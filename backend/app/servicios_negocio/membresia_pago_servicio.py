@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
     Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, CoberturaBonificada,
-    HistorialEstadoMembresia,
+    HistorialEstadoMembresia, CorreccionPago,
 )
-from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago
+from app.dominio.enums import (
+    EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, EfectoCoberturaCorreccion,
+)
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -32,7 +34,7 @@ from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
     ComprobantePagoCreateDTO,
-    PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO,
+    PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO, CorreccionPagoDTO,
 )
 from app.presentacion.schemas.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -419,7 +421,17 @@ class PagoServicio:
                     "deben registrar este pago"
                 )
 
-        membresia = self.repo_membresia.obtener_por_id(datos.membresia_id)
+        # `FOR UPDATE` (issue #400/5b, hallazgo del revisor): antes de este
+        # slice un `Pago` APROBADO era inmutable, así que este ancla
+        # (`_fecha_fin_maxima_combinada`, leída más abajo) nunca podía
+        # quedar obsoleta a mitad de vuelo. `PagoServicio.corregir_pago`
+        # introduce esa ventana -- puede mutar `fecha_fin` de un pago YA
+        # aprobado mientras este método todavía está anclando un pago NUEVO
+        # sobre el valor viejo. El lock serializa: quien pierde la carrera
+        # relee el estado ya corregido/registrado por el otro. Mismo
+        # mecanismo (`obtener_por_id_con_bloqueo`) que `suspender_membresia`/
+        # `reactivar_membresia` ya usan sobre `Membresia`.
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(datos.membresia_id)
         if not membresia:
             raise EntidadNoEncontrada(f"Membresía con id {datos.membresia_id} no encontrada")
 
@@ -673,7 +685,13 @@ class PagoServicio:
         return max(candidatos) if candidatos else None
 
     def _hay_cobertura_en_rango(
-        self, membresia_id: int, fecha_inicio: date, fecha_fin: date, *, medio_abierto: bool,
+        self,
+        membresia_id: int,
+        fecha_inicio: date,
+        fecha_fin: date,
+        *,
+        medio_abierto: bool,
+        excluir_pago_id: int | None = None,
     ) -> bool:
         """True si CUALQUIERA de las dos tablas ya cubre (total o
         parcialmente) el rango dado para esta membresía.
@@ -687,14 +705,24 @@ class PagoServicio:
         (`fecha_fin` de uno == `fecha_inicio` del siguiente), así que
         necesita la variante MEDIO ABIERTA -- con la cerrada, dos períodos
         apenas adyacentes se verían como solapados (bug real, ver
-        `test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa`)."""
+        `test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa`).
+
+        `excluir_pago_id` (issue #400/5b, usado solo por `corregir_pago`):
+        el pago que se está corrigiendo sigue APROBADO durante todo el
+        chequeo, con sus fechas VIEJAS -- sin excluirlo se solaparía
+        consigo mismo y ninguna corrección de fecha podría pasar nunca esta
+        guardia. `regularizar_deuda`/`aplicar_beneficio_bonificado` no
+        pasan este argumento (ninguno de los dos corrige un pago existente),
+        así que el default `None` no les cambia el comportamiento."""
         if medio_abierto:
             return (
                 self.repo.cobertura_aprobada_en_rango_medio_abierto(membresia_id, fecha_inicio, fecha_fin)
                 or self.repo_cobertura_bonificada.existe_en_rango(membresia_id, fecha_inicio, fecha_fin)
             )
         return (
-            self.repo.cobertura_aprobada_en_rango(membresia_id, fecha_inicio, fecha_fin)
+            self.repo.cobertura_aprobada_en_rango(
+                membresia_id, fecha_inicio, fecha_fin, excluir_pago_id=excluir_pago_id,
+            )
             or self.repo_cobertura_bonificada.existe_en_rango_cerrado(membresia_id, fecha_inicio, fecha_fin)
         )
 
@@ -1067,6 +1095,242 @@ class PagoServicio:
             motivo_regularizacion=datos.motivo,
         )
         return self.repo.crear(pago)
+
+    # --- Issue #400 (slice 5b): corrección financiera -------------------------
+    # Seis campos financieros congelados de `Pago`. Un DTO puede traer
+    # cualquier subconjunto de ellos (mismo criterio de "solo lo que cambia"
+    # que `TipoMembresiaUpdateDTO`); los que no llegan conservan su valor
+    # anterior tal cual.
+    _CAMPOS_CORREGIBLES_PAGO = (
+        "tarifa_mensual_aplicada", "meses_comprados", "monto_base",
+        "monto", "fecha_inicio", "fecha_fin",
+    )
+
+    def corregir_pago(
+        self, pago_id: int, datos: CorreccionPagoDTO, actor_persona_id: int,
+    ) -> tuple[Pago, CorreccionPago]:
+        """Corrige uno o más de los seis campos financieros congelados de un
+        `Pago` YA APROBADO (issue #400, slice 5b), citando el texto del
+        issue: "Toda corrección conserva: pago original; valores anteriores
+        y nuevos; motivo obligatorio; administrador; fecha; efecto explícito
+        sobre cobertura. No se permite borrar ni sobrescribir el rastro
+        original."
+
+        El `Pago` original SÍ se muta (los campos corregidos pasan a valer
+        lo nuevo) pero CONSERVA SU ID -- a diferencia de `regularizar_deuda`,
+        que crea una fila `Pago` nueva, esto es una corrección DEL MISMO
+        pago, no un pago adicional. El rastro sobrevive en la fila
+        `CorreccionPago` nueva, que jamás se sobrescribe.
+
+        Lockea la `Membresia` PRIMERO y el `Pago` DESPUÉS (issue #400/5b,
+        hallazgo del revisor): antes de este slice un `Pago` APROBADO era
+        inmutable, así que `registrar_pago` podía leer su ancla de cobertura
+        (`_fecha_fin_maxima_combinada`) sin lock -- nunca había una
+        escritura concurrente que la corriera. Esta corrección introduce
+        esa ventana: reduce/amplía `fecha_fin` de un pago YA aprobado
+        mientras otra transacción podría estar registrando un pago nuevo
+        anclado en el valor viejo. El lock de `Membresia`
+        (`obtener_por_id_con_bloqueo`, mismo método que `suspender_
+        membresia`/`reactivar_membresia`) serializa contra ese
+        `registrar_pago` concurrente -- que ahora también lockea la
+        `Membresia` antes de leer el ancla. El orden (Membresia primero,
+        Pago después) es el MISMO en toda esta clase -- ningún otro método
+        toma los dos locks al revés -- así que no hay ciclo posible de
+        deadlock. Recién después se lockea el `Pago` con `FOR UPDATE`
+        (mismo mecanismo que `validar_pago`): dos correcciones concurrentes
+        del MISMO pago se serializan -- la segunda espera el commit de la
+        primera y relee los valores ya corregidos, así que sus deltas
+        ("anterior") reflejan la corrección previa en vez de pisarla en
+        silencio.
+
+        Guardia de estado: solo un pago APROBADO tiene algo financiero que
+        "corregir" -- uno PENDIENTE_VALIDACION todavía no fijó nada, y uno
+        RECHAZADO nunca cobró.
+
+        Si ningún campo efectivamente cambia, se rechaza: una "corrección"
+        que no corrige nada no es una corrección (mismo criterio que el
+        CHECK `ck_correccion_pago_algun_campo_cambia` en la base).
+
+        Consistencia cruzada entre los seis campos (issue #400/5b, hallazgo
+        del revisor): estos campos no son independientes entre sí --
+        `fecha_fin` se deriva de `fecha_inicio` + `meses_comprados`
+        (`_sumar_meses`, mismo cálculo que `registrar_pago`), `monto_base`
+        se deriva de `tarifa_mensual_aplicada * meses_comprados`, y `monto`
+        se deriva de `monto_base` menos el descuento YA congelado del pago
+        (`Pago.descuento_valor_aplicado`, que este DTO NO permite corregir).
+        Sin este chequeo, un admin podía corregir `meses_comprados` solo,
+        dejando `fecha_fin` describiendo un período que ya no coincide con
+        lo que el pago dice haber comprado -- exactamente la clase de "dato
+        con forma de bueno que no lo es" que `ck_pago_snapshot_completo_o_
+        ausente` ya previene para el caso NULL/NOT NULL. Cada una de las
+        tres validaciones corre SOLO si el DTO tocó alguno de los campos
+        que esa fórmula relaciona -- una corrección que no toca ninguno de
+        los campos de una fórmula no puede haberla desalineado.
+
+        Si `fecha_inicio`/`fecha_fin` cambian, se valida contra la
+        ENVOLVENTE del rango VIEJO y el NUEVO (`min`/`max` de ambos), no
+        solo el rango nuevo -- un solape puro no puede detectar un HUECO:
+        `registrar_pago` ancla cada pago nuevo exactamente donde terminó el
+        anterior (`fecha_inicio = ultima_fecha_fin`, ver `_sumar_meses` más
+        arriba), así que si este pago reduce su `fecha_fin` de 30/06 a
+        20/06 y un pago POSTERIOR ya ancló su `fecha_inicio` en 30/06, el
+        rango NUEVO ([.., 20/06]) por sí solo NUNCA se solapa con el
+        posterior ([30/06, ..]) -- un hueco, por definición, no es un
+        solape. La ENVOLVENTE ([.., 30/06], que incluye el borde viejo)
+        SÍ se solapa con ese posterior tocando exactamente en 30/06, y
+        `_hay_cobertura_en_rango` (semántica CERRADA, mismo criterio que
+        `regularizar_deuda`) trata un borde compartido como solape -- por
+        eso alcanza con extenderla a la envolvente en vez de escribir un
+        chequeo de huecos aparte. Decisión de diseño ya tomada (no
+        reabrir): reducir la `fecha_fin` de un pago aprobado cuando otro
+        pago posterior ancló su `fecha_inicio` justo ahí se rechaza, en vez
+        de permitir un hueco silencioso en la cadena de cobertura.
+
+        `efecto_cobertura` se calcula comparando `fecha_fin` anterior contra
+        la nueva: igual -> `SIN_CAMBIO`; posterior -> `AMPLIADA`; anterior
+        -> `REDUCIDA`. Se persiste en la fila de corrección, nunca queda
+        implícito.
+        """
+        # Existencia primero -- consulta de UNA SOLA COLUMNA
+        # (`obtener_membresia_id`), nunca `Session.get(Pago, ...)` sin lock:
+        # ver el docstring de `PagoRepositorio.obtener_membresia_id` para el
+        # porqué (identity map + `with_for_update` es una combinación que
+        # silenciosamente no lockea nada si el objeto ya está cacheado).
+        membresia_id = self.repo.obtener_membresia_id(pago_id)
+        if membresia_id is None:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+
+        # Lock de `Membresia` PRIMERO, `Pago` DESPUÉS -- ver el docstring de
+        # arriba para el porqué (orden consistente con el resto de la clase,
+        # sin ciclo posible de deadlock).
+        self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
+
+        pago = self.repo.obtener_por_id_con_bloqueo(pago_id)
+        if not pago:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+
+        if not datos.motivo.strip():
+            raise OperacionInvalida("Debe indicar el motivo de la corrección.")
+
+        if pago.estado_pago != EstadoPago.APROBADO:
+            raise OperacionInvalida(
+                "Solo un pago aprobado puede corregirse; este pago está "
+                f"{estado_de_pago_en_castellano(pago.estado_pago)}.",
+                detalle_tecnico=f"pago_id={pago_id} estado_pago={pago.estado_pago.value}",
+            )
+
+        anteriores = {
+            campo: getattr(pago, campo) for campo in self._CAMPOS_CORREGIBLES_PAGO
+        }
+        nuevos = {
+            campo: (
+                valor_dto if (valor_dto := getattr(datos, campo)) is not None
+                else anteriores[campo]
+            )
+            for campo in self._CAMPOS_CORREGIBLES_PAGO
+        }
+
+        if all(nuevos[campo] == anteriores[campo] for campo in self._CAMPOS_CORREGIBLES_PAGO):
+            raise OperacionInvalida("La corrección no modifica ningún valor del pago.")
+
+        def _tocado(campo: str) -> bool:
+            return getattr(datos, campo) is not None
+
+        # Consistencia cruzada (issue #400/5b, hallazgo del revisor): ver el
+        # docstring de arriba. Cada validación corre SOLO si el DTO tocó
+        # algún campo de la fórmula que verifica, y SOLO si los valores
+        # EFECTIVOS involucrados existen (los tres campos de snapshot son
+        # nullable para pagos históricos pre-#400 sin snapshot -- no hay
+        # nada que validar contra un valor ausente).
+        if _tocado("meses_comprados") or _tocado("fecha_inicio") or _tocado("fecha_fin"):
+            if (
+                nuevos["meses_comprados"] is not None
+                and nuevos["fecha_fin"] != _sumar_meses(nuevos["fecha_inicio"], nuevos["meses_comprados"])
+            ):
+                raise OperacionInvalida(
+                    "La fecha de fin no coincide con la fecha de inicio más "
+                    "la cantidad de meses comprados."
+                )
+
+        if _tocado("tarifa_mensual_aplicada") or _tocado("meses_comprados") or _tocado("monto_base"):
+            if (
+                nuevos["tarifa_mensual_aplicada"] is not None
+                and nuevos["meses_comprados"] is not None
+                and nuevos["monto_base"] is not None
+                and nuevos["monto_base"] != nuevos["tarifa_mensual_aplicada"] * nuevos["meses_comprados"]
+            ):
+                raise OperacionInvalida(
+                    "El monto base no coincide con la tarifa mensual "
+                    "aplicada multiplicada por los meses comprados."
+                )
+
+        if _tocado("monto_base") or _tocado("monto"):
+            if nuevos["monto_base"] is not None:
+                descuento_congelado = pago.descuento_valor_aplicado or Decimal("0.00")
+                if nuevos["monto"] != nuevos["monto_base"] - descuento_congelado:
+                    raise OperacionInvalida(
+                        "El monto final no coincide con el monto base menos "
+                        "el descuento ya aplicado a este pago."
+                    )
+
+        fecha_inicio_nueva = nuevos["fecha_inicio"]
+        fecha_fin_nueva = nuevos["fecha_fin"]
+        if fecha_inicio_nueva >= fecha_fin_nueva:
+            raise OperacionInvalida("La fecha de inicio debe ser anterior a la de fin.")
+
+        if (
+            fecha_inicio_nueva != anteriores["fecha_inicio"]
+            or fecha_fin_nueva != anteriores["fecha_fin"]
+        ):
+            envolvente_inicio = min(fecha_inicio_nueva, anteriores["fecha_inicio"])
+            envolvente_fin = max(fecha_fin_nueva, anteriores["fecha_fin"])
+            if self._hay_cobertura_en_rango(
+                pago.membresia_id, envolvente_inicio, envolvente_fin,
+                medio_abierto=False, excluir_pago_id=pago.id,
+            ):
+                raise OperacionInvalida(
+                    "El período corregido se superpone o rompe la continuidad "
+                    "con la cobertura de otro pago aprobado, o de un beneficio "
+                    "bonificado, de esta membresía."
+                )
+
+        if fecha_fin_nueva == anteriores["fecha_fin"]:
+            efecto = EfectoCoberturaCorreccion.SIN_CAMBIO
+        elif fecha_fin_nueva > anteriores["fecha_fin"]:
+            efecto = EfectoCoberturaCorreccion.AMPLIADA
+        else:
+            efecto = EfectoCoberturaCorreccion.REDUCIDA
+
+        for campo in self._CAMPOS_CORREGIBLES_PAGO:
+            setattr(pago, campo, nuevos[campo])
+
+        correccion = CorreccionPago(
+            pago_id=pago.id,
+            tarifa_mensual_aplicada_anterior=anteriores["tarifa_mensual_aplicada"],
+            tarifa_mensual_aplicada_nuevo=nuevos["tarifa_mensual_aplicada"],
+            meses_comprados_anterior=anteriores["meses_comprados"],
+            meses_comprados_nuevo=nuevos["meses_comprados"],
+            monto_base_anterior=anteriores["monto_base"],
+            monto_base_nuevo=nuevos["monto_base"],
+            monto_anterior=anteriores["monto"],
+            monto_nuevo=nuevos["monto"],
+            fecha_inicio_anterior=anteriores["fecha_inicio"],
+            fecha_inicio_nuevo=fecha_inicio_nueva,
+            fecha_fin_anterior=anteriores["fecha_fin"],
+            fecha_fin_nuevo=fecha_fin_nueva,
+            motivo=datos.motivo,
+            actor_persona_id=actor_persona_id,
+            efecto_cobertura=efecto,
+        )
+        self.db.add(correccion)
+        pago_guardado = self.repo.guardar_cambios(pago)
+        return pago_guardado, correccion
+
+    def listar_correcciones_de_pago(self, pago_id: int) -> list[CorreccionPago]:
+        """Historial completo de correcciones financieras de un pago (issue
+        #400/5b) -- el rastro que el issue exige que se "conserve" tiene que
+        ser consultable, no solo escribible."""
+        return self.repo.listar_correcciones_por_pago(pago_id)
 
     # --- Issue #400 (slice 4d): cobertura bonificada -------------------------
     def aplicar_beneficio_bonificado(

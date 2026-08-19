@@ -29,6 +29,7 @@ from app.dominio.enums import (
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
     TipoNotificacion,
     TipoManoDominante,
+    EfectoCoberturaCorreccion,
 )
 
 _log = logging.getLogger("cataclub.dominio.modelos")
@@ -585,6 +586,102 @@ class Pago(Base):
         ForeignKey("persona.id"), nullable=True,
     )
     motivo_regularizacion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
+class CorreccionPago(Base):
+    """Corrección financiera auditable de un `Pago` YA aprobado (issue #400,
+    slice 5b).
+
+    Por qué existe: los seis campos financieros congelados de `Pago`
+    (`tarifa_mensual_aplicada`, `meses_comprados`, `monto_base`, `monto`,
+    `fecha_inicio`, `fecha_fin`) a veces necesitan un ajuste administrativo
+    después de aprobados -- un error de tipeo, un descuento mal aplicado, un
+    período mal calculado. El contrato de #400 ("Corrección financiera") es
+    explícito: "Toda corrección conserva: pago original; valores anteriores
+    y nuevos; motivo obligatorio; administrador; fecha; efecto explícito
+    sobre cobertura. No se permite borrar ni sobrescribir el rastro
+    original." -- por eso esta es una fila NUEVA que referencia al `Pago`
+    corregido (`pago_id`), nunca un UPDATE silencioso sin huella. El `Pago`
+    original SÍ se muta (los seis campos pasan a valer lo nuevo, mismo
+    criterio que `HistorialEstadoMembresia` muta `Membresia.estado`), pero
+    conserva su `id` -- a diferencia de `regularizar_deuda`, que crea un
+    `Pago` nuevo, `corregir_pago` nunca crea una fila `Pago` adicional.
+
+    Mismo patrón que `HistorialEstadoMembresia`, con una diferencia
+    deliberada: acá `actor_persona_id` es NOT NULL. En
+    `HistorialEstadoMembresia` es nullable porque el vencimiento lo dispara
+    el sistema; una corrección financiera SIEMPRE la ejecuta un
+    administrador -- no existe un camino del sistema que corrija plata por
+    su cuenta.
+
+    Los seis pares `*_anterior`/`*_nuevo` se registran SIEMPRE, incluso para
+    los campos que un `corregir_pago` puntual no tocó (anterior == nuevo en
+    ese caso): la fila describe el estado COMPLETO del pago antes y después
+    de la operación, no solo el delta -- ver
+    `PagoServicio.corregir_pago`. Columnas explícitas tipadas (no JSON),
+    igual convención que el resto del repo.
+
+    `efecto_cobertura` es el efecto EXPLÍCITO que el texto del issue exige:
+    `PagoServicio.corregir_pago` lo calcula comparando `fecha_fin` anterior
+    contra la nueva y lo persiste acá -- nunca queda implícito ni se deriva
+    después, a partir de comparar dos filas."""
+
+    __tablename__ = "correccion_pago"
+    __table_args__ = (
+        Index("ix_correccion_pago_pago_id", "pago_id"),
+        Index("ix_correccion_pago_actor_persona_id", "actor_persona_id"),
+        # Red de seguridad EN LA BASE (mismo criterio que
+        # `ck_historial_estado_cambia`): una "corrección" que no cambia
+        # ningún valor no es una corrección, es ruido en la auditoría. El
+        # camino primario de rechazo es `PagoServicio.corregir_pago`; este
+        # CHECK es la red de seguridad ante un INSERT que lo esquive.
+        # `IS DISTINCT FROM` compara NULL-safe -- necesario porque
+        # `tarifa_mensual_aplicada`/`meses_comprados`/`monto_base` son
+        # nullable (snapshot ausente en pagos históricos pre-#400, ver
+        # `Pago.tarifa_mensual_aplicada`).
+        CheckConstraint(
+            "tarifa_mensual_aplicada_anterior IS DISTINCT FROM tarifa_mensual_aplicada_nuevo"
+            " OR meses_comprados_anterior IS DISTINCT FROM meses_comprados_nuevo"
+            " OR monto_base_anterior IS DISTINCT FROM monto_base_nuevo"
+            " OR monto_anterior IS DISTINCT FROM monto_nuevo"
+            " OR fecha_inicio_anterior IS DISTINCT FROM fecha_inicio_nuevo"
+            " OR fecha_fin_anterior IS DISTINCT FROM fecha_fin_nuevo",
+            name="ck_correccion_pago_algun_campo_cambia",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pago_id: Mapped[int] = mapped_column(ForeignKey("pago.id"))
+
+    # --- Los seis campos financieros congelados de `Pago`, anterior/nuevo --
+    # Nullable exactamente donde `Pago` lo es (tarifa/meses/monto_base
+    # pueden faltar en un snapshot histórico pre-#400); NOT NULL donde
+    # `Pago` lo exige (monto, fecha_inicio, fecha_fin).
+    tarifa_mensual_aplicada_anterior: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    tarifa_mensual_aplicada_nuevo: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    meses_comprados_anterior: Mapped[Optional[int]] = mapped_column(nullable=True)
+    meses_comprados_nuevo: Mapped[Optional[int]] = mapped_column(nullable=True)
+    monto_base_anterior: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    monto_base_nuevo: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    monto_anterior: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    monto_nuevo: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    fecha_inicio_anterior: Mapped[date] = mapped_column(Date)
+    fecha_inicio_nuevo: Mapped[date] = mapped_column(Date)
+    fecha_fin_anterior: Mapped[date] = mapped_column(Date)
+    fecha_fin_nuevo: Mapped[date] = mapped_column(Date)
+
+    efecto_cobertura: Mapped[EfectoCoberturaCorreccion] = mapped_column(
+        SAEnum(EfectoCoberturaCorreccion)
+    )
+    motivo: Mapped[str] = mapped_column(String(255))
+    # NOT NULL a propósito (a diferencia de `HistorialEstadoMembresia.
+    # actor_persona_id`): ver docstring de la clase.
+    actor_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
 
 # ---------------------------------------------------------------------------

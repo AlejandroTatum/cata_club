@@ -14,6 +14,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
     DeudaMembresiaResponseDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
+    CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
 )
 from app.presentacion.schemas.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -330,6 +331,40 @@ def regularizar_deuda_membresia(
         membresia_id, datos, persona_id_admin=token_payload.get("persona_id"),
     )
     return servicio.pago_a_response_dto(pago)
+
+
+# Corrección financiera (issue #400, slice 5b): admin-only, mismo criterio de
+# autorización que `regularizar-deuda`/`suspender`/`reactivar` -- ajustar los
+# campos financieros congelados de un pago YA aprobado es una operación de
+# administración, nunca autoservicio.
+@router.post(
+    "/pagos/{pago_id}/corregir",
+    response_model=CorreccionPagoResultadoDTO,
+    status_code=201,
+)
+def corregir_pago(
+    pago_id: int,
+    datos: CorreccionPagoDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
+):
+    servicio = PagoServicio(db)
+    pago, correccion = servicio.corregir_pago(
+        pago_id, datos, actor_persona_id=token_payload.get("persona_id"),
+    )
+    return CorreccionPagoResultadoDTO(
+        pago=servicio.pago_a_response_dto(pago),
+        correccion=CorreccionPagoResponseDTO.model_validate(correccion),
+    )
+
+
+@router.get(
+    "/pagos/{pago_id}/correcciones",
+    response_model=list[CorreccionPagoResponseDTO],
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+def listar_correcciones_de_pago(pago_id: int, db: Session = Depends(obtener_sesion)):
+    return PagoServicio(db).listar_correcciones_de_pago(pago_id)
 
 
 # Suspensión y reactivación (issue #400, slice 5a): "Solo administración
