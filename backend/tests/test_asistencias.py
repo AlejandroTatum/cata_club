@@ -1,5 +1,5 @@
 from app.dominio.cedula import cedula_valida
-from app.dominio.modelos import Persona
+from app.dominio.modelos import AsistenciaCorreccion, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from datetime import date, timedelta
@@ -750,10 +750,138 @@ def test_registrar_asistencia_ignora_autor_enviado_en_el_body(client):
     assert resp.json()["registradoPorNombre"] == "María Torres"
 
 
-# `test_corregir_no_pisa_quien_tomo_la_lista` vivía acá: la rama de
-# actualización que cubría (#262) ya no existe (issue #389 -- re-registrar
-# se rechaza, nunca actualiza). Cobertura equivalente vuelve en el slice de
-# corrección transaccional (`fix/asistencias-02-transaccion-correccion`).
+# --- Issue #389, slice 2: corrección transaccional --------------------------
+# `PATCH /asistencias/{id}/corregir`, el reemplazo explícito del mecanismo
+# de "corrección" que el slice 1 eliminó de `registrar_asistencia`. Solo
+# ADMINISTRADOR, con motivo obligatorio y traza append-only.
+def _id_de_la_asistencia(client, persona_id):
+    """El id de la (única) fila de Asistencia de esta persona, vía el
+    historial -- `_preparar_asistencia_para_corregir` devuelve el payload
+    del POST, no la respuesta, así que el id se recupera por acá."""
+    historial = client.get(f"/api/v1/asistencias/persona/{persona_id}")
+    return historial.json()["items"][0]["id"]
+
+
+def test_admin_corrige_asistencia_dentro_de_la_ventana(client, monkeypatch):
+    """Corrección feliz: la fila de Asistencia queda con el valor nuevo, la
+    respuesta trae la traza completa de la corrección, y `registrado_por_id`
+    (quién TOMÓ la lista originalmente) queda intacto -- corregir no
+    reescribe la autoría de la toma."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "El alumno no asistió, se cargó mal."},
+    )
+    assert resp.status_code == 200, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["asistencia"]["estado"] == "AUSENTE"
+    assert cuerpo["asistencia"]["registradoPorId"] == 1
+    assert cuerpo["estadoAnterior"] == "PRESENTE"
+    assert cuerpo["motivo"] == "El alumno no asistió, se cargó mal."
+    assert cuerpo["corregidoPorId"] == 1
+    assert cuerpo["corregidoPorNombre"]
+    assert cuerpo["corregidoEn"]
+
+
+def test_entrenador_no_puede_corregir_asistencia(client_entrenador, client, monkeypatch):
+    """Solo ADMINISTRADOR corrige -- ni siquiera el ENTRENADOR que tomó la
+    lista originalmente."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "intento no autorizado"},
+    )
+    assert resp.status_code == 403
+
+
+def test_admin_no_puede_corregir_mas_alla_de_la_ventana(client, monkeypatch):
+    """`LIMITE_CORRECCION_ASISTENCIA_DIAS` = 30: el día 31 se rechaza."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=31))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "demasiado tarde"},
+    )
+    assert resp.status_code == 400
+
+
+def test_admin_corrige_en_el_dia_30_permitido(client, monkeypatch):
+    """Contracara del día 31: el límite es `> 30`, no `>= 30` -- el día 30
+    exacto todavía cae dentro de la ventana permitida."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=30))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "todavía en ventana"},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_corregir_asistencia_inexistente_da_404(client):
+    resp = client.patch(
+        "/api/v1/asistencias/999999/corregir",
+        json={"estado": "AUSENTE", "motivo": "no existe"},
+    )
+    assert resp.status_code == 404
+
+
+def test_corregir_asistencia_exige_motivo(client, monkeypatch):
+    """`motivo` vacío se rechaza en validación Pydantic (422), antes de
+    llegar al servicio."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": ""},
+    )
+    assert resp.status_code == 422
+
+
+def test_dos_correcciones_sucesivas_encadenan_estado_anterior_sin_pisarse(
+    client, db_session, monkeypatch,
+):
+    """Dos correcciones sobre la MISMA fila dejan DOS filas de auditoría
+    distintas (append-only, ninguna se pisa): la segunda corrección trae
+    como `estado_anterior` el valor que dejó la primera, no el original."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    primera = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "primera corrección"},
+    )
+    assert primera.status_code == 200, primera.text
+    segunda = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "JUSTIFICADO", "motivo": "segunda corrección"},
+    )
+    assert segunda.status_code == 200, segunda.text
+
+    assert primera.json()["estadoAnterior"] == "PRESENTE"
+    assert segunda.json()["estadoAnterior"] == primera.json()["asistencia"]["estado"] == "AUSENTE"
+
+    filas = db_session.query(AsistenciaCorreccion).filter_by(asistencia_id=asistencia_id).all()
+    assert len(filas) == 2
 
 
 def test_historial_expone_quien_tomo_la_lista(client):

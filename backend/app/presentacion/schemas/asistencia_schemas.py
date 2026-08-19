@@ -107,6 +107,33 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     registrado_por_nombre: Optional[str] = None
 
 
+# --- Issue #389, slice 2: corrección transaccional de una Asistencia -------
+class AsistenciaCorreccionDTO(BaseModel):
+    """Los tres campos mutables de `Asistencia` (`estado`, `justificativo`,
+    `estado_justificativo`) se corrigen SIEMPRE juntos, como una unidad --
+    igual que la toma original -- nunca campo por campo. `motivo` es
+    obligatorio: una corrección sin motivo es exactamente lo que este
+    operativo existe para impedir."""
+    estado: EstadoAsistencia
+    justificativo: Optional[str] = None
+    estado_justificativo: Optional[bool] = None
+    motivo: str = Field(min_length=1, max_length=500)
+
+
+class AsistenciaCorreccionResponseDTO(ResponseBase, BaseModel):
+    """Confirma la corrección con la fila de `Asistencia` ya actualizada
+    MÁS la traza que quedó grabada -- el admin necesita ver que la
+    corrección se registró, no solo el valor nuevo."""
+    asistencia: AsistenciaResponseDTO
+    corregido_por_id: int
+    corregido_por_nombre: str
+    corregido_en: datetime
+    motivo: str
+    estado_anterior: EstadoAsistencia
+    justificativo_anterior: Optional[str] = None
+    estado_justificativo_anterior: Optional[bool] = None
+
+
 # --- Asignación directa Alumno ↔ Horario ------------------------------------
 class AlumnoHorarioCreateDTO(BaseModel):
     persona_id: int

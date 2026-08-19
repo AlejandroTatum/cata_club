@@ -5,7 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import (
-    Asistencia, HorarioEntrenamiento, AlumnoHorario, Persona, SesionAsistencia,
+    Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, AlumnoHorario, Persona,
+    SesionAsistencia,
 )
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
 
@@ -78,6 +79,23 @@ class AsistenciaRepositorio:
         self.db.commit()
         self.db.refresh(asistencia)
         return asistencia
+
+    def obtener_por_id(self, asistencia_id: int) -> Optional[Asistencia]:
+        return self.db.get(Asistencia, asistencia_id)
+
+    def guardar_correccion(
+        self, asistencia: Asistencia, correccion: AsistenciaCorreccion
+    ) -> tuple[Asistencia, AsistenciaCorreccion]:
+        """Persiste la `Asistencia` ya mutada por el llamador y la fila de
+        auditoría de la corrección en UNA sola transacción (issue #389,
+        slice 2) -- mismo criterio "un commit por operación lógica" que
+        `AlumnoHorarioRepositorio.crear_muchos`, no uno por fila: si algo
+        falla entre medio, ninguna de las dos queda a mitad de camino."""
+        self.db.add_all([asistencia, correccion])
+        self.db.commit()
+        self.db.refresh(asistencia)
+        self.db.refresh(correccion)
+        return asistencia, correccion
 
     def buscar_por_persona_horario_fecha(
         self, persona_id: int, horario_id: int, fecha_entrenamiento: date
