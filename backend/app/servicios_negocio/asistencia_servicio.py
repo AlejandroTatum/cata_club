@@ -2,6 +2,7 @@ import re
 import unicodedata
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
@@ -9,12 +10,13 @@ from app.dominio.modelos import (
 )
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
+from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.asistencia_repositorio import (
-    AsistenciaRepositorio, HorarioRepositorio, AlumnoHorarioRepositorio
+    AsistenciaRepositorio, HorarioRepositorio, AlumnoHorarioRepositorio,
+    SesionAsistenciaRepositorio,
 )
 from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, CategoriaCreateDTO, CategoriaResponseDTO, CategoriaUpdateDTO,
@@ -26,12 +28,6 @@ from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.soporte_transversal.tiempo import hoy_club
 
 _CODIGO_MAX_LEN = 20
-
-# Tope de corrección de asistencia (issue #262, regla del club): una asistencia
-# puede corregirse hasta 30 días después de la fecha de la sesión -- atado al
-# ciclo de cobro, un mes cerrado es un mes cerrado. Aplica SOLO a corregir un
-# registro ya existente; la toma original (crear) no tiene tope.
-LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
 
 # `date.weekday()` (Python, Lunes=0..Domingo=6) -> `DiaSemana`. Usado por
 # `registrar_asistencia` para exigir que `fecha_entrenamiento` caiga
@@ -73,6 +69,7 @@ class AsistenciaServicio:
         self.repo_alumno_horario = AlumnoHorarioRepositorio(db)
         self.repo_categoria = CategoriaRepositorio(db)
         self.repo_membresia = MembresiaRepositorio(db)
+        self.repo_sesion = SesionAsistenciaRepositorio(db)
 
     def _validar_dia_y_derivar_horas(self, horario: HorarioEntrenamiento) -> CategoriaHorario:
         """`hora_inicio`/`hora_fin` nunca los envía el cliente: siempre se
@@ -367,30 +364,29 @@ class AsistenciaServicio:
 
         Matiz (#263): SÍ se registra quién TOMÓ la lista, en
         `registrado_por_id` -- la identidad viene del TOKEN
-        (`persona_id_solicitante`), nunca del DTO. Solo se setea en la rama de
-        CREACIÓN: la corrección (#262) actualiza el estado pero NO pisa quién
-        tomó la lista originalmente (quién corrige después es un follow-up
-        fuera de alcance).
+        (`persona_id_solicitante`), nunca del DTO. Se setea siempre en esta
+        rama de CREACIÓN: no hay rama de actualización que pueda pisarlo
+        (ver más abajo, issue #389 -- re-registrar a alguien que ya tiene
+        fila se rechaza en vez de actualizar).
 
-        Upsert por (persona_id, horario_id, fecha_entrenamiento): re-tomar
-        asistencia para una sesión ya registrada (ej. reabrir el wizard
-        "Tomar asistencia") actualiza el registro existente en vez de crear
-        uno duplicado -- no hay constraint único en BD, así que la
-        deduplicación se hace explícitamente aquí.
+        Cierre atómico de sesión (issue #389, slice 1 de la cadena): la
+        primera `Asistencia` creada con éxito para un (horario_id,
+        fecha_entrenamiento) cierra esa sesión (`SesionAsistencia`, ver su
+        docstring en `app/dominio/modelos.py`). Una vez cerrada, NADIE
+        vuelve a registrar ahí a un alumno que ya tiene fila -- ni un
+        ADMINISTRADOR: se rechaza con `OperacionInvalida` (400). Esto
+        reemplaza por completo el mecanismo previo de "corrección" del
+        issue #262 (rol ADMINISTRADOR + tope de 30 días), que dejaba una
+        puerta abierta a re-tomar la lista entera desde el mismo wizard. Esa
+        puerta queda cerrada en este slice; una puerta de corrección
+        explícita, con traza de quién/cuándo/motivo/valor anterior, es un
+        slice posterior de esta misma cadena -- no existe todavía.
 
-        Reglas de CORRECCIÓN (issue #262), que aplican SOLO a la rama de
-        actualización -- la toma original (crear el primer registro) no las
-        hereda:
-
-        1. Solo el ADMINISTRADOR corrige. El entrenador toma asistencia pero
-           nunca corrige: una actualización sin el rol ADMINISTRADOR se rechaza
-           con `PermisosInsuficientes` (403).
-        2. Tope de antigüedad: corregir una asistencia de más de
-           `LIMITE_CORRECCION_ASISTENCIA_DIAS` días se rechaza con
-           `OperacionInvalida` (400). Día 30 permitido, día 31 rechazado.
-
-        Re-tomar el MISMO día también cae en la rama de actualización: es una
-        corrección, no una toma original."""
+        El cierre NO bloquea que un alumno que aún no tiene fila en esa
+        sesión se registre por primera vez (ej. un lote parcialmente
+        fallido que se reintenta solo para los alumnos que faltaron): lo
+        que se cierra es RE-registrar a quien ya tiene fila, no la sesión
+        completa como conjunto de altas posibles."""
         # La persona se ata a un nombre en vez de descartarse: el mensaje de
         # más abajo la nombra, y esta consulta ya se estaba haciendo.
         persona = self.repo_persona.obtener_por_id(datos.persona_id)
@@ -444,25 +440,59 @@ class AsistenciaServicio:
             datos.persona_id, datos.horario_id, datos.fecha_entrenamiento
         )
         if existente:
-            # Corrección (issue #262): la rama de actualización exige
-            # ADMINISTRADOR y no puede tener más de 30 días de antigüedad.
-            if "ADMINISTRADOR" not in roles_solicitante:
-                raise PermisosInsuficientes(
-                    "Solo el administrador puede corregir asistencias ya registradas."
-                )
-            antiguedad = (hoy_club() - datos.fecha_entrenamiento).days
-            if antiguedad > LIMITE_CORRECCION_ASISTENCIA_DIAS:
-                raise OperacionInvalida(
-                    "No se puede corregir una asistencia con más de 30 días de antigüedad."
-                )
-            existente.estado = datos.estado
-            existente.justificativo = datos.justificativo
-            existente.estado_justificativo = datos.estado_justificativo
-            return self.repo.actualizar(existente)
+            # Cierre permanente (issue #389): esta persona ya tiene fila en
+            # esta sesión, así que la lista para ella ya quedó cerrada.
+            # Nadie -- ni un ADMINISTRADOR -- vuelve a tomarla desde acá; ver
+            # el docstring de la función para el reemplazo del mecanismo
+            # previo de "corrección" (issue #262, rol + 30 días).
+            raise OperacionInvalida(
+                f"La asistencia de {persona.nombres} {persona.apellidos} para el "
+                f"{datos.fecha_entrenamiento.isoformat()} ya fue registrada. Esa "
+                "lista quedó cerrada de forma permanente y no puede volver a "
+                "tomarse.",
+                detalle_tecnico=(
+                    f"sesion ya cerrada: horario_id={datos.horario_id} "
+                    f"fecha_entrenamiento={datos.fecha_entrenamiento.isoformat()} "
+                    f"persona_id={datos.persona_id}"
+                ),
+            )
 
-        return self.repo.crear(
-            Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
+        # Primer registro exitoso de esta persona en la sesión: si es
+        # también la primera Asistencia de TODA la sesión
+        # (horario_id, fecha_entrenamiento), esto la cierra. Get-or-create:
+        # si otra persona ya cerró esta misma sesión antes, devuelve esa
+        # fila sin tocarla -- el cierre lo gana quien llega primero, no
+        # quien llama último. Se agrega/flushea en la MISMA sesión de BD que
+        # la `Asistencia` de abajo; el `commit()` de `self.repo.crear` los
+        # confirma juntos.
+        self.repo_sesion.obtener_o_crear_cerrada(
+            datos.horario_id, datos.fecha_entrenamiento, persona_id_solicitante,
         )
+        try:
+            return self.repo.crear(
+                Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
+            )
+        except IntegrityError:
+            # Carrera real (no solo teórica): dos requests para la MISMA
+            # persona pueden pasar ambas el `if existente` de arriba antes
+            # de que cualquiera commitee -- el chequeo de más arriba es
+            # check-then-act, no atómico. `uq_asistencia_persona_horario_fecha`
+            # (migración de este mismo slice) es quien realmente lo impide;
+            # acá solo traducimos su violación al mismo rechazo legible que
+            # ya usa el camino no-concurrente.
+            self.repo.db.rollback()
+            raise OperacionInvalida(
+                f"La asistencia de {persona.nombres} {persona.apellidos} para el "
+                f"{datos.fecha_entrenamiento.isoformat()} ya fue registrada. Esa "
+                "lista quedó cerrada de forma permanente y no puede volver a "
+                "tomarse.",
+                detalle_tecnico=(
+                    f"choque de unique en insercion concurrente: horario_id="
+                    f"{datos.horario_id} fecha_entrenamiento="
+                    f"{datos.fecha_entrenamiento.isoformat()} persona_id="
+                    f"{datos.persona_id}"
+                ),
+            ) from None
 
     def historial_por_persona(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None

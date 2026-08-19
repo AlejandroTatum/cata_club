@@ -74,12 +74,12 @@ def test_cualquier_entrenador_registra_asistencia_en_cualquier_horario(
     assert "entrenadorId" not in resp.json()
 
 
-def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
-    """Bug confirmado: reabrir el wizard "Tomar asistencia" para una sesión
-    ya registrada y volver a enviar creaba filas duplicadas en vez de
-    actualizar las existentes. `registrar_asistencia` debe hacer upsert por
-    (persona_id, horario_id, fecha_entrenamiento): exactamente una fila por
-    esa combinación, con el último `estado` enviado."""
+def test_registrar_asistencia_dos_veces_se_rechaza_por_sesion_cerrada(client):
+    """Issue #389: reabrir el wizard "Tomar asistencia" para una sesión ya
+    registrada y volver a enviar YA NO actualiza la fila existente -- el
+    primer registro exitoso cierra la sesión de forma permanente, así que
+    el segundo envío se rechaza con 400 y la fila original queda intacta
+    (reemplaza el upsert previo, que sí actualizaba en el lugar)."""
     alumno = _crear_persona_api(client, "1710034073", "Ana")
 
     horario = client.post(
@@ -102,9 +102,8 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
         "/api/v1/asistencias/",
         json={**payload, "estado": "AUSENTE"},
     )
-    assert segunda.status_code == 201
-    assert segunda.json()["id"] == primera.json()["id"]
-    assert segunda.json()["estado"] == "AUSENTE"
+    assert segunda.status_code == 400
+    assert "cerrada" in segunda.json()["detail"].lower()
 
     historial = client.get(f"/api/v1/asistencias/persona/{alumno['id']}")
     registros = [
@@ -112,7 +111,7 @@ def test_registrar_asistencia_dos_veces_actualiza_en_vez_de_duplicar(client):
         if r["horarioId"] == horario["id"] and r["fechaEntrenamiento"] == str(date(2026, 7, 20))
     ]
     assert len(registros) == 1
-    assert registros[0]["estado"] == "AUSENTE"
+    assert registros[0]["estado"] == "PRESENTE"  # sin cambios: no se pisó
 
 
 # --- Issue #308: la fecha registrada tiene que ser la del horario ----------
@@ -529,11 +528,11 @@ def test_listar_ultimas_listas_rechaza_rol_sin_permiso(client_sin_permisos, clie
     assert resp.status_code == 403
 
 
-# --- Issue #262: corrección de asistencia con reglas del club -----------------
-# Solo el ADMINISTRADOR corrige; el ENTRENADOR toma pero nunca corrige. Tope de
-# 30 días (día 30 permitido, día 31 rechazado) SOLO para corregir -- la toma
-# original (crear) no tiene tope. Re-tomar el mismo día es corrección (rama de
-# actualización), no toma original.
+# --- Issue #389: cierre permanente de sesión (reemplaza la corrección de
+# issue #262) -----------------------------------------------------------------
+# El mecanismo previo (solo ADMINISTRADOR corrige, tope de 30 días) queda
+# eliminado: re-registrar a quien YA tiene fila se rechaza con 400 para
+# cualquier rol, sin importar la antigüedad. La toma original no tiene tope.
 _HOY_CORRECCION = date(2026, 8, 15)
 
 
@@ -573,8 +572,10 @@ def _preparar_asistencia_para_corregir(client, fecha):
 
 
 def test_entrenador_no_puede_corregir_asistencia_existente(client_entrenador, client, monkeypatch):
-    """Corregir un registro ya existente exige ADMINISTRADOR: el ENTRENADOR
-    recibe 403 con el mensaje de ROL, distinto del mensaje de antigüedad."""
+    """Issue #389: re-enviar un registro ya existente se rechaza para
+    CUALQUIER rol -- el ENTRENADOR ya no recibe el 403 de "falta de rol"
+    (ese chequeo no existe más en esta rama): recibe el mismo 400 de sesión
+    cerrada que recibiría un administrador."""
     _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
     payload = _preparar_asistencia_para_corregir(
         client, str(_HOY_CORRECCION - timedelta(days=5))
@@ -584,44 +585,37 @@ def test_entrenador_no_puede_corregir_asistencia_existente(client_entrenador, cl
     resp = client_entrenador.post(
         "/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"},
     )
-    assert resp.status_code == 403
-    assert resp.json()["detail"] == "Solo el administrador puede corregir asistencias ya registradas."
-
-
-def test_admin_no_puede_corregir_asistencia_con_mas_de_30_dias(client, monkeypatch):
-    """El ADMINISTRADOR corrige, pero no algo de más de 30 días: 400 con el
-    mensaje de ANTIGÜEDAD, distinto del de rol."""
-    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
-    payload = _preparar_asistencia_para_corregir(
-        client, str(_HOY_CORRECCION - timedelta(days=31))
-    )
-
-    resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "No se puede corregir una asistencia con más de 30 días de antigüedad."
+    assert "cerrada" in resp.json()["detail"].lower()
 
 
-def test_admin_corrige_en_el_dia_30_permitido(client, monkeypatch):
-    """Límite exacto: 30 días de antigüedad es el último día corregible."""
+def test_admin_no_puede_reabrir_sesion_cerrada_sin_importar_antiguedad(client, monkeypatch):
+    """Issue #389: el tope de 30 días del #262 queda eliminado -- un
+    ADMINISTRADOR ya NUNCA re-registra a quien ya tiene fila, sin importar
+    la antigüedad (antes, el día 30 devolvía 201). Cada iteración usa su
+    propio alumno/horario en un weekday distinto (sin domingo) para no
+    chocar con `uq_horario_categoria_dia` ni con la cédula anterior."""
     _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
-    payload = _preparar_asistencia_para_corregir(
-        client, str(_HOY_CORRECCION - timedelta(days=30))
-    )
+    for indice, antiguedad_dias in enumerate((0, 5, 30, 31, 60)):
+        fecha = str(_HOY_CORRECCION - timedelta(days=antiguedad_dias))
+        dia = _dia_semana_de(fecha)
+        categoria = "COMPETITIVO" if dia == "SABADO" else "JUVENIL"
+        alumno = _crear_persona_api(client, cedula_valida(170 + indice), f"Alumno{indice}")
+        horario = _crear_horario_api(client, dia=dia, categoria=categoria)
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+        )
+        payload = {
+            "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        }
+        primera = client.post("/api/v1/asistencias/", json=payload)
+        assert primera.status_code == 201, primera.text
 
-    resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
-    assert resp.status_code == 201
-    assert resp.json()["estado"] == "AUSENTE"
-
-
-def test_admin_corrige_en_el_dia_31_rechazado(client, monkeypatch):
-    """Límite exacto: 31 días de antigüedad ya excede el techo de 30."""
-    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
-    payload = _preparar_asistencia_para_corregir(
-        client, str(_HOY_CORRECCION - timedelta(days=31))
-    )
-
-    resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
-    assert resp.status_code == 400
+        resp = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
+        assert resp.status_code == 400, (antiguedad_dias, resp.text)
+        assert "cerrada" in resp.json()["detail"].lower()
 
 
 def test_toma_original_por_entrenador_no_tiene_tope_de_antiguedad(client_entrenador, client, monkeypatch):
@@ -650,9 +644,10 @@ def test_toma_original_por_entrenador_no_tiene_tope_de_antiguedad(client_entrena
 
 
 def test_re_tomar_mismo_dia_por_entrenador_se_rechaza_como_correccion(client_entrenador, client, monkeypatch):
-    """Re-tomar el MISMO día es una actualización, no una toma original: un
-    ENTRENADOR que reenvía la lista del día cae en la rama de corrección y
-    recibe 403."""
+    """Re-tomar el MISMO día sigue cayendo en la rama de re-registro: un
+    ENTRENADOR que reenvía la lista del día recibe el mismo 400 de sesión
+    cerrada (issue #389 -- ya no es un 403 de rol, porque el rol dejó de
+    importar en esta rama)."""
     _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
     payload = _preparar_asistencia_para_corregir(client, str(_HOY_CORRECCION))
 
@@ -660,7 +655,40 @@ def test_re_tomar_mismo_dia_por_entrenador_se_rechaza_como_correccion(client_ent
     resp = client_entrenador.post(
         "/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 400
+    assert "cerrada" in resp.json()["detail"].lower()
+
+
+def test_segundo_alumno_se_registra_en_sesion_ya_cerrada(client):
+    """El cierre bloquea RE-registrar a quien ya tiene fila, no altas
+    nuevas en la misma sesión (issue #389): un segundo alumno sin fila debe
+    poder registrarse aunque la sesión ya esté cerrada -- si no, un lote
+    parcialmente fallido (issue #352) no podría reintentarse."""
+    alumno_a = _crear_persona_api(client, cedula_valida(180), "Ana")
+    alumno_b = _crear_persona_api(client, cedula_valida(181), "Beto")
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "JUVENIL", "dia_semana": "LUNES"},
+    ).json()
+    for alumno in (alumno_a, alumno_b):
+        client.post(
+            "/api/v1/asistencias/asignar-alumno",
+            json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+        )
+
+    payload_base = {
+        "fecha_entrenamiento": str(date(2026, 7, 13)), "estado": "PRESENTE",
+        "horario_id": horario["id"],
+    }
+    primera = client.post(
+        "/api/v1/asistencias/", json={**payload_base, "persona_id": alumno_a["id"]},
+    )
+    assert primera.status_code == 201  # cierra la sesión
+
+    segunda = client.post(
+        "/api/v1/asistencias/", json={**payload_base, "persona_id": alumno_b["id"]},
+    )
+    assert segunda.status_code == 201  # alta nueva, no re-registro
 
 
 # --- Issue #263: persistir quién tomó la lista ---------------------------------
@@ -722,30 +750,10 @@ def test_registrar_asistencia_ignora_autor_enviado_en_el_body(client):
     assert resp.json()["registradoPorNombre"] == "María Torres"
 
 
-def test_corregir_no_pisa_quien_tomo_la_lista(client, monkeypatch):
-    """La rama de corrección (#262) actualiza el estado pero NO sobrescribe
-    `registrado_por_id`: la columna significa 'quién tomó la lista
-    originalmente'."""
-    # Mismo patrón que los tests de #262: congela el `hoy_club()` del
-    # servicio para que la antigüedad no dependa del reloj real.
-    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
-    fecha = str(_HOY_CORRECCION - timedelta(days=1))
-    # El horario sigue a `fecha` (issue #308): HOY_CORRECCION - 1 día es
-    # viernes, no lunes.
-    autor, alumno, horario = _crear_autor_y_alumno(client, dia=_dia_semana_de(fecha))
-
-    payload = {
-        "fecha_entrenamiento": fecha,
-        "estado": "PRESENTE",
-        "persona_id": alumno["id"], "horario_id": horario["id"],
-    }
-    primera = client.post("/api/v1/asistencias/", json=payload)
-    assert primera.status_code == 201
-
-    segunda = client.post("/api/v1/asistencias/", json={**payload, "estado": "AUSENTE"})
-    assert segunda.status_code == 201
-    assert segunda.json()["registradoPorId"] == autor["id"]
-    assert segunda.json()["registradoPorNombre"] == "María Torres"
+# `test_corregir_no_pisa_quien_tomo_la_lista` vivía acá: la rama de
+# actualización que cubría (#262) ya no existe (issue #389 -- re-registrar
+# se rechaza, nunca actualiza). Cobertura equivalente vuelve en el slice de
+# corrección transaccional (`fix/asistencias-02-transaccion-correccion`).
 
 
 def test_historial_expone_quien_tomo_la_lista(client):
