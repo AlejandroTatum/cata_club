@@ -1451,7 +1451,7 @@ describe("MembersPage — Beneficio del club", () => {
     const dialog = await openEditModal();
 
     expect(
-      await within(dialog).findByText(/el servidor no pudo completar la operación/i),
+      await within(dialog).findByText(/tuvimos un problema de nuestro lado/i),
     ).toBeInTheDocument();
   });
 
