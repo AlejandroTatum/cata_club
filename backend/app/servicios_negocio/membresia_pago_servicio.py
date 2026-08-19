@@ -1466,9 +1466,23 @@ class PagoServicio:
         notificación in-app, pero con `TipoNotificacion.
         COBERTURA_BONIFICADA_OTORGADA` -- nunca `PAGO_APROBADO`, cuyo texto
         ("Su pago de $X fue aprobado") describiría un cobro que no ocurrió.
+
+        Lock de `Membresia` (`obtener_por_id_con_bloqueo`, `SELECT ...
+        FOR UPDATE`, issue #400/08): mismo patrón que `registrar_pago`/
+        `suspender_membresia`/`reactivar_membresia`/`corregir_pago`/
+        `cambiar_plan` -- este era el único de los seis métodos que muta
+        estado de una `Membresia` sin tomarlo, apoyado solo en el `EXCLUDE`
+        de Postgres `ex_cobertura_bonificada_periodo_no_solapa`. Ese
+        `EXCLUDE` protege el solapamiento DENTRO de `cobertura_bonificada`,
+        pero no puede ver una carrera contra `membresia.estado` (una
+        suspensión concurrente) ni contra `pago.estado_pago` (una
+        corrección concurrente sobre un pago aprobado de la misma
+        membresía) -- ninguna de las dos toca la tabla que el `EXCLUDE`
+        vigila. El lock serializa contra los cinco métodos hermanos igual
+        que ya se serializan entre sí.
         """
         roles_solicitante = roles_solicitante or []
-        membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
         if not membresia:
             raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 

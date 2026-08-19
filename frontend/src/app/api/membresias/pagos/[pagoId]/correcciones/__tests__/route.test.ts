@@ -79,4 +79,23 @@ describe("GET /api/membresias/pagos/[pagoId]/correcciones", () => {
 
     expect(response.status).toBe(403);
   });
+
+  // Issue #400 (entrega 08): pin the exact status the backend returns for
+  // 409/422, not a genericized 500 — a route that swallows the real status
+  // here would still 200 or 500 in these tests without this assertion.
+  it("relays the backend's 409 as-is", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Conflicto" }, 409));
+
+    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("relays the backend's 422 as-is", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
+
+    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+
+    expect(response.status).toBe(422);
+  });
 });
