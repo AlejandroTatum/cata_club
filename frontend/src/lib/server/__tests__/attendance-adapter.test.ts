@@ -92,7 +92,21 @@ describe("buildAttendanceRecord", () => {
       estado: "present",
       registradoPorId: 7,
       registradoPorNombre: "Carlos Ruiz",
+      justificativo: null,
+      estadoJustificativo: null,
     });
+  });
+
+  it("threads justificativo/estadoJustificativo through for the correction form (issue #389)", () => {
+    const conJustificativo: BackendAsistencia = {
+      ...asistencia,
+      estado: "JUSTIFICADO",
+      justificativo: "Certificado médico",
+      estadoJustificativo: true,
+    };
+    const built = buildAttendanceRecord(conJustificativo, horario);
+    expect(built.justificativo).toBe("Certificado médico");
+    expect(built.estadoJustificativo).toBe(true);
   });
 
   it("carries the persisted taker (issue #263), not a browser-side name", () => {

@@ -139,6 +139,13 @@ export function buildAttendanceRecord(
     estado: ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND[asistencia.estado],
     registradoPorId: asistencia.registradoPorId ?? null,
     registradoPorNombre: asistencia.registradoPorNombre ?? null,
+    // Threaded through for the correction form (issue #389, slice 4b): it
+    // pre-fills these two so a correction never has to guess, and passes them
+    // back UNCHANGED on submit — the backend overwrites all three mutable
+    // fields together, so omitting them would silently wipe a real
+    // justificativo instead of preserving it.
+    justificativo: asistencia.justificativo ?? null,
+    estadoJustificativo: asistencia.estadoJustificativo ?? null,
   };
 }
 
