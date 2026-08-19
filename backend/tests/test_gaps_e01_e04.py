@@ -384,7 +384,7 @@ def test_menor_no_puede_registrar_su_propio_pago(client):
     resp = c_menor.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "30.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": menor["id"], "membresia_id": membresia["id"],
         },
@@ -416,7 +416,7 @@ def test_representante_si_puede_registrar_pago_del_representado(client):
     resp = c_rep.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "30.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": menor["id"], "membresia_id": membresia["id"],
         },
@@ -431,7 +431,7 @@ def test_pago_a_persona_inexistente_sin_vinculo_da_403_no_404(client_sin_permiso
     resp = client_sin_permisos.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "35.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": 999, "membresia_id": 1,
         },

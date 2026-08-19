@@ -54,7 +54,7 @@ def _crear_membresia(client, persona_id, tipo_id):
 
 def _payload_pago(persona_id, membresia_id):
     return {
-        "monto": "35.00", "tipo_pago": "TRANSFERENCIA",
+        "meses": 1, "tipo_pago": "TRANSFERENCIA",
         "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
         "persona_id": persona_id, "membresia_id": membresia_id,
     }

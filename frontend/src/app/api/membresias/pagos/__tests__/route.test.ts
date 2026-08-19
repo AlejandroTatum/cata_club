@@ -54,7 +54,7 @@ describe("POST /api/membresias/pagos", () => {
 
   it("returns 400 when required fields are missing", async () => {
     const token = makeJwt(3600);
-    const response = await POST(request({ monto: 50, tipoPago: "TRANSFERENCIA" }, `${ACCESS_TOKEN_COOKIE}=${token}`));
+    const response = await POST(request({ meses: 1, tipoPago: "TRANSFERENCIA" }, `${ACCESS_TOKEN_COOKIE}=${token}`));
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual(
       expect.objectContaining({ message: expect.stringContaining("Faltan campos obligatorios") }),
@@ -87,7 +87,7 @@ describe("POST /api/membresias/pagos", () => {
     const response = await POST(
       request(
         {
-          monto: 50,
+          meses: 1,
           tipoPago: "TRANSFERENCIA",
           personaId: 9,
           membresiaId: 4,
@@ -103,7 +103,7 @@ describe("POST /api/membresias/pagos", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          monto: 50,
+          meses: 1,
           tipo_pago: "TRANSFERENCIA",
           persona_id: 9,
           membresia_id: 4,
@@ -113,11 +113,11 @@ describe("POST /api/membresias/pagos", () => {
   });
 
   /**
-   * Fix período de cobertura (PAG-5): el backend calcula el período del
-   * monto y la cuota -- un cliente que TODAVÍA mande `fechaInicio`/
-   * `fechaFin` (versión vieja del bundle, o un curl como el de la
-   * reproducción del agujero) no debe lograr que esas fechas lleguen al
-   * backend. El handler ya no las lee del body.
+   * Fix período de cobertura (PAG-5): el backend calcula el período de
+   * `meses` -- un cliente que TODAVÍA mande `fechaInicio`/`fechaFin`
+   * (versión vieja del bundle, o un curl como el de la reproducción del
+   * agujero) no debe lograr que esas fechas lleguen al backend. El handler
+   * ya no las lee del body.
    */
   it("ignores a client-sent fechaInicio/fechaFin instead of forwarding it", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
@@ -127,7 +127,7 @@ describe("POST /api/membresias/pagos", () => {
     const response = await POST(
       request(
         {
-          monto: 50,
+          meses: 1,
           tipoPago: "TRANSFERENCIA",
           fechaInicio: "2026-08-01",
           fechaFin: "2027-08-01", // un año -- exactamente el payload de la reproducción
@@ -162,7 +162,7 @@ describe("POST /api/membresias/pagos", () => {
     const response = await POST(
       request(
         {
-          monto: 35,
+          meses: 1,
           tipoPago: "EFECTIVO",
           personaId: 9,
           membresiaId: 4,
@@ -177,15 +177,29 @@ describe("POST /api/membresias/pagos", () => {
     expect(forwarded).not.toHaveProperty("descuento_ids");
   });
 
+  /**
+   * "El monto debe ser múltiplo de la cuota mensual" used to be the
+   * example here, but that backend rule is GONE (issue #400/4b:
+   * `PagoCreateDTO` takes `meses`, an integer -- there is no monto left to
+   * divide). The domain error this test protects against surfacing raw is
+   * still very much reachable: registering a second payment while one is
+   * already PENDIENTE_VALIDACION for the same membership.
+   */
   it("surfaces an arbitrary backend 400 message to the client", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ detail: "El monto debe ser múltiplo de la cuota mensual" }, 400),
+      jsonResponse(
+        {
+          detail: "Esta membresía ya tiene un pago pendiente de validación. "
+            + "Espere a que sea validado antes de registrar uno nuevo.",
+        },
+        400,
+      ),
     );
     const token = makeJwt(3600);
     const response = await POST(
       request(
         {
-          monto: 35,
+          meses: 1,
           tipoPago: "EFECTIVO",
           personaId: 9,
           membresiaId: 4,
@@ -195,7 +209,8 @@ describe("POST /api/membresias/pagos", () => {
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      message: "El monto debe ser múltiplo de la cuota mensual",
+      message: "Esta membresía ya tiene un pago pendiente de validación. "
+        + "Espere a que sea validado antes de registrar uno nuevo.",
     });
   });
 
@@ -205,7 +220,7 @@ describe("POST /api/membresias/pagos", () => {
     const response = await POST(
       request(
         {
-          monto: 50,
+          meses: 1,
           tipoPago: "EFECTIVO",
           personaId: 1,
           membresiaId: 4,
@@ -244,7 +259,7 @@ describe("POST /api/membresias/pagos", () => {
     const response = await POST(
       request(
         {
-          monto: 50,
+          meses: 1,
           tipoPago: "EFECTIVO",
           personaId: 1,
           membresiaId: 4,

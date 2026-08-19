@@ -367,17 +367,16 @@ class PagoServicio:
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
 
-        # El monto debe ser un múltiplo exacto del precio mensual de la
-        # membresía (se queda: decisiones 2026-08-11 §6 sacó los pagos
-        # parciales de alcance). Esto es lo que garantiza que TODO pago
-        # represente meses completos, así que el período de abajo puede
-        # calcularse en línea recta -- sin saldos, sin estados intermedios.
+        # El usuario elige una cantidad ENTERA de meses, nunca un monto libre
+        # (issue #400): `datos.meses` ya viene validado por el DTO (`gt=0`,
+        # `le=12`), así que no hay ningún "múltiplo de la cuota" que
+        # chequear acá -- esa regla existía SOLO porque el contrato viejo
+        # recibía un monto y tenía que adivinar cuántos meses representaba.
+        # El monto base se deriva multiplicando, en vez de adivinarse
+        # dividiendo.
         precio_mensual = membresia.monto_aplicado
-        if precio_mensual > 0 and datos.monto % precio_mensual != 0:
-            raise OperacionInvalida(
-                f"El monto (${datos.monto}) debe ser múltiplo del precio mensual "
-                f"(${precio_mensual})."
-            )
+        meses = datos.meses
+        monto_base = precio_mensual * meses
 
         # Fix período de cobertura (PAG-5): antes, `fecha_inicio`/`fecha_fin`
         # llegaban del cliente y el servicio solo confiaba en que una fuera
@@ -386,15 +385,7 @@ class PagoServicio:
         # docs/archive/fixes/06-periodo-de-cobertura.md). Ahora el backend deriva el
         # período: arranca donde termina la del último pago APROBADO (o hoy
         # si no hay ninguno, igual que antes leía el frontend) y avanza
-        # tantos meses completos como el monto compre.
-        #
-        # Importante (decisiones 2026-08-11 §6): "tantos meses como el monto
-        # compre" se calcula sobre `datos.monto`, el monto BASE -- ANTES de
-        # `_congelar_beneficio_activo` más abajo. La membresía anual se vende como
-        # descuento del catálogo sobre doce meses adelantados ($300 -> $270);
-        # si la cobertura se calculara sobre el monto ya descontado, el padre
-        # pagaría doce meses y recibiría once.
-        meses = int(datos.monto // precio_mensual) if precio_mensual > 0 else 1
+        # tantos meses completos como el cliente pidió.
         ultima_fecha_fin = self.repo.fecha_fin_maxima_aprobada(datos.membresia_id)
         hoy = hoy_club()
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
@@ -408,11 +399,18 @@ class PagoServicio:
         # descuento) para que el INSERT sea una sola transacción: no puede
         # quedar un pago descontado sin su detalle.
         descuento_congelado, monto_final = self._congelar_beneficio_activo(
-            datos.persona_id, datos.monto,
+            datos.persona_id, monto_base,
         )
 
+        # `Pago(**datos.model_dump(), ...)` ya no alcanza: `PagoCreateDTO`
+        # perdió `monto` (la columna) y ganó `meses` (que NO es columna de
+        # `Pago` -- se guarda como `meses_comprados` en el snapshot de abajo).
+        # Repartir el `model_dump()` a mano evita las dos trampas: `meses`
+        # colándose como kwarg inexistente, y `monto` quedando sin proveer.
         pago = Pago(
-            **datos.model_dump(),
+            tipo_pago=datos.tipo_pago,
+            persona_id=datos.persona_id,
+            membresia_id=datos.membresia_id,
             estado_pago=EstadoPago.PENDIENTE_VALIDACION,
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
@@ -429,29 +427,32 @@ class PagoServicio:
         # el historial no dependa de `membresia.monto_aplicado` (mutable) ni
         # de una futura re-derivación contra un catálogo que puede cambiar
         # (ver docstring de `actualizar_tipo_membresia`). `monto_base` es
-        # `datos.monto`, el monto ANTES de `_congelar_beneficio_activo` --
-        # `pago.monto` ya quedó con el final, descontado, arriba.
+        # `precio_mensual * meses`, el monto ANTES de
+        # `_congelar_beneficio_activo` -- `pago.monto` ya quedó con el
+        # final, descontado, arriba.
         #
         # Caso `precio_mensual == 0`: hoy la ÚNICA forma de llegar acá es la
         # gratuidad familiar E04-RF002 (`_aplicar_regla_familiar_si_corresponde`
-        # deja `membresia.monto_aplicado` en 0.00). El `meses = 1` de la
-        # línea de arriba NO es una división real -- es un valor de guardia
-        # para no partir por cero, y el chequeo de múltiplo también se
-        # saltea en esa rama, así que un pago contra una membresía gratuita
-        # puede llegar con CUALQUIER monto positivo (el DTO exige `gt=0`)
-        # sin que exista ninguna aritmética que vincule ese monto con "1
-        # mes". Congelar tarifa=0.00/meses=1/monto_base=<lo enviado>
-        # inventaría un hecho histórico que la ejecución real no produjo --
-        # exactamente la "corrección automática de plata ambigua" que la
-        # migración prohíbe (ver docstring de
-        # tests/test_snapshot_de_pago.py). Se deja el snapshot AUSENTE (las
-        # tres columnas NULL, que `ck_pago_snapshot_completo_o_ausente`
-        # permite) en vez de mentir con un 0.00/1 que tiene forma de dato
-        # bueno y no lo es.
+        # deja `membresia.monto_aplicado` en 0.00). Antes de este slice
+        # (#400/4b), `meses` era un valor de guardia fijo (`meses = 1`) sin
+        # relación aritmética con lo que mandaba el cliente -- congelar un
+        # snapshot con eso habría inventado un hecho histórico. Desde este
+        # slice `datos.meses` SÍ es lo que el cliente pidió, así que
+        # `monto_base = precio_mensual * meses` es aritmética real incluso
+        # acá (0.00 * meses = 0.00, siempre exacto). Aun así se mantiene el
+        # mismo criterio conservador de dejar el snapshot AUSENTE: una
+        # `tarifa_mensual_aplicada` de $0.00 tiene forma de tarifa vigente
+        # real cuando en los hechos esta membresía no tiene ninguna, y
+        # `monto_base` en $0.00 no distingue "1 mes gratuito" de "12 meses
+        # gratuitos" -- la única columna que sí lo haría (`meses_comprados`)
+        # no vale la pena escribirla sola, a medias, contra las otras dos
+        # ausentes. Se deja el snapshot AUSENTE (las tres columnas NULL, que
+        # `ck_pago_snapshot_completo_o_ausente` permite) en vez de mentir
+        # con un 0.00 que tiene forma de dato bueno y no lo es.
         if precio_mensual > 0:
             pago.tarifa_mensual_aplicada = precio_mensual
             pago.meses_comprados = meses
-            pago.monto_base = datos.monto
+            pago.monto_base = monto_base
         # Red de seguridad del invariante 1 (issue #8): si otra petición
         # concurrente registró su pendiente ENTRE el chequeo de arriba y este
         # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se

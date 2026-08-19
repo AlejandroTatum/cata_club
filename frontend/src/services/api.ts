@@ -1307,9 +1307,14 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
 }
 
 /** Payload for registering a new pending payment — `POST /api/membresias/pagos`.
- *  `monto` is always the BASE amount: the backend resolves the persona's
- *  assigned benefit (if any — see `fetchBeneficio`/`BeneficioAsignado`
- *  below), freezes its current value and computes the final amount itself.
+ *  `meses` replaces `monto` (issue #400): the user picks a whole number of
+ *  months, never a free-form amount — the backend resolves the membership's
+ *  current monthly price and computes `monto_base = tarifa_vigente * meses`
+ *  itself, then resolves the persona's assigned benefit (if any — see
+ *  `fetchBeneficio`/`BeneficioAsignado` below), freezes its current value
+ *  and computes the final amount. Callers still collect an amount from the
+ *  reader for now (the month-picker UX is a later phase) and derive `meses`
+ *  from it with `wholeMonthsFor` before calling this.
  *
  *  No `descuentoIds` (issue #398): a discount used to be a per-payment
  *  choice sent here, but the backend now resolves it from the persona's
@@ -1318,14 +1323,14 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
  *  any single payment.
  *
  *  No `fechaInicio`/`fechaFin` (fix período de cobertura, PAG-5): the
- *  backend derives the coverage period from `monto` and the membership's
- *  monthly price -- the old contract let the caller hand it any range
- *  regardless of `monto`, which is exactly the hole this fix closes (see
- *  docs/archive/fixes/06-periodo-de-cobertura.md). Callers can still PREVIEW the
- *  period client-side (`wholeMonthsFor` / `addMonthsIso`) to show the
- *  reader what they're about to pay for, but nothing here is sent. */
+ *  backend derives the coverage period from `meses` -- the old contract let
+ *  the caller hand it any range regardless of the amount, which is exactly
+ *  the hole this fix closes (see docs/archive/fixes/06-periodo-de-cobertura.md).
+ *  Callers can still PREVIEW the period client-side (`wholeMonthsFor` /
+ *  `addMonthsIso`) to show the reader what they're about to pay for, but
+ *  nothing here is sent. */
 export interface RegistrarPagoInput {
-  monto: number;
+  meses: number;
   tipoPago: "EFECTIVO" | "TRANSFERENCIA";
   personaId: number;
   membresiaId: number;

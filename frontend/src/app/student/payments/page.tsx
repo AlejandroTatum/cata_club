@@ -539,11 +539,17 @@ function RenewPaymentForm({
     let nuevoPago: PagoPersona;
     try {
       // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el
-      // backend las calcula solo, a partir del monto y la cuota. Las
-      // variables locales siguen existiendo -- son la vista previa que ve
-      // el lector antes de confirmar -- pero ya no viajan en la petición.
+      // backend las calcula solo, a partir de `meses`. Las variables
+      // locales siguen existiendo -- son la vista previa que ve el lector
+      // antes de confirmar -- pero ya no viajan en la petición.
+      //
+      // `meses` reemplaza a `monto` (issue #400): el backend ya no recibe
+      // un monto libre, sino la cantidad de meses que el usuario eligió.
+      // `months` no puede ser `null` acá: `findProblem()` ya corrió arriba
+      // sin encontrar ninguno, y eso exige `fechaFin` calculada, que a su
+      // vez exige `months !== null` (ver su `useMemo`).
       nuevoPago = await registrarPago({
-        monto: amount,
+        meses: months as number,
         tipoPago,
         personaId: Number(personaId),
         membresiaId: membership.id,

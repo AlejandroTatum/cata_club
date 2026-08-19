@@ -7,12 +7,21 @@ vivo contra QA con un pago de UN mes pidiendo DOCE de cobertura, 201. La
 regla del múltiplo (`monto % precio_mensual`) validaba el MONTO y daba la
 ilusión de que el período estaba atado a él; no lo estaba.
 
-El fix: el backend deriva `fecha_inicio`/`fecha_fin` del monto BASE y la
-cuota mensual -- el cliente ya no puede mandarlos (`PagoCreateDTO` los
-quitó del contrato). La cobertura arranca donde termina la del último pago
-APROBADO (o hoy si no hay ninguno) y avanza `monto // precio_mensual` meses
-completos. La regla del múltiplo se queda: es lo que garantiza que todo
-pago represente meses completos.
+El fix original: el backend derivaba `fecha_inicio`/`fecha_fin` del monto
+BASE y la cuota mensual -- el cliente ya no podía mandarlos (`PagoCreateDTO`
+los quitó del contrato). La cobertura arrancaba donde terminaba la del
+último pago APROBADO (o hoy si no había ninguno) y avanzaba
+`monto // precio_mensual` meses completos.
+
+Actualización (issue #400, slice 4b): `PagoCreateDTO.monto` se reemplazó por
+`meses: int` -- el usuario elige una cantidad ENTERA de meses, no un monto
+libre, y el backend calcula `monto_base = tarifa_vigente * meses`. La regla
+del múltiplo DESAPARECE (no queda: ver `test_meses_no_positivo_o_fuera_de_
+rango_es_rechazado` más abajo, la invariante nueva que ocupa su lugar) --
+con `meses` como input no hay ningún resto que calcular, la cantidad de
+meses YA es la cantidad de meses. La cobertura sigue avanzando tantos meses
+completos como el cliente pidió; ahora es una lectura directa de
+`datos.meses`, no una división de `datos.monto` contra la cuota.
 """
 from datetime import date
 from decimal import Decimal
@@ -71,10 +80,10 @@ def _asignar_beneficio(client, persona_id, descuento_id):
     return resp.json()
 
 
-def _registrar_pago(client, persona_id, membresia_id, monto, *, descuento_ids=None,
+def _registrar_pago(client, persona_id, membresia_id, meses, *, descuento_ids=None,
                      fecha_inicio=None, fecha_fin=None):
     payload = {
-        "monto": monto, "tipo_pago": "TRANSFERENCIA",
+        "meses": meses, "tipo_pago": "TRANSFERENCIA",
         "persona_id": persona_id, "membresia_id": membresia_id,
     }
     if descuento_ids is not None:
@@ -107,17 +116,18 @@ def _aprobar(client, pago_id):
 
 def test_un_pago_de_un_mes_no_puede_pedir_doce_de_cobertura(client, monkeypatch):
     """Reproduce la vulnerabilidad reportada por el dueño: POST con
-    `fecha_inicio`/`fecha_fin` separadas por un año, pagando el precio de UN
-    solo mes. Antes del fix, el backend aceptaba esas fechas tal cual (201,
-    doce meses de cobertura por la cuota de uno). Con el fix, el período lo
-    calcula el backend y esas fechas del payload no tienen ningún efecto."""
+    `fecha_inicio`/`fecha_fin` separadas por un año, pidiendo UN solo mes
+    (`meses=1`). Antes del fix, el backend aceptaba esas fechas tal cual
+    (201, doce meses de cobertura por la cuota de uno). Con el fix, el
+    período lo calcula el backend y esas fechas del payload no tienen ningún
+    efecto."""
     _congelar_hoy_en_pagos(monkeypatch)
     persona = _crear_persona(client)
     tipo = _crear_tipo_membresia(client, precio="25.00")
     membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="25.00")
 
     resp = _registrar_pago(
-        client, persona["id"], membresia["id"], "25.00",
+        client, persona["id"], membresia["id"], 1,
         fecha_inicio="2026-08-11", fecha_fin="2027-08-11",  # doce meses, en el payload
     )
     assert resp.status_code == 201
@@ -138,7 +148,7 @@ def test_primer_pago_arranca_hoy(client, monkeypatch):
     tipo = _crear_tipo_membresia(client, precio="35.00")
     membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="35.00")
 
-    pago = _registrar_pago(client, persona["id"], membresia["id"], "35.00").json()
+    pago = _registrar_pago(client, persona["id"], membresia["id"], 1).json()
 
     assert pago["fechaInicio"] == FECHA_CONGELADA_HOY.isoformat()
     assert pago["fechaFin"] == date(2029, 2, 1).isoformat()
@@ -150,11 +160,11 @@ def test_renovacion_arranca_donde_termino_la_aprobada(client, monkeypatch):
     tipo = _crear_tipo_membresia(client, precio="35.00")
     membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="35.00")
 
-    primero = _registrar_pago(client, persona["id"], membresia["id"], "35.00").json()
+    primero = _registrar_pago(client, persona["id"], membresia["id"], 1).json()
     aprobado = _aprobar(client, primero["id"])
     assert aprobado["fechaFin"] == date(2029, 2, 1).isoformat()
 
-    segundo = _registrar_pago(client, persona["id"], membresia["id"], "35.00").json()
+    segundo = _registrar_pago(client, persona["id"], membresia["id"], 1).json()
     # Retoma exactamente donde terminó el aprobado -- sin gap ni superposición.
     assert segundo["fechaInicio"] == date(2029, 2, 1).isoformat()
     assert segundo["fechaFin"] == date(2029, 3, 1).isoformat()
@@ -166,7 +176,7 @@ def test_adelantar_dos_meses(client, monkeypatch):
     tipo = _crear_tipo_membresia(client, precio="25.00")
     membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="25.00")
 
-    pago = _registrar_pago(client, persona["id"], membresia["id"], "50.00").json()
+    pago = _registrar_pago(client, persona["id"], membresia["id"], 2).json()
     assert pago["fechaInicio"] == FECHA_CONGELADA_HOY.isoformat()
     assert pago["fechaFin"] == date(2029, 3, 1).isoformat()
 
@@ -177,30 +187,46 @@ def test_adelantar_tres_meses(client, monkeypatch):
     tipo = _crear_tipo_membresia(client, precio="25.00")
     membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="25.00")
 
-    pago = _registrar_pago(client, persona["id"], membresia["id"], "75.00").json()
+    pago = _registrar_pago(client, persona["id"], membresia["id"], 3).json()
     assert pago["fechaInicio"] == FECHA_CONGELADA_HOY.isoformat()
     assert pago["fechaFin"] == date(2029, 4, 1).isoformat()
 
 
-def test_monto_no_multiplo_de_la_cuota_sigue_rechazado(client, monkeypatch):
-    """La regla del múltiplo se queda (decisiones 2026-08-11 §6: pagos
-    parciales quedaron fuera de alcance)."""
+def test_meses_no_positivo_o_fuera_de_rango_es_rechazado(client, monkeypatch):
+    """La regla del múltiplo (`monto % precio_mensual`) YA NO EXISTE (issue
+    #400/4b): con `meses` como input no hay ningún resto que calcular, la
+    cantidad de meses ES la cantidad de meses. La invariante que ocupa su
+    lugar es la que ya protege `PagoCreateDTO.meses` (`gt=0, le=12`): esto
+    es validación de esquema (422), no una regla de negocio del servicio
+    (400) como la que reemplaza -- Pydantic la atrapa antes de que
+    `registrar_pago` corra."""
     _congelar_hoy_en_pagos(monkeypatch)
     persona = _crear_persona(client)
     tipo = _crear_tipo_membresia(client, precio="25.00")
     membresia = _crear_membresia(client, persona["id"], tipo["id"], monto_aplicado="25.00")
 
-    resp = _registrar_pago(client, persona["id"], membresia["id"], "40.00")
-    assert resp.status_code == 400
+    assert _registrar_pago(client, persona["id"], membresia["id"], 0).status_code == 422
+    assert _registrar_pago(client, persona["id"], membresia["id"], -1).status_code == 422
+    assert _registrar_pago(client, persona["id"], membresia["id"], 13).status_code == 422
 
 
 def test_cobertura_se_calcula_sobre_el_monto_base_no_el_descontado(client, monkeypatch):
     """La membresía anual del club: descuento del catálogo sobre doce meses
-    adelantados. $300 base (múltiplo exacto de la cuota $25) con 10% de
-    descuento -> pago final $270, pero la cobertura tiene que ser DOCE
-    meses -- calculada sobre los $300, antes de congelar el descuento. Si
-    se calculara sobre $270 (floor(270/25) = 10), el padre pagaría un año y
-    recibiría diez meses."""
+    adelantados. Bajo el contrato viejo (`monto`, no `meses`) esto se
+    probaba pidiendo $300 base (múltiplo exacto de la cuota $25) con 10% de
+    descuento -> pago final $270, y el riesgo era que la cobertura se
+    calculara dividiendo el monto YA descontado (`floor(270/25) = 10`
+    meses, en vez de doce).
+
+    Desde issue #400/4b, `meses` es el input directo del cliente -- no hay
+    ninguna división que "contamine" con el descuento, `meses=12` significa
+    doce sea cual sea el beneficio aplicado. El riesgo se desplazó, no
+    desapareció: `monto_base` (`precio_mensual * meses`) tiene que
+    congelarse ANTES de `_congelar_beneficio_activo`, y la cobertura
+    (`_sumar_meses`) tiene que avanzar los DOCE meses pedidos, nunca algo
+    derivado del monto final. Si `monto_base` se calculara sobre el monto
+    YA descontado, el padre pagaría doce meses y el snapshot mentiría con
+    diez."""
     _congelar_hoy_en_pagos(monkeypatch)
     persona = _crear_persona(client)
     tipo = _crear_tipo_membresia(client, precio="25.00")
@@ -215,7 +241,7 @@ def test_cobertura_se_calcula_sobre_el_monto_base_no_el_descontado(client, monke
     # resuelve solo.
     _asignar_beneficio(client, persona["id"], descuento["id"])
 
-    resp = _registrar_pago(client, persona["id"], membresia["id"], "300.00")
+    resp = _registrar_pago(client, persona["id"], membresia["id"], 12)
     assert resp.status_code == 201, resp.text
     pago = resp.json()
 

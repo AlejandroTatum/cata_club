@@ -46,7 +46,7 @@ def test_post_pago_sin_token_da_401(client_sin_token):
     resp = client_sin_token.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "10.00", "tipo_pago": "EFECTIVO",
+            "meses": 1, "tipo_pago": "EFECTIVO",
             "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
             "persona_id": 1, "membresia_id": 1,
         },

@@ -255,7 +255,7 @@ def test_registrar_pago_sigue_anclando_en_hoy(client, db_session, monkeypatch):
     resp = client.post(
         "/api/v1/membresias/pagos",
         json={
-            "monto": "30.00",
+            "meses": 1,
             "tipo_pago": "TRANSFERENCIA",
             "persona_id": persona.id,
             "membresia_id": membresia.id,
