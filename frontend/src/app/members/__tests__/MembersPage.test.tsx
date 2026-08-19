@@ -1624,6 +1624,141 @@ describe("MembersPage — capped results help", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Issue #326: overdue amount + months on the members list for VENCIDA rows.
+// Sourced from `MemberStudentSummary.membresia.mesesAdeudados`/
+// `montoAdeudado` (built server-side by the adapter from the bulk debt
+// endpoint) — MembersPage only renders what it's given, no fetch here.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — deuda en la fila (issue #326)", () => {
+  it("shows overdue amount and months on a VENCIDA membership row and card", async () => {
+    const cuentaConDeuda: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-05-01",
+            fechaFin: "2026-05-31",
+            monto: 30,
+            id: 42,
+            mesesAdeudados: 3,
+            montoAdeudado: 90,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConDeuda] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const row = await findAccountRow();
+    expect(within(row).getByText(/90/)).toBeInTheDocument();
+    expect(within(row).getByText(/3\s*meses/i)).toBeInTheDocument();
+
+    const card = await findAccountCard();
+    expect(within(card).getByText(/90/)).toBeInTheDocument();
+    expect(within(card).getByText(/3\s*meses/i)).toBeInTheDocument();
+  });
+
+  it("uses singular 'mes' for exactly one overdue month", async () => {
+    const cuentaConUnMes: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-07-01",
+            fechaFin: "2026-07-31",
+            monto: 30,
+            id: 42,
+            mesesAdeudados: 1,
+            montoAdeudado: 30,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConUnMes] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const row = await findAccountRow();
+    expect(within(row).getByText(/1\s*mes\b/i)).toBeInTheDocument();
+    expect(within(row).queryByText(/1\s*meses/i)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing extra when a VENCIDA membership has no resolved debt data (bulk lookup degraded)", async () => {
+    const cuentaSinDeudaResuelta: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "vencida",
+            fechaInicio: "2026-05-01",
+            fechaFin: "2026-05-31",
+            monto: 30,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaSinDeudaResuelta] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const row = await findAccountRow();
+    expect(within(row).queryByText(/adeudad/i)).not.toBeInTheDocument();
+  });
+
+  it("does not show debt info for an ACTIVA membership even if debt fields were somehow present", async () => {
+    const cuentaActiva: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual (Tarde)",
+            estado: "activa",
+            fechaInicio: "2026-08-01",
+            fechaFin: "2026-09-01",
+            monto: 30,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaActiva] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const row = await findAccountRow();
+    expect(within(row).queryByText(/adeudad/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("MembersPage — honest aggregate coverage", () => {
   it("shows the incomplete-coverage notice when the upstream persona cap is reached after accounts collapse", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ACCOUNT], personasCapped: true });

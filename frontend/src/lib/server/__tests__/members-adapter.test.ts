@@ -252,4 +252,77 @@ describe("buildMemberAccounts", () => {
       expect(accounts[0].sinDatosEmergencia).toBe(true);
     });
   });
+
+  // Issue #326: overdue amount + months on the members list, for VENCIDA
+  // memberships only — sourced from `GET /membresias/deuda/bulk` (resolved
+  // server-side in route.ts), never recomputed on the frontend beyond the
+  // pure `mesesAdeudados * montoMensual` presentation multiplication.
+  describe("deuda en bloque (mesesAdeudados / montoAdeudado)", () => {
+    const membresiaVencida: BackendMembresia = { ...membresia, estado: "VENCIDA" };
+
+    it("attaches mesesAdeudados and the multiplied montoAdeudado for a VENCIDA membership present in the bulk map", () => {
+      const accounts = buildMemberAccounts(
+        [parent, child],
+        new Map([[3, pago]]),
+        new Map([[100, membresiaVencida]]),
+        new Map(),
+        new Map([[5, tipo]]),
+        new Set(),
+        new Map([[100, { mesesAdeudados: 3, montoMensual: 30 }]]),
+      );
+
+      const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+      expect(student?.membresia?.mesesAdeudados).toBe(3);
+      // Pure presentation arithmetic on backend-provided numbers, not a
+      // reimplementation of the day-boundary debt formula.
+      expect(student?.membresia?.montoAdeudado).toBe(90);
+    });
+
+    it("omits debt fields for a VENCIDA membership missing from the bulk map (fetch failure/degrade)", () => {
+      const accounts = buildMemberAccounts(
+        [parent, child],
+        new Map([[3, pago]]),
+        new Map([[100, membresiaVencida]]),
+        new Map(),
+        new Map([[5, tipo]]),
+        new Set(),
+        new Map(), // bulk lookup failed or didn't resolve this id — degrade, don't fabricate
+      );
+
+      const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+      expect(student?.membresia?.mesesAdeudados).toBeUndefined();
+      expect(student?.membresia?.montoAdeudado).toBeUndefined();
+    });
+
+    it("does NOT attach debt fields for an ACTIVA membership even if present in the bulk map", () => {
+      // The bulk map is keyed by membresiaId and could in principle carry a
+      // stale/irrelevant entry; only a VENCIDA membership ever shows debt.
+      const accounts = buildMemberAccounts(
+        [parent, child],
+        new Map([[3, pago]]),
+        new Map([[100, membresia]]), // ACTIVA
+        new Map(),
+        new Map([[5, tipo]]),
+        new Set(),
+        new Map([[100, { mesesAdeudados: 3, montoMensual: 30 }]]),
+      );
+
+      const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+      expect(student?.membresia?.mesesAdeudados).toBeUndefined();
+      expect(student?.membresia?.montoAdeudado).toBeUndefined();
+    });
+
+    it("defaults to an empty debt map when the parameter is omitted", () => {
+      const accounts = buildMemberAccounts(
+        [parent, child],
+        new Map([[3, pago]]),
+        new Map([[100, membresiaVencida]]),
+        new Map(),
+        new Map([[5, tipo]]),
+      );
+
+      const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+      expect(student?.membresia?.montoAdeudado).toBeUndefined();
+    });
+  });
 });
