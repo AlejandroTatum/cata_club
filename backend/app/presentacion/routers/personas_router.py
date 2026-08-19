@@ -354,24 +354,40 @@ async def listar_representados(
 
 
 # --- Beneficio del club (issue #398): asignación/retiro de un descuento ----
-# personal, ADMINISTRADOR-only las tres. El actor (`asignado_por`/`retirado_
-# por`) sale SIEMPRE de `token_payload["persona_id"]` -- nunca del cuerpo del
-# request -- así un usuario nunca puede concederse un beneficio a sí mismo
-# (invariante de seguridad firmado en el issue). `GestorPermisos` se usa como
-# dependencia de PARÁMETRO (no en `dependencies=[]`) porque además de exigir
-# el rol necesitamos el `token_payload` para leer ese actor -- mismo patrón
-# que `vincular_representado` más abajo.
+# personal. POST/DELETE siguen ADMINISTRADOR-only -- el actor (`asignado_por`/
+# `retirado_por`) sale SIEMPRE de `token_payload["persona_id"]`, nunca del
+# cuerpo del request, así un usuario nunca puede concederse un beneficio a sí
+# mismo (invariante de seguridad firmado en el issue). `GestorPermisos` se usa
+# como dependencia de PARÁMETRO (no en `dependencies=[]`) porque además de
+# exigir el rol necesitamos el `token_payload` para leer ese actor -- mismo
+# patrón que `vincular_representado` más abajo.
+#
+# GET se relajó (issue #400, slice 06): el socio no podía saber SI tenía un
+# beneficio vigente antes de pagar -- el portal necesita mostrarlo antes del
+# formulario de pago. Mismo criterio de ownership ya usado por
+# `GET /membresias/mias` y `GET /membresias/pagos/persona/{persona_id}`:
+# dueño, su representante, o ADMINISTRADOR -- vía `PoliticaAccesoPersona.
+# exigir_acceso` (ya usada en este mismo archivo por `actualizar_foto_persona`
+# e `independizar_persona`), no un chequeo nuevo.
 @router.get(
     "/{persona_id}/beneficio",
     response_model=Optional[AsignacionDescuentoResponseDTO],
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def obtener_beneficio(
     persona_id: int,
-    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
     """Beneficio VIGENTE de la persona, o `null` si no tiene ninguno --
     ausencia de beneficio no es un error (ver `BeneficioServicio.obtener_activo`)."""
+    PoliticaAccesoPersona(db).exigir_acceso(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+        roles_privilegiados=SOLO_ADMINISTRADOR,
+        mensaje="Solo la propia persona, su representante, o un administrador pueden ver este beneficio",
+    )
     servicio = BeneficioServicio(db)
     activo = servicio.obtener_activo(persona_id)
     return servicio.a_response_dto(activo) if activo is not None else None

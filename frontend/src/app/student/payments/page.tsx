@@ -49,8 +49,10 @@ import { useToast } from "@/contexts/ToastContext";
 import {
   fetchStudentPortal,
   fetchPagosDePersona,
+  fetchBeneficio,
   subirVoucherPago,
   registrarPago,
+  aplicarBeneficio,
 } from "@/services/api";
 import type {
   StudentPortalSummary,
@@ -58,11 +60,14 @@ import type {
   PagoPersona,
   MembershipSummary,
   RegistrarPagoInput,
+  BeneficioAsignado,
+  CoberturaBonificada,
 } from "@/services/api";
 import {
   BackLink,
   Badge,
   Button,
+  DataBox,
   EmptyState,
   ErrorState,
   FilterPanel,
@@ -94,13 +99,13 @@ import {
   describePagoDescuento,
   pagoFaltaComprobante,
   countPagosByStatus,
-  wholeMonthsFor,
   addMonthsIso,
+  estimateTotal,
   TIPO_PAGO_LABEL,
   PAGO_FILTER_LABELS,
   type PagoStatusFilter,
 } from "./payments-utils";
-import { CreditCard, Loader2, Paperclip, Plus, Upload, X } from "lucide-react";
+import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -272,8 +277,8 @@ function HowToPay({
   /**
    * Issue #400 (slice 4c-b): the gratuitous case — `RenewPaymentForm` is
    * replaced by an explanatory paragraph (see the render below), so the
-   * amount-driven procedure below ("escriba el monto… cada $X cubre un
-   * mes") describes a form that is not there for this reader.
+   * month-selector procedure below ("elija cuántos meses… cada mes cuesta
+   * $X") describes a form that is not there for this reader.
    */
   gratuitous,
   /** True once the club has a `Membresia` to renew; without one the form cannot be reached at all. */
@@ -346,13 +351,14 @@ function HowToPay({
       <p>Son tres pasos y terminan en el club, no en usted: lo último lo hace quien valida.</p>
       <ol className="mt-2.5 flex flex-col gap-2.5">
         <HowToPayStep index={1}>
-          Abra <b className="font-semibold text-ink">Registrar un pago</b> y escriba el monto{" "}
-          {subject === "suyo" ? "" : `${subject} `}y la forma de pago.
+          Abra <b className="font-semibold text-ink">Registrar un pago</b> y elija cuántos meses{" "}
+          {subject === "suyo" ? "" : `${subject} `}va a pagar, más la forma de pago — nunca escribe
+          un monto.
           {monthlyPrice ? (
             <>
               {" "}
-              Cada {formatCurrency(monthlyPrice)} cubre un mes: el formulario muestra el período
-              exacto antes de que confirme.
+              Cada mes cuesta {formatCurrency(monthlyPrice)}: el formulario muestra el período y el
+              total estimado antes de que confirme.
             </>
           ) : null}
         </HowToPayStep>
@@ -402,6 +408,97 @@ function HowToPayStep({
 }
 
 // ---------------------------------------------------------------------------
+// The club's benefit, read BEFORE the reader pays (issue #400, slice 06)
+//
+// `GET /personas/{id}/beneficio` used to be ADMINISTRADOR-only (issue #398):
+// a socio could not know whether they had a discount until the club told
+// them, or until a payment came back with it already applied. Relaxing that
+// one GET (owner/representative, same ownership criterion `fetchPagosDePersona`
+// already uses) lets this screen show it up front, right where the reader is
+// about to decide how much to pay.
+// ---------------------------------------------------------------------------
+
+function BeneficioNote({ beneficio }: { beneficio: BeneficioAsignado | null }): React.ReactElement | null {
+  if (!beneficio) return null;
+  const { descuento } = beneficio;
+  const porcentaje = descuento.porcentaje != null ? Number(descuento.porcentaje) : null;
+  const etiqueta =
+    porcentaje != null && Number.isFinite(porcentaje)
+      ? `${porcentaje}% OFF`
+      : descuento.monto != null
+        ? `${formatCurrency(descuento.monto)} OFF`
+        : null;
+  if (!etiqueta) return null;
+
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+      Su beneficio: <DataBox>{etiqueta}</DataBox>
+      <span className="text-ink-3">{descuento.nombre}</span>
+    </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cuántos meses — selector discreto, nunca un monto (issue #400)
+//
+// El usuario elige una cantidad ENTERA de meses; el backend sigue siendo
+// quien calcula `monto_base = tarifa_vigente * meses` (`PagoCreateDTO.meses`,
+// `gt=0, le=12` — mismo techo que `CoberturaBonificadaCreateDTO.meses`, doce
+// es la cobertura más larga que el club vende hoy).
+//
+// `Stepper` (components/ui) es un indicador de PASOS con nombre ("Horario ·
+// Lunes 15:00"), nunca un número pelado, y no calza con "elija una
+// cantidad" — este es un control +/- simple sobre los mismos tokens
+// (`h-ctl`, `rounded-ctl`, `border-line-2`) que ya usa el resto del
+// formulario, no un componente nuevo del sistema de diseño.
+// ---------------------------------------------------------------------------
+
+const MESES_MINIMO = 1;
+const MESES_MAXIMO = 12;
+
+function MonthCountField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className={FIELD_LABEL_CLASSES}>Meses a pagar</span>
+      <div className="inline-flex h-ctl w-fit items-center gap-1 rounded-ctl border border-line-2 bg-paper px-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(MESES_MINIMO, value - 1))}
+          disabled={disabled || value <= MESES_MINIMO}
+          aria-label="Un mes menos"
+          className="flex h-7 w-7 flex-none items-center justify-center rounded text-ink-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Minus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+        </button>
+        <span
+          aria-live="polite"
+          className="w-8 flex-none text-center text-sm font-bold tabular-nums text-ink"
+        >
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(MESES_MAXIMO, value + 1))}
+          disabled={disabled || value >= MESES_MAXIMO}
+          aria-label="Un mes más"
+          className="flex h-7 w-7 flex-none items-center justify-center rounded text-ink-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Registering a payment
 //
 // ## Why this commits behind a confirm step and not behind an undo
@@ -422,87 +519,82 @@ function HowToPayStep({
 // period that is about to be charged — and, once it is registered, a plain
 // statement of the real recovery, which is that the club validates every
 // payment and a wrong one is resolved by the club rejecting it.
+//
+// ## `useConfirmedAction` — the state machine `RenewPaymentForm` and
+// `ApplyBenefitForm` share
+//
+// Both forms are "closed → open → confirm → submit", and until this hook
+// existed that whole machine was copy-pasted between them (SonarCloud
+// flagged the duplication on PR #438): the same four pieces of state
+// (`showForm`/`confirming`/`loading`/`error`), the same auto-open-on-arrival
+// effect, the same focus-follows-the-checkpoint effect, and the same
+// `handleCancel`/`handleRequestConfirm`/`handleBackToForm` trio.
+//
+// What stays OUT of the hook, on purpose: `onSubmit` orchestration. The two
+// forms diverge there in a way that is not cosmetic —
+// `RenewPaymentForm.handleSubmit` has a THIRD outcome (`registrarPago`
+// succeeds but `subirVoucherPago` fails) that closes the form without
+// clearing `error`, while `ApplyBenefitForm.handleSubmit` only has the usual
+// two. Forcing both through one `onSubmit(): Promise<void>` shape here would
+// either lose that branch or smuggle it back in as a hook-level special
+// case — so `loading`/`error`/`setConfirming` are exposed as setters and
+// each component still writes its own `handleSubmit`, using them.
 // ---------------------------------------------------------------------------
 
-function RenewPaymentForm({
-  membership,
-  personaId,
-  coverageEnd,
-  hasPendingPago,
-  /**
-   * Open the form without a click, for a reader who arrived from the home
-   * screen's "Registrar un pago" band (`/student/payments?registrar=1`).
-   *
-   * The caller only flips this to `true` once the payment history has loaded:
-   * `handleOpen` seeds `fechaInicio` from `coverageEnd` so a family paying
-   * early does not lose the days they already paid for, and `coverageEnd` is
-   * `null` until the history arrives.
-   */
+function useConfirmedAction({
   autoOpen,
-  studentName,
-  onRegistered,
+  blocked,
+  onOpen,
+  findProblem,
 }: {
-  membership: MembershipSummary;
-  personaId: string;
-  coverageEnd: string | null;
-  hasPendingPago: boolean;
+  /** Open without a click, once, for a reader who arrived via `?registrar=1`. */
   autoOpen: boolean;
-  studentName: string | null;
-  onRegistered: () => void;
-}): React.ReactElement {
+  /** A pending payment blocks auto-open — same gate both forms already state in their own render. */
+  blocked: boolean;
+  /** The caller's own field seeding (months, fechaInicio, voucherFile…), run every time the form opens. */
+  onOpen: () => void;
+  /** The first thing wrong with the form as it stands, or `null` — checked before the checkpoint opens. */
+  findProblem: () => string | null;
+}): {
+  showForm: boolean;
+  confirming: boolean;
+  loading: boolean;
+  error: string | null;
+  setShowForm: (value: boolean) => void;
+  setConfirming: (value: boolean) => void;
+  setLoading: (value: boolean) => void;
+  setError: (value: string | null) => void;
+  confirmButtonRef: React.RefObject<HTMLButtonElement>;
+  submitButtonRef: React.RefObject<HTMLButtonElement>;
+  open: () => void;
+  handleCancel: () => void;
+  handleRequestConfirm: () => void;
+  handleBackToForm: () => void;
+} {
   const [showForm, setShowForm] = useState(false);
   /** The checkpoint between "I filled this in" and "the club has my money". */
   const [confirming, setConfirming] = useState(false);
-  const [monto, setMonto] = useState<string>(membership.montoAplicado ?? "");
-  const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
-  const [fechaInicio, setFechaInicio] = useState<string>("");
-  const [voucherFile, setVoucherFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
-  const { showSuccess, showWarning } = useToast();
 
-  const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
-  const amount = Number(monto) || 0;
-  const months = wholeMonthsFor(amount, monthlyPrice);
-
-  /**
-   * Coverage resumes where the paid period ends, not today — otherwise a family
-   * paying early loses the days they already paid for. `coverageEnd` is the
-   * furthest approved `fechaFin`; `membership.fechaFin`, which the old form
-   * read, never reaches this client.
-   */
-  const fechaFin = useMemo(
-    () => (fechaInicio && months !== null ? addMonthsIso(fechaInicio, months) : ""),
-    [fechaInicio, months],
-  );
-
-  const openForm = useCallback((): void => {
+  const open = useCallback((): void => {
     setShowForm(true);
     setConfirming(false);
     setError(null);
-    setVoucherFile(null);
-    // Both sides must be CALENDAR dates before they are compared: mixing an
-    // instant with a noon-anchored date made the comparison depend on the
-    // hour of day.
-    const today = clubToday();
-    const paidThrough = coverageEnd ? fromIsoDate(coverageEnd) : null;
-    setFechaInicio(
-      calendarIsoDate(paidThrough && paidThrough.getTime() > today.getTime() ? paidThrough : today),
-    );
-  }, [coverageEnd]);
+    onOpen();
+  }, [onOpen]);
 
   // Once, on arrival. Guarded by a ref rather than by `showForm` so that a
   // reader who deliberately cancels the form is not handed it straight back
   // when the payment history refetches.
   const autoOpened = useRef(false);
   useEffect(() => {
-    if (!autoOpen || autoOpened.current || hasPendingPago) return;
+    if (!autoOpen || autoOpened.current || blocked) return;
     autoOpened.current = true;
-    openForm();
-  }, [autoOpen, hasPendingPago, openForm]);
+    open();
+  }, [autoOpen, blocked, open]);
 
   // The checkpoint's own primary button takes focus when it appears: the
   // control that was focused a moment ago has just unmounted.
@@ -513,28 +605,14 @@ function RenewPaymentForm({
   function handleCancel(): void {
     setShowForm(false);
     setConfirming(false);
-    setVoucherFile(null);
     setError(null);
   }
 
-  /** The first thing wrong with the form as it stands, or `null`. */
-  function findProblem(): string | null {
-    if (amount <= 0) return "Ingrese un monto mayor a 0.";
-    if (monthlyPrice > 0 && months === null) {
-      return `El monto debe ser un múltiplo del valor mensual (${formatCurrency(monthlyPrice)}): pague uno o más meses completos.`;
-    }
-    if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este pago.";
-    if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
-      return "Adjunte el comprobante de la transferencia para que el club pueda validarla.";
-    }
-    return null;
-  }
-
   /**
-   * "Registrar pago" no longer registers anything. It validates and opens the
-   * checkpoint — the reader still has to say yes to a sentence that names the
-   * child, the amount and the period, because nothing after this point can be
-   * taken back from the portal.
+   * The button that used to submit no longer submits anything. It validates
+   * and opens the checkpoint — the reader still has to say yes to a sentence
+   * that names what is about to happen, because nothing after this point can
+   * be taken back from the portal.
    */
   function handleRequestConfirm(): void {
     const problem = findProblem();
@@ -553,18 +631,211 @@ function RenewPaymentForm({
     window.requestAnimationFrame(() => submitButtonRef.current?.focus());
   }
 
+  return {
+    showForm,
+    confirming,
+    loading,
+    error,
+    setShowForm,
+    setConfirming,
+    setLoading,
+    setError,
+    confirmButtonRef,
+    submitButtonRef,
+    open,
+    handleCancel,
+    handleRequestConfirm,
+    handleBackToForm,
+  };
+}
+
+/**
+ * The confirmation checkpoint's own two buttons — primary "Confirmar y X"
+ * (spinner while `loading`) plus "Volver a corregir". Byte-identical between
+ * `RenewPaymentForm` and `ApplyBenefitForm` except for the label and the
+ * `aria-describedby` target, both passed in.
+ */
+function ConfirmCheckpointActions({
+  loading,
+  loadingLabel,
+  idleLabel,
+  describedBy,
+  onConfirm,
+  onBack,
+  confirmButtonRef,
+}: {
+  loading: boolean;
+  loadingLabel: string;
+  idleLabel: string;
+  describedBy: string;
+  onConfirm: () => void;
+  onBack: () => void;
+  confirmButtonRef: React.RefObject<HTMLButtonElement>;
+}): React.ReactElement {
+  return (
+    <div className="mt-3.5 flex flex-wrap gap-2">
+      <Button
+        ref={confirmButtonRef}
+        variant="primary"
+        onClick={onConfirm}
+        disabled={loading}
+        aria-describedby={describedBy}
+      >
+        {loading ? (
+          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        )}
+        {loading ? loadingLabel : idleLabel}
+      </Button>
+      <Button variant="tertiary" onClick={onBack} disabled={loading}>
+        Volver a corregir
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The pre-checkpoint trigger row — primary "Registrar pago"/"Aplicar
+ * beneficio" plus "Cancelar". Byte-identical between the two forms except
+ * for the label; both share the same `disabled` condition
+ * (`!fechaInicio || !fechaFin`).
+ */
+function OpenCheckpointTrigger({
+  label,
+  disabled,
+  onRequestConfirm,
+  onCancel,
+  submitButtonRef,
+}: {
+  label: string;
+  disabled: boolean;
+  onRequestConfirm: () => void;
+  onCancel: () => void;
+  submitButtonRef: React.RefObject<HTMLButtonElement>;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        ref={submitButtonRef}
+        variant="primary"
+        onClick={onRequestConfirm}
+        disabled={disabled}
+      >
+        <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        {label}
+      </Button>
+      <Button variant="tertiary" onClick={onCancel}>
+        Cancelar
+      </Button>
+    </div>
+  );
+}
+
+function RenewPaymentForm({
+  membership,
+  personaId,
+  coverageEnd,
+  hasPendingPago,
+  /**
+   * Open the form without a click, for a reader who arrived from the home
+   * screen's "Registrar un pago" band (`/student/payments?registrar=1`).
+   *
+   * The caller only flips this to `true` once the payment history has loaded:
+   * `handleOpen` seeds `fechaInicio` from `coverageEnd` so a family paying
+   * early does not lose the days they already paid for, and `coverageEnd` is
+   * `null` until the history arrives.
+   */
+  autoOpen,
+  studentName,
+  /**
+   * The active benefit's percentage, or `null` — issue #400 slice 06. Only
+   * feeds the CLIENT-SIDE preview total (`estimateTotal`); the request this
+   * form sends never carries it, same as it never carried `monto`. A 100%
+   * benefit never reaches this component: `PaymentsContent` renders
+   * `ApplyBenefitForm` instead in that case.
+   */
+  beneficioPorcentaje,
+  onRegistered,
+}: {
+  membership: MembershipSummary;
+  personaId: string;
+  coverageEnd: string | null;
+  hasPendingPago: boolean;
+  autoOpen: boolean;
+  studentName: string | null;
+  beneficioPorcentaje: number | null;
+  onRegistered: () => void;
+}): React.ReactElement {
+  /** Issue #400: a discrete month count, never a typed monto. */
+  const [months, setMonths] = useState<number>(MESES_MINIMO);
+  const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
+  const [fechaInicio, setFechaInicio] = useState<string>("");
+  const [voucherFile, setVoucherFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showSuccess, showWarning } = useToast();
+
+  const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
+  /** What the checkpoint shows BEFORE confirming — a preview, not the authoritative total (see `estimateTotal`). */
+  const estimatedTotal = estimateTotal(monthlyPrice, months, beneficioPorcentaje);
+
+  /**
+   * Coverage resumes where the paid period ends, not today — otherwise a family
+   * paying early loses the days they already paid for. `coverageEnd` is the
+   * furthest approved `fechaFin`; `membership.fechaFin`, which the old form
+   * read, never reaches this client.
+   */
+  const fechaFin = useMemo(
+    () => (fechaInicio ? addMonthsIso(fechaInicio, months) : ""),
+    [fechaInicio, months],
+  );
+
+  const seedForm = useCallback((): void => {
+    setVoucherFile(null);
+    setMonths(MESES_MINIMO);
+    // Both sides must be CALENDAR dates before they are compared: mixing an
+    // instant with a noon-anchored date made the comparison depend on the
+    // hour of day.
+    const today = clubToday();
+    const paidThrough = coverageEnd ? fromIsoDate(coverageEnd) : null;
+    setFechaInicio(
+      calendarIsoDate(paidThrough && paidThrough.getTime() > today.getTime() ? paidThrough : today),
+    );
+  }, [coverageEnd]);
+
+  /** The first thing wrong with the form as it stands, or `null`. */
+  function findProblem(): string | null {
+    if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este pago.";
+    if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
+      return "Adjunte el comprobante de la transferencia para que el club pueda validarla.";
+    }
+    return null;
+  }
+
+  const action = useConfirmedAction({
+    autoOpen,
+    blocked: hasPendingPago,
+    onOpen: seedForm,
+    findProblem,
+  });
+
+  function handleCancel(): void {
+    action.handleCancel();
+    setVoucherFile(null);
+  }
+
   async function handleSubmit(): Promise<void> {
     // Re-checked rather than trusted: the fields stay live behind the
     // checkpoint, so the summary always describes what will actually be sent.
     const problem = findProblem();
     if (problem) {
-      setError(problem);
-      setConfirming(false);
+      action.setError(problem);
+      action.setConfirming(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    action.setLoading(true);
+    action.setError(null);
 
     let nuevoPago: PagoPersona;
     try {
@@ -574,19 +845,18 @@ function RenewPaymentForm({
       // antes de confirmar -- pero ya no viajan en la petición.
       //
       // `meses` reemplaza a `monto` (issue #400): el backend ya no recibe
-      // un monto libre, sino la cantidad de meses que el usuario eligió.
-      // `months` no puede ser `null` acá: `findProblem()` ya corrió arriba
-      // sin encontrar ninguno, y eso exige `fechaFin` calculada, que a su
-      // vez exige `months !== null` (ver su `useMemo`).
+      // un monto libre, sino la cantidad de meses que el usuario eligió con
+      // `MonthCountField` — ya no hay nada que parsear ni validar como
+      // "múltiplo del valor mensual", el selector solo permite enteros.
       nuevoPago = await registrarPago({
-        meses: months as number,
+        meses: months,
         tipoPago,
         personaId: Number(personaId),
         membresiaId: membership.id,
       } satisfies RegistrarPagoInput);
     } catch (err) {
-      setError(toUserMessage(err, "No se pudo registrar el pago."));
-      setLoading(false);
+      action.setError(toUserMessage(err, "No se pudo registrar el pago."));
+      action.setLoading(false);
       return;
     }
 
@@ -602,10 +872,10 @@ function RenewPaymentForm({
       try {
         await subirVoucherPago(nuevoPago.id, voucherFile);
       } catch (err) {
-        setShowForm(false);
-        setConfirming(false);
+        action.setShowForm(false);
+        action.setConfirming(false);
         setVoucherFile(null);
-        setLoading(false);
+        action.setLoading(false);
         showWarning(
           studentName
             ? `El pago de ${studentName} se registró, pero no pudimos subir el comprobante`
@@ -619,22 +889,26 @@ function RenewPaymentForm({
       }
     }
 
-    setShowForm(false);
-    setConfirming(false);
+    action.setShowForm(false);
+    action.setConfirming(false);
     setVoucherFile(null);
     // What happened, and what to do if it was wrong. There is no "Deshacer"
     // to offer (see the block comment above this component), so the toast
-    // says plainly where the recovery actually lives.
+    // says plainly where the recovery actually lives. `nuevoPago.monto` is
+    // the REAL, authoritative amount the backend registered (issue #400
+    // slice 06) — `estimatedTotal` above is only the preview shown before
+    // confirming, and the two can differ when a partial or fixed-amount
+    // benefit applies.
     showSuccess(
       studentName
         ? `Pago de ${studentName} registrado y en revisión`
         : "Pago registrado y en revisión",
       {
-        description: `${formatCurrency(amount)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y usted registra el pago correcto.`,
+        description: `${formatCurrency(nuevoPago.monto)} por el período ${formatDateRange(fechaInicio, fechaFin)}. El club lo valida; si algo está mal lo rechaza indicando el motivo y usted registra el pago correcto.`,
       },
     );
     onRegistered();
-    setLoading(false);
+    action.setLoading(false);
   }
 
   if (hasPendingPago) {
@@ -647,9 +921,9 @@ function RenewPaymentForm({
     );
   }
 
-  if (!showForm) {
+  if (!action.showForm) {
     return (
-      <Button variant="primary" onClick={openForm}>
+      <Button variant="primary" onClick={action.open}>
         <Plus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
       </Button>
@@ -664,18 +938,7 @@ function RenewPaymentForm({
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL_CLASSES}>Monto</span>
-          <input
-            type="number"
-            step={monthlyPrice > 0 ? monthlyPrice : "0.01"}
-            min="0"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-            className={FIELD_CLASSES}
-            placeholder="0,00"
-          />
-        </label>
+        <MonthCountField value={months} onChange={setMonths} disabled={action.loading} />
         <label className="flex flex-col gap-1.5">
           <span className={FIELD_LABEL_CLASSES}>Forma de pago</span>
           <select
@@ -693,7 +956,7 @@ function RenewPaymentForm({
         </label>
       </div>
 
-      {/* The consequence of the amount, stated before the reader commits to it. */}
+      {/* The consequence of the months chosen, stated before the reader commits to it. */}
       <div className="rounded-ctl bg-sunken px-3.5 py-3">
         <p className="text-2xs font-bold uppercase text-ink-3-strong">
           Período que cubre
@@ -701,16 +964,16 @@ function RenewPaymentForm({
         <p className="mt-1 text-sm font-bold tabular-nums text-ink">
           {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
         </p>
-        {months !== null && (
-          <p className="mt-0.5 text-xs text-ink-3-strong">
-            {months === 1 ? "1 mes" : `${months} meses`} a {formatCurrency(monthlyPrice)} por mes.
-          </p>
-        )}
-        {months === null && monthlyPrice > 0 && amount > 0 && (
-          <p className="mt-0.5 text-xs text-state-bad">
-            El monto debe ser un múltiplo de {formatCurrency(monthlyPrice)}.
-          </p>
-        )}
+        <p className="mt-0.5 text-xs text-ink-3-strong">
+          {months === 1 ? "1 mes" : `${months} meses`} a {formatCurrency(monthlyPrice)} por mes.
+        </p>
+        {/* Issue #400 slice 06: labelled "estimado" on purpose — this is a
+            client-side preview (`estimateTotal`), never what the backend
+            was sent (it only ever receives `meses`). The real total is
+            `nuevoPago.monto`, shown in the success toast once registered. */}
+        <p className="mt-1.5 text-sm font-bold tabular-nums text-ink">
+          Total estimado: {formatCurrency(estimatedTotal)}
+        </p>
       </div>
 
       {tipoPago === "TRANSFERENCIA" && (
@@ -754,23 +1017,20 @@ function RenewPaymentForm({
       )}
 
       {/*
-       * PAG-5: `findProblem()` always had the right sentence (a monto that
-       * doesn't close, a missing voucher…) but it only ever reached the
-       * screen through `error`, which `handleRequestConfirm` only sets on a
-       * CLICK — and the button that triggers it is exactly the one this
-       * sentence explains is disabled. The reader saw a greyed-out button
-       * and nothing else. `liveProblem` is the same function, read on every
-       * render instead of waiting for a click; `error` (a submit attempt or
-       * an API failure) still wins once it exists, so nothing here changes
-       * once the reader has actually tried to submit.
+       * Issue #400 (slice 06): the PAG-5 live-preview this used to need
+       * ("a monto that doesn't close") is gone along with the monto field —
+       * `MonthCountField` cannot produce an invalid `months`, so the only
+       * remaining `findProblem()` case (a TRANSFERENCIA with no voucher yet)
+       * is fine to hold behind an actual submit attempt, same as the API
+       * failure branch it shares this alert with.
        */}
-      {(error || (monto !== "" && findProblem())) && (
+      {action.error && (
         <p role="alert" className="text-sm font-semibold text-state-bad">
-          {error ?? findProblem()}
+          {action.error}
         </p>
       )}
 
-      {confirming ? (
+      {action.confirming ? (
         /* The checkpoint sits where the submit button was, so it lands under
            the eye that just clicked, with every field it describes still on
            screen and still editable above it. A modal would have dimmed
@@ -780,7 +1040,8 @@ function RenewPaymentForm({
             Confirme antes de registrar
           </p>
           <p id="renew-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
-            Va a registrar <b className="font-bold tabular-nums">{formatCurrency(amount)}</b>{" "}
+            Va a registrar un total estimado de{" "}
+            <b className="font-bold tabular-nums">{formatCurrency(estimatedTotal)}</b>{" "}
             {studentName ? (
               <>
                 a nombre de <b className="font-bold">{studentName}</b>
@@ -795,44 +1056,239 @@ function RenewPaymentForm({
             Una vez registrado no puede eliminarlo desde el portal. El club revisa cada pago: si
             algo está mal lo rechaza indicando el motivo y usted registra el correcto.
           </p>
-          <div className="mt-3.5 flex flex-wrap gap-2">
-            <Button
-              ref={confirmButtonRef}
-              variant="primary"
-              onClick={() => void handleSubmit()}
-              disabled={loading}
-              aria-describedby="renew-confirm-summary"
-            >
-              {loading ? (
-                <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              )}
-              {loading ? "Registrando…" : "Confirmar y registrar"}
-            </Button>
-            <Button variant="tertiary" onClick={handleBackToForm} disabled={loading}>
-              Volver a corregir
-            </Button>
-          </div>
+          <ConfirmCheckpointActions
+            loading={action.loading}
+            loadingLabel="Registrando…"
+            idleLabel="Confirmar y registrar"
+            describedBy="renew-confirm-summary"
+            onConfirm={() => void handleSubmit()}
+            onBack={action.handleBackToForm}
+            confirmButtonRef={action.confirmButtonRef}
+          />
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            ref={submitButtonRef}
-            variant="primary"
-            onClick={handleRequestConfirm}
-            disabled={!monto || !fechaInicio || !fechaFin}
-          >
-            <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Registrar pago
-          </Button>
-          <Button variant="tertiary" onClick={handleCancel}>
-            Cancelar
-          </Button>
-        </div>
+        <OpenCheckpointTrigger
+          label="Registrar pago"
+          disabled={!fechaInicio || !fechaFin}
+          onRequestConfirm={action.handleRequestConfirm}
+          onCancel={handleCancel}
+          submitButtonRef={action.submitButtonRef}
+        />
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Applying a 100% benefit — no Pago, no monto, no voucher (issue #400, slice 06)
+//
+// `PaymentsContent` renders this INSTEAD of `RenewPaymentForm` when the
+// benefit read from `GET /personas/{id}/beneficio` is a 100% percentage
+// discount. `POST /membresias/{id}/aplicar-beneficio` grants coverage
+// directly with no `Pago` created — the same invariant `HowToPay`'s
+// gratuitous branch already states for family gratuity ("no hay ningún
+// monto que registrar acá"), here for a personal 100% benefit instead. Same
+// two-step checkpoint pattern as `RenewPaymentForm` — `useConfirmedAction`,
+// declared right before `RenewPaymentForm` above, is what the two share.
+// ---------------------------------------------------------------------------
+
+function ApplyBenefitForm({
+  membership,
+  personaId,
+  coverageEnd,
+  hasPendingPago,
+  autoOpen,
+  studentName,
+  onRegistered,
+}: {
+  membership: MembershipSummary;
+  personaId: string;
+  coverageEnd: string | null;
+  hasPendingPago: boolean;
+  autoOpen: boolean;
+  studentName: string | null;
+  onRegistered: () => void;
+}): React.ReactElement {
+  const [months, setMonths] = useState<number>(MESES_MINIMO);
+  const [fechaInicio, setFechaInicio] = useState<string>("");
+  const { showSuccess } = useToast();
+
+  const fechaFin = useMemo(
+    () => (fechaInicio ? addMonthsIso(fechaInicio, months) : ""),
+    [fechaInicio, months],
+  );
+
+  const seedForm = useCallback((): void => {
+    setMonths(MESES_MINIMO);
+    const today = clubToday();
+    const paidThrough = coverageEnd ? fromIsoDate(coverageEnd) : null;
+    setFechaInicio(
+      calendarIsoDate(paidThrough && paidThrough.getTime() > today.getTime() ? paidThrough : today),
+    );
+  }, [coverageEnd]);
+
+  function findProblem(): string | null {
+    if (!fechaInicio || !fechaFin) return "No se pudo calcular el período que cubre este beneficio.";
+    return null;
+  }
+
+  const action = useConfirmedAction({
+    autoOpen,
+    blocked: hasPendingPago,
+    onOpen: seedForm,
+    findProblem,
+  });
+
+  async function handleSubmit(): Promise<void> {
+    action.setLoading(true);
+    action.setError(null);
+
+    let cobertura: CoberturaBonificada;
+    try {
+      cobertura = await aplicarBeneficio(membership.id, months);
+    } catch (err) {
+      action.setError(toUserMessage(err, "No se pudo aplicar el beneficio."));
+      action.setConfirming(false);
+      action.setLoading(false);
+      return;
+    }
+
+    action.setShowForm(false);
+    action.setConfirming(false);
+    action.setLoading(false);
+    // `cobertura.fechaInicio`/`fechaFin` are the REAL, authoritative period —
+    // same reasoning `RenewPaymentForm` uses `nuevoPago.monto` for the
+    // success toast rather than a client-side preview.
+    showSuccess(
+      studentName
+        ? `Beneficio de ${studentName} aplicado — cobertura activa`
+        : "Beneficio aplicado — cobertura activa",
+      {
+        description: `Cubre el período ${formatDateRange(cobertura.fechaInicio, cobertura.fechaFin)}. No se generó ningún pago: el beneficio cubrió el 100%.`,
+      },
+    );
+    onRegistered();
+  }
+
+  if (hasPendingPago) {
+    return (
+      <p className="text-sm text-ink-2">
+        {studentName
+          ? `Ya hay un pago de ${studentName} esperando validación. Espere a que el club lo resuelva antes de aplicar el beneficio.`
+          : "Ya tiene un pago esperando validación. Espere a que el club lo resuelva antes de aplicar el beneficio."}
+      </p>
+    );
+  }
+
+  if (!action.showForm) {
+    return (
+      <Button variant="primary" onClick={action.open}>
+        <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        {studentName ? `Aplicar el beneficio de ${studentName}` : "Aplicar mi beneficio"}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {studentName && (
+        <p className="text-sm text-ink-2">
+          Este beneficio se aplica a nombre de <b className="font-semibold text-ink">{studentName}</b>.
+        </p>
+      )}
+
+      <MonthCountField value={months} onChange={setMonths} disabled={action.loading} />
+
+      <div className="rounded-ctl bg-sunken px-3.5 py-3">
+        <p className="text-2xs font-bold uppercase text-ink-3-strong">Período que cubre</p>
+        <p className="mt-1 text-sm font-bold tabular-nums text-ink">
+          {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
+        </p>
+        <p className="mt-0.5 text-xs text-ink-3-strong">
+          {months === 1 ? "1 mes" : `${months} meses`}, sin costo — el beneficio cubre el 100%.
+        </p>
+      </div>
+
+      {action.error && (
+        <p role="alert" className="text-sm font-semibold text-state-bad">
+          {action.error}
+        </p>
+      )}
+
+      {action.confirming ? (
+        <div data-testid="benefit-confirm" className="rounded-ctl border border-line-2 bg-sunken px-4 py-4">
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">Confirme antes de aplicar</p>
+          <p id="benefit-confirm-summary" className="mt-1.5 max-w-[68ch] text-sm leading-relaxed text-ink">
+            Va a aplicar su beneficio del 100%{" "}
+            {studentName ? (
+              <>
+                a nombre de <b className="font-bold">{studentName}</b>
+              </>
+            ) : (
+              "a su nombre"
+            )}
+            , para el período{" "}
+            <b className="font-bold tabular-nums">{formatDateRange(fechaInicio, fechaFin)}</b>. No se
+            genera ningún pago ni comprobante.
+          </p>
+          <p className="mt-2 max-w-[68ch] text-xs leading-relaxed text-ink-3-strong">
+            La cobertura queda activa de inmediato. Una vez aplicado no puede deshacerlo desde el
+            portal.
+          </p>
+          <ConfirmCheckpointActions
+            loading={action.loading}
+            loadingLabel="Aplicando…"
+            idleLabel="Confirmar y aplicar"
+            describedBy="benefit-confirm-summary"
+            onConfirm={() => void handleSubmit()}
+            onBack={action.handleBackToForm}
+            confirmButtonRef={action.confirmButtonRef}
+          />
+        </div>
+      ) : (
+        <OpenCheckpointTrigger
+          label="Aplicar beneficio"
+          disabled={!fechaInicio || !fechaFin}
+          onRequestConfirm={action.handleRequestConfirm}
+          onCancel={action.handleCancel}
+          submitButtonRef={action.submitButtonRef}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Picks `ApplyBenefitForm` or `RenewPaymentForm` — the six fields the two
+ * forms share (`membership`…`onRegistered`, minus `beneficioPorcentaje`,
+ * which only `RenewPaymentForm` reads) travel once via `...common` instead
+ * of being repeated in both JSX call sites in `PaymentsContent` (SonarCloud
+ * flagged that repetition on PR #438 too).
+ */
+function PaymentOrBenefitForm({
+  isFullBenefit,
+  beneficioPorcentaje,
+  ...common
+}: {
+  membership: MembershipSummary;
+  personaId: string;
+  coverageEnd: string | null;
+  hasPendingPago: boolean;
+  autoOpen: boolean;
+  studentName: string | null;
+  onRegistered: () => void;
+  /**
+   * A 100% PERCENTAGE benefit: self-service coverage grant, no Pago, no
+   * monto, no voucher — see `ApplyBenefitForm`'s header comment for why this
+   * replaces the payment form entirely rather than folding into it.
+   */
+  isFullBenefit: boolean;
+  beneficioPorcentaje: number | null;
+}): React.ReactElement {
+  if (isFullBenefit) {
+    return <ApplyBenefitForm {...common} />;
+  }
+  return <RenewPaymentForm {...common} beneficioPorcentaje={beneficioPorcentaje} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -1043,6 +1499,48 @@ function PaymentsContent({
     };
   }, [selectedPersonaId, reloadToken]);
 
+  /**
+   * The active benefit, read BEFORE the reader pays (issue #400, slice 06).
+   *
+   * A failure here is swallowed to `null` rather than surfaced as a blocking
+   * error: this is an enrichment of the payment screen, not its core job —
+   * the reader can still register a normal payment even if this particular
+   * read fails, exactly the same reasoning `resolveCoverageEnd` gets from an
+   * empty `pagos` array rather than an error state.
+   */
+  const [beneficio, setBeneficio] = useState<BeneficioAsignado | null>(null);
+  useEffect(() => {
+    if (!selectedPersonaId) {
+      setBeneficio(null);
+      return;
+    }
+    let cancelled = false;
+    fetchBeneficio(Number(selectedPersonaId))
+      .then((activo) => {
+        if (!cancelled) setBeneficio(activo);
+      })
+      .catch(() => {
+        if (!cancelled) setBeneficio(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPersonaId, reloadToken]);
+
+  const beneficioPorcentaje =
+    beneficio?.descuento.porcentaje != null ? Number(beneficio.descuento.porcentaje) : null;
+  /**
+   * A 100% PERCENTAGE benefit swaps the payment form for `ApplyBenefitForm`
+   * (no monto, no tipoPago, no voucher — a 100% benefit never creates a
+   * `Pago`). A fixed-amount (`monto`) benefit that happens to cover the
+   * period exactly is still resolved by `registrarPago`'s normal path on the
+   * backend (`CoberturaBonificadaResponseDTO`'s own docstring: "100%" is a
+   * property of the PAIR, not the assignment alone) — this client-side gate
+   * only recognizes the simple, always-100% case: a percentage discount of
+   * exactly 100.
+   */
+  const isFullBenefit = beneficioPorcentaje != null && Number.isFinite(beneficioPorcentaje) && beneficioPorcentaje === 100;
+
   // Memoised so the empty-list branch does not hand a fresh array to the three
   // derivations below on every render.
   const pagos = useMemo(
@@ -1191,6 +1689,10 @@ function PaymentsContent({
         coverageEnd={coverageEnd}
         studentName={studentName}
       >
+        {/* Issue #400 (slice 06): shown BEFORE any payment control, blocked
+            or not — a reader who cannot pay from here (a minor on their own
+            account) can still see whether they have a benefit waiting. */}
+        {selectedProfile.membership && !isGratuitous && <BeneficioNote beneficio={beneficio} />}
         {blockedAsMinor ? (
           <p className="text-sm text-ink-2">
             {/* The old copy sent EVERY minor to "su representante" — including
@@ -1206,13 +1708,15 @@ function PaymentsContent({
           // blocked states read from one place and cannot disagree.
           <p className="text-sm text-ink-2">{situation.detail}</p>
         ) : selectedProfile.membership ? (
-          <RenewPaymentForm
+          <PaymentOrBenefitForm
             membership={selectedProfile.membership}
             personaId={selectedProfile.personaId}
             coverageEnd={coverageEnd}
             hasPendingPago={hasPendingPago}
             autoOpen={wantsRegisterForm && pagosState.status === "ready"}
             studentName={studentName}
+            isFullBenefit={isFullBenefit}
+            beneficioPorcentaje={beneficioPorcentaje}
             onRegistered={handleRegistered}
           />
         ) : (
@@ -1342,7 +1846,10 @@ function PaymentsContent({
                     )}
                     className={buttonClasses("secondary", "sm")}
                   >
-                    Registrar un pago
+                    {/* Issue #400 slice 06: a 100% benefit has nothing to
+                        "registrar" — this door leads to `ApplyBenefitForm`,
+                        not `RenewPaymentForm`, so it says so. */}
+                    {isFullBenefit ? "Aplicar mi beneficio" : "Registrar un pago"}
                   </Link>
                 ) : undefined
               }

@@ -421,6 +421,16 @@ export function describeMembershipState(estado: string | null | undefined): Memb
   if (!estado) return { label: "Sin membresía", tone: "neutral", active: false };
   if (estado === "ACTIVA") return { label: "Membresía activa", tone: "ok", active: true };
   if (estado === "INACTIVA") return { label: "Membresía pendiente", tone: "warn", active: false };
+  // Issue #400 (slice 06 — real bug, not "any other estado"): SUSPENDIDA
+  // (5a) used to fall all the way through to the "vencida" branch below,
+  // which is actively misleading — suspending a membership never forfeits
+  // or freezes the coverage already paid for (`suspender_membresia` /
+  // `reactivar_membresia`, invariant of 5a). `warn`, not `bad`: the same
+  // reasoning INACTIVA already gets ("pending, not broken") applies here —
+  // a red pill reads as an alarm about coverage that has NOT been lost.
+  if (estado === "SUSPENDIDA") {
+    return { label: "Suspendida — cobertura vigente", tone: "warn", active: false };
+  }
   return { label: "Membresía vencida", tone: "bad", active: false };
 }
 
