@@ -8,7 +8,8 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.asistencia_schemas import (
-    AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaCorreccionResponseDTO,
+    AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
+    AsistenciaCorreccionResponseDTO,
     AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
@@ -137,8 +138,7 @@ async def registrar_asistencia(
 
 # Corrección explícita de UNA Asistencia ya cerrada (issue #389, slice 2):
 # camino DISTINTO de `registrar_asistencia`, exclusivo de ADMINISTRADOR y
-# con traza obligatoria. Sin endpoint de LISTADO del historial -- alcance
-# de un slice posterior ("auditoría visible").
+# con traza obligatoria.
 @router.patch(
     "/{asistencia_id}/corregir",
     response_model=AsistenciaCorreccionResponseDTO,
@@ -163,6 +163,22 @@ async def corregir_asistencia(
         justificativo_anterior=correccion.justificativo_anterior,
         estado_justificativo_anterior=correccion.estado_justificativo_anterior,
     )
+
+
+# Historial de correcciones de UNA Asistencia (issue #389, slice 4a): el
+# "alcance de un slice posterior" que el comentario de arriba anunciaba.
+# ADMIN-only, igual que `corregir` -- es auditoría sobre registros que
+# pueden ser de menores, así que el default es acotado, no amplio (ampliar
+# después es un cambio simple; achicar después es uno rompiente).
+@router.get(
+    "/{asistencia_id}/correcciones",
+    response_model=List[AsistenciaCorreccionEntryDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def listar_correcciones_de_asistencia(
+    asistencia_id: int, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).listar_correcciones(asistencia_id)
 
 
 # Historial de asistencia de una persona: dato sensible (presencia/régimen).

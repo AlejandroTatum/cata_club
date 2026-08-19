@@ -559,6 +559,16 @@ class AsistenciaServicio:
         _, correccion = self.repo.guardar_correccion(asistencia, correccion)
         return correccion
 
+    def listar_correcciones(self, asistencia_id: int) -> list[AsistenciaCorreccion]:
+        """Historial de correcciones de UNA `Asistencia` (issue #389, slice
+        4a). Busca la `Asistencia` primero para poder devolver 404 ante un
+        id inexistente -- delegar directo al repo dejaría pasar cualquier id,
+        existente o no, con una lista vacía indistinguible de "sin
+        correcciones todavía"."""
+        if not self.repo.obtener_por_id(asistencia_id):
+            raise EntidadNoEncontrada(f"Asistencia con id {asistencia_id} no encontrada")
+        return self.repo.listar_correcciones_por_asistencia(asistencia_id)
+
     def historial_por_persona(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None
     ) -> tuple[list[Asistencia], int]:

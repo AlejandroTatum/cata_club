@@ -134,6 +134,23 @@ class AsistenciaCorreccionResponseDTO(ResponseBase, BaseModel):
     estado_justificativo_anterior: Optional[bool] = None
 
 
+class AsistenciaCorreccionEntryDTO(ResponseBase, BaseModel):
+    """Una fila del HISTORIAL de correcciones (issue #389, slice 4a) --
+    `GET /asistencias/{id}/correcciones`. A diferencia de
+    `AsistenciaCorreccionResponseDTO`, deliberadamente NO anida la
+    `Asistencia` completa: quien pide el historial ya tiene la fila actual
+    (viene de la pantalla que la muestra), así que repetirla N veces por N
+    entradas sería puro desperdicio."""
+    id: int
+    corregido_por_id: int
+    corregido_por_nombre: str
+    corregido_en: datetime
+    motivo: str
+    estado_anterior: EstadoAsistencia
+    justificativo_anterior: Optional[str] = None
+    estado_justificativo_anterior: Optional[bool] = None
+
+
 # --- Asignación directa Alumno ↔ Horario ------------------------------------
 class AlumnoHorarioCreateDTO(BaseModel):
     persona_id: int

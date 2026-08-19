@@ -239,6 +239,9 @@ RUTAS_ROLES_REQUERIDOS = {
     # Issue #389: corregir es un acto DISTINTO de tomar -- solo admin,
     # nunca el entrenador que puede tomar/crear via el POST de abajo.
     ("PATCH", "/asistencias/{asistencia_id}/corregir"): frozenset({"ADMINISTRADOR"}),
+    # Issue #389, slice 4a: historial de correcciones -- mismo tier que
+    # `corregir` (auditoría de registros que pueden ser de menores).
+    ("GET", "/asistencias/{asistencia_id}/correcciones"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/asistencias/"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/asignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("POST", "/asistencias/horarios"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
