@@ -878,6 +878,46 @@ export default function PaymentsPage(): React.ReactElement {
   // Queue
   // -------------------------------------------------------------------------
 
+  /**
+   * The action cluster at the end of a queue row — Sonar duplication
+   * follow-up (issue #400): this was IDENTICAL, token for token, between
+   * the desktop `<TableRow>` and the mobile `<li>` card below (the "same
+   * rows as cards" pattern the file's own comment already names) — the
+   * status badge (only under the "Todas" tab) plus the button that opens
+   * the detail. The two renderings still differ in their surrounding
+   * container (a `<TableCell>` vs a plain `<div>`, since a table row and a
+   * card are genuinely different DOM shapes), so only this inner cluster
+   * — the part that was actually copy-pasted — moved out.
+   */
+  function renderRowActions(req: PaymentValidationRequest): React.ReactElement {
+    return (
+      <>
+        {/* No "Estado" column/badge outside "Todas": the active tab already
+            filters to one status, so repeating it per row would only echo
+            the tab. Under "Todas" it is the one thing on the row that says
+            what state a payment is in. */}
+        {activeFilter === "all" && (
+          <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+            {VALIDATION_STATUS_LABELS[req.validationStatus]}
+          </Badge>
+        )}
+        {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for every pending row,
+            and the default tab IS the pending queue: ten red buttons down one
+            column. "Nunca hay dos botones rojos en una pantalla" — the real
+            decision is "Aprobar pago" inside the detail, so this stays the
+            neutral action that leads to it, not a second red. */}
+        <Button
+          size="sm"
+          aria-label={actionLabel(req)}
+          data-payment-action={req.id}
+          onClick={() => setSelectedId(req.id)}
+        >
+          {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+        </Button>
+      </>
+    );
+  }
+
   function renderQueue(): React.ReactElement {
     return (
       <>
@@ -1067,39 +1107,7 @@ export default function PaymentsPage(): React.ReactElement {
                       <TableCell type="text">{req.paymentMethod}</TableCell>
                       <TableCell type="action">
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          {/* No "Estado" column: the active tab already filters
-                              to one status, so repeating it per row would only
-                              echo the tab. What is left is context for the
-                              action button, not a column of its own — see the
-                              "Todas" case below, where it is the one thing on
-                              the row that says what state a payment is in. */}
-                          {activeFilter === "all" && (
-                            <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                              {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                            </Badge>
-                          )}
-                          {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for
-                              every pending row, and the default tab IS the
-                              pending queue: ten red buttons down one column,
-                              fifteen in the badge beside the nav item. "Nunca
-                              hay dos botones rojos en una pantalla" — and at
-                              ten, red has stopped meaning "the one thing to
-                              press" and become the colour of the column.
-
-                              What it opens is the detail, where the decision
-                              actually happens and where "Aprobar pago" is the
-                              one red control on screen. Spending the CTA colour
-                              on the step BEFORE the decision left the real
-                              decision wearing the same red as the ten links
-                              that lead to it. */}
-                          <Button
-                            size="sm"
-                            aria-label={actionLabel(req)}
-                            data-payment-action={req.id}
-                            onClick={() => setSelectedId(req.id)}
-                          >
-                            {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                          </Button>
+                          {renderRowActions(req)}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1127,27 +1135,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <div className="flex items-center justify-between gap-3">
                     <DataBox variant="numeric">{formatCurrency(req.expectedAmount)}</DataBox>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {/* Same rule as the desktop table: the active tab
-                          already fixes the status for every visible row, and
-                          what is left is context for the action button, not a
-                          column of its own. */}
-                      {activeFilter === "all" && (
-                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                        </Badge>
-                      )}
-                      {/* The narrow rendering of the same row — see the note on
-                          the table's copy. The two are separate JSX, so the
-                          red had to be removed twice or the phone would keep
-                          the column of CTAs the desktop just lost. */}
-                      <Button
-                        size="sm"
-                        aria-label={actionLabel(req)}
-                        data-payment-action={req.id}
-                        onClick={() => setSelectedId(req.id)}
-                      >
-                        {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                      </Button>
+                      {renderRowActions(req)}
                     </div>
                   </div>
                 </li>

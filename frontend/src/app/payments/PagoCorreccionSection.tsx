@@ -78,6 +78,51 @@ function buildInput(form: FormState): CorreccionPagoInput {
   return input;
 }
 
+interface CampoCorregibleProps {
+  label: string;
+  type: "number" | "date";
+  value: string;
+  onChange: (value: string) => void;
+  /** Solo aplica cuando `type="number"` — cada campo numérico tiene su propio
+   *  paso/mínimo (`mesesComprados` es entero, el resto es plata con centavos). */
+  numberStep?: string;
+  numberMin?: string;
+  numberInputMode?: "decimal" | "numeric";
+}
+
+/**
+ * Un campo del formulario de corrección — issue #400, criterio 7.
+ *
+ * Los seis campos corregibles (`tarifaMensualAplicada`, `mesesComprados`,
+ * `montoBase`, `monto`, `fechaInicio`, `fechaFin`) compartían exactamente
+ * esta misma forma (label + input + "vacío = sin cambio", ver `buildInput`)
+ * repetida seis veces con solo el label/valor/tipo cambiando — extraído acá
+ * para que un séptimo campo corregible algún día sea una línea, no un bloque
+ * copiado.
+ */
+function CampoCorregible({
+  label,
+  type,
+  value,
+  onChange,
+  numberStep = "0.01",
+  numberMin = "0",
+  numberInputMode = "decimal",
+}: CampoCorregibleProps): React.ReactElement {
+  return (
+    <label className="block text-2xs text-ink-3">
+      {label}
+      <input
+        type={type}
+        {...(type === "number" ? { inputMode: numberInputMode, min: numberMin, step: numberStep } : {})}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
+      />
+    </label>
+  );
+}
+
 export default function PagoCorreccionSection({
   pagoId,
   onCorrected,
@@ -195,60 +240,45 @@ export default function PagoCorreccionSection({
             {formOpen && (
               <form onSubmit={handleSubmit} className="mt-2 rounded-lg border border-line bg-surface p-3">
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="block text-2xs text-ink-3">
-                    Tarifa mensual
-                    <input
-                      type="number" inputMode="decimal" min="0" step="0.01"
-                      value={form.tarifaMensualAplicada}
-                      onChange={(e) => setForm((f) => ({ ...f, tarifaMensualAplicada: e.target.value }))}
-                      className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    />
-                  </label>
-                  <label className="block text-2xs text-ink-3">
-                    Meses comprados
-                    <input
-                      type="number" inputMode="numeric" min="1" step="1"
-                      value={form.mesesComprados}
-                      onChange={(e) => setForm((f) => ({ ...f, mesesComprados: e.target.value }))}
-                      className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    />
-                  </label>
-                  <label className="block text-2xs text-ink-3">
-                    Monto base
-                    <input
-                      type="number" inputMode="decimal" min="0" step="0.01"
-                      value={form.montoBase}
-                      onChange={(e) => setForm((f) => ({ ...f, montoBase: e.target.value }))}
-                      className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    />
-                  </label>
-                  <label className="block text-2xs text-ink-3">
-                    Monto final
-                    <input
-                      type="number" inputMode="decimal" min="0" step="0.01"
-                      value={form.monto}
-                      onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
-                      className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    />
-                  </label>
-                  <label className="block text-2xs text-ink-3">
-                    Fecha inicio
-                    <input
-                      type="date"
-                      value={form.fechaInicio}
-                      onChange={(e) => setForm((f) => ({ ...f, fechaInicio: e.target.value }))}
-                      className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    />
-                  </label>
-                  <label className="block text-2xs text-ink-3">
-                    Fecha fin
-                    <input
-                      type="date"
-                      value={form.fechaFin}
-                      onChange={(e) => setForm((f) => ({ ...f, fechaFin: e.target.value }))}
-                      className="mt-0.5 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs text-ink"
-                    />
-                  </label>
+                  <CampoCorregible
+                    label="Tarifa mensual"
+                    type="number"
+                    value={form.tarifaMensualAplicada}
+                    onChange={(v) => setForm((f) => ({ ...f, tarifaMensualAplicada: v }))}
+                  />
+                  <CampoCorregible
+                    label="Meses comprados"
+                    type="number"
+                    value={form.mesesComprados}
+                    onChange={(v) => setForm((f) => ({ ...f, mesesComprados: v }))}
+                    numberMin="1"
+                    numberStep="1"
+                    numberInputMode="numeric"
+                  />
+                  <CampoCorregible
+                    label="Monto base"
+                    type="number"
+                    value={form.montoBase}
+                    onChange={(v) => setForm((f) => ({ ...f, montoBase: v }))}
+                  />
+                  <CampoCorregible
+                    label="Monto final"
+                    type="number"
+                    value={form.monto}
+                    onChange={(v) => setForm((f) => ({ ...f, monto: v }))}
+                  />
+                  <CampoCorregible
+                    label="Fecha inicio"
+                    type="date"
+                    value={form.fechaInicio}
+                    onChange={(v) => setForm((f) => ({ ...f, fechaInicio: v }))}
+                  />
+                  <CampoCorregible
+                    label="Fecha fin"
+                    type="date"
+                    value={form.fechaFin}
+                    onChange={(v) => setForm((f) => ({ ...f, fechaFin: v }))}
+                  />
                 </div>
 
                 <label className="mt-2 block text-2xs text-ink-3">

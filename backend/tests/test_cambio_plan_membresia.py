@@ -144,37 +144,37 @@ def test_cambiar_plan_registra_auditoria(db_session, grafo, admin_id):
 
 # --- Rechazos ------------------------------------------------------------
 
+def _cambiar_plan(db_session, membresia_id: int, nuevo_tipo_id: int, admin_id: int) -> Membresia:
+    """Atajo para los tres tests de rechazo de abajo: los tres invocan
+    `MembresiaServicio.cambiar_plan` con la misma forma de llamada, solo
+    variando qué id de membresía/tipo dispara el rechazo -- Sonar los
+    marcaba como bloque duplicado (líneas 150/161/172 del PR original)."""
+    return MembresiaServicio(db_session).cambiar_plan(
+        membresia_id,
+        CambioPlanMembresiaDTO(nuevo_tipo_membresia_id=nuevo_tipo_id),
+        actor_persona_id=admin_id,
+    )
+
+
 def test_cambiar_plan_al_mismo_tipo_se_rechaza(db_session, grafo, admin_id):
     _, tipo_viejo, _, membresia, _ = grafo
 
     with pytest.raises(OperacionInvalida, match="ya tiene asignado ese tipo"):
-        MembresiaServicio(db_session).cambiar_plan(
-            membresia.id,
-            CambioPlanMembresiaDTO(nuevo_tipo_membresia_id=tipo_viejo.id),
-            actor_persona_id=admin_id,
-        )
+        _cambiar_plan(db_session, membresia.id, tipo_viejo.id, admin_id)
 
 
 def test_cambiar_plan_membresia_inexistente_da_entidad_no_encontrada(db_session, grafo, admin_id):
     _, _, tipo_nuevo, _, _ = grafo
 
     with pytest.raises(EntidadNoEncontrada):
-        MembresiaServicio(db_session).cambiar_plan(
-            999999,
-            CambioPlanMembresiaDTO(nuevo_tipo_membresia_id=tipo_nuevo.id),
-            actor_persona_id=admin_id,
-        )
+        _cambiar_plan(db_session, 999999, tipo_nuevo.id, admin_id)
 
 
 def test_cambiar_plan_tipo_inexistente_da_entidad_no_encontrada(db_session, grafo, admin_id):
     _, _, _, membresia, _ = grafo
 
     with pytest.raises(EntidadNoEncontrada):
-        MembresiaServicio(db_session).cambiar_plan(
-            membresia.id,
-            CambioPlanMembresiaDTO(nuevo_tipo_membresia_id=999999),
-            actor_persona_id=admin_id,
-        )
+        _cambiar_plan(db_session, membresia.id, 999999, admin_id)
 
 
 # --- Autorización a nivel API -------------------------------------------------
