@@ -276,6 +276,10 @@ RUTAS_ROLES_REQUERIDOS = {
     # llevan GestorPermisos(ROL_ADMIN).
     ("POST", "/membresias/{membresia_id}/suspender"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/{membresia_id}/reactivar"): frozenset({"ADMINISTRADOR"}),
+    # Issue #400 (criterio 1): cambiar el plan de una membresía ya existente
+    # es una decisión administrativa, mismo criterio que suspender/reactivar/
+    # regularizar-deuda/corregir -- nunca autoservicio.
+    ("POST", "/membresias/{membresia_id}/cambiar-plan"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/pagos/{pago_id}/comprobante"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/tipos"): frozenset({"ADMINISTRADOR"}),
     # Issue #394: editar una tarifa es escribir sobre el número con el que el

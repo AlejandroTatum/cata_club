@@ -54,7 +54,12 @@ describe("401 refresh-and-retry", () => {
         return Promise.resolve(okResponse({ success: true }));
       }
       paymentsCallCount += 1;
-      return Promise.resolve(paymentsCallCount === 1 ? unauthorizedResponse() : okResponse([]));
+      // Issue #400 (criterio 4/5): `/api/payments` now responds
+      // `{ items, total }`, not a bare array — `fetchPaymentValidations`
+      // unwraps `.items`.
+      return Promise.resolve(
+        paymentsCallCount === 1 ? unauthorizedResponse() : okResponse({ items: [], total: 0 }),
+      );
     });
 
     const result = await fetchPaymentValidations();
@@ -106,8 +111,11 @@ describe("401 refresh-and-retry", () => {
       }
       paymentsCallCount += 1;
       // The first two calls are the two concurrent original requests -> 401.
-      // Anything after that is a retry -> succeed.
-      return Promise.resolve(paymentsCallCount <= 2 ? unauthorizedResponse() : okResponse([]));
+      // Anything after that is a retry -> succeed. `{ items, total }`, same
+      // reason as the previous test.
+      return Promise.resolve(
+        paymentsCallCount <= 2 ? unauthorizedResponse() : okResponse({ items: [], total: 0 }),
+      );
     });
 
     const [r1, r2] = await Promise.all([fetchPaymentValidations(), fetchPaymentValidations()]);

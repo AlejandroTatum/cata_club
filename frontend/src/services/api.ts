@@ -97,6 +97,15 @@ export interface PaymentValidationRequest {
    *  above (`validationStatus`, `rejectionReason`) is still final and real.
    *  Only ever set by `PUT /api/payments/[id]`; absent elsewhere. */
   notificationDeliveryFailed?: boolean;
+  /**
+   * The club's OFFICIAL PDF receipt (issue #400, criterio 8) — distinct
+   * from `proofPreviewUrl`, which is the voucher the payer uploaded.
+   * Absent on the queue LIST (`PagoListItemDTO` never carried this field,
+   * and still doesn't — deliberately not touched, see the backend PR for
+   * this slice), only ever populated by `fetchPagoDetalle` for an
+   * already-approved payment's own detail view.
+   */
+  comprobanteOficialUrl?: string;
 }
 
 /**
@@ -440,13 +449,119 @@ async function request<T>(
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch all payment validation requests.
+ * `GET /api/payments` response shape (issue #400, criterio 4/5) — `total` is
+ * the backend's real count for whatever filter was applied, independent of
+ * how many `items` this particular call brought back. See
+ * `fetchPaymentValidationsPage` below for why this matters.
+ */
+interface PaginatedPaymentValidations {
+  items: PaymentValidationRequest[];
+  total: number;
+}
+
+/**
+ * Fetch payment validation requests, unpaginated (up to the BFF's default
+ * page size) — kept for callers that only need "whatever's there" and never
+ * page through it, e.g. the dashboard's activity summary
+ * (`app/dashboard/page.tsx`). Do NOT use this for the `/payments` queue
+ * table itself; see `fetchPaymentValidationsPage`.
  */
 export async function fetchPaymentValidations(): Promise<PaymentValidationRequest[]> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
-  return request<PaymentValidationRequest[]>(apiEndpoint("/payments"), {
+  const result = await request<PaginatedPaymentValidations>(apiEndpoint("/payments"), {
     headers: mockHeaders,
   });
+  return result.items;
+}
+
+/** Backend `EstadoPago` — the three states `/membresias/pagos` can filter by. */
+export type BackendEstadoPago = "PENDIENTE_VALIDACION" | "APROBADO" | "RECHAZADO";
+
+/**
+ * Fetch ONE real page of the payment validation queue — `GET /api/payments`
+ * with `skip`/`limit` (and, optionally, `estadoPago`) forwarded to the
+ * backend's own paginated `GET /membresias/pagos` (issue #400, criterio
+ * 4/5).
+ *
+ * Before this, `/payments/page.tsx` fetched a single batch of up to 200
+ * requests and paginated CLIENT-SIDE over that already-truncated array — a
+ * club with more than 200 historical payment requests silently lost the
+ * rest, with no error and no signal. This function is the replacement: each
+ * UI page is its own backend round trip, so `total` (not
+ * `PAYMENTS_FETCH_LIMIT`) is the real, unbounded count.
+ */
+export async function fetchPaymentValidationsPage(params: {
+  skip: number;
+  limit: number;
+  estadoPago?: BackendEstadoPago;
+}): Promise<PaginatedPaymentValidations> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  const qs = new URLSearchParams({ skip: String(params.skip), limit: String(params.limit) });
+  if (params.estadoPago) qs.set("estadoPago", params.estadoPago);
+  return request<PaginatedPaymentValidations>(apiEndpoint(`/payments?${qs.toString()}`), {
+    headers: mockHeaders,
+  });
+}
+
+/**
+ * Backend's own per-request ceiling on `GET /membresias/pagos`
+ * (`limit: int = Query(..., le=200)`) — the largest page
+ * `fetchAllPaymentValidations` can ask for per round trip.
+ */
+const DRAIN_PAGE_SIZE = 200;
+
+/**
+ * Hard bound on pages drained by one `fetchAllPaymentValidations` call.
+ * Mirrors `MAX_PAGES_PER_SOURCE` in `lib/server/paged-fetch.ts` (same
+ * reasoning: at the 200-row backend cap this is 10 000 rows, the same
+ * ceiling `LIMITE_MAXIMO_REPORTE_PAGOS` puts on the backend's own pagos
+ * report) — a defensive bound against a backend that misreports `total` or
+ * ignores `skip`, not a limit anyone should reach in normal operation.
+ */
+const MAX_DRAIN_PAGES = 50;
+
+/**
+ * Drains EVERY row of the payment validation queue for a given filter,
+ * making as many `fetchPaymentValidationsPage` calls as it takes (issue
+ * #400, criterio 4/5 — "drena la paginación completa o pagina de forma
+ * explícita; nunca corta silenciosamente en 200").
+ *
+ * `/payments/page.tsx`'s main table deliberately chose the OTHER strategy
+ * ("pagina de forma explícita" — one real backend page per UI page,
+ * `fetchPaymentValidationsPage`), which is correct for free navigation
+ * through an arbitrarily large list. This function is for the two places on
+ * that same screen that need the FULL set, not a window into it: the
+ * pending-queue "Pendiente X de Y" prev/next navigator (which must be able
+ * to reach every pending request, not just the ones on whatever page
+ * happens to be open) and the search box (which must be able to find a
+ * match anywhere in the active filter, not just on the currently visible
+ * page).
+ *
+ * Stops on the first SHORT page (fewer rows than requested) or once it has
+ * accumulated at least `total` rows — the real end-of-list signal, not a
+ * client-guessed count. Bounded by `MAX_DRAIN_PAGES` so a backend that
+ * never returns a short page cannot hang the caller forever.
+ */
+export async function fetchAllPaymentValidations(
+  estadoPago?: BackendEstadoPago,
+): Promise<PaymentValidationRequest[]> {
+  const items: PaymentValidationRequest[] = [];
+  let skip = 0;
+  for (let page = 0; page < MAX_DRAIN_PAGES; page += 1) {
+    const result = await fetchPaymentValidationsPage({ skip, limit: DRAIN_PAGE_SIZE, estadoPago });
+    items.push(...result.items);
+    if (result.items.length < DRAIN_PAGE_SIZE || items.length >= result.total) return items;
+    skip += DRAIN_PAGE_SIZE;
+  }
+  // Fell out of the bound with the source still claiming more rows: what we
+  // hold is a prefix. Same posture as `paged-fetch.ts`'s identical guard —
+  // a degradation that would otherwise repeat silently on every request
+  // while looking exactly like "that's just how many there are".
+  console.warn(
+    `[fetchAllPaymentValidations] exhausted ${MAX_DRAIN_PAGES} pages of ${DRAIN_PAGE_SIZE}; ` +
+      `returning ${items.length} rows as a possibly-incomplete prefix`,
+  );
+  return items;
 }
 
 /**
@@ -1230,7 +1345,11 @@ export async function restablecerContrasenia(
  */
 export interface MembresiaPorPersona {
   id: number;
-  estado: "INACTIVA" | "ACTIVA" | "VENCIDA";
+  // "SUSPENDIDA" (issue #400, criterio 3): faltaba en esta unión aunque el
+  // backend ya la devuelve desde la entrega 06 -- `suspenderMembresia`/
+  // `reactivarMembresia`/`cambiarPlanMembresia` devuelven este mismo tipo, y
+  // sin este valor un `estado === "SUSPENDIDA"` en la UI no compilaría.
+  estado: "INACTIVA" | "ACTIVA" | "VENCIDA" | "SUSPENDIDA";
   montoAplicado: string;
   fechaActivacion: string;
   personaId: number;
@@ -1317,6 +1436,17 @@ export interface PagoPersona {
   descuentoValorAplicado: string | null;
   /** Porcentaje vigente al aplicarlo, o `null` si el descuento era de monto fijo. */
   descuentoPorcentajeAplicado: string | null;
+  /**
+   * El comprobante OFICIAL en PDF que el club genera al aprobar (issue #400,
+   * criterio 8) — distinto de `voucherUrl` (la evidencia que SUBE el
+   * alumno). `null`/ausente cuando el pago no fue aprobado, o cuando el PDF
+   * todavía no terminó de generarse. Opcional (a diferencia de los demás
+   * campos, que el backend siempre serializa): mismo criterio que
+   * `MembresiaPorPersona.esGratuidadFamiliar` — así los fixtures ya
+   * existentes en la suite de tests, escritos antes de este campo, siguen
+   * tipando sin tener que tocarlos uno por uno.
+   */
+  comprobanteOficialUrl?: string | null;
 }
 
 /**
@@ -1328,6 +1458,161 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   return request<PagoPersona[]>(apiEndpoint(`/membresias/pagos/persona/${personaId}`), {
     headers: mockHeaders,
+  });
+}
+
+/**
+ * A single pago's own detail, any status — admin-facing (issue #400,
+ * criterio 7/8): `GET /api/membresias/pagos/:pagoId`, proxying the
+ * backend's `GET /membresias/pagos/{pago_id}` (dueño/representante/admin
+ * authorization enforced backend-side). The admin queue's list view
+ * (`PagoListItemDTO`) never carried `comprobanteOficialUrl` nor a
+ * correction history — this is the one extra round trip
+ * `/payments/page.tsx` makes when it opens the detail of an ALREADY
+ * VALIDATED payment, to fetch both.
+ */
+export async function fetchPagoDetalle(pagoId: number): Promise<PagoPersona> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<PagoPersona>(apiEndpoint(`/membresias/pagos/${pagoId}`), {
+    headers: mockHeaders,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Corrección financiera de pagos (issue #400, criterio 7)
+// ---------------------------------------------------------------------------
+
+/**
+ * `CorreccionPagoDTO` (backend): los seis campos financieros congelados de
+ * un `Pago` YA aprobado, todos opcionales -- se envía solo lo que cambia.
+ * `motivo` es el único obligatorio.
+ */
+export interface CorreccionPagoInput {
+  tarifaMensualAplicada?: string;
+  mesesComprados?: number;
+  montoBase?: string;
+  monto?: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+  motivo: string;
+}
+
+/** `CorreccionPagoResponseDTO` — una fila de auditoría de corrección financiera. */
+export interface CorreccionPago {
+  id: number;
+  pagoId: number;
+  tarifaMensualAplicadaAnterior: string | null;
+  tarifaMensualAplicadaNuevo: string | null;
+  mesesCompradosAnterior: number | null;
+  mesesCompradosNuevo: number | null;
+  montoBaseAnterior: string | null;
+  montoBaseNuevo: string | null;
+  montoAnterior: string;
+  montoNuevo: string;
+  fechaInicioAnterior: string;
+  fechaInicioNuevo: string;
+  fechaFinAnterior: string;
+  fechaFinNuevo: string;
+  efectoCobertura: "SIN_CAMBIO" | "AMPLIADA" | "REDUCIDA";
+  motivo: string;
+  actorPersonaId: number;
+  fechaRegistro: string;
+}
+
+/** `CorreccionPagoResultadoDTO` — el pago ya corregido + la fila de auditoría que dejó. */
+export interface CorreccionPagoResultado {
+  pago: PagoPersona;
+  correccion: CorreccionPago;
+}
+
+/**
+ * Corrige un campo financiero congelado de un pago YA aprobado —
+ * `POST /api/membresias/pagos/:pagoId/corregir` (admin-only). Issue #400,
+ * criterio 7: el backend deja el pago original mutado y una fila
+ * `CorreccionPago` nueva con el rastro anterior/nuevo, nunca un UPDATE
+ * silencioso.
+ */
+export async function corregirPago(
+  pagoId: number,
+  datos: CorreccionPagoInput,
+): Promise<CorreccionPagoResultado> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CorreccionPagoResultado>(apiEndpoint(`/membresias/pagos/${pagoId}/corregir`), {
+    method: "POST",
+    body: JSON.stringify(datos),
+    headers: { "Content-Type": "application/json", ...mockHeaders },
+  });
+}
+
+/** Historial de correcciones de un pago — `GET /api/membresias/pagos/:pagoId/correcciones` (admin-only). */
+export async function fetchCorrecciones(pagoId: number): Promise<CorreccionPago[]> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CorreccionPago[]>(apiEndpoint(`/membresias/pagos/${pagoId}/correcciones`), {
+    headers: mockHeaders,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Suspensión y reactivación de membresía (issue #400, criterio 3)
+// ---------------------------------------------------------------------------
+
+/** `SuspensionReactivacionDTO` (backend): motivo obligatorio, fecha efectiva opcional. */
+export interface SuspensionReactivacionInput {
+  motivo: string;
+  /** ISO datetime; omitido significa "ahora" (el backend completa `datetime.now(UTC)`). */
+  fechaEfectiva?: string;
+}
+
+/**
+ * Suspende una membresía ACTIVA — `POST /api/membresias/:id/suspender`
+ * (admin-only). Detiene la generación de deuda futura y bloquea nuevos
+ * pagos; la cobertura ya pagada no se toca.
+ */
+export async function suspenderMembresia(
+  membresiaId: number,
+  datos: SuspensionReactivacionInput,
+): Promise<MembresiaPorPersona> {
+  return request<MembresiaPorPersona>(apiEndpoint(`/membresias/${membresiaId}/suspender`), {
+    method: "POST",
+    body: JSON.stringify(datos),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Reactiva una membresía SUSPENDIDA — `POST /api/membresias/:id/reactivar`
+ * (admin-only). Resincroniza la tarifa vigente del catálogo; no otorga
+ * cobertura por sí sola.
+ */
+export async function reactivarMembresia(
+  membresiaId: number,
+  datos: SuspensionReactivacionInput,
+): Promise<MembresiaPorPersona> {
+  return request<MembresiaPorPersona>(apiEndpoint(`/membresias/${membresiaId}/reactivar`), {
+    method: "POST",
+    body: JSON.stringify(datos),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cambio de plan de una membresía existente (issue #400, criterio 1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cambia el tipo de membresía de una membresía YA existente —
+ * `POST /api/membresias/:id/cambiar-plan` (admin-only). Prospectivo: la
+ * cobertura ya pagada (fechas de pagos/coberturas bonificadas ya aprobados)
+ * no se toca; la tarifa nueva rige recién desde el próximo pago.
+ */
+export async function cambiarPlanMembresia(
+  membresiaId: number,
+  nuevoTipoMembresiaId: number,
+): Promise<MembresiaPorPersona> {
+  return request<MembresiaPorPersona>(apiEndpoint(`/membresias/${membresiaId}/cambiar-plan`), {
+    method: "POST",
+    body: JSON.stringify({ nuevoTipoMembresiaId }),
+    headers: { "Content-Type": "application/json" },
   });
 }
 

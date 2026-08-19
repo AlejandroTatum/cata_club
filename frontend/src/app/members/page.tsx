@@ -98,6 +98,8 @@ import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatu
 import CreateMembershipForm from "./CreateMembershipForm";
 import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
+import SuspenderReactivarForm from "./SuspenderReactivarForm";
+import CambiarPlanForm from "./CambiarPlanForm";
 import BeneficioSection from "./BeneficioSection";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
@@ -185,6 +187,16 @@ interface StudentRowProps {
    * as `onMembershipCreated` (never unmount the open dialog).
    */
   onDebtRegularized: () => void;
+  /**
+   * Called after a suspend/reactivate/cambiar-plan write (issue #400,
+   * criterios 1/3) — same silent-refresh semantics as the two callbacks
+   * above. All three of these callbacks currently resolve to the exact same
+   * `loadMembers` call at the page level; they stay separate props (rather
+   * than reusing `onDebtRegularized`) because each write flow owns its own
+   * named contract, same convention this file already uses for the other
+   * two.
+   */
+  onMembresiaChanged: () => void;
 }
 
 /**
@@ -207,7 +219,12 @@ function LabeledDataBox({
   );
 }
 
-function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: StudentRowProps): React.ReactElement {
+function StudentEditPanel({
+  student,
+  onMembershipCreated,
+  onDebtRegularized,
+  onMembresiaChanged,
+}: StudentRowProps): React.ReactElement {
   const [showMedical, setShowMedical] = useState(false);
 
   const personaId = Number(student.id);
@@ -335,6 +352,21 @@ function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: S
             esGratuidadFamiliar={student.membresia.esGratuidadFamiliar}
             onRegularized={onDebtRegularized}
           />
+          {/* Issue #400, criterio 3: solo administración suspende/reactiva
+              (texto explícito del issue) — el componente decide por sí solo
+              si corresponde "Suspender" o "Reactivar" según el estado
+              actual, y no se ofrece ninguno de los dos desde VENCIDA. */}
+          <SuspenderReactivarForm
+            membresiaId={Number(student.membresia.id)}
+            estado={student.membresia.estado}
+            onChanged={onMembresiaChanged}
+          />
+          {/* Issue #400, criterio 1: cambio de plan PROSPECTIVO sobre esta
+              misma membresía — la cobertura ya pagada no se toca. */}
+          <CambiarPlanForm
+            membresiaId={Number(student.membresia.id)}
+            onChanged={onMembresiaChanged}
+          />
         </div>
       )}
 
@@ -376,6 +408,7 @@ interface MemberEditDialogProps {
   /** Refetch the member list — forwarded to each student's edit panel. */
   onMembershipCreated: () => void;
   onDebtRegularized: () => void;
+  onMembresiaChanged: () => void;
 }
 
 const ALL_BACKEND_ROLES: BackendTipoRol[] = ["ADMINISTRADOR", "ENTRENADOR", "REPRESENTANTE", "ALUMNO"];
@@ -500,6 +533,7 @@ function MemberEditDialog({
   onClose,
   onMembershipCreated,
   onDebtRegularized,
+  onMembresiaChanged,
 }: MemberEditDialogProps): React.ReactElement {
   // Roles and estado are ONE concern, not two: a single request answers both,
   // a failed load has to show up in both places, and the header badge below
@@ -797,7 +831,8 @@ function MemberEditDialog({
                         key={estudiante.id}
                         student={estudiante}
                         onMembershipCreated={onMembershipCreated}
-                            onDebtRegularized={onDebtRegularized}
+                        onDebtRegularized={onDebtRegularized}
+                        onMembresiaChanged={onMembresiaChanged}
                       />
                     ))}
                   </ul>
@@ -1253,6 +1288,7 @@ export default function MembersPage(): React.ReactElement {
             onClose={() => setEditingAccountId(null)}
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
+            onMembresiaChanged={() => void loadMembers({ silent: true })}
           />
         )}
       </AppShell>

@@ -15,6 +15,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO,
     DeudaMembresiaResponseDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
+    CambioPlanMembresiaDTO,
 )
 from app.presentacion.schemas.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -410,6 +411,27 @@ def reactivar_membresia(
         datos.motivo,
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
+    )
+
+
+# Cambio de plan de una membresía existente (issue #400, criterio 1):
+# admin-only, mismo criterio de autorización que `suspender`/`reactivar`/
+# `corregir` -- mover a alguien de plan es una decisión administrativa,
+# nunca autoservicio. Ver `MembresiaServicio.cambiar_plan` para el porqué de
+# "prospectivo" y de la tabla de auditoría dedicada.
+@router.post(
+    "/{membresia_id}/cambiar-plan",
+    response_model=MembresiaResponseDTO,
+    status_code=200,
+)
+def cambiar_plan_membresia(
+    membresia_id: int,
+    datos: CambioPlanMembresiaDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
+):
+    return MembresiaServicio(db).cambiar_plan(
+        membresia_id, datos, actor_persona_id=token_payload.get("persona_id"),
     )
 
 

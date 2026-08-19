@@ -132,7 +132,11 @@ afterEach(() => {
 describe("fetchPaymentValidations", () => {
   it("calls /api/payments when NEXT_PUBLIC_USE_MOCKS=true", async () => {
     const items = [makePaymentValidation({ id: "pv-001" })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
+    // Issue #400 (criterio 4/5): `/api/payments` now responds
+    // `{ items, total }`, not a bare array — `fetchPaymentValidations`
+    // unwraps `.items` for callers that just want "whatever's there"
+    // (e.g. the dashboard).
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items, total: items.length }));
 
     const result = await fetchPaymentValidations();
 
@@ -148,7 +152,7 @@ describe("fetchPaymentValidations", () => {
     // authenticate. NEXT_PUBLIC_USE_MOCKS only affects the x-mock-role
     // header below, not which URL gets called.
     process.env.NEXT_PUBLIC_USE_MOCKS = "false";
-    vi.mocked(global.fetch).mockResolvedValue(okResponse([]));
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items: [], total: 0 }));
 
     await fetchPaymentValidations();
 
@@ -157,7 +161,7 @@ describe("fetchPaymentValidations", () => {
 
   it("defaults to local mocks when NEXT_PUBLIC_USE_MOCKS is unset", async () => {
     delete process.env.NEXT_PUBLIC_USE_MOCKS;
-    vi.mocked(global.fetch).mockResolvedValue(okResponse([]));
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items: [], total: 0 }));
 
     await fetchPaymentValidations();
 

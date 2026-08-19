@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
     Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, CoberturaBonificada,
-    HistorialEstadoMembresia, CorreccionPago,
+    HistorialEstadoMembresia, CorreccionPago, HistorialCambioPlanMembresia,
 )
 from app.dominio.enums import (
     EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, EfectoCoberturaCorreccion,
@@ -35,6 +35,7 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
     ComprobantePagoCreateDTO,
     PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO, CorreccionPagoDTO,
+    CambioPlanMembresiaDTO,
 )
 from app.presentacion.schemas.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -106,6 +107,11 @@ MENSAJE_PAGO_PENDIENTE_DUPLICADO = (
 MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
     "La persona ya tiene una membresía activa o suspendida. "
     "Cancele, deje vencer, o reactive la actual antes de crear una nueva."
+)
+
+# --- Issue #400 (criterio 1): cambio de plan ---------------------------------
+MENSAJE_CAMBIO_PLAN_MISMO_TIPO = (
+    "La membresía ya tiene asignado ese tipo de membresía."
 )
 
 # --- Issue #400 (slice 5a): suspensión y reactivación ------------------------
@@ -245,6 +251,68 @@ class MembresiaServicio:
         from app.servicios_negocio.rol_servicio import RolServicio
         RolServicio(self.db).asignar_alumno_si_corresponde(datos.persona_id)
         return membresia
+
+    def cambiar_plan(
+        self, membresia_id: int, datos: CambioPlanMembresiaDTO, actor_persona_id: int,
+    ) -> Membresia:
+        """Cambia el `TipoMembresia` de una membresía YA existente (issue
+        #400, criterio 1), admin-only.
+
+        Decisión de producto ya tomada (issue #400): PROSPECTIVO. La
+        cobertura ya pagada -- `fecha_inicio`/`fecha_fin` de `Pago`s
+        `APROBADO` y de `CoberturaBonificada` ya existentes -- NO se toca ni
+        se recalcula acá, mismo criterio que ya rige un cambio de tarifa de
+        CATÁLOGO (`actualizar_tipo_membresia`, issue #394/2a) aplicado ahora
+        a nivel de una membresía individual. Este método no lee ni escribe
+        ningún `Pago`.
+
+        `monto_aplicado` SÍ se resincroniza con la tarifa del plan nuevo
+        (copia, no referencia -- mismo criterio que `crear_membresia`/
+        `reactivar_membresia`): es la columna que `registrar_pago` lee para
+        cobrar el PRÓXIMO pago (`precio_mensual = membresia.monto_aplicado`).
+        Sin este resync, "la tarifa nueva rige desde el próximo pago" sería
+        falso -- el próximo pago seguiría cobrando la tarifa del plan viejo.
+
+        Mismo lock que `suspender_membresia`/`reactivar_membresia`/
+        `corregir_pago` (`obtener_por_id_con_bloqueo`, `SELECT ... FOR
+        UPDATE`): dos cambios de plan concurrentes sobre la MISMA membresía
+        deben serializarse, no perder ninguna de las dos filas de auditoría
+        ni dejar `monto_aplicado` en un valor que no corresponda a
+        `tipo_membresia_id` final.
+
+        Sin restricción de `estado` de origen a propósito: el issue no pide
+        ninguna, y esta operación no depende del estado (no otorga ni quita
+        cobertura, no genera ni salda deuda) -- a diferencia de suspender/
+        reactivar, que sí son transiciones de estado con un origen válido
+        estricto. Si el club necesita restringir esto más adelante (ej. no
+        cambiar de plan con un pago PENDIENTE_VALIDACION en curso), es una
+        decisión de producto nueva, fuera de este alcance.
+        """
+        membresia = self.repo.obtener_por_id_con_bloqueo(membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+
+        tipo_nuevo = self.repo_tipo.obtener_por_id(datos.nuevo_tipo_membresia_id)
+        if not tipo_nuevo:
+            raise EntidadNoEncontrada(
+                f"Tipo de membresía con id {datos.nuevo_tipo_membresia_id} no encontrado"
+            )
+
+        if membresia.tipo_membresia_id == datos.nuevo_tipo_membresia_id:
+            raise OperacionInvalida(MENSAJE_CAMBIO_PLAN_MISMO_TIPO)
+
+        tipo_anterior_id = membresia.tipo_membresia_id
+        membresia.tipo_membresia_id = tipo_nuevo.id
+        membresia.monto_aplicado = tipo_nuevo.precio
+        self.db.add(
+            HistorialCambioPlanMembresia(
+                membresia_id=membresia.id,
+                tipo_membresia_id_anterior=tipo_anterior_id,
+                tipo_membresia_id_nuevo=tipo_nuevo.id,
+                actor_persona_id=actor_persona_id,
+            )
+        )
+        return self.repo.guardar_cambios(membresia)
 
     def obtener_membresia(
         self,
@@ -1588,17 +1656,37 @@ class PagoServicio:
             formato="pdf" if es_pdf else None,
         )
 
+    def _url_entrega_comprobante(self, pago: Pago) -> str | None:
+        """Mismo criterio que `_url_entrega_voucher`, aplicado al comprobante
+        OFICIAL (issue #400, criterio 8): `ComprobantePago.archivo_url`
+        persiste un `public_id` (nunca una URL pública, ver su docstring en
+        `modelos.py`), así que necesita la misma firma fresca antes de
+        salir por HTTP. `comprobante_tareas.py` siempre genera PDF
+        (`formato_archivo="pdf"`, `resource_type="raw"` -- nunca imagen, a
+        diferencia del voucher que el alumno puede subir en JPEG/PNG)."""
+        from app.infraestructura.cloudinary_cliente import resolver_url_entrega
+
+        if pago.comprobante is None:
+            return None
+        return resolver_url_entrega(
+            pago.comprobante.archivo_url, resource_type="raw", formato="pdf",
+        )
+
     def pago_a_response_dto(self, pago: Pago) -> PagoResponseDTO:
         """Punto único donde un `Pago` ORM se convierte en la respuesta HTTP:
         reemplaza el `voucher_url` persistido (un `public_id`, o una URL
         pública heredada de antes del fix) por una URL de entrega firmada
-        fresca. Los routers de lectura (`GET /pagos/{id}`, `GET
-        /pagos/persona/{id}`, `PATCH /pagos/{id}/validar`, `POST
+        fresca, y agrega `comprobante_oficial_url` (issue #400, criterio 8)
+        con el mismo criterio. Los routers de lectura (`GET /pagos/{id}`,
+        `GET /pagos/persona/{id}`, `PATCH /pagos/{id}/validar`, `POST
         /pagos/{id}/voucher`) deben pasar por acá en vez de devolver el
         `Pago` directo -- devolverlo directo filtraría el `public_id` o la
         URL heredada tal cual, sin firmar."""
         dto = PagoResponseDTO.model_validate(pago)
-        return dto.model_copy(update={"voucher_url": self._url_entrega_voucher(pago)})
+        return dto.model_copy(update={
+            "voucher_url": self._url_entrega_voucher(pago),
+            "comprobante_oficial_url": self._url_entrega_comprobante(pago),
+        })
 
     def listar_pagos_de_persona(
         self,

@@ -99,6 +99,9 @@ beforeEach(() => {
   mockFetchBeneficio.mockReset().mockResolvedValue(null);
   mockAsignarBeneficio.mockReset();
   mockRetirarBeneficio.mockReset();
+  mockSuspenderMembresia.mockReset().mockResolvedValue({ id: 42, estado: "SUSPENDIDA" });
+  mockReactivarMembresia.mockReset().mockResolvedValue({ id: 42, estado: "ACTIVA" });
+  mockCambiarPlanMembresia.mockReset().mockResolvedValue({ id: 42, estado: "ACTIVA", tipoMembresiaId: 7 });
 });
 
 const mockShowInfo = vi.fn();
@@ -143,6 +146,9 @@ const mockRegularizarDeuda = vi.fn().mockResolvedValue({
   fechaInicio: "2026-04-01",
   fechaFin: "2026-04-30",
 });
+const mockSuspenderMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "SUSPENDIDA" });
+const mockReactivarMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA" });
+const mockCambiarPlanMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA", tipoMembresiaId: 7 });
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -174,6 +180,10 @@ vi.mock("@/services/api", () => {
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     fetchMembresiaDeuda: () => mockFetchMembresiaDeuda(),
     regularizarDeuda: (membresiaId: number, data: unknown) => mockRegularizarDeuda(membresiaId, data),
+    suspenderMembresia: (membresiaId: number, data: unknown) => mockSuspenderMembresia(membresiaId, data),
+    reactivarMembresia: (membresiaId: number, data: unknown) => mockReactivarMembresia(membresiaId, data),
+    cambiarPlanMembresia: (membresiaId: number, nuevoTipoMembresiaId: number) =>
+      mockCambiarPlanMembresia(membresiaId, nuevoTipoMembresiaId),
     ApiClientError: MockApiClientError,
   };
 });
@@ -1375,6 +1385,71 @@ describe("MembersPage — Registrar pago inline form", () => {
     const dialog = screen.getByRole("dialog");
     await within(dialog).findByRole("button", { name: /crear membresía/i });
     expect(within(dialog).queryByRole("button", { name: /^registrar pago$/i })).not.toBeInTheDocument();
+  });
+
+  // --- Issue #400, criterio 3: suspensión / reactivación -------------------
+
+  it("offers 'Suspender' for an ACTIVA membership and submits the motivo", async () => {
+    const dialog = await openMemberDialog({
+      membresia: { ...MEMBRESIA_VENCIDA, estado: "activa" },
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /suspender membresía/i }));
+    fireEvent.change(within(dialog).getByLabelText(/^motivo/i), {
+      target: { value: "Ausencia prolongada" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^suspender$/i }));
+
+    await waitFor(() =>
+      expect(mockSuspenderMembresia).toHaveBeenCalledWith(42, { motivo: "Ausencia prolongada" }),
+    );
+  });
+
+  it("offers 'Reactivar' for a SUSPENDIDA membership and submits the motivo", async () => {
+    const dialog = await openMemberDialog({
+      membresia: { ...MEMBRESIA_VENCIDA, estado: "suspendida" },
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reactivar membresía/i }));
+    fireEvent.change(within(dialog).getByLabelText(/^motivo/i), {
+      target: { value: "Regresó al club" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^reactivar$/i }));
+
+    await waitFor(() =>
+      expect(mockReactivarMembresia).toHaveBeenCalledWith(42, { motivo: "Regresó al club" }),
+    );
+  });
+
+  it("does NOT offer 'Suspender' nor 'Reactivar' for a VENCIDA membership", async () => {
+    const dialog = await openMemberDialog({ membresia: MEMBRESIA_VENCIDA });
+
+    expect(within(dialog).queryByRole("button", { name: /suspender membresía/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /reactivar membresía/i })).not.toBeInTheDocument();
+  });
+
+  // --- Issue #400, criterio 1: cambio de plan -------------------------------
+
+  it("offers 'Cambiar plan', lists the catalog and submits the selected tipo", async () => {
+    mockFetchTiposMembresia.mockResolvedValue([
+      { id: 5, categoria: "Adultos", precio: "30.00", modalidad: "MENSUAL" },
+      { id: 7, categoria: "Juveniles", precio: "45.00", modalidad: "MENSUAL" },
+    ]);
+    const dialog = await openMemberDialog({ membresia: MEMBRESIA_VENCIDA });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /cambiar plan/i }));
+    const combobox = await within(dialog).findAllByRole("combobox");
+    // The last combobox on screen is this form's own — the create-membership
+    // form's combobox is not rendered here (the student already has a
+    // membership), but scoping defensively keeps this test honest if that
+    // ever changes.
+    const select = combobox[combobox.length - 1];
+    fireEvent.change(select, { target: { value: "7" } });
+
+    const form = select.parentElement as HTMLElement;
+    fireEvent.click(within(form).getByRole("button", { name: /^cambiar$/i }));
+
+    await waitFor(() => expect(mockCambiarPlanMembresia).toHaveBeenCalledWith(42, 7));
   });
 });
 

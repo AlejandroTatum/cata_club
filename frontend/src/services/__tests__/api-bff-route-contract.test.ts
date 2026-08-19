@@ -60,6 +60,13 @@ import {
   fetchBeneficio,
   asignarBeneficio,
   retirarBeneficio,
+  fetchPaymentValidationsPage,
+  fetchPagoDetalle,
+  corregirPago,
+  fetchCorrecciones,
+  suspenderMembresia,
+  reactivarMembresia,
+  cambiarPlanMembresia,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -196,6 +203,18 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     ["fetchBeneficio", () => fetchBeneficio(2)],
     ["asignarBeneficio", () => asignarBeneficio(2, 3)],
     ["retirarBeneficio", () => retirarBeneficio(2)],
+    // Issue #400 (entrega 07): gap 1 (paginación real), gap 2 (correcciones)
+    // y gap 4/5 (suspensión/reactivación/cambio de plan) — sin esto, cada
+    // una de estas seis funciones nuevas podría apuntar a una URL que
+    // Next.js resuelve con su 404 HTML, y los tests unitarios (que mockean
+    // `fetch`) nunca lo notarían.
+    ["fetchPaymentValidationsPage", () => fetchPaymentValidationsPage({ skip: 0, limit: 10 })],
+    ["fetchPagoDetalle", () => fetchPagoDetalle(9)],
+    ["corregirPago", () => corregirPago(9, { motivo: "Ajuste" })],
+    ["fetchCorrecciones", () => fetchCorrecciones(9)],
+    ["suspenderMembresia", () => suspenderMembresia(3, { motivo: "Ausencia" })],
+    ["reactivarMembresia", () => reactivarMembresia(3, { motivo: "Regresa" })],
+    ["cambiarPlanMembresia", () => cambiarPlanMembresia(3, 5)],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {

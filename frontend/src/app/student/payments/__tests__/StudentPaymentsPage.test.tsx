@@ -477,6 +477,31 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.getByText("Motivo del rechazo")).toBeInTheDocument();
   });
 
+  // Issue #400 (criterio 8): el comprobante OFICIAL que genera el club al
+  // aprobar es distinto del voucher que sube el socio (`voucherUrl` /
+  // "Ver el comprobante") — solo aparece cuando el backend lo pobló.
+  it("shows a 'Descargar comprobante oficial' link when comprobanteOficialUrl is populated", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ estadoPago: "APROBADO", comprobanteOficialUrl: "https://files.example/comprobante-oficial.pdf" }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    const link = await screen.findByRole("link", { name: /descargar comprobante oficial/i });
+    expect(link).toHaveAttribute("href", "https://files.example/comprobante-oficial.pdf");
+  });
+
+  it("does NOT show the official comprobante link when comprobanteOficialUrl is absent", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ estadoPago: "APROBADO", comprobanteOficialUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByText(shownRange(PAGO_START, COVERAGE_END));
+    expect(screen.queryByRole("link", { name: /descargar comprobante oficial/i })).not.toBeInTheDocument();
+  });
+
   it("filters by status, and marks the active filter with the ball dot rather than red", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ id: 1, estadoPago: "APROBADO" }),
