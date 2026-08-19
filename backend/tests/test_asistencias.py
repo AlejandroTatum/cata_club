@@ -884,6 +884,65 @@ def test_dos_correcciones_sucesivas_encadenan_estado_anterior_sin_pisarse(
     assert len(filas) == 2
 
 
+# --- Issue #389, slice 4a: historial de correcciones ------------------------
+# `GET /asistencias/{id}/correcciones`. ADMIN-only, igual que `corregir`.
+def test_listar_correcciones_de_asistencia_nunca_corregida_es_lista_vacia(client, monkeypatch):
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    resp = client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+def test_listar_correcciones_devuelve_mas_reciente_primero(client, monkeypatch):
+    """Dos correcciones sucesivas: el listado las devuelve en orden inverso
+    al de creación (más reciente primero), no en orden de inserción."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "AUSENTE", "motivo": "primera corrección"},
+    )
+    client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "JUSTIFICADO", "motivo": "segunda corrección"},
+    )
+
+    resp = client.get(f"/api/v1/asistencias/{asistencia_id}/correcciones")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()
+    assert len(items) == 2
+    assert [i["motivo"] for i in items] == ["segunda corrección", "primera corrección"]
+    # La respuesta refleja lo submiteado: motivo, autor y estado anterior.
+    assert items[0]["estadoAnterior"] == "AUSENTE"
+    assert items[1]["estadoAnterior"] == "PRESENTE"
+    assert items[0]["corregidoPorNombre"]
+    assert items[0]["corregidoPorId"] == 1
+
+
+def test_listar_correcciones_de_asistencia_inexistente_da_404(client):
+    resp = client.get("/api/v1/asistencias/999999/correcciones")
+    assert resp.status_code == 404
+
+
+def test_entrenador_no_puede_listar_correcciones(client_entrenador, client, monkeypatch):
+    """Admin-only, igual que `corregir`."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    _restaurar_token_entrenador()
+    resp = client_entrenador.get(f"/api/v1/asistencias/{asistencia_id}/correcciones")
+    assert resp.status_code == 403
+
+
 def test_historial_expone_quien_tomo_la_lista(client):
     """El listado por persona (`GET /asistencias/persona/{id}`) devuelve los
     campos de autor en cada item."""

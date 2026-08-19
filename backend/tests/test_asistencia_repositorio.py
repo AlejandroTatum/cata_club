@@ -12,9 +12,12 @@ from sqlalchemy import func, select
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia
 from app.dominio.excepciones import OperacionInvalida
-from app.dominio.modelos import AlumnoHorario, Asistencia, HorarioEntrenamiento, Persona, SesionAsistencia
+from app.dominio.modelos import (
+    AlumnoHorario, Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, Persona,
+    SesionAsistencia,
+)
 from app.infraestructura.repositorios.asistencia_repositorio import (
-    AlumnoHorarioRepositorio, SesionAsistenciaRepositorio,
+    AlumnoHorarioRepositorio, AsistenciaRepositorio, SesionAsistenciaRepositorio,
 )
 from app.presentacion.schemas.asistencia_schemas import AsistenciaCreateDTO
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
@@ -207,3 +210,54 @@ def test_registrar_asistencia_rechaza_choque_concurrente_de_unique(db_session, m
     ).scalar_one()
     assert total == 1  # la fila ganadora sigue siendo la única
     assert db_session.get(Asistencia, fila_ganadora.id).estado == EstadoAsistencia.PRESENTE
+
+
+# ---------------------------------------------------------------------------
+# Issue #389, slice 4a: `AsistenciaRepositorio.listar_correcciones_por_asistencia`.
+# ---------------------------------------------------------------------------
+
+
+def test_listar_correcciones_por_asistencia_vacio_sin_historial(db_session):
+    horario = _crear_horario(db_session)
+    alumno = _crear_persona(db_session, cedula_valida(190), "Ana", "Torres")
+    asistencia = Asistencia(
+        persona_id=alumno.id, horario_id=horario.id, fecha_entrenamiento=date(2026, 7, 13),
+        estado=EstadoAsistencia.PRESENTE,
+    )
+    db_session.add(asistencia)
+    db_session.commit()
+
+    correcciones = AsistenciaRepositorio(db_session).listar_correcciones_por_asistencia(
+        asistencia.id
+    )
+    assert correcciones == []
+
+
+def test_listar_correcciones_por_asistencia_ordena_mas_reciente_primero(db_session):
+    horario = _crear_horario(db_session)
+    alumno = _crear_persona(db_session, cedula_valida(191), "Ana", "Torres")
+    admin = _crear_persona(db_session, cedula_valida(192), "Leo", "Pardo")
+    asistencia = Asistencia(
+        persona_id=alumno.id, horario_id=horario.id, fecha_entrenamiento=date(2026, 7, 13),
+        estado=EstadoAsistencia.JUSTIFICADO,
+    )
+    db_session.add(asistencia)
+    db_session.flush()
+    primera = AsistenciaCorreccion(
+        asistencia_id=asistencia.id, corregido_por_id=admin.id,
+        motivo="primera", estado_anterior=EstadoAsistencia.PRESENTE,
+    )
+    db_session.add(primera)
+    db_session.flush()
+    segunda = AsistenciaCorreccion(
+        asistencia_id=asistencia.id, corregido_por_id=admin.id,
+        motivo="segunda", estado_anterior=EstadoAsistencia.AUSENTE,
+    )
+    db_session.add(segunda)
+    db_session.commit()
+
+    correcciones = AsistenciaRepositorio(db_session).listar_correcciones_por_asistencia(
+        asistencia.id
+    )
+    assert [c.id for c in correcciones] == [segunda.id, primera.id]
+    assert correcciones[0].corregido_por_nombre == "Leo Pardo"
