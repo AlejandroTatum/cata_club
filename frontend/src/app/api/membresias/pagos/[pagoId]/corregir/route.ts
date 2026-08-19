@@ -12,11 +12,13 @@
  * `motivo`): an omitted field means "no change for that field", which is
  * exactly what `exclude_unset` on the backend needs to see — sending an
  * explicit `undefined`/`null` for an untouched field would defeat that.
+ * The id-parsing and fetch/error/response tail are shared with the other
+ * `membresias` action routes via `proxyMembresiaAction` (issue #442,
+ * round 8).
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
-import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { parseNumericRouteParam, proxyMembresiaAction } from "@/lib/server/proxy-membresia-action";
 
 interface CorreccionPagoBody {
   tarifaMensualAplicada?: unknown;
@@ -41,10 +43,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { pagoId: string } },
 ): Promise<NextResponse> {
-  const pagoId = Number(params.pagoId);
-  if (!Number.isInteger(pagoId)) {
-    return NextResponse.json({ message: "El id de pago no es válido." }, { status: 400 });
-  }
+  const pagoId = parseNumericRouteParam(params.pagoId, "pago", { requireInteger: true });
+  if (pagoId instanceof NextResponse) return pagoId;
 
   let body: unknown;
   try {
@@ -68,23 +68,8 @@ export async function POST(
     if (valor !== undefined) backendBody[snake] = valor;
   }
 
-  const result = await backendFetchAuthed(request, `/membresias/pagos/${pagoId}/corregir`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(backendBody),
+  return proxyMembresiaAction(request, `/membresias/pagos/${pagoId}/corregir`, backendBody, {
+    failureMessage: "No se pudo registrar la corrección.",
+    successStatus: 201,
   });
-
-  if (!result.ok) {
-    return NextResponse.json({ message: "No se pudo registrar la corrección." }, { status: result.status });
-  }
-  if (!result.response.ok) {
-    return passthroughBackendError(result.response, "No se pudo registrar la corrección.");
-  }
-
-  const data = await result.response.json();
-  const response = NextResponse.json(data, { status: 201 });
-  if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
-  }
-  return response;
 }

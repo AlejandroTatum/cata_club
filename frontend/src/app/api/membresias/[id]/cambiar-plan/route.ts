@@ -7,6 +7,9 @@
  * backend is a plain snake_case Pydantic model with NO alias generator
  * (write DTO, not `ResponseBase`) — this handler translates the frontend's
  * camelCase body explicitly, same pattern as `POST /api/membresias/pagos`.
+ * The id-parsing and fetch/error/response tail are shared with the other
+ * `membresias` action routes via `proxyMembresiaAction` (issue #442,
+ * round 8).
  *
  * Prospectivo (decisión de producto ya tomada, ver
  * `MembresiaServicio.cambiar_plan` en el backend): la cobertura ya pagada no
@@ -14,18 +17,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookies } from "@/lib/server/auth";
-import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { parseNumericRouteParam, proxyMembresiaAction } from "@/lib/server/proxy-membresia-action";
 
 interface RouteContext {
   params: { id: string };
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const membresiaId = Number(context.params.id);
-  if (Number.isNaN(membresiaId)) {
-    return NextResponse.json({ message: "El id de membresía no es válido." }, { status: 400 });
-  }
+  const membresiaId = parseNumericRouteParam(context.params.id, "membresía");
+  if (membresiaId instanceof NextResponse) return membresiaId;
 
   let body: unknown;
   try {
@@ -47,23 +47,10 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
 
   const nuevoTipoMembresiaId = (body as { nuevoTipoMembresiaId: number }).nuevoTipoMembresiaId;
 
-  const result = await backendFetchAuthed(request, `/membresias/${membresiaId}/cambiar-plan`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nuevo_tipo_membresia_id: nuevoTipoMembresiaId }),
-  });
-
-  if (!result.ok) {
-    return NextResponse.json({ message: "No se pudo cambiar el plan de la membresía." }, { status: result.status });
-  }
-  if (!result.response.ok) {
-    return passthroughBackendError(result.response, "No se pudo cambiar el plan de la membresía.");
-  }
-
-  const data = await result.response.json();
-  const response = NextResponse.json(data);
-  if (result.refreshedAccessToken) {
-    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
-  }
-  return response;
+  return proxyMembresiaAction(
+    request,
+    `/membresias/${membresiaId}/cambiar-plan`,
+    { nuevo_tipo_membresia_id: nuevoTipoMembresiaId },
+    { failureMessage: "No se pudo cambiar el plan de la membresía." },
+  );
 }
