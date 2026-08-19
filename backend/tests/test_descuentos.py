@@ -11,9 +11,20 @@ Modelo firmado (docs/product/concepto-alcance-modelo.md §4), colapsado a column
   CONGELADO al momento de aplicar. Cambios posteriores al catálogo NO alteran
   pagos ya registrados.
 - Invariantes: el descuento de un pago <= 100 % de su monto base (no hay
-  pagos negativos); un descuento inactivo no puede aplicarse; un pago admite
-  UN solo descuento (más de un id es 400); el becado 100 % registra su pago
-  de $0 por el flujo NORMAL de registro + aprobación (no es estado especial).
+  pagos negativos); un pago admite UN solo descuento; el becado 100 %
+  registra su pago de $0 por el flujo NORMAL de registro + aprobación (no es
+  estado especial).
+
+ACTUALIZACIÓN (issue #398/#400, slice 3c): aplicar un descuento a un pago ya
+NO es una elección del cliente. `PagoCreateDTO` perdió el campo
+`descuento_ids` -- el beneficio se ASIGNA por separado a la persona
+(`BeneficioServicio`, `test_beneficio_asignacion.py`) y `PagoServicio.
+registrar_pago` resuelve la asignación VIGENTE del pagador solo. Un
+`descuento_ids` que el cliente mande igual se ignora en silencio (Pydantic
+descarta campos de más); "un descuento inactivo no puede aplicarse" ahora es
+"no puede ASIGNARSE" (el chequeo se movió de tiempo-de-pago a
+tiempo-de-asignación). La aplicación automática en sí, con su propia suite,
+vive en `test_beneficio_en_pago.py`.
 
 Fábricas del grafo persona -> tipo -> membresía -> pago: `fabricas_pagos`
 (única copia compartida, ver su docstring).
@@ -27,6 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from tests.fabricas_pagos import (
+    asignar_beneficio_api,
     crear_membresia_orm,
     crear_pago_orm,
     crear_persona_orm,
@@ -156,17 +168,42 @@ def test_catalogo_sin_token_responde_401(client_sin_token):
 
 
 # --- Aplicación al registrar un pago -----------------------------------------
+# Issue #398/#400: el descuento de un pago YA NO lo elige el cliente. Estos
+# tests aplicaban un `descuento_ids` enviado en el POST; ahora el beneficio se
+# ASIGNA por separado (`asignar_beneficio_api`, endpoint de
+# `test_beneficio_asignacion.py`) y `registrar_pago` lo resuelve solo. La
+# aplicación automática en sí (feliz, con porcentaje/monto fijo, quién queda
+# como autor, retiro, manipulación del payload) tiene su propia suite en
+# `test_beneficio_en_pago.py`; lo que sigue acá es lo que YA vivía en este
+# archivo y necesitaba adaptarse al nuevo contrato, sin perder lo que
+# protegía.
 
-def test_pago_con_descuento_porcentual_congela_valor_y_autor(client, db_session):
-    """El servicio resuelve el valor VIGENTE del catálogo, lo congela en las
-    columnas `descuento_*` de Pago y descuenta el monto final; queda
-    registrado qué admin lo autorizó (persona_id 1 del token de `client`)."""
+def _escenario_con_beneficio_asignado(
+    client, *, porcentaje=None, monto=None, nombre="Media beca",
+) -> tuple[dict, dict, dict]:
+    """Persona + tipo + membresía (sin pago) + beneficio YA asignado, vía API
+    completa. Devuelve (persona, membresia, descuento). Base común de las
+    pruebas de este archivo que necesitan un beneficio vigente antes de
+    registrar el pago."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
-    descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
+    descuento = crear_descuento_api(client, nombre, porcentaje=porcentaje, monto=monto).json()
+    asignacion = asignar_beneficio_api(client, persona["id"], descuento["id"])
+    assert asignacion.status_code == 201, asignacion.text
+    return persona, membresia, descuento
 
-    respuesta = registrar_pago_api(
-        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
+
+def test_pago_con_beneficio_porcentual_congela_valor_y_autor(client, db_session):
+    """El servicio resuelve la asignación VIGENTE del pagador (issue #398),
+    la congela en las columnas `descuento_*` de Pago y descuenta el monto
+    final -- el cliente no envía nada sobre descuentos. Queda registrado qué
+    admin CONCEDIÓ el beneficio (`asignado_por_persona_id`, persona_id 1 del
+    token de `client`), no quien registró el pago (ver
+    `test_beneficio_en_pago.py` para el caso en que son personas distintas)."""
+    persona, membresia, descuento = _escenario_con_beneficio_asignado(
+        client, porcentaje="50",
     )
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 201
     pago = respuesta.json()
     assert Decimal(str(pago["monto"])) == Decimal("17.50")
@@ -184,13 +221,12 @@ def test_pago_con_descuento_porcentual_congela_valor_y_autor(client, db_session)
     assert Decimal(str(pago["descuentoValorAplicado"])) == Decimal("17.50")
 
 
-def test_pago_con_descuento_de_monto_fijo(client, db_session):
-    persona, membresia = escenario_membresia_sin_pago_api(client)
-    descuento = crear_descuento_api(client, "Convenio", monto="10.00").json()
-
-    respuesta = registrar_pago_api(
-        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
+def test_pago_con_beneficio_de_monto_fijo(client, db_session):
+    persona, membresia, descuento = _escenario_con_beneficio_asignado(
+        client, nombre="Convenio", monto="10.00",
     )
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 201
     pago = respuesta.json()
     assert Decimal(str(pago["monto"])) == Decimal("25.00")
@@ -201,26 +237,26 @@ def test_pago_con_descuento_de_monto_fijo(client, db_session):
     assert fila.descuento_porcentaje_aplicado is None
 
 
-def test_historial_propio_expone_el_descuento_congelado(client):
+def test_historial_propio_expone_el_beneficio_congelado(client):
     """El portal del socio lee `GET /membresias/pagos/persona/{id}`, y de ahí
     -- no del POST -- saca lo que muestra en el historial. El socio no elige
-    descuentos (los aplica el admin, ver `registrar_pago`), pero sí tiene que
-    poder LEER el que el club ya le aplicó: sin `descuentoValorAplicado` en
-    esta respuesta, la pantalla solo puede mostrarle un monto final sin
-    explicación, que es justamente el reclamo de QA del 17/08/2026.
+    el beneficio (lo concede el admin por separado, issue #398), pero sí
+    tiene que poder LEER el que el club ya le aplicó: sin
+    `descuentoValorAplicado` en esta respuesta, la pantalla solo puede
+    mostrarle un monto final sin explicación, que es justamente el reclamo de
+    QA del 17/08/2026.
 
     El precio de lista NO viaja como campo propio: `Pago.monto` es el monto
     FINAL (`registrar_pago` hace `pago.monto = monto_final`) y el base se
     reconstruye exacto sumándole el valor congelado, porque
-    `_congelar_descuento` devuelve justamente `monto_base - valor`. Este test
-    fija esa relación además de la presencia de los campos: es la aritmética
-    que el cliente rehace para poder nombrar los tres números."""
-    persona, membresia = escenario_membresia_sin_pago_api(client)
-    assert persona["id"] == 1  # el token de `client` es persona_id=1: es "su" historial
-    descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
-    registrar_pago_api(
-        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
+    `_congelar_beneficio_activo` devuelve justamente `monto_base - valor`.
+    Este test fija esa relación además de la presencia de los campos: es la
+    aritmética que el cliente rehace para poder nombrar los tres números."""
+    persona, membresia, descuento = _escenario_con_beneficio_asignado(
+        client, porcentaje="50",
     )
+    assert persona["id"] == 1  # el token de `client` es persona_id=1: es "su" historial
+    registrar_pago_api(client, persona["id"], membresia["id"])
 
     respuesta = client.get(f"/api/v1/membresias/pagos/persona/{persona['id']}")
     assert respuesta.status_code == 200
@@ -243,7 +279,9 @@ def test_historial_propio_sin_descuento_deja_los_campos_en_null(client):
     """El contrario del anterior, y la razón por la que la pantalla puede
     decidir sin ambigüedad: un pago sin descuento no trae ceros, trae `None`.
     Un `0.00` obligaría al cliente a distinguir «no hubo descuento» de «hubo
-    uno de cero», y el producto no muestra nada cuando no hubo."""
+    uno de cero», y el producto no muestra nada cuando no hubo. Sin ningún
+    beneficio asignado (no se toca `_escenario_con_beneficio_asignado`), este
+    test no necesitó cambios: sigue probando exactamente lo mismo."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     registrar_pago_api(client, persona["id"], membresia["id"])
 
@@ -255,22 +293,18 @@ def test_historial_propio_sin_descuento_deja_los_campos_en_null(client):
     assert pago["descuentoPorcentajeAplicado"] is None
 
 
-def test_descuento_total_no_puede_superar_el_100_por_ciento(client, db_session):
-    """Tope firmado: no existen pagos negativos. Bajo la regla nueva (un pago
-    admite UN solo descuento) el tope ya no se prueba sumando dos ids -- eso
-    ahora lo rechaza `_congelar_descuento` con otro motivo (ver
-    `test_mas_de_un_descuento_es_rechazado` más abajo). Un porcentual nunca
-    puede solo excederlo: el catálogo ya limita `porcentaje <= 100`
+def test_beneficio_no_puede_superar_el_100_por_ciento(client, db_session):
+    """Tope firmado: no existen pagos negativos. Un porcentual nunca puede
+    solo excederlo: el catálogo ya limita `porcentaje <= 100`
     (`ck_descuento_porcentaje_en_rango`), así que a lo sumo iguala el monto
-    base. La única forma real de que un ÚNICO descuento supere el 100 % es
-    uno de monto FIJO mayor que el monto base del pago -- exactamente lo que
-    se ejercita acá."""
-    persona, membresia = escenario_membresia_sin_pago_api(client)
-    descuento = crear_descuento_api(client, "Convenio excesivo", monto="40.00").json()
-
-    respuesta = registrar_pago_api(
-        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
+    base. La única forma real de que un beneficio supere el 100 % es uno de
+    monto FIJO mayor que el monto base del pago -- exactamente lo que se
+    ejercita acá, ahora vía asignación en vez de `descuento_ids`."""
+    persona, membresia, descuento = _escenario_con_beneficio_asignado(
+        client, nombre="Convenio excesivo", monto="40.00",
     )
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 400
     assert "100" in respuesta.json()["detail"]
 
@@ -278,10 +312,20 @@ def test_descuento_total_no_puede_superar_el_100_por_ciento(client, db_session):
     assert db_session.query(Pago).count() == 0
 
 
-def test_mas_de_un_descuento_es_rechazado(client, db_session):
-    """Colapsado a columnas de Pago (el dueño confirmó: un pago lleva UN solo
-    descuento): enviar más de un id ya no sirve para acumular descuentos,
-    se rechaza directo con 400 y no queda ningún pago registrado."""
+# --- `descuento_ids` ya no existe en el contrato: enviarlo no tiene efecto ---
+# Los cinco tests siguientes protegían, cada uno, una forma distinta de
+# payload inválido de `descuento_ids` (más de un id, un id inactivo, un id
+# inexistente, un id repetido, un id enviado sin ser admin) que antes se
+# RECHAZABA con 400/403/404. Bajo el contrato nuevo el campo no existe:
+# Pydantic lo descarta al parsear (ver docstring de `PagoCreateDTO`), así que
+# ninguna de esas formas puede romper nada -- el pago se registra igual, SIN
+# descuento. Se mantienen las cinco variantes de payload (no se colapsan en
+# una sola prueba) porque cada una demuestra que el campo es inerte pase lo
+# que pase adentro, no solo en el caso feliz.
+
+def test_enviar_varios_descuento_ids_no_tiene_efecto(client):
+    """ANTES: un pago admitía UN solo descuento, así que enviar dos ids se
+    rechazaba con 400 (colapsado a columnas de Pago)."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     d1 = crear_descuento_api(client, "Beca parcial", porcentaje="30").json()
     d2 = crear_descuento_api(client, "Familiar", porcentaje="20").json()
@@ -289,13 +333,19 @@ def test_mas_de_un_descuento_es_rechazado(client, db_session):
     respuesta = registrar_pago_api(
         client, persona["id"], membresia["id"], descuento_ids=[d1["id"], d2["id"]],
     )
-    assert respuesta.status_code == 400
+    assert respuesta.status_code == 201
+    pago = respuesta.json()
+    assert pago["descuentoId"] is None
+    assert Decimal(str(pago["monto"])) == Decimal("35.00")
 
-    from app.dominio.modelos import Pago
-    assert db_session.query(Pago).count() == 0
 
-
-def test_descuento_inactivo_es_rechazado(client):
+def test_enviar_descuento_ids_de_un_descuento_inactivo_no_tiene_efecto(client):
+    """ANTES: un descuento inactivo enviado en `descuento_ids` se rechazaba
+    con 400 al registrar el pago. AHORA esa validación vive en
+    `BeneficioServicio.asignar` (issue #398,
+    `test_beneficio_asignacion.py::test_asignar_descuento_inactivo_es_rechazado`)
+    -- un descuento inactivo no puede ASIGNARSE como beneficio. Al registrar
+    el pago ya no hay ningún `descuento_ids` que validar."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     descuento = crear_descuento_api(client, "Beca vieja", porcentaje="50").json()
     client.patch(f"{RUTA_DESCUENTOS}{descuento['id']}", json={"activo": False})
@@ -303,37 +353,47 @@ def test_descuento_inactivo_es_rechazado(client):
     respuesta = registrar_pago_api(
         client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
     )
-    assert respuesta.status_code == 400
-    assert "inactivo" in respuesta.json()["detail"].lower()
+    assert respuesta.status_code == 201
+    assert respuesta.json()["descuentoId"] is None
 
 
-def test_descuento_inexistente_es_404(client):
+def test_enviar_descuento_ids_inexistente_no_tiene_efecto(client):
+    """ANTES: un id inexistente en `descuento_ids` daba 404."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     respuesta = registrar_pago_api(
         client, persona["id"], membresia["id"], descuento_ids=[9999],
     )
-    assert respuesta.status_code == 404
+    assert respuesta.status_code == 201
+    assert respuesta.json()["descuentoId"] is None
 
 
-def test_descuento_repetido_en_la_solicitud_es_rechazado(client):
+def test_enviar_descuento_ids_repetido_no_tiene_efecto(client):
+    """ANTES: el mismo id repetido dos veces en `descuento_ids` se rechazaba
+    con 400."""
     persona, membresia = escenario_membresia_sin_pago_api(client)
     descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
     respuesta = registrar_pago_api(
         client, persona["id"], membresia["id"],
         descuento_ids=[descuento["id"], descuento["id"]],
     )
-    assert respuesta.status_code == 400
+    assert respuesta.status_code == 201
+    assert respuesta.json()["descuentoId"] is None
 
 
-def test_alumno_no_puede_aplicar_descuentos(client_sin_permisos, db_session):
-    """Aplicar descuentos es decisión del ADMINISTRADOR (modelo firmado §4:
-    'el admin decide, el sistema registra'). Un alumno adulto puede registrar
-    su propio pago, pero adjuntarle descuentos responde 403."""
+def test_enviar_descuento_ids_no_tiene_efecto_sin_ser_admin(client_sin_permisos, db_session):
+    """ANTES: aplicar descuentos era decisión del ADMINISTRADOR (modelo
+    firmado §4: 'el admin decide, el sistema registra'); un alumno adulto que
+    enviara `descuento_ids` en su propio pago recibía 403 -- ese era el único
+    caso en que este archivo probaba la autorización de `descuento_ids` en
+    sí. AHORA esa autorización dejó de tener sentido: nadie "aplica" un
+    descuento al pagar (el admin lo asigna aparte, issue #398), así que un
+    no-admin que igual mande `descuento_ids` no necesita ningún permiso
+    especial para eso -- simplemente no tiene efecto, igual que para un
+    admin (tests de arriba)."""
     persona = crear_persona_orm(
         db_session, "1710034065", fecha_nacimiento=date(1990, 1, 1),
     )
     tipo = crear_tipo_membresia_orm(db_session)
-    from app.dominio.enums import EstadoMembresia
     membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
     descuento = crear_descuento_orm(db_session, porcentaje=Decimal("50"))
 
@@ -341,7 +401,8 @@ def test_alumno_no_puede_aplicar_descuentos(client_sin_permisos, db_session):
         client_sin_permisos, persona.id, membresia.id,
         monto="30.00", descuento_ids=[descuento.id],
     )
-    assert respuesta.status_code == 403
+    assert respuesta.status_code == 201
+    assert respuesta.json()["descuentoId"] is None
 
 
 # --- El becado no es un estado especial: pago de $0 por el flujo normal ------
@@ -350,13 +411,13 @@ def test_beca_total_registra_pago_de_cero_por_el_flujo_normal(client, monkeypatc
     """Beca municipal 100 %: el pago se registra en $0, se aprueba por el
     MISMO camino que cualquier pago, la membresía se activa y se dispara la
     generación del comprobante. Así el becado figura al día con la misma
-    lógica que todos."""
-    persona, membresia = escenario_membresia_sin_pago_api(client)
-    beca = crear_descuento_api(client, "Beca municipal", porcentaje="100").json()
-
-    respuesta = registrar_pago_api(
-        client, persona["id"], membresia["id"], descuento_ids=[beca["id"]],
+    lógica que todos -- ahora con el beneficio asignado de antemano en vez de
+    enviado en el POST."""
+    persona, membresia, beca = _escenario_con_beneficio_asignado(
+        client, nombre="Beca municipal", porcentaje="100",
     )
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 201
     pago = respuesta.json()
     assert Decimal(str(pago["monto"])) == Decimal("0.00")
@@ -385,16 +446,15 @@ def test_beca_total_registra_pago_de_cero_por_el_flujo_normal(client, monkeypatc
 
 # --- Valor congelado: el catálogo posterior no reescribe la historia ---------
 
-def test_editar_el_catalogo_no_altera_descuentos_ya_aplicados(client, db_session):
+def test_editar_el_catalogo_no_altera_beneficios_ya_aplicados(client, db_session):
     """Invariante firmado: cambios al catálogo NUNCA alteran pagos históricos.
     Tras aplicar un 50 %, se cambia el descuento a 10 %, se renombra y se
     desactiva: las columnas `descuento_*` del pago y su monto no se mueven."""
-    persona, membresia = escenario_membresia_sin_pago_api(client)
-    descuento = crear_descuento_api(client, "Media beca", porcentaje="50").json()
+    persona, membresia, descuento = _escenario_con_beneficio_asignado(
+        client, porcentaje="50",
+    )
 
-    pago = registrar_pago_api(
-        client, persona["id"], membresia["id"], descuento_ids=[descuento["id"]],
-    ).json()
+    pago = registrar_pago_api(client, persona["id"], membresia["id"]).json()
     assert Decimal(str(pago["monto"])) == Decimal("17.50")
 
     # Edición posterior del catálogo: valor, nombre y estado.
@@ -414,11 +474,11 @@ def test_editar_el_catalogo_no_altera_descuentos_ya_aplicados(client, db_session
 # --- El CHECK es el espejo del chequeo del servicio (colapsado a columnas) ---
 
 def test_pago_con_descuento_id_pero_sin_valor_congelado_viola_el_check(db_session):
-    """`PagoServicio._congelar_descuento` siempre asigna `descuento_id` y
-    `descuento_valor_aplicado` juntos, o ninguno de los dos -- pero un INSERT
-    que se lo salte (directo por ORM, como acá) debe seguir rechazado por
-    `ck_pago_descuento_valor_congelado`: el servicio es el camino primario de
-    error, la base es la red de seguridad."""
+    """`PagoServicio._congelar_beneficio_activo` siempre asigna
+    `descuento_id` y `descuento_valor_aplicado` juntos, o ninguno de los dos
+    -- pero un INSERT que se lo salte (directo por ORM, como acá) debe
+    seguir rechazado por `ck_pago_descuento_valor_congelado`: el servicio es
+    el camino primario de error, la base es la red de seguridad."""
     persona = crear_persona_orm(db_session, cedula_valida(220))
     tipo = crear_tipo_membresia_orm(db_session)
     membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)

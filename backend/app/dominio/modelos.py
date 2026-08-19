@@ -445,8 +445,9 @@ class Pago(Base):
         Index("ix_pago_descuento_id", "descuento_id"),
         Index("ix_pago_descuento_autorizado_por_persona_id", "descuento_autorizado_por_persona_id"),
         Index("ix_pago_regularizada_por_persona_id", "regularizada_por_persona_id"),
-        # Espejo en la base del invariante que `PagoServicio._congelar_descuento`
-        # ya respeta: un descuento congelado sin su valor sería un hecho
+        # Espejo en la base del invariante que
+        # `PagoServicio._congelar_beneficio_activo` ya respeta: un descuento
+        # congelado sin su valor sería un hecho
         # histórico incompleto. El servicio sigue siendo el camino primario de
         # error (mensaje claro); esto es la red de seguridad ante un INSERT que
         # lo esquive (mismo criterio que los CHECK de `Descuento` más abajo).
@@ -547,8 +548,14 @@ class Pago(Base):
     # Porcentaje vigente al aplicar (NULL si el descuento era de monto fijo);
     # también congelado, para poder auditar "era el 50 % de entonces".
     descuento_porcentaje_aplicado: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
-    # Auditoría de quién autorizó el descuento (issue #11: "el admin decide,
-    # el sistema registra" -- ver `PagoServicio.registrar_pago`).
+    # Auditoría de quién AUTORIZÓ el descuento. Desde el issue #400/3c ya NO es
+    # `persona_id_solicitante` (quien registró este pago) -- es el admin que
+    # CONCEDIÓ el beneficio en `AsignacionDescuento.asignado_por_persona_id`
+    # (issue #398), congelado acá por `PagoServicio._congelar_beneficio_activo`.
+    # Antes coincidían siempre por construcción (solo un admin podía elegir el
+    # descuento Y registrar el pago); ahora un alumno puede autoservirse un
+    # pago con un beneficio que otro admin le concedió hace tiempo, y esta
+    # columna debe seguir nombrando a quien lo concedió, no a quien pagó.
     descuento_autorizado_por_persona_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("persona.id"), nullable=True,
     )

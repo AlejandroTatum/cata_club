@@ -162,6 +162,22 @@ def crear_pago_api(client, persona_id: int, membresia_id: int) -> dict:
     return registrar_pago_api(client, persona_id, membresia_id).json()
 
 
+def asignar_beneficio_api(client, persona_id: int, descuento_id: int):
+    """POST /personas/{id}/beneficio devolviendo la Response CRUDA (issue
+    #398): asigna el descuento del catálogo como beneficio VIGENTE de
+    `persona_id`. Requiere un `client` con rol ADMINISTRADOR -- ver
+    `RUTA_BENEFICIO` en `test_beneficio_asignacion.py`, mismo endpoint."""
+    return client.post(
+        f"/api/v1/personas/{persona_id}/beneficio",
+        json={"descuento_id": descuento_id},
+    )
+
+
+def retirar_beneficio_api(client, persona_id: int):
+    """DELETE /personas/{id}/beneficio devolviendo la Response cruda."""
+    return client.delete(f"/api/v1/personas/{persona_id}/beneficio")
+
+
 def escenario_membresia_sin_pago_api(client) -> tuple[dict, dict]:
     """Persona + tipo + membresía (sin ningún pago todavía) vía API.
     Devuelve (persona, membresia). Base común de las pruebas que registran

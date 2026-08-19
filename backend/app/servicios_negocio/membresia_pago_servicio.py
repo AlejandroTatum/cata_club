@@ -15,7 +15,9 @@ from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, Perm
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio, TipoMembresiaRepositorio
 from app.infraestructura.repositorios.pago_repositorio import PagoRepositorio, ComprobantePagoRepositorio
-from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
+from app.infraestructura.repositorios.descuento_repositorio import (
+    AsignacionDescuentoRepositorio, DescuentoRepositorio,
+)
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
@@ -94,12 +96,17 @@ MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA = (
 logger = logging.getLogger("cataclub.servicios.pagos")
 
 
-# --- Issue #11: descuento congelado, previo a volcarse en columnas de Pago --
+# --- Issue #11/#398: descuento congelado, previo a volcarse en columnas de
+# Pago. `autorizado_por_persona_id` (issue #398/3c) es SIEMPRE el admin que
+# concedió la asignación (`AsignacionDescuento.asignado_por_persona_id`),
+# nunca quien registró este pago -- ver docstring de
+# `_congelar_beneficio_activo` y de `Pago.descuento_autorizado_por_persona_id`.
 @dataclass(frozen=True)
 class _DescuentoCongelado:
     descuento_id: int
     valor_aplicado: Decimal
     porcentaje_aplicado: Decimal | None
+    autorizado_por_persona_id: int
 
 
 class MembresiaServicio:
@@ -265,6 +272,7 @@ class PagoServicio:
         self.repo_persona = PersonaRepositorio(db)
         self.repo_notificacion = NotificacionRepositorio(db)
         self.repo_descuento = DescuentoRepositorio(db)
+        self.repo_asignacion = AsignacionDescuentoRepositorio(db)
 
     def registrar_pago(
         self,
@@ -303,16 +311,6 @@ class PagoServicio:
             raise PermisosInsuficientes(
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden registrar este pago"
-            )
-
-        # Issue #11 (modelo firmado §4): aplicar descuentos es decisión del
-        # ADMINISTRADOR -- "el admin decide, el sistema registra". El dueño o
-        # su representante pueden registrar el pago, pero no adjuntarle
-        # descuentos. `persona_id_solicitante` además queda registrado como
-        # quien autorizó, así que debe existir en el token.
-        if datos.descuento_ids and (not es_admin or persona_id_solicitante is None):
-            raise PermisosInsuficientes(
-                "Solo un administrador puede aplicar descuentos al registrar un pago"
             )
 
         # Un pago EFECTIVO es la declaración de quien entregó el dinero -- el
@@ -392,7 +390,7 @@ class PagoServicio:
         #
         # Importante (decisiones 2026-08-11 §6): "tantos meses como el monto
         # compre" se calcula sobre `datos.monto`, el monto BASE -- ANTES de
-        # `_congelar_descuento` más abajo. La membresía anual se vende como
+        # `_congelar_beneficio_activo` más abajo. La membresía anual se vende como
         # descuento del catálogo sobre doce meses adelantados ($300 -> $270);
         # si la cobertura se calculara sobre el monto ya descontado, el padre
         # pagaría doce meses y recibiría once.
@@ -402,15 +400,19 @@ class PagoServicio:
         ancla = max(ultima_fecha_fin, hoy) if ultima_fecha_fin is not None else hoy
         fecha_inicio, fecha_fin = ancla, _sumar_meses(ancla, meses)
 
-        # Issue #11: resolver el valor VIGENTE del catálogo, congelarlo y
+        # Issue #398/3c: resolver la asignación VIGENTE del PAGADOR
+        # (`datos.persona_id`, no `persona_id_solicitante` -- un representante
+        # o un admin pueden registrar el pago de otra persona), congelarla y
         # descontar el monto base. Las columnas congeladas se asignan al MISMO
         # `Pago` (issue #11 colapsado a columnas: un pago lleva un solo
         # descuento) para que el INSERT sea una sola transacción: no puede
         # quedar un pago descontado sin su detalle.
-        descuento_congelado, monto_final = self._congelar_descuento(datos)
+        descuento_congelado, monto_final = self._congelar_beneficio_activo(
+            datos.persona_id, datos.monto,
+        )
 
         pago = Pago(
-            **datos.model_dump(exclude={"descuento_ids"}),
+            **datos.model_dump(),
             estado_pago=EstadoPago.PENDIENTE_VALIDACION,
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
@@ -420,7 +422,7 @@ class PagoServicio:
             pago.descuento_id = descuento_congelado.descuento_id
             pago.descuento_valor_aplicado = descuento_congelado.valor_aplicado
             pago.descuento_porcentaje_aplicado = descuento_congelado.porcentaje_aplicado
-            pago.descuento_autorizado_por_persona_id = persona_id_solicitante
+            pago.descuento_autorizado_por_persona_id = descuento_congelado.autorizado_por_persona_id
         # Red de seguridad del invariante 1 (issue #8): si otra petición
         # concurrente registró su pendiente ENTRE el chequeo de arriba y este
         # INSERT, el índice `uq_pago_pendiente_por_membresia` lo rechaza y se
@@ -435,60 +437,77 @@ class PagoServicio:
                 raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
             raise
 
-    # --- Issue #11: descuento aplicado al registrar -----------------------
-    def _congelar_descuento(
-        self, datos: PagoCreateDTO,
+    # --- Issue #398/3c: beneficio del pagador, resuelto server-side --------
+    def _congelar_beneficio_activo(
+        self, persona_id: int, monto_base: Decimal,
     ) -> tuple[_DescuentoCongelado | None, Decimal]:
-        """Resuelve el descuento solicitado contra el catálogo VIGENTE y
+        """Resuelve la asignación de beneficio VIGENTE de `persona_id`
+        (`AsignacionDescuento.retirado_en IS NULL`, ver
+        `AsignacionDescuentoRepositorio.obtener_activa_por_persona`) y
         devuelve (descuento congelado o `None`, monto final del pago).
-        Quién autoriza NO viaja acá: `registrar_pago` ya lo tiene
-        (`persona_id_solicitante`) y lo asigna directo a la columna, sin
-        necesidad de un tercer valor de retorno.
 
-        Invariantes firmados (docs/product/concepto-alcance-modelo.md §4, colapsado a
-        columnas de `Pago` -- el dueño confirmó que un pago lleva UN solo
-        descuento):
+        Reemplaza a la vieja `_congelar_descuento` (issue #11): antes el
+        cliente elegía el descuento en cada pago (solo un ADMINISTRADOR podía
+        enviarlo); ahora `PagoCreateDTO` ya no tiene ningún campo de
+        descuento -- el backend resuelve el beneficio que el club ya le
+        concedió a la persona por separado (issue #398). Un
+        `descuento_ids` que el cliente mande igual nunca llega hasta acá:
+        Pydantic lo descarta al parsear el DTO (ver su docstring).
+
+        Invariantes firmados (docs/product/concepto-alcance-modelo.md §4,
+        issue #398 "seguridad e invariantes"), sin cambios de fondo:
         - Valor congelado: se copia el valor calculado HOY (y el porcentaje
-          vigente, si aplica). Cambios posteriores al catálogo no alteran
-          estas columnas -- son el hecho histórico.
+          vigente, si aplica) contra el `Descuento` de la asignación. Cambios
+          posteriores al catálogo o a la asignación no alteran estas columnas
+          -- son el hecho histórico.
         - Tope: el descuento no supera el monto base (100 %); no existen
           pagos negativos. Un pago de $0 (beca total) es válido y sigue el
           flujo normal de registro + aprobación.
-        - Un descuento inactivo no puede aplicarse (el catálogo es vivo,
-          pero solo su presente ofrece; su pasado ya quedó congelado).
+        - `autorizado_por_persona_id` es SIEMPRE `asignacion.
+          asignado_por_persona_id` -- el admin que CONCEDIÓ el beneficio,
+          nunca quien registra este pago en particular (ver docstring de
+          `Pago.descuento_autorizado_por_persona_id`).
+
+        A diferencia de la vieja `_congelar_descuento`, acá NO se exige
+        `descuento.activo`: un descuento inactivo no puede ASIGNARSE
+        (`BeneficioServicio.asignar` ya lo rechaza), pero desactivarlo del
+        catálogo después no retira los beneficios ya concedidos con él --
+        mismo diseño documentado en `AsignacionDescuento` (issue #398). Si la
+        asignación sigue vigente, el pago la aplica sin importar el estado
+        actual del catálogo.
         """
-        if not datos.descuento_ids:
-            return None, datos.monto
+        asignacion = self.repo_asignacion.obtener_activa_por_persona(persona_id)
+        if asignacion is None:
+            return None, monto_base
 
-        if len(datos.descuento_ids) > 1:
-            raise OperacionInvalida("Un pago admite un único descuento")
-
-        descuento = self.repo_descuento.obtener_por_id(datos.descuento_ids[0])
+        descuento = self.repo_descuento.obtener_por_id(asignacion.descuento_id)
         if not descuento:
-            raise EntidadNoEncontrada(f"Descuento con id {datos.descuento_ids[0]} no encontrado")
-        if not descuento.activo:
-            raise OperacionInvalida(
-                f"El descuento '{descuento.nombre}' está inactivo y no puede aplicarse"
-            )
+            # Defensivo: el catálogo solo se da de baja (`activo=False`),
+            # nunca se borra, así que esto no debería ocurrir en la práctica.
+            # Tratarlo como "sin beneficio" es más seguro que reventar el
+            # registro de un pago legítimo por una fila de catálogo ausente.
+            return None, monto_base
+
         if descuento.porcentaje is not None:
-            valor = (datos.monto * descuento.porcentaje / Decimal("100")).quantize(
+            valor = (monto_base * descuento.porcentaje / Decimal("100")).quantize(
                 Decimal("0.01")
             )
         else:
             valor = descuento.monto
 
-        if valor > datos.monto:
+        if valor > monto_base:
             raise OperacionInvalida(
-                "El descuento no puede superar el 100% del monto del pago "
-                f"(monto base ${datos.monto}, descuento ${valor})"
+                "El beneficio asignado no puede superar el 100% del monto "
+                f"del pago (monto base ${monto_base}, descuento ${valor})"
             )
         return (
             _DescuentoCongelado(
                 descuento_id=descuento.id,
                 valor_aplicado=valor,
                 porcentaje_aplicado=descuento.porcentaje,
+                autorizado_por_persona_id=asignacion.asignado_por_persona_id,
             ),
-            datos.monto - valor,
+            monto_base - valor,
         )
 
     def calcular_meses_adeudados(self, membresia_id: int) -> int:

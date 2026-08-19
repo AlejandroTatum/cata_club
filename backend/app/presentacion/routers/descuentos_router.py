@@ -5,8 +5,11 @@ catálogo es del club y la decisión de aplicar es del admin (modelo firmado
 (PATCH), coherente con la filosofía de conservar historia del sistema --
 las aplicaciones históricas referencian al descuento por FK.
 
-La APLICACIÓN de descuentos a un pago no vive aquí: es parte del registro
-del pago (`POST /membresias/pagos`, campo `descuento_ids`).
+La APLICACIÓN de un descuento a un pago no vive aquí: desde el issue #398/3c
+el pago YA NO recibe ningún campo de descuento -- `PagoServicio.
+registrar_pago` resuelve server-side la `AsignacionDescuento` vigente de
+quien paga (asignada/retirada vía `POST|DELETE /personas/{id}/beneficio`,
+ver `beneficio_servicio.py`) y congela su valor.
 """
 from typing import List
 
