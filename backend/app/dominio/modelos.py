@@ -605,6 +605,93 @@ class Descuento(Base):
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class AsignacionDescuento(Base):
+    """Beneficio personal asignado por un administrador a una persona
+    (issue #398): el descuento deja de ser una elección del pago y pasa a
+    ser un hecho que el club concede, vigente hasta que alguien lo retire.
+
+    Por qué pertenece a la PERSONA y no a la membresía: debe sobrevivir a
+    renovaciones y cambios de plan -- lo mismo que ya decidió `Membresia`
+    (ver su docstring de asociación con `Pago`), pero un nivel más arriba.
+
+    Por qué "vigente" es `retirado_en IS NULL` y NO una columna `activo`
+    booleana aparte: dos columnas contando el mismo hecho (un booleano y un
+    timestamp) es la forma exacta en que un modelo miente -- se pueden
+    escribir `activo=True, retirado_en=<fecha>` o `activo=False,
+    retirado_en=NULL` y ninguna fila avisa que está mal. Con una sola
+    columna, `retirado_en` ES el estado (NULL = vigente) Y el dato de
+    auditoría (cuándo se retiró) al mismo tiempo. No puede desalinearse
+    consigo misma.
+
+    Invariantes en la base, mismo criterio que `uq_membresia_activa_por_
+    persona` (auditoría hallazgo 7, issue #8): el chequeo del servicio que
+    asigne el beneficio sigue siendo el camino primario de error (UX); el
+    índice único parcial es la red de seguridad ante dos asignaciones
+    concurrentes que lo burlen. Parcial a propósito -- el historial de
+    beneficios retirados convive sin límite; el WHERE es el espejo exacto
+    de "vigente".
+
+    Retirar SIEMPRE anota actor y fecha (`ck_asignacion_retiro_completo`):
+    un timestamp de retiro sin su actor, o un actor sin timestamp, sería un
+    hecho histórico incompleto -- mismo criterio que `ck_pago_descuento_
+    valor_congelado` en `Pago` más arriba. Esta tabla NUNCA toca `Pago`: el
+    congelamiento del valor aplicado en cada pago es responsabilidad de
+    `PagoServicio`, no de este modelo (issue #400 queda fuera de alcance
+    acá a propósito).
+
+    Creada por la migración `f3a9c8e2b615`.
+    """
+
+    __tablename__ = "asignacion_descuento"
+    __table_args__ = (
+        Index(
+            "uq_asignacion_descuento_activa_por_persona",
+            "persona_id",
+            unique=True,
+            postgresql_where=text("retirado_en IS NULL"),
+        ),
+        Index("ix_asignacion_descuento_persona_id", "persona_id"),
+        Index("ix_asignacion_descuento_descuento_id", "descuento_id"),
+        Index(
+            "ix_asignacion_descuento_asignado_por_persona_id",
+            "asignado_por_persona_id",
+        ),
+        Index(
+            "ix_asignacion_descuento_retirado_por_persona_id",
+            "retirado_por_persona_id",
+        ),
+        CheckConstraint(
+            "(retirado_en IS NULL) = (retirado_por_persona_id IS NULL)",
+            name="ck_asignacion_retiro_completo",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    descuento_id: Mapped[int] = mapped_column(ForeignKey("descuento.id"), nullable=False)
+
+    # Toda asignación tiene un administrador detrás -- nunca nullable, a
+    # diferencia de `HistorialEstadoMembresia.actor_persona_id` (que sí
+    # admite transiciones disparadas por el sistema). Acá no existe una
+    # asignación "automática": siempre la decide una persona.
+    asignado_por_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id"), nullable=False
+    )
+    asignado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+
+    # Nullable: NULL es "todavía vigente". Ver el docstring de la clase para
+    # por qué esto reemplaza a un booleano `activo` separado.
+    retirado_por_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    retirado_en: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class ComprobantePago(Base):
     __tablename__ = "comprobante_pago"
     id: Mapped[int] = mapped_column(primary_key=True)
