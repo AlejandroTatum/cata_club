@@ -125,13 +125,9 @@ import {
   FilterPanel,
   FilterPill,
   LoadingState,
-  Pagination,
   ResponsiveList,
   SearchInput,
-  Table,
-  TableBody,
   TableCell,
-  TableHead,
   TableHeaderCell,
   TableNameCell,
   TableRow,
@@ -1113,80 +1109,69 @@ export default function PaymentsPage(): React.ReactElement {
             order="tableFirst"
             tableTestId="payments-table"
             cardsTestId="payments-cards"
-            table={
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell type="text">Estudiante</TableHeaderCell>
-                    <TableHeaderCell type="text">Período</TableHeaderCell>
-                    <TableHeaderCell type="number">Monto</TableHeaderCell>
-                    <TableHeaderCell type="text">Método</TableHeaderCell>
-                    <TableHeaderCell type="action">
-                      <span className="sr-only">Acción</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {visibleItems.map((req) => {
-                    const desktopNameId = `payment-name-desktop-${req.id}`;
-                    const fields = buildRowFields(req);
-                    return (
-                    <TableRow key={req.id}>
-                      <TableNameCell
-                        name={<span id={desktopNameId}>{fields.studentName}</span>}
-                        sub={fields.payer}
-                      />
-                      <TableCell type="text">{fields.period}</TableCell>
-                      <TableCell type="number">{fields.amount}</TableCell>
-                      <TableCell type="text">{fields.method}</TableCell>
-                      <TableCell type="action">
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          {renderRowActions(req)}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            }
-            cards={visibleItems.map((req) => {
+            items={visibleItems}
+            getKey={(req) => req.id}
+            columns={[
+              <TableHeaderCell key="estudiante" type="text">Estudiante</TableHeaderCell>,
+              <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
+              <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
+              <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
+              <TableHeaderCell key="accion" type="action">
+                <span className="sr-only">Acción</span>
+              </TableHeaderCell>,
+            ]}
+            renderRow={(req) => {
+              const desktopNameId = `payment-name-desktop-${req.id}`;
+              const fields = buildRowFields(req);
+              return (
+                <TableRow>
+                  <TableNameCell
+                    name={<span id={desktopNameId}>{fields.studentName}</span>}
+                    sub={fields.payer}
+                  />
+                  <TableCell type="text">{fields.period}</TableCell>
+                  <TableCell type="number">{fields.amount}</TableCell>
+                  <TableCell type="text">{fields.method}</TableCell>
+                  <TableCell type="action">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      {renderRowActions(req)}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            }}
+            renderCard={(req) => {
               const mobileNameId = `payment-name-mobile-${req.id}`;
               const fields = buildRowFields(req);
               return (
-              <li key={req.id} className="flex flex-col gap-3 p-4">
-                <div className="min-w-0">
-                  <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                    {fields.studentName}
-                  </p>
-                  <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
-                </div>
-                <p className="text-xs text-ink-2">
-                  {fields.period} · {fields.method}
-                </p>
-                <div className="flex items-center justify-between gap-3">
-                  <DataBox variant="numeric">{fields.amount}</DataBox>
-                  <div className="flex flex-wrap items-center justify-end gap-1.5">
-                    {renderRowActions(req)}
+                <li className="flex flex-col gap-3 p-4">
+                  <div className="min-w-0">
+                    <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
+                      {fields.studentName}
+                    </p>
+                    <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
                   </div>
-                </div>
-              </li>
+                  <p className="text-xs text-ink-2">
+                    {fields.period} · {fields.method}
+                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <DataBox variant="numeric">{fields.amount}</DataBox>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      {renderRowActions(req)}
+                    </div>
+                  </div>
+                </li>
               );
-            })}
-            pagination={
-              totalPages > 1 && (
-                <Pagination
-                  variant="footer"
-                  page={page}
-                  totalPages={totalPages}
-                  onPageChange={setPage}
-                  totalItems={visibleTotal}
-                  pageSize={PAYMENTS_PAGE_SIZE}
-                  itemNoun="solicitud"
-                  itemNounPlural="solicitudes"
-                />
-              )
-            }
+            }}
+            pagination={{
+              page,
+              totalPages,
+              onPageChange: setPage,
+              totalItems: visibleTotal,
+              pageSize: PAYMENTS_PAGE_SIZE,
+              itemNoun: "solicitud",
+              itemNounPlural: "solicitudes",
+            }}
           />
         )}
       </>
