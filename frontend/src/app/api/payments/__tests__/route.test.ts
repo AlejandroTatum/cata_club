@@ -30,8 +30,8 @@ function makeJwt(expSecondsFromNow: number): string {
   return `${header}.${payload}.sig`;
 }
 
-function getRequest(cookie = ""): NextRequest {
-  return new NextRequest("http://localhost/api/payments", { headers: cookie ? { cookie } : {} });
+function getRequest(cookie = "", query = ""): NextRequest {
+  return new NextRequest(`http://localhost/api/payments${query}`, { headers: cookie ? { cookie } : {} });
 }
 
 const pagoListItem = {
@@ -71,9 +71,9 @@ describe("GET /api/payments", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("calls /membresias/pagos with Authorization: Bearer using the cookie's access token", async () => {
+  it("calls /membresias/pagos with skip=0&limit=200 by default, Authorization: Bearer using the cookie's access token", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0 })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
       .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [] })); // /membresias/
@@ -83,14 +83,84 @@ describe("GET /api/payments", () => {
 
     expect(global.fetch).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8000/api/v1/membresias/pagos?limit=200",
+      "http://localhost:8000/api/v1/membresias/pagos?skip=0&limit=200",
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${access}` }) }),
     );
   });
 
-  it("translates the backend queue into PaymentValidationRequest[]", async () => {
+  it("forwards skip, limit and estadoPago (as estado_pago) from the query string", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0 })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
+      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [] })); // /membresias/
+
+    const access = makeJwt(3600);
+    await GET(getRequest(
+      `${ACCESS_TOKEN_COOKIE}=${access}`,
+      "?skip=210&limit=10&estadoPago=PENDIENTE_VALIDACION",
+    ));
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/membresias/pagos?skip=210&limit=10&estado_pago=PENDIENTE_VALIDACION",
+      expect.anything(),
+    );
+  });
+
+  it("rejects a negative skip or a non-positive limit with 400, without calling the backend", async () => {
+    const access = makeJwt(3600);
+
+    const negativeSkip = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?skip=-1"));
+    expect(negativeSkip.status).toBe(400);
+
+    const zeroLimit = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?limit=0"));
+    expect(zeroLimit.status).toBe(400);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects an estadoPago outside the backend's EstadoPago enum with 400", async () => {
+    const access = makeJwt(3600);
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?estadoPago=NO_EXISTE"));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("reaches a page beyond the old hard-coded 200 cap (issue #400, criterio 4/5): a club with 205 payment requests can still page to request #201", async () => {
+    // Before this fix, the handler always sent `limit=200` and threw away
+    // `total` — so a page with `skip=200` simply never happened, and rows
+    // past #200 were silently unreachable. This proves that path now works:
+    // asking for `skip=200&limit=10` against a 205-request backend still
+    // reaches the tail 5 rows, and `total` (not a client-guessed count)
+    // reports the true size.
+    const tailRequest = { ...pagoListItem, id: 201, personaNombreCompleto: "Alumno 201" };
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [tailRequest], total: 205 })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
+      .mockResolvedValueOnce(jsonResponse(tipos)) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [membresia] })); // /membresias/
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?skip=200&limit=10"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(205);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].id).toBe("201");
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/membresias/pagos?skip=200&limit=10",
+      expect.anything(),
+    );
+  });
+
+  it("translates the backend queue into { items, total }", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem], total: 1 })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
       .mockResolvedValueOnce(jsonResponse(tipos)) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [membresia] })); // /membresias/
@@ -100,29 +170,32 @@ describe("GET /api/payments", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual([
-      {
-        id: "1",
-        studentName: "Sofia Alumna",
-        membershipPeriod: "01/07/2026 – 31/07/2026",
-        membershipType: "Mensual",
-        expectedAmount: 85,
-        paymentMethod: "Transferencia",
-        uploadedAt: "2026-06-28T10:30:00Z",
-        currentMembershipStatus: "vencida",
-        proofFileName: "comprobante.pdf",
-        proofFileType: "pdf",
-        proofPreviewUrl: "https://example.com/comprobante.pdf",
-        validationStatus: "pendiente",
-        startDate: "2026-07-01",
-        endDate: "2026-07-31",
-      },
-    ]);
+    expect(body).toEqual({
+      total: 1,
+      items: [
+        {
+          id: "1",
+          studentName: "Sofia Alumna",
+          membershipPeriod: "01/07/2026 – 31/07/2026",
+          membershipType: "Mensual",
+          expectedAmount: 85,
+          paymentMethod: "Transferencia",
+          uploadedAt: "2026-06-28T10:30:00Z",
+          currentMembershipStatus: "vencida",
+          proofFileName: "comprobante.pdf",
+          proofFileType: "pdf",
+          proofPreviewUrl: "https://example.com/comprobante.pdf",
+          validationStatus: "pendiente",
+          startDate: "2026-07-01",
+          endDate: "2026-07-31",
+        },
+      ],
+    });
   });
 
   it("calls /personas/ with limit=200 (auth cookie forwarded) to resolve responsablePagoName", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 0 })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
       .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [] })); // /membresias/
@@ -146,7 +219,7 @@ describe("GET /api/payments", () => {
     const membresiaWithId = { id: 1, estado: "VENCIDA", tipoMembresiaId: 5 };
 
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem, selfManagedPago] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem, selfManagedPago], total: 2 })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ items: personas })) // /personas/
       .mockResolvedValueOnce(jsonResponse(tipos)) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [membresiaWithId] })); // /membresias/
@@ -156,15 +229,15 @@ describe("GET /api/payments", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    const represented = body.find((item: { id: string }) => item.id === "1");
-    const selfManaged = body.find((item: { id: string }) => item.id === "2");
+    const represented = body.items.find((item: { id: string }) => item.id === "1");
+    const selfManaged = body.items.find((item: { id: string }) => item.id === "2");
     expect(represented.responsablePagoName).toBe("Carlos Padre");
     expect(selfManaged.responsablePagoName).toBe("Carlos Padre");
   });
 
   it("falls back to an inactive/untyped membership when the per-row membresia lookup fails", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem], total: 1 })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
       .mockResolvedValueOnce(jsonResponse(tipos)) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({}, 404)); // /membresias/
@@ -174,13 +247,13 @@ describe("GET /api/payments", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body[0].currentMembershipStatus).toBe("vencida");
-    expect(body[0].membershipType).toBe("Sin tipo");
+    expect(body.items[0].currentMembershipStatus).toBe("vencida");
+    expect(body.items[0].membershipType).toBe("Sin tipo");
   });
 
   it("falls back to an inactive/untyped membership when the bulk membresia lookup returns empty", async () => {
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse({ items: [pagoListItem], total: 1 })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /personas/
       .mockResolvedValueOnce(jsonResponse(tipos)) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [] })); // /membresias/
@@ -190,8 +263,8 @@ describe("GET /api/payments", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body[0].currentMembershipStatus).toBe("vencida");
-    expect(body[0].membershipType).toBe("Sin tipo");
+    expect(body.items[0].currentMembershipStatus).toBe("vencida");
+    expect(body.items[0].membershipType).toBe("Sin tipo");
   });
 
   it("propagates the backend's status and message when /membresias/pagos fails", async () => {

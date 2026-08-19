@@ -67,11 +67,72 @@ const mockUseAuth = vi.mocked(useAuth);
 
 const mockFetchPaymentValidations = vi.fn();
 const mockUpdatePaymentValidation = vi.fn();
+const mockFetchPagoDetalle = vi.fn();
+const mockFetchCorrecciones = vi.fn();
+const mockCorregirPago = vi.fn();
+
+/**
+ * `validationStatus` (frontend, lowercase) <-> the backend `EstadoPago` the
+ * real `fetchPaymentValidationsPage` accepts as `estadoPago` — needed here
+ * because this mock filters/paginates the SAME fixture array
+ * `mockFetchPaymentValidations` already returns, rather than maintaining a
+ * second parallel fixture set.
+ */
+const BACKEND_TO_VALIDATION_STATUS: Record<string, PaymentValidationRequest["validationStatus"]> = {
+  PENDIENTE_VALIDACION: "pendiente",
+  APROBADO: "validado",
+  RECHAZADO: "rechazado",
+};
+
+/**
+ * Issue #400 (criterio 4/5): `page.tsx` now fetches the visible table via
+ * `fetchPaymentValidationsPage` (server-paginated), separately from
+ * `fetchPaymentValidations` (still used for the pill counts / pending-queue
+ * navigation, unchanged). This mock derives its paginated slice from
+ * whatever `mockFetchPaymentValidations` currently resolves to, so the ~60
+ * existing `mockFetchPaymentValidations.mockResolvedValue([...])` fixtures
+ * across this file keep driving the visible table too, without having to
+ * duplicate every one of them.
+ */
+function filterByEstado(
+  all: PaymentValidationRequest[],
+  estadoPago?: string,
+): PaymentValidationRequest[] {
+  return estadoPago ? all.filter((r) => r.validationStatus === BACKEND_TO_VALIDATION_STATUS[estadoPago]) : all;
+}
+
+async function fetchPaymentValidationsPageMock(params: {
+  skip: number;
+  limit: number;
+  estadoPago?: string;
+}): Promise<{ items: PaymentValidationRequest[]; total: number }> {
+  const all: PaymentValidationRequest[] = await mockFetchPaymentValidations();
+  const filtered = filterByEstado(all, params.estadoPago);
+  return { items: filtered.slice(params.skip, params.skip + params.limit), total: filtered.length };
+}
+
+/**
+ * Issue #400 (criterio 4/5, second pass — adversarial review): the queue
+ * navigator ("Pendiente X de Y", prev/next) and the search box both drain
+ * ALL matching rows via `fetchAllPaymentValidations` rather than reading a
+ * single page — this mock returns the full (unpaginated) filtered fixture
+ * array, same source of truth as `fetchPaymentValidationsPageMock` above.
+ */
+async function fetchAllPaymentValidationsMock(estadoPago?: string): Promise<PaymentValidationRequest[]> {
+  const all: PaymentValidationRequest[] = await mockFetchPaymentValidations();
+  return filterByEstado(all, estadoPago);
+}
 
 vi.mock("@/services/api", () => ({
   fetchPaymentValidations: () => mockFetchPaymentValidations(),
+  fetchPaymentValidationsPage: (params: { skip: number; limit: number; estadoPago?: string }) =>
+    fetchPaymentValidationsPageMock(params),
+  fetchAllPaymentValidations: (estadoPago?: string) => fetchAllPaymentValidationsMock(estadoPago),
   updatePaymentValidation: (id: string, dto: unknown) =>
     mockUpdatePaymentValidation(id, dto),
+  fetchPagoDetalle: (pagoId: number) => mockFetchPagoDetalle(pagoId),
+  fetchCorrecciones: (pagoId: number) => mockFetchCorrecciones(pagoId),
+  corregirPago: (pagoId: number, datos: unknown) => mockCorregirPago(pagoId, datos),
 }));
 
 const PENDING_REQUEST: PaymentValidationRequest = {
@@ -198,6 +259,13 @@ beforeEach(() => {
   mockUpdatePaymentValidation.mockReset().mockImplementation((id: string) =>
     Promise.resolve({ ...PENDING_REQUEST, id, validationStatus: "validado" }),
   );
+  // Comprobante/correcciones (issue #400, criterios 7/8) — only rendered for
+  // an already-`validado` payment's detail (`PagoCorreccionSection`); most
+  // tests never open one, but default to benign empty responses so the ones
+  // that do don't need their own setup just to avoid an unhandled rejection.
+  mockFetchPagoDetalle.mockReset().mockResolvedValue({ comprobanteOficialUrl: null });
+  mockFetchCorrecciones.mockReset().mockResolvedValue([]);
+  mockCorregirPago.mockReset();
   mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("admin"));
 });
 
@@ -237,8 +305,106 @@ describe("PaymentsPage — opens on the pending queue", () => {
     expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
     expect(within(queueTable()).queryByText("Kevin Sabando")).not.toBeInTheDocument();
 
+    // Issue #400 (criterio 4/5): switching tabs now re-fetches the visible
+    // page from the (mocked) backend — `activeFilter` drives `estadoPago`
+    // in `loadPage` — instead of re-filtering an already-fetched array
+    // synchronously, so this needs to wait for that round trip.
     fireEvent.click(screen.getByRole("button", { name: /^todas/i }));
-    expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument();
+    await waitFor(() => expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1a. Real pagination, no silent truncation past 200 (issue #400, criterio 4/5)
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — pagination reaches every request, past the old 200 cap", () => {
+  it("navigates all the way to request #201 of a 205-request queue", async () => {
+    // 205 pending requests — one more than the old hard-coded `?limit=200`
+    // the BFF used to send, and enough to prove the fix does not just move
+    // the ceiling higher: it removes it. `PAYMENTS_PAGE_SIZE` is 10, so
+    // reaching request #201 means paging to page 21 (skip=200).
+    const many: PaymentValidationRequest[] = Array.from({ length: 205 }, (_, i) => ({
+      ...PENDING_REQUEST,
+      id: `req-${i + 1}`,
+      studentName: `Alumno ${i + 1}`,
+    }));
+    mockFetchPaymentValidations.mockResolvedValue(many);
+    renderPage();
+
+    await screen.findByTestId("payments-table");
+    expect(screen.getByText("Página 1 de 21")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Alumno 1")).toBeInTheDocument();
+    expect(within(queueTable()).queryByText("Alumno 201")).not.toBeInTheDocument();
+
+    for (let click = 0; click < 20; click += 1) {
+      fireEvent.click(screen.getByRole("button", { name: /página siguiente/i }));
+      // eslint-disable-next-line no-await-in-loop -- each page is its own
+      // real fetch (issue #400, criterio 4/5): waiting for the previous one
+      // to settle before firing the next click mirrors how a real admin
+      // clicks through the pager, one page at a time.
+      await waitFor(() => expect(screen.getByText(`Página ${click + 2} de 21`)).toBeInTheDocument());
+    }
+
+    // Request #201 — past the old 200-request cap — is reachable, with no
+    // error and no silent drop.
+    expect(within(queueTable()).getByText("Alumno 201")).toBeInTheDocument();
+  });
+
+  // Issue #400 (criterio 4/5, hallazgo 2 — adversarial review): before this
+  // fix, `searchFiltered` matched only within the current server PAGE (10
+  // rows) — a downgrade from before criterio 4/5's own first pass, which
+  // matched within a batch of up to 200. Neither reaches request #201. The
+  // fix drains the active filter's FULL set (`fetchAllPaymentValidations`)
+  // and searches over that instead.
+  it("finds a match beyond row #200 through the search box, over the full drained set", async () => {
+    const many: PaymentValidationRequest[] = Array.from({ length: 205 }, (_, i) => ({
+      ...PENDING_REQUEST,
+      id: `req-${i + 1}`,
+      // Index 200 is request #201 — one past the table's first page (10
+      // rows) AND one past the old 200-row cap.
+      studentName: i === 200 ? "Zoe Especial" : `Alumno ${i + 1}`,
+    }));
+    mockFetchPaymentValidations.mockResolvedValue(many);
+    renderPage();
+
+    await screen.findByTestId("payments-table");
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(11));
+    expect(within(queueTable()).queryByText("Zoe Especial")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "Zoe Especial" } });
+
+    expect(await within(queueTable()).findByText("Zoe Especial")).toBeInTheDocument();
+  });
+
+  // Issue #400 (criterio 4/5, hallazgo 1 — adversarial review): before this
+  // fix, the "Pendiente X de Y" prev/next navigator read from a bulk fetch
+  // hard-capped at 200 — a queue of 205 pendings showed "de 200" and
+  // "Siguiente" disabled at the 200th, so the last 5 were unreachable via
+  // the normal prev/next workflow even though the table itself (already
+  // fixed) could page all the way to them. The fix drains the FULL pending
+  // set (`fetchAllPaymentValidations`, `pendingAll`) for the navigator too.
+  it("the queue navigator's total and 'Siguiente' reach the real last pending request, past 200", async () => {
+    const many: PaymentValidationRequest[] = Array.from({ length: 205 }, (_, i) => ({
+      ...PENDING_REQUEST,
+      id: `req-${i + 1}`,
+      studentName: i === 204 ? "Último Pendiente" : `Alumno ${i + 1}`,
+    }));
+    mockFetchPaymentValidations.mockResolvedValue(many);
+    renderPage();
+
+    // Reach the very last pending request (#205) via the search box, which
+    // (for the "pendiente" tab) reuses the same drained `pendingAll` the
+    // navigator itself reads from.
+    await screen.findByTestId("payments-table");
+    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "Último Pendiente" } });
+    await openRequest("Último Pendiente");
+
+    // The total is the real 205, not the old 200 cap, and there is nothing
+    // after the true last request.
+    expect(await screen.findByText("Pendiente 205 de 205")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pendiente siguiente" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pendiente anterior" })).not.toBeDisabled();
   });
 });
 
@@ -276,9 +442,10 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     renderPage();
 
     await screen.findByTestId("payments-table");
+    // Same async round trip as the previous describe block's note.
     fireEvent.click(screen.getByRole("button", { name: /^todas/i }));
 
-    expect(within(queueTable()).getByText("Pendiente")).toBeInTheDocument();
+    await waitFor(() => expect(within(queueTable()).getByText("Pendiente")).toBeInTheDocument());
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
     // The mobile cards render the same rows through their own branch
     // (`payments-cards`), which carries its own copy of this badge.
@@ -383,6 +550,99 @@ describe("PaymentsPage — the queue is operable without a mouse", () => {
     expect(
       within(queueTable()).getByRole("button", { name: /ver el detalle del pago de Kevin Sabando/i }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2a-2. Comprobante oficial + correcciones, only on an already-validado detail
+// (issue #400, criterios 7/8)
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — comprobante oficial y correcciones", () => {
+  // `RESOLVED_REQUEST.id` is "req-3" everywhere else in this file (a
+  // human-readable fixture id, never converted back to a number by any
+  // OTHER code path) — but `renderDetail` for THIS section does
+  // `Number(request.id)` (a real `Pago.id` in production, always a plain
+  // numeric string). Overridden to "3" here so `Number(...)` round-trips
+  // and the `toHaveBeenCalledWith(3)` assertions below mean something.
+  const RESOLVED_WITH_NUMERIC_ID: PaymentValidationRequest = { ...RESOLVED_REQUEST, id: "3" };
+
+  async function openResolvedRequestDetail(): Promise<void> {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /^todas/i }));
+    await openRequest("Kevin Sabando");
+  }
+
+  it("does NOT fetch pago detalle nor correcciones for a still-pending request", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    await screen.findByRole("heading", { name: /detalle de la solicitud/i });
+    expect(mockFetchPagoDetalle).not.toHaveBeenCalled();
+    expect(mockFetchCorrecciones).not.toHaveBeenCalled();
+  });
+
+  it("shows a 'Descargar comprobante oficial' link once populated, for an already-validado request", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([RESOLVED_WITH_NUMERIC_ID]);
+    mockFetchPagoDetalle.mockResolvedValue({
+      comprobanteOficialUrl: "https://files.example/comprobante-3.pdf",
+    });
+
+    await openResolvedRequestDetail();
+
+    const link = await screen.findByRole("link", { name: /descargar comprobante oficial/i });
+    expect(link).toHaveAttribute("href", "https://files.example/comprobante-3.pdf");
+    expect(mockFetchPagoDetalle).toHaveBeenCalledWith(3);
+  });
+
+  it("lists the correction history for an already-validado request", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([RESOLVED_WITH_NUMERIC_ID]);
+    mockFetchCorrecciones.mockResolvedValue([
+      {
+        id: 1,
+        pagoId: 3,
+        tarifaMensualAplicadaAnterior: null,
+        tarifaMensualAplicadaNuevo: null,
+        mesesCompradosAnterior: null,
+        mesesCompradosNuevo: null,
+        montoBaseAnterior: null,
+        montoBaseNuevo: null,
+        montoAnterior: "30.00",
+        montoNuevo: "40.00",
+        fechaInicioAnterior: "2026-07-01",
+        fechaInicioNuevo: "2026-07-01",
+        fechaFinAnterior: "2026-07-31",
+        fechaFinNuevo: "2026-07-31",
+        efectoCobertura: "SIN_CAMBIO",
+        motivo: "Ajuste de tipeo",
+        actorPersonaId: 1,
+        fechaRegistro: "2026-08-10T00:00:00Z",
+      },
+    ]);
+
+    await openResolvedRequestDetail();
+
+    expect(await screen.findByText("Ajuste de tipeo", { exact: false })).toBeInTheDocument();
+    expect(mockFetchCorrecciones).toHaveBeenCalledWith(3);
+  });
+
+  it("submits a new correction with only the fields filled in, plus the mandatory motivo", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([RESOLVED_WITH_NUMERIC_ID]);
+    mockCorregirPago.mockResolvedValue({
+      pago: { id: 3 },
+      correccion: { id: 2 },
+    });
+
+    await openResolvedRequestDetail();
+
+    fireEvent.click(await screen.findByRole("button", { name: /corregir pago/i }));
+    fireEvent.change(screen.getByLabelText(/monto final/i), { target: { value: "45.00" } });
+    fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Descuento mal aplicado" } });
+    fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));
+
+    await waitFor(() =>
+      expect(mockCorregirPago).toHaveBeenCalledWith(3, { motivo: "Descuento mal aplicado", monto: "45.00" }),
+    );
   });
 });
 

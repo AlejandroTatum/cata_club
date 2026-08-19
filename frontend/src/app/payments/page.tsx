@@ -71,6 +71,7 @@ import ContextualHelp from "@/components/ContextualHelp";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck,
@@ -90,19 +91,22 @@ import type {
   PaymentValidationRequest,
   ValidationStatus,
 } from "@/services/api";
-import { fetchPaymentValidations, updatePaymentValidation } from "@/services/api";
+import {
+  fetchPaymentValidationsPage,
+  fetchAllPaymentValidations,
+  updatePaymentValidation,
+  type BackendEstadoPago,
+} from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { usePersistentPreference } from "@/lib/persistent-preference";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeferredCommit } from "@/lib/deferred-commit";
 import {
-  paginatePaymentRequests,
   getTotalPages,
-  PAYMENTS_FETCH_LIMIT,
+  paginatePaymentRequests,
   PAYMENTS_PAGE_SIZE,
   humanizePaymentPeriod,
-  getPendingRequests,
   findQueueNeighbours,
   getAutoAdvanceId,
   buildApprovalChecklist,
@@ -121,12 +125,9 @@ import {
   FilterPanel,
   FilterPill,
   LoadingState,
-  Pagination,
+  ResponsiveList,
   SearchInput,
-  Table,
-  TableBody,
   TableCell,
-  TableHead,
   TableHeaderCell,
   TableNameCell,
   TableRow,
@@ -139,6 +140,20 @@ import {
 } from "@/lib/status-badges";
 
 type FilterKey = "all" | ValidationStatus;
+
+/**
+ * `activeFilter` -> the backend's `EstadoPago` filter (issue #400, criterio
+ * 4/5) — `undefined` for "all" means "no filter", matching
+ * `GET /membresias/pagos`'s own `estado_pago: Optional[EstadoPago]`. Moving
+ * this server-side (instead of filtering the already-fetched batch
+ * client-side, as before) is what makes `total` — and therefore the page
+ * count — accurate for a SINGLE status instead of the whole table.
+ */
+const BACKEND_ESTADO_BY_FILTER: Record<ValidationStatus, BackendEstadoPago> = {
+  pendiente: "PENDIENTE_VALIDACION",
+  validado: "APROBADO",
+  rechazado: "RECHAZADO",
+};
 
 /**
  * Pendientes first, and it is the default — the prototype's whole point is
@@ -178,6 +193,36 @@ function actionLabel(request: PaymentValidationRequest): string {
   return request.validationStatus === "pendiente"
     ? `Revisar el pago de ${request.studentName}`
     : `Ver el detalle del pago de ${request.studentName}`;
+}
+
+/** The five row facts, already formatted — shared by both queue renderings. */
+interface RowFields {
+  studentName: string;
+  payer: string;
+  period: string;
+  amount: string;
+  method: string;
+}
+
+/**
+ * Derives the five row facts ONCE (Sonar duplication follow-up, issue
+ * #400): the desktop `<TableRow>` and the mobile `<li>` card render the
+ * SAME five facts, in the SAME order, off the SAME `req` — only their
+ * surrounding DOM shape differs (table cells vs a card layout, which is a
+ * genuine difference this file keeps for a reason, see "the same rows as
+ * cards" below). What used to duplicate was the field ACCESS/FORMATTING
+ * itself — `payerLabel(req)`, `humanizePaymentPeriod(req.membershipPeriod)`,
+ * `formatCurrency(req.expectedAmount)` — called out twice, once per
+ * rendering. Computed here once; both renderings just read the result.
+ */
+function buildRowFields(req: PaymentValidationRequest): RowFields {
+  return {
+    studentName: req.studentName,
+    payer: payerLabel(req),
+    period: humanizePaymentPeriod(req.membershipPeriod),
+    amount: formatCurrency(req.expectedAmount),
+    method: req.paymentMethod,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -344,9 +389,6 @@ function focusQueueAction(requestId: string | null): boolean {
 export default function PaymentsPage(): React.ReactElement {
   const { session, isLoading: authLoading } = useAuth();
   const { showSuccess, showError, showWarning, showInfo } = useToast();
-  const [requests, setRequests] = useState<PaymentValidationRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   /**
    * The queue remembers where the admin works from. Whoever validates payments
    * every morning opens on "Pendientes" because that is the job; making them
@@ -387,16 +429,100 @@ export default function PaymentsPage(): React.ReactElement {
   const [page, setPage] = useState(1);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
 
-  const loadRequests = useCallback(async (): Promise<void> => {
+  /**
+   * The visible TABLE's real source — one backend page per UI page (issue
+   * #400, criterio 4/5, "pagina de forma explícita"): correct for free
+   * navigation through an arbitrarily large list, since nothing here needs
+   * to hold the whole set at once. `pageTotal` is the backend's own count
+   * for `activeFilter`, so pagination itself never truncates.
+   */
+  const [pageItems, setPageItems] = useState<PaymentValidationRequest[]>([]);
+  const [pageTotal, setPageTotal] = useState(0);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  /**
+   * The FULL pending queue, drained (issue #400, criterio 4/5, "drena la
+   * paginación completa"): unlike the table above, the "Pendiente X de Y"
+   * prev/next navigator and the "Pendientes" pill both need to operate on
+   * the WHOLE set, not a window into it — a navigator that stops at
+   * whatever page happened to be open would leave every pending request
+   * past that point unreachable via "Siguiente", exactly the truncation
+   * this fix exists to remove. `fetchAllPaymentValidations` makes as many
+   * backend calls as it takes; see its own doc comment.
+   */
+  const [pendingAll, setPendingAll] = useState<PaymentValidationRequest[]>([]);
+  const [pendingAllLoading, setPendingAllLoading] = useState(true);
+  const [pendingAllError, setPendingAllError] = useState<string | null>(null);
+
+  /**
+   * The other three pills ("Todas", "Aprobados", "Rechazados") do NOT need
+   * to drain — the backend's paginated response already carries an accurate
+   * `total` for whatever `estadoPago` filter was applied, independent of
+   * how many rows a given call actually fetched. One `limit=1` call per
+   * pill reads that count without pulling any real rows.
+   */
+  const [lightTotals, setLightTotals] = useState<{ all: number; validado: number; rechazado: number }>({
+    all: 0,
+    validado: 0,
+    rechazado: 0,
+  });
+
+  /**
+   * The full drained set the search box searches over, for whichever filter
+   * OTHER than "pendiente" is active (see `searchSource` below — "pendiente"
+   * reuses `pendingAll` instead of draining a second time). Populated only
+   * while a search term is actually typed (see the effect below): draining
+   * "Todas" on every keystroke-free render would be work most admins never
+   * trigger.
+   */
+  const [searchDrained, setSearchDrained] = useState<PaymentValidationRequest[]>([]);
+  const [searchDrainLoading, setSearchDrainLoading] = useState(false);
+  const [searchDrainError, setSearchDrainError] = useState<string | null>(null);
+
+  const loadPage = useCallback(async (): Promise<void> => {
     try {
-      setLoading(true);
-      setError(null);
-      setRequests(await fetchPaymentValidations());
+      setPageLoading(true);
+      setPageError(null);
+      const estadoPago = activeFilter === "all" ? undefined : BACKEND_ESTADO_BY_FILTER[activeFilter];
+      const result = await fetchPaymentValidationsPage({
+        skip: (page - 1) * PAYMENTS_PAGE_SIZE,
+        limit: PAYMENTS_PAGE_SIZE,
+        estadoPago,
+      });
+      setPageItems(result.items);
+      setPageTotal(result.total);
     } catch (err) {
-      console.error("[payments] fetchPaymentValidations failed", err);
-      setError("Error al cargar las solicitudes de validación de pago");
+      console.error("[payments] fetchPaymentValidationsPage failed", err);
+      setPageError("Error al cargar las solicitudes de validación de pago");
     } finally {
-      setLoading(false);
+      setPageLoading(false);
+    }
+  }, [activeFilter, page]);
+
+  const loadPendingAll = useCallback(async (): Promise<void> => {
+    try {
+      setPendingAllLoading(true);
+      setPendingAllError(null);
+      setPendingAll(await fetchAllPaymentValidations("PENDIENTE_VALIDACION"));
+    } catch (err) {
+      console.error("[payments] fetchAllPaymentValidations(pendiente) failed", err);
+      setPendingAllError("Error al cargar la cola de pendientes");
+    } finally {
+      setPendingAllLoading(false);
+    }
+  }, []);
+
+  const loadLightTotals = useCallback(async (): Promise<void> => {
+    try {
+      const [all, validado, rechazado] = await Promise.all([
+        fetchPaymentValidationsPage({ skip: 0, limit: 1 }),
+        fetchPaymentValidationsPage({ skip: 0, limit: 1, estadoPago: "APROBADO" }),
+        fetchPaymentValidationsPage({ skip: 0, limit: 1, estadoPago: "RECHAZADO" }),
+      ]);
+      setLightTotals({ all: all.total, validado: validado.total, rechazado: rechazado.total });
+    } catch (err) {
+      console.error("[payments] loadLightTotals failed", err);
     }
   }, []);
 
@@ -408,8 +534,14 @@ export default function PaymentsPage(): React.ReactElement {
 
   useEffect(() => {
     if (!isAdmin) return;
-    void loadRequests();
-  }, [isAdmin, loadRequests]);
+    void loadPendingAll();
+    void loadLightTotals();
+  }, [isAdmin, loadPendingAll, loadLightTotals]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadPage();
+  }, [isAdmin, loadPage]);
 
   // #319 hallazgo #68: `ProtectedRoute` already bounces a non-admin session
   // away, but silently — the URL changed and nothing said why. Same pattern
@@ -420,9 +552,75 @@ export default function PaymentsPage(): React.ReactElement {
     showInfo("No tiene permiso para acceder a esa sección.");
   }, [authLoading, session, showInfo]);
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const isSearching = normalizedQuery.length > 0;
+
+  /**
+   * The full set the search box searches over for the CURRENTLY ACTIVE
+   * filter (issue #400, criterio 4/5 — "drena la paginación completa"):
+   * "pendiente" reuses `pendingAll` (already drained unconditionally for
+   * the queue navigator below), so it is never drained twice. The other
+   * three filters have no standing drained set, so the effect underneath
+   * fills `searchDrained` on demand, only while a search term is typed.
+   */
+  const searchSource = activeFilter === "pendiente" ? pendingAll : searchDrained;
+  const searchSourceLoading = activeFilter === "pendiente" ? pendingAllLoading : searchDrainLoading;
+  const searchSourceError = activeFilter === "pendiente" ? pendingAllError : searchDrainError;
+
+  /** Bumped by the retry button on a failed drain — included in the effect's
+   *  deps below purely to force a re-run on demand, its value is unused. */
+  const [searchDrainRetryToken, setSearchDrainRetryToken] = useState(0);
+
+  const loadSearchDrain = useCallback(async (): Promise<void> => {
+    if (activeFilter === "pendiente") return; // reuses `pendingAll` — nothing to fetch.
+    try {
+      setSearchDrainLoading(true);
+      setSearchDrainError(null);
+      const estadoPago = activeFilter === "all" ? undefined : BACKEND_ESTADO_BY_FILTER[activeFilter];
+      setSearchDrained(await fetchAllPaymentValidations(estadoPago));
+    } catch (err) {
+      console.error("[payments] search drain failed", err);
+      setSearchDrainError("Error al buscar en la cola completa");
+    } finally {
+      setSearchDrainLoading(false);
+    }
+  }, [activeFilter]);
+
+  useEffect(() => {
+    if (!isAdmin || !isSearching) return;
+    void loadSearchDrain();
+    // `searchDrainRetryToken` intentionally forces a re-run without being
+    // read inside — see its own declaration.
+  }, [isAdmin, isSearching, loadSearchDrain, searchDrainRetryToken]);
+
+  const searchMatches = useMemo(
+    () => searchSource.filter((r) => r.studentName.toLowerCase().includes(normalizedQuery)),
+    [searchSource, normalizedQuery],
+  );
+
+  // Not searching: the table IS the server page, paginated EXPLICITLY
+  // (`loadPage`, one real backend call per UI page — issue #400, criterio
+  // 4/5). Searching: the table is a CLIENT-side page over the fully
+  // DRAINED set that matches the query — the other half of that same
+  // criterion ("drena la paginación completa o pagina de forma explícita").
+  // Either way nothing is ever silently cut at 200.
+  const visibleItems = isSearching ? paginatePaymentRequests(searchMatches, page) : pageItems;
+  const visibleTotal = isSearching ? searchMatches.length : pageTotal;
+  const visibleLoading = isSearching ? searchSourceLoading : pageLoading;
+  const visibleError = isSearching ? searchSourceError : pageError;
+
+  // `pageItems`/`pendingAll`/`searchDrained` together cover every source a
+  // `selectedId` can come from: a click on a visible row (`pageItems` while
+  // browsing, `searchDrained`/`pendingAll` while searching — see
+  // `visibleItems` above), or the queue navigator's prev/next, which always
+  // points into `pendingAll`.
   const selectedRequest = useMemo(
-    () => requests.find((r) => r.id === selectedId) ?? null,
-    [requests, selectedId],
+    () =>
+      pageItems.find((r) => r.id === selectedId)
+      ?? pendingAll.find((r) => r.id === selectedId)
+      ?? searchDrained.find((r) => r.id === selectedId)
+      ?? null,
+    [pageItems, pendingAll, searchDrained, selectedId],
   );
 
   /**
@@ -439,33 +637,26 @@ export default function PaymentsPage(): React.ReactElement {
     setVoucherModalOpen(false);
   }, [selectedId]);
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = useMemo(
-    () =>
-      requests
-        .filter((r) => activeFilter === "all" || r.validationStatus === activeFilter)
-        .filter((r) => !normalizedQuery || r.studentName.toLowerCase().includes(normalizedQuery)),
-    [requests, activeFilter, normalizedQuery],
-  );
-
   // Reset to page 1 whenever the filter or the search changes, so the
   // paginator never gets stuck on a stale/out-of-range page.
   useEffect(() => {
     setPage(1);
   }, [activeFilter, normalizedQuery]);
 
-  const totalPages = useMemo(() => getTotalPages(filtered.length), [filtered]);
-  const paginatedRequests = useMemo(
-    () => paginatePaymentRequests(filtered, page),
-    [filtered, page],
-  );
+  const totalPages = useMemo(() => getTotalPages(visibleTotal), [visibleTotal]);
 
-  const pending = useMemo(() => getPendingRequests(requests), [requests]);
+  // `pendingAll` IS the pending queue already — drained whole, never a
+  // window into it (issue #400, criterio 4/5): the "Pendientes" pill counts
+  // it directly, and the prev/next navigator below walks it directly, so
+  // neither can stop short of the real last pending request. The other
+  // three pills read the backend's own `total` for their filter — accurate
+  // without draining, since a count needs `total`, not every row.
+  const pending = pendingAll;
   const filterCounts: Record<FilterKey, number> = {
-    all: requests.length,
-    pendiente: pending.length,
-    validado: requests.filter((r) => r.validationStatus === "validado").length,
-    rechazado: requests.filter((r) => r.validationStatus === "rechazado").length,
+    all: lightTotals.all,
+    pendiente: pendingAll.length,
+    validado: lightTotals.validado,
+    rechazado: lightTotals.rechazado,
   };
 
   const queue = findQueueNeighbours(pending, selectedId ?? "");
@@ -537,8 +728,50 @@ export default function PaymentsPage(): React.ReactElement {
     detailWasOpen.current = isOpen;
   }, [selectedRequest]);
 
+  /**
+   * Mirrors `updated` into the server-paginated `pageItems` (issue #400,
+   * criterio 4/5): a plain `.map()` alone would leave an approved/rejected
+   * row sitting in a "Pendientes" page with a badge that no longer matches
+   * the tab — status filtering moved server-side, into `loadPage`'s
+   * `estadoPago`, so nothing else would make the row disappear from view.
+   * This restores the "the queue moves immediately" promise `decide()`'s
+   * own doc comment describes, without waiting on a real refetch. It is a
+   * LOCAL approximation, not the source of truth — `pageTotal` is not
+   * adjusted, so it can read one high until the next real `loadPage()` (a
+   * filter change, a page change, or simply reopening the screen)
+   * reconciles it.
+   */
+  function applyToPageItems(updated: PaymentValidationRequest): void {
+    setPageItems((prev) => {
+      const mapped = prev.map((r) => (r.id === updated.id ? updated : r));
+      if (activeFilter !== "all" && updated.validationStatus !== activeFilter) {
+        return mapped.filter((r) => r.id !== updated.id);
+      }
+      return mapped;
+    });
+  }
+
+  /**
+   * Same mirroring, for the DRAINED `pendingAll` (issue #400, criterio
+   * 4/5): the queue navigator and the "Pendientes" pill both read it
+   * directly, so a decision has to leave it consistent too, immediately —
+   * a payment that just left PENDIENTE_VALIDACION must stop being a
+   * candidate for "Siguiente" and stop counting toward the pill in the same
+   * tick the table's own optimistic update lands, not one real drain later.
+   */
+  function applyToPendingAll(updated: PaymentValidationRequest): void {
+    setPendingAll((prev) => {
+      const mapped = prev.map((r) => (r.id === updated.id ? updated : r));
+      if (updated.validationStatus !== "pendiente") {
+        return mapped.filter((r) => r.id !== updated.id);
+      }
+      return mapped;
+    });
+  }
+
   function applyDecision(updated: PaymentValidationRequest): void {
-    setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    applyToPageItems(updated);
+    applyToPendingAll(updated);
     setSelectedId(getAutoAdvanceId(pendingBeforeDecision.current, updated.id));
   }
 
@@ -561,14 +794,16 @@ export default function PaymentsPage(): React.ReactElement {
     dto: Parameters<typeof updatePaymentValidation>[1],
     confirmation: { label: string; message: string; description: string; failure: string },
   ): void {
-    const previousRequests = requests;
+    const previousPageItems = pageItems;
+    const previousPendingAll = pendingAll;
     const previousSelectedId = selectedId;
 
     pendingBeforeDecision.current = pending;
     applyDecision(optimistic);
 
     const putItBack = (): void => {
-      setRequests(previousRequests);
+      setPageItems(previousPageItems);
+      setPendingAll(previousPendingAll);
       setSelectedId(previousSelectedId);
     };
 
@@ -583,7 +818,13 @@ export default function PaymentsPage(): React.ReactElement {
         const saved = await updatePaymentValidation(request.id, dto);
         // The server owns the canonical row — dates it normalised, the
         // validation timestamp, the validator's name.
-        setRequests((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+        applyToPageItems(saved);
+        applyToPendingAll(saved);
+        // The other two pills ("Aprobados"/"Rechazados") only read an
+        // accurate `total` after a real fetch — same "can read one high
+        // until reconciled" posture `pageTotal` already documents above,
+        // now settled for real.
+        void loadLightTotals();
         // The decision itself (`saved.validationStatus`) is final and real
         // even when this is true — only the in-app notification failed. The
         // optimistic success toast above already fired and is gone by the
@@ -664,6 +905,46 @@ export default function PaymentsPage(): React.ReactElement {
   // Queue
   // -------------------------------------------------------------------------
 
+  /**
+   * The action cluster at the end of a queue row — Sonar duplication
+   * follow-up (issue #400): this was IDENTICAL, token for token, between
+   * the desktop `<TableRow>` and the mobile `<li>` card below (the "same
+   * rows as cards" pattern the file's own comment already names) — the
+   * status badge (only under the "Todas" tab) plus the button that opens
+   * the detail. The two renderings still differ in their surrounding
+   * container (a `<TableCell>` vs a plain `<div>`, since a table row and a
+   * card are genuinely different DOM shapes), so only this inner cluster
+   * — the part that was actually copy-pasted — moved out.
+   */
+  function renderRowActions(req: PaymentValidationRequest): React.ReactElement {
+    return (
+      <>
+        {/* No "Estado" column/badge outside "Todas": the active tab already
+            filters to one status, so repeating it per row would only echo
+            the tab. Under "Todas" it is the one thing on the row that says
+            what state a payment is in. */}
+        {activeFilter === "all" && (
+          <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+            {VALIDATION_STATUS_LABELS[req.validationStatus]}
+          </Badge>
+        )}
+        {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for every pending row,
+            and the default tab IS the pending queue: ten red buttons down one
+            column. "Nunca hay dos botones rojos en una pantalla" — the real
+            decision is "Aprobar pago" inside the detail, so this stays the
+            neutral action that leads to it, not a second red. */}
+        <Button
+          size="sm"
+          aria-label={actionLabel(req)}
+          data-payment-action={req.id}
+          onClick={() => setSelectedId(req.id)}
+        >
+          {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
+        </Button>
+      </>
+    );
+  }
+
   function renderQueue(): React.ReactElement {
     return (
       <>
@@ -729,38 +1010,51 @@ export default function PaymentsPage(): React.ReactElement {
             </div>
           }
           // D11c, and the panel's fourth slot, which this screen left empty
-          // while carrying exactly the caveat it is for. The four pill counts
-          // read as the club's totals — "Todas 62" — but they are counts of
-          // what this page FETCHED, and the request is capped. `/members` has
-          // the same cap and already discloses it here; this screen is the one
-          // where the number is a queue somebody is working through, so an
-          // undisclosed ceiling is worth more.
+          // while carrying exactly the caveat it is for.
+          //
+          // Issue #400 (criterio 4/5): nothing on this screen caps at 200
+          // anymore. The table pagina de forma explícita — each page is its
+          // own real backend fetch (`loadPage`). The "Pendientes" pill and
+          // the queue navigator drenan la paginación completa
+          // (`fetchAllPaymentValidations`, `pendingAll`). The other three
+          // pills read the backend's own `total` per filter (`loadLightTotals`).
+          // The search box drains the active filter's full set before
+          // matching. The old "esta cola trae hasta 200 solicitudes"
+          // sentence described a real cap that no longer exists anywhere on
+          // this page, so it was removed rather than left to mislead.
           help={
             <ContextualHelp title="Ayuda sobre el alcance de la cola">
               {/* #315 hallazgo #45: esta era la única ayuda de la cola y solo
                   hablaba del tope técnico de la consulta — nunca de en qué
                   consiste el trabajo que el administrador vino a hacer acá.
-                  El primer párrafo dice eso; el segundo, que ya estaba,
-                  sigue con el límite. */}
-              <p className="mb-2">
+                  El primer párrafo dice eso. */}
+              <p>
                 Validar un pago es revisar lo que la familia declaró — monto, período y comprobante
                 cuando corresponde — antes de decidir. Aprobar activa la membresía del período
                 pagado; rechazar le pide a la familia un comprobante nuevo.
-              </p>
-              <p>
-                Esta cola trae hasta {PAYMENTS_FETCH_LIMIT} solicitudes por consulta, y los números
-                de las pestañas cuentan sobre lo traído. Si el club supera ese volumen, use el
-                buscador o el reporte de pagos para llegar a una solicitud puntual.
               </p>
             </ContextualHelp>
           }
         />
 
-        {loading && <LoadingState label="Cargando solicitudes…" />}
+        {visibleLoading && <LoadingState label="Cargando solicitudes…" />}
 
-        {error && !loading && <ErrorState message={error} onRetry={() => void loadRequests()} />}
+        {visibleError && !visibleLoading && (
+          <ErrorState
+            message={visibleError}
+            onRetry={() => {
+              if (!isSearching) {
+                void loadPage();
+              } else if (activeFilter === "pendiente") {
+                void loadPendingAll();
+              } else {
+                setSearchDrainRetryToken((t) => t + 1);
+              }
+            }}
+          />
+        )}
 
-        {!loading && !error && filtered.length === 0 && (
+        {!visibleLoading && !visibleError && visibleItems.length === 0 && (
           <EmptyState
             // A search that finds nobody left 397px of bare canvas under a
             // three-line statement — 44%. `fill` puts the surplus inside the
@@ -809,139 +1103,76 @@ export default function PaymentsPage(): React.ReactElement {
           />
         )}
 
-        {!loading && !error && filtered.length > 0 && (
-          <>
-            <div className="card overflow-hidden">
-            {/* Desktop: the five columns that carry a decision. */}
-            <div data-testid="payments-table" className="hidden overflow-x-auto md:block">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell type="text">Estudiante</TableHeaderCell>
-                    <TableHeaderCell type="text">Período</TableHeaderCell>
-                    <TableHeaderCell type="number">Monto</TableHeaderCell>
-                    <TableHeaderCell type="text">Método</TableHeaderCell>
-                    <TableHeaderCell type="action">
-                      <span className="sr-only">Acción</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paginatedRequests.map((req) => {
-                    const desktopNameId = `payment-name-desktop-${req.id}`;
-                    return (
-                    <TableRow key={req.id}>
-                      <TableNameCell
-                        name={<span id={desktopNameId}>{req.studentName}</span>}
-                        sub={payerLabel(req)}
-                      />
-                      <TableCell type="text">{humanizePaymentPeriod(req.membershipPeriod)}</TableCell>
-                      <TableCell type="number">{formatCurrency(req.expectedAmount)}</TableCell>
-                      <TableCell type="text">{req.paymentMethod}</TableCell>
-                      <TableCell type="action">
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          {/* No "Estado" column: the active tab already filters
-                              to one status, so repeating it per row would only
-                              echo the tab. What is left is context for the
-                              action button, not a column of its own — see the
-                              "Todas" case below, where it is the one thing on
-                              the row that says what state a payment is in. */}
-                          {activeFilter === "all" && (
-                            <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                              {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                            </Badge>
-                          )}
-                          {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for
-                              every pending row, and the default tab IS the
-                              pending queue: ten red buttons down one column,
-                              fifteen in the badge beside the nav item. "Nunca
-                              hay dos botones rojos en una pantalla" — and at
-                              ten, red has stopped meaning "the one thing to
-                              press" and become the colour of the column.
-
-                              What it opens is the detail, where the decision
-                              actually happens and where "Aprobar pago" is the
-                              one red control on screen. Spending the CTA colour
-                              on the step BEFORE the decision left the real
-                              decision wearing the same red as the ten links
-                              that lead to it. */}
-                          <Button
-                            size="sm"
-                            aria-label={actionLabel(req)}
-                            data-payment-action={req.id}
-                            onClick={() => setSelectedId(req.id)}
-                          >
-                            {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Mobile: the same rows as cards, like members already does. */}
-            <ul data-testid="payments-cards" className="divide-y divide-line md:hidden">
-              {paginatedRequests.map((req) => {
-                const mobileNameId = `payment-name-mobile-${req.id}`;
-                return (
-                <li key={req.id} className="flex flex-col gap-3 p-4">
+        {!visibleLoading && !visibleError && visibleItems.length > 0 && (
+          <ResponsiveList
+            breakpoint="md"
+            order="tableFirst"
+            tableTestId="payments-table"
+            cardsTestId="payments-cards"
+            items={visibleItems}
+            getKey={(req) => req.id}
+            columns={[
+              <TableHeaderCell key="estudiante" type="text">Estudiante</TableHeaderCell>,
+              <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
+              <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
+              <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
+              <TableHeaderCell key="accion" type="action">
+                <span className="sr-only">Acción</span>
+              </TableHeaderCell>,
+            ]}
+            renderRow={(req) => {
+              const desktopNameId = `payment-name-desktop-${req.id}`;
+              const fields = buildRowFields(req);
+              return (
+                <TableRow>
+                  <TableNameCell
+                    name={<span id={desktopNameId}>{fields.studentName}</span>}
+                    sub={fields.payer}
+                  />
+                  <TableCell type="text">{fields.period}</TableCell>
+                  <TableCell type="number">{fields.amount}</TableCell>
+                  <TableCell type="text">{fields.method}</TableCell>
+                  <TableCell type="action">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      {renderRowActions(req)}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            }}
+            renderCard={(req) => {
+              const mobileNameId = `payment-name-mobile-${req.id}`;
+              const fields = buildRowFields(req);
+              return (
+                <li className="flex flex-col gap-3 p-4">
                   <div className="min-w-0">
                     <p id={mobileNameId} className="truncate text-sm font-semibold text-ink">
-                      {req.studentName}
+                      {fields.studentName}
                     </p>
-                    <p className="truncate text-2xs tracking-flat text-ink-3">{payerLabel(req)}</p>
+                    <p className="truncate text-2xs tracking-flat text-ink-3">{fields.payer}</p>
                   </div>
                   <p className="text-xs text-ink-2">
-                    {humanizePaymentPeriod(req.membershipPeriod)} · {req.paymentMethod}
+                    {fields.period} · {fields.method}
                   </p>
                   <div className="flex items-center justify-between gap-3">
-                    <DataBox variant="numeric">{formatCurrency(req.expectedAmount)}</DataBox>
+                    <DataBox variant="numeric">{fields.amount}</DataBox>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {/* Same rule as the desktop table: the active tab
-                          already fixes the status for every visible row, and
-                          what is left is context for the action button, not a
-                          column of its own. */}
-                      {activeFilter === "all" && (
-                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
-                        </Badge>
-                      )}
-                      {/* The narrow rendering of the same row — see the note on
-                          the table's copy. The two are separate JSX, so the
-                          red had to be removed twice or the phone would keep
-                          the column of CTAs the desktop just lost. */}
-                      <Button
-                        size="sm"
-                        aria-label={actionLabel(req)}
-                        data-payment-action={req.id}
-                        onClick={() => setSelectedId(req.id)}
-                      >
-                        {req.validationStatus === "pendiente" ? "Revisar" : "Detalle"}
-                      </Button>
+                      {renderRowActions(req)}
                     </div>
                   </div>
                 </li>
-                );
-              })}
-            </ul>
-
-            {totalPages > 1 && (
-              <Pagination
-                variant="footer"
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                totalItems={filtered.length}
-                pageSize={PAYMENTS_PAGE_SIZE}
-                itemNoun="solicitud"
-                itemNounPlural="solicitudes"
-              />
-            )}
-            </div>
-          </>
+              );
+            }}
+            pagination={{
+              page,
+              totalPages,
+              onPageChange: setPage,
+              totalItems: visibleTotal,
+              pageSize: PAYMENTS_PAGE_SIZE,
+              itemNoun: "solicitud",
+              itemNounPlural: "solicitudes",
+            }}
+          />
         )}
       </>
     );
@@ -1320,6 +1551,19 @@ export default function PaymentsPage(): React.ReactElement {
                 {request.validatedBy ? ` por ${request.validatedBy}` : ""}
                 {request.validatedAt ? ` el ${formatDate(request.validatedAt)}` : ""}.
               </p>
+            )}
+
+            {/* Comprobante oficial + correcciones (issue #400, criterios 7/8):
+                solo para un pago YA validado — `corregir_pago` exige un pago
+                APROBADO, y el comprobante oficial por construcción no existe
+                hasta que se aprobó. `Number(request.id)` es seguro: el id
+                siempre llega como un `Pago.id` numérico serializado a
+                string (ver `PaymentValidationRequest.id`). */}
+            {request.validationStatus === "validado" && (
+              <PagoCorreccionSection
+                pagoId={Number(request.id)}
+                onCorrected={() => void loadPage()}
+              />
             )}
           </div>
 

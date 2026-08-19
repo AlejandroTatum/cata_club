@@ -98,6 +98,8 @@ import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatu
 import CreateMembershipForm from "./CreateMembershipForm";
 import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
+import SuspenderReactivarForm from "./SuspenderReactivarForm";
+import CambiarPlanForm from "./CambiarPlanForm";
 import BeneficioSection from "./BeneficioSection";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
@@ -170,21 +172,36 @@ function ModalSection({
 // que es de donde se lo sacó.
 // ---------------------------------------------------------------------------
 
-interface StudentRowProps {
-  student: MemberStudentSummary;
-  /**
-   * Called after a membership is successfully created so the page can refetch
-   * and show the new row. The panel used to tell the user "Recarga para
-   * verla." instead — the system should refresh its own data rather than
-   * delegate that to the user.
-   */
+/**
+ * The three refetch callbacks shared by the student edit panel and the
+ * account dialog that hosts it (Sonar duplication follow-up, issue #400):
+ * `MemberEditDialog` just forwards all three straight down to
+ * `StudentEditPanel`, so the two interfaces used to repeat the exact same
+ * three names, in the exact same order, with the exact same docs — one
+ * shared shape instead of two copies.
+ *
+ * All three currently resolve to the exact same `loadMembers` call at the
+ * page level; they stay separate fields (rather than collapsing into one
+ * generic "onChanged") because each write flow — membership creation, debt
+ * regularization, suspend/reactivate/cambiar-plan — owns its own named
+ * contract, never unmounting the open dialog to refresh.
+ */
+interface MembresiaCallbacks {
+  /** Called after a membership is successfully created so the page can
+   *  refetch and show the new row. The panel used to tell the user
+   *  "Recarga para verla." instead — the system should refresh its own
+   *  data rather than delegate that to the user. */
   onMembershipCreated: () => void;
-  /**
-   * Called after a debt regularization is recorded (issue #284) so the page
-   * can refetch and show the remaining debt — same silent-refresh semantics
-   * as `onMembershipCreated` (never unmount the open dialog).
-   */
+  /** Called after a debt regularization is recorded (issue #284) so the
+   *  page can refetch and show the remaining debt. */
   onDebtRegularized: () => void;
+  /** Called after a suspend/reactivate/cambiar-plan write (issue #400,
+   *  criterios 1/3). */
+  onMembresiaChanged: () => void;
+}
+
+interface StudentRowProps extends MembresiaCallbacks {
+  student: MemberStudentSummary;
 }
 
 /**
@@ -207,7 +224,12 @@ function LabeledDataBox({
   );
 }
 
-function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: StudentRowProps): React.ReactElement {
+function StudentEditPanel({
+  student,
+  onMembershipCreated,
+  onDebtRegularized,
+  onMembresiaChanged,
+}: StudentRowProps): React.ReactElement {
   const [showMedical, setShowMedical] = useState(false);
 
   const personaId = Number(student.id);
@@ -335,6 +357,21 @@ function StudentEditPanel({ student, onMembershipCreated, onDebtRegularized }: S
             esGratuidadFamiliar={student.membresia.esGratuidadFamiliar}
             onRegularized={onDebtRegularized}
           />
+          {/* Issue #400, criterio 3: solo administración suspende/reactiva
+              (texto explícito del issue) — el componente decide por sí solo
+              si corresponde "Suspender" o "Reactivar" según el estado
+              actual, y no se ofrece ninguno de los dos desde VENCIDA. */}
+          <SuspenderReactivarForm
+            membresiaId={Number(student.membresia.id)}
+            estado={student.membresia.estado}
+            onChanged={onMembresiaChanged}
+          />
+          {/* Issue #400, criterio 1: cambio de plan PROSPECTIVO sobre esta
+              misma membresía — la cobertura ya pagada no se toca. */}
+          <CambiarPlanForm
+            membresiaId={Number(student.membresia.id)}
+            onChanged={onMembresiaChanged}
+          />
         </div>
       )}
 
@@ -370,12 +407,10 @@ interface AccountListItemProps {
   onEdit: () => void;
 }
 
-interface MemberEditDialogProps {
+/** `MembresiaCallbacks` (see its own doc comment) — forwarded unchanged to each student's edit panel. */
+interface MemberEditDialogProps extends MembresiaCallbacks {
   account: MemberAccount;
   onClose: () => void;
-  /** Refetch the member list — forwarded to each student's edit panel. */
-  onMembershipCreated: () => void;
-  onDebtRegularized: () => void;
 }
 
 const ALL_BACKEND_ROLES: BackendTipoRol[] = ["ADMINISTRADOR", "ENTRENADOR", "REPRESENTANTE", "ALUMNO"];
@@ -498,8 +533,7 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
 function MemberEditDialog({
   account,
   onClose,
-  onMembershipCreated,
-  onDebtRegularized,
+  ...membresiaCallbacks
 }: MemberEditDialogProps): React.ReactElement {
   // Roles and estado are ONE concern, not two: a single request answers both,
   // a failed load has to show up in both places, and the header badge below
@@ -796,8 +830,7 @@ function MemberEditDialog({
                       <StudentEditPanel
                         key={estudiante.id}
                         student={estudiante}
-                        onMembershipCreated={onMembershipCreated}
-                            onDebtRegularized={onDebtRegularized}
+                        {...membresiaCallbacks}
                       />
                     ))}
                   </ul>
@@ -1253,6 +1286,7 @@ export default function MembersPage(): React.ReactElement {
             onClose={() => setEditingAccountId(null)}
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
+            onMembresiaChanged={() => void loadMembers({ silent: true })}
           />
         )}
       </AppShell>

@@ -148,8 +148,18 @@ test.describe("Back navigation + toasts", () => {
 
   test("payments: the way back to /dashboard is a real link, and a failed reject shows an error toast", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.route("**/api/payments", (route) => {
-      if (route.request().method() === "GET") return fulfillJson(route, [PAYMENT_ROW]);
+    // The trailing `*` is load-bearing (issue #400, criterio 4/5): every GET
+    // now carries `?skip=&limit=…`, which an exact `**/api/payments` glob
+    // (no wildcard) does NOT match — the request fell through to the real
+    // network instead of this mock. `**/api/payments*` still does not swallow
+    // the more specific `**/api/payments/pay-1` route below (`*` never
+    // crosses a `/`).
+    await page.route("**/api/payments*", (route) => {
+      // Issue #400 (criterio 4/5): `/api/payments` now answers
+      // `{ items, total }` (real pagination), not a bare array.
+      if (route.request().method() === "GET") {
+        return fulfillJson(route, { items: [PAYMENT_ROW], total: 1 });
+      }
       return route.fallback();
     });
     // updatePaymentValidation() (src/services/api.ts) sends PUT, not PATCH.

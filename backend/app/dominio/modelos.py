@@ -684,6 +684,63 @@ class CorreccionPago(Base):
     fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
 
 
+class HistorialCambioPlanMembresia(Base):
+    """Huella auditable de un cambio de tipo de membresía sobre una membresía
+    YA existente (issue #400, criterio 1).
+
+    Por qué existe: `crear_membresia` bloquea una segunda membresía activa o
+    suspendida por persona (`MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA`), así que
+    cambiar de plan no puede resolverse dando de baja la membresía vieja y
+    creando una nueva -- el club pidió una operación PROSPECTIVA sobre la
+    MISMA membresía (`MembresiaServicio.cambiar_plan`): cambia
+    `tipo_membresia_id` (y la tarifa que copia); la cobertura ya pagada
+    (fechas de `Pago`/`CoberturaBonificada` ya aprobados) no se toca.
+
+    No reutiliza `HistorialEstadoMembresia`: esa tabla audita transiciones de
+    ESTADO (columnas `estado_anterior`/`estado_nuevo`, con un CHECK que exige
+    que difieran) -- un cambio de plan no toca `Membresia.estado` en
+    absoluto, así que forzarlo ahí exigiría inventar un par de estados
+    iguales que el propio CHECK `ck_historial_estado_cambia` rechazaría, o
+    mentir con un "estado antes/después" que no cambió. Mismo criterio de
+    "una tabla por tipo de hecho auditado" que ya separa `CorreccionPago`
+    (campos financieros de un `Pago`) de `HistorialEstadoMembresia` (estado
+    de una `Membresia`) -- esta es la tercera: el TIPO DE PLAN de una
+    `Membresia`.
+
+    `actor_persona_id` NOT NULL (igual que `CorreccionPago`, a diferencia de
+    `HistorialEstadoMembresia`): no existe ningún camino del sistema que
+    cambie un plan por su cuenta, siempre lo decide un administrador."""
+
+    __tablename__ = "historial_cambio_plan_membresia"
+    __table_args__ = (
+        Index("ix_historial_cambio_plan_membresia_membresia_id", "membresia_id"),
+        Index("ix_historial_cambio_plan_membresia_actor_persona_id", "actor_persona_id"),
+        # `test_indices_fk.py` exige cobertura de índice en TODA FK, no solo
+        # en las de "quién"/"a qué fila madre" -- los dos punteros a
+        # `tipo_membresia` también se consultarán filtrando por plan
+        # (ej. "cuántos cambios de plan salieron/entraron a este tipo").
+        Index("ix_historial_cambio_plan_membresia_tipo_membresia_id_anterior", "tipo_membresia_id_anterior"),
+        Index("ix_historial_cambio_plan_membresia_tipo_membresia_id_nuevo", "tipo_membresia_id_nuevo"),
+        # Red de seguridad EN LA BASE (mismo criterio que
+        # `ck_historial_estado_cambia`/`ck_correccion_pago_algun_campo_
+        # cambia`): un "cambio de plan" que deja el mismo tipo no es un
+        # cambio, es ruido en la auditoría. El camino primario de rechazo es
+        # `MembresiaServicio.cambiar_plan`; este CHECK es la red de
+        # seguridad ante un INSERT que lo esquive.
+        CheckConstraint(
+            "tipo_membresia_id_anterior <> tipo_membresia_id_nuevo",
+            name="ck_historial_cambio_plan_cambia",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    membresia_id: Mapped[int] = mapped_column(ForeignKey("membresia.id"))
+    tipo_membresia_id_anterior: Mapped[int] = mapped_column(ForeignKey("tipo_membresia.id"))
+    tipo_membresia_id_nuevo: Mapped[int] = mapped_column(ForeignKey("tipo_membresia.id"))
+    actor_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc)
+
+
 # ---------------------------------------------------------------------------
 # Descuento (issue #11, modelo firmado docs/product/concepto-alcance-modelo.md §4)
 #

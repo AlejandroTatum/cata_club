@@ -355,7 +355,29 @@ const SCREENS: Screen[] = [
     paginated: true,
     open: async (page, n) => {
       await mockSession(page, "admin");
-      await page.route("**/api/payments", (r) => fulfillJson(r, payments(n)));
+      // Issue #400 (criterio 4/5): `/api/payments` now answers
+      // `{ items, total }` (real pagination), not a bare array. The trailing
+      // `*` is load-bearing (same convention as the other paginated routes
+      // above, e.g. `**/api/attendance/records*`): every call now carries
+      // `?skip=&limit=…`, which an exact `**/api/payments` glob (no
+      // wildcard) does NOT match, so the request fell through to the real
+      // network and the page rendered its error state instead of any rows.
+      //
+      // Unlike `/attendance`/`/members` (still "fetch a batch once, paginate
+      // CLIENT-side" — their mocks below correctly return every row
+      // unsliced), `/payments` moved to real SERVER-side pagination: the
+      // frontend now trusts `items` to already be exactly one page, and
+      // renders whatever it receives without slicing further. A mock that
+      // ignores `skip`/`limit` and always returns all `n` rows made this
+      // "fills the canvas" case render every row at once (40, not
+      // `PAYMENTS_PAGE_SIZE`) — `dead: 0` but wildly over the scroll budget.
+      // The mock has to actually behave like the paginated backend it stands in for.
+      await page.route("**/api/payments*", (r) => {
+        const url = new URL(r.request().url());
+        const skip = Number(url.searchParams.get("skip") ?? "0");
+        const limit = Number(url.searchParams.get("limit") ?? String(n));
+        return fulfillJson(r, { items: payments(n).slice(skip, skip + limit), total: n });
+      });
       await page.goto("/payments");
       await expect(page.locator("table tbody tr").first()).toBeVisible({ timeout: 20_000 });
     },

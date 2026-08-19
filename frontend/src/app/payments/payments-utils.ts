@@ -13,23 +13,18 @@ import { MONTH_ABBR } from "@/lib/format-utils";
 export const PAYMENTS_PAGE_SIZE = 10;
 
 /**
- * Maximum number of requests the queue fetch brings back in one call, mirroring
- * the `limit=200` the BFF sends upstream (`app/api/payments/route.ts`).
- *
- * It is declared here for the same reason `MEMBERS_AGGREGATE_LIMIT` is declared
- * in `members-utils.ts`: the four pill counts on the screen are computed over
- * whatever this call returned, so they read as the club's totals while actually
- * being totals of the first page. The screen now says so out loud, and a number
- * a screen states in words should not be a literal typed a second time in the
- * sentence that states it.
- */
-export const PAYMENTS_FETCH_LIMIT = 200;
-
-/**
  * Slice a (possibly already filtered) payment requests list to a single page.
  *
  * `page` is 1-indexed. Returns an empty array when `page` is beyond the
  * available data — never throws or wraps around.
+ *
+ * Kept for the free-text search box, which still narrows CLIENT-SIDE within
+ * whatever page the server already returned (see `page.tsx`'s
+ * `searchFiltered`) — the queue TABLE itself no longer calls this: since
+ * issue #400 (criterio 4/5) each UI page is its own real backend fetch
+ * (`fetchPaymentValidationsPage`), not a slice of a client-side batch capped
+ * at `PAYMENTS_FETCH_LIMIT` (removed — the cap it described no longer
+ * exists).
  */
 export function paginatePaymentRequests(
   requests: PaymentValidationRequest[],
@@ -45,6 +40,11 @@ export function paginatePaymentRequests(
  *
  * Always returns at least 1 (never 0 pages, even for an empty list) so
  * "Página 1 de 1" is a valid state to render.
+ *
+ * Since issue #400 (criterio 4/5), the count `page.tsx` passes in is the
+ * backend's own `total` for the active filter (`fetchPaymentValidationsPage`'s
+ * response) — a real, unbounded count, not `filtered.length` over an
+ * already-truncated client-side array.
  */
 export function getTotalPages(
   totalRequests: number,

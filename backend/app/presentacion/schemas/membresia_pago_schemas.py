@@ -186,6 +186,14 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     voucher_url: Optional[str] = None
     voucher_formato: Optional[str] = None
     voucher_fecha_carga: Optional[datetime] = None
+    # Issue #400 (criterio 8): el comprobante OFICIAL que el club genera al
+    # aprobar (`ComprobantePago`, PDF de Celery -- ver `comprobante_tareas.
+    # py`), distinto de `voucher_url` (evidencia que SUBE el alumno). `None`
+    # cuando el pago no fue aprobado (`comprobante_tareas.py` aborta si no
+    # está `APROBADO`, ver su docstring) o el PDF todavía no terminó de
+    # generarse -- no hace falta repetir ese chequeo de estado acá: la fila
+    # `ComprobantePago` sencillamente no existe hasta que eso pasó.
+    comprobante_oficial_url: Optional[str] = None
     # Issue #11: descuento congelado aplicado a este pago (columnas de Pago,
     # no una tabla aparte -- ver `app.dominio.modelos.Pago`). Los cuatro son
     # `None` cuando el pago no lleva descuento.
@@ -287,6 +295,17 @@ class SuspensionReactivacionDTO(BaseModel):
         if not self.motivo.strip():
             raise ValueError("Debe indicar el motivo.")
         return self
+
+
+# --- Cambio de plan (issue #400, criterio 1) ---------------------------------
+# Prospectivo: la cobertura ya pagada no se toca (ver
+# `MembresiaServicio.cambiar_plan`). Sin `motivo`: a diferencia de
+# `SuspensionReactivacionDTO`/`RegularizacionDeudaDTO`/`CorreccionPagoDTO`,
+# el issue no exige uno para esta operación -- la auditoría
+# (`HistorialCambioPlanMembresia`) ya registra quién y cuándo sin necesitar
+# texto libre.
+class CambioPlanMembresiaDTO(BaseModel):
+    nuevo_tipo_membresia_id: int
 
 
 # --- Corrección financiera (issue #400, slice 5b) ----------------------------

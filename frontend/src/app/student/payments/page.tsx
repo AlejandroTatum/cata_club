@@ -105,7 +105,7 @@ import {
   PAGO_FILTER_LABELS,
   type PagoStatusFilter,
 } from "./payments-utils";
-import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
+import { CreditCard, Download, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -1390,6 +1390,23 @@ function PagoRow({
           >
             <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             Ver el comprobante
+          </a>
+        )}
+
+        {/* Comprobante OFICIAL en PDF que el club genera al aprobar (issue
+            #400, criterio 8) — distinto del `voucherUrl` de arriba, que es
+            la evidencia que el propio socio subió. Solo existe una vez
+            aprobado (la condición la impone la fila `ComprobantePago`
+            misma, no un chequeo de `estadoPago` acá). */}
+        {pago.comprobanteOficialUrl && (
+          <a
+            href={pago.comprobanteOficialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+          >
+            <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            Descargar comprobante oficial
           </a>
         )}
 
