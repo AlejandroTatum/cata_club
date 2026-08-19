@@ -408,10 +408,50 @@ class Pago(Base):
             "descuento_id IS NULL OR descuento_valor_aplicado IS NOT NULL",
             name="ck_pago_descuento_valor_congelado",
         ),
+        # Snapshot de tarifa (issue #400): todo o nada. Un pago con tarifa
+        # pero sin meses es un hecho histórico incompleto, y eso es PEOR que
+        # no tener snapshot -- tiene forma de dato bueno y no lo es. Mismo
+        # criterio que `ck_pago_descuento_valor_congelado` justo arriba.
+        CheckConstraint(
+            "(tarifa_mensual_aplicada IS NULL"
+            " AND meses_comprados IS NULL"
+            " AND monto_base IS NULL)"
+            " OR (tarifa_mensual_aplicada IS NOT NULL"
+            " AND meses_comprados IS NOT NULL"
+            " AND monto_base IS NOT NULL)",
+            name="ck_pago_snapshot_completo_o_ausente",
+        ),
+        CheckConstraint(
+            "meses_comprados IS NULL OR meses_comprados > 0",
+            name="ck_pago_meses_comprados_positivo",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # OJO: `monto` es el monto FINAL, ya descontado (`registrar_pago` hace
+    # `pago.monto = monto_final`). El monto ANTES del descuento vive en
+    # `monto_base`, más abajo.
     monto: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+
+    # --- Snapshot de tarifa congelado (issue #400) ---------------------------
+    # Hoy el precio mensual solo vive en `membresia.monto_aplicado`, que es
+    # mutable: editar la tarifa reescribe de hecho cuántos meses compró un
+    # pago viejo, porque los meses se derivan dividiendo por ese valor
+    # VIGENTE. Estas tres columnas congelan la cuenta en el pago, para que el
+    # historial no dependa de un número que alguien puede cambiar mañana.
+    #
+    # NULLABLE a propósito, y no se rellenan hacia atrás: la tarifa que regía
+    # cuando se cobró un pago histórico es justamente lo que nadie registró.
+    # Inventarla sería la "corrección automática de plata ambigua" que #400
+    # prohíbe; `scripts/inventario_anomalias_pagos.py` (A5) mide cuántas
+    # filas quedan sin poder reconstruirse. Además, mientras dure la cadena
+    # de #400 el código viejo sigue insertando pagos sin snapshot: NOT NULL
+    # partiría la aplicación en el momento de aplicar la migración.
+    tarifa_mensual_aplicada: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    meses_comprados: Mapped[Optional[int]] = mapped_column(nullable=True)
+    monto_base: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     motivo_rechazo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     estado_pago: Mapped[EstadoPago] = mapped_column(SAEnum(EstadoPago))
     tipo_pago: Mapped[TipoPago] = mapped_column(SAEnum(TipoPago))
