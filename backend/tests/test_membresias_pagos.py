@@ -370,6 +370,7 @@ def test_listar_membresias_devuelve_paginated_response_con_shape_correcta(client
     assert len(body["items"]) == 1
     assert body["items"][0]["id"] == creada["id"]
     assert body["items"][0]["estado"] == "INACTIVA"
+    assert body["items"][0]["esGratuidadFamiliar"] is False
 
 
 def test_listar_membresias_respeta_skip_y_limit(client):
@@ -550,6 +551,7 @@ def test_alumno_ve_sus_propias_membresias(client):
     membresias = resp.json()
     assert len(membresias) == 1
     assert membresias[0]["personaId"] == persona["id"]
+    assert membresias[0]["esGratuidadFamiliar"] is False
 
 
 def test_representante_ve_membresias_de_representado(client_sin_permisos, client):
@@ -659,6 +661,7 @@ def test_membresias_mias_aplica_matriz_de_propiedad_sin_exponer_al_extrano(clien
     representante_resp = client_sin_permisos.get(f"/api/v1/membresias/mias?persona_id={alumno['id']}")
     assert representante_resp.status_code == 200
     assert representante_resp.json()[0]["personaId"] == alumno["id"]
+    assert representante_resp.json()[0]["esGratuidadFamiliar"] is False
 
     app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
         "sub": "admin@cataclub.test", "persona_id": ajeno["id"], "roles": ["ADMINISTRADOR"],
@@ -729,6 +732,7 @@ def test_e04_rf002_primera_membresia_familiar_sin_gratuidad(client):
     assert membresia_actualizada["estado"] == "ACTIVA"
     # 1er miembro: sin gratuidad, precio completo
     assert Decimal(membresia_actualizada["montoAplicado"]) == Decimal("35.00")
+    assert membresia_actualizada["esGratuidadFamiliar"] is False
 
 
 def test_e04_rf002_cuarta_membresia_familiar_con_gratuidad(client):
@@ -753,6 +757,7 @@ def test_e04_rf002_cuarta_membresia_familiar_con_gratuidad(client):
     assert membresia_4_actualizada["estado"] == "ACTIVA"
     # La 4ta membresía debe tener monto 0 por gratuidad familiar E04-RF002
     assert Decimal(membresia_4_actualizada["montoAplicado"]) == Decimal("0.00")
+    assert membresia_4_actualizada["esGratuidadFamiliar"] is True
 
 
 def test_e04_rf002_tercera_membresia_familiar_sin_gratuidad(client):
@@ -775,6 +780,7 @@ def test_e04_rf002_tercera_membresia_familiar_sin_gratuidad(client):
     assert membresia_3_actualizada["estado"] == "ACTIVA"
     # La 3ra membresía NO debe tener gratuidad
     assert Decimal(membresia_3_actualizada["montoAplicado"]) == Decimal("35.00")
+    assert membresia_3_actualizada["esGratuidadFamiliar"] is False
 
 
 # --- GET /membresias/{membresia_id} authorization -----------------------------
@@ -797,6 +803,7 @@ def test_obtener_membresia_owner_puede_acceder(client):
     resp = client.get(f"/api/v1/membresias/{membresia['id']}")
     assert resp.status_code == 200
     assert resp.json()["id"] == membresia["id"]
+    assert resp.json()["esGratuidadFamiliar"] is False
 
 
 def test_obtener_membresia_representante_puede_acceder(client_sin_permisos, client):

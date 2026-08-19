@@ -127,9 +127,25 @@ describe("buildMemberAccounts", () => {
       fechaInicio: "2026-07-01",
       fechaFin: "2026-07-31",
       monto: 25,
+      esGratuidadFamiliar: false,
     });
     expect(student?.ultimoPago?.estado).toBe("aprobado");
     expect(student?.ultimoPago?.monto).toBe(50);
+  });
+
+  // Issue #400 (slice 4c-a): the flag has to survive the pago/membresia/tipo
+  // resolution chain unchanged, not just default to false.
+  it("passes esGratuidadFamiliar through when the backend membership is flagged", () => {
+    const accounts = buildMemberAccounts(
+      [parent, child],
+      new Map([[3, pago]]),
+      new Map([[100, { ...membresia, esGratuidadFamiliar: true }]]),
+      new Map(),
+      new Map([[5, tipo]]),
+    );
+
+    const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+    expect(student?.membresia?.esGratuidadFamiliar).toBe(true);
   });
 
   it("shows a membership that has no payment behind it, with no invented period", () => {
@@ -153,6 +169,10 @@ describe("buildMemberAccounts", () => {
       fechaInicio: "",
       fechaFin: "",
       monto: 25,
+      // `membresia` fixture above carries no `esGratuidadFamiliar` — this
+      // proves the adapter defaults an absent backend flag to `false`
+      // instead of leaving it `undefined` (issue #400, slice 4c-a).
+      esGratuidadFamiliar: false,
     });
     // No payment means no payment row — the membership does not fabricate one.
     expect(student.ultimoPago).toBeNull();

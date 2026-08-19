@@ -145,6 +145,11 @@ function buildMemberStudentSummary(
           // duplicado con otro nombre. Son dos hechos distintos: cuánto
           // cuesta el plan por mes, y cuánto fue el último pago.
           monto: Number(membresia.montoAplicado ?? 0),
+          // Normalized to a concrete boolean (never left `undefined`), even
+          // though the field is optional on `BackendMembresia` — see that
+          // interface's doc comment (payments-adapter.ts) for why an older
+          // backend omitting it must resolve to "no gratuity" here.
+          esGratuidadFamiliar: membresia.esGratuidadFamiliar ?? false,
         }
       : null,
     ultimoPago: pago

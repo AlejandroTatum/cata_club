@@ -92,6 +92,15 @@ export interface BackendMembresiaPropia {
    * the student card had no "socio desde" date to show.
    */
   fechaActivacion?: string;
+  /**
+   * `MembresiaResponseDTO.es_gratuidad_familiar` (issue #400, slice 4c-a) —
+   * the authoritative gratuity signal, not `montoAplicado === "0"` (see
+   * `BackendMembresia` in payments-adapter.ts for the two-zero-classes
+   * rationale). Optional here so an older backend that omits the field, or a
+   * hand-built test fixture, still type-checks; `buildMembershipView`
+   * normalizes it to `false`.
+   */
+  esGratuidadFamiliar?: boolean;
 }
 
 /** Enriched membership view for a single persona — built server-side. */
@@ -103,6 +112,8 @@ export interface MembershipView {
   categoria: string | null;
   modalidad: string | null;
   fechaActivacion: string | null;
+  /** Normalized to `false` when the backend omits it — see `BackendMembresiaPropia.esGratuidadFamiliar`. */
+  esGratuidadFamiliar: boolean;
 }
 
 export function buildMembershipView(
@@ -118,6 +129,7 @@ export function buildMembershipView(
     categoria: tipo?.categoria ?? null,
     modalidad: tipo?.modalidad ?? null,
     fechaActivacion: mem.fechaActivacion ?? null,
+    esGratuidadFamiliar: mem.esGratuidadFamiliar ?? false,
   };
 }
 

@@ -954,6 +954,17 @@ export interface MembershipSummary {
   fechaActivacion: string | null;
   /** End of the paid period — drives the "Vigente hasta"/"Venció" state. */
   fechaFin: string | null;
+  /**
+   * `MembresiaResponseDTO.es_gratuidad_familiar` (issue #400, slice 4c-a) —
+   * the authoritative gratuity signal; a zero `montoAplicado` is NOT
+   * necessarily gratuity (see `MembresiaPorPersona.esGratuidadFamiliar`'s
+   * doc comment for the two-zero-classes rationale). Optional so the
+   * hand-built fixtures in StudentPage.test.tsx / StudentPaymentsPage.test.tsx
+   * / ProfilePage.test.tsx keep type-checking without every one of them
+   * naming this field; `buildMembershipView` (student-adapter.ts)
+   * normalizes it to `false` server-side before this ever reaches the client.
+   */
+  esGratuidadFamiliar?: boolean;
 }
 
 /** A real `TipoMembresia` catalog entry (`GET /membresias/tipos`) — replaces the old hardcoded `membershipPlans` array. */
@@ -1225,6 +1236,15 @@ export interface MembresiaPorPersona {
     precio: string;
     modalidad: "PERSONALIZADA" | "MENSUAL";
   };
+  /**
+   * `MembresiaResponseDTO.es_gratuidad_familiar` (issue #400, slice 4c-a) —
+   * the authoritative gratuity signal, not a zero `montoAplicado` (a zero
+   * price with this flag false is an "unexplained zero", not gratuity — see
+   * `backend/scripts/inventario_anomalias_membresias.py`). Optional: this is
+   * a raw passthrough type (the `/api/membresias/...` BFF routes proxy the
+   * backend JSON as-is), so an older backend simply omits the key.
+   */
+  esGratuidadFamiliar?: boolean;
 }
 
 /**
@@ -1372,6 +1392,13 @@ export interface DeudaMembresia {
   mesesAdeudados: number;
   ultimaCoberturaFin: string | null;
   montoMensual: number;
+  /**
+   * `DeudaMembresiaResponseDTO.es_gratuidad_familiar` (issue #400, slice
+   * 4c-a) — same authoritative-gratuity-signal rationale as
+   * `MembresiaPorPersona.esGratuidadFamiliar`. Optional: raw passthrough
+   * type, an older backend simply omits the key.
+   */
+  esGratuidadFamiliar?: boolean;
 }
 
 /** Regularize (settle) owed months with explicit retroactive dates — admin
