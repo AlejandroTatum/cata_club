@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -22,10 +22,34 @@ class TipoMembresiaUpdateDTO(BaseModel):
 
     No hay campo para retirar un tipo del catálogo: `TipoMembresia` no tiene
     columna `activo` y agregarla es una migración aparte. #394 pide poder
-    EDITAR el precio; retirar un plan queda fuera de este alcance."""
+    EDITAR el precio; retirar un plan queda fuera de este alcance.
+
+    Un `null` explícito en `categoria`/`precio`/`modalidad` se RECHAZA acá
+    (hallazgo de review adversarial, issue #400). Esta clase copió la forma
+    de `DescuentoUpdateDTO` (`Optional[...] = Field(None, ...)`), donde un
+    null explícito SÍ es válido porque `porcentaje`/`monto` son
+    genuinamente nulleables en la base y el null es la señal para cambiar de
+    modalidad. Acá las tres columnas son NOT NULL: no existe una "modalidad
+    nula" del campo, así que la misma forma es un agujero de validación. Sin
+    este validador, `exclude_unset` en el servicio (que solo descarta claves
+    OMITIDAS, no claves presentes con valor `null`) dejaba pasar el `None`
+    hasta `setattr`, y el `IntegrityError` de la columna NOT NULL se
+    traducía en un 409 de conflicto que no nombraba el campo ni describía el
+    problema real. El rechazo debe pasar en esta capa -- antes de tocar la
+    base -- con un 422 que sí lo nombra."""
     categoria: Optional[str] = Field(None, min_length=1, max_length=80)
     precio: Optional[Decimal] = Field(None, gt=0)
     modalidad: Optional[TipoModalidad] = None
+
+    @field_validator("categoria", "precio", "modalidad", mode="before")
+    @classmethod
+    def _rechazar_valor_vacio_explicito(cls, valor, info):
+        if valor is None:
+            raise ValueError(
+                f"No se puede dejar '{info.field_name}' sin valor. Si no "
+                "desea modificarlo, no lo incluya en la solicitud."
+            )
+        return valor
 
 
 class TipoMembresiaResponseDTO(ResponseBase, TipoMembresiaCreateDTO):

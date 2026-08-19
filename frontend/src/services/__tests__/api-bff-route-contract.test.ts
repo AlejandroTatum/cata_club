@@ -54,6 +54,7 @@ import {
   fetchDescuentos,
   crearDescuento,
   actualizarDescuento,
+  actualizarTipoMembresia,
 } from "../api";
 
 const API_ROOT = path.resolve(
@@ -182,6 +183,9 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     ["fetchDescuentos", () => fetchDescuentos()],
     ["crearDescuento", () => crearDescuento({ nombre: "Beca", porcentaje: 50, monto: null })],
     ["actualizarDescuento", () => actualizarDescuento(3, { activo: false })],
+    // #394: editar una tarifa toca el numero con el que el club cobra, asi
+    // que su ruta tiene que existir de verdad y no caer en el 404 HTML.
+    ["actualizarTipoMembresia", () => actualizarTipoMembresia(5, { precio: "40.00" })],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
