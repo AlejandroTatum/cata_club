@@ -431,13 +431,16 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   const isAdmin = session?.user?.role === "admin";
   /**
-   * The session this wizard has open is a CORRECTION nobody but an admin can
-   * make (`registrar_asistencia`'s upsert rule, backend). Gates step 2 and
-   * step 3 into read-only — see `renderMarkAttendance` — instead of letting
-   * the trainer rebuild every state only to have the backend reject all of
-   * them on the last click (issue #310 / #3).
+   * A session that already has a row is permanently closed for EVERYONE now —
+   * admin included (issue #389: the backend's `registrar_asistencia` rejects
+   * a second row for the same persona/session with no exception, and the only
+   * way to fix a mistake is the separate correction endpoint, which this
+   * wizard does not expose). Gates step 2 and step 3 into read-only — see
+   * `renderMarkAttendance` — instead of letting the user rebuild every state
+   * only to have the backend reject all of them on the last click (issue
+   * #310 / #3).
    */
-  const readOnly = sessionAlreadyRegistered && !isAdmin;
+  const readOnly = sessionAlreadyRegistered;
 
   const selectedSchedule = schedules.find((s) => s.id === selectedScheduleId) ?? null;
 
@@ -454,8 +457,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
   const selectedListTakenToday =
     selectedSchedule !== null &&
     selectedSchedule.diaSemana === today &&
-    (todaysRecordCounts.get(selectedSchedule.id) ?? 0) > 0 &&
-    !isAdmin;
+    (todaysRecordCounts.get(selectedSchedule.id) ?? 0) > 0;
 
   /** The draft's key — null until a session is actually chosen. */
   const draftKey = useMemo(
@@ -572,11 +574,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
         const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, fecha));
         const withDraft = applyAttendanceDraft(roster, draft);
 
-        // At least one record already exists for this (horario, fecha): every
-        // student in it is now a CORRECTION under the backend's upsert rule,
-        // and only an admin may make one. Read BEFORE the draft is applied —
-        // the draft can mark a student reviewed too, and that must never be
-        // mistaken for "the club already has this on file" (issue #310 / #3).
+        // At least one record already exists for this (horario, fecha): the
+        // whole session is closed under the backend's upsert rule, for
+        // everyone, admin included (issue #389) — only the separate
+        // correction endpoint can touch it, and this wizard does not expose
+        // that. Read BEFORE the draft is applied — the draft can mark a
+        // student reviewed too, and that must never be mistaken for "the club
+        // already has this on file" (issue #310 / #3).
         setSessionAlreadyRegistered(existingRecords.length > 0);
         setSessionDate(fecha);
         setRequestedDate(requestedDate);
@@ -1267,12 +1271,14 @@ export default function TrainerAttendancePage(): React.ReactElement {
                           // #22).
                           const recordedToday =
                             group.day === today ? todaysRecordCounts.get(sched.id) ?? 0 : 0;
-                          // Issue #368: para el entrenador ese conteo no es un
-                          // dato más, es un IMPEDIMENTO — la sesión ya
-                          // registrada solo se abre en modo consulta. El
-                          // administrador sí corrige (ventana de 30 días del
-                          // backend), así que para él la tarjeta no cambia.
-                          const takenForThisUser = recordedToday > 0 && !isAdmin;
+                          // Issue #368: ese conteo no es un dato más, es un
+                          // IMPEDIMENTO — la sesión ya registrada solo se abre
+                          // en modo consulta. Issue #389: la ventana de 30
+                          // días del administrador (#262) ya no existe —
+                          // cerrar una lista es permanente para todos, así que
+                          // la tarjeta se deshabilita también para él, por el
+                          // mismo motivo que para cualquier otro usuario.
+                          const takenForThisUser = recordedToday > 0;
                           return (
                             <button
                               key={sched.id}
@@ -1343,8 +1349,8 @@ export default function TrainerAttendancePage(): React.ReactElement {
           >
             <p className="font-semibold">Esta lista ya fue tomada hoy.</p>
             <p>
-              Puede continuar para consultarla, pero no para volver a tomarla: corregir una lista
-              ya registrada solo lo puede hacer un administrador del club.
+              Puede continuar para consultarla, pero no para volver a tomarla: una vez registrada,
+              la lista queda cerrada. Ante un error, consulte con administración.
             </p>
           </div>
         )}
@@ -1362,9 +1368,13 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   /**
    * The permission gate, spelled out — WHAT is blocked and WHO to ask, not
-   * just THAT it is blocked (issue #310 / #3): "el motivo y a quién
-   * pedírselo". `role="status"` rather than `alert`: this is the state of the
-   * session the trainer just opened, not the outcome of something they did.
+   * just THAT it is blocked (issue #310 / #3). Issue #389: closing a session
+   * is now permanent for everyone, admin included — there is no one left who
+   * can fix it from this wizard, so the message names the actual door
+   * (administración, through the separate correction flow) instead of a role
+   * that used to have a shortcut here. `role="status"` rather than `alert`:
+   * this is the state of the session the user just opened, not the outcome
+   * of something they did.
    */
   function renderReadOnlyReason(): React.ReactElement {
     return (
@@ -1373,7 +1383,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
         className="rounded-ctl border border-state-warn/30 bg-state-warn-bg p-4 text-sm text-state-warn"
       >
         <p className="font-semibold">Esta lista ya fue registrada.</p>
-        <p>Solo un administrador puede corregirla. Pídale la corrección a un administrador del club.</p>
+        <p>
+          Quedó cerrada de forma permanente — no se puede editar desde acá. Ante un error, consulte
+          con administración.
+        </p>
       </div>
     );
   }
@@ -1381,12 +1394,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
   function renderMarkAttendance(): React.ReactElement | null {
     if (!selectedSchedule) return null;
 
-    // A correction only an admin may make (issue #310 / #3): the roster
-    // renders read-only, with the reason up front, instead of letting the
-    // trainer rebuild every state only to have the backend reject all of them
-    // on the last click. No radios, no fiche taps, no bulk action — every
-    // control that used to promise an edit the backend was always going to
-    // refuse is gone, not merely disabled.
+    // A session that already has a row is closed for everyone now (issue
+    // #389): the roster renders read-only, with the reason up front, instead
+    // of letting the user rebuild every state only to have the backend
+    // reject all of them on the last click. No radios, no fiche taps, no
+    // bulk action — every control that used to promise an edit the backend
+    // was always going to refuse is gone, not merely disabled.
     if (readOnly) {
       return (
         <div className="flex flex-col gap-4">

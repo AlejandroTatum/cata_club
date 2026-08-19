@@ -284,14 +284,18 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  it("pre-selects Presente for a student who already has an attendance record for today's date + this horario", async () => {
-    // Admin, not trainer (issue #310 / #3): a session with an existing record
-    // is now a CORRECTION only an admin may edit — a trainer opening this
-    // exact roster gets the read-only gate covered by its own describe block
-    // below, with no radiogroup to pre-select into. This test is about the
-    // PREFILL logic (`buildRosterFromAlumnoHorarios`), which applies the same
-    // way regardless of role, so it moves to the role that still sees it as
-    // an editable radiogroup.
+  it("opens read-only for an admin too when the session already has a record, reached by a plain click (issue #389)", async () => {
+    // Issue #389: a session with an existing record is now closed for
+    // EVERYONE, admin included — there is no role left that sees an editable,
+    // pre-selected radiogroup here. The underlying prefill mapping
+    // (`buildRosterFromAlumnoHorarios` defaulting to the existing record's
+    // estado) is still exercised directly in `attendance-utils.test.ts`;
+    // this test instead locks in that the read-only gate fires for admin via
+    // ordinary navigation clicks, not just the URL-restore path covered
+    // elsewhere. "lun" (Monday) is deliberately NOT `today` here, so the
+    // schedule card itself is not the #397 today-scoped `disabled` — the
+    // click reaches the roster, and read-only comes from
+    // `sessionAlreadyRegistered` alone.
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -315,9 +319,10 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /18:00/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
 
-    const stateSelector = await screen.findByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
-    expect(within(stateSelector).getByRole("radio", { name: "Presente" })).toHaveAttribute("aria-checked", "true");
-    expect(within(stateSelector).getByRole("radio", { name: "Ausente" })).toHaveAttribute("aria-checked", "false");
+    await screen.findByText("Ana López");
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 });
 
@@ -1480,7 +1485,9 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     await screen.findByText("Student 01");
 
     expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
-    expect(screen.getByText(/Solo un administrador puede corregirla/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde acá/),
+    ).toBeInTheDocument();
     // Nothing left that promises an edit the backend was always going to
     // refuse — no radios, and "Revisar y confirmar" is disabled rather than
     // silently reachable.
@@ -1488,16 +1495,24 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
-  it("no aplica el modo lectura para un administrador, que sí puede corregir", async () => {
+  it("aplica el modo lectura también a un administrador, que ya no puede corregir desde acá", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    // Issue #397: la tarjeta ya está deshabilitada para el administrador
+    // también, así que `openRoster()` no puede alcanzar este estado por
+    // click — se llega como un reload/deep-link llegaría (#95's URL restore),
+    // igual que el test del entrenador arriba.
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-    await openRoster();
     await screen.findByText("Student 01");
 
-    expect(screen.queryByText("Esta lista ya fue registrada.")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Quedó cerrada de forma permanente — no se puede editar desde acá/),
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
   it("marca en el paso 1 el horario que ya tiene lista tomada hoy (issue #310 / #22)", async () => {
@@ -1726,7 +1741,7 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 
-  it("no le advierte nada al administrador, que sí puede corregir dentro de la ventana", async () => {
+  it("nombra en la tarjeta que el administrador tampoco puede volver a tomarla, y la deshabilita de verdad (issue #389)", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     mockFetchAttendanceRecords.mockResolvedValue(todaysRecordsForAllStudents());
 
@@ -1734,11 +1749,14 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
 
     expect(await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/)).toBeInTheDocument();
+    expect(within(scheduleButton).queryByText(/solo consulta/i)).not.toBeInTheDocument();
     expect(within(scheduleButton).queryByText(/no se puede volver a tomar/i)).not.toBeInTheDocument();
+
+    expect(scheduleButton).toBeDisabled();
 
     fireEvent.click(scheduleButton);
     expect(screen.queryByText("Esta lista ya fue tomada hoy.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 });
 
