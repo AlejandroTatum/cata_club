@@ -45,6 +45,7 @@ import {
   consultarChatbot,
   fetchMembresiaDeuda,
   regularizarDeuda,
+  fetchTarifas,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -844,6 +845,37 @@ describe("fetchCategoriasCatalogo", () => {
 
     expect(global.fetch).toHaveBeenCalledWith("/api/attendance/categories", expect.anything());
     expect(result).toEqual(catalogo);
+  });
+});
+
+describe("fetchTarifas", () => {
+  // Public, unauthenticated catalog (issue #394 contract, issue #331
+  // consumer) — deliberately unpaginated, so this returns the backend's flat
+  // array verbatim, unlike the `{items, total}` envelope `fetchInstituciones`
+  // unwraps.
+  it("GETs /api/membresias/tarifas and returns the flat catalog verbatim", async () => {
+    const tarifas = [
+      { categoria: "Categoria Test A", precio: "12.50" },
+      { categoria: "Categoria Test B", precio: "9.99" },
+    ];
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(tarifas));
+
+    const result = await fetchTarifas();
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/membresias/tarifas", expect.anything());
+    expect(result).toEqual(tarifas);
+  });
+
+  it("rejects a malformed body instead of returning it as-is", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ not: "an array" }));
+
+    await expect(fetchTarifas()).rejects.toThrow(ApiClientError);
+  });
+
+  it("rejects a row missing the expected shape", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse([{ categoria: "Solo esto" }]));
+
+    await expect(fetchTarifas()).rejects.toThrow(ApiClientError);
   });
 });
 
