@@ -12,7 +12,7 @@
 
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Plus, Upload } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
@@ -45,6 +45,21 @@ export default function RegisterPaymentForm({
   const [registered, setRegistered] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+
+  // Issue #465: the error message below used to be a plain, unannounced
+  // `<p>` — no `id`, no `role="alert"`/`aria-live` on it or on any ancestor
+  // up to the enclosing `<dialog>`, and the voucher input carried neither
+  // `aria-describedby` nor `aria-invalid`. `errorId` gives the message a
+  // stable id to be described-by (via `useId`, not a literal, so two open
+  // instances of this form — one per student — never collide).
+  const errorId = useId();
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  // Bumped on every failed `validate()`, even when the message text repeats
+  // (e.g. two submits in a row with the same missing field). `error` alone
+  // cannot drive the focus effect below for that case: React bails out a
+  // `setState` to an Object.is-equal string, so a second identical failure
+  // would leave focus stuck on "Registrar pago" with nothing re-announced.
+  const [errorAnnounceKey, setErrorAnnounceKey] = useState(0);
 
   /**
    * `wholeMonthsFor`/`addMonthsIso` (`student/payments/payments-utils.ts`)
@@ -105,11 +120,27 @@ export default function RegisterPaymentForm({
     return null;
   }
 
+  // Runs after every failed submit (see `errorAnnounceKey`), including a
+  // second identical one — never only on the true→false→true edge a plain
+  // `useEffect(..., [error])` would need. `errorRef.current` is populated by
+  // the time this runs: effects fire after the DOM commit that mounted the
+  // `<p role="alert">` (or, on a repeat failure, it was already mounted).
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+    // `error` is read above but deliberately left out of the deps below:
+    // `errorAnnounceKey` alone must drive re-focus (see the comment on this
+    // effect). Adding `error` as a second trigger would double-fire on a
+    // genuinely new (different-text) error instead of relying on this one
+    // counter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errorAnnounceKey]);
+
   async function handleSubmit(): Promise<void> {
     const montoNum = Number(monto);
     const invalid = validate(montoNum);
     if (invalid) {
       setError(invalid);
+      setErrorAnnounceKey((key) => key + 1);
       return;
     }
 
@@ -249,6 +280,8 @@ export default function RegisterPaymentForm({
             accept="image/jpeg,image/png,application/pdf"
             onChange={(e) => setVoucherFile(e.target.files?.[0] ?? null)}
             className="hidden"
+            aria-describedby={error ? errorId : undefined}
+            aria-invalid={error ? true : undefined}
           />
           <button
             type="button"
@@ -270,7 +303,23 @@ export default function RegisterPaymentForm({
         </div>
       </label>
 
-      {error && <p className="text-xs text-state-bad">{error}</p>}
+      {error && (
+        // `role="alert"` announces this on mount without waiting for focus;
+        // `tabIndex={-1}` + the focus effect above also move focus here so a
+        // screen reader always reads it, including on a repeat identical
+        // failure. The voucher `<input>` is `display:none` (hidden behind
+        // "Seleccionar archivo"), so it cannot receive focus itself — the
+        // message is the field-adjacent control that CAN.
+        <p
+          id={errorId}
+          ref={errorRef}
+          role="alert"
+          tabIndex={-1}
+          className="text-xs text-state-bad focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ball focus-visible:shadow-focus-band"
+        >
+          {error}
+        </p>
+      )}
 
       <div className="flex gap-1.5">
         <button
