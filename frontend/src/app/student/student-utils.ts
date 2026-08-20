@@ -638,9 +638,18 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
       // The old copy said "Lo hace su representante desde la suya" to EVERY
       // minor, including the ones whose `representanteId` is null — it named a
       // person who does not exist and left the reader with nowhere to go.
+      //
+      // Issue #460: the no-representative branch used to stop at "acérquese a
+      // administración del club" — a real next step, but one that requires
+      // leaving the app, with no mention of the self-service mechanism that
+      // already exists (`vincular-representado`, reachable from a
+      // representative's own "Agregar dependiente"). The minor reading this
+      // cannot act on it themselves (E01-RF006/RF007: read-only access to the
+      // financial module), so this stays informational text, never a link —
+      // but it now names BOTH real paths instead of only the in-person one.
       detail: input.representanteName
         ? `Un estudiante menor de edad no registra pagos desde su propia cuenta: lo hace ${input.representanteName} desde la suya.`
-        : "Un estudiante menor de edad no registra pagos desde su propia cuenta. Su cuenta no tiene un representante registrado, así que el pago se hace en administración del club.",
+        : 'Un estudiante menor de edad no registra pagos desde su propia cuenta. Su cuenta no tiene un representante vinculado: pídale a la persona responsable que use "Agregar dependiente" en su cuenta para vincularse, o acérquese a administración del club para que lo vinculen.',
       priceNote,
       canRegister: false,
       urgent: false,

@@ -38,6 +38,16 @@ export interface MemberStudentSummary {
    * to resolve it per Persona. Omitted (not fabricated) when unavailable.
    */
   email?: string;
+  /**
+   * Issue #460: `POST /personas/{representanteId}/vincular-representado`
+   * identifies the person being linked by CÉDULA, not by id (see
+   * `LinkRepresentativeSection.tsx`) — this is the one field the admin
+   * panel's "link a representative" action needs off the student it is
+   * already editing. Optional/omitted, same convention as every other
+   * best-effort field on this type, for a backend or fixture that doesn't
+   * carry it.
+   */
+  cedula?: string;
   telefono?: string;
   fechaNacimiento?: string;
   activo: boolean;

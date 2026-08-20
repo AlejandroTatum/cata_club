@@ -494,6 +494,37 @@ def test_vincular_representado_administrador_puede_vincular_por_cualquiera(clien
     assert resp.status_code == 200, resp.text
 
 
+def test_vincular_representado_admin_representante_id_inexistente_da_conflicto_claro(client, db_session):
+    """Issue #460, TRIANGULATE: el panel admin (`Miembros -> Editar ->
+    Representante legal`) ahora invoca este endpoint con un `representante_id`
+    resuelto por búsqueda (`GET /personas/buscar`), así que la UI nueva nunca
+    envía un id inexistente -- pero un ADMINISTRADOR igual puede llamarlo
+    directamente por API con cualquier `persona_id` en la URL
+    (`exigir_acceso_directo` no valida que el objetivo exista para un rol
+    privilegiado). `representante_id` no se verifica en
+    `_resolver_representado_elegible`, así que el `UPDATE` viola la FK
+    `Persona.representante_id -> Persona.id` y el `IntegrityError` sube sin
+    capturar hasta el manejador de último recurso de `main.py`
+    (`_integrity_error_handler`): 409 con un mensaje legible, nunca un 500
+    crudo ni una traza de SQLAlchemy."""
+    menor = _menor(cedula_valida(632), representante_id=None)
+    db_session.add(menor)
+    db_session.commit()
+    _restaurar_override_token(persona_id=999, roles=["ADMINISTRADOR"])
+    representante_id_inexistente = 999999
+
+    resp = client.post(
+        f"/api/v1/personas/{representante_id_inexistente}/vincular-representado",
+        json={"cedula": menor.cedula},
+    )
+
+    assert resp.status_code == 409, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["detail"]
+    assert "traceback" not in resp.text.lower()
+    assert "integrityerror" not in resp.text.lower()
+
+
 def test_vincular_representado_cedula_invalida_da_422(client, db_session):
     representante = _adulto("1710034073", nombres="Marcela")
     db_session.add(representante)

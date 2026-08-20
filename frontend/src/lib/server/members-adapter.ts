@@ -165,6 +165,14 @@ function buildMemberStudentSummary(
     id: String(persona.id),
     nombres: persona.nombres,
     apellidos: persona.apellidos,
+    // Issue #460: the admin panel had no way to link a minor to a
+    // representative because it never carried the one value the existing
+    // `vincular-representado` endpoint needs to identify WHICH persona to
+    // link (its body takes a cédula, not a persona_id) — see
+    // `LinkRepresentativeSection.tsx`. Same optional/omit convention as
+    // `BackendPersonaFull.cedula` above: never fabricated when the backend
+    // omits it.
+    cedula: persona.cedula ?? undefined,
     telefono: persona.telefono,
     fechaNacimiento: persona.fechaNacimiento,
     activo: true, // gap #3 above — no readable account-active flag exists via any GET endpoint

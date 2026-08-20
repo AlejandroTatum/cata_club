@@ -475,6 +475,16 @@ describe("describePaymentSituation", () => {
     expect(result.detail).toMatch(/administración del club/i);
   });
 
+  it("issue #460: names the in-app self-service path, not only the in-person one", () => {
+    const result = describePaymentSituation(situation({ blockedAsMinor: true }), TODAY);
+    expect(result.kind).toBe("minor-blocked");
+    // Both real paths that now exist: a representative's own "Agregar
+    // dependiente" flow, and administración as the fallback — never a
+    // clickable action here (the minor cannot act on the financial module).
+    expect(result.detail).toMatch(/agregar dependiente/i);
+    expect(result.detail).toMatch(/administración/i);
+  });
+
   it("states the monthly price as a price, never as an amount owed", () => {
     const result = describePaymentSituation(situation(), TODAY);
     expect(result.priceNote).toBe("Plan Mensual Infantil · $25,00 al mes");

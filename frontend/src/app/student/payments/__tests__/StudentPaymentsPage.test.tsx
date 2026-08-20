@@ -272,6 +272,29 @@ describe("StudentPaymentsPage — whose payment this is", () => {
   });
 });
 
+/**
+ * Issue #460, Escenario 2: a representative account with zero managed
+ * profiles — e.g. a representative whose child is already registered under
+ * someone else, so the child never appears in "sus estudiantes". Before this
+ * fix the only action here was "Ir a mi cuenta", a dead end that never leads
+ * to `vincular-representado`. `/student/add-dependent` is the existing
+ * self-service door: entering the child's real cédula there surfaces
+ * "Vincular a mi cuenta" (`DuplicateIdentityHelp`'s `representative` variant).
+ */
+describe("StudentPaymentsPage — a representative who manages nobody yet", () => {
+  it("offers a real next step, not just a link back to the account", async () => {
+    mockUseAuth.mockReturnValue(authSession("representante"));
+    mockFetchStudentPortal.mockResolvedValue({ self: null, representados: [], membershipPlans: [] });
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByText("No se encontraron estudiantes asociados a esta cuenta")).toBeInTheDocument();
+    const action = screen.getByRole("link", { name: /agregar hijo o dependiente/i });
+    expect(action).toHaveAttribute("href", "/student/add-dependent");
+    expect(screen.queryByRole("link", { name: /^ir a mi cuenta$/i })).not.toBeInTheDocument();
+  });
+});
+
 describe("StudentPaymentsPage — arriving from the home band", () => {
   it("opens the form on ?registrar=1 so the route to paying is one click, not three", async () => {
     searchParams = new URLSearchParams("registrar=1");
@@ -1142,7 +1165,12 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
     await screen.findByTestId("membership-status");
     fireEvent.click(screen.getByRole("button", { name: "Cómo se paga esta membresía" }));
 
-    expect(screen.getByText(/Acérquese a administración del club/i)).toBeInTheDocument();
+    // Scoped to the disclosed region: issue #460 added a second, unrelated
+    // mention of "administración del club" to `situation.detail` above this
+    // panel (the minor-blocked message now also names the self-service path),
+    // so a page-wide `getByText` here would match both and fail as ambiguous.
+    const panel = screen.getByRole("region", { name: "Cómo se paga esta membresía" });
+    expect(within(panel).getByText(/Acérquese a administración del club/i)).toBeInTheDocument();
   });
 });
 
