@@ -236,7 +236,7 @@ def test_dos_aprobaciones_concurrentes_solo_una_gana(
     serializa: exactamente uno gana; el otro relee el estado ya commiteado y
     recibe `OperacionInvalida`. Los efectos (notificación, disparo Celery)
     ocurren UNA sola vez."""
-    pago_id, membresia_id, _, _ = escenario_pago_concurrente
+    pago_id, membresia_id, _, persona_id = escenario_pago_concurrente
 
     despachos: list[int] = []
     candado_despachos = threading.Lock()
@@ -257,7 +257,8 @@ def test_dos_aprobaciones_concurrentes_solo_una_gana(
         try:
             barrera.wait()
             resultados[indice] = PagoServicio(sesion).validar_pago(
-                pago_id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO)
+                pago_id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO),
+                actor_persona_id=persona_id,
             )
         except BaseException as error:  # noqa: BLE001 -- el test inspecciona el fallo
             resultados[indice] = error

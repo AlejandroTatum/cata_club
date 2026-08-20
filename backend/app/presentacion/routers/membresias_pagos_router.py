@@ -560,15 +560,25 @@ async def registrar_pago(
     return servicio.pago_a_response_dto(pago)
 
 
-@router.patch("/pagos/{pago_id}/validar", response_model=PagoResponseDTO,
-              dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
+@router.patch("/pagos/{pago_id}/validar", response_model=PagoResponseDTO)
 @limiter.limit("20/minute")
-async def validar_pago(request: Request, pago_id: int, datos: PagoValidarDTO, db: Session = Depends(obtener_sesion)):
+async def validar_pago(
+    request: Request,
+    pago_id: int,
+    datos: PagoValidarDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
+):
     servicio = PagoServicio(db)
     # `run_in_threadpool` (issue #451, misma clase de bug que `registrar_
     # pago` arriba): `validar_pago` toma el lock `FOR UPDATE` de `PagoRepositorio.
     # obtener_por_id_con_bloqueo` DIRECTO en esta coroutine.
-    pago = await run_in_threadpool(servicio.validar_pago, pago_id, datos)
+    pago = await run_in_threadpool(
+        servicio.validar_pago,
+        pago_id,
+        datos,
+        actor_persona_id=token_payload.get("persona_id"),
+    )
     return servicio.pago_a_response_dto(pago)
 
 

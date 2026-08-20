@@ -1892,7 +1892,9 @@ class PagoServicio:
         ]
         return items, total
 
-    def validar_pago(self, pago_id: int, datos: PagoValidarDTO) -> Pago:
+    def validar_pago(
+        self, pago_id: int, datos: PagoValidarDTO, actor_persona_id: int | None,
+    ) -> Pago:
         """
         Regla de negocio:
         - Aprobar un pago activa su membresía (INACTIVA/VENCIDA -> ACTIVA).
@@ -1915,7 +1917,26 @@ class PagoServicio:
         commiteado y recibe `OperacionInvalida` (400). Sin esto, revalidar un
         pago reactivaba la membresía, re-aplicaba la gratuidad familiar,
         re-disparaba el PDF y duplicaba la notificación.
+
+        Autoría fail-closed (issue #458): `actor_persona_id` no lleva default
+        -- el llamador (el router) SIEMPRE debe pasar explícitamente lo que
+        trajo el JWT, aunque sea `None`, para que un futuro call-site nunca
+        omita el argumento en silencio y guarde un pago sin autor por
+        accidente. Si el JWT decodificado no trae `persona_id` (token
+        malformado o legado), la operación se rechaza ACÁ, antes de tocar el
+        pago: guardar la aprobación/rechazo sin saber quién la ejecutó es
+        justamente el defecto que este issue cierra. 403 (`PermisosInsuficientes`)
+        y no 500: no es un bug del servidor, es que no se pudo verificar la
+        identidad de quien pide la operación -- mismo código que usa
+        `GestorPermisos` cuando el rol no alcanza.
         """
+        if actor_persona_id is None:
+            raise PermisosInsuficientes(
+                "No se pudo identificar al administrador que aprueba o "
+                "rechaza este pago.",
+                detalle_tecnico=f"pago_id={pago_id} token sin persona_id",
+            )
+
         pago = self.repo.obtener_por_id_con_bloqueo(pago_id)
         if not pago:
             raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
@@ -1931,6 +1952,10 @@ class PagoServicio:
         pago.estado_pago = datos.estado_pago
         pago.motivo_rechazo = datos.motivo_rechazo
         pago.fecha_validacion = datetime.now(timezone.utc)
+        # Mismo campo para APROBADO y RECHAZADO (issue #458): quién lo validó
+        # no depende del desenlace, igual que `fecha_validacion` ya unifica
+        # el "cuándo" de las dos ramas de abajo.
+        pago.validado_por_persona_id = actor_persona_id
 
         if datos.estado_pago == EstadoPago.APROBADO:
             # `pago.fecha_inicio`/`fecha_fin` NO se tocan acá (issue #400):
