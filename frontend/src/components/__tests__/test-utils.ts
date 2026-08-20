@@ -82,6 +82,7 @@ export function createUnauthenticatedAuth(
     hydrationOutage: false,
     retryHydration: vi.fn(),
     sessionExpired,
+    periodicOutage: false,
   };
 }
 
@@ -117,6 +118,7 @@ export function createAuthenticatedAuth(
     hydrationOutage: false,
     retryHydration: vi.fn(),
     sessionExpired: false,
+    periodicOutage: false,
     ...overrides,
   };
 }
@@ -152,6 +154,7 @@ export function createMultiRoleAuth(
     hydrationOutage: false,
     retryHydration: vi.fn(),
     sessionExpired: false,
+    periodicOutage: false,
   };
 }
 
@@ -169,6 +172,7 @@ export function createLoadingAuth(): AuthContextValue {
     hydrationOutage: false,
     retryHydration: vi.fn(),
     sessionExpired: false,
+    periodicOutage: false,
   };
 }
 
@@ -188,5 +192,6 @@ export function createHydrationOutageAuth(): AuthContextValue {
     hydrationOutage: true,
     retryHydration: vi.fn(),
     sessionExpired: false,
+    periodicOutage: false,
   };
 }
