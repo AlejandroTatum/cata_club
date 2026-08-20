@@ -2176,6 +2176,8 @@ class PagoServicio:
           2. Pago está PENDIENTE_VALIDACION (400 OperacionInvalida)
           3. Solicitante es el dueño del pago o admin (403 PermisosInsuficientes)
           4. content_type permitido JPG/PNG/PDF (400 OperacionInvalida)
+          4a. el archivo no está vacío (400 OperacionInvalida) -- issue #462,
+              mensaje propio distinto del de firma no coincidente
           4b. la firma binaria real coincide con el tipo declarado (400
               OperacionInvalida) -- REQ-SEC-3, sdd/production-readiness
           5. tamaño <= 5 MB (400 OperacionInvalida)
@@ -2221,6 +2223,14 @@ class PagoServicio:
         # 4. Tipo MIME permitido.
         if not content_type or content_type not in TIPOS_MIME_PERMITIDOS_VOUCHER:
             raise OperacionInvalida("Formato de archivo no permitido. Use JPG, PNG o PDF")
+
+        # 4a. Un archivo de 0 bytes no tiene ninguna firma binaria que
+        # coincida con NINGÚN tipo MIME soportado -- sin este check caía en
+        # el mensaje de "no coincide con el formato declarado" de 4b, que
+        # induce a pensar que se subió el TIPO de archivo equivocado cuando
+        # el problema real es que el archivo no tiene contenido (issue #462).
+        if not contenido:
+            raise OperacionInvalida("El archivo está vacío")
 
         # 4b. La firma binaria real debe coincidir con el tipo declarado: el
         # Content-Type que manda el cliente no prueba nada sobre el

@@ -244,6 +244,32 @@ def test_subir_voucher_firma_no_coincide_con_content_type_da_400(_mock_cloudinar
 
 
 @patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
+def test_subir_voucher_archivo_vacio_da_400_con_mensaje_de_archivo_vacio(_mock_cloudinary, client):
+    """Issue #462: un archivo de 0 bytes no tiene firma binaria que coincida
+    con NINGÚN tipo MIME soportado, así que caía en el mensaje genérico de
+    `es_firma_valida` ("no coincide con el formato declarado") -- impreciso,
+    porque no habla de tipo de archivo sino de contenido ausente. Debe
+    distinguirse con un mensaje propio, distinto del de firma no coincidente,
+    y sin tocar Cloudinary."""
+    persona = _crear_persona(client, cedula=cedula_valida(700))
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    _autenticar_como_duenio(client, persona["id"])
+
+    resp = client.post(
+        f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+        files={"archivo": ("voucher.jpg", b"", "image/jpeg")},
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "vacío" in detail
+    assert "no coincide" not in detail
+    _mock_cloudinary.assert_not_called()
+
+
+@patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
 def test_subir_voucher_excede_tamano_maximo_da_400_antes_de_cloudinary(_mock_cloudinary, client):
     """La lectura acotada (`leer_con_limite`) debe rechazar un archivo de
     más de 5MB sin llegar a invocar Cloudinary."""
