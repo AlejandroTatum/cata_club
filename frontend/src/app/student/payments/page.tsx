@@ -106,7 +106,7 @@ import {
   PAGO_FILTER_LABELS,
   type PagoStatusFilter,
 } from "./payments-utils";
-import { CreditCard, Download, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
+import { CreditCard, Download, Loader2, Minus, Paperclip, Plus, RefreshCw, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -1508,16 +1508,47 @@ function PagoRow({
             Registrar un pago nuevo
           </Link>
         )}
+
+        {/* Issue #459: cuando el club aprobó esta transferencia sin
+            comprobante, es una excepción auditada (verificación directa en
+            la cuenta del club), no un dato interno silencioso — el socio
+            tiene derecho a ver por qué se activó su membresía sin que él
+            hubiera subido nada. Mismo tratamiento visual que el bloque de
+            descuento (bg-sunken): es información, no un problema que el
+            socio deba resolver. */}
+        {pago.motivoExcepcionSinComprobante && (
+          <div className="mt-2 rounded-ctl bg-sunken px-3.5 py-2.5">
+            <p className="text-2xs font-bold uppercase text-ink-3-strong">
+              Aprobado sin comprobante (excepción)
+            </p>
+            <p className="mt-0.5 text-sm text-ink-2">{pago.motivoExcepcionSinComprobante}</p>
+          </div>
+        )}
       </div>
 
       {canUpload && (
         <Button size="sm" onClick={() => onUploadFile(pago.id)} disabled={uploadingId === pago.id}>
           {uploadingId === pago.id ? (
             <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+          ) : faltaComprobante ? (
+            <RefreshCw size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           ) : (
             <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           )}
-          {uploadingId === pago.id ? "Subiendo…" : "Subir comprobante"}
+          {/* Issue #459: mismo botón, pero el texto ahora distingue la
+              primera subida de un reintento. Antes decía "Subir comprobante"
+              en los dos casos, así que un admin/socio que volvía a esta
+              fila después de un 503 de Cloudinary no tenía ninguna pista de
+              que ESTE botón era la forma de resolverlo — tenía que
+              adivinarlo o volver al wizard de registro, que ya rechaza el
+              reintento (membresía con un pago pendiente). El badge "Falta
+              el comprobante" de arriba ya marca la fila; esto hace que la
+              acción que la resuelve diga lo mismo con las mismas palabras. */}
+          {uploadingId === pago.id
+            ? "Subiendo…"
+            : faltaComprobante
+            ? "Reintentar subir comprobante"
+            : "Subir comprobante"}
         </Button>
       )}
     </li>
