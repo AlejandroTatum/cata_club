@@ -245,6 +245,57 @@ export async function enrichBackendPagos(
 }
 
 /**
+ * Enrich ONE `BackendPagoCore` (from either the validar response or a plain
+ * `GET /membresias/pagos/{id}`) into a `PaymentValidationRequest`: resolves
+ * the student's name, membresía and tipo de membresía — the same three-way
+ * lookup `enrichBackendPagos` does for a list, sized for a single row.
+ *
+ * Shared by `PUT /api/payments/[id]` (issue #456: re-validated, so it needs
+ * this to rebuild its response) and `GET /api/payments/[id]` (issue #456:
+ * the fix's re-check endpoint — after a failed/timed-out PUT, the frontend
+ * calls this to learn the payment's REAL state before deciding what to show
+ * the admin, instead of assuming the optimistic snapshot was correct).
+ */
+export interface EnrichedSinglePago {
+  item: PaymentValidationRequest;
+  /** Propagate whichever of the three lookups actually refreshed the token, if any. */
+  refreshedAccessToken?: string;
+}
+
+export async function enrichSinglePago(
+  request: NextRequest,
+  pago: BackendPagoCore,
+): Promise<EnrichedSinglePago> {
+  const [personaResult, membresiaResult, tiposResult] = await Promise.all([
+    backendFetchAuthed(request, `/personas/${pago.personaId}`),
+    backendFetchAuthed(request, `/membresias/${pago.membresiaId}`),
+    backendFetchAuthed(request, "/membresias/tipos"),
+  ]);
+
+  const persona: BackendPersona | undefined =
+    personaResult.ok && personaResult.response.ok ? await personaResult.response.json() : undefined;
+  const membresia: BackendMembresia =
+    membresiaResult.ok && membresiaResult.response.ok
+      ? await membresiaResult.response.json()
+      : { estado: "INACTIVA", tipoMembresiaId: 0 };
+  const tipos: BackendTipoMembresia[] =
+    tiposResult.ok && tiposResult.response.ok ? await tiposResult.response.json() : [];
+
+  const tipoMembresia = tipos.find((tipo) => tipo.id === membresia.tipoMembresiaId);
+  const item = buildPaymentValidationRequest(pago, personaFullName(persona), membresia, tipoMembresia);
+
+  // Any of the three calls above may have independently refreshed the
+  // token (each resolves/refreshes off the same request cookies) —
+  // callers propagate whichever one actually did, same as GET /api/payments.
+  const refreshedAccessToken =
+    (personaResult.ok ? personaResult.refreshedAccessToken : undefined) ??
+    (membresiaResult.ok ? membresiaResult.refreshedAccessToken : undefined) ??
+    (tiposResult.ok ? tiposResult.refreshedAccessToken : undefined);
+
+  return { item, refreshedAccessToken };
+}
+
+/**
  * Build the backend query string (snake_case) for the Pagos report/PDF
  * endpoints from the incoming request's camelCase params. Shared by
  * `/api/payments/reportes` and its `/pdf` sibling — both take the exact

@@ -565,6 +565,24 @@ export async function fetchAllPaymentValidations(
 }
 
 /**
+ * Re-check ONE payment's REAL current state (issue #456) — `GET
+ * /api/payments/{id}`.
+ *
+ * `/payments/page.tsx` calls this after a failed/timed-out
+ * `updatePaymentValidation`, before deciding what to tell the admin: a
+ * network error or timeout does not mean the write never reached the
+ * server (reproduced live — the backend can commit while the client only
+ * sees a dropped connection), so "it failed" can only be shown once this
+ * re-check confirms the payment is still `pendiente`.
+ */
+export async function fetchPaymentValidationById(id: string): Promise<PaymentValidationRequest> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<PaymentValidationRequest>(apiEndpoint(`/payments/${id}`), {
+    headers: mockHeaders,
+  });
+}
+
+/**
  * Update a payment validation request (approve or reject).
  *
  * - Approve: `{ action: "approved" }`

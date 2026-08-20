@@ -1,5 +1,5 @@
 /**
- * Route Handler Tests — PUT /api/payments/[id]
+ * Route Handler Tests — GET/PUT /api/payments/[id]
  *
  * Mocks the backend via vi.spyOn(global, "fetch") — no live FastAPI needed
  * (same pattern as src/app/api/auth/__tests__/session-route.test.ts). Covers
@@ -7,12 +7,15 @@
  * request shape, the persona/membresia/tipo fan-out used to rebuild the
  * student's name and membership type, and error propagation.
  *
+ * GET (issue #456) is the re-check `frontend/src/app/payments/page.tsx` calls
+ * after a failed/timed-out PUT, before deciding what to tell the admin.
+ *
  * @vitest-environment node
  */
 
 import { NextRequest } from "next/server";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { PUT } from "../[id]/route";
+import { GET, PUT } from "../[id]/route";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/server/auth";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -37,6 +40,13 @@ function putRequest(body: unknown, cookie: string | null = `${ACCESS_TOKEN_COOKI
     method: "PUT",
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
+  });
+}
+
+function getRequest(cookie: string | null = `${ACCESS_TOKEN_COOKIE}=${validAccess}`): NextRequest {
+  return new NextRequest("http://localhost/api/payments/42", {
+    method: "GET",
+    headers: cookie ? { cookie } : {},
   });
 }
 
@@ -236,6 +246,83 @@ describe("PUT /api/payments/[id] — backend error propagation", () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 
     const response = await PUT(putRequest({ action: "approved" }), { params: { id: "42" } });
+
+    expect(response.status).toBe(503);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/payments/[id] — issue #456's re-check endpoint.
+// ---------------------------------------------------------------------------
+
+describe("GET /api/payments/[id]", () => {
+  it("calls GET /membresias/pagos/{id} and returns the translated payment", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse(pagoResponse))
+      .mockResolvedValueOnce(jsonResponse(persona))
+      .mockResolvedValueOnce(jsonResponse(membresia))
+      .mockResolvedValueOnce(jsonResponse(tipos));
+
+    const response = await GET(getRequest(), { params: { id: "42" } });
+    const body = await response.json();
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe(
+      "http://localhost:8000/api/v1/membresias/pagos/42",
+    );
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      id: "42",
+      studentName: "Sofia Alumna",
+      membershipPeriod: "01/07/2026 – 31/07/2026",
+      membershipType: "Mensual",
+      expectedAmount: 85,
+      paymentMethod: "Transferencia",
+      uploadedAt: "2026-06-28T10:30:00Z",
+      currentMembershipStatus: "activa",
+      proofFileName: "comprobante.pdf",
+      proofFileType: "pdf",
+      proofPreviewUrl: "https://example.com/comprobante.pdf",
+      validationStatus: "validado",
+      validatedAt: "2026-07-18T12:00:00Z",
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+    });
+  });
+
+  it("returns a still-pendiente payment as pendiente — the re-check has to be able to say 'no, it really failed'", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ ...pagoResponse, estadoPago: "PENDIENTE_VALIDACION" }))
+      .mockResolvedValueOnce(jsonResponse(persona))
+      .mockResolvedValueOnce(jsonResponse(membresia))
+      .mockResolvedValueOnce(jsonResponse(tipos));
+
+    const response = await GET(getRequest(), { params: { id: "42" } });
+    const body = await response.json();
+
+    expect(body.validationStatus).toBe("pendiente");
+  });
+
+  it("returns 401 without calling the backend when no auth cookie is present", async () => {
+    const response = await GET(getRequest(null), { params: { id: "42" } });
+
+    expect(response.status).toBe(401);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the backend reports the payment doesn't exist", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Pago no encontrado" }, 404));
+
+    const response = await GET(getRequest(), { params: { id: "999" } });
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.message).toBe("Pago no encontrado");
+  });
+
+  it("returns 503 when the backend is unreachable", async () => {
+    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    const response = await GET(getRequest(), { params: { id: "42" } });
 
     expect(response.status).toBe(503);
   });
