@@ -82,3 +82,12 @@ class ServicioNoDisponible(ErrorDominio):
     """Una dependencia necesaria para completar la operación no respondió,
     ej. el broker de tareas al encolar un envío de correo (-> HTTP 503)."""
     pass
+
+
+class ConflictoConcurrencia(ErrorDominio):
+    """Dos operaciones concurrentes compitieron por la misma fila y el
+    `lock_timeout` de Postgres venció esperando su turno (-> HTTP 409, issue
+    #451). Distinta de `OperacionInvalida`/`EntidadDuplicada` (400): acá no
+    hay ningún dato inválido -- es puro timing, y reintentar sin cambiar
+    nada suele alcanzar. Ver `app/soporte_transversal/bloqueo_fila.py`."""
+    pass

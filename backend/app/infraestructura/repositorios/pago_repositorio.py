@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada, CorreccionPago
 from app.dominio.enums import EstadoPago
+from app.soporte_transversal.bloqueo_fila import obtener_con_bloqueo_y_timeout
 
 
 def _rango_fecha_registro(fecha_inicio: Optional[date], fecha_fin: Optional[date]):
@@ -47,8 +48,21 @@ class PagoRepositorio:
         hasta el commit/rollback de esta transacción. Dos validaciones
         concurrentes del mismo pago se serializan en Postgres: la segunda
         espera y relee el estado ya commiteado por la primera (con lo que la
-        guardia de estado de `validar_pago` la rechaza)."""
-        return self.db.get(Pago, pago_id, with_for_update=True)
+        guardia de estado de `validar_pago` la rechaza).
+
+        `lock_timeout` (issue #451, reproducción en vivo: deadlock de
+        proceso de 5m32s sin autorrecuperación bajo pagos concurrentes
+        sobre la misma fila) -- ver `bloqueo_fila.obtener_con_bloqueo_y_
+        timeout`. Sin esto, quien pierde la carrera por este lock espera
+        INDEFINIDAMENTE; ahora recibe `ConflictoConcurrencia` (-> HTTP 409)
+        pasado `TIMEOUT_LOCK_FILA_MS`."""
+        return obtener_con_bloqueo_y_timeout(
+            self.db, Pago, pago_id,
+            mensaje_conflicto=(
+                "Este pago está siendo modificado por otra operación, "
+                "intente de nuevo en unos segundos."
+            ),
+        )
 
     def listar(
         self,

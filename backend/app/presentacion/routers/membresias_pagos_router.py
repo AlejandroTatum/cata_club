@@ -507,7 +507,14 @@ async def aplicar_beneficio_bonificado(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
     servicio = PagoServicio(db)
-    cobertura = servicio.aplicar_beneficio_bonificado(
+    # `run_in_threadpool` (issues #450/#451, mismo patrón que `login` en
+    # auth_router.py, issue #311): este método toma el lock `FOR UPDATE` de
+    # `obtener_por_id_con_bloqueo` -- llamado directo desde esta coroutine,
+    # una carrera real por la MISMA membresía puede colgar el hilo único del
+    # event loop (ver docstring de `registrar_pago` más abajo, mismo
+    # mecanismo).
+    cobertura = await run_in_threadpool(
+        servicio.aplicar_beneficio_bonificado,
         membresia_id,
         datos,
         persona_id_solicitante=token_payload.get("persona_id"),
@@ -533,7 +540,19 @@ async def registrar_pago(
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
     servicio = PagoServicio(db)
-    pago = servicio.registrar_pago(
+    # `run_in_threadpool` (issue #451, reproducción en vivo: reproducido con
+    # 3 pagos concurrentes sobre la MISMA membresía, mismo patrón que
+    # `login` en auth_router.py, issue #311): `registrar_pago` toma el lock
+    # `FOR UPDATE` de `obtener_por_id_con_bloqueo` (`MembresiaRepositorio`)
+    # DIRECTO en esta coroutine. Sin threadpool, quien pierde la carrera por
+    # el lock bloquea el ÚNICO hilo del event loop -- y quien ganó nunca
+    # puede volver a ejecutarse para hacer COMMIT y liberar el lock:
+    # deadlock real de proceso (confirmado en vivo, 5m32s sin
+    # autorrecuperación, `/health` incluido). El `lock_timeout` que traduce
+    # una espera excesiva a 409 vive en
+    # `app/soporte_transversal/bloqueo_fila.py` (Parte B del mismo fix).
+    pago = await run_in_threadpool(
+        servicio.registrar_pago,
         datos,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
@@ -546,7 +565,10 @@ async def registrar_pago(
 @limiter.limit("20/minute")
 async def validar_pago(request: Request, pago_id: int, datos: PagoValidarDTO, db: Session = Depends(obtener_sesion)):
     servicio = PagoServicio(db)
-    pago = servicio.validar_pago(pago_id, datos)
+    # `run_in_threadpool` (issue #451, misma clase de bug que `registrar_
+    # pago` arriba): `validar_pago` toma el lock `FOR UPDATE` de `PagoRepositorio.
+    # obtener_por_id_con_bloqueo` DIRECTO en esta coroutine.
+    pago = await run_in_threadpool(servicio.validar_pago, pago_id, datos)
     return servicio.pago_a_response_dto(pago)
 
 
@@ -624,7 +646,18 @@ async def subir_voucher(
 ):
     contenido = await leer_con_limite(archivo, TAMANO_MAXIMO_VOUCHER_BYTES)
     servicio = PagoServicio(db)
-    pago = servicio.adjuntar_voucher(
+    # `run_in_threadpool` (issue #450, mismo patrón que `login` en
+    # auth_router.py, issue #311): `adjuntar_voucher` termina en
+    # `cloudinary.uploader.upload(...)`, SDK síncrono bloqueante (hasta
+    # `TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS`), llamado directo desde esta
+    # coroutine. Sin threadpool, una subida lenta retiene el único hilo del
+    # event loop y bloquea a TODO otro cliente -- ni siquiera `/health`
+    # respondería mientras la subida está en curso (misma clase de bug que
+    # #451, confirmada en vivo para el patrón `FOR UPDATE`; acá el mecanismo
+    # es E/S de red en vez de un lock de Postgres, pero el efecto sobre el
+    # event loop es idéntico).
+    pago = await run_in_threadpool(
+        servicio.adjuntar_voucher,
         pago_id=pago_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
