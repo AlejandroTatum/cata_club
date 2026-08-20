@@ -84,6 +84,19 @@ export interface AuthContextValue {
    * never mislabeled by a stale flag from a session two logins ago.
    */
   sessionExpired: boolean;
+  /**
+   * True from the moment a PERIODIC session revalidation (`revalidate()` —
+   * the 5-minute interval or a `visibilitychange` tick, NOT the initial
+   * mount hydration covered by `hydrationOutage`) hits an outage, until a
+   * later revalidation succeeds. Issue #454: before this flag existed,
+   * `revalidate()` silently no-op'd on outage (correctly — a transient blip
+   * must not read as a logout) but left literally nothing on screen for a
+   * tab that stayed open through a backend outage. `ConnectivityBanner`
+   * (mounted once in `AuthProviderWrapper`) is this flag's only consumer —
+   * it renders the app-wide "sin conexión" banner and clears itself the
+   * moment this goes back to false, with no page reload required.
+   */
+  periodicOutage: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +107,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** How often to silently revalidate the session while a tab stays open (also runs on visibility change). Comfortably under the 60-minute access-token lifetime so /api/auth/session has room to proactively refresh before expiry. */
 const SESSION_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Once `periodicOutage` is true, how often to retry in the background —
+ * deliberately much shorter than `SESSION_REVALIDATE_INTERVAL_MS`. Waiting
+ * out the full 5-minute cadence while the "sin conexión" banner sits on
+ * screen would make "reintentando…" a lie for most of that window; this
+ * loop stops the moment a revalidation succeeds (see the effect below).
+ */
+const PERIODIC_OUTAGE_RETRY_MS = 20 * 1000;
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -109,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrationOutage, setHydrationOutage] = useState(false);
   // Issue #353 — see the field's own doc comment on AuthContextValue.
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Issue #454 — see the field's own doc comment on AuthContextValue.
+  const [periodicOutage, setPeriodicOutage] = useState(false);
   const sessionRef = useRef<AuthSession | null>(null);
   sessionRef.current = session;
   // Set synchronously at the start of logout() so any revalidation already
@@ -128,7 +152,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loggingOutRef.current) return;
     // A transient outage (503 / network failure) must NOT be treated as a
     // logout — only a genuine "unauthenticated" result clears the session.
-    if (outcome.kind === "outage") return;
+    // Issue #454: it also must not stay invisible — flag it so
+    // `ConnectivityBanner` can tell the rest of the app.
+    if (outcome.kind === "outage") {
+      setPeriodicOutage(true);
+      return;
+    }
+    setPeriodicOutage(false);
     setSession(outcome.kind === "authenticated" ? outcome.session : null);
   }, []);
 
@@ -196,6 +226,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [revalidate]);
 
+  // Issue #454 — background retry while `periodicOutage` is up. Separate
+  // from the interval above (which keeps ticking every 5 minutes
+  // regardless): this one only exists while the banner is visible, retries
+  // much sooner, and stops itself the instant `revalidate` clears the flag
+  // — `periodicOutage` flipping to false unmounts this effect's interval
+  // via the dependency array, no manual bookkeeping needed.
+  useEffect(() => {
+    if (!periodicOutage) return;
+    const retryId = setInterval(() => {
+      if (!loggingOutRef.current && sessionRef.current) void revalidate();
+    }, PERIODIC_OUTAGE_RETRY_MS);
+    return () => clearInterval(retryId);
+  }, [periodicOutage, revalidate]);
+
   // React to a failed refresh-and-retry from the generic API client
   // (src/services/api.ts) — clear local session state so ProtectedRoute
   // redirects to /login.
@@ -238,6 +282,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("[auth] logout request failed", err);
     } finally {
       setSession(null);
+      // A logout that follows an outage must not carry the banner onto
+      // /login — there is no session left for it to be reporting on.
+      setPeriodicOutage(false);
       /*
        * Navigate from HERE rather than leaving it to whatever rendered the
        * button. Until this line, landing on /login was only ever a side effect
@@ -264,6 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hydrationOutage,
     retryHydration,
     sessionExpired,
+    periodicOutage,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

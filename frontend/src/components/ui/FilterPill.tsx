@@ -16,8 +16,13 @@ import { cn } from "./cn";
 
 export interface FilterPillProps {
   label: string;
-  /** Optional trailing count, e.g. the 44 in "Todos 44". */
-  count?: number;
+  /**
+   * Optional trailing count, e.g. the 44 in "Todos 44". `null` means the
+   * count failed to load (issue #454, hallazgo menor) — rendered as "—"
+   * rather than a bare 0, which used to read as "no hay pagos" instead of
+   * "no se pudo cargar" while the filter it belongs to was failing.
+   */
+  count?: number | null;
   active?: boolean;
   onClick?: () => void;
   disabled?: boolean;
@@ -62,8 +67,11 @@ export default function FilterPill({
       ) : null}
       {label}
       {count !== undefined ? (
-        <span className={cn("tabular-nums", active ? "text-white/60" : "text-ink-3")}>
-          {count}
+        <span
+          className={cn("tabular-nums", active ? "text-white/60" : "text-ink-3")}
+          aria-label={count === null ? "no disponible" : undefined}
+        >
+          {count === null ? "—" : count}
         </span>
       ) : null}
     </button>

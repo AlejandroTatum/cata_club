@@ -132,6 +132,7 @@ const ADMIN_SESSION = {
   hydrationOutage: false,
   retryHydration: vi.fn(),
   sessionExpired: false,
+  periodicOutage: false,
 };
 
 function sessionForRole(role: "admin" | "trainer" | "representante" | "estudiante") {

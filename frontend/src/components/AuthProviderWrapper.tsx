@@ -9,11 +9,19 @@
 "use client";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import ConnectivityBanner from "@/components/ConnectivityBanner";
 
 export default function AuthProviderWrapper({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      {/* Issue #454 — needs to be INSIDE AuthProvider (reads useAuth()) and
+          ABOVE every route, since it is not tied to any one shell. */}
+      <ConnectivityBanner />
+      {children}
+    </AuthProvider>
+  );
 }
