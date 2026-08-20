@@ -1625,8 +1625,16 @@ export default function PaymentsPage(): React.ReactElement {
         {voucherModalOpen && selectedRequest?.proofPreviewUrl &&
           createPortal(
             <div
+              // No `onClick` here: a backdrop with a click-to-close handler
+              // reads as an interactive element without keyboard support
+              // (Sonar S6848 / jsx-a11y click-events-have-key-events). Escape
+              // and the "Cerrar" button — both wired by `useModalFocusTrap`
+              // above — already close this dialog by every accessible path;
+              // "click outside to close" isn't a requirement from #464 or
+              // #465, so the backdrop stays decorative instead of gaining
+              // fake button semantics (role/tabIndex/onKeyDown) for a
+              // non-essential interaction.
               className="fixed inset-0 z-50 flex items-center justify-center bg-coal/60 backdrop-blur-sm"
-              onClick={closeVoucherModal}
               role="dialog"
               aria-modal="true"
               aria-label="Visor de comprobante"
