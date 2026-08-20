@@ -335,32 +335,41 @@ class MembresiaServicio:
         """Obtiene una membresía por ID, aplicando autorización
         owner/representative/admin (mismo criterio que listar_membresias_por_persona).
         Sin parámetros de autorización (todos None) se comporta como antes:
-        solo existencia; útil para contextos internos donde el caller ya validó."""
-        membresia = self.repo.obtener_por_id(membresia_id)
-        if not membresia:
-            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
+        solo existencia; útil para contextos internos donde el caller ya validó.
 
-        # Si no hay contexto de autorización, devolver sin filtro (comportamiento
-        # anterior preservado para usos internos).
+        Autorización primero, existencia después (issue #457, mismo criterio
+        que `PagoServicio.registrar_pago`): sin esto, un solicitante sin
+        ningún vínculo con la membresía podía distinguir "no existe" (404)
+        de "existe pero no es mía" (403) probando ids consecutivos. Solo un
+        ADMINISTRADOR conserva esa distinción -- para todos los demás, ambos
+        casos caen en el mismo 403.
+        """
+        membresia = self.repo.obtener_por_id(membresia_id)
+
+        # Sin contexto de autorización, comportamiento anterior preservado
+        # para usos internos: solo existencia.
         if persona_id_solicitante is None and not roles_solicitante:
+            if not membresia:
+                raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
             return membresia
 
         roles_solicitante = roles_solicitante or []
-        es_duenio = persona_id_solicitante == membresia.persona_id
         es_admin = "ADMINISTRADOR" in roles_solicitante
-        es_representante = False
-
-        if not es_duenio and not es_admin and persona_id_solicitante is not None:
-            persona_objetivo = self.repo_persona.obtener_por_id(membresia.persona_id)
-            es_representante = bool(
-                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
+        autorizado = es_admin or (
+            membresia is not None
+            and PoliticaAccesoPersona(self.db).puede_acceder(
+                persona_id_objetivo=membresia.persona_id,
+                persona_id_solicitante=persona_id_solicitante,
+                roles_solicitante=roles_solicitante,
             )
-
-        if not (es_duenio or es_representante or es_admin):
+        )
+        if not autorizado:
             raise PermisosInsuficientes(
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden ver esta membresía"
             )
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
         return membresia
 
     def contar_membresias_activas(self) -> int:
@@ -1568,17 +1577,20 @@ class PagoServicio:
         vigila. El lock serializa contra los cinco métodos hermanos igual
         que ya se serializan entre sí.
         """
+        # Autorización primero, existencia después (issue #457): sin admin
+        # de por medio en este método (ver docstring arriba), quien no es
+        # dueño ni representante no debe poder distinguir "no existe" de
+        # "existe pero no es mía" -- ambos casos caen en el mismo 403.
         roles_solicitante = roles_solicitante or []
         membresia = self.repo_membresia.obtener_por_id_con_bloqueo(membresia_id)
-        if not membresia:
-            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 
         es_duenio = (
-            persona_id_solicitante is not None
+            membresia is not None
+            and persona_id_solicitante is not None
             and persona_id_solicitante == membresia.persona_id
         )
         es_representante = False
-        if not es_duenio and persona_id_solicitante is not None:
+        if membresia is not None and not es_duenio and persona_id_solicitante is not None:
             persona_objetivo = self.repo_persona.obtener_por_id(membresia.persona_id)
             es_representante = bool(
                 persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
@@ -1588,6 +1600,9 @@ class PagoServicio:
                 "Solo el titular de la membresía, o su representante, "
                 "pueden aplicar su beneficio bonificado"
             )
+
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {membresia_id} no encontrada")
 
         if membresia.es_gratuidad_familiar:
             raise OperacionInvalida(MENSAJE_MEMBRESIA_YA_GRATUITA)
@@ -1720,23 +1735,38 @@ class PagoServicio:
         contexto, así que cualquier sesión autenticada podía leer el pago de
         cualquier otra persona: monto, y sobre todo `voucher_url`, que es la
         URL pública en Cloudinary del comprobante bancario que subió el socio.
+
+        Autorización primero, existencia después (issue #457): ese fix dejó
+        de filtrar monto/voucher_url a un tercero, pero seguía filtrando
+        EXISTENCIA -- un solicitante sin ningún vínculo con el pago podía
+        distinguir "no existe" (404) de "existe pero no es mío" (403)
+        probando ids consecutivos. Solo un ADMINISTRADOR conserva esa
+        distinción; para todos los demás, ambos casos caen en el mismo 403.
         """
         pago = self.repo.obtener_por_id(pago_id)
-        if not pago:
-            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
 
         if persona_id_solicitante is None and not roles_solicitante:
+            if not pago:
+                raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
             return pago
 
-        PoliticaAccesoPersona(self.db).exigir_acceso(
-            persona_id_objetivo=pago.persona_id,
-            persona_id_solicitante=persona_id_solicitante,
-            roles_solicitante=roles_solicitante,
-            mensaje=(
+        roles_solicitante = roles_solicitante or []
+        es_admin = "ADMINISTRADOR" in roles_solicitante
+        autorizado = es_admin or (
+            pago is not None
+            and PoliticaAccesoPersona(self.db).puede_acceder(
+                persona_id_objetivo=pago.persona_id,
+                persona_id_solicitante=persona_id_solicitante,
+                roles_solicitante=roles_solicitante,
+            )
+        )
+        if not autorizado:
+            raise PermisosInsuficientes(
                 "Solo el titular del pago, su representante, o un "
                 "administrador pueden consultarlo"
-            ),
-        )
+            )
+        if not pago:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
         return pago
 
     def _url_entrega_voucher(self, pago: Pago) -> str | None:
@@ -2154,6 +2184,34 @@ class PagoServicio:
         comprobante = ComprobantePago(**datos.model_dump(), pago_id=pago_id)
         return self.repo_comprobante.crear(comprobante)
 
+    def _resolver_autorizacion_pago(
+        self,
+        pago: Pago | None,
+        persona_id_solicitante: int | None,
+        roles_solicitante: list[str],
+    ) -> tuple[bool, bool, bool]:
+        """Resuelve (es_duenio, es_representante, es_admin) para un `pago`
+        que puede no existir (issue #457): extraído de `adjuntar_voucher`
+        para bajar su complejidad cognitiva, y reescrito para que el análisis
+        estático de Sonar pueda probar la correlación entre `pago` y la
+        persona titular -- antes, `persona_titular` salía de un ternario
+        aparte y `es_representante` la dereferenciaba en una expresión
+        distinta a la que verificaba `pago is not None`, algo que en tiempo
+        de ejecución es seguro (el `and` corta antes) pero que Sonar no puede
+        probar mirando solo el flujo de datos.
+        """
+        es_admin = "ADMINISTRADOR" in roles_solicitante
+        es_duenio = False
+        es_representante = False
+        if pago is not None and persona_id_solicitante is not None:
+            es_duenio = persona_id_solicitante == pago.persona_id
+            persona_titular = pago.persona
+            es_representante = (
+                persona_titular is not None
+                and persona_titular.representante_id == persona_id_solicitante
+            )
+        return es_duenio, es_representante, es_admin
+
     # --- Voucher de transferencia (cliente) -----------------------------------
     def adjuntar_voucher(
         self,
@@ -2172,9 +2230,16 @@ class PagoServicio:
 
         Orden de validaciones (cada fallo lanza una excepción de dominio que
         main.py traduce al HTTP correspondiente):
-          1. El pago existe (404 EntidadNoEncontrada)
-          2. Pago está PENDIENTE_VALIDACION (400 OperacionInvalida)
-          3. Solicitante es el dueño del pago o admin (403 PermisosInsuficientes)
+          1. Autorización: dueño del pago, su representante, o admin (403
+             PermisosInsuficientes) -- PRIMERO, y de forma indistinguible
+             entre "el pago no existe" y "el pago existe pero no es mío"
+             (issue #457): para quien no tiene ningún vínculo, ambos casos
+             dan el mismo 403 con el mismo mensaje.
+          2. El pago existe (404 EntidadNoEncontrada) -- recién acá, ya
+             autorizado.
+          3. Pago está PENDIENTE_VALIDACION (400 OperacionInvalida) -- ídem:
+             el estado real de un pago ajeno tampoco se revela antes de la
+             autorización.
           4. content_type permitido JPG/PNG/PDF (400 OperacionInvalida)
           4b. la firma binaria real coincide con el tipo declarado (400
               OperacionInvalida) -- REQ-SEC-3, sdd/production-readiness
@@ -2184,33 +2249,35 @@ class PagoServicio:
         Se permite SOBREESCRIBIR un voucher ya existente mientras el pago siga
         PENDIENTE_VALIDACION (el cliente puede corregir una subida errónea).
         """
-        # 1. Pago existe (lanza EntidadNoEncontrada si no).
-        pago = self.obtener_pago(pago_id)
-
-        # 2. Estado válido para adjuntar voucher.
-        if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
-            raise OperacionInvalida(
-                "Solo se puede adjuntar voucher a un pago pendiente de validación"
-            )
-
-        # 3. Autorización: dueño del pago, su representante, o admin.
-        persona_titular = pago.persona
-        es_duenio = persona_id_solicitante is not None and persona_id_solicitante == pago.persona_id
-        es_representante = (
-            persona_id_solicitante is not None
-            and persona_titular.representante_id == persona_id_solicitante
+        # 1. Autorización: dueño del pago, su representante, o admin. Lee el
+        # pago (puede no existir) SOLO para resolver el vínculo -- la lectura
+        # interna está bien, lo que no puede pasar es que el pago inexistente
+        # se distinga de uno ajeno en la respuesta.
+        pago = self.repo.obtener_por_id(pago_id)
+        es_duenio, es_representante, es_admin = self._resolver_autorizacion_pago(
+            pago, persona_id_solicitante, roles_solicitante
         )
-        es_admin = "ADMINISTRADOR" in roles_solicitante
         if not (es_duenio or es_representante or es_admin):
             raise PermisosInsuficientes(
                 "Solo el titular del pago, su representante, o un administrador "
                 "pueden adjuntar el voucher"
             )
 
+        # 2. Pago existe (lanza EntidadNoEncontrada si no) -- ya autorizado.
+        if not pago:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+
+        # 3. Estado válido para adjuntar voucher.
+        if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
+            raise OperacionInvalida(
+                "Solo se puede adjuntar voucher a un pago pendiente de validación"
+            )
+
         # E01-RF006/RF007: mismo criterio de solo-lectura financiera para
-        # menores que en registrar_pago (ver docstring allá).
+        # menores que en registrar_pago (ver docstring allá). `pago` ya está
+        # garantizado no-None acá (el check #2 de arriba lo asegura).
         if es_duenio and not es_admin and not es_representante:
-            edad = _calcular_edad(persona_titular.fecha_nacimiento)
+            edad = _calcular_edad(pago.persona.fecha_nacimiento)
             if edad < 18:
                 raise PermisosInsuficientes(
                     "Los alumnos menores de edad tienen acceso de solo lectura "
