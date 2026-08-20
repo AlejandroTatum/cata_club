@@ -252,6 +252,27 @@ export function formatPagoMonto(monto: string): string {
   return formatCurrency(monto);
 }
 
+/**
+ * Human-readable file size for the upload preview (issue #463) — "68 B",
+ * "204,8 KB", "1,2 MB". Same `es-EC` number grammar `formatCurrency` uses
+ * elsewhere on this screen, so a decimal reads with a comma here too, never
+ * a period.
+ */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  const formatted = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 1 }).format(value);
+  return `${formatted} ${units[unitIndex]}`;
+}
+
 // ---------------------------------------------------------------------------
 // El descuento que el club ya aplicó
 // ---------------------------------------------------------------------------

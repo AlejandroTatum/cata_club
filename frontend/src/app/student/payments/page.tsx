@@ -101,6 +101,7 @@ import {
   countPagosByStatus,
   addMonthsIso,
   estimateTotal,
+  formatFileSize,
   TIPO_PAGO_LABEL,
   PAGO_FILTER_LABELS,
   type PagoStatusFilter,
@@ -1292,6 +1293,67 @@ function PaymentOrBenefitForm({
 }
 
 // ---------------------------------------------------------------------------
+// Confirm before the voucher actually uploads (issue #463)
+// ---------------------------------------------------------------------------
+
+/**
+ * The step between picking a file in the OS dialog and actually sending it:
+ * name, size, and the image itself when it is one (a PDF gets a plain
+ * attachment icon instead — there is nothing to thumbnail). Nothing here
+ * calls the API; `onConfirm`/`onCancel` are the caller's own.
+ */
+function VoucherUploadPreview({
+  file,
+  previewUrl,
+  uploading,
+  onConfirm,
+  onCancel,
+}: {
+  file: File;
+  /** An object URL for `file`, or `null` when it is not an image. */
+  previewUrl: string | null;
+  uploading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  return (
+    <div className="card flex flex-col gap-3 p-4" role="group" aria-label="Confirmar comprobante antes de subir">
+      <div className="flex items-center gap-3">
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previewUrl}
+            alt=""
+            className="h-16 w-16 shrink-0 rounded-ctl object-cover"
+          />
+        ) : (
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-ctl bg-sunken">
+            <Paperclip size={ICON.lg} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{file.name}</p>
+          <p className="text-xs text-ink-3">{formatFileSize(file.size)}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" size="sm" onClick={onConfirm} disabled={uploading}>
+          {uploading ? (
+            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {uploading ? "Subiendo…" : "Confirmar y subir"}
+        </Button>
+        <Button size="sm" onClick={onCancel} disabled={uploading}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // One payment in the history
 // ---------------------------------------------------------------------------
 
@@ -1299,14 +1361,25 @@ function PagoRow({
   pago,
   onUploadFile,
   uploadingId,
+  registerHref,
 }: {
   pago: PagoPersona;
   onUploadFile: (pagoId: number) => void;
   uploadingId: number | null;
+  /** Where "Registrar un pago nuevo" points, or `null` when this reader
+   *  cannot register one from here (issue #461's own CTA is gated the same
+   *  way the empty-state's "Registrar un pago" already is). */
+  registerHref: string | null;
 }): React.ReactElement {
   const estado = describePagoEstado(pago.estadoPago);
-  const canUpload = !pago.voucherUrl && pago.estadoPago !== "APROBADO";
   const faltaComprobante = pagoFaltaComprobante(pago);
+  // "Puede subir su comprobante" termina siendo EXACTAMENTE el mismo caso que
+  // "Falta el comprobante" marca: TRANSFERENCIA, PENDIENTE_VALIDACION, sin
+  // voucherUrl. EFECTIVO nunca tiene comprobante bancario que subir (#452),
+  // y un pago ya resuelto (APROBADO/RECHAZADO) no admite adjuntar nada más
+  // -- RECHAZADO en particular responde 400 "pendiente de validación" si se
+  // lo intenta (#461, confirmado en vivo).
+  const canUpload = faltaComprobante;
   // `null` en la enorme mayoría de los pagos, y entonces no se dibuja nada.
   const descuento = describePagoDescuento(pago);
 
@@ -1421,6 +1494,20 @@ function PagoRow({
             <p className="mt-0.5 text-sm text-ink-2">{pago.motivoRechazo}</p>
           </div>
         )}
+
+        {/* Issue #461: un pago RECHAZADO es una decisión ya tomada por el
+            club -- no admite adjuntar nada más (el backend responde 400 si
+            se lo intenta, confirmado en vivo). El botón de subir comprobante
+            deja de mostrarse para este estado (ver `canUpload` arriba); esta
+            es la única salida real que la fila ofrece en su lugar. */}
+        {pago.estadoPago === "RECHAZADO" && registerHref && (
+          <Link
+            href={registerHref}
+            className="mt-2 inline-flex text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+          >
+            Registrar un pago nuevo
+          </Link>
+        )}
       </div>
 
       {canUpload && (
@@ -1478,6 +1565,21 @@ function PaymentsContent({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingUploadPagoId, setPendingUploadPagoId] = useState<number | null>(null);
+  /** Issue #463 — the file staged by the OS picker, awaiting an explicit
+   *  "Confirmar y subir" before `subirVoucherPago` ever runs. */
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  /** Object URL for `previewFile`'s thumbnail — only set for an image, and
+   *  always revoked, either when a new file replaces it or on unmount. */
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!previewFile || !previewFile.type.startsWith("image/")) {
+      setPreviewObjectUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(previewFile);
+    setPreviewObjectUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [previewFile]);
 
   const selectedPersonaId = selectedProfile?.personaId ?? null;
 
@@ -1627,19 +1729,48 @@ function PaymentsContent({
   const canRegisterHere =
     !blockedAsMinor && selectedProfile?.membership != null && !isGratuitous && !hasPendingPago;
 
+  /**
+   * Issue #461: the same door D11's empty-state action already opens,
+   * offered again from a REJECTED payment's own row — the one real next
+   * step once that row stops offering "Subir comprobante". `null` under the
+   * same gates `canRegisterHere` already applies: a rejected row is not the
+   * place to promise a form the reader cannot actually reach.
+   */
+  const registerHref =
+    canRegisterHere && selectedProfile
+      ? withSelectedStudent("/student/payments?registrar=1", selectedProfile.personaId)
+      : null;
+
   function handleSelectFile(pagoId: number): void {
     setUploadError(null);
     setPendingUploadPagoId(pagoId);
     fileInputRef.current?.click();
   }
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+  /**
+   * Issue #463: picking a file from the OS picker used to fire the real
+   * `POST .../voucher` in the same tick as the selection (confirmed live
+   * with `browser_network_requests` — no intermediate state existed at all,
+   * so a wrong file or a change of mind could only be reacted to AFTER the
+   * upload had already happened). This now only stages the file for
+   * `VoucherUploadPreview` below; the request fires from
+   * `handleConfirmUpload`, never from here.
+   */
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
-    if (!file || !pendingUploadPagoId) return;
-    setUploadingId(pendingUploadPagoId);
+    if (!file) return;
+    setUploadError(null);
+    setPreviewFile(file);
+  }
+
+  async function handleConfirmUpload(): Promise<void> {
+    if (!previewFile || !pendingUploadPagoId) return;
+    const file = previewFile;
+    const pagoId = pendingUploadPagoId;
+    setUploadingId(pagoId);
     setUploadError(null);
     try {
-      await subirVoucherPago(pendingUploadPagoId, file);
+      await subirVoucherPago(pagoId, file);
       setReloadToken((n) => n + 1);
     } catch (err) {
       // Inline, not `alert()`: a browser dialog cannot be styled, cannot be
@@ -1648,8 +1779,15 @@ function PaymentsContent({
     } finally {
       setUploadingId(null);
       setPendingUploadPagoId(null);
+      setPreviewFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }
+
+  function handleCancelUpload(): void {
+    setPendingUploadPagoId(null);
+    setPreviewFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function handleRegistered(): void {
@@ -1778,10 +1916,21 @@ function PaymentsContent({
         accept="image/jpeg,image/png,application/pdf"
         className="hidden"
         data-testid="pago-voucher-input"
-        onChange={(e) => {
-          void handleFileChange(e);
-        }}
+        onChange={handleFileChange}
       />
+
+      {/* Issue #463: the confirm/cancel step between picking a file and
+          actually uploading it — see `handleFileChange`'s comment for why
+          this exists. */}
+      {previewFile && (
+        <VoucherUploadPreview
+          file={previewFile}
+          previewUrl={previewObjectUrl}
+          uploading={uploadingId !== null}
+          onConfirm={() => void handleConfirmUpload()}
+          onCancel={handleCancelUpload}
+        />
+      )}
 
       {uploadError && (
         <p role="alert" className="text-sm font-semibold text-state-bad">
@@ -1879,6 +2028,7 @@ function PaymentsContent({
                   pago={pago}
                   onUploadFile={handleSelectFile}
                   uploadingId={uploadingId}
+                  registerHref={registerHref}
                 />
               ))}
             </ul>

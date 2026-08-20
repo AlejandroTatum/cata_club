@@ -219,6 +219,10 @@ beforeEach(() => {
   // No active benefit by default — tests that care override this per-case.
   mockFetchBeneficio.mockReset().mockResolvedValue(null);
   mockAplicarBeneficio.mockReset().mockResolvedValue({ id: 1 });
+  // jsdom does not implement `URL.createObjectURL`/`revokeObjectURL` — the
+  // voucher upload preview (#463) uses them to thumbnail an image file.
+  URL.createObjectURL = vi.fn(() => "blob:mock-voucher-preview");
+  URL.revokeObjectURL = vi.fn();
 });
 
 afterEach(() => {
@@ -570,7 +574,77 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByText("Falta el comprobante")).not.toBeInTheDocument();
   });
 
-  it("uploads the missing voucher from that same row and refreshes the history", async () => {
+  // Issue #452: a cash payment is handed over in person — there is no bank
+  // voucher to upload for it, and the backend never validated `tipoPago`
+  // before accepting one (confirmed live: it 503'd on Cloudinary instead of
+  // rejecting the request outright). The button itself must not be offered.
+  it("does not offer 'Subir comprobante' for a cash payment (#452)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 5, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "EFECTIVO", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByText(shownRange(PAGO_START, COVERAGE_END));
+    expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
+  });
+
+  // Triangulates #452: the SAME payment, but by transfer, still gets the
+  // button — the fix must key off `tipoPago`, not remove the button outright.
+  it("still offers 'Subir comprobante' for the same payment shape when it is a transfer", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 6, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByRole("button", { name: /subir comprobante/i })).toBeInTheDocument();
+  });
+
+  // Issue #461: a REJECTED payment is a decision the club already made — the
+  // backend confirmed live it answers 400 "Solo se puede adjuntar voucher a
+  // un pago pendiente de validación" for it, a message that does not even
+  // name the reader's own status. The button must disappear, and the row
+  // must point at the one real next step instead: registering a new payment.
+  it("does not offer 'Subir comprobante' for a rejected payment, and offers 'Registrar un pago nuevo' instead (#461)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({
+        id: 7,
+        estadoPago: "RECHAZADO",
+        tipoPago: "TRANSFERENCIA",
+        voucherUrl: null,
+        motivoRechazo: "El comprobante no coincide",
+      }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByText("El comprobante no coincide");
+    expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /registrar un pago nuevo/i })).toBeInTheDocument();
+  });
+
+  // Triangulates #461: the same rejected payment keeps its button on the
+  // states where uploading still makes sense — a pending transfer without
+  // its voucher (the case above already exercises this) never loses it, and
+  // an approved payment (which already has no button, asserted above) is not
+  // where the new "Registrar un pago nuevo" link belongs either.
+  it("does not offer 'Registrar un pago nuevo' on a payment that is not rejected", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 8, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByRole("button", { name: /subir comprobante/i });
+    expect(screen.queryByRole("link", { name: /registrar un pago nuevo/i })).not.toBeInTheDocument();
+  });
+
+  // Issue #463: selecting a file from the native picker must NOT upload
+  // immediately — it stages a preview (name + size) with an explicit
+  // confirm/cancel step. Reproduced live with `browser_network_requests`:
+  // the POST used to fire in the same tick as the file selection.
+  it("stages a preview instead of uploading immediately when a file is picked (#463)", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
     ]);
@@ -580,6 +654,67 @@ describe("StudentPaymentsPage — the history", () => {
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByText("comprobante.jpg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar y subir/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^cancelar$/i })).toBeInTheDocument();
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+  });
+
+  it("cancels the staged preview without uploading anything (#463)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+
+    const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+    await screen.findByText("comprobante.jpg");
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    expect(screen.queryByText("comprobante.jpg")).not.toBeInTheDocument();
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+  });
+
+  // Triangulates #463: a non-image file (PDF) still stages the same
+  // name/size preview with confirm/cancel — it just has no image thumbnail
+  // to show, which is the one thing that legitimately differs by file type.
+  it("stages a preview for a non-image file too, without an image thumbnail", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+
+    const file = new File(["contenido"], "comprobante.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByText("comprobante.pdf")).toBeInTheDocument();
+    const preview = screen.getByRole("group", { name: /confirmar comprobante antes de subir/i });
+    expect(within(preview).getByRole("button", { name: /confirmar y subir/i })).toBeInTheDocument();
+    // Only the shell's OWN logo `<img>` exists on screen — the preview
+    // panel itself has no thumbnail for a file it cannot render as an image.
+    expect(within(preview).queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("uploads the missing voucher only after the reader confirms the preview, and refreshes the history", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+
+    const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+    await screen.findByText("comprobante.jpg");
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y subir/i }));
 
     await waitFor(() => {
       expect(mockSubirVoucherPago).toHaveBeenCalledWith(77, file);
