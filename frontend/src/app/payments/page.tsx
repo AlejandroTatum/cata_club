@@ -84,7 +84,6 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
-  Clock,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import type {
@@ -94,6 +93,7 @@ import type {
 import {
   fetchPaymentValidationsPage,
   fetchAllPaymentValidations,
+  fetchPaymentValidationById,
   updatePaymentValidation,
   type BackendEstadoPago,
 } from "@/services/api";
@@ -101,7 +101,6 @@ import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import { usePersistentPreference } from "@/lib/persistent-preference";
 import { useToast } from "@/contexts/ToastContext";
-import { useDeferredCommit } from "@/lib/deferred-commit";
 import {
   getTotalPages,
   paginatePaymentRequests,
@@ -696,9 +695,6 @@ export default function PaymentsPage(): React.ReactElement {
   /** The pending queue as it stood before the in-flight decision resolves. */
   const pendingBeforeDecision = useRef<PaymentValidationRequest[]>([]);
 
-  /** Holds a decision for a few seconds so "Deshacer" can still mean something. */
-  const deferredDecision = useDeferredCommit();
-
   /**
    * Opening a payment swaps the queue out for the detail IN PLACE — same URL,
    * same `<main>`, no dialog. Without help, that leaves focus on a button that
@@ -776,85 +772,117 @@ export default function PaymentsPage(): React.ReactElement {
   }
 
   /**
-   * Decide now, send in a moment — the only honest undo for this screen.
+   * Decide for real, send for real — issue #456.
    *
-   * Approving flips the payment, activates the membership and hands a receipt
-   * to a worker that generates a PDF. Reverting that afterwards would not be
-   * an undo, it would be a compensating transaction with visible fallout: a
-   * membership that blinked active, a receipt already sent for a payment now
-   * pending again. So the decision is held for a few seconds instead, the
-   * queue moves immediately, and "Deshacer" cancels something that never
-   * happened. `useDeferredCommit` guarantees the hold is never silently
-   * dropped: another decision, leaving the page, or closing the tab all send
-   * it rather than discard it.
+   * This used to declare success and move the queue SYNCHRONOUSLY, before the
+   * real `PUT` even existed on the wire (it was held for a few seconds by
+   * `useDeferredCommit`, so "Deshacer" could still mean something).
+   * Reproduced live, twice, under two different triggers:
+   * `browser_network_requests` showed zero PUT/PATCH requests in flight at
+   * the instant the success toast was already visible; and on a dropped
+   * connection during the held commit, the write could land server-side
+   * while the client only ever saw a network error. A product decision
+   * settled the fix: the UI never asserts an approval/rejection the server
+   * hasn't confirmed.
+   *
+   * So the hold is gone. The confirm dialog (approve) or the reason form
+   * itself (reject) is now the ONLY cancel-before-send step — requirement
+   * #456 explicitly allows retiring "deshacer diferido" once it becomes
+   * redundant with an existing pre-send confirmation, and it does here. The
+   * request fires the moment the admin confirms; `actionLoading` (already
+   * wired into the two buttons' disabled state and "Procesando…" label, just
+   * never set until now) is the honest in-flight indicator. The queue only
+   * moves, and the toast only fires, once the real response lands.
+   *
+   * A failure — 400/409 conflict, timeout, dropped connection — does not
+   * mean "nothing happened": the mutation may have reached the server
+   * anyway. So `onFailure` always re-fetches the payment's REAL state
+   * (`fetchPaymentValidationById`) before telling the admin anything. If
+   * that confirms the decision landed after all, the admin is told the
+   * truth (a delayed confirmation, not a fabricated failure) instead of a
+   * "no se pudo" that contradicts what the server actually holds. If it
+   * confirms the payment is still pending, the admin sees the real error
+   * (via `toUserMessage`, never a hardcoded string) and a way to retry —
+   * this never happened before either, since the old flow only had a dead
+   * end.
    */
-  function decide(
+  async function decide(
     request: PaymentValidationRequest,
-    optimistic: PaymentValidationRequest,
+    loadingKey: "approve" | "reject",
     dto: Parameters<typeof updatePaymentValidation>[1],
-    confirmation: { label: string; message: string; description: string; failure: string },
-  ): void {
-    const previousPageItems = pageItems;
-    const previousPendingAll = pendingAll;
-    const previousSelectedId = selectedId;
-
+    confirmation: { label: string; message: string; failure: string },
+  ): Promise<void> {
     pendingBeforeDecision.current = pending;
-    applyDecision(optimistic);
-
-    const putItBack = (): void => {
-      setPageItems(previousPageItems);
-      setPendingAll(previousPendingAll);
-      setSelectedId(previousSelectedId);
-    };
-
-    showSuccess(confirmation.message, {
-      description: confirmation.description,
-      action: { label: "Deshacer", onAction: deferredDecision.undo },
-    });
-
-    deferredDecision.schedule({
-      label: confirmation.label,
-      commit: async () => {
-        const saved = await updatePaymentValidation(request.id, dto);
-        // The server owns the canonical row — dates it normalised, the
-        // validation timestamp, the validator's name.
-        applyToPageItems(saved);
-        applyToPendingAll(saved);
-        // The other two pills ("Aprobados"/"Rechazados") only read an
-        // accurate `total` after a real fetch — same "can read one high
-        // until reconciled" posture `pageTotal` already documents above,
-        // now settled for real.
-        void loadLightTotals();
-        // The decision itself (`saved.validationStatus`) is final and real
-        // even when this is true — only the in-app notification failed. The
-        // optimistic success toast above already fired and is gone by the
-        // time this resolves, so this is a SEPARATE, honest follow-up: the
-        // admin needs to know the notice didn't reach the student/guardian,
-        // not just see a silent success (hallazgo en vivo, 2026-08-11).
-        if (saved.notificationDeliveryFailed) {
-          showWarning(`${confirmation.label}: la decisión se guardó, pero el aviso no llegó.`, {
-            description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísele directamente.`,
-          });
-        }
-      },
-      onUndo: putItBack,
-      onError: (err: unknown) => {
-        console.error("[payments] decision failed", err);
-        putItBack();
-        // The window is gone and the admin has moved on, so there is no
-        // control left to attach this to: it has to travel to them. It used
-        // to always be `confirmation.failure` — a generic "no se pudo" even
-        // when the backend named the real reason (e.g. a rejection note over
-        // 255 characters) — so `err` never reached the admin. `toUserMessage`
-        // is the one place that decides whether `err` is safe to show.
-        // For 400/409/422 it may surface the backend's own detail, falling
-        // back to `confirmation.failure` only when that detail isn't safe to
-        // show. For any 5xx it always returns the generic server-failure
-        // message before `fallback` is even looked at, so `confirmation.failure`
-        // is never used in that case (see `error-message.ts`).
-        showError(toUserMessage(err, confirmation.failure), {
-          description: `${request.studentName} volvió a la cola de pendientes.`,
+    setActionLoading(loadingKey);
+    try {
+      const saved = await updatePaymentValidation(request.id, dto);
+      applyDecision(saved);
+      showSuccess(confirmation.message);
+      // The other two pills ("Aprobados"/"Rechazados") only read an
+      // accurate `total` after a real fetch — same "can read one high
+      // until reconciled" posture `pageTotal` already documents above, now
+      // settled for real.
+      void loadLightTotals();
+      // The decision itself (`saved.validationStatus`) is final and real
+      // even when this is true — only the in-app notification failed. This
+      // is a SEPARATE, honest follow-up: the admin needs to know the notice
+      // didn't reach the student/guardian, not just see a silent success
+      // (hallazgo en vivo, 2026-08-11).
+      if (saved.notificationDeliveryFailed) {
+        showWarning(`${confirmation.label}: la decisión se guardó, pero el aviso no llegó.`, {
+          description: `${request.studentName} no recibió la notificación in-app. Si hace falta, avísele directamente.`,
         });
+      }
+    } catch (err: unknown) {
+      console.error("[payments] decision failed", err);
+      await reportRealOutcomeAfterFailure(request, loadingKey, dto, confirmation, err);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  /**
+   * After a failed/timed-out mutation, learn the truth before saying
+   * anything (issue #456, requisito 3): re-fetch the payment instead of
+   * assuming "it failed" or "it succeeded".
+   */
+  async function reportRealOutcomeAfterFailure(
+    request: PaymentValidationRequest,
+    loadingKey: "approve" | "reject",
+    dto: Parameters<typeof updatePaymentValidation>[1],
+    confirmation: { label: string; message: string; failure: string },
+    err: unknown,
+  ): Promise<void> {
+    let real: PaymentValidationRequest | null = null;
+    try {
+      real = await fetchPaymentValidationById(request.id);
+    } catch (checkErr: unknown) {
+      console.error("[payments] could not re-check the real payment state", checkErr);
+    }
+
+    if (real && real.validationStatus !== "pendiente") {
+      // The write landed anyway — a ghost write on a dropped connection, or
+      // another tab/admin got there first with the same outcome. Either way
+      // the server's own record is now the truth, so sync to it and say so
+      // honestly instead of contradicting the server with a fake failure.
+      applyDecision(real);
+      void loadLightTotals();
+      showWarning(`${confirmation.label}: se confirmó, aunque la conexión falló.`, {
+        description: `${request.studentName}: el cambio sí se guardó en el servidor.`,
+      });
+      return;
+    }
+
+    // Either the re-check confirms the payment is still pending, or the
+    // re-check itself failed and there is nothing to trust either way — in
+    // both cases this is a real, retriable failure, never a silent "maybe".
+    showError(toUserMessage(err, confirmation.failure), {
+      description: real
+        ? `${request.studentName} sigue en la cola de pendientes.`
+        : `${request.studentName}: no se pudo confirmar el estado real. Actualice la página antes de reintentar.`,
+      action: {
+        label: "Reintentar",
+        onAction: () => void decide(request, loadingKey, dto, confirmation),
       },
     });
   }
@@ -863,23 +891,11 @@ export default function PaymentsPage(): React.ReactElement {
     if (!selectedRequest || !checklistComplete) return;
     const request = selectedRequest;
 
-    // No date fields sent (issue #400): Administración cannot edit
-    // `fecha_inicio`/`fecha_fin` at approval, so the request already carries
-    // the only coverage that will ever exist for this payment — the one the
-    // month-based engine derived at registration. Approving just confirms
-    // it; `startDate`/`endDate` in the optimistic row stay exactly what
-    // `request` already has.
-    decide(
-      request,
-      { ...request, validationStatus: "validado" },
-      { action: "approved" },
-      {
-        label: `Aprobación de ${request.studentName}`,
-        message: "Pago aprobado. La membresía ahora está activa.",
-        description: "Puede deshacerlo durante unos segundos.",
-        failure: "No se pudo aprobar el pago.",
-      },
-    );
+    void decide(request, "approve", { action: "approved" }, {
+      label: `Aprobación de ${request.studentName}`,
+      message: "Pago aprobado. La membresía ahora está activa.",
+      failure: "No se pudo aprobar el pago.",
+    });
   }
 
   function handleRejectSubmit(): void {
@@ -888,17 +904,11 @@ export default function PaymentsPage(): React.ReactElement {
     if (!rejectionReason) return;
     const request = selectedRequest;
 
-    decide(
-      request,
-      { ...request, validationStatus: "rechazado", rejectionReason },
-      { action: "rejected", rejectionReason },
-      {
-        label: `Rechazo de ${request.studentName}`,
-        message: "Pago rechazado. Se le avisó al responsable con el motivo elegido.",
-        description: "Puede deshacerlo durante unos segundos.",
-        failure: "No se pudo rechazar el pago.",
-      },
-    );
+    void decide(request, "reject", { action: "rejected", rejectionReason }, {
+      label: `Rechazo de ${request.studentName}`,
+      message: "Pago rechazado. Se le avisó al responsable con el motivo elegido.",
+      failure: "No se pudo rechazar el pago.",
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -948,33 +958,6 @@ export default function PaymentsPage(): React.ReactElement {
   function renderQueue(): React.ReactElement {
     return (
       <>
-        {/*
-         * A decision that is still reversible is a state the admin is IN, and
-         * a toast is a state that scrolls away — it dismisses itself, and the
-         * next one buries it. This row lasts exactly as long as the hold does,
-         * so "did that go through yet?" has an answer on the screen rather
-         * than only in a notification that may already be gone.
-         *
-         * No focus class on the button: the system indicator in `globals.css`
-         * already paints every button, and outranks Tailwind's utilities.
-         */}
-        {deferredDecision.pendingLabel && (
-          <div
-            role="status"
-            className="mb-4 flex flex-wrap items-center gap-3 rounded-ctl border border-line-2 bg-sunken px-4 py-2.5 text-xs font-semibold text-ink-2"
-          >
-            <Clock size={ICON.sm} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-3" />
-            <span>{deferredDecision.pendingLabel} — se envía en unos segundos.</span>
-            <button
-              type="button"
-              onClick={deferredDecision.undo}
-              className="ml-auto rounded-ctl px-2 py-1 font-bold text-ink underline underline-offset-2"
-            >
-              Deshacer
-            </button>
-          </div>
-        )}
-
         {/* This screen used to read the other way round — chips first, search
             on its own line underneath — which was the exact inverse of
             Members. `FilterPanel` renders the slots in one fixed order, so the
@@ -1384,8 +1367,8 @@ export default function PaymentsPage(): React.ReactElement {
                     <ContextualHelp title="Cómo se decide">
                       {checklist.note && <p className="text-xs text-ink-2">{checklist.note}</p>}
                       <p className="text-xs text-ink-2">
-                        Tras aprobar va a tener unos segundos para deshacerlo con &quot;Deshacer&quot;.
-                        Pasado ese momento el pago queda registrado y ya no se puede revertir.
+                        Aprobar se envía de inmediato y activa la membresía; esta acción no se
+                        puede deshacer una vez confirmada. Revise el comprobante antes de confirmar.
                       </p>
                     </ContextualHelp>
                   )}
@@ -1590,7 +1573,7 @@ export default function PaymentsPage(): React.ReactElement {
           open={confirmApproveOpen}
           variant="state-ok"
           title="Aprobar pago"
-          message="¿Confirma que aprueba este pago? La membresía pasará a activa. Va a tener unos segundos para deshacerlo; pasado ese momento no se puede revertir."
+          message="¿Confirma que aprueba este pago? La membresía pasará a activa de inmediato y esta acción no se puede deshacer."
           onConfirm={() => {
             if (confirmApproveInFlightRef.current) return;
             confirmApproveInFlightRef.current = true;

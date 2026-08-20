@@ -1,31 +1,32 @@
 /**
- * PUT /api/payments/[id] — proxies FastAPI's payment validation endpoint.
+ * GET/PUT /api/payments/[id] — proxies FastAPI's single-payment endpoints.
  *
- * Approve or reject a membership payment validation request (CU012).
+ * PUT approves or rejects a membership payment validation request (CU012).
  * Calls `PATCH /membresias/pagos/{id}/validar`, whose response
  * (`PagoResponseDTO`) doesn't carry the student's name (only
  * `PagoListItemDTO`, the queue list, denormalizes that) — so this handler
  * also fetches the persona and membresia/tipo in parallel to rebuild the
  * same `PaymentValidationRequest` shape the GET route returns (see
- * src/lib/server/payments-adapter.ts).
+ * `enrichSinglePago` in src/lib/server/payments-adapter.ts).
  *
  * Request body (approve):
  *   { "action": "approved" }
  * Request body (reject):
  *   { "action": "rejected", "rejectionReason": "string" }
+ *
+ * GET re-checks one payment's REAL current state — added for issue #456.
+ * When a PUT above times out, drops the connection, or comes back with an
+ * error, the frontend cannot tell "nothing happened" from "the write landed
+ * anyway, the response just never arrived" (a real, reproduced failure mode:
+ * the backend commits, the client only sees a network error). This is what
+ * `frontend/src/app/payments/page.tsx` calls after such a failure, instead
+ * of assuming either outcome.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import {
-  buildPaymentValidationRequest,
-  personaFullName,
-  type BackendMembresia,
-  type BackendPagoCore,
-  type BackendPersona,
-  type BackendTipoMembresia,
-} from "@/lib/server/payments-adapter";
+import { enrichSinglePago, type BackendPagoCore } from "@/lib/server/payments-adapter";
 
 type ParsedUpdateBody =
   | { action: "approved" }
@@ -94,38 +95,45 @@ export async function PUT(
   }
 
   const pago = (await validarResult.response.json()) as BackendPagoCore;
-
-  // `/membresias/tipos` is a small, rarely-changing catalog (see the N+1
-  // note in payments-adapter.ts) — fetching it in full alongside the two
-  // per-payment lookups is cheap and keeps this handler's shape consistent
-  // with GET /api/payments.
-  const [personaResult, membresiaResult, tiposResult] = await Promise.all([
-    backendFetchAuthed(request, `/personas/${pago.personaId}`),
-    backendFetchAuthed(request, `/membresias/${pago.membresiaId}`),
-    backendFetchAuthed(request, "/membresias/tipos"),
-  ]);
-
-  const persona: BackendPersona | undefined =
-    personaResult.ok && personaResult.response.ok ? await personaResult.response.json() : undefined;
-  const membresia: BackendMembresia =
-    membresiaResult.ok && membresiaResult.response.ok
-      ? await membresiaResult.response.json()
-      : { estado: "INACTIVA", tipoMembresiaId: 0 };
-  const tipos: BackendTipoMembresia[] =
-    tiposResult.ok && tiposResult.response.ok ? await tiposResult.response.json() : [];
-
-  const tipoMembresia = tipos.find((tipo) => tipo.id === membresia.tipoMembresiaId);
-  const item = buildPaymentValidationRequest(pago, personaFullName(persona), membresia, tipoMembresia);
+  const { item, refreshedAccessToken: enrichRefreshedToken } = await enrichSinglePago(request, pago);
 
   const response = NextResponse.json(item);
-  // Any of the four calls above may have independently refreshed the token
-  // (each resolves/refreshes off the same request cookies) — propagate
-  // whichever one actually did, same as GET /api/payments.
-  const refreshedAccessToken =
-    validarResult.refreshedAccessToken ??
-    (personaResult.ok ? personaResult.refreshedAccessToken : undefined) ??
-    (membresiaResult.ok ? membresiaResult.refreshedAccessToken : undefined) ??
-    (tiposResult.ok ? tiposResult.refreshedAccessToken : undefined);
+  // Either the validar call or any of the three enrichment lookups may have
+  // independently refreshed the token (each resolves/refreshes off the same
+  // request cookies) — propagate whichever one actually did, same as GET
+  // /api/payments.
+  const refreshedAccessToken = validarResult.refreshedAccessToken ?? enrichRefreshedToken;
+  if (refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: refreshedAccessToken });
+  }
+  return response;
+}
+
+/**
+ * GET /api/payments/[id] — one payment's REAL current state (issue #456).
+ *
+ * Calls `GET /membresias/pagos/{id}` (admin-authorized, same as every other
+ * route here) and enriches it the same way PUT's response is built. No
+ * caching: this exists specifically to be trusted over whatever the caller's
+ * last optimistic guess was.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+): Promise<NextResponse> {
+  const pagoResult = await backendFetchAuthed(request, `/membresias/pagos/${params.id}`);
+  if (!pagoResult.ok) {
+    return NextResponse.json({ message: "No se pudo consultar el pago." }, { status: pagoResult.status });
+  }
+  if (!pagoResult.response.ok) {
+    return passthroughBackendError(pagoResult.response, "No se pudo consultar el pago.");
+  }
+
+  const pago = (await pagoResult.response.json()) as BackendPagoCore;
+  const { item, refreshedAccessToken: enrichRefreshedToken } = await enrichSinglePago(request, pago);
+
+  const response = NextResponse.json(item);
+  const refreshedAccessToken = pagoResult.refreshedAccessToken ?? enrichRefreshedToken;
   if (refreshedAccessToken) {
     setAuthCookies(response, { accessToken: refreshedAccessToken });
   }

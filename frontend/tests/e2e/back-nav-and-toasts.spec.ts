@@ -171,7 +171,17 @@ test.describe("Back navigation + toasts", () => {
         // failed-request body.
         return fulfillJson(route, { error: "server_error", message: "No se pudo procesar el rechazo." }, 500);
       }
-      return route.fallback();
+      // GET is `reportRealOutcomeAfterFailure`'s (src/app/payments/page.tsx)
+      // re-check via `fetchPaymentValidationById` — issue #456 never shows a
+      // "failed" toast without first confirming, from the server, that the
+      // write really didn't land. Answer with the SAME still-`pendiente` row:
+      // without this route the request fell through to the generic `**/api/**`
+      // catch-all above, which answers every GET with `[]`. An empty array's
+      // `.validationStatus` reads `undefined`, which `!== "pendiente"` is
+      // true — so the re-check code wrongly concluded the write had landed
+      // anyway and showed the "se confirmó, aunque la conexión falló" warning
+      // instead of the real error this test asserts on below.
+      return fulfillJson(route, PAYMENT_ROW);
     });
 
     await page.goto("/payments");
@@ -209,35 +219,32 @@ test.describe("Back navigation + toasts", () => {
     await page.getByRole("button", { name: "Rechazar y avisar" }).click();
 
     /*
-     * The decision is HELD for `UNDO_WINDOW_MS` (8s, src/lib/deferred-commit.ts)
-     * before the request goes out, so the failure cannot arrive any sooner than
-     * that. The timeout has to clear the window with room for the round trip on
-     * a loaded CI runner, or this test fails on timing rather than on behaviour.
-     *
-     * The queue reports the failure through a toast rather than an inline
-     * banner: by the time it lands, the window is gone and the admin may have
-     * moved on, so there is no control left to attach it to.
+     * Issue #456 retired the deferred "Deshacer" hold (`useDeferredCommit` /
+     * `src/lib/deferred-commit.ts` — both gone): the request fires the moment
+     * the admin confirms, and `decide()` (src/app/payments/page.tsx) never
+     * declares success or failure before the real PUT resolves. On failure it
+     * does not assume "nothing happened" either — `reportRealOutcomeAfterFailure`
+     * re-fetches the payment's real state first (mocked via the GET branch on
+     * the payments/pay-1 route above, still `pendiente`), confirms the write
+     * never landed, and only then shows the error. So the toast can land as
+     * soon as that PUT + GET round trip completes — no fixed window to wait out.
      *
      * The mocked failure is a 500, and `toUserMessage` (src/lib/error-message.ts)
      * deliberately gives every 5xx the SAME generic sentence app-wide, no matter
      * what the caller's own fallback text says — a 5xx `detail` describes the
      * SERVER's failure, never the user's business, so there is nothing
      * operation-specific worth showing (see `error-message.test.ts`, "gives
-     * every 5xx the same answer, whatever the body said"). This assertion used
-     * to expect the payment-specific fallback ("No se pudo rechazar el pago.")
-     * because /payments' onError still hardcoded `confirmation.failure` and
-     * never routed `err` through `toUserMessage` at all. Now that it does
-     * (matching every other error site in the app — see the `showError` call a
-     * few lines above `handleRejectSubmit` in payments/page.tsx), a 500 here
-     * reads the same generic sentence a 500 would produce anywhere else.
+     * every 5xx the same answer, whatever the body said").
      */
     await expect(
       page.getByRole("alert").filter({ hasText: /problema de nuestro lado/i }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    // And it names the payment that came back, so the admin knows what to redo.
+    // And its description names the payment, so the admin knows what to redo
+    // (the exact copy `reportRealOutcomeAfterFailure` uses once the re-check
+    // confirms the payment is still pending — see payments/page.tsx).
     await expect(
-      page.getByRole("alert").filter({ hasText: /volvió a la cola de pendientes/i }).first(),
+      page.getByRole("alert").filter({ hasText: /sigue en la cola de pendientes/i }).first(),
     ).toBeVisible();
 
     // The detail view carries its own way back to the queue, and a failed

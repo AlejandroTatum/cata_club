@@ -20,7 +20,6 @@ import PaymentsPage from "@/app/payments/page";
 import type { PaymentValidationRequest } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 import ToastContainer from "@/components/ToastContainer";
-import { UNDO_WINDOW_MS } from "@/lib/deferred-commit";
 import { humanizePaymentPeriod } from "@/app/payments/payments-utils";
 
 vi.mock("@/components/ProtectedRoute", () => ({
@@ -67,6 +66,7 @@ const mockUseAuth = vi.mocked(useAuth);
 
 const mockFetchPaymentValidations = vi.fn();
 const mockUpdatePaymentValidation = vi.fn();
+const mockFetchPaymentValidationById = vi.fn();
 const mockFetchPagoDetalle = vi.fn();
 const mockFetchCorrecciones = vi.fn();
 const mockCorregirPago = vi.fn();
@@ -130,6 +130,7 @@ vi.mock("@/services/api", () => ({
   fetchAllPaymentValidations: (estadoPago?: string) => fetchAllPaymentValidationsMock(estadoPago),
   updatePaymentValidation: (id: string, dto: unknown) =>
     mockUpdatePaymentValidation(id, dto),
+  fetchPaymentValidationById: (id: string) => mockFetchPaymentValidationById(id),
   fetchPagoDetalle: (pagoId: number) => mockFetchPagoDetalle(pagoId),
   fetchCorrecciones: (pagoId: number) => mockFetchCorrecciones(pagoId),
   corregirPago: (pagoId: number, datos: unknown) => mockCorregirPago(pagoId, datos),
@@ -251,13 +252,29 @@ async function liveRegionSaying(text: RegExp): Promise<HTMLElement> {
   });
 }
 
+/** Same as `liveRegionSaying`, for error/warning toasts (`role="alert"`, ToastContainer.tsx). */
+async function alertRegionSaying(text: RegExp): Promise<HTMLElement> {
+  return waitFor(() => {
+    const match = screen
+      .getAllByRole("alert")
+      .find((region) => text.test(region.textContent ?? ""));
+    if (!match) throw new Error(`No alert region matching ${text}`);
+    return match;
+  });
+}
+
 beforeEach(() => {
-  // A decision is held for a few seconds before it is sent, so the undo window
-  // is something every case has to be able to step over deliberately.
+  // `shouldAdvanceTime: true` lets testing-library's own polling (`waitFor`,
+  // `findBy*`) keep working under fake timers without every test having to
+  // advance them by hand — used by toast auto-dismiss timers, not by
+  // decisions anymore (issue #456 removed the pre-send hold).
   vi.useFakeTimers({ shouldAdvanceTime: true });
   mockFetchPaymentValidations.mockReset().mockResolvedValue([PENDING_REQUEST]);
   mockUpdatePaymentValidation.mockReset().mockImplementation((id: string) =>
     Promise.resolve({ ...PENDING_REQUEST, id, validationStatus: "validado" }),
+  );
+  mockFetchPaymentValidationById.mockReset().mockImplementation((id: string) =>
+    Promise.resolve({ ...PENDING_REQUEST, id }),
   );
   // Comprobante/correcciones (issue #400, criterios 7/8) — only rendered for
   // an already-`validado` payment's detail (`PagoCorreccionSection`); most
@@ -270,8 +287,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Unmount first: leaving the screen FLUSHES a held decision, and that must
-  // happen while the fake timers are still installed.
   cleanup();
   vi.useRealTimers();
 });
@@ -941,12 +956,6 @@ describe("PaymentsPage — rejection", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /rechazar y avisar/i }));
 
-    // The decision is held for the undo window before it is sent, so the
-    // assertion about what reaches the server has to step over that window.
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
     await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
     expect(mockUpdatePaymentValidation).toHaveBeenCalledWith("req-1", {
       action: "rejected",
@@ -1008,12 +1017,8 @@ describe("PaymentsPage — approve confirmation gating", () => {
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
 
-    // Confirming starts the undo window rather than the request; the send is
-    // what this case is about, so it steps over the window to reach it.
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
+    // Confirming sends the real request immediately (issue #456) — no hold
+    // to step over anymore.
     await waitFor(() => {
       expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
     });
@@ -1057,39 +1062,89 @@ describe("PaymentsPage — approve confirmation gating", () => {
       confirmBtn.click();
     });
 
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
     await waitFor(() => {
       expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
     });
-    // Give any second, wrongly-scheduled commit a chance to have fired too.
+    // Give any second, wrongly-fired request a chance to have landed too.
     await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
+      await Promise.resolve();
     });
     expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Issue #314 (K6 hallazgo #17) — the undo window has to be announced BEFORE
-// the click, not discoverable two clicks away in /ayuda.
+// Issue #456 — the UI never asserts an approval/rejection the server hasn't
+// confirmed yet. Reproduced live twice: `decide()` used to fire the success
+// toast and advance the queue SYNCHRONOUSLY, before the real PUT even
+// existed on the wire (it was held for `UNDO_WINDOW_MS` by
+// `useDeferredCommit`). `browser_network_requests` showed zero PUT/PATCH
+// requests in flight at the instant the success toast was already visible.
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — approving announces the undo window before it happens", () => {
-  // El aviso del deshacer dejó de estar suelto bajo los botones: ahora vive
-  // dentro de «Cómo se decide», en la misma tarjeta. La garantía que este test
+describe("PaymentsPage — issue #456: no success before the real server response", () => {
+  it("does not show the success toast, or move the queue, before the real PUT resolves", async () => {
+    let resolvePut!: (value: PaymentValidationRequest) => void;
+    mockUpdatePaymentValidation.mockImplementation(
+      () =>
+        new Promise<PaymentValidationRequest>((resolve) => {
+          resolvePut = resolve;
+        }),
+    );
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+    completeChecklist();
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    // The real request is in flight (mockUpdatePaymentValidation was called)
+    // but has not resolved — nothing may claim success yet.
+    await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Pago aprobado/)).not.toBeInTheDocument();
+    // The queue must still show this as the open, undecided request — not
+    // already advanced to "no more pending" or a next item.
+    expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
+
+    // Now the real server response lands.
+    await act(async () => {
+      resolvePut({ ...PENDING_REQUEST, validationStatus: "validado" });
+    });
+
+    expect(await screen.findByText(/Pago aprobado/)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #314 (K6 hallazgo #17) — the irreversibility warning has to be
+// announced BEFORE the click, not discoverable two clicks away in /ayuda.
+//
+// Issue #456 changed WHAT is irreversible: approving used to be held for a
+// few seconds so "Deshacer" could cancel it before it was ever sent — that
+// hold is gone (the confirm dialog is now the only cancel-before-send step),
+// so the warning had to be reworded from "you'll have a few seconds to undo
+// it" to "this cannot be undone once confirmed". The guarantee these two
+// tests hold — reachable without leaving the screen, repeated in the dialog
+// — is unchanged.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — approving announces that it cannot be undone, before it happens", () => {
+  // El aviso dejó de estar suelto bajo los botones: ahora vive dentro de
+  // «Cómo se decide», en la misma tarjeta. La garantía que este test
   // sostiene no es «está a la vista» sino «se alcanza sin salir de la pantalla».
-  it("keeps the undo window one disclosure away, not one screen away", async () => {
+  it("keeps the irreversibility warning one disclosure away, not one screen away", async () => {
     await openPendingWithChecklistDone();
 
-    expect(screen.queryByText(/unos segundos para deshacerlo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no se puede deshacer/i)).not.toBeInTheDocument();
 
     openComoSeDecide();
 
-    expect(screen.getByText(/unos segundos para deshacerlo/i)).toBeInTheDocument();
-    expect(screen.getByText(/ya no se puede revertir/i)).toBeInTheDocument();
+    expect(screen.getByText(/no se puede deshacer/i)).toBeInTheDocument();
   });
 
   it("repeats the irreversibility warning in the confirmation dialog itself", async () => {
@@ -1098,7 +1153,7 @@ describe("PaymentsPage — approving announces the undo window before it happens
     fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/no se puede revertir/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no se puede deshacer/i)).toBeInTheDocument();
   });
 });
 
@@ -1118,28 +1173,28 @@ describe("PaymentsPage — approving announces the undo window before it happens
 // ---------------------------------------------------------------------------
 
 describe("PaymentsPage — «Cómo se decide» pliega el procedimiento, no el riesgo", () => {
-  it("no muestra el aviso del deshacer al cargar la decisión", async () => {
+  it("no muestra el aviso de irreversibilidad al cargar la decisión", async () => {
     renderPage();
     await openRequest("Juan Pérez");
     await screen.findByRole("button", { name: /aprobar pago/i });
 
-    expect(screen.queryByText(/unos segundos para deshacerlo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no se puede deshacer/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cómo se decide/i })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
   });
 
-  it("despliega el aviso del deshacer al abrir «Cómo se decide», y lo vuelve a plegar", async () => {
+  it("despliega el aviso de irreversibilidad al abrir «Cómo se decide», y lo vuelve a plegar", async () => {
     renderPage();
     await openRequest("Juan Pérez");
     await screen.findByRole("button", { name: /aprobar pago/i });
 
     openComoSeDecide();
-    expect(screen.getByText(/unos segundos para deshacerlo/i)).toBeInTheDocument();
+    expect(screen.getByText(/no se puede deshacer/i)).toBeInTheDocument();
 
     openComoSeDecide();
-    expect(screen.queryByText(/unos segundos para deshacerlo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no se puede deshacer/i)).not.toBeInTheDocument();
   });
 
   // Issue #400 supersedes this test's premise. The "alerta de vigencia
@@ -1251,8 +1306,8 @@ describe("PaymentsPage — la nota del checklist se pliega en sus tres variantes
 
     openComoSeDecide();
 
-    // Sin `note` el panel sigue teniendo algo que decir: el aviso del deshacer.
-    expect(screen.getByText(/unos segundos para deshacerlo/i)).toBeInTheDocument();
+    // Sin `note` el panel sigue teniendo algo que decir: el aviso de irreversibilidad.
+    expect(screen.getByText(/no se puede deshacer/i)).toBeInTheDocument();
   });
 });
 
@@ -1399,7 +1454,7 @@ describe("PaymentsPage — 390px viewport", () => {
   });
 });
 
-describe("PaymentsPage — a decision stays reversible for a few seconds", () => {
+describe("PaymentsPage — a decision only becomes real once the server confirms it", () => {
   function renderWithToasts(): void {
     render(
       <ToastProvider>
@@ -1418,68 +1473,47 @@ describe("PaymentsPage — a decision stays reversible for a few seconds", () =>
     fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
   }
 
-  it("offers the undo on the confirmation itself", async () => {
+  it("sends the decision immediately on confirm — no artificial hold", async () => {
     await approveJuan();
 
-    const toast = await liveRegionSaying(/Pago aprobado/);
-    expect(within(toast).getByRole("button", { name: "Deshacer" })).toBeInTheDocument();
+    await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1));
   });
 
-  it("never sends the decision when the undo is taken", async () => {
+  it("shows a processing state on the button while the real request is in flight", async () => {
+    let resolvePut!: (value: PaymentValidationRequest) => void;
+    mockUpdatePaymentValidation.mockImplementation(
+      () => new Promise<PaymentValidationRequest>((resolve) => { resolvePut = resolve; }),
+    );
     await approveJuan();
 
-    const toast = await liveRegionSaying(/Pago aprobado/);
-    fireEvent.click(within(toast).getByRole("button", { name: "Deshacer" }));
+    expect(await screen.findByRole("button", { name: /procesando/i })).toBeDisabled();
 
     await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS * 2);
+      resolvePut({ ...PENDING_REQUEST, validationStatus: "validado" });
     });
-    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
   });
 
-  it("puts the admin back in front of the payment they had just decided", async () => {
-    await approveJuan();
-
-    const toast = await liveRegionSaying(/Pago aprobado/);
-    fireEvent.click(within(toast).getByRole("button", { name: "Deshacer" }));
-
-    // Undo returns the whole situation, not just the row: the payment is
-    // pending again AND the admin is looking at it, which is where they were
-    // when they made the call they took back.
-    expect(await screen.findByRole("button", { name: /aprobar pago/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
-  });
-
-  it("sends the decision once the window closes", async () => {
-    await approveJuan();
-
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
-    expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns the payment to the queue and says so when a held decision fails", async () => {
+  it("returns the payment to the queue and says so when the decision truly failed", async () => {
+    // Default `mockFetchPaymentValidationById` resolves with the payment
+    // still `pendiente` — the re-check (issue #456) confirms this failure is
+    // real, not a dropped connection that actually landed server-side.
     mockUpdatePaymentValidation.mockRejectedValue(new Error("500"));
     await approveJuan();
-
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
 
     // No control is left to attach the failure to, so it has to travel to them.
     expect(await screen.findByText("No se pudo aprobar el pago.")).toBeInTheDocument();
     expect(
-      screen.getByText("Juan Pérez volvió a la cola de pendientes."),
+      screen.getByText("Juan Pérez sigue en la cola de pendientes."),
     ).toBeInTheDocument();
+    // The queue never moved: it was never told this succeeded.
+    expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
   });
 
   it("shows the backend's real reason instead of the generic toast, when it has one", async () => {
     // PAG-2: reproduced with a real rejection, where the backend refused a
     // 422 because the admin's own note passed 255 characters. `decide()`'s
-    // `onError` used to hardcode `confirmation.failure` and throw the real
-    // `err` away — the admin always saw "No se pudo aprobar/rechazar el
+    // failure handler used to hardcode `confirmation.failure` and throw the
+    // real `err` away — the admin always saw "No se pudo aprobar/rechazar el
     // pago." and never learned what to fix. `err` has to go through
     // `toUserMessage()`, same as every other error site in the app.
     mockUpdatePaymentValidation.mockRejectedValue(
@@ -1487,14 +1521,63 @@ describe("PaymentsPage — a decision stays reversible for a few seconds", () =>
     );
     await approveJuan();
 
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
     expect(
       await screen.findByText("La nota no puede superar los 255 caracteres."),
     ).toBeInTheDocument();
     expect(screen.queryByText("No se pudo aprobar el pago.")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry, and retrying resends the same decision", async () => {
+    mockUpdatePaymentValidation
+      .mockRejectedValueOnce(new Error("500"))
+      .mockResolvedValueOnce({ ...PENDING_REQUEST, validationStatus: "validado" });
+    await approveJuan();
+
+    // Error toasts render `role="alert"`, not `role="status"` (ToastContainer.tsx).
+    const toast = await alertRegionSaying(/No se pudo aprobar el pago\./);
+    fireEvent.click(within(toast).getByRole("button", { name: "Reintentar" }));
+
+    await waitFor(() => expect(mockUpdatePaymentValidation).toHaveBeenCalledTimes(2));
+    expect(mockUpdatePaymentValidation).toHaveBeenNthCalledWith(2, "req-1", { action: "approved" });
+    expect(await screen.findByText(/Pago aprobado/)).toBeInTheDocument();
+  });
+
+  // Reproduced live (issue #454/#456, tercer disparador: caída de red durante
+  // la mutación) — la escritura puede completarse server-side mientras el
+  // cliente solo ve un error de conexión. El frontend NO puede asumir "no
+  // pasó nada": tiene que re-consultar antes de decidir qué mostrar.
+  it("tells the admin the truth when the request failed on the wire but the server actually applied it", async () => {
+    mockUpdatePaymentValidation.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockFetchPaymentValidationById.mockResolvedValue({
+      ...PENDING_REQUEST,
+      validationStatus: "validado",
+    });
+    await approveJuan();
+
+    // Never a fabricated failure when the server's own record says otherwise.
+    expect(screen.queryByText("No se pudo aprobar el pago.")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/se confirmó, aunque la conexión falló/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/el cambio sí se guardó en el servidor/i)).toBeInTheDocument();
+    // The queue reflects the real, now-confirmed state.
+    expect(screen.queryByRole("button", { name: /aprobar pago/i })).not.toBeInTheDocument();
+  });
+
+  it("tells the admin it could not confirm the real state, when the re-check also fails", async () => {
+    mockUpdatePaymentValidation.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockFetchPaymentValidationById.mockRejectedValue(new Error("503"));
+    await approveJuan();
+
+    // `toUserMessage` reads this as a network failure (no `.status`, a real
+    // `TypeError`) rather than falling back to `confirmation.failure` — same
+    // classification every other error site in the app uses.
+    expect(
+      await screen.findByText("No pudimos conectar. Revise su conexión a internet e intente nuevamente."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no se pudo confirmar el estado real/i),
+    ).toBeInTheDocument();
   });
 });
 
@@ -1507,57 +1590,27 @@ describe("PaymentsPage — a decision stays reversible for a few seconds", () =>
 // that had not moved since the prototype.
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — the hold is visible while it lasts", () => {
-  async function approveJuanBare(): Promise<void> {
-    renderPage();
-    await openRequest("Juan Pérez");
-    await screen.findByRole("button", { name: /aprobar pago/i });
-    completeChecklist();
-    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
-  }
-
-  it("names what is being held, on the queue itself", async () => {
-    await approveJuanBare();
-
-    expect(
-      await screen.findByText(/Aprobación de Juan Pérez — se envía en unos segundos/),
-    ).toBeInTheDocument();
-  });
-
-  it("clears the indicator once the decision is actually sent", async () => {
-    await approveJuanBare();
-    await screen.findByText(/Aprobación de Juan Pérez/);
-
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS);
-    });
-
-    await waitFor(() =>
-      expect(screen.queryByText(/se envía en unos segundos/)).not.toBeInTheDocument(),
-    );
-  });
-
-  it("offers a second way back that does not depend on the toast surviving", async () => {
-    await approveJuanBare();
-    const banner = await liveRegionSaying(/se envía en unos segundos/);
-
-    fireEvent.click(within(banner).getByRole("button", { name: "Deshacer" }));
-
-    await act(async () => {
-      vi.advanceTimersByTime(UNDO_WINDOW_MS * 2);
-    });
-    expect(mockUpdatePaymentValidation).not.toHaveBeenCalled();
-  });
-
+// Issue #456: the pre-send hold (and its "se envía en unos segundos" queue
+// banner) is gone — the confirm dialog is now the only cancel-before-send
+// step, and the real request fires immediately on confirm. What survives
+// from the old "the hold is visible while it lasts" contract is that the two
+// outcomes read differently, which the success toast's own message already
+// carries.
+describe("PaymentsPage — a rejection reads as a rejection, not an approval", () => {
   it("says a rejection is a rejection, not an approval", async () => {
-    renderPage();
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
     await openRequest("Juan Pérez");
     fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
     fireEvent.click(screen.getByRole("radio", { name: /el monto no coincide/i }));
     fireEvent.click(screen.getByRole("button", { name: /rechazar y avisar/i }));
 
-    expect(await screen.findByText(/Rechazo de Juan Pérez/)).toBeInTheDocument();
+    expect(await screen.findByText(/Pago rechazado/)).toBeInTheDocument();
+    expect(screen.queryByText(/Pago aprobado/)).not.toBeInTheDocument();
   });
 });
 
