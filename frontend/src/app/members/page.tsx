@@ -101,6 +101,7 @@ import RegularizarDeudaForm from "./RegularizarDeudaForm";
 import SuspenderReactivarForm from "./SuspenderReactivarForm";
 import CambiarPlanForm from "./CambiarPlanForm";
 import BeneficioSection from "./BeneficioSection";
+import LinkRepresentativeSection from "./LinkRepresentativeSection";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -583,6 +584,19 @@ function MemberEditDialog({
   const statusBadge = getAccountStatusBadge(account);
   const personaId = Number(account.id);
 
+  // Issue #460: `LinkRepresentativeSection` only makes sense for a minor —
+  // an adult links themselves through their own account (INS-2), and the
+  // endpoint this reuses (`vincular-representado`) already rejects an adult
+  // cédula with the same generic message it uses for "doesn't exist"
+  // (`_resolver_representado_elegible`). `account.estudiantes[0]` is always
+  // THIS persona (issue #388: one row per persona, not per representante's
+  // dependents — see `buildMemberAccounts`'s own doc comment).
+  const primaryStudent = account.estudiantes[0];
+  const rawStudentAge = primaryStudent?.fechaNacimiento
+    ? calculatePersonAge(primaryStudent.fechaNacimiento, clubToday())
+    : NaN;
+  const isMinorStudent = !Number.isNaN(rawStudentAge) && rawStudentAge < 18;
+
   // Issue #314 (K6 hallazgo #16): otorgar o quitar el rol ADMINISTRADOR daba
   // control total del club (o se lo quitaba) al primer clic, sin ningún paso
   // intermedio — el bloque "Roles" ya avisa que "se guarda al instante" pero
@@ -719,6 +733,24 @@ function MemberEditDialog({
               <ModalSection title="Datos de la cuenta" saveMode="manual">
                 <AccountInfoSection account={account} />
               </ModalSection>
+
+              {/* Issue #460: the only in-app way to assign a representante to
+                  a minor used to be knowing the endpoint existed and calling
+                  it directly — this panel had roles, estado, and per-student
+                  membership/ficha médica, and no field for it. */}
+              {isMinorStudent && (
+                <ModalSection
+                  title="Representante legal"
+                  saveMode="manual"
+                  icon={<Building2 size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+                >
+                  <LinkRepresentativeSection
+                    studentCedula={primaryStudent?.cedula}
+                    currentRepresentativeName={account.representadoPor}
+                    onLinked={membresiaCallbacks.onMembresiaChanged}
+                  />
+                </ModalSection>
+              )}
 
               <ModalSection title="Estado de la cuenta" saveMode="instant">
                 <div className="flex flex-wrap items-center gap-3">

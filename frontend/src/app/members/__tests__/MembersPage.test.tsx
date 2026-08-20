@@ -149,6 +149,8 @@ const mockRegularizarDeuda = vi.fn().mockResolvedValue({
 const mockSuspenderMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "SUSPENDIDA" });
 const mockReactivarMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA" });
 const mockCambiarPlanMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA", tipoMembresiaId: 7 });
+const mockSearchStudents = vi.fn().mockResolvedValue([]);
+const mockVincularRepresentado = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -184,6 +186,8 @@ vi.mock("@/services/api", () => {
     reactivarMembresia: (membresiaId: number, data: unknown) => mockReactivarMembresia(membresiaId, data),
     cambiarPlanMembresia: (membresiaId: number, nuevoTipoMembresiaId: number) =>
       mockCambiarPlanMembresia(membresiaId, nuevoTipoMembresiaId),
+    searchStudents: (query: string, opts?: unknown) => mockSearchStudents(query, opts),
+    vincularRepresentado: (personaId: number, cedula: string) => mockVincularRepresentado(personaId, cedula),
     ApiClientError: MockApiClientError,
   };
 });
@@ -2676,5 +2680,138 @@ describe("MembersPage — la ayuda explica el listado", () => {
     // que la ayuda no puede prometer que buscar alcance para traer a alguien
     // que quedó fuera del tope.
     expect(tercera).toHaveTextContent(/tope|fuera/i);
+  });
+});
+
+/**
+ * Issue #460, Escenario 5: the backend already lets an ADMINISTRADOR call
+ * `vincular-representado` for any persona, but "Miembros → Editar" had no
+ * field for it — an admin following the product ("the minor cannot pay,
+ * fix it") hit a dead end. `LinkRepresentativeSection` reuses the exact same
+ * endpoint the self-service "Agregar dependiente" flow already calls.
+ */
+describe("MembersPage — Representante legal (issue #460)", () => {
+  const MENOR: MemberAccount = {
+    id: "20",
+    role: "representante",
+    nombres: "Menor",
+    apellidos: "SinRepresentante",
+    telefono: "0999999999",
+    estudiantes: [
+      {
+        id: "20",
+        nombres: "Menor",
+        apellidos: "SinRepresentante",
+        cedula: "1710034065",
+        fechaNacimiento: "2015-01-01",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  const ADULTO: MemberAccount = {
+    ...ACCOUNT,
+    id: "21",
+    nombres: "Adulto",
+    apellidos: "ConCuentaPropia",
+    estudiantes: [
+      {
+        id: "21",
+        nombres: "Adulto",
+        apellidos: "ConCuentaPropia",
+        cedula: "1710034073",
+        fechaNacimiento: "1990-01-01",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  const REPRESENTANTE_ENCONTRADO = { id: 30, nombres: "Marcela", apellidos: "Ruiz" };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockSearchStudents.mockReset().mockResolvedValue([]);
+    mockVincularRepresentado.mockReset();
+  });
+
+  async function openMenorEditModal(account: MemberAccount = MENOR): Promise<HTMLElement> {
+    mockFetchMembers.mockResolvedValue({ accounts: [account] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText(`${account.nombres} ${account.apellidos}`);
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    return screen.getByRole("dialog");
+  }
+
+  it("shows the field for a minor with no representative", async () => {
+    const dialog = await openMenorEditModal();
+
+    expect(within(dialog).getByText("Representante legal")).toBeInTheDocument();
+    expect(within(dialog).getByText(/no tiene un representante vinculado/i)).toBeInTheDocument();
+  });
+
+  it("does not offer the field for an adult, self-managed account", async () => {
+    const dialog = await openMenorEditModal(ADULTO);
+
+    expect(within(dialog).queryByText("Representante legal")).not.toBeInTheDocument();
+  });
+
+  it("names the current representative and lets the admin replace it", async () => {
+    const dialog = await openMenorEditModal({
+      ...MENOR,
+      representadoPor: "Pedro Ruiz",
+    });
+
+    expect(within(dialog).getByText(/representante actual: pedro ruiz/i)).toBeInTheDocument();
+  });
+
+  it("searches by name, then links the selected representative by the minor's own cédula", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockVincularRepresentado.mockResolvedValue({ id: 20, representanteId: 30 });
+    const dialog = await openMenorEditModal();
+
+    const search = within(dialog).getByPlaceholderText(/buscar representante por nombre/i);
+    fireEvent.change(search, { target: { value: "Marcela" } });
+
+    const option = await within(dialog).findByText("Marcela Ruiz");
+    fireEvent.click(option);
+
+    const link = within(dialog).getByRole("button", { name: /vincular a marcela ruiz/i });
+    fireEvent.click(link);
+
+    await waitFor(() =>
+      // Path param is the REPRESENTANTE's id; the body is the MENOR's cédula —
+      // never the other way around (`vincular-representado`'s own contract).
+      expect(mockVincularRepresentado).toHaveBeenCalledWith(30, "1710034065"),
+    );
+    expect(await within(dialog).findByText(/vinculado a marcela ruiz/i)).toBeInTheDocument();
+  });
+
+  it("shows a clear message when linking fails, instead of a silent no-op", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockVincularRepresentado.mockRejectedValue(
+      new (await import("@/services/api")).ApiClientError(
+        "No fue posible completar la vinculación solicitada.",
+        400,
+        true,
+      ),
+    );
+    const dialog = await openMenorEditModal();
+
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Ruiz"));
+    fireEvent.click(within(dialog).getByRole("button", { name: /vincular a marcela ruiz/i }));
+
+    expect(await within(dialog).findByText(/no fue posible completar la vinculación/i)).toBeInTheDocument();
   });
 });
