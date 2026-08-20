@@ -2184,6 +2184,34 @@ class PagoServicio:
         comprobante = ComprobantePago(**datos.model_dump(), pago_id=pago_id)
         return self.repo_comprobante.crear(comprobante)
 
+    def _resolver_autorizacion_pago(
+        self,
+        pago: Pago | None,
+        persona_id_solicitante: int | None,
+        roles_solicitante: list[str],
+    ) -> tuple[bool, bool, bool]:
+        """Resuelve (es_duenio, es_representante, es_admin) para un `pago`
+        que puede no existir (issue #457): extraído de `adjuntar_voucher`
+        para bajar su complejidad cognitiva, y reescrito para que el análisis
+        estático de Sonar pueda probar la correlación entre `pago` y la
+        persona titular -- antes, `persona_titular` salía de un ternario
+        aparte y `es_representante` la dereferenciaba en una expresión
+        distinta a la que verificaba `pago is not None`, algo que en tiempo
+        de ejecución es seguro (el `and` corta antes) pero que Sonar no puede
+        probar mirando solo el flujo de datos.
+        """
+        es_admin = "ADMINISTRADOR" in roles_solicitante
+        es_duenio = False
+        es_representante = False
+        if pago is not None and persona_id_solicitante is not None:
+            es_duenio = persona_id_solicitante == pago.persona_id
+            persona_titular = pago.persona
+            es_representante = (
+                persona_titular is not None
+                and persona_titular.representante_id == persona_id_solicitante
+            )
+        return es_duenio, es_representante, es_admin
+
     # --- Voucher de transferencia (cliente) -----------------------------------
     def adjuntar_voucher(
         self,
@@ -2226,18 +2254,9 @@ class PagoServicio:
         # interna está bien, lo que no puede pasar es que el pago inexistente
         # se distinga de uno ajeno en la respuesta.
         pago = self.repo.obtener_por_id(pago_id)
-        persona_titular = pago.persona if pago else None
-        es_duenio = (
-            pago is not None
-            and persona_id_solicitante is not None
-            and persona_id_solicitante == pago.persona_id
+        es_duenio, es_representante, es_admin = self._resolver_autorizacion_pago(
+            pago, persona_id_solicitante, roles_solicitante
         )
-        es_representante = (
-            pago is not None
-            and persona_id_solicitante is not None
-            and persona_titular.representante_id == persona_id_solicitante
-        )
-        es_admin = "ADMINISTRADOR" in roles_solicitante
         if not (es_duenio or es_representante or es_admin):
             raise PermisosInsuficientes(
                 "Solo el titular del pago, su representante, o un administrador "
@@ -2255,9 +2274,10 @@ class PagoServicio:
             )
 
         # E01-RF006/RF007: mismo criterio de solo-lectura financiera para
-        # menores que en registrar_pago (ver docstring allá).
+        # menores que en registrar_pago (ver docstring allá). `pago` ya está
+        # garantizado no-None acá (el check #2 de arriba lo asegura).
         if es_duenio and not es_admin and not es_representante:
-            edad = _calcular_edad(persona_titular.fecha_nacimiento)
+            edad = _calcular_edad(pago.persona.fecha_nacimiento)
             if edad < 18:
                 raise PermisosInsuficientes(
                     "Los alumnos menores de edad tienen acceso de solo lectura "
