@@ -72,6 +72,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
+import { useModalFocusTrap } from "@/lib/focus-trap";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck,
@@ -432,6 +433,23 @@ export default function PaymentsPage(): React.ReactElement {
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [page, setPage] = useState(1);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const voucherPanelRef = useRef<HTMLDivElement>(null);
+  // `useCallback` (not an inline arrow at each call site) so this stays the
+  // same function across renders: `useModalFocusTrap` re-arms its Escape/Tab
+  // listener whenever `onClose` changes identity, and an unstable `onClose`
+  // would steal focus back to "Ampliar" — the hook's own close-time
+  // behaviour — on every unrelated re-render while the viewer is open.
+  const closeVoucherModal = useCallback(() => setVoucherModalOpen(false), []);
+  // Issue #464: `role="dialog"`/`aria-modal`/`aria-label` below were already
+  // correct, but nothing backed them — Escape did nothing, focus never
+  // entered the panel, Tab reached "Descargar" behind the overlay, and
+  // closing dropped focus on `<body>`. Same hook `EmergencyCardDialog`
+  // already proved (`focus-trap.ts`).
+  useModalFocusTrap({
+    open: voucherModalOpen,
+    onClose: closeVoucherModal,
+    panelRef: voucherPanelRef,
+  });
 
   /**
    * The visible TABLE's real source — one backend page per UI page (issue
@@ -1608,13 +1626,22 @@ export default function PaymentsPage(): React.ReactElement {
         {voucherModalOpen && selectedRequest?.proofPreviewUrl &&
           createPortal(
             <div
+              // No `onClick` here: a backdrop with a click-to-close handler
+              // reads as an interactive element without keyboard support
+              // (Sonar S6848 / jsx-a11y click-events-have-key-events). Escape
+              // and the "Cerrar" button — both wired by `useModalFocusTrap`
+              // above — already close this dialog by every accessible path;
+              // "click outside to close" isn't a requirement from #464 or
+              // #465, so the backdrop stays decorative instead of gaining
+              // fake button semantics (role/tabIndex/onKeyDown) for a
+              // non-essential interaction.
               className="fixed inset-0 z-50 flex items-center justify-center bg-coal/60 backdrop-blur-sm"
-              onClick={(): void => setVoucherModalOpen(false)}
               role="dialog"
               aria-modal="true"
               aria-label="Visor de comprobante"
             >
               <div
+                ref={voucherPanelRef}
                 className="relative mx-4 flex h-[90vh] w-full max-w-4xl flex-col card overflow-hidden shadow-elevated"
                 /* The panel is a layout box, not a control: its only handler
                    keeps a click INSIDE the sheet from reaching the backdrop's
@@ -1632,7 +1659,7 @@ export default function PaymentsPage(): React.ReactElement {
                   </p>
                   <button
                     type="button"
-                    onClick={(): void => setVoucherModalOpen(false)}
+                    onClick={closeVoucherModal}
                     aria-label="Cerrar"
                     className="rounded-ctl p-1.5 text-ink-3 transition-colors hover:bg-canvas hover:text-ink"
                   >

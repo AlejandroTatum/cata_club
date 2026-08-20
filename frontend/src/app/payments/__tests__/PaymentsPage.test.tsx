@@ -1381,6 +1381,122 @@ describe("PaymentsPage — voucher preview recovery", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Issue #464 — the "Ampliar" voucher viewer is a real modal for keyboard and
+// screen-reader admins: Escape closes it, focus enters on open, Tab cannot
+// escape it while it is up, and focus returns to "Ampliar" on close. Before
+// this fix, `role="dialog"`/`aria-modal`/`aria-label` were correct but nothing
+// backed them: Escape did nothing, focus never left the "Ampliar" trigger,
+// Tab reached "Descargar" behind the overlay, and closing dropped focus on
+// `<body>`.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — el visor de comprobante (Ampliar) es un diálogo real", () => {
+  function voucherRequest(): PaymentValidationRequest {
+    return {
+      ...PENDING_REQUEST,
+      proofPreviewUrl: "https://files.example/voucher.png",
+      proofFileType: "image",
+    };
+  }
+
+  /**
+   * `fireEvent.click` dispatches a bare click event — unlike a real browser,
+   * jsdom does not also focus the clicked button, so the trap's "capture
+   * whoever was focused" step would otherwise capture whatever the PREVIOUS
+   * effect left focused (the detail heading) instead of "Ampliar". The
+   * explicit `.focus()` reproduces the real click-focuses-the-button
+   * behaviour every browser gives a `<button>` for free (same convention as
+   * `EmergencyCardDialog.test.tsx`'s `disparador.focus()`).
+   */
+  async function clickAmpliar(): Promise<HTMLElement> {
+    const ampliar = await screen.findByRole("button", { name: "Ampliar" });
+    ampliar.focus();
+    fireEvent.click(ampliar);
+    return ampliar;
+  }
+
+  async function openVoucherViewer(): Promise<void> {
+    await clickAmpliar();
+    await screen.findByRole("dialog", { name: /visor de comprobante/i });
+  }
+
+  it("closes on Escape", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([voucherRequest()]);
+    renderPage();
+    await openRequest("Juan Pérez");
+    await openVoucherViewer();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: /visor de comprobante/i })).not.toBeInTheDocument();
+  });
+
+  it("moves focus to the Cerrar button when it opens", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([voucherRequest()]);
+    renderPage();
+    await openRequest("Juan Pérez");
+    await openVoucherViewer();
+
+    expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+  });
+
+  it("traps Tab inside the dialog instead of reaching 'Descargar' behind the overlay", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([voucherRequest()]);
+    renderPage();
+    await openRequest("Juan Pérez");
+    await openVoucherViewer();
+
+    // The only focusable inside the panel is "Cerrar" — a one-element cycle,
+    // so Tab has to land back on it rather than escaping to "Descargar".
+    fireEvent.keyDown(document, { key: "Tab" });
+
+    expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+    expect(screen.queryByRole("link", { name: "Descargar" })).not.toHaveFocus();
+  });
+
+  it("returns focus to the Ampliar trigger when closed with the Cerrar button", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([voucherRequest()]);
+    renderPage();
+    await openRequest("Juan Pérez");
+    const ampliar = await clickAmpliar();
+    await screen.findByRole("dialog", { name: /visor de comprobante/i });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    expect(ampliar).toHaveFocus();
+  });
+
+  it("returns focus to the Ampliar trigger when closed with Escape", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([voucherRequest()]);
+    renderPage();
+    await openRequest("Juan Pérez");
+    const ampliar = await clickAmpliar();
+    await screen.findByRole("dialog", { name: /visor de comprobante/i });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(ampliar).toHaveFocus();
+  });
+
+  it("leaves focus management correct across two open/close cycles in a row", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([voucherRequest()]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const firstAmpliar = await clickAmpliar();
+    await screen.findByRole("dialog", { name: /visor de comprobante/i });
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(firstAmpliar).toHaveFocus();
+
+    const secondAmpliar = await clickAmpliar();
+    await screen.findByRole("dialog", { name: /visor de comprobante/i });
+    expect(screen.getByRole("button", { name: "Cerrar" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(secondAmpliar).toHaveFocus();
+  });
+});
+
 describe("PaymentsPage — unrelated happy path", () => {
   it("does not add contextual help to the unrelated payment-review journey", async () => {
     renderPage();
