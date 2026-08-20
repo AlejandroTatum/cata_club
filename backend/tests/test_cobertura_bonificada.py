@@ -260,7 +260,13 @@ def test_aplicacion_ancla_sobre_el_ultimo_pago_aprobado(client, db_session):
     ).json()
     _autenticar_como_admin()
     aprobado = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar", json={"estado_pago": "APROBADO"},
+        # Issue #459: pago TRANSFERENCIA sin voucher adjunto -- sin este
+        # motivo, aprobar devuelve 400 desde este fix.
+        f"/api/v1/membresias/pagos/{pago['id']}/validar",
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     ).json()
 
     descuento = _crear_descuento_api(client, porcentaje=Decimal("100.00"))
@@ -868,7 +874,13 @@ def test_pago_normal_ancla_despues_de_cobertura_bonificada_existente(client, db_
 
     _autenticar_como_admin()
     aprobado = client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar", json={"estado_pago": "APROBADO"},
+        # Issue #459: pago TRANSFERENCIA sin voucher adjunto -- sin este
+        # motivo, aprobar devuelve 400 desde este fix.
+        f"/api/v1/membresias/pagos/{pago['id']}/validar",
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert aprobado.status_code == 200, aprobado.text
     # Confirmado también contra la fila real (no solo la respuesta HTTP):
@@ -914,7 +926,13 @@ def test_aplicar_beneficio_rechaza_solapar_pago_aprobado_aunque_el_ancla_falle(
 
     pago = registrar_pago_api(client, persona["id"], membresia["id"], tipo_pago="TRANSFERENCIA").json()
     client.patch(
-        f"/api/v1/membresias/pagos/{pago['id']}/validar", json={"estado_pago": "APROBADO"},
+        # Issue #459: pago TRANSFERENCIA sin voucher adjunto -- sin este
+        # motivo, aprobar devuelve 400 desde este fix.
+        f"/api/v1/membresias/pagos/{pago['id']}/validar",
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
 
     descuento = _crear_descuento_api(client, porcentaje=Decimal("100.00"))

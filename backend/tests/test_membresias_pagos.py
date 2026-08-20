@@ -90,7 +90,11 @@ def test_pago_aprobado_activa_membresia(client):
 
     resp = client.patch(
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # Issue #459: TRANSFERENCIA sin voucher adjunto.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert resp.status_code == 200
 

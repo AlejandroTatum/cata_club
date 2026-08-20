@@ -228,7 +228,13 @@ def test_retirar_beneficio_deja_sin_descuento_el_proximo_pago(client):
     # de poder registrar el segundo sobre la misma membresía.
     aprobacion = client.patch(
         f"/api/v1/membresias/pagos/{primero['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # `motivo_excepcion_sin_comprobante` (issue #459): `registrar_pago_api`
+        # crea una TRANSFERENCIA sin voucher adjunto por defecto -- sin este
+        # motivo, aprobar devuelve 400 desde este fix.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert aprobacion.status_code == 200, aprobacion.text
 

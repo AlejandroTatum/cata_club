@@ -74,6 +74,13 @@ def _validar(client, pago_id: int, estado: str, motivo: str | None = None):
     payload = {"estado_pago": estado}
     if motivo is not None:
         payload["motivo_rechazo"] = motivo
+    if estado == "APROBADO":
+        # Issue #459: `escenario_pago_pendiente_api` crea una TRANSFERENCIA
+        # sin voucher adjunto -- sin este motivo, aprobar devuelve 400 desde
+        # este fix. Esta suite prueba la guardia de estado/concurrencia, no
+        # la excepción de comprobante; el motivo acá es solo lo que hace
+        # falta para que la aprobación pase.
+        payload["motivo_excepcion_sin_comprobante"] = "Verificado directamente en la cuenta del club."
     return client.patch(f"/api/v1/membresias/pagos/{pago_id}/validar", json=payload)
 
 
@@ -257,7 +264,15 @@ def test_dos_aprobaciones_concurrentes_solo_una_gana(
         try:
             barrera.wait()
             resultados[indice] = PagoServicio(sesion).validar_pago(
-                pago_id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO),
+                pago_id,
+                # Issue #459: `escenario_pago_concurrente` crea el pago como
+                # TRANSFERENCIA sin voucher -- sin este motivo, aprobar
+                # rechaza con `OperacionInvalida` antes de llegar siquiera
+                # a competir por el lock que este test ejercita.
+                PagoValidarDTO(
+                    estado_pago=EstadoPago.APROBADO,
+                    motivo_excepcion_sin_comprobante="Verificado directamente en la cuenta del club.",
+                ),
                 actor_persona_id=persona_id,
             )
         except BaseException as error:  # noqa: BLE001 -- el test inspecciona el fallo
