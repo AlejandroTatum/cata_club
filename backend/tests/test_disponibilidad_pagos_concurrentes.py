@@ -74,7 +74,6 @@ import time
 from decimal import Decimal
 from unittest.mock import patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
