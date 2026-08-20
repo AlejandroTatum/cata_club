@@ -361,3 +361,26 @@ export function composeRejectionReason(reasonKey: string, note: string): string 
   const trimmedNote = note.trim();
   return trimmedNote ? `${reason.label} — ${trimmedNote}` : reason.label;
 }
+
+/**
+ * Max length for the exception reason required to approve a TRANSFERENCIA
+ * with no voucher attached (issue #459, audited exception). Mirrors the
+ * backend's own cap (`PagoValidarDTO.motivo_excepcion_sin_comprobante`,
+ * `max_length=255`) exactly — unlike `REJECTION_NOTE_MAX_LENGTH` above,
+ * there is no downstream notification column to stay clear of here, so
+ * there's no reason to cap it any lower than the backend already does.
+ */
+export const EXCEPTION_REASON_MAX_LENGTH = 255;
+
+/**
+ * Whether approving `request` as-is needs the audited no-voucher exception
+ * reason (issue #459) — a TRANSFERENCIA with nothing attached. Mirrors
+ * `PagoServicio.validar_pago`'s own gate (`tipo_pago == TRANSFERENCIA and
+ * not voucher_url`) exactly: EFECTIVO never needs it (no voucher is the
+ * NORMAL case there, not an exception — issue #452), and a transfer that
+ * already has a voucher doesn't either (that's the ordinary "read the
+ * voucher" path, unchanged).
+ */
+export function requiresExceptionReason(kind: PaymentMethodKind, hasProof: boolean): boolean {
+  return kind === "transferencia" && !hasProof;
+}

@@ -113,7 +113,13 @@ def test_ciclo_integral_inscripcion_a_reactivacion(db_session, monkeypatch):
     assert pago1.fecha_fin == _sumar_meses(FECHA_INICIO, 1)
 
     # --- Paso 3: validar_pago (aprobación) ----------------------------------
-    pago1 = pago_servicio.validar_pago(pago1.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id)
+    pago1 = pago_servicio.validar_pago(pago1.id, PagoValidarDTO(
+        estado_pago=EstadoPago.APROBADO,
+        # Issue #459: los cuatro pagos de este ciclo son TRANSFERENCIA sin
+        # voucher (nunca se adjunta uno en esta narrativa) -- sin este
+        # motivo, aprobar rechaza con `OperacionInvalida` desde este fix.
+        motivo_excepcion_sin_comprobante="Verificado directamente en la cuenta del club.",
+    ), actor_persona_id=admin.id)
     db_session.refresh(membresia)
     # Invariante 6 (#400): "la cobertura se deriva de la cantidad de meses
     # comprados; administración no puede escribir fechas de cobertura
@@ -139,7 +145,13 @@ def test_ciclo_integral_inscripcion_a_reactivacion(db_session, monkeypatch):
     assert pago2.fecha_inicio == pago1.fecha_fin == _sumar_meses(FECHA_INICIO, 1)
     assert pago2.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
     assert pago2.tarifa_mensual_aplicada == Decimal("30.00")
-    pago2 = pago_servicio.validar_pago(pago2.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id)
+    pago2 = pago_servicio.validar_pago(pago2.id, PagoValidarDTO(
+        estado_pago=EstadoPago.APROBADO,
+        # Issue #459: los cuatro pagos de este ciclo son TRANSFERENCIA sin
+        # voucher (nunca se adjunta uno en esta narrativa) -- sin este
+        # motivo, aprobar rechaza con `OperacionInvalida` desde este fix.
+        motivo_excepcion_sin_comprobante="Verificado directamente en la cuenta del club.",
+    ), actor_persona_id=admin.id)
     assert pago2.estado_pago == EstadoPago.APROBADO
 
     # --- Paso 5: cambio de tarifa del catálogo (#394/2a) --------------------
@@ -172,7 +184,13 @@ def test_ciclo_integral_inscripcion_a_reactivacion(db_session, monkeypatch):
     assert pago3.monto_base == Decimal("30.00")
     assert pago3.fecha_inicio == pago2.fecha_fin == _sumar_meses(FECHA_INICIO, 2)
     assert pago3.fecha_fin == _sumar_meses(FECHA_INICIO, 3)
-    pago3 = pago_servicio.validar_pago(pago3.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id)
+    pago3 = pago_servicio.validar_pago(pago3.id, PagoValidarDTO(
+        estado_pago=EstadoPago.APROBADO,
+        # Issue #459: los cuatro pagos de este ciclo son TRANSFERENCIA sin
+        # voucher (nunca se adjunta uno en esta narrativa) -- sin este
+        # motivo, aprobar rechaza con `OperacionInvalida` desde este fix.
+        motivo_excepcion_sin_comprobante="Verificado directamente en la cuenta del club.",
+    ), actor_persona_id=admin.id)
     assert pago3.estado_pago == EstadoPago.APROBADO
 
     # --- Paso 7: cambiar_plan a un TipoMembresia distinto -------------------
@@ -277,7 +295,13 @@ def test_ciclo_integral_inscripcion_a_reactivacion(db_session, monkeypatch):
     # paso 7, confirmado una vez más sobre el camino real de pago.
     assert pago4.tarifa_mensual_aplicada == Decimal("45.00")
     assert pago4.monto_base == Decimal("45.00")
-    pago4 = pago_servicio.validar_pago(pago4.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id)
+    pago4 = pago_servicio.validar_pago(pago4.id, PagoValidarDTO(
+        estado_pago=EstadoPago.APROBADO,
+        # Issue #459: los cuatro pagos de este ciclo son TRANSFERENCIA sin
+        # voucher (nunca se adjunta uno en esta narrativa) -- sin este
+        # motivo, aprobar rechaza con `OperacionInvalida` desde este fix.
+        motivo_excepcion_sin_comprobante="Verificado directamente en la cuenta del club.",
+    ), actor_persona_id=admin.id)
     assert pago4.estado_pago == EstadoPago.APROBADO
 
     # Invariante 9 (#400): "dinero en Decimal, nunca float" -- tocado acá

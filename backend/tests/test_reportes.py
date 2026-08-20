@@ -66,9 +66,16 @@ def _crear_pago(client, cedula, estado_pago=None, monto="35.00"):
         },
     ).json()
     if estado_pago is not None:
+        payload = {"estado_pago": estado_pago}
+        if estado_pago == "APROBADO":
+            # Issue #459: TRANSFERENCIA sin voucher adjunto -- sin este
+            # motivo, aprobar devuelve 400 desde este fix. RECHAZADO no lo
+            # necesita (ver `PagoServicio.validar_pago`: la excepción solo
+            # se exige al aprobar) -- se deja sin tocar, fuera de alcance.
+            payload["motivo_excepcion_sin_comprobante"] = "Verificado directamente en la cuenta del club."
         client.patch(
             f"/api/v1/membresias/pagos/{pago['id']}/validar",
-            json={"estado_pago": estado_pago},
+            json=payload,
         )
     return pago
 

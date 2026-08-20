@@ -171,7 +171,11 @@ def test_admin_sigue_registrando_y_aprobando_pago_valido_de_cualquier_persona(cl
 
     aprobado = client.patch(
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # Issue #459: TRANSFERENCIA sin voucher adjunto (`_payload_pago`).
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert aprobado.status_code == 200
     estado = client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"]

@@ -106,7 +106,14 @@ def _registrar_pago(client, persona_id, membresia_id, meses, *, descuento_ids=No
 def _aprobar(client, pago_id):
     resp = client.patch(
         f"/api/v1/membresias/pagos/{pago_id}/validar",
-        json={"estado_pago": "APROBADO"},
+        # Issue #459: `_registrar` (arriba) siempre crea una TRANSFERENCIA
+        # sin voucher adjunto -- sin este motivo, aprobar devuelve 400 desde
+        # este fix. Esta suite prueba el período de cobertura, no la
+        # excepción de comprobante.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -281,6 +288,8 @@ def test_fecha_inicio_fin_en_el_payload_de_validar_no_alteran_la_cobertura(clien
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
         json={
             "estado_pago": "APROBADO",
+            # Issue #459: TRANSFERENCIA sin voucher (`_registrar` de arriba).
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
             # Un año de diferencia respecto de lo derivado -- si esto tuviera
             # algún efecto, la cobertura aprobada no coincidiría con lo que
             # se afirma arriba.

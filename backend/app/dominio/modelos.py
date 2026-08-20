@@ -606,6 +606,30 @@ class Pago(Base):
         ForeignKey("persona.id"), nullable=True,
     )
 
+    # --- Excepción auditada: aprobar una transferencia sin comprobante
+    # (issue #459) ------------------------------------------------------
+    # Decisión de producto: una TRANSFERENCIA puede aprobarse sin voucher
+    # cuando el admin verificó la cuenta bancaria directamente, pero SOLO
+    # como excepción auditada -- nunca un camino silencioso. `PagoServicio.
+    # validar_pago` exige este motivo (no vacío) exactamente en ese caso
+    # (TRANSFERENCIA, sin `voucher_url`, se está APROBANDO); el resto del
+    # tiempo queda `None`, incluyendo cuando el pago SÍ trae voucher (ese
+    # camino no cambia) y cuando se RECHAZA sin voucher (rechazar nunca
+    # activa nada, no hay riesgo que auditar). Un EFECTIVO sin comprobante
+    # tampoco entra acá: para ese tipo de pago la ausencia de voucher es lo
+    # normal, no una excepción (ver `pagoFaltaComprobante` en el frontend,
+    # que ya scopea "falta comprobante" a TRANSFERENCIA únicamente -- issue
+    # #452 documenta que el voucher nunca aplicó a EFECTIVO).
+    #
+    # NULLABLE a nivel de esquema, mismo criterio que `validado_por_persona_
+    # id` arriba: el fail-closed es responsabilidad del servicio, no de un
+    # NOT NULL que rompería sobre transferencias históricas ya aprobadas sin
+    # voucher (antes de este fix, se aprobaban por autoatestación pura, sin
+    # dejar ningún rastro del motivo).
+    motivo_excepcion_sin_comprobante: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True,
+    )
+
 
 class CorreccionPago(Base):
     """Corrección financiera auditable de un `Pago` YA aprobado (issue #400,

@@ -193,7 +193,11 @@ def test_subir_voucher_a_pago_no_pendiente_da_400(client):
     # Estado: PENDIENTE_VALIDACION -> APROBADO vía PATCH (mock Celery ya activo).
     client.patch(
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # Issue #459: TRANSFERENCIA sin voucher adjunto (`_crear_pago`).
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
 
     contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100

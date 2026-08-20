@@ -112,6 +112,8 @@ import {
   composeRejectionReason,
   REJECTION_REASONS,
   REJECTION_NOTE_MAX_LENGTH,
+  requiresExceptionReason,
+  EXCEPTION_REASON_MAX_LENGTH,
 } from "@/app/payments/payments-utils";
 import {
   BackLink,
@@ -412,6 +414,9 @@ export default function PaymentsPage(): React.ReactElement {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  /** Issue #459: motivo obligatorio para aprobar una TRANSFERENCIA sin
+   *  comprobante adjunto (excepción auditada) — ver `requiresExceptionReason`. */
+  const [exceptionReason, setExceptionReason] = useState("");
   const [rejectionReasonKey, setRejectionReasonKey] = useState("");
   const [rejectionNote, setRejectionNote] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -661,6 +666,7 @@ export default function PaymentsPage(): React.ReactElement {
    */
   useEffect(() => {
     setChecked({});
+    setExceptionReason("");
     setShowRejectForm(false);
     setRejectionReasonKey("");
     setRejectionNote("");
@@ -713,7 +719,16 @@ export default function PaymentsPage(): React.ReactElement {
     [selectedRequest?.paymentMethod, selectedRequest?.expectedAmount, selectedRequest?.proofPreviewUrl],
   );
   const remainingChecks = checklist.items.filter((item) => !checked[item.key]).length;
-  const checklistComplete = remainingChecks === 0;
+  /** Issue #459: a TRANSFERENCIA with nothing attached also needs a
+   *  non-blank exception reason before "Aprobar pago" unlocks — the
+   *  checklist's checkboxes alone were pure self-attestation, with no gate
+   *  that actually required evidence. */
+  const needsExceptionReason = requiresExceptionReason(
+    checklist.kind,
+    Boolean(selectedRequest?.proofPreviewUrl),
+  );
+  const checklistComplete =
+    remainingChecks === 0 && (!needsExceptionReason || exceptionReason.trim().length > 0);
 
   /**
    * Issue #400 supersedes issue #314 K6 hallazgos #11/#46. Those hallazgos
@@ -927,11 +942,21 @@ export default function PaymentsPage(): React.ReactElement {
     if (!selectedRequest || !checklistComplete) return;
     const request = selectedRequest;
 
-    void decide(request, "approve", { action: "approved" }, {
-      label: `Aprobación de ${request.studentName}`,
-      message: "Pago aprobado. La membresía ahora está activa.",
-      failure: "No se pudo aprobar el pago.",
-    });
+    // `exceptionReason` only travels when this approval actually needs it
+    // (issue #459) — sending it unconditionally would ask the BFF/backend
+    // to ignore a value that means nothing for an ordinary approval.
+    void decide(
+      request,
+      "approve",
+      needsExceptionReason
+        ? { action: "approved", exceptionReason: exceptionReason.trim() }
+        : { action: "approved" },
+      {
+        label: `Aprobación de ${request.studentName}`,
+        message: "Pago aprobado. La membresía ahora está activa.",
+        failure: "No se pudo aprobar el pago.",
+      },
+    );
   }
 
   function handleRejectSubmit(): void {
@@ -1419,6 +1444,45 @@ export default function PaymentsPage(): React.ReactElement {
                         "Período" field above (`request.membershipPeriod`).
                         Approving confirms that period; it is never a value
                         this screen lets the admin change. */}
+                    {/* Issue #459: aprobar una transferencia sin comprobante
+                        es la excepción auditada, no un camino silencioso —
+                        el motivo es tan obligatorio para desbloquear
+                        "Aprobar pago" como cada checkbox de la lista de
+                        arriba (ver `checklistComplete`). Vive acá, pegado al
+                        botón que desbloquea, en vez de mezclado entre los
+                        checkboxes: los checkboxes confirman hechos ya
+                        verificados, esto es la justificación en texto de
+                        POR QUÉ se aprueba sin la evidencia habitual. */}
+                    {needsExceptionReason && (
+                      <label className="flex flex-col gap-1.5">
+                        <span className="flex items-baseline justify-between text-2xs font-bold uppercase text-ink-3">
+                          <span>
+                            Motivo de la excepción (transferencia sin comprobante){" "}
+                            <span className="text-state-bad">*</span>
+                          </span>
+                          <span
+                            className={`font-normal normal-case tabular-nums ${
+                              exceptionReason.length >= EXCEPTION_REASON_MAX_LENGTH
+                                ? "text-state-bad"
+                                : ""
+                            }`}
+                          >
+                            {exceptionReason.length}/{EXCEPTION_REASON_MAX_LENGTH}
+                          </span>
+                        </span>
+                        <textarea
+                          rows={2}
+                          value={exceptionReason}
+                          onChange={(e) =>
+                            setExceptionReason(e.target.value.slice(0, EXCEPTION_REASON_MAX_LENGTH))
+                          }
+                          maxLength={EXCEPTION_REASON_MAX_LENGTH}
+                          placeholder="Ej.: se verificó el depósito directamente en la cuenta del club el 18/08."
+                          className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
+                          disabled={actionLoading !== null}
+                        />
+                      </label>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="primary"
@@ -1458,9 +1522,13 @@ export default function PaymentsPage(): React.ReactElement {
                         no hay nada que pueda divergir del período pedido.) */}
                     {!checklistComplete && (
                       <p className="text-xs text-ink-3">
-                        {remainingChecks === 1
-                          ? "Falta confirmar 1 punto de la lista para poder aprobar."
-                          : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`}
+                        {remainingChecks > 0 && needsExceptionReason
+                          ? `Faltan ${remainingChecks} puntos de la lista y el motivo de la excepción para poder aprobar.`
+                          : remainingChecks > 0
+                          ? remainingChecks === 1
+                            ? "Falta confirmar 1 punto de la lista para poder aprobar."
+                            : `Faltan ${remainingChecks} puntos de la lista para poder aprobar.`
+                          : "Falta indicar el motivo de la excepción para poder aprobar."}
                       </p>
                     )}
                   </>

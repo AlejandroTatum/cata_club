@@ -434,7 +434,11 @@ def test_beca_total_registra_pago_de_cero_por_el_flujo_normal(client, monkeypatc
 
     aprobacion = client.patch(
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # Issue #459: TRANSFERENCIA sin voucher (default de `registrar_pago_api`).
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert aprobacion.status_code == 200
     assert aprobacion.json()["estadoPago"] == "APROBADO"

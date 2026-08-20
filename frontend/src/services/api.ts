@@ -118,6 +118,15 @@ export interface PaymentValidationRequest {
  */
 export interface ApprovePaymentDTO {
   action: "approved";
+  /**
+   * Required only when approving a TRANSFERENCIA with no voucher attached
+   * (issue #459) — the audited exception for "the admin verified the bank
+   * account directly". Omitted for every other approval (a transfer with a
+   * voucher, or an efectivo payment); the backend (`PagoServicio.
+   * validar_pago`) is the single source of truth for when it is actually
+   * mandatory and rejects the request with a 400 if it's missing there.
+   */
+  exceptionReason?: string;
 }
 
 /** DTO for rejecting a payment validation request. */
@@ -1501,6 +1510,14 @@ export interface PagoPersona {
    * tipando sin tener que tocarlos uno por uno.
    */
   comprobanteOficialUrl?: string | null;
+  /**
+   * Por qué se aprobó ESTA transferencia sin comprobante adjunto (issue
+   * #459, excepción auditada) — `null`/ausente salvo en ese caso exacto.
+   * Opcional por el mismo motivo que `comprobanteOficialUrl`: los fixtures
+   * de test ya existentes, escritos antes de este campo, no tienen por qué
+   * tocarse uno por uno.
+   */
+  motivoExcepcionSinComprobante?: string | null;
 }
 
 /**

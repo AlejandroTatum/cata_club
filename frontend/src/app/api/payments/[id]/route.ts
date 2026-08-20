@@ -11,6 +11,8 @@
  *
  * Request body (approve):
  *   { "action": "approved" }
+ *   { "action": "approved", "exceptionReason": "string" }  (issue #459 —
+ *     required by the backend only for a TRANSFERENCIA with no voucher)
  * Request body (reject):
  *   { "action": "rejected", "rejectionReason": "string" }
  *
@@ -29,7 +31,7 @@ import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backen
 import { enrichSinglePago, type BackendPagoCore } from "@/lib/server/payments-adapter";
 
 type ParsedUpdateBody =
-  | { action: "approved" }
+  | { action: "approved"; exceptionReason?: string }
   | { action: "rejected"; rejectionReason: string };
 
 /**
@@ -47,7 +49,19 @@ function parseUpdateBody(value: unknown): ParsedUpdateBody | { error: string } {
   const body = value as Record<string, unknown>;
 
   if (body.action === "approved") {
-    return { action: "approved" };
+    // A blank/whitespace-only `exceptionReason` is treated as absent, not
+    // forwarded as an empty string (issue #459): the backend's own
+    // required-when-applicable check gives a clearer 400 ("Debe indicar el
+    // motivo…") than Pydantic's generic "no puede estar vacío" would for a
+    // present-but-blank field. Whether it's actually REQUIRED for this
+    // payment (TRANSFERENCIA, no voucher) is decided backend-side —
+    // this route never reads `tipoPago`/`voucherUrl` to pre-empt that.
+    const rawReason = body.exceptionReason;
+    const exceptionReason =
+      typeof rawReason === "string" && rawReason.trim().length > 0
+        ? rawReason.trim()
+        : undefined;
+    return { action: "approved", exceptionReason };
   }
 
   if (body.action === "rejected") {
@@ -79,7 +93,12 @@ export async function PUT(
 
   const validarBody: Record<string, unknown> =
     parsed.action === "approved"
-      ? { estado_pago: "APROBADO" }
+      ? {
+          estado_pago: "APROBADO",
+          ...(parsed.exceptionReason
+            ? { motivo_excepcion_sin_comprobante: parsed.exceptionReason }
+            : {}),
+        }
       : { estado_pago: "RECHAZADO", motivo_rechazo: parsed.rejectionReason };
 
   const validarResult = await backendFetchAuthed(request, `/membresias/pagos/${params.id}/validar`, {

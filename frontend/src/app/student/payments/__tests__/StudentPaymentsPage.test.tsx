@@ -576,7 +576,7 @@ describe("StudentPaymentsPage — the history", () => {
     render(<StudentPaymentsPage />);
 
     expect(await screen.findByText("Falta el comprobante")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^subir comprobante$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^reintentar subir comprobante$/i })).toBeInTheDocument();
   });
 
   it("does not mark an approved or a cash payment as missing its voucher", async () => {
@@ -673,7 +673,7 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -690,7 +690,7 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -711,7 +711,7 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.pdf", { type: "application/pdf" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -730,7 +730,7 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^subir comprobante$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });

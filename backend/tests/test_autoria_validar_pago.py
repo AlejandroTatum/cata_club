@@ -102,7 +102,15 @@ def test_pago_aprobado_registra_al_admin_que_aprueba(client, db_session):
     _autenticar_como(admin["id"], ["ADMINISTRADOR"])
     resp = client.patch(
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # `motivo_excepcion_sin_comprobante` (issue #459): estos pagos son
+        # TRANSFERENCIA sin voucher adjunto (`_crear_pago_pendiente` nunca
+        # adjunta uno) -- sin este motivo, aprobar devuelve 400 desde este
+        # fix. Esta suite prueba autoría (issue #458), no la excepción; el
+        # motivo acá es solo lo que hace falta para que la aprobación pase.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert resp.status_code == 200
     assert resp.json()["validadoPorPersonaId"] == admin["id"]
@@ -146,14 +154,30 @@ def test_dos_admins_aprobando_pagos_distintos_no_se_cruzan(client, db_session):
     _autenticar_como(admin_a["id"], ["ADMINISTRADOR"])
     resp_1 = client.patch(
         f"/api/v1/membresias/pagos/{pago_1['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # `motivo_excepcion_sin_comprobante` (issue #459): estos pagos son
+        # TRANSFERENCIA sin voucher adjunto (`_crear_pago_pendiente` nunca
+        # adjunta uno) -- sin este motivo, aprobar devuelve 400 desde este
+        # fix. Esta suite prueba autoría (issue #458), no la excepción; el
+        # motivo acá es solo lo que hace falta para que la aprobación pase.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert resp_1.status_code == 200
 
     _autenticar_como(admin_b["id"], ["ADMINISTRADOR"])
     resp_2 = client.patch(
         f"/api/v1/membresias/pagos/{pago_2['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # `motivo_excepcion_sin_comprobante` (issue #459): estos pagos son
+        # TRANSFERENCIA sin voucher adjunto (`_crear_pago_pendiente` nunca
+        # adjunta uno) -- sin este motivo, aprobar devuelve 400 desde este
+        # fix. Esta suite prueba autoría (issue #458), no la excepción; el
+        # motivo acá es solo lo que hace falta para que la aprobación pase.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert resp_2.status_code == 200
 
@@ -183,7 +207,15 @@ def test_validar_pago_falla_cerrado_si_el_token_no_trae_persona_id(client, db_se
     }
     resp = client.patch(
         f"/api/v1/membresias/pagos/{pago['id']}/validar",
-        json={"estado_pago": "APROBADO"},
+        # `motivo_excepcion_sin_comprobante` (issue #459): estos pagos son
+        # TRANSFERENCIA sin voucher adjunto (`_crear_pago_pendiente` nunca
+        # adjunta uno) -- sin este motivo, aprobar devuelve 400 desde este
+        # fix. Esta suite prueba autoría (issue #458), no la excepción; el
+        # motivo acá es solo lo que hace falta para que la aprobación pase.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
     )
     assert resp.status_code == 403
 
@@ -223,6 +255,8 @@ def test_validar_pago_no_acepta_autor_enviado_por_el_cliente(client):
             "estado_pago": "APROBADO",
             "validado_por_persona_id": otra_persona["id"],
             "actor_persona_id": otra_persona["id"],
+            # Issue #459: TRANSFERENCIA sin voucher, ver comentario arriba.
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
         },
     )
     assert resp.status_code == 200
