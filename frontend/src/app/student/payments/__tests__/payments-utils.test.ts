@@ -11,6 +11,7 @@ import {
   addMonthsIso,
   describePagoDescuento,
   estimateTotal,
+  formatFileSize,
   type PagoStatusFilter,
 } from "../payments-utils";
 import type { PagoPersona } from "@/services/api";
@@ -169,6 +170,20 @@ describe("pagoFaltaComprobante", () => {
       expect(pagoFaltaComprobante(pago)).toBe(false);
     },
   );
+});
+
+describe("formatFileSize", () => {
+  it("shows plain bytes under 1 KB", () => {
+    expect(formatFileSize(68)).toBe("68 B");
+  });
+
+  it("shows kilobytes with the product's comma decimal grammar", () => {
+    expect(formatFileSize(1536)).toBe("1,5 KB");
+  });
+
+  it("shows megabytes for a large file", () => {
+    expect(formatFileSize(5 * 1024 * 1024)).toBe("5 MB");
+  });
 });
 
 describe("wholeMonthsFor", () => {

@@ -81,7 +81,6 @@ import {
   Calendar,
   DollarSign,
   FileText,
-  Eye,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -317,12 +316,18 @@ function ProofViewer({
             </button>
           </div>
         ) : (
+          // Issue #453: this branch only ever renders when there is no
+          // `proofPreviewUrl` at all — i.e. no comprobante was attached
+          // (the header above already says so: "Sin comprobante adjunto").
+          // The old copy here ("Vista previa no disponible para este tipo de
+          // comprobante") implies a file DOES exist, just of an unpreviewable
+          // type — a claim that contradicts the header instead of restating
+          // it. That wording belongs to a file that exists but cannot be
+          // rendered (handled by the `previewUnavailable` branch above),
+          // never to the absence of one.
           <div className="space-y-section text-center">
             <FileText size={ICON.lg} strokeWidth={1.5} className="mx-auto text-ink-3" aria-hidden="true" />
-            <p className="text-xs text-ink-3">
-              <Eye size={ICON.sm} strokeWidth={1.5} className="mr-1 inline-block -mt-0.5" aria-hidden="true" />
-              Vista previa no disponible para este tipo de comprobante.
-            </p>
+            <p className="text-xs text-ink-3">Este pago no tiene ningún comprobante adjunto.</p>
           </div>
         )}
       </div>

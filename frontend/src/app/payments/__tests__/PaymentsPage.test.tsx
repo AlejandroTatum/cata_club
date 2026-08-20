@@ -1365,13 +1365,19 @@ describe("PaymentsPage — voucher preview recovery", () => {
     expect(screen.queryByText(/vista previa no disponible/i)).not.toBeInTheDocument();
   });
 
-  it("shows the unavailable message only when there is no preview URL at all", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([{ ...PENDING_REQUEST, proofPreviewUrl: undefined }]); // no proofPreviewUrl
+  // Issue #453: confirmed live with the EXACT contradictory pair — "Sin
+  // comprobante adjunto" (nothing was attached) shown at the same time as
+  // "Vista previa no disponible para este tipo de comprobante" (which implies
+  // a file DOES exist, just of an unpreviewable type). When there is no
+  // `proofPreviewUrl` at all, only the absence message belongs on screen.
+  it("shows only the absence message when no proof was attached at all — never the contradictory 'vista previa' text (#453)", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
 
     renderPage();
-    await openRequest("Juan Pérez");
+    await openRequest(CASH_REQUEST.studentName);
 
-    expect(await screen.findByText(/vista previa no disponible/i)).toBeInTheDocument();
+    expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
+    expect(screen.queryByText(/vista previa no disponible/i)).not.toBeInTheDocument();
   });
 });
 
