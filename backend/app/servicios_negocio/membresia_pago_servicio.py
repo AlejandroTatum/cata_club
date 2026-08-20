@@ -1929,6 +1929,21 @@ class PagoServicio:
         y no 500: no es un bug del servidor, es que no se pudo verificar la
         identidad de quien pide la operación -- mismo código que usa
         `GestorPermisos` cuando el rol no alcanza.
+
+        Excepción auditada sin comprobante (issue #459): aprobar una
+        TRANSFERENCIA sin `voucher_url` exige `datos.motivo_excepcion_sin_
+        comprobante` no vacío -- antes de este fix, el único gate era el
+        checklist de autoatestación del frontend (dos checkboxes sin
+        ninguna validación real), así que un pago quedaba aprobado sin
+        ninguna evidencia y sin dejar ningún rastro de por qué. Esta
+        excepción es DELIBERADAMENTE angosta:
+          - Solo se exige al APROBAR, nunca al RECHAZAR -- rechazar no
+            activa la membresía ni mueve dinero, no hay nada que auditar.
+          - Solo aplica a TRANSFERENCIA. Un EFECTIVO sin comprobante es el
+            camino NORMAL (issue #452: el voucher nunca aplicó a pagos en
+            efectivo), no una excepción que requiera justificarse.
+          - No aplica si el pago YA tiene voucher: ese es el camino de
+            siempre (revisar el comprobante adjunto), sin cambios acá.
         """
         if actor_persona_id is None:
             raise PermisosInsuficientes(
@@ -1949,6 +1964,25 @@ class PagoServicio:
                 detalle_tecnico=f"pago_id={pago_id} estado_pago={pago.estado_pago.value}",
             )
 
+        # Ver docstring: excepción auditada, angosta a propósito (aprobar +
+        # TRANSFERENCIA + sin voucher). El chequeo va ACÁ, antes de tocar el
+        # pago, para que un motivo faltante lo rechace limpio (400) sin
+        # dejar ningún efecto secundario a medias.
+        requiere_motivo_excepcion = (
+            datos.estado_pago == EstadoPago.APROBADO
+            and pago.tipo_pago == TipoPago.TRANSFERENCIA
+            and not pago.voucher_url
+        )
+        if requiere_motivo_excepcion and (
+            datos.motivo_excepcion_sin_comprobante is None
+            or not datos.motivo_excepcion_sin_comprobante.strip()
+        ):
+            raise OperacionInvalida(
+                "Debe indicar el motivo de la excepción para aprobar una "
+                "transferencia sin comprobante adjunto.",
+                detalle_tecnico=f"pago_id={pago_id} tipo_pago=TRANSFERENCIA voucher_url=None",
+            )
+
         pago.estado_pago = datos.estado_pago
         pago.motivo_rechazo = datos.motivo_rechazo
         pago.fecha_validacion = datetime.now(timezone.utc)
@@ -1956,6 +1990,14 @@ class PagoServicio:
         # no depende del desenlace, igual que `fecha_validacion` ya unifica
         # el "cuándo" de las dos ramas de abajo.
         pago.validado_por_persona_id = actor_persona_id
+        # Solo se persiste en el caso exacto de la excepción (issue #459):
+        # un motivo enviado fuera de ese caso (p. ej. el pago sí tenía
+        # voucher) se descarta en silencio, para que la columna signifique
+        # siempre lo mismo -- "esta aprobación fue la excepción auditada" --
+        # y nunca un dato suelto sin relación con lo que de verdad pasó.
+        pago.motivo_excepcion_sin_comprobante = (
+            datos.motivo_excepcion_sin_comprobante if requiere_motivo_excepcion else None
+        )
 
         if datos.estado_pago == EstadoPago.APROBADO:
             # `pago.fecha_inicio`/`fecha_fin` NO se tocan acá (issue #400):

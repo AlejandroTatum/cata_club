@@ -165,6 +165,15 @@ class PagoCreateDTO(BaseModel):
 class PagoValidarDTO(BaseModel):
     estado_pago: EstadoPago
     motivo_rechazo: Optional[str] = Field(None, max_length=255)
+    # Issue #459: motivo de la excepción auditada para aprobar una
+    # TRANSFERENCIA sin comprobante adjunto. Opcional a nivel de este DTO
+    # -- el propio payload no sabe si el pago es una TRANSFERENCIA ni si
+    # trae voucher, así que NO puede decidir acá si es obligatorio; esa
+    # decisión (que sí necesita leer el `Pago` real) la hace `PagoServicio.
+    # validar_pago`. Este validador solo cubre lo que el payload puede ver
+    # por sí solo: si el campo viaja, no puede ser un string vacío o solo
+    # espacios (mismo criterio que `motivo_rechazo` arriba).
+    motivo_excepcion_sin_comprobante: Optional[str] = Field(None, max_length=255)
 
     # `fecha_inicio`/`fecha_fin` NO se aceptan al validar (issue #400):
     # Administración no puede editar la cobertura durante la aprobación, ni
@@ -180,6 +189,11 @@ class PagoValidarDTO(BaseModel):
         if self.estado_pago == EstadoPago.RECHAZADO:
             if self.motivo_rechazo is None or not self.motivo_rechazo.strip():
                 raise ValueError("Debe indicar el motivo del rechazo.")
+        if (
+            self.motivo_excepcion_sin_comprobante is not None
+            and not self.motivo_excepcion_sin_comprobante.strip()
+        ):
+            raise ValueError("El motivo de la excepción no puede estar vacío.")
         return self
 
 
@@ -217,6 +231,13 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     # PENDIENTE_VALIDACION, y en pagos validados antes de este fix (no se
     # reescriben retroactivamente -- ver `app.dominio.modelos.Pago`).
     validado_por_persona_id: Optional[int] = None
+    # Issue #459: por qué se aprobó ESTA transferencia sin comprobante
+    # adjunto -- `None` salvo en ese caso exacto (ver
+    # `app.dominio.modelos.Pago.motivo_excepcion_sin_comprobante`).
+    # Expuesto acá (y no solo en la base) para que la excepción quede
+    # visible en el historial del pago, no solo auditable por quien mire
+    # la tabla directamente.
+    motivo_excepcion_sin_comprobante: Optional[str] = None
     # `PagoServicio.validar_pago` lo setea como atributo transitorio (no es
     # columna de `Pago`) cuando aprobar/rechazar el pago sale bien pero el
     # aviso in-app al alumno/representante falla. El pago YA quedó en el
