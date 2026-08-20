@@ -467,6 +467,13 @@ export default function PaymentsPage(): React.ReactElement {
     validado: 0,
     rechazado: 0,
   });
+  /**
+   * Issue #454, hallazgo menor: `loadLightTotals` used to only log to the
+   * console on failure and leave `lightTotals` at its stale/default 0s —
+   * indistinguishable from "no hay pagos". Tracked so `filterCounts` can
+   * surface `null` (rendered as "—" by `FilterPill`) instead of a bare 0.
+   */
+  const [lightTotalsError, setLightTotalsError] = useState(false);
 
   /**
    * The full drained set the search box searches over, for whichever filter
@@ -521,8 +528,10 @@ export default function PaymentsPage(): React.ReactElement {
         fetchPaymentValidationsPage({ skip: 0, limit: 1, estadoPago: "RECHAZADO" }),
       ]);
       setLightTotals({ all: all.total, validado: validado.total, rechazado: rechazado.total });
+      setLightTotalsError(false);
     } catch (err) {
       console.error("[payments] loadLightTotals failed", err);
+      setLightTotalsError(true);
     }
   }, []);
 
@@ -652,11 +661,15 @@ export default function PaymentsPage(): React.ReactElement {
   // three pills read the backend's own `total` for their filter — accurate
   // without draining, since a count needs `total`, not every row.
   const pending = pendingAll;
-  const filterCounts: Record<FilterKey, number> = {
-    all: lightTotals.all,
-    pendiente: pendingAll.length,
-    validado: lightTotals.validado,
-    rechazado: lightTotals.rechazado,
+  // Issue #454, hallazgo menor: `null` (not 0) while the count behind a pill
+  // failed to load — `pendingAllError` already existed for the "Pendientes"
+  // queue; the other three share one flag since one call
+  // (`loadLightTotals`) fetches all three totals together.
+  const filterCounts: Record<FilterKey, number | null> = {
+    all: lightTotalsError ? null : lightTotals.all,
+    pendiente: pendingAllError ? null : pendingAll.length,
+    validado: lightTotalsError ? null : lightTotals.validado,
+    rechazado: lightTotalsError ? null : lightTotals.rechazado,
   };
 
   const queue = findQueueNeighbours(pending, selectedId ?? "");

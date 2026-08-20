@@ -71,6 +71,14 @@ describe("FilterPill — behavior", () => {
     expect(screen.getByText("0")).toBeInTheDocument();
   });
 
+  it("renders a placeholder instead of a bare 0 when count is unavailable (issue #454)", () => {
+    // `null` means the count failed to load — a literal 0 there used to read
+    // as "no hay pagos" instead of "no se pudo cargar".
+    render(<FilterPill label="Pendientes" count={null} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
   it("fires onClick", () => {
     const onClick = vi.fn();
     render(<FilterPill label="Todos" onClick={onClick} />);
