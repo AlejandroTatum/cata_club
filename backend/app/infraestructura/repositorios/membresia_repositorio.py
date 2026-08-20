@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import Membresia, TipoMembresia, Pago, HistorialEstadoMembresia
 from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.soporte_transversal.bloqueo_fila import obtener_con_bloqueo_y_timeout
 
 
 class TipoMembresiaRepositorio:
@@ -82,8 +83,21 @@ class MembresiaRepositorio:
         `FOR UPDATE` con un LEFT OUTER JOIN es inválido en Postgres salvo
         que se acote con `of=`, y ninguno de los dos métodos que usan este
         lock necesita `persona`/`tipo_membresia` precargados -- `reactivar_
-        membresia` resuelve el tipo aparte, por `tipo_membresia_id`."""
-        return self.db.get(Membresia, membresia_id, with_for_update=True)
+        membresia` resuelve el tipo aparte, por `tipo_membresia_id`.
+
+        `lock_timeout` (issue #451, reproducción en vivo: deadlock de
+        proceso de 5m32s sin autorrecuperación bajo pagos concurrentes
+        sobre la misma membresía) -- ver `bloqueo_fila.obtener_con_
+        bloqueo_y_timeout`. Sin esto, quien pierde la carrera por este lock
+        espera INDEFINIDAMENTE; ahora recibe `ConflictoConcurrencia`
+        (-> HTTP 409) pasado `TIMEOUT_LOCK_FILA_MS`."""
+        return obtener_con_bloqueo_y_timeout(
+            self.db, Membresia, membresia_id,
+            mensaje_conflicto=(
+                "Esta membresía está siendo modificada por otra operación, "
+                "intente de nuevo en unos segundos."
+            ),
+        )
 
     def contar_activas(self) -> int:
         stmt = (

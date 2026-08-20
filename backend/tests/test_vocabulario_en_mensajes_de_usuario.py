@@ -454,7 +454,7 @@ MENSAJES_NO_VERIFICABLES = sorted(
 # texto sin revisar -- solo el mismo, leído dos veces por dos sitios.
 NO_VERIFICABLES_ADMITIDOS = (
     "app/infraestructura/repositorios/eliminacion_segura.py:29",
-    "main.py:204",
+    "main.py:206",
 )
 
 FUGAS_EN_PROSA = sorted(
@@ -474,8 +474,12 @@ class TestElBarridoEncuentraAlgo:
         assert len(MENSAJES) >= 40
 
     def test_el_alcance_se_derivo_del_mapa_real(self):
-        # `OperacionInvalida` y `EntidadDuplicada` son 400; el resto no entra.
-        assert EXCEPCIONES_DE_ENTRADA == {"OperacionInvalida", "EntidadDuplicada"}
+        # `OperacionInvalida` y `EntidadDuplicada` son 400; `ConflictoConcurrencia`
+        # es 409 (issue #451, lock_timeout de `obtener_por_id_con_bloqueo`); el
+        # resto no entra.
+        assert EXCEPCIONES_DE_ENTRADA == {
+            "OperacionInvalida", "EntidadDuplicada", "ConflictoConcurrencia",
+        }
 
     def test_conoce_los_enums_del_dominio(self):
         assert {"ADMINISTRADOR", "PENDIENTE_VALIDACION", "LUNES", "COMPETITIVO"} <= MIEMBROS_DE_ENUMS
