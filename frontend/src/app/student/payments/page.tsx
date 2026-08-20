@@ -1663,9 +1663,17 @@ function PaymentsContent({
         icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
         title="No se encontraron estudiantes asociados a esta cuenta"
         description="Inscríbase como jugador o agregue un hijo o dependiente para registrar pagos."
+        // Issue #460 (Escenario 2): the description already promised "agregue
+        // un hijo o dependiente", but the only action here used to be "Ir a mi
+        // cuenta" — a dead end for a representative whose child is already
+        // registered under someone else. `/student/add-dependent` is where
+        // entering that child's real cédula surfaces the existing
+        // "Vincular a mi cuenta" button (`DuplicateIdentityHelp`'s
+        // `representative` audience) — same pattern `medical-record/page.tsx`'s
+        // own empty state already uses for this account state.
         action={
-          <Link href="/student" className={buttonClasses("secondary", "sm")}>
-            Ir a mi cuenta
+          <Link href="/student/add-dependent" className={buttonClasses("secondary", "sm")}>
+            Agregar hijo o dependiente
           </Link>
         }
       />
