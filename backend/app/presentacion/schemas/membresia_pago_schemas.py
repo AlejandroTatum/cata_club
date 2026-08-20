@@ -213,6 +213,10 @@ class PagoResponseDTO(ResponseBase, BaseModel):
     descuento_valor_aplicado: Optional[Decimal] = None
     descuento_porcentaje_aplicado: Optional[Decimal] = None
     descuento_autorizado_por_persona_id: Optional[int] = None
+    # Issue #458: quién aprobó o rechazó ESTE pago. `None` en pagos todavía
+    # PENDIENTE_VALIDACION, y en pagos validados antes de este fix (no se
+    # reescriben retroactivamente -- ver `app.dominio.modelos.Pago`).
+    validado_por_persona_id: Optional[int] = None
     # `PagoServicio.validar_pago` lo setea como atributo transitorio (no es
     # columna de `Pago`) cuando aprobar/rechazar el pago sale bien pero el
     # aviso in-app al alumno/representante falla. El pago YA quedó en el

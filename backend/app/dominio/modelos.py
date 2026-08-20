@@ -461,6 +461,7 @@ class Pago(Base):
         Index("ix_pago_descuento_id", "descuento_id"),
         Index("ix_pago_descuento_autorizado_por_persona_id", "descuento_autorizado_por_persona_id"),
         Index("ix_pago_regularizada_por_persona_id", "regularizada_por_persona_id"),
+        Index("ix_pago_validado_por_persona_id", "validado_por_persona_id"),
         # Espejo en la base del invariante que
         # `PagoServicio._congelar_beneficio_activo` ya respeta: un descuento
         # congelado sin su valor sería un hecho
@@ -586,6 +587,24 @@ class Pago(Base):
         ForeignKey("persona.id"), nullable=True,
     )
     motivo_regularizacion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # --- Autoría de aprobación/rechazo (issue #458) ------------------------
+    # Antes de esto, `PATCH /pagos/{id}/validar` no registraba QUIÉN aprobó o
+    # rechazó un pago -- a diferencia de `descuento_autorizado_por_persona_id`
+    # y `regularizada_por_persona_id` acá arriba, que sí nombran a su admin.
+    # Un solo campo sirve para las dos operaciones (aprobar Y rechazar), mismo
+    # criterio que `fecha_validacion` (que ya es el "cuándo" de ambas): la
+    # columna no distingue el desenlace, `estado_pago` ya lo hace.
+    #
+    # NULLABLE a nivel de esquema a propósito: el fail-closed ("nunca guardar
+    # sin autor") es una regla de `PagoServicio.validar_pago`, NO un NOT NULL
+    # de columna -- un NOT NULL de esquema rompería la migración sobre pagos
+    # ya validados antes de este fix (regularizados o históricos), que jamás
+    # tuvieron este dato y no se reescriben retroactivamente (mismo criterio
+    # que `tarifa_mensual_aplicada` más arriba).
+    validado_por_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True,
+    )
 
 
 class CorreccionPago(Base):
