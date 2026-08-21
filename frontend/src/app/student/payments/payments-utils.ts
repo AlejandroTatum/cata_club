@@ -273,6 +273,24 @@ export function formatFileSize(bytes: number): string {
   return `${formatted} ${units[unitIndex]}`;
 }
 
+/** The only MIME types every voucher `<input type="file" accept="...">` advertises. */
+export const ALLOWED_VOUCHER_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"];
+
+/**
+ * Issue #482: `accept` on an `<input type="file">` only filters what the OS
+ * picker's own file-type dropdown offers — it does not stop a reader who
+ * switches that dropdown to "All Files" (or drags a file in) from selecting
+ * a `.txt`. Every voucher input calls this right after the user picks a
+ * file, so the mismatch is caught client-side instead of round-tripping to
+ * the backend's own `content_type` check (`PagoServicio.adjuntar_voucher`)
+ * and leaving a payment stuck in "Pendiente de validación — Falta el
+ * comprobante" until a manual retry.
+ */
+export function voucherFileTypeError(file: File): string | null {
+  if (ALLOWED_VOUCHER_MIME_TYPES.includes(file.type)) return null;
+  return "El comprobante debe ser un archivo PDF, JPG o PNG.";
+}
+
 // ---------------------------------------------------------------------------
 // El descuento que el club ya aplicó
 // ---------------------------------------------------------------------------

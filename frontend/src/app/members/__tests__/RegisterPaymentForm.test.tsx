@@ -118,3 +118,40 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
     await waitFor(() => expect(mockSubirVoucherPago).toHaveBeenCalledWith(501, file));
   });
 });
+
+// Issue #482: `accept="image/jpeg,image/png,application/pdf"` on the input
+// only filters the OS picker's own dropdown — a reader who switches it to
+// "All Files" can still select a `.txt`, which used to sail through
+// unvalidated until the backend rejected the follow-up upload with a 400
+// after the pago already existed.
+describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inválido antes de subir (#482)", () => {
+  it("rejects a .txt file with a clear error and does not stage it as the voucher", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    const file = new File(["notas"], "notas.txt", { type: "text/plain" });
+    fireEvent.change(fileInput(), { target: { files: [file] } });
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("El comprobante debe ser un archivo PDF, JPG o PNG.");
+    expect(screen.queryByText("notas.txt")).not.toBeInTheDocument();
+    expect(screen.getByText("Seleccionar archivo")).toBeInTheDocument();
+  });
+
+  it("accepts a valid file after a rejected one, clearing the error", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    fireEvent.change(fileInput(), {
+      target: { files: [new File(["notas"], "notas.txt", { type: "text/plain" })] },
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    fireEvent.change(fileInput(), {
+      target: { files: [new File(["contenido"], "voucher.png", { type: "image/png" })] },
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("voucher.png")).toBeInTheDocument();
+  });
+});
