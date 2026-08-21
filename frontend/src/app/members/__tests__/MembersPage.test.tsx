@@ -2434,7 +2434,10 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     // backend never requires — assert it is gone, not just that new text
     // exists alongside it.
     expect(within(row).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    const notice = within(row).getByText(/ficha médica/i);
+    // Scoped to the full notice text (not a bare `/ficha médica/i` substring):
+    // issue #505 added a "Ficha médica" row action beside this notice, and a
+    // loose match now finds both.
+    const notice = within(row).getByText(/sin ficha médica cargada/i);
     expect(notice).not.toHaveClass("text-state-warn");
     expect(notice).toHaveClass("text-state-neutral");
   });
@@ -2449,7 +2452,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     const card = await findAccountCard();
 
     expect(within(card).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    expect(within(card).getByText(/ficha médica/i)).toHaveClass("text-state-neutral");
+    expect(within(card).getByText(/sin ficha médica cargada/i)).toHaveClass("text-state-neutral");
   });
 
   it("shows no notice at all once emergency data is present", async () => {
@@ -2461,7 +2464,7 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     );
     const row = await findAccountRow();
 
-    expect(within(row).queryByText(/ficha médica/i)).not.toBeInTheDocument();
+    expect(within(row).queryByText(/sin ficha médica cargada/i)).not.toBeInTheDocument();
   });
 });
 
@@ -2831,5 +2834,196 @@ describe("MembersPage — Representante legal (issue #460)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /vincular a marcela ruiz/i }));
 
     expect(await within(dialog).findByText(/no fue posible completar la vinculación/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #505: the row's single "Editar" trigger used to be the only entry
+// point into ficha médica (behind an internal "Ficha médica" toggle inside
+// the account dialog's "Estudiantes a cargo" section) AND pagos/membresía
+// (the create/register/regularizar/suspender/cambiar-plan block in that same
+// section) — both reachable only after opening the generic account dialog
+// first. "Ficha médica" and "Pagos" are now their own direct entry points,
+// each reaching its flow with no intermediate dialog. `Editar` itself is
+// untouched — it still opens the full account dialog with roles, estado,
+// datos personales and "Estudiantes a cargo", exactly as before.
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — direct Ficha médica and Pagos entry points (issue #505)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+    mockFetchFichaMedica.mockReset().mockResolvedValue({
+      tipoSangre: "DESCONOCIDO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+    mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+  });
+
+  function getRowButton(container: HTMLElement, name: RegExp): HTMLElement {
+    return within(container).getAllByRole("button", { name })[0];
+  }
+
+  it("gives each rendering exactly one Ficha médica and one Pagos trigger, alongside Editar", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const card = await findAccountCard();
+
+    for (const container of [row, card]) {
+      expect(within(container).getAllByRole("button", { name: /^editar/i })).toHaveLength(1);
+      expect(within(container).getAllByRole("button", { name: /^ficha médica/i })).toHaveLength(1);
+      expect(within(container).getAllByRole("button", { name: /^pagos/i })).toHaveLength(1);
+    }
+  });
+
+  it("names each trigger after the account holder, matching Editar's own aria-label convention", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    expect(getRowButton(row, /^ficha médica/i)).toHaveAccessibleName("Ficha médica de María González");
+    expect(getRowButton(row, /^pagos/i)).toHaveAccessibleName("Pagos de María González");
+  });
+
+  it("matches Editar's touch target size on both new triggers", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const editar = getRowButton(row, /^editar/i);
+    const ficha = getRowButton(row, /^ficha médica/i);
+    const pagos = getRowButton(row, /^pagos/i);
+
+    // `Button size="sm"` — the same in-table control height (`h-ctl-sm`) the
+    // audit already granted `EditAccountButton`.
+    expect(ficha.className).toContain("h-ctl-sm");
+    expect(pagos.className).toContain("h-ctl-sm");
+    expect(editar.className).toContain("h-ctl-sm");
+  });
+
+  it("opens the ficha médica editor directly from the row, with no generic dialog in between", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    fireEvent.click(getRowButton(row, /^ficha médica/i));
+
+    const dialog = await screen.findByRole("dialog");
+    // No role checkboxes and no "Roles" heading — this is not MemberEditDialog.
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
+    await waitFor(() => expect(mockFetchFichaMedica).toHaveBeenCalledWith(10));
+    expect(within(dialog).getByText(/ficha médica de sofía gonzález/i)).toBeInTheDocument();
+  });
+
+  it("opens the pagos/membresía flow directly from the row, with no roles/estado controls present", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    fireEvent.click(getRowButton(row, /^pagos/i));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Roles")).not.toBeInTheDocument();
+    expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
+  });
+
+  it("keeps Editar itself unchanged: still opens the full account dialog with roles and estudiantes", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    fireEvent.click(getRowButton(row, /^editar/i));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeInTheDocument();
+  });
+
+  it("only one row dialog is open at a time: Pagos closes an already-open Ficha médica dialog for the same row", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    fireEvent.click(getRowButton(row, /^ficha médica/i));
+    await screen.findByRole("dialog");
+
+    fireEvent.click(getRowButton(row, /^pagos/i));
+
+    const dialogs = await screen.findAllByRole("dialog");
+    expect(dialogs).toHaveLength(1);
+    expect(await within(dialogs[0]).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
+  });
+
+  it("returns focus to the Ficha médica trigger when its dialog closes", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const trigger = getRowButton(row, /^ficha médica/i);
+
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("returns focus to the Pagos trigger when its dialog closes", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const trigger = getRowButton(row, /^pagos/i);
+
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ventana" }));
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("closes the Pagos dialog on Escape, same as the account dialog", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, /^pagos/i));
+    await screen.findByRole("dialog");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

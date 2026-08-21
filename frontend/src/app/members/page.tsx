@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -62,6 +62,7 @@ import {
   Pencil,
   X,
   UserPlus,
+  Wallet,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -93,13 +94,11 @@ import { clubToday } from "@/lib/club-date";
 import MedicalRecordEditor from "./MedicalRecordEditor";
 import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
-import CreateMembershipForm from "./CreateMembershipForm";
-import RegisterPaymentForm from "./RegisterPaymentForm";
-import RegularizarDeudaForm from "./RegularizarDeudaForm";
-import SuspenderReactivarForm from "./SuspenderReactivarForm";
-import CambiarPlanForm from "./CambiarPlanForm";
-import BeneficioSection from "./BeneficioSection";
+import StudentMembershipActions, { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
+import { useNativeDialog } from "./useNativeDialog";
+import MedicalRecordDialog from "./MedicalRecordDialog";
+import PaymentsDialog from "./PaymentsDialog";
 
 const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
@@ -170,34 +169,6 @@ function ModalSection({
 // editable — ficha médica, membresía, pagos — sigue viviendo solo en el modal,
 // que es de donde se lo sacó.
 // ---------------------------------------------------------------------------
-
-/**
- * The three refetch callbacks shared by the student edit panel and the
- * account dialog that hosts it (Sonar duplication follow-up, issue #400):
- * `MemberEditDialog` just forwards all three straight down to
- * `StudentEditPanel`, so the two interfaces used to repeat the exact same
- * three names, in the exact same order, with the exact same docs — one
- * shared shape instead of two copies.
- *
- * All three currently resolve to the exact same `loadMembers` call at the
- * page level; they stay separate fields (rather than collapsing into one
- * generic "onChanged") because each write flow — membership creation, debt
- * regularization, suspend/reactivate/cambiar-plan — owns its own named
- * contract, never unmounting the open dialog to refresh.
- */
-interface MembresiaCallbacks {
-  /** Called after a membership is successfully created so the page can
-   *  refetch and show the new row. The panel used to tell the user
-   *  "Recarga para verla." instead — the system should refresh its own
-   *  data rather than delegate that to the user. */
-  onMembershipCreated: () => void;
-  /** Called after a debt regularization is recorded (issue #284) so the
-   *  page can refetch and show the remaining debt. */
-  onDebtRegularized: () => void;
-  /** Called after a suspend/reactivate/cambiar-plan write (issue #400,
-   *  criterios 1/3). */
-  onMembresiaChanged: () => void;
-}
 
 interface StudentRowProps extends MembresiaCallbacks {
   student: MemberStudentSummary;
@@ -334,45 +305,16 @@ function StudentEditPanel({
         </div>
       )}
 
-      {/* Beneficio del club attaches to the PERSONA, not the membership
-          (issue #398) — shown regardless of whether the student currently
-          has a membresia, unlike the two forms below it. */}
-      <BeneficioSection personaId={personaId} />
-
-      {/* The two write flows are independent forms, each owning its own state
-          and its own failures — see CreateMembershipForm / RegisterPaymentForm.
-          Which one is offered is decided here, and only here: you create a
-          membership when there is none, and register a payment against one
-          that exists. */}
-      {!student.membresia && (
-        <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
-      )}
-      {student.membresia && (
-        <div className="mt-2.5">
-          <RegisterPaymentForm personaId={personaId} membresia={student.membresia} />
-          <RegularizarDeudaForm
-            membresiaId={Number(student.membresia.id)}
-            montoMensual={student.membresia.monto ?? 0}
-            esGratuidadFamiliar={student.membresia.esGratuidadFamiliar}
-            onRegularized={onDebtRegularized}
-          />
-          {/* Issue #400, criterio 3: solo administración suspende/reactiva
-              (texto explícito del issue) — el componente decide por sí solo
-              si corresponde "Suspender" o "Reactivar" según el estado
-              actual, y no se ofrece ninguno de los dos desde VENCIDA. */}
-          <SuspenderReactivarForm
-            membresiaId={Number(student.membresia.id)}
-            estado={student.membresia.estado}
-            onChanged={onMembresiaChanged}
-          />
-          {/* Issue #400, criterio 1: cambio de plan PROSPECTIVO sobre esta
-              misma membresía — la cobertura ya pagada no se toca. */}
-          <CambiarPlanForm
-            membresiaId={Number(student.membresia.id)}
-            onChanged={onMembresiaChanged}
-          />
-        </div>
-      )}
+      {/* Membership/payment write flows — extracted to `StudentMembershipActions`
+          (issue #505) so the exact same block also renders directly from the
+          row's "Pagos" entry point, with no duplicated business logic. */}
+      <StudentMembershipActions
+        personaId={personaId}
+        student={student}
+        onMembershipCreated={onMembershipCreated}
+        onDebtRegularized={onDebtRegularized}
+        onMembresiaChanged={onMembresiaChanged}
+      />
 
       {/* Actions */}
       <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
@@ -404,6 +346,10 @@ function StudentEditPanel({
 interface AccountListItemProps {
   account: MemberAccount;
   onEdit: () => void;
+  /** Issue #505: opens `MedicalRecordDialog` directly for this account. */
+  onMedical: () => void;
+  /** Issue #505: opens `PaymentsDialog` directly for this account. */
+  onPayments: () => void;
 }
 
 /** `MembresiaCallbacks` (see its own doc comment) — forwarded unchanged to each student's edit panel. */
@@ -433,7 +379,10 @@ const ROLE_ICONS: Record<BackendTipoRol, typeof ShieldCheck> = {
  * instead, which reads as a control without adding a forty-fifth line to the
  * grid — and it is the correct LEVEL, not just the quieter one.
  */
-function EditAccountButton({ account, onEdit }: AccountListItemProps): React.ReactElement {
+function EditAccountButton({
+  account,
+  onEdit,
+}: Pick<AccountListItemProps, "account" | "onEdit">): React.ReactElement {
   return (
     <Button
       variant="tertiary"
@@ -448,6 +397,59 @@ function EditAccountButton({ account, onEdit }: AccountListItemProps): React.Rea
       aria-label={`Editar ${account.nombres} ${account.apellidos}`}
     >
       Editar
+    </Button>
+  );
+}
+
+/**
+ * Issue #505: direct entry point into `MedicalRecordDialog` — no need to
+ * open `EditAccountButton`'s dialog first and toggle an internal "Ficha
+ * médica" control. Same trigger level, size and focus-before-open pattern as
+ * `EditAccountButton`, so the audit's D5-tertiary/touch-target answer for
+ * this row applies here too.
+ */
+function MedicalRecordAccessButton({
+  account,
+  onMedical,
+}: Pick<AccountListItemProps, "account" | "onMedical">): React.ReactElement {
+  return (
+    <Button
+      variant="tertiary"
+      size="sm"
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onMedical();
+      }}
+      aria-label={`Ficha médica de ${account.nombres} ${account.apellidos}`}
+    >
+      <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      Ficha médica
+    </Button>
+  );
+}
+
+/**
+ * Issue #505: direct entry point into `PaymentsDialog` — no need to open
+ * `EditAccountButton`'s dialog first and scroll past roles/estado to reach
+ * the membership/payment forms. Same trigger level, size and
+ * focus-before-open pattern as `EditAccountButton`.
+ */
+function PaymentsAccessButton({
+  account,
+  onPayments,
+}: Pick<AccountListItemProps, "account" | "onPayments">): React.ReactElement {
+  return (
+    <Button
+      variant="tertiary"
+      size="sm"
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onPayments();
+      }}
+      aria-label={`Pagos de ${account.nombres} ${account.apellidos}`}
+    >
+      <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      Pagos
     </Button>
   );
 }
@@ -500,7 +502,7 @@ function MembershipDebtInfo({ account }: { account: MemberAccount }): React.Reac
 }
 
 /** One account as a table row (`sm` and up). */
-function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactElement {
+function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
 
@@ -527,14 +529,18 @@ function AccountRow({ account, onEdit }: AccountListItemProps): React.ReactEleme
         <MembershipDebtInfo account={account} />
       </TableCell>
       <TableCell type="action">
-        <EditAccountButton account={account} onEdit={onEdit} />
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <MedicalRecordAccessButton account={account} onMedical={onMedical} />
+          <PaymentsAccessButton account={account} onPayments={onPayments} />
+          <EditAccountButton account={account} onEdit={onEdit} />
+        </div>
       </TableCell>
     </TableRow>
   );
 }
 
 /** The same account below `sm`, where a five-column table cannot fit. */
-function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElement {
+function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
 
   return (
@@ -561,7 +567,13 @@ function AccountCard({ account, onEdit }: AccountListItemProps): React.ReactElem
           <MembershipDebtInfo account={account} />
         </>
       }
-      actions={<EditAccountButton account={account} onEdit={onEdit} />}
+      actions={
+        <>
+          <MedicalRecordAccessButton account={account} onMedical={onMedical} />
+          <PaymentsAccessButton account={account} onPayments={onPayments} />
+          <EditAccountButton account={account} onEdit={onEdit} />
+        </>
+      }
     />
   );
 }
@@ -613,45 +625,12 @@ function MemberEditDialog({
   const accountFullName = `${account.nombres} ${account.apellidos}`;
   const grantingAdmin = !roles.includes("ADMINISTRADOR");
 
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-
   // Native <dialog> shown via showModal(): the browser traps Tab focus and
   // renders the ::backdrop for us, so no manual focus trap is needed (unlike
-  // ConfirmDialog.tsx's older role="dialog" div convention). Escape is still
-  // wired manually (rather than relying solely on the dialog's native
-  // "cancel" event) so open/closed stays driven by the page's
-  // `editingAccountId` alone — the dialog is conditionally rendered, not
-  // toggled via its `open` attribute, so the JSX onCancel handler only
-  // preventDefaults the native auto-close to avoid it and this listener
-  // double-toggling React state. The backdrop-click listener is attached
-  // imperatively (not as a JSX onClick on the <dialog>) since the element
-  // itself is non-interactive. Focus restoration captures whichever trigger
-  // was focused when the dialog mounted — row or card.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    if (!dialog.open) dialog.showModal();
-    closeButtonRef.current?.focus();
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") onClose();
-    }
-    function handleBackdropClick(event: MouseEvent): void {
-      if (event.target === dialog) onClose();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    dialog.addEventListener("click", handleBackdropClick);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      dialog.removeEventListener("click", handleBackdropClick);
-      previouslyFocused?.focus();
-    };
-  }, [onClose]);
+  // ConfirmDialog.tsx's older role="dialog" div convention). Escape/backdrop/
+  // focus-restore wiring lives in `useNativeDialog` (issue #505) — shared with
+  // the two new direct entry points, `MedicalRecordDialog` and `PaymentsDialog`.
+  const { dialogRef, closeButtonRef } = useNativeDialog(onClose);
 
   return (
     <>
@@ -951,12 +930,23 @@ export default function MembersPage(): React.ReactElement {
   const [membresiasDegraded, setMembresiasDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  /**
+   * Issue #505: the row now offers three direct entry points — Ficha médica,
+   * Pagos, Editar — that each open their own dialog. One shared field (not
+   * three independent id states) keeps the pre-existing "only one dialog at
+   * a time" behavior: opening any of the three for any account replaces
+   * whatever was open, the same way `editingAccountId` used to.
+   */
+  const [openDialog, setOpenDialog] = useState<{
+    kind: "edit" | "medical" | "payments";
+    accountId: string;
+  } | null>(null);
   const [page, setPage] = useState(1);
 
-  const toggleEditModal = useCallback((accountId: string) => {
-    setEditingAccountId((prev) => (prev === accountId ? null : accountId));
+  const toggleDialog = useCallback((kind: "edit" | "medical" | "payments", accountId: string) => {
+    setOpenDialog((prev) => (prev?.kind === kind && prev.accountId === accountId ? null : { kind, accountId }));
   }, []);
+  const closeDialog = useCallback(() => setOpenDialog(null), []);
 
   // `silent` refreshes the data WITHOUT flipping the page-level `loading` flag.
   // That flag gates the whole account list (see the `loading ? ... : ...` split
@@ -1019,7 +1009,13 @@ export default function MembersPage(): React.ReactElement {
     [filteredAccounts, page],
   );
 
-  const editingAccount = accounts.find((account) => account.id === editingAccountId) ?? null;
+  const findOpenAccount = (kind: "edit" | "medical" | "payments"): MemberAccount | null =>
+    openDialog?.kind === kind
+      ? (accounts.find((account) => account.id === openDialog.accountId) ?? null)
+      : null;
+  const editingAccount = findOpenAccount("edit");
+  const medicalAccount = findOpenAccount("medical");
+  const paymentsAccount = findOpenAccount("payments");
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
@@ -1241,10 +1237,20 @@ export default function MembersPage(): React.ReactElement {
                 </div>
               }
               renderCard={(account) => (
-                <AccountCard account={account} onEdit={() => toggleEditModal(account.id)} />
+                <AccountCard
+                  account={account}
+                  onEdit={() => toggleDialog("edit", account.id)}
+                  onMedical={() => toggleDialog("medical", account.id)}
+                  onPayments={() => toggleDialog("payments", account.id)}
+                />
               )}
               renderRow={(account) => (
-                <AccountRow account={account} onEdit={() => toggleEditModal(account.id)} />
+                <AccountRow
+                  account={account}
+                  onEdit={() => toggleDialog("edit", account.id)}
+                  onMedical={() => toggleDialog("medical", account.id)}
+                  onPayments={() => toggleDialog("payments", account.id)}
+                />
               )}
               tableHead={
                 <TableRow>
@@ -1340,7 +1346,23 @@ export default function MembersPage(): React.ReactElement {
           <MemberEditDialog
             key={editingAccount.id}
             account={editingAccount}
-            onClose={() => setEditingAccountId(null)}
+            onClose={closeDialog}
+            onMembershipCreated={() => void loadMembers({ silent: true })}
+            onDebtRegularized={() => void loadMembers({ silent: true })}
+            onMembresiaChanged={() => void loadMembers({ silent: true })}
+          />
+        )}
+        {/* Issue #505: direct entry points, mutually exclusive with the
+            dialog above and with each other via the shared `openDialog`
+            state — opening any of the three closes whichever was open. */}
+        {medicalAccount && (
+          <MedicalRecordDialog key={medicalAccount.id} account={medicalAccount} onClose={closeDialog} />
+        )}
+        {paymentsAccount && (
+          <PaymentsDialog
+            key={paymentsAccount.id}
+            account={paymentsAccount}
+            onClose={closeDialog}
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
             onMembresiaChanged={() => void loadMembers({ silent: true })}
