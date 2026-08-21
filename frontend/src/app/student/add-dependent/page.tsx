@@ -382,7 +382,7 @@ function AddDependentContent(): React.ReactElement {
 
         <WizardInput
           idPrefix="add-dependent"
-          label="Correo electrónico (opcional)"
+          label="Correo electrónico"
           value={formData.correo}
           onChange={(v) => updateField("correo", v)}
           type="email"
@@ -395,7 +395,7 @@ function AddDependentContent(): React.ReactElement {
 
         <WizardInput
           idPrefix="add-dependent"
-          label="Contraseña (opcional)"
+          label="Contraseña"
           value={formData.contrasenia}
           onChange={(v) => updateField("contrasenia", v)}
           type="password"
