@@ -115,6 +115,7 @@ import {
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
+  markRosterClosed,
   hasUnsavedAttendanceEdits,
   type SessionStudent,
   type StoredAttendanceDraft,
@@ -582,13 +583,19 @@ export default function TrainerAttendancePage(): React.ReactElement {
         // that. Read BEFORE the draft is applied — the draft can mark a
         // student reviewed too, and that must never be mistaken for "the club
         // already has this on file" (issue #310 / #3).
-        setSessionAlreadyRegistered(existingRecords.length > 0);
+        const closed = existingRecords.length > 0;
+        setSessionAlreadyRegistered(closed);
         setSessionDate(fecha);
         setRequestedDate(requestedDate);
         setRestoredFromDraft(
           withDraft !== roster && countUnreviewed(withDraft) < countUnreviewed(roster),
         );
-        setStudents(withDraft);
+        // A closed session cannot have a pending review left (issue #485):
+        // without this, a student enrolled in the horario AFTER this session
+        // closed still lands in `withDraft` unreviewed (no record for that
+        // past date), and the "sin revisar" summary never reached 0 on an
+        // already-closed, read-only list.
+        setStudents(closed ? markRosterClosed(withDraft) : withDraft);
         // A roster that just loaded has no marking actions behind it — an undo
         // here would restore a roster from a different session.
         setUndoStack([]);

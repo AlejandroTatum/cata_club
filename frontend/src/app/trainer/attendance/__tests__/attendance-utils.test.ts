@@ -35,6 +35,7 @@ import {
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
+  markRosterClosed,
   hasUnsavedAttendanceEdits,
   isWithinCorrectionWindow,
   type SessionStudent,
@@ -310,6 +311,49 @@ describe("buildRosterFromAlumnoHorarios", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster.every((s) => s.attendance === "present")).toBe(true);
     expect(countUnreviewed(roster)).toBe(roster.length);
+  });
+
+  // Issue #485: a closed session's roster is built from the horario's CURRENT
+  // membership, which can outgrow the historical record set (a student
+  // enrolled AFTER the session closed). `markRosterClosed` is what makes
+  // "sin revisar" actually reach 0 for a closed list, regardless of that
+  // mismatch.
+  describe("markRosterClosed", () => {
+    it("marks every unreviewed row reviewed, dropping the unreviewed count to 0", () => {
+      const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
+      expect(countUnreviewed(roster)).toBe(roster.length);
+
+      const closed = markRosterClosed(roster);
+
+      expect(countUnreviewed(closed)).toBe(0);
+      expect(closed.every(isReviewed)).toBe(true);
+    });
+
+    it("leaves already-reviewed rows and their data untouched", () => {
+      const existingRecords: AttendanceRecord[] = [
+        {
+          id: "501",
+          fecha: "2026-07-23",
+          horario: "Lunes 18:00 — 19:00",
+          horarioId: 1,
+          personaId: 3,
+          estudiante: "Sofia Alumna",
+          estado: "present",
+        },
+      ];
+      const roster = buildRosterFromAlumnoHorarios(alumnoHorarios, existingRecords);
+
+      const closed = markRosterClosed(roster);
+
+      // Sofia already had a record — same reference, nothing rebuilt.
+      expect(closed.find((s) => s.id === "3")).toBe(roster.find((s) => s.id === "3"));
+      // Mateo had none — now reviewed, everything else unchanged.
+      expect(closed.find((s) => s.id === "7")).toMatchObject({ reviewed: true, attendance: "present" });
+    });
+
+    it("returns an empty roster for an empty array", () => {
+      expect(markRosterClosed([])).toEqual([]);
+    });
   });
 });
 

@@ -363,6 +363,23 @@ export function hasUnsavedAttendanceEdits(
   return current.some((s) => s.attendance !== serverAttendanceById.get(s.id));
 }
 
+/**
+ * Force every row to `reviewed: true` — for a session that is already
+ * closed (`existingRecords.length > 0` in `openRoster`, issue #485).
+ *
+ * `buildRosterFromAlumnoHorarios` maps `reviewed` per row, against the
+ * horario's CURRENT membership (`fetchAlumnosPorHorario`), which can grow
+ * AFTER a session closes: a student enrolled later has no record for that
+ * past date, so that row alone comes back `reviewed: false`. A closed
+ * session cannot gain a new pending review — nothing can be marked from
+ * here (issue #389) — so counting that row against `unreviewedCount` made an
+ * already-closed list keep reporting a nonzero "sin revisar" that no real,
+ * pending alumno backed.
+ */
+export function markRosterClosed(students: SessionStudent[]): SessionStudent[] {
+  return students.map((s) => (s.reviewed ? s : { ...s, reviewed: true }));
+}
+
 export function buildRosterFromAlumnoHorarios(
   items: AlumnoHorario[],
   existingRecords: AttendanceRecord[] = [],
