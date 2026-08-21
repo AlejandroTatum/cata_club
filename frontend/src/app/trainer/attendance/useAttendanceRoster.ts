@@ -17,6 +17,7 @@ import {
   buildRosterFromAlumnoHorarios,
   countUnreviewed,
   loadAttendanceDraft,
+  markRosterClosed,
   type SessionStudent,
   type WizardStep,
 } from "./attendance-utils";
@@ -88,13 +89,19 @@ export function useAttendanceRoster(): AttendanceRoster {
         const draft = loadAttendanceDraft(attendanceDraftKey(horarioId, fecha));
         const withDraft = applyAttendanceDraft(roster, draft);
 
-        setSessionAlreadyRegistered(existingRecords.length > 0);
+        const closed = existingRecords.length > 0;
+        setSessionAlreadyRegistered(closed);
         setSessionDate(fecha);
         setRequestedDate(requestedDateArg);
         setRestoredFromDraft(
           withDraft !== roster && countUnreviewed(withDraft) < countUnreviewed(roster),
         );
-        setStudents(withDraft);
+        // A closed session cannot have a pending review left (issue #485):
+        // without this, a student enrolled in the horario AFTER this session
+        // closed still lands in `withDraft` unreviewed (no record for that
+        // past date), and the "sin revisar" summary never reached 0 on an
+        // already-closed, read-only list.
+        setStudents(closed ? markRosterClosed(withDraft) : withDraft);
         setStep(target);
         onLoaded(horarioId, requestedDateArg, target);
         return true;
