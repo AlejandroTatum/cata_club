@@ -1,16 +1,18 @@
 "use client";
 
 /**
- * Tarifas — admin editing of the club's membership price catalog (issue #394,
- * frontend half of #400). Price-only on purpose: `TipoMembresia` has no
- * soft-delete column and the backend resolves its price fresh at each
- * `crearMembresia`/`registrar_pago` rather than freezing it on the catalog
- * row, so a change here only ever reaches FUTURE payments — the reason the
- * confirmation states that explicitly.
+ * Tarifas — admin management of the club's membership price catalog (issue
+ * #394/#400, plus "Nueva tarifa" from #507). Editing a price has no
+ * soft-delete equivalent here: `TipoMembresia` has no soft-delete column and
+ * the backend resolves its price fresh at each `crearMembresia`/
+ * `registrar_pago` rather than freezing it on the catalog row, so a price
+ * change only ever reaches FUTURE payments — the reason the confirmation
+ * states that explicitly. Creating a tariff carries no such caveat, so it
+ * skips the confirmation dialog entirely (see `handleCreateSubmit`).
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Tag } from "lucide-react";
+import { Loader2, Pencil, Plus, Tag } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -22,6 +24,7 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PAGE_RAIL,
   Table,
   TableBody,
   TableCell,
@@ -31,7 +34,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchTiposMembresia, actualizarTipoMembresia } from "@/services/api";
+import { fetchTiposMembresia, actualizarTipoMembresia, crearTipoMembresia } from "@/services/api";
 import type { TipoMembresiaCatalogo } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -83,11 +86,23 @@ function normalizePrecio(value: string): string {
 const PRECIO_INPUT_CLASS =
   "h-ctl w-28 rounded-ctl border border-line-2 bg-paper px-3 text-right text-sm text-ink tabular-nums outline-none focus:border-cata-red";
 
+/** The new-tariff form's field skin — same tokens `discounts/page.tsx` draws
+ *  its own "Nuevo descuento" form with, spelled once. */
+const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
+const FIELD_CONTROL =
+  "h-ctl w-full rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
+
 interface PendingConfirm {
   id: number;
   categoria: string;
   precioNuevo: string;
 }
+
+const EMPTY_NEW_TARIFA = {
+  categoria: "",
+  precioInput: "",
+  modalidad: "MENSUAL" as TipoMembresiaCatalogo["modalidad"],
+};
 
 export default function TarifasPage(): React.ReactElement {
   const { showSuccess, showError } = useToast();
@@ -101,6 +116,11 @@ export default function TarifasPage(): React.ReactElement {
   const [inputError, setInputError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTarifa, setNewTarifa] = useState(EMPTY_NEW_TARIFA);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const loadCatalog = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -171,6 +191,49 @@ export default function TarifasPage(): React.ReactElement {
     setPendingConfirm(null);
   }
 
+  // --- Nueva tarifa (issue #507) --------------------------------------------
+  // Same "open a rail form, validate on submit, reload on success" shape as
+  // `discounts/page.tsx`'s create flow — no confirmation dialog here (unlike
+  // the price edit above): creating a new catalog row has no existing pagos
+  // or future charges to warn about, the way changing one does.
+
+  function openCreateForm(): void {
+    setNewTarifa(EMPTY_NEW_TARIFA);
+    setCreateError(null);
+    setCreateOpen(true);
+  }
+
+  function closeCreateForm(): void {
+    setCreateOpen(false);
+    setCreateError(null);
+  }
+
+  async function handleCreateSubmit(): Promise<void> {
+    const categoria = newTarifa.categoria.trim();
+    if (!categoria) {
+      setCreateError("La categoría es obligatoria.");
+      return;
+    }
+    const precio = normalizePrecio(newTarifa.precioInput);
+    if (!PRECIO_REGEX.test(precio)) {
+      setCreateError(PRECIO_ERROR);
+      return;
+    }
+
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await crearTipoMembresia({ categoria, precio, modalidad: newTarifa.modalidad });
+      showSuccess(`Tarifa «${categoria}» creada.`);
+      closeCreateForm();
+      await loadCatalog();
+    } catch (err) {
+      setCreateError(toUserMessage(err, "No se pudo crear la tarifa."));
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function renderMeta(tarifa: TipoMembresiaCatalogo): React.ReactElement {
     if (editingId === tarifa.id) {
       return (
@@ -229,89 +292,189 @@ export default function TarifasPage(): React.ReactElement {
     );
   }
 
+  function renderCreateForm(): React.ReactElement {
+    return (
+      <div className="card flex flex-col gap-section p-[18px]">
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+          Nueva tarifa
+        </h2>
+        <div className="flex flex-col gap-section">
+          <label className={FIELD_LABEL}>
+            Categoría
+            <input
+              type="text"
+              value={newTarifa.categoria}
+              onChange={(e) => {
+                setNewTarifa({ ...newTarifa, categoria: e.target.value });
+                setCreateError(null);
+              }}
+              className={FIELD_CONTROL}
+              placeholder="Mensual Infantil"
+              disabled={creating}
+              autoFocus
+            />
+          </label>
+          <label className={FIELD_LABEL}>
+            Precio
+            <input
+              type="text"
+              inputMode="decimal"
+              value={newTarifa.precioInput}
+              onChange={(e) => {
+                setNewTarifa({ ...newTarifa, precioInput: sanitizePrecioInput(e.target.value) });
+                setCreateError(null);
+              }}
+              className={FIELD_CONTROL}
+              placeholder="45.00"
+              disabled={creating}
+            />
+          </label>
+          <label className={FIELD_LABEL}>
+            Modalidad
+            <select
+              value={newTarifa.modalidad}
+              onChange={(e) =>
+                setNewTarifa({
+                  ...newTarifa,
+                  modalidad: e.target.value as TipoMembresiaCatalogo["modalidad"],
+                })
+              }
+              className={FIELD_CONTROL}
+              disabled={creating}
+            >
+              <option value="MENSUAL">Mensual</option>
+              <option value="PERSONALIZADA">Personalizada</option>
+            </select>
+          </label>
+        </div>
+        {createError && (
+          <p className="text-xs text-state-bad" role="alert">
+            {createError}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="dark" onClick={() => void handleCreateSubmit()} disabled={creating}>
+            {creating ? (
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            )}
+            Crear
+          </Button>
+          <Button onClick={closeCreateForm} disabled={creating}>
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell title="Tarifas" measure="short">
+      <AppShell
+        title="Tarifas"
+        measure="short"
+        actions={
+          <Button variant="dark" onClick={openCreateForm}>
+            <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            Nueva tarifa
+          </Button>
+        }
+      >
         {loadError && <ErrorState message={loadError} onRetry={() => void loadCatalog()} />}
 
-        <section className="card flex min-w-0 flex-col overflow-hidden">
-          <div className="flex items-center justify-between gap-2 border-b border-line px-[18px] py-3">
-            <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-              Catálogo de tarifas
-            </h2>
+        <div
+          data-testid="tarifas-split"
+          className={createOpen ? PAGE_RAIL : "flex min-w-0 flex-1 flex-col"}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-page">
+            <section className="card flex min-w-0 flex-col overflow-hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-line px-[18px] py-3">
+                <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                  Catálogo de tarifas
+                </h2>
+              </div>
+
+              {loading ? (
+                <LoadingState label="Cargando tarifas…" />
+              ) : !loadError && tarifas.length === 0 ? (
+                <EmptyState
+                  surface="inset"
+                  fill
+                  icon={<Tag size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                  title="Sin tarifas en el catálogo"
+                  description="Todavía no hay tipos de membresía configurados."
+                  action={
+                    <Button variant="dark" onClick={openCreateForm}>
+                      <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                      Crear primera tarifa
+                    </Button>
+                  }
+                />
+              ) : tarifas.length > 0 ? (
+                <>
+                  <ul data-testid="tarifas-cards" className="divide-y divide-line sm:hidden">
+                    {tarifas.map((tarifa) => (
+                      <DataRow
+                        key={tarifa.id}
+                        name={tarifa.categoria}
+                        // Bundled into `meta` rather than `DataRow`'s own
+                        // per-row `actions` prop: this row's actions are
+                        // "Editar precio"/"Guardar"/"Cancelar", distinct from
+                        // the header's own "Nueva tarifa" (#507). `meta`
+                        // renders the same trailing flex row, so nothing
+                        // about the card layout changes.
+                        meta={
+                          <>
+                            {renderMeta(tarifa)}
+                            {renderAcciones(tarifa)}
+                          </>
+                        }
+                      />
+                    ))}
+                  </ul>
+
+                  <div data-testid="tarifas-table" className="hidden overflow-x-auto sm:block">
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableHeaderCell>Categoría</TableHeaderCell>
+                          <TableHeaderCell>Precio</TableHeaderCell>
+                          <TableHeaderCell>Modalidad</TableHeaderCell>
+                          <TableHeaderCell align="right">
+                            <span className="sr-only">Acciones</span>
+                          </TableHeaderCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {tarifas.map((tarifa) => (
+                          <TableRow key={tarifa.id}>
+                            <TableNameCell name={tarifa.categoria} />
+                            <TableCell>
+                              {editingId === tarifa.id ? (
+                                renderMeta(tarifa)
+                              ) : (
+                                `$ ${tarifa.precio}`
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {editingId === tarifa.id ? "" : MODALIDAD_LABEL[tarifa.modalidad]}
+                            </TableCell>
+                            <TableCell align="right">
+                              <div className="flex justify-end gap-2">{renderAcciones(tarifa)}</div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              ) : null}
+            </section>
           </div>
 
-          {loading ? (
-            <LoadingState label="Cargando tarifas…" />
-          ) : !loadError && tarifas.length === 0 ? (
-            <EmptyState
-              surface="inset"
-              fill
-              icon={<Tag size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title="Sin tarifas en el catálogo"
-              description="Todavía no hay tipos de membresía configurados."
-            />
-          ) : tarifas.length > 0 ? (
-            <>
-              <ul data-testid="tarifas-cards" className="divide-y divide-line sm:hidden">
-                {tarifas.map((tarifa) => (
-                  <DataRow
-                    key={tarifa.id}
-                    name={tarifa.categoria}
-                    // Bundled into `meta` rather than `DataRow`'s own
-                    // per-row prop of the same name as AppShell's header
-                    // slot: this screen has no header action (see
-                    // `primary-action.test.ts`'s `NO_HEADER_ACTION`, which
-                    // greps the raw file and cannot tell the two props with
-                    // that shared name apart). `meta` renders the same
-                    // trailing flex row, so nothing about the card changes.
-                    meta={
-                      <>
-                        {renderMeta(tarifa)}
-                        {renderAcciones(tarifa)}
-                      </>
-                    }
-                  />
-                ))}
-              </ul>
-
-              <div data-testid="tarifas-table" className="hidden overflow-x-auto sm:block">
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeaderCell>Categoría</TableHeaderCell>
-                      <TableHeaderCell>Precio</TableHeaderCell>
-                      <TableHeaderCell>Modalidad</TableHeaderCell>
-                      <TableHeaderCell align="right">
-                        <span className="sr-only">Acciones</span>
-                      </TableHeaderCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {tarifas.map((tarifa) => (
-                      <TableRow key={tarifa.id}>
-                        <TableNameCell name={tarifa.categoria} />
-                        <TableCell>
-                          {editingId === tarifa.id ? (
-                            renderMeta(tarifa)
-                          ) : (
-                            `$ ${tarifa.precio}`
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingId === tarifa.id ? "" : MODALIDAD_LABEL[tarifa.modalidad]}
-                        </TableCell>
-                        <TableCell align="right">
-                          <div className="flex justify-end gap-2">{renderAcciones(tarifa)}</div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </>
-          ) : null}
-        </section>
+          {createOpen ? <div data-testid="tarifas-rail">{renderCreateForm()}</div> : null}
+        </div>
 
         <ConfirmDialog
           open={pendingConfirm !== null}

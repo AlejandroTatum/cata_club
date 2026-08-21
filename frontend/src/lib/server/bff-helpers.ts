@@ -285,3 +285,60 @@ export async function patchCatalogResource<Field extends string>(
   }
   return response;
 }
+
+interface PostCatalogResourceOptions<Field extends string> {
+  /** Backend path to POST to (e.g. `/membresias/tipos`). */
+  backendPath: string;
+  /** Fields the backend requires; a missing/empty one is rejected before the trip. */
+  requiredFields: readonly Field[];
+  /** 400 message when a required field is missing. */
+  missingFieldMessage: string;
+  /** Message used both as the fallback backend-error text and when the auth proxy itself fails. */
+  failureMessage: string;
+}
+
+/**
+ * Shared POST algorithm for admin catalog resources (issue #507): parse JSON,
+ * reject a body missing any required field, POST the whole parsed body to the
+ * backend (unlike `patchCatalogResource` there is no partial-update
+ * whitelist — a create sends everything), relay a backend refusal verbatim,
+ * and refresh the auth cookie on success. Mirrors `patchCatalogResource`
+ * above and `/api/descuentos`'s POST handler, so a second catalog-create
+ * route doesn't copy that proxy/timeout/error boilerplate a second time.
+ */
+export async function postCatalogResource<Field extends string>(
+  request: NextRequest,
+  options: PostCatalogResourceOptions<Field>,
+): Promise<NextResponse> {
+  const { backendPath, requiredFields, missingFieldMessage, failureMessage } = options;
+
+  const [body, parseError] = await parseJsonBody(request);
+  if (parseError) return parseError;
+
+  const parsed = (typeof body === "object" && body !== null ? body : {}) as Record<Field, unknown>;
+  for (const field of requiredFields) {
+    if (parsed[field] === undefined || parsed[field] === null || parsed[field] === "") {
+      return badRequestResponse(missingFieldMessage);
+    }
+  }
+
+  const result = await backendFetchAuthed(request, backendPath, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(parsed),
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ message: failureMessage }, { status: result.status });
+  }
+  if (!result.response.ok) {
+    return passthroughBackendError(result.response, failureMessage);
+  }
+
+  const data = await result.response.json();
+  const response = NextResponse.json(data, { status: 201 });
+  if (result.refreshedAccessToken) {
+    setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  }
+  return response;
+}
