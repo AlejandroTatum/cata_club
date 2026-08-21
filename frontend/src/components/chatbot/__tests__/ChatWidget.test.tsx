@@ -16,12 +16,15 @@ import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-li
 import ChatWidget from "@/components/chatbot/ChatWidget";
 import { getQuickReplies } from "@/components/chatbot/chat-quick-replies";
 
-// `src` is forwarded, not dropped: which asset the header avatar points at is
-// a behaviour these tests assert (the club wordmark is unreadable at 32px).
+// `src` and `className` are forwarded, not dropped: which asset the header
+// avatar points at, and whether it crops with `object-cover`, are behaviours
+// these tests assert.
 vi.mock("next/image", () => ({
   __esModule: true,
-  // eslint-disable-next-line @next/next/no-img-element
-  default: ({ alt, src }: { alt: string; src: string }) => <img alt={alt} src={src} />,
+  default: ({ alt, src, className }: { alt: string; src: string; className?: string }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={alt} src={src} className={className} />
+  ),
 }));
 
 /** Never resolves — holds the widget in its "enviando" state for inspection. */
@@ -193,16 +196,21 @@ describe("ChatWidget — design system", () => {
     expect(screen.getByText("Responde en segundos")).toBeInTheDocument();
   });
 
-  it("wears the purpose-made bot avatar, not the club wordmark that smudges at 32px", () => {
+  it("wears the club's real logo, cropped to a circle over the disc", () => {
     const { container } = render(<ChatWidget open onClose={vi.fn()} />);
 
     const avatar = container.querySelector("header img");
-    // The 512px master, not the 128px copy. `sizes` is in CSS pixels, so
-    // asking for a 32px source made Next serve 32 real pixels and every
-    // HiDPI display upscaled them — the avatar rendered as a smudge. The
-    // `sizes` value itself is not asserted here: the `next/image` mock in this
-    // suite drops that prop, so it can only be checked in the browser.
-    expect(avatar).toHaveAttribute("src", "/brand/cata-bot.png");
+    // Issue #512: the purpose-made illustration is gone in favor of the
+    // club's actual logo — no new illustration, no AI/external tool. The
+    // full `public/brand/cata-club-logo.jpeg` under plain `object-cover`
+    // was tried and rejected on inspection: it's wider than tall, so the
+    // browser only trims ~4% off each side and the wordmark band survives
+    // almost whole inside the circle. `cata-club-logo-avatar.png` is a
+    // deterministic (non-AI) crop of that same JPEG ending above the
+    // wordmark, with its background keyed to transparent. `object-cover`
+    // (not `contain`) still fills the disc from that square source.
+    expect(avatar).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
+    expect(avatar?.className).toContain("object-cover");
   });
 
   it("introduces itself by name in the opening bubble", () => {

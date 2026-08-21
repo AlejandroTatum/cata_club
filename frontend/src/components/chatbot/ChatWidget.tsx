@@ -4,19 +4,27 @@
  * ## The assistant has a name and a face
  *
  * It used to introduce itself as "Cata Club" behind the club's own JPEG
- * wordmark, which is wrong twice: it made the bot indistinguishable from the
- * human channel one row below it ("Hablar con el club"), and the wordmark
- * rendered at 32px is an unreadable red smudge — that mark carries three
- * lines of type inside a wreath and needs ~100px to resolve. The assistant is
- * now CATA-BOT everywhere it identifies itself (header, greeting, ARIA
- * labels, failure copy), drawn as `/brand/cata-bot.png`, a purpose-made
- * circular avatar that survives 32px. That is the 512px master, and it is what
- * both callers request — this header and `HelpChatDock`'s launcher — because
- * `next/image` picks a source off `sizes`, not off the layout box, so a
- * 32px-wide avatar on a 2x display still needs real pixels behind it; the
- * 128px copy beside it in `public/brand` is asked for by nobody. See the
- * header's own comment below for the sizing. "Hablar con el club" keeps the
- * club's name on purpose: that link hands off to a person.
+ * wordmark, which was wrong: it made the bot indistinguishable from the
+ * human channel one row below it ("Hablar con el club"). The assistant is
+ * CATA-BOT everywhere it identifies itself (header, greeting, ARIA labels,
+ * failure copy). "Hablar con el club" keeps the club's name on purpose: that
+ * link hands off to a person.
+ *
+ * A purpose-made circular illustration was explored for the avatar and
+ * dropped (issue #512): the product owner's call is the club's own logo, not
+ * a new illustration and not any AI/external image-generation tool. Running
+ * the full `/brand/cata-club-logo.jpeg` (1080×996, wordmark below the
+ * wreath) through plain `object-cover` was tried first and failed on
+ * inspection: the source is wider than tall, so the browser scales it down
+ * by height and only trims ~4% off each side — the "CATA CLUB / TENIS DE
+ * MESA" band survives almost whole inside the circle and reads as noise at
+ * 32/40px, not as a crest. `/brand/cata-club-logo-avatar.png` is a
+ * deterministic derivative of that same JPEG — a 620×620 crop of the wreath
+ * and player silhouette ending above the wordmark band, background
+ * chroma-keyed to transparent (Python/Pillow: threshold + edge unblend, no
+ * AI) so `bg-coal` shows through instead of the JPEG's light-grey square.
+ * See the header's own comment below for the exact crop and why the source
+ * JPEG stays untouched (the landing and other pages still use it whole).
  *
  * Talks to the backend's FAQ chatbot (no RAG, no persistence) via the BFF
  * proxy at POST /api/chatbot (see src/app/api/chatbot/route.ts), which itself
@@ -219,23 +227,31 @@ export default function ChatWidget({
       {/* `.chat > header` — coal, avatar disc, "Responde en segundos". */}
       <header className="flex flex-none items-center gap-[11px] bg-coal px-[15px] py-3 text-white">
         {/*
-          The 512px master with `sizes="96px"`, NOT the 128px copy at "32px".
-          `sizes` is CSS pixels: at "32px" Next serves a 32-pixel-wide file, so
-          a 2x or 3x display upscales it and the avatar reads as a smudge.
-          Asking for 96 lets the browser pick a source with real pixels at any
-          density; it still lays out at 32.
+          `sizes="96px"`, not the 32px layout box: `sizes` is CSS pixels, so
+          asking for 32 would make Next serve a 32-pixel-wide file and a 2x or
+          3x display would upscale it into a smudge. Asking for 96 gives the
+          browser room to pick real pixels at any density; it still lays out
+          at 32.
 
-          No `bg-white` behind it either — the PNG is transparent outside its
-          own coal disc, so a white fill bled through the antialiased rim as a
-          halo. The mark carries its own black edge against the coal header.
+          `cata-club-logo-avatar.png`, not the raw `cata-club-logo.jpeg`: the
+          source is 1080×996 (wider than tall), so `object-cover` alone
+          scales it by height and barely trims the sides — the "CATA CLUB /
+          TENIS DE MESA" wordmark below the wreath survives almost whole
+          inside the circle and stays legible-but-wrong at 32px. The PNG is a
+          620×620 crop of the same source, cut above the wordmark band, with
+          the JPEG's light-grey background chroma-keyed to transparent —
+          `object-cover` is still correct here (a square source into a square
+          box needs no cropping, just scaling), and the transparent margin
+          around the wreath's oval lets this header's own `bg-coal` show
+          through instead of that light-grey square.
         */}
         <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-full">
           <Image
-            src="/brand/cata-bot.png"
+            src="/brand/cata-club-logo-avatar.png"
             alt=""
             fill
             sizes="96px"
-            className="object-contain"
+            className="object-cover"
           />
         </span>
         <span className="min-w-0 flex-1 leading-tight">
