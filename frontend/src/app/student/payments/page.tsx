@@ -969,7 +969,16 @@ function RenewPaymentForm({
             onChange={(e) => {
               const value = e.target.value as "EFECTIVO" | "TRANSFERENCIA";
               setTipoPago(value);
-              if (value !== "TRANSFERENCIA") setVoucherFile(null);
+              // findProblem() reported "falta el comprobante" against the
+              // FORM STATE AT THAT MOMENT — switching to EFECTIVO removes
+              // the field the alert refers to, but nothing was previously
+              // re-running findProblem() to also clear the stale message
+              // (issue #488), so it hung around until the next submit
+              // attempt pointing at a field no longer on screen.
+              if (value !== "TRANSFERENCIA") {
+                setVoucherFile(null);
+                action.setError(null);
+              }
             }}
             className={FIELD_CLASSES}
           >
