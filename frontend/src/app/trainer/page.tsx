@@ -59,7 +59,6 @@ import Link from "next/link";
 import { CalendarCheck, CalendarOff } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/contexts/ToastContext";
 import {
   fetchTrainingSchedules,
   fetchAttendanceRecords,
@@ -110,7 +109,6 @@ function firstNameOf(fullName: string | undefined): string {
 
 export default function TrainerPage(): React.ReactElement {
   const { session, isLoading: authLoading } = useAuth();
-  const { showInfo } = useToast();
 
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
   const [monthRecords, setMonthRecords] = useState<AttendanceRecord[]>([]);
@@ -165,15 +163,6 @@ export default function TrainerPage(): React.ReactElement {
     loadData();
     loadRecentSessions();
   }, [isTrainer, loadData, loadRecentSessions]);
-
-  // #319 hallazgo #68: `ProtectedRoute` already bounces a non-trainer session
-  // away, but silently — the URL changed and nothing said why. Same pattern
-  // as the medical-record minor bounce (#315 hallazgo #69): a toast at the
-  // landing spot names the reason instead of leaving a mute redirect.
-  useEffect(() => {
-    if (authLoading || !session || session.user.role === "trainer") return;
-    showInfo("No tiene permiso para acceder a esa sección.");
-  }, [authLoading, session, showInfo]);
 
   const todaySchedules = useMemo(() => {
     const today = todayDiaSemana();

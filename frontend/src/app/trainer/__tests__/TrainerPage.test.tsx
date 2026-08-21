@@ -31,17 +31,6 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 const mockUseAuth = vi.mocked(useAuth);
 
-const mockShowInfo = vi.fn();
-vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({
-    showToast: vi.fn(),
-    showError: vi.fn(),
-    showSuccess: vi.fn(),
-    showInfo: mockShowInfo,
-    showWarning: vi.fn(),
-  }),
-}));
-
 vi.mock("next/navigation", () => ({
   usePathname: () => "/trainer",
   useRouter: () => ({ push: vi.fn() }),
@@ -182,7 +171,6 @@ describe("TrainerPage — Mi día", () => {
     mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
     mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
     mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
-    mockShowInfo.mockReset();
   });
 
   afterEach(() => {
@@ -581,7 +569,6 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
     mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
     mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
-    mockShowInfo.mockReset();
   });
 
   afterEach(() => {
@@ -735,55 +722,6 @@ describe("TrainerPage — defers attendance API calls until the role resolves", 
 });
 
 // ---------------------------------------------------------------------------
-// Silent bounce, explained (issue #319 hallazgo #68).
-//
-// `ProtectedRoute` (mocked to a pass-through here) already redirects a
-// non-trainer session away from /trainer — but silently, with nothing in the
-// UI naming why. Same pattern as the medical-record minor bounce (#315
-// hallazgo #69): a toast at the landing spot.
-// ---------------------------------------------------------------------------
-
-describe("TrainerPage — names the reason when a non-trainer session lands here", () => {
-  beforeEach(() => {
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
-    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
-    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
-    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
-    mockShowInfo.mockReset();
-  });
-
-  it("shows no toast while the session is still hydrating", async () => {
-    mockUseAuth.mockReturnValue(createLoadingAuth());
-
-    render(<TrainerPage />);
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mockShowInfo).not.toHaveBeenCalled();
-  });
-
-  it("shows a visible reason for a resolved non-trainer role", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante"));
-
-    render(<TrainerPage />);
-
-    await waitFor(() =>
-      expect(mockShowInfo).toHaveBeenCalledWith(
-        expect.stringMatching(/permiso|autorizad|acceso|no corresponde/i),
-      ),
-    );
-  });
-
-  it("shows no toast for the trainer role that actually belongs here", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
-
-    render(<TrainerPage />);
-
-    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
-    expect(mockShowInfo).not.toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Issue #346 (regresión de #308 + #310): antes de K1, "la fecha de la sesión"
 // y "hoy" eran siempre el mismo valor. Separarlas en la escritura dejó
 // expuesta cualquier lectura que todavía asumiera que coinciden -- este
@@ -821,7 +759,6 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
     mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue([]);
     mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue([]);
     mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
-    mockShowInfo.mockReset();
     // Un rango de verdad: solo vuelven los registros cuya PROPIA `fecha` cae
     // dentro de [fechaInicio, fechaFin]. Un llamado que (por error) pidiera
     // solo la fecha de hoy no recibiría nada de esta sesión.

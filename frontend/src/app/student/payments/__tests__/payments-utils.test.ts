@@ -12,6 +12,7 @@ import {
   describePagoDescuento,
   estimateTotal,
   formatFileSize,
+  voucherFileTypeError,
   type PagoStatusFilter,
 } from "../payments-utils";
 import type { PagoPersona } from "@/services/api";
@@ -183,6 +184,29 @@ describe("formatFileSize", () => {
 
   it("shows megabytes for a large file", () => {
     expect(formatFileSize(5 * 1024 * 1024)).toBe("5 MB");
+  });
+});
+
+// Issue #482: `accept` on the `<input type="file">` is only a picker hint —
+// a `.txt` selected via "All Files" reaches the app with no client-side
+// check unless something reads `file.type` itself.
+describe("voucherFileTypeError", () => {
+  it.each(["image/jpeg", "image/png", "application/pdf"])(
+    "allows %s, the three types the backend accepts",
+    (type) => {
+      const file = new File(["contenido"], "comprobante", { type });
+      expect(voucherFileTypeError(file)).toBeNull();
+    },
+  );
+
+  it("rejects a .txt file with a clear, actionable message", () => {
+    const file = new File(["contenido"], "notas.txt", { type: "text/plain" });
+    expect(voucherFileTypeError(file)).toBe("El comprobante debe ser un archivo PDF, JPG o PNG.");
+  });
+
+  it("rejects a file with no declared type at all", () => {
+    const file = new File(["contenido"], "comprobante", { type: "" });
+    expect(voucherFileTypeError(file)).not.toBeNull();
   });
 });
 

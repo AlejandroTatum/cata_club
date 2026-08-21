@@ -746,6 +746,29 @@ describe("StudentPaymentsPage — the history", () => {
       expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(2);
     });
   });
+
+  // Issue #482: `accept="image/jpeg,image/png,application/pdf"` on the input
+  // only filters the OS picker's own "All Files" dropdown — a `.txt` picked
+  // that way used to stage a preview and only fail once `subirVoucherPago`
+  // hit the backend's own content-type check.
+  it("rejects a .txt file with an inline error instead of staging a preview (#482)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+
+    const file = new File(["notas"], "notas.txt", { type: "text/plain" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El comprobante debe ser un archivo PDF, JPG o PNG.",
+    );
+    expect(screen.queryByText("notas.txt")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+  });
 });
 
 describe("StudentPaymentsPage — registering a payment", () => {
@@ -898,6 +921,26 @@ describe("StudentPaymentsPage — registering a payment", () => {
     const detach = await screen.findByRole("button", { name: /quitar el comprobante/i });
     expect(detach).toHaveClass("h-6", "w-6");
     expect(detach).toHaveClass("items-center", "justify-center");
+  });
+
+  // Issue #488: switching to Efectivo removes the Comprobante field, but the
+  // "falta el comprobante" alert findProblem() had set for the earlier
+  // Transferencia attempt was never cleared alongside it — it hung around
+  // pointing at a field no longer on screen.
+  it("clears the missing-comprobante alert when switching to Efectivo (#488)", async () => {
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    // Transferencia is the default method; requesting the checkpoint with no
+    // voucher attached surfaces findProblem()'s message.
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+    expect(await screen.findByText(/adjunte el comprobante/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/forma de pago/i), {
+      target: { value: "EFECTIVO" },
+    });
+
+    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
   });
 });
 

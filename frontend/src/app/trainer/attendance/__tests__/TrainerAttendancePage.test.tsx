@@ -1519,6 +1519,38 @@ describe("TrainerAttendancePage — la restricción de corrección se ve al abri
     expect(screen.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 
+  // Issue #485: the horario's roster can grow AFTER a session closes (a
+  // student enrolled later). That student has no record for the closed
+  // session's date, so the raw per-row mapping in `buildRosterFromAlumnoHorarios`
+  // left them `reviewed: false` — a phantom "sin revisar" on an already-closed,
+  // read-only list that no pending alumno ever backed.
+  it("no cuenta como sin revisar a un alumno inscripto después de que la lista se cerró (issue #485)", async () => {
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      ...buildAlumnoHorarios(3),
+      {
+        id: 4,
+        personaId: 400,
+        personaNombreCompleto: "Student 04",
+        horarioId: 12,
+        horarioDia: "mar",
+        horarioHoraInicio: "18:00",
+        horarioHoraFin: "19:00",
+        fechaAsignacion: "2026-08-01",
+      },
+    ]);
+    // Only the original 3 students have a filed record for this session date.
+    mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());
+    window.history.replaceState(null, "", "/trainer/attendance?horario=12&paso=lista");
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByText("Student 01");
+    await screen.findByText("Student 04");
+
+    expect(screen.getByText("Esta lista ya fue registrada.")).toBeInTheDocument();
+    expect(screen.queryByText(/sin revisar/)).not.toBeInTheDocument();
+  });
+
   it("marca en el paso 1 el horario que ya tiene lista tomada hoy (issue #310 / #22)", async () => {
     mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
     mockFetchAttendanceRecords.mockResolvedValue(existingRecordsForAllStudents());

@@ -395,7 +395,7 @@ function focusQueueAction(requestId: string | null): boolean {
 
 export default function PaymentsPage(): React.ReactElement {
   const { session, isLoading: authLoading } = useAuth();
-  const { showSuccess, showError, showWarning, showInfo } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
   /**
    * The queue remembers where the admin works from. Whoever validates payments
    * every morning opens on "Pendientes" because that is the job; making them
@@ -578,15 +578,6 @@ export default function PaymentsPage(): React.ReactElement {
     if (!isAdmin) return;
     void loadPage();
   }, [isAdmin, loadPage]);
-
-  // #319 hallazgo #68: `ProtectedRoute` already bounces a non-admin session
-  // away, but silently — the URL changed and nothing said why. Same pattern
-  // as the medical-record minor bounce (#315 hallazgo #69): a toast at the
-  // landing spot names the reason instead of leaving a mute redirect.
-  useEffect(() => {
-    if (authLoading || !session || session.user.role === "admin") return;
-    showInfo("No tiene permiso para acceder a esa sección.");
-  }, [authLoading, session, showInfo]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
