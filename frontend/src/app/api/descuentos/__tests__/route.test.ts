@@ -135,6 +135,9 @@ describe("POST /api/descuentos", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ message: "Ya existe un descuento con ese nombre" });
+    expect(await response.json()).toEqual({
+      message: "Ya existe un descuento con ese nombre",
+      mensaje_seguro: false,
+    });
   });
 });

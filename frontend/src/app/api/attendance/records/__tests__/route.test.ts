@@ -182,7 +182,7 @@ describe("GET /api/attendance/records", () => {
     const response = await GET(request);
 
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ message: detail });
+    expect(await response.json()).toEqual({ message: detail, mensaje_seguro: false });
     // The enrichment lookups must not run once the report itself failed.
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });

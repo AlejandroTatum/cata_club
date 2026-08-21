@@ -140,19 +140,29 @@ export async function backendFetchAuthed(
  * across every resource's Route Handler under `src/app/api/**` that proxies
  * `backendFetchAuthed` — one place to fix if the backend's error shape ever
  * changes.
+ *
+ * Also forwards `mensaje_seguro` (issue #481): the backend marks a 5xx
+ * `detail` safe to show as-is via `ErrorDominio.seguro_mostrar` (see
+ * `error-message.ts`'s "5xx exception"), but that marker lived only in
+ * FastAPI's response body — this helper dropped it, so `services/api.ts`
+ * always saw `mensaje_seguro` as absent and every BFF-proxied 5xx fell back
+ * to the generic `SERVER_FAILURE` copy regardless of what the backend sent.
+ * Defaults to `false`, same fail-closed behavior as the message fallback.
  */
 export async function passthroughBackendError(response: Response, fallback: string): Promise<NextResponse> {
   let message = fallback;
+  let mensajeSeguro = false;
   try {
     const body: unknown = await response.json();
     if (typeof body === "object" && body !== null) {
       const b = body as Record<string, unknown>;
       message = (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail) || fallback;
+      mensajeSeguro = b.mensaje_seguro === true;
     }
   } catch {
     // ignore parse errors — use fallback
   }
-  return NextResponse.json({ message }, { status: response.status });
+  return NextResponse.json({ message, mensaje_seguro: mensajeSeguro }, { status: response.status });
 }
 
 /**

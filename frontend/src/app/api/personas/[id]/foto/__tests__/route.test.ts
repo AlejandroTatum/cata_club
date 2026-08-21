@@ -129,4 +129,28 @@ describe("POST /api/personas/[id]/foto", () => {
 
     expect(response.status).toBe(400);
   });
+
+  // Issue #481: Cloudinary rejects an upload (e.g. no credentials configured
+  // in QA) and `cloudinary_cliente._subir` raises `ServicioNoDisponible` with
+  // `seguro_mostrar=True` and a specific, safe-to-show message — main.py's
+  // handler puts that in both `detail` and `mensaje_seguro: true`. This route
+  // must forward `mensaje_seguro` so the frontend shows that specific message
+  // instead of falling back to the generic "Tuvimos un problema..." copy.
+  it("forwards `mensaje_seguro` on a 503 so the specific backend message survives", async () => {
+    const mensaje =
+      "No se pudo subir el archivo en este momento. Vuelva a intentarlo más tarde o acérquese al club / escríbanos por WhatsApp.";
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ detail: mensaje, message: mensaje, mensaje_seguro: true }, 503),
+    );
+
+    const access = makeJwt(3600);
+    const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
+    const response = await POST(fotoRequest("42", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
+      params: { id: "42" },
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({ message: mensaje, mensaje_seguro: true });
+  });
 });

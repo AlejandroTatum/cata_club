@@ -45,7 +45,7 @@ describe("GET /api/membresias/mias", () => {
     const token = makeJwt(3600);
     const response = await GET(request(`${ACCESS_TOKEN_COOKIE}=${token}`, "?persona_id=9"));
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ message: "No autorizado" });
+    expect(await response.json()).toEqual({ message: "No autorizado", mensaje_seguro: false });
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/membresias/mias?persona_id=9",
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${token}` }) }),
