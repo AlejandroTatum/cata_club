@@ -35,6 +35,7 @@ import {
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
+  countRecordsByHorario,
   hasUnsavedAttendanceEdits,
   isWithinCorrectionWindow,
   type SessionStudent,
@@ -310,6 +311,38 @@ describe("buildRosterFromAlumnoHorarios", () => {
     const roster = buildRosterFromAlumnoHorarios(alumnoHorarios);
     expect(roster.every((s) => s.attendance === "present")).toBe(true);
     expect(countUnreviewed(roster)).toBe(roster.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #483 — extracted out of `TrainerAttendancePage` so the reducer's own
+// branching does not add to that component's already-large cognitive
+// complexity (see the PR's SonarCloud gate).
+// ---------------------------------------------------------------------------
+
+describe("countRecordsByHorario", () => {
+  function record(horarioId: number, personaId: number): AttendanceRecord {
+    return {
+      id: `att-${horarioId}-${personaId}`,
+      fecha: "2026-07-20",
+      horario: "Lunes 18:00 — 19:00",
+      horarioId,
+      personaId,
+      estudiante: `Student ${personaId}`,
+      estado: "present",
+    };
+  }
+
+  it("tallies each horario's own records, not the whole list's length", () => {
+    const counts = countRecordsByHorario([record(12, 1), record(12, 2), record(13, 3)]);
+    expect(counts.get(12)).toBe(2);
+    expect(counts.get(13)).toBe(1);
+  });
+
+  it("returns an empty map for an empty list, not a zero-filled one", () => {
+    const counts = countRecordsByHorario([]);
+    expect(counts.size).toBe(0);
+    expect(counts.get(12)).toBeUndefined();
   });
 });
 

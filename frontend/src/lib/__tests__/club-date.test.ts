@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import type { DiaSemana } from "@/types/domain";
 import {
   CLUB_TIME_ZONE,
   buildDateRange,
@@ -15,6 +16,7 @@ import {
   clubToday,
   lastOccurrenceOfDiaSemana,
   todayDiaSemana,
+  weekWindowStartIso,
 } from "../club-date";
 
 describe("CLUB_TIME_ZONE", () => {
@@ -131,6 +133,30 @@ describe("lastOccurrenceOfDiaSemana", () => {
     // but still Friday on a UTC clock. Asking for "jue" here must resolve to
     // THAT Thursday, not walk back a further day because of a UTC read.
     expect(lastOccurrenceOfDiaSemana("jue", new Date("2026-07-24T02:00:00Z"))).toBe("2026-07-23");
+  });
+});
+
+describe("weekWindowStartIso", () => {
+  const SUNDAY = new Date("2026-08-16T15:00:00Z");
+
+  it("is exactly 6 days before today", () => {
+    expect(weekWindowStartIso(SUNDAY)).toBe("2026-08-10");
+  });
+
+  it("brackets lastOccurrenceOfDiaSemana for every DiaSemana this week", () => {
+    // Issue #483's whole point: the window this feeds a query with has to be
+    // wide enough that NO day's last occurrence falls outside it.
+    const days: DiaSemana[] = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
+    const start = weekWindowStartIso(SUNDAY);
+    const end = clubIsoDate(SUNDAY);
+    for (const day of days) {
+      const occurrence = lastOccurrenceOfDiaSemana(day, SUNDAY);
+      expect(occurrence >= start && occurrence <= end).toBe(true);
+    }
+  });
+
+  it("reads the club's calendar day, not the device's", () => {
+    expect(weekWindowStartIso(new Date("2026-07-24T02:00:00Z"))).toBe("2026-07-17");
   });
 });
 

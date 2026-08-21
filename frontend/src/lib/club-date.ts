@@ -195,6 +195,22 @@ export function lastOccurrenceOfDiaSemana(diaSemana: DiaSemana, now: Date = new 
 }
 
 /**
+ * `YYYY-MM-DD` for the club's calendar date 6 days before today.
+ *
+ * The start of the narrowest trailing window that is still guaranteed to
+ * contain `lastOccurrenceOfDiaSemana` for EVERY `DiaSemana` — that function
+ * never walks back more than 6 days, since a week only has 7 days and it
+ * always includes today (offset 0) as one of them. Issue #483: a caller that
+ * needs "has this week's occurrence of any horario already happened" — not
+ * just today's — pairs this with `clubIsoDate()` as the end of the range.
+ */
+export function weekWindowStartIso(now: Date = new Date()): string {
+  const start = clubToday(now);
+  start.setDate(start.getDate() - 6);
+  return calendarIsoDate(start);
+}
+
+/**
  * Resolve a preset into `{ fechaInicio, fechaFin }`, both `YYYY-MM-DD`.
  *
  * `custom` returns empty strings — the caller owns those two pickers.

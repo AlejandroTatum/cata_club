@@ -115,6 +115,7 @@ import {
   toAttendanceMarks,
   buildAttendanceReceipt,
   buildRosterFromAlumnoHorarios,
+  countRecordsByHorario,
   hasUnsavedAttendanceEdits,
   type SessionStudent,
   type StoredAttendanceDraft,
@@ -150,11 +151,10 @@ import {
 } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
 import {
-  calendarIsoDate,
   clubIsoDate,
-  clubToday,
   lastOccurrenceOfDiaSemana,
   todayDiaSemana,
+  weekWindowStartIso,
 } from "@/lib/club-date";
 import { formatDateTime } from "@/lib/format-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
@@ -412,16 +412,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
   useEffect(() => {
     if (schedules.length === 0) return;
     let cancelled = false;
-    const windowStart = clubToday();
-    windowStart.setDate(windowStart.getDate() - 6);
-    fetchAttendanceRecords({ fechaInicio: calendarIsoDate(windowStart), fechaFin: clubIsoDate() })
+    fetchAttendanceRecords({ fechaInicio: weekWindowStartIso(), fechaFin: clubIsoDate() })
       .then((records) => {
         if (cancelled) return;
-        const counts = new Map<number, number>();
-        for (const record of records) {
-          counts.set(record.horarioId, (counts.get(record.horarioId) ?? 0) + 1);
-        }
-        setWeekRecordCounts(counts);
+        setWeekRecordCounts(countRecordsByHorario(records));
       })
       .catch((err: unknown) => {
         console.error("[trainer/attendance] fetchAttendanceRecords week-counts failed", err);
