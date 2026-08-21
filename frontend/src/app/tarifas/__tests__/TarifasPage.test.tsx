@@ -58,6 +58,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 const mockFetchTiposMembresia = vi.fn();
 const mockActualizarTipoMembresia = vi.fn();
+const mockCrearTipoMembresia = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
 
@@ -73,6 +74,7 @@ vi.mock("@/services/api", () => {
   return {
     fetchTiposMembresia: () => mockFetchTiposMembresia(),
     actualizarTipoMembresia: (id: number, data: unknown) => mockActualizarTipoMembresia(id, data),
+    crearTipoMembresia: (data: unknown) => mockCrearTipoMembresia(data),
     fetchNotificaciones: () => mockFetchNotificaciones(),
     marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
     ApiClientError: MockApiClientError,
@@ -112,6 +114,7 @@ async function findTarifaRow(categoria: string): Promise<HTMLElement> {
 beforeEach(() => {
   mockFetchTiposMembresia.mockReset().mockResolvedValue([JUNIOR, SENIOR]);
   mockActualizarTipoMembresia.mockReset();
+  mockCrearTipoMembresia.mockReset();
 });
 
 describe("TarifasPage — listado", () => {
@@ -335,5 +338,119 @@ describe("TarifasPage — masking y separador decimal", () => {
     fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
 
     expect(within(juniorRow).queryByText(/precio válido/i)).not.toBeInTheDocument();
+  });
+});
+
+// Issue #507 — the screen only ever let an admin EDIT an existing tariff's
+// price; there was no way to add a new one, even though the backend already
+// supports `POST /membresias/tipos`.
+describe("TarifasPage — crear tarifa", () => {
+  it("opens the form, creates a tariff and refreshes the list", async () => {
+    mockCrearTipoMembresia.mockResolvedValueOnce({
+      id: 3, categoria: "Mensual Infantil", precio: "25.00", modalidad: "MENSUAL",
+    });
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "25.00" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => {
+      expect(mockCrearTipoMembresia).toHaveBeenCalledWith({
+        categoria: "Mensual Infantil",
+        precio: "25.00",
+        modalidad: "MENSUAL",
+      });
+    });
+    // The catalog reloads after a successful create, same as `discounts/page.tsx`.
+    expect(mockFetchTiposMembresia).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets the admin switch modalidad before creating", async () => {
+    mockCrearTipoMembresia.mockResolvedValueOnce({
+      id: 4, categoria: "Clases sueltas", precio: "10.00", modalidad: "PERSONALIZADA",
+    });
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Clases sueltas" } });
+    fireEvent.change(screen.getByLabelText(/modalidad/i), { target: { value: "PERSONALIZADA" } });
+    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "10.00" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => {
+      expect(mockCrearTipoMembresia).toHaveBeenCalledWith({
+        categoria: "Clases sueltas",
+        precio: "10.00",
+        modalidad: "PERSONALIZADA",
+      });
+    });
+  });
+
+  it("rejects an empty categoria without calling the API", async () => {
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "25.00" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
+    expect(await screen.findByText(/categoría es obligatoria/i)).toBeInTheDocument();
+  });
+
+  it("rejects an invalid price without calling the API", async () => {
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
+    expect(await screen.findByText(/precio válido/i)).toBeInTheDocument();
+  });
+
+  it("surfaces the backend's failure message instead of a generic one", async () => {
+    const { ApiClientError } = await import("@/services/api");
+    mockCrearTipoMembresia.mockRejectedValueOnce(
+      new ApiClientError("Ya existe una tarifa con esa categoría", 409),
+    );
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "25.00" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(await screen.findByText("Ya existe una tarifa con esa categoría")).toBeInTheDocument();
+    // The form stays open so the admin can correct the input.
+    expect(screen.getByLabelText(/categoría/i)).toBeInTheDocument();
+  });
+
+  it("lets the admin cancel without creating anything", async () => {
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    expect(screen.queryByLabelText(/categoría/i)).not.toBeInTheDocument();
+    expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
+  });
+
+  it("gives the categoria field initial focus when the form opens", async () => {
+    renderPage();
+    await screen.findByTestId("tarifas-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+
+    expect(screen.getByLabelText(/categoría/i)).toHaveFocus();
   });
 });

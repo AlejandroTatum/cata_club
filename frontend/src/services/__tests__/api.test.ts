@@ -46,6 +46,7 @@ import {
   fetchMembresiaDeuda,
   regularizarDeuda,
   fetchTarifas,
+  crearTipoMembresia,
 } from "../api";
 import type { PaymentValidationRequest, Horario, AlumnoHorario, DescuentoCatalogo } from "../api";
 import type { Notificacion, PerfilPropio } from "@/types/domain";
@@ -876,6 +877,32 @@ describe("fetchTarifas", () => {
     vi.mocked(global.fetch).mockResolvedValue(okResponse([{ categoria: "Solo esto" }]));
 
     await expect(fetchTarifas()).rejects.toThrow(ApiClientError);
+  });
+});
+
+describe("crearTipoMembresia", () => {
+  it("POSTs /api/membresias/tipos with categoria, precio (string) and modalidad", async () => {
+    const created = { id: 3, categoria: "Mensual Infantil", precio: "25.00", modalidad: "MENSUAL" };
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(created, { status: 201 }));
+
+    const dto = { categoria: "Mensual Infantil", precio: "25.00", modalidad: "MENSUAL" as const };
+    const result = await crearTipoMembresia(dto);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/membresias/tipos",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(dto) }),
+    );
+    expect(result).toEqual(created);
+  });
+
+  it("surfaces the backend domain message on a 422 (e.g. invalid price)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(422, { message: "El precio debe ser mayor a 0" }),
+    );
+
+    await expect(
+      crearTipoMembresia({ categoria: "Mensual Adultos", precio: "0", modalidad: "MENSUAL" }),
+    ).rejects.toThrow("El precio debe ser mayor a 0");
   });
 });
 

@@ -1885,6 +1885,28 @@ export async function actualizarTipoMembresia(
   });
 }
 
+/** Fields to create a new catalog tariff. All three required — unlike the
+ *  PATCH payload above, there is no partial create. */
+export interface CrearTipoMembresiaInput {
+  categoria: string;
+  precio: string;
+  modalidad: "PERSONALIZADA" | "MENSUAL";
+}
+
+/**
+ * Admin-only: create a catalog tariff — `POST /api/membresias/tipos`
+ * (issue #507). Same `precio`-as-string contract as `actualizarTipoMembresia`
+ * above: money crosses the wire as a decimal string, never a JS number.
+ */
+export async function crearTipoMembresia(
+  data: CrearTipoMembresiaInput,
+): Promise<TipoMembresiaCatalogo> {
+  return request<TipoMembresiaCatalogo>(apiEndpoint("/membresias/tipos"), {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 /**
  * Create and assign a membership to a persona — `POST /api/membresias/`.
  *

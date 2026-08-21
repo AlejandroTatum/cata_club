@@ -34,6 +34,9 @@ const ADMIN_SCREENS = [
   "app/discounts/page.tsx",
   "app/attendance/page.tsx",
   "app/reports/page.tsx",
+  // Issue #507: gained "Nueva tarifa" — the catalog is no longer price-only
+  // (edit-per-row), so the old `NO_HEADER_ACTION` entry below is stale.
+  "app/tarifas/page.tsx",
 ];
 
 /**
@@ -63,10 +66,6 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // A validation queue: the actions are per row, and the batch bar only exists
   // when there are reviewed rows to flush.
   "app/payments/page.tsx": "queue — actions are per row",
-  // A catalog with no create and no delete (#394: price-only, and
-  // `TipoMembresia` has no soft-delete column) — the only action is per row,
-  // "Editar precio", the same shape as the queue above.
-  "app/tarifas/page.tsx": "catalog — the only action is per row, edit price",
   // --- The five family screens, decided in #43 -----------------------------
   // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
   // through the steps rather than act on the page, and which one is showing is

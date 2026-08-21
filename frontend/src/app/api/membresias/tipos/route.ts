@@ -1,11 +1,31 @@
 /**
- * GET /api/membresias/tipos — list available membership type catalog.
- * Proxies to FastAPI's GET /membresias/tipos (any authenticated user).
+ * GET/POST /api/membresias/tipos — membership type catalog.
+ *
+ * GET: list the catalog. Proxies FastAPI's GET /membresias/tipos (any
+ *      authenticated user).
+ * POST: create a catalog tariff (issue #507). Proxies FastAPI's
+ *       POST /membresias/tipos (`TipoMembresiaCreateDTO` — admin-only,
+ *       `GestorPermisos(["ADMINISTRADOR"])` on the backend; a non-admin gets
+ *       its 403 passed through). Uses the shared `postCatalogResource` —
+ *       same proxy/timeout/error shaping as the PATCH sibling in
+ *       `tipos/[id]/route.ts`.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { postCatalogResource } from "@/lib/server/bff-helpers";
+
+const REQUIRED_FIELDS = ["categoria", "precio", "modalidad"] as const;
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  return postCatalogResource(request, {
+    backendPath: "/membresias/tipos",
+    requiredFields: REQUIRED_FIELDS,
+    missingFieldMessage: "Categoría, precio y modalidad son obligatorios.",
+    failureMessage: "No se pudo crear la tarifa.",
+  });
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const result = await backendFetchAuthed(request, "/membresias/tipos");
