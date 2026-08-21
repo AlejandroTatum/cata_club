@@ -156,6 +156,34 @@ function shownRange(startIso: string, endIso: string): string {
   return `${shown(startIso)} – ${shown(endIso)}`;
 }
 
+/**
+ * Issue #513: the history is now a `ResponsiveList` — the SAME primitive
+ * `/payments` (the admin queue) uses, which mounts the mobile card list AND
+ * the desktop table at once (CSS, not React, picks which one a real browser
+ * shows). A plain page-wide `getByText`/`getByRole` would therefore match a
+ * row's content TWICE and fail as ambiguous — these two scope to one
+ * rendering, same convention `PaymentsPage.test.tsx` already uses via its
+ * own `queueTable()`.
+ */
+function historyTable(): HTMLElement {
+  return screen.getByTestId("student-payments-table");
+}
+
+function historyCards(): HTMLElement {
+  return screen.getByTestId("student-payments-cards");
+}
+
+/**
+ * Opens a row's accordion detail from the desktop table — closed by
+ * default (issue #513), so any test reading the discount, a comprobante
+ * link, or the rejection reason must open it first. Scoped to the table
+ * rather than global for the same reason `historyTable()` exists: the same
+ * "Detalle" button also exists, hidden, in the mobile card rendering.
+ */
+function openHistoryDetail(name: RegExp = /detalle/i): void {
+  fireEvent.click(within(historyTable()).getByRole("button", { name }));
+}
+
 const SELF: StudentProfileSummary = {
   personaId: "9",
   nombres: "Alumno",
@@ -387,8 +415,29 @@ describe("StudentPaymentsPage — the membership card", () => {
     render(<StudentPaymentsPage />);
 
     const card = await screen.findByTestId("membership-status");
-    expect(within(card).getByText(/suspendida/i)).toBeInTheDocument();
+    // Issue #513: the status-footer dot repeats the same label the `Badge`
+    // already carries, right above the CTA — so "suspendida" now matches
+    // twice inside the card, both true.
+    expect(within(card).getAllByText(/suspendida/i).length).toBeGreaterThanOrEqual(1);
     expect(within(card).queryByText(/membresía vencida/i)).not.toBeInTheDocument();
+  });
+
+  // Issue #513 (Propuesta B, idea 1 + 2): a status-footer dot at the foot of
+  // the status block, with the CTA immediately below it — both in the same
+  // card as the badge, so a reader never scrolls between "what is my
+  // status" and "what can I do about it".
+  it("repeats the membership state as a footer dot right above the CTA, no scroll between them", async () => {
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    // The `Badge` at the top and the status-footer dot both carry the same
+    // label — "Membresía activa" for this fixture's default `ACTIVA` state.
+    const stateMentions = within(card).getAllByText("Membresía activa");
+    expect(stateMentions.length).toBe(2);
+
+    // The CTA ("Registrar un pago") lives in the SAME card as the dot, not
+    // a separate section the reader has to scroll to find.
+    expect(within(card).getByRole("button", { name: /^registrar un pago$/i })).toBeInTheDocument();
   });
 });
 
@@ -484,37 +533,49 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
 describe("StudentPaymentsPage — the history", () => {
   it("renders amounts and periods in the product's formats, never the raw API strings", async () => {
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
     // The period is unique to the payment row; the amount is not (the
     // membership card states the same monthly price), so the row is anchored
-    // on the period and the amount is asserted across both.
-    expect(await screen.findByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    // on the period and the amount is asserted across both. Scoped to the
+    // table — `ResponsiveList` mounts the mobile cards at the same time.
+    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     expect(screen.getAllByText("$25,00").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(PAGO_START, { exact: false })).not.toBeInTheDocument();
   });
 
-  it("states the rejection reason in full — it is the only row that asks the reader to act", async () => {
+  it("states the rejection reason in full, behind the row's own accordion (#513)", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "RECHAZADO", motivoRechazo: "El comprobante es ilegible" }),
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    expect(await screen.findByText("El comprobante es ilegible")).toBeInTheDocument();
-    expect(screen.getByText("Motivo del rechazo")).toBeInTheDocument();
+    // Closed by default (issue #513): the panel is in the DOM (a plain
+    // text query cannot tell — `hidden` is not a text query's concern) but
+    // not visible, exactly the native-`hidden` contract `Accordion.tsx`
+    // already established for this product.
+    expect(within(historyTable()).getByText("El comprobante es ilegible")).not.toBeVisible();
+    openHistoryDetail();
+
+    expect(within(historyTable()).getByText("El comprobante es ilegible")).toBeInTheDocument();
+    expect(within(historyTable()).getByText("Motivo del rechazo")).toBeInTheDocument();
   });
 
   // Issue #400 (criterio 8): el comprobante OFICIAL que genera el club al
   // aprobar es distinto del voucher que sube el socio (`voucherUrl` /
   // "Ver el comprobante") — solo aparece cuando el backend lo pobló.
-  it("shows a 'Descargar comprobante oficial' link when comprobanteOficialUrl is populated", async () => {
+  it("shows a 'Descargar comprobante oficial' link, behind the accordion, when comprobanteOficialUrl is populated", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "APROBADO", comprobanteOficialUrl: "https://files.example/comprobante-oficial.pdf" }),
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    openHistoryDetail();
 
-    const link = await screen.findByRole("link", { name: /descargar comprobante oficial/i });
+    const link = within(historyTable()).getByRole("link", { name: /descargar comprobante oficial/i });
     expect(link).toHaveAttribute("href", "https://files.example/comprobante-oficial.pdf");
   });
 
@@ -524,8 +585,12 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    await screen.findByText(shownRange(PAGO_START, COVERAGE_END));
+    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    // Nothing to explain for this payment (no discount, no voucher, no
+    // comprobante, no rejection) — the row gets no "Detalle" toggle at all.
+    expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /descargar comprobante oficial/i })).not.toBeInTheDocument();
   });
 
@@ -536,13 +601,14 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    expect(await screen.findByText("$40,00")).toBeInTheDocument();
+    expect(within(historyTable()).getByText("$40,00")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^Aprobados/ }));
 
     await waitFor(() => {
-      expect(screen.queryByText("$40,00")).not.toBeInTheDocument();
+      expect(within(historyTable()).queryByText("$40,00")).not.toBeInTheDocument();
     });
     // `FilterPill` marks selection with coal + the yellow ball dot. Red is
     // reserved for the primary CTA and destructive intent.
@@ -553,8 +619,9 @@ describe("StudentPaymentsPage — the history", () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ estadoPago: "APROBADO" })]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    expect(await screen.findByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Rechazados/ }));
 
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
@@ -574,9 +641,12 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    expect(await screen.findByText("Falta el comprobante")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^reintentar subir comprobante$/i })).toBeInTheDocument();
+    expect(within(historyTable()).getByText("Falta el comprobante")).toBeInTheDocument();
+    expect(
+      within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }),
+    ).toBeInTheDocument();
   });
 
   it("does not mark an approved or a cash payment as missing its voucher", async () => {
@@ -592,8 +662,9 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    await screen.findByText("$40,00");
+    expect(within(historyTable()).getByText("$40,00")).toBeInTheDocument();
     expect(screen.queryByText("Falta el comprobante")).not.toBeInTheDocument();
   });
 
@@ -607,8 +678,9 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    await screen.findByText(shownRange(PAGO_START, COVERAGE_END));
+    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
   });
 
@@ -620,8 +692,11 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    expect(await screen.findByRole("button", { name: /subir comprobante/i })).toBeInTheDocument();
+    expect(
+      within(historyTable()).getByRole("button", { name: /subir comprobante/i }),
+    ).toBeInTheDocument();
   });
 
   // Issue #461: a REJECTED payment is a decision the club already made — the
@@ -641,10 +716,14 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    openHistoryDetail();
 
-    await screen.findByText("El comprobante no coincide");
+    expect(within(historyTable()).getByText("El comprobante no coincide")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /registrar un pago nuevo/i })).toBeInTheDocument();
+    expect(
+      within(historyTable()).getByRole("link", { name: /registrar un pago nuevo/i }),
+    ).toBeInTheDocument();
   });
 
   // Triangulates #461: the same rejected payment keeps its button on the
@@ -658,8 +737,9 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
 
-    await screen.findByRole("button", { name: /subir comprobante/i });
+    within(historyTable()).getByRole("button", { name: /subir comprobante/i });
     expect(screen.queryByRole("link", { name: /registrar un pago nuevo/i })).not.toBeInTheDocument();
   });
 
@@ -673,7 +753,8 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -690,7 +771,8 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -711,7 +793,8 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.pdf", { type: "application/pdf" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -730,7 +813,8 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["contenido"], "comprobante.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -757,7 +841,8 @@ describe("StudentPaymentsPage — the history", () => {
     ]);
 
     render(<StudentPaymentsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
 
     const file = new File(["notas"], "notas.txt", { type: "text/plain" });
     fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
@@ -768,6 +853,63 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByText("notas.txt")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Issue #513: the history's per-row accordion itself — closed by default,
+ * shared open state between the table row and its mobile card twin (both
+ * mount at once via `ResponsiveList`; CSS alone decides which one a real
+ * browser shows), and absent entirely on a row with nothing to disclose.
+ */
+describe("StudentPaymentsPage — the row accordion (#513)", () => {
+  it("opens a row's detail from the table, and the mobile card's own copy opens with it", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ estadoPago: "RECHAZADO", motivoRechazo: "El comprobante es ilegible" }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    const tableToggle = within(historyTable()).getByRole("button", { name: /detalle/i });
+    const cardToggle = within(historyCards()).getByRole("button", { name: /detalle/i });
+    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
+    expect(cardToggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(historyCards()).getByText("El comprobante es ilegible")).not.toBeVisible();
+
+    fireEvent.click(tableToggle);
+
+    expect(tableToggle).toHaveAttribute("aria-expanded", "true");
+    // Same logical row: opening the table's toggle opens the card's own
+    // copy too, even though only one of the two is visible in a real
+    // browser at any given width.
+    expect(cardToggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(historyCards()).getByText("El comprobante es ilegible")).toBeVisible();
+  });
+
+  it("gives a row with nothing to disclose no accordion toggle at all", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ estadoPago: "APROBADO" })]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
+    expect(within(historyCards()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
+  });
+
+  it("ports the admin queue's exact column vocabulary — Estado, Monto, Período, Método, Acción", async () => {
+    render(<StudentPaymentsPage />);
+
+    const headers = within(await screen.findByTestId("student-payments-table")).getAllByRole(
+      "columnheader",
+    );
+    expect(headers.map((header) => header.textContent)).toEqual([
+      "Estado",
+      "Monto",
+      "Período",
+      "Método",
+      "Acción",
+    ]);
   });
 });
 
@@ -1317,8 +1459,12 @@ describe("StudentPaymentsPage — el descuento que el club ya aplicó", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    // Issue #513: the discount is now behind the row's own accordion, closed
+    // by default.
+    openHistoryDetail();
 
-    const detalle = await screen.findByTestId("pago-descuento");
+    const detalle = within(historyTable()).getByTestId("pago-descuento");
     expect(within(detalle).getByText("Descuento aplicado por el club")).toBeInTheDocument();
     expect(within(detalle).getByText("Precio de lista")).toBeInTheDocument();
     expect(within(detalle).getByText("$35,00")).toBeInTheDocument();
@@ -1337,8 +1483,10 @@ describe("StudentPaymentsPage — el descuento que el club ya aplicó", () => {
     ]);
 
     render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    openHistoryDetail();
 
-    const detalle = await screen.findByTestId("pago-descuento");
+    const detalle = within(historyTable()).getByTestId("pago-descuento");
     expect(within(detalle).getByText("−$10,00")).toBeInTheDocument();
     expect(within(detalle).queryByText(/%/)).not.toBeInTheDocument();
   });

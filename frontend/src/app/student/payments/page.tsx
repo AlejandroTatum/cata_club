@@ -73,8 +73,13 @@ import {
   FilterPanel,
   FilterPill,
   LoadingState,
+  ResponsiveList,
+  TableCell,
+  TableHeaderCell,
+  TableRow,
   buttonClasses,
   cn,
+  type BadgeTone,
 } from "@/components/ui";
 import ContextualHelp from "@/components/ContextualHelp";
 import { formatCurrency, formatDate, formatDateRange } from "@/lib/format-utils";
@@ -107,7 +112,18 @@ import {
   voucherFileTypeError,
   type PagoStatusFilter,
 } from "./payments-utils";
-import { CreditCard, Download, Loader2, Minus, Paperclip, Plus, RefreshCw, Upload, X } from "lucide-react";
+import {
+  ChevronDown,
+  CreditCard,
+  Download,
+  Loader2,
+  Minus,
+  Paperclip,
+  Plus,
+  RefreshCw,
+  Upload,
+  X,
+} from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -145,6 +161,19 @@ const FIELD_LABEL_CLASSES = "text-2xs font-bold uppercase text-ink-3";
 function fromIsoDate(iso: string): Date {
   return new Date(`${iso}T12:00:00`);
 }
+
+/**
+ * The status-footer dot's text color, one per `BadgeTone` — the same
+ * tone→color pairing `Badge` uses for its own `currentColor` dot, reused
+ * here as plain text color since this dot sits alone, with no pill behind
+ * it.
+ */
+const STATUS_DOT_TEXT: Record<BadgeTone, string> = {
+  neutral: "text-state-neutral",
+  ok: "text-state-ok",
+  warn: "text-state-warn",
+  bad: "text-state-bad",
+};
 
 // ---------------------------------------------------------------------------
 // Membership status — everything the club can actually prove about coverage
@@ -230,6 +259,19 @@ function MembershipCard({
             </div>
           ))}
         </dl>
+      )}
+
+      {/* Issue #513 (Propuesta B, idea 1): a compact status-footer dot,
+          placed at the very foot of the status block — immediately above
+          the CTA below. The `Badge` at the top already carries the state
+          for a reader scanning down from the title; this repeats it right
+          where the eye lands before acting, so status and action read
+          together without a scroll back up. */}
+      {children && (
+        <div className="flex items-center gap-1.5 border-t border-line bg-sunken px-5 py-2">
+          <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full bg-current", STATUS_DOT_TEXT[state.tone])} />
+          <span className={cn("text-2xs font-bold uppercase", STATUS_DOT_TEXT[state.tone])}>{state.label}</span>
+        </div>
       )}
 
       {children && <div className="border-t border-line px-5 py-4">{children}</div>}
@@ -890,7 +932,7 @@ function RenewPaymentForm({
     // the payment it had just created ("ya tiene un pago pendiente") — the
     // ghost-payment bug this closes (PAG-1). Instead the form gets out of
     // the way and the payment survives in the history, marked as missing
-    // its voucher, with its own upload control (PagoRow).
+    // its voucher, with its own upload control (`PagoActionSlot`).
     if (voucherFile && nuevoPago?.id) {
       try {
         await subirVoucherPago(nuevoPago.id, voucherFile);
@@ -1385,202 +1427,391 @@ function VoucherUploadPreview({
 }
 
 // ---------------------------------------------------------------------------
-// One payment in the history
+// One payment in the history — issue #513: ported to the table+accordion
+// pattern `/payments` (the admin validation queue) already uses, via the
+// SAME `ResponsiveList`/`Table*`/`Badge` primitives, instead of the flat
+// `<ul>` of cards this screen had on its own. Nothing about a payment's
+// DATA changes here — amount, discount, voucher, and rejection reason are
+// still exactly what `payments-utils.ts` derives; only where each one lives
+// (row vs. accordion) does.
 // ---------------------------------------------------------------------------
 
-function PagoRow({
+/** The row facts every rendering (table row, mobile card) reads the same way. */
+interface PagoRowFields {
+  amount: string;
+  estado: { label: string; tone: BadgeTone };
+  faltaComprobante: boolean;
+  method: string;
+  period: string;
+  /** When the payment was registered — kept on the row itself (a `Método`
+   *  sub-line, same two-line shape `TableNameCell` uses elsewhere), not
+   *  folded into the accordion: every payment has one, so hiding it behind
+   *  detail would have forced a toggle onto rows with nothing else to show. */
+  registeredOn: string;
+}
+
+function buildPagoRowFields(pago: PagoPersona): PagoRowFields {
+  return {
+    registeredOn: formatDate(pago.fechaRegistro),
+    amount: formatPagoMonto(pago.monto),
+    estado: describePagoEstado(pago.estadoPago),
+    faltaComprobante: pagoFaltaComprobante(pago),
+    method: TIPO_PAGO_LABEL[pago.tipoPago],
+    period: formatDateRange(pago.fechaInicio, pago.fechaFin),
+  };
+}
+
+/**
+ * Whether a payment has anything to say behind the accordion at all — the
+ * discount, either comprobante, a rejection reason, or the no-voucher
+ * exception. Most payments have none of these, and a row with nothing to
+ * expand gets no toggle rather than an empty disclosure.
+ */
+function pagoHasDetail(pago: PagoPersona): boolean {
+  return (
+    describePagoDescuento(pago) != null ||
+    Boolean(pago.voucherUrl) ||
+    Boolean(pago.comprobanteOficialUrl) ||
+    (pago.estadoPago === "RECHAZADO" && Boolean(pago.motivoRechazo)) ||
+    Boolean(pago.motivoExcepcionSinComprobante)
+  );
+}
+
+/**
+ * The secondary facts a payment can have to explain itself — discount,
+ * either comprobante, and a rejection reason — behind the per-row
+ * accordion now (issue #513, Propuesta A), instead of always inline. The
+ * data itself is untouched: same three fields `describePagoDescuento`
+ * always derived, same two comprobante links, same rejection paragraph.
+ */
+function PagoDetailPanel({ pago }: { pago: PagoPersona }): React.ReactElement {
+  // `null` en la enorme mayoría de los pagos, y entonces no se dibuja nada.
+  const descuento = describePagoDescuento(pago);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Por qué el monto de la fila es el que es.
+       *
+       * Hallazgo de QA humana (17/08/2026): «a la hora de pagar no se me
+       * muestra el apartado de descuentos». El club ya aplicaba descuentos y
+       * el backend ya los congelaba en el pago — lo que faltaba era el lado
+       * del socio, que veía un monto final sin explicación. Un monto solo es
+       * lo que genera el reclamo. */}
+      {descuento && (
+        <div data-testid="pago-descuento" className="rounded-ctl bg-sunken px-3.5 py-2.5">
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">
+            Descuento aplicado por el club
+          </p>
+          <dl className="mt-1.5 flex flex-wrap gap-x-6 gap-y-field">
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-xs text-ink-3-strong">Precio de lista</dt>
+              {/* Tachado: es el precio que este pago YA no tuvo. */}
+              <dd className="text-xs font-semibold tabular-nums text-ink-3-strong line-through">
+                {descuento.precioLista}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-xs text-ink-3-strong">Descuento</dt>
+              <dd className="text-xs font-semibold tabular-nums text-ink-2">
+                {/* U+2212 (signo menos), no un guión: es un número negativo,
+                    y en tabular-nums alinea con las cifras de al lado. */}
+                {descuento.porcentaje
+                  ? `−${descuento.descuento} (${descuento.porcentaje})`
+                  : `−${descuento.descuento}`}
+              </dd>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-xs text-ink-3-strong">Monto final</dt>
+              <dd className="text-xs font-bold tabular-nums text-ink">{descuento.montoFinal}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
+      {pago.voucherUrl && (
+        <a
+          href={pago.voucherUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+        >
+          <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Ver el comprobante
+        </a>
+      )}
+
+      {/* Comprobante OFICIAL en PDF que el club genera al aprobar (issue
+          #400, criterio 8) — distinto del `voucherUrl` de arriba, que es
+          la evidencia que el propio socio subió. Solo existe una vez
+          aprobado (la condición la impone la fila `ComprobantePago`
+          misma, no un chequeo de `estadoPago` acá). */}
+      {pago.comprobanteOficialUrl && (
+        <a
+          href={pago.comprobanteOficialUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+        >
+          <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Descargar comprobante oficial
+        </a>
+      )}
+
+      {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
+        <div className="rounded-ctl bg-state-bad-bg px-3.5 py-2.5">
+          <p className="text-2xs font-bold uppercase text-state-bad">Motivo del rechazo</p>
+          <p className="mt-0.5 text-sm text-ink-2">{pago.motivoRechazo}</p>
+        </div>
+      )}
+
+      {/* Issue #459: cuando el club aprobó esta transferencia sin
+          comprobante, es una excepción auditada (verificación directa en
+          la cuenta del club), no un dato interno silencioso — el socio
+          tiene derecho a ver por qué se activó su membresía sin que él
+          hubiera subido nada. Mismo tratamiento visual que el bloque de
+          descuento (bg-sunken): es información, no un problema que el
+          socio deba resolver. */}
+      {pago.motivoExcepcionSinComprobante && (
+        <div className="rounded-ctl bg-sunken px-3.5 py-2.5">
+          <p className="text-2xs font-bold uppercase text-ink-3-strong">
+            Aprobado sin comprobante (excepción)
+          </p>
+          <p className="mt-0.5 text-sm text-ink-2">{pago.motivoExcepcionSinComprobante}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The accordion trigger for one row's detail — same accessibility contract
+ * `components/ui/Accordion.tsx` already establishes for this product (a
+ * real `<button>`, `aria-expanded`, `aria-controls`, a chevron that rotates
+ * rather than carrying the state alone): a keyboard user gets a focusable,
+ * announced toggle, not a `<div onClick>`.
+ *
+ * Not `<Accordion>` itself — that component's shape is a labelled FAQ
+ * group (`role="group"` wrapping question/answer pairs), built for
+ * `/ayuda`'s static list and not for a `<tr>`/`<li>` whose panel must be a
+ * second table row. This reuses its INTERACTION pattern, not its markup.
+ */
+function PagoDetailToggle({
+  panelId,
+  isOpen,
+  onToggle,
+}: {
+  panelId: string;
+  isOpen: boolean;
+  onToggle: () => void;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      aria-expanded={isOpen}
+      aria-controls={panelId}
+      onClick={onToggle}
+      className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-xs font-semibold text-ink-2 hover:bg-sunken"
+    >
+      Detalle
+      <ChevronDown
+        size={ICON.sm}
+        strokeWidth={2}
+        aria-hidden="true"
+        className={cn("flex-none transition-transform duration-200", isOpen && "rotate-180")}
+      />
+    </button>
+  );
+}
+
+/** The upload button or the "Registrar un pago nuevo" link — the row's one
+ *  primary action, never both (a rejected payment cannot upload, and only a
+ *  rejected payment gets the link). Stays visible on the row itself, unlike
+ *  the read-only facts `PagoDetailPanel` holds: it is something to DO, not
+ *  something to explain. */
+function PagoActionSlot({
   pago,
+  fields,
   onUploadFile,
   uploadingId,
   registerHref,
 }: {
   pago: PagoPersona;
+  fields: PagoRowFields;
   onUploadFile: (pagoId: number) => void;
   uploadingId: number | null;
-  /** Where "Registrar un pago nuevo" points, or `null` when this reader
-   *  cannot register one from here (issue #461's own CTA is gated the same
-   *  way the empty-state's "Registrar un pago" already is). */
   registerHref: string | null;
-}): React.ReactElement {
-  const estado = describePagoEstado(pago.estadoPago);
-  const faltaComprobante = pagoFaltaComprobante(pago);
+}): React.ReactElement | null {
   // "Puede subir su comprobante" termina siendo EXACTAMENTE el mismo caso que
   // "Falta el comprobante" marca: TRANSFERENCIA, PENDIENTE_VALIDACION, sin
   // voucherUrl. EFECTIVO nunca tiene comprobante bancario que subir (#452),
   // y un pago ya resuelto (APROBADO/RECHAZADO) no admite adjuntar nada más
   // -- RECHAZADO en particular responde 400 "pendiente de validación" si se
   // lo intenta (#461, confirmado en vivo).
-  const canUpload = faltaComprobante;
-  // `null` en la enorme mayoría de los pagos, y entonces no se dibuja nada.
-  const descuento = describePagoDescuento(pago);
+  const canUpload = fields.faltaComprobante;
+
+  if (canUpload) {
+    return (
+      <Button size="sm" onClick={() => onUploadFile(pago.id)} disabled={uploadingId === pago.id}>
+        {uploadingId === pago.id ? (
+          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <RefreshCw size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        )}
+        {/* Issue #459: mismo botón, pero el texto ahora distingue la
+            primera subida de un reintento — ver el comentario original en
+            el historial de este archivo para el porqué. */}
+        {uploadingId === pago.id ? "Subiendo…" : "Reintentar subir comprobante"}
+      </Button>
+    );
+  }
+
+  // Issue #461: un pago RECHAZADO es una decisión ya tomada por el club --
+  // no admite adjuntar nada más (el backend responde 400 si se lo intenta,
+  // confirmado en vivo). Esta es la única salida real que la fila ofrece en
+  // su lugar.
+  if (pago.estadoPago === "RECHAZADO" && registerHref) {
+    return (
+      <Link
+        href={registerHref}
+        className="inline-flex text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+      >
+        Registrar un pago nuevo
+      </Link>
+    );
+  }
+
+  return null;
+}
+
+const PAGO_TABLE_COLUMN_COUNT = 5;
+
+/**
+ * The desktop table row — `renderRow` returns the COMPLETE row markup, same
+ * contract `ResponsiveList`'s own doc comment describes for `/members`'
+ * `AccountRow`: a summary `<TableRow>` plus, when this payment has detail to
+ * show, a second `<TableRow>` holding the accordion panel, spanning every
+ * column. Collapsed by default (`isOpen` starts `false` in `PaymentsContent`)
+ * — the accordion the issue asks for, "cerrado por defecto por fila".
+ */
+function PagoTableRow({
+  pago,
+  isOpen,
+  onToggleDetail,
+  onUploadFile,
+  uploadingId,
+  registerHref,
+}: {
+  pago: PagoPersona;
+  isOpen: boolean;
+  onToggleDetail: () => void;
+  onUploadFile: (pagoId: number) => void;
+  uploadingId: number | null;
+  registerHref: string | null;
+}): React.ReactElement {
+  const fields = buildPagoRowFields(pago);
+  const hasDetail = pagoHasDetail(pago);
+  const panelId = `pago-detail-desktop-${pago.id}`;
 
   return (
-    <li className="flex min-h-drow flex-wrap items-start gap-x-4 gap-y-field border-b border-line px-5 py-3.5 last:border-b-0">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-base font-bold tabular-nums text-ink">
-            {formatPagoMonto(pago.monto)}
+    <>
+      <TableRow>
+        <TableCell type="badge">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={fields.estado.tone}>{fields.estado.label}</Badge>
+            {/* Distinct from an ordinary "awaiting validation" row: this is
+                the payment a failed voucher upload left behind. The owner's
+                call (decisiones §7) keeps it, marked, instead of reverting
+                it. */}
+            {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
+          </div>
+        </TableCell>
+        <TableCell type="number">{fields.amount}</TableCell>
+        <TableCell type="text">{fields.period}</TableCell>
+        <TableCell type="text">
+          <span className="block">{fields.method}</span>
+          <span className="mt-px block text-2xs tracking-flat text-ink-3">
+            Registrado el <span className="tabular-nums">{fields.registeredOn}</span>
           </span>
-          <Badge tone={estado.tone}>{estado.label}</Badge>
-          {/* Distinct from an ordinary "awaiting validation" row: this is the
-              payment a failed voucher upload left behind. The owner's call
-              (decisiones §7) keeps it, marked, instead of reverting it. */}
-          {faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
+        </TableCell>
+        <TableCell type="action">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <PagoActionSlot
+              pago={pago}
+              fields={fields}
+              onUploadFile={onUploadFile}
+              uploadingId={uploadingId}
+              registerHref={registerHref}
+            />
+            {hasDetail && (
+              <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+      {hasDetail && (
+        <TableRow hidden={!isOpen}>
+          <TableCell colSpan={PAGO_TABLE_COLUMN_COUNT} id={panelId} className="bg-sunken">
+            <PagoDetailPanel pago={pago} />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+/** The mobile card — same facts as `PagoTableRow`, same accordion contract,
+ *  in a `<li>` instead of a table row pair. */
+function PagoCard({
+  pago,
+  isOpen,
+  onToggleDetail,
+  onUploadFile,
+  uploadingId,
+  registerHref,
+}: {
+  pago: PagoPersona;
+  isOpen: boolean;
+  onToggleDetail: () => void;
+  onUploadFile: (pagoId: number) => void;
+  uploadingId: number | null;
+  registerHref: string | null;
+}): React.ReactElement {
+  const fields = buildPagoRowFields(pago);
+  const hasDetail = pagoHasDetail(pago);
+  const panelId = `pago-detail-mobile-${pago.id}`;
+
+  return (
+    <li className="flex flex-col gap-3 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-field">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-base font-bold tabular-nums text-ink">{fields.amount}</span>
+            <Badge tone={fields.estado.tone}>{fields.estado.label}</Badge>
+            {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
+          </div>
+          <p className="mt-1 text-xs text-ink-3-strong">
+            {fields.method} · Registrado el{" "}
+            <span className="tabular-nums">{fields.registeredOn}</span> · Cubre{" "}
+            <span className="tabular-nums">{fields.period}</span>
+          </p>
         </div>
-        <p className="mt-1 text-xs text-ink-3-strong">
-          {TIPO_PAGO_LABEL[pago.tipoPago]} · Registrado el{" "}
-          <span className="tabular-nums">{formatDate(pago.fechaRegistro)}</span> · Cubre{" "}
-          <span className="tabular-nums">{formatDateRange(pago.fechaInicio, pago.fechaFin)}</span>
-        </p>
-
-        {/* Por qué el monto de arriba es el que es.
-         *
-         * Hallazgo de QA humana (17/08/2026): «a la hora de pagar no se me
-         * muestra el apartado de descuentos». El club ya aplicaba descuentos y
-         * el backend ya los congelaba en el pago — lo que faltaba era el lado
-         * del socio, que veía un monto final sin explicación. Un monto solo es
-         * lo que genera el reclamo.
-         *
-         * Es un bloque de LECTURA. El socio no elige descuentos: eso es
-         * potestad exclusiva del administrador (issue #11 §4), y esta pantalla
-         * no ofrece ninguna forma de pedirlos ni de cambiarlos.
-         *
-         * Misma forma que el bloque del motivo de rechazo unas líneas más
-         * abajo — es la otra cosa que una fila de pago tiene para explicar —
-         * pero sobre `bg-sunken` y no sobre el fondo de alarma: un descuento
-         * es una buena noticia, no algo que el lector deba resolver. */}
-        {descuento && (
-          <div
-            data-testid="pago-descuento"
-            className="mt-2 rounded-ctl bg-sunken px-3.5 py-2.5"
-          >
-            <p className="text-2xs font-bold uppercase text-ink-3-strong">
-              Descuento aplicado por el club
-            </p>
-            <dl className="mt-1.5 flex flex-wrap gap-x-6 gap-y-field">
-              <div className="flex items-baseline gap-1.5">
-                <dt className="text-xs text-ink-3-strong">Precio de lista</dt>
-                {/* Tachado: es el precio que este pago YA no tuvo. */}
-                <dd className="text-xs font-semibold tabular-nums text-ink-3-strong line-through">
-                  {descuento.precioLista}
-                </dd>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <dt className="text-xs text-ink-3-strong">Descuento</dt>
-                <dd className="text-xs font-semibold tabular-nums text-ink-2">
-                  {/* U+2212 (signo menos), no un guión: es un número negativo,
-                      y en tabular-nums alinea con las cifras de al lado. */}
-                  {descuento.porcentaje
-                    ? `−${descuento.descuento} (${descuento.porcentaje})`
-                    : `−${descuento.descuento}`}
-                </dd>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <dt className="text-xs text-ink-3-strong">Monto final</dt>
-                <dd className="text-xs font-bold tabular-nums text-ink">
-                  {descuento.montoFinal}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        )}
-
-        {pago.voucherUrl && (
-          <a
-            href={pago.voucherUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
-          >
-            <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Ver el comprobante
-          </a>
-        )}
-
-        {/* Comprobante OFICIAL en PDF que el club genera al aprobar (issue
-            #400, criterio 8) — distinto del `voucherUrl` de arriba, que es
-            la evidencia que el propio socio subió. Solo existe una vez
-            aprobado (la condición la impone la fila `ComprobantePago`
-            misma, no un chequeo de `estadoPago` acá). */}
-        {pago.comprobanteOficialUrl && (
-          <a
-            href={pago.comprobanteOficialUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
-          >
-            <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Descargar comprobante oficial
-          </a>
-        )}
-
-        {/* The rejection reason is the one thing on this screen that asks the
-            reader to act, so it is stated in full rather than truncated into
-            the meta line. */}
-        {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
-          <div className="mt-2 rounded-ctl bg-state-bad-bg px-3.5 py-2.5">
-            <p className="text-2xs font-bold uppercase text-state-bad">
-              Motivo del rechazo
-            </p>
-            <p className="mt-0.5 text-sm text-ink-2">{pago.motivoRechazo}</p>
-          </div>
-        )}
-
-        {/* Issue #461: un pago RECHAZADO es una decisión ya tomada por el
-            club -- no admite adjuntar nada más (el backend responde 400 si
-            se lo intenta, confirmado en vivo). El botón de subir comprobante
-            deja de mostrarse para este estado (ver `canUpload` arriba); esta
-            es la única salida real que la fila ofrece en su lugar. */}
-        {pago.estadoPago === "RECHAZADO" && registerHref && (
-          <Link
-            href={registerHref}
-            className="mt-2 inline-flex text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
-          >
-            Registrar un pago nuevo
-          </Link>
-        )}
-
-        {/* Issue #459: cuando el club aprobó esta transferencia sin
-            comprobante, es una excepción auditada (verificación directa en
-            la cuenta del club), no un dato interno silencioso — el socio
-            tiene derecho a ver por qué se activó su membresía sin que él
-            hubiera subido nada. Mismo tratamiento visual que el bloque de
-            descuento (bg-sunken): es información, no un problema que el
-            socio deba resolver. */}
-        {pago.motivoExcepcionSinComprobante && (
-          <div className="mt-2 rounded-ctl bg-sunken px-3.5 py-2.5">
-            <p className="text-2xs font-bold uppercase text-ink-3-strong">
-              Aprobado sin comprobante (excepción)
-            </p>
-            <p className="mt-0.5 text-sm text-ink-2">{pago.motivoExcepcionSinComprobante}</p>
-          </div>
-        )}
-      </div>
-
-      {canUpload && (
-        <Button size="sm" onClick={() => onUploadFile(pago.id)} disabled={uploadingId === pago.id}>
-          {uploadingId === pago.id ? (
-            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-          ) : faltaComprobante ? (
-            <RefreshCw size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          ) : (
-            <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <PagoActionSlot
+            pago={pago}
+            fields={fields}
+            onUploadFile={onUploadFile}
+            uploadingId={uploadingId}
+            registerHref={registerHref}
+          />
+          {hasDetail && (
+            <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
           )}
-          {/* Issue #459: mismo botón, pero el texto ahora distingue la
-              primera subida de un reintento. Antes decía "Subir comprobante"
-              en los dos casos, así que un admin/socio que volvía a esta
-              fila después de un 503 de Cloudinary no tenía ninguna pista de
-              que ESTE botón era la forma de resolverlo — tenía que
-              adivinarlo o volver al wizard de registro, que ya rechaza el
-              reintento (membresía con un pago pendiente). El badge "Falta
-              el comprobante" de arriba ya marca la fila; esto hace que la
-              acción que la resuelve diga lo mismo con las mismas palabras. */}
-          {uploadingId === pago.id
-            ? "Subiendo…"
-            : faltaComprobante
-            ? "Reintentar subir comprobante"
-            : "Subir comprobante"}
-        </Button>
+        </div>
+      </div>
+      {hasDetail && (
+        <div id={panelId} hidden={!isOpen}>
+          <PagoDetailPanel pago={pago} />
+        </div>
       )}
     </li>
   );
@@ -1623,6 +1854,15 @@ function PaymentsContent({
     isPagoStatusFilter,
   );
   const [pagosState, setPagosState] = useState<PagosLoadState>({ status: "loading" });
+  /**
+   * Which payments' accordion detail is open — issue #513: closed by
+   * default per row, so a fresh visit shows every row collapsed. Keyed by
+   * `Pago.id`, shared between the desktop table and mobile card renderings
+   * of the SAME row (`ResponsiveList` mounts both at once; they are the
+   * same logical row, so opening one opens the other, even though only one
+   * is visible at a time).
+   */
+  const [openPagoDetailIds, setOpenPagoDetailIds] = useState<ReadonlySet<number>>(new Set());
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1807,6 +2047,15 @@ function PaymentsContent({
     setUploadError(null);
     setPendingUploadPagoId(pagoId);
     fileInputRef.current?.click();
+  }
+
+  function togglePagoDetail(pagoId: number): void {
+    setOpenPagoDetailIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pagoId)) next.delete(pagoId);
+      else next.add(pagoId);
+      return next;
+    });
   }
 
   /**
@@ -2042,10 +2291,10 @@ function PaymentsContent({
         // own no-results state. It is also the case D11b says to design for
         // first: a socio nuevo has no payments at all.
         <section
-          className={cn("card flex flex-col overflow-hidden", filteredPagos.length === 0 && "flex-1")}
+          className={cn("flex flex-col", filteredPagos.length === 0 && "flex-1")}
           aria-labelledby="pagos-title"
         >
-          <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+          <div className="mb-3 flex items-center gap-3">
             <h2 id="pagos-title" className="flex-1 text-sm font-bold text-ink">
               Historial de pagos
             </h2>
@@ -2056,60 +2305,95 @@ function PaymentsContent({
             )}
           </div>
           {filteredPagos.length === 0 ? (
-            <EmptyState
-              surface="inset"
-              fill
-              icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-              title={getEmptyStateMessage(filter)}
-              description={
-                filter !== "TODOS"
-                  ? "Pruebe con otro estado para ver el resto de su historial."
-                  : blockedAsMinor
-                    ? // "Cuando registre un pago" is an instruction this
-                      // reader cannot follow — the club registers it.
-                      "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
-                    : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
-              }
-              // D11's third part. The action used to appear ONLY when a filter
-              // was on, which is backwards: a filtered empty list is the
-              // recoverable case, and the family with no payments at all — the
-              // socio nuevo D11b says to design for FIRST — was the one left
-              // with nothing to do. `?registrar=1` is the same door the home
-              // screen's band already opens, so this adds a way in, not a
-              // behaviour.
-              action={
-                filter !== "TODOS" ? (
-                  <Button size="sm" onClick={() => setFilter("TODOS")}>
-                    Ver todos los pagos
-                  </Button>
-                ) : canRegisterHere ? (
-                  <Link
-                    href={withSelectedStudent(
-                      "/student/payments?registrar=1",
-                      selectedProfile.personaId,
-                    )}
-                    className={buttonClasses("secondary", "sm")}
-                  >
-                    {/* Issue #400 slice 06: a 100% benefit has nothing to
-                        "registrar" — this door leads to `ApplyBenefitForm`,
-                        not `RenewPaymentForm`, so it says so. */}
-                    {isFullBenefit ? "Aplicar mi beneficio" : "Registrar un pago"}
-                  </Link>
-                ) : undefined
-              }
-            />
+            <div className="card flex flex-1 flex-col overflow-hidden">
+              <EmptyState
+                surface="inset"
+                fill
+                icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                title={getEmptyStateMessage(filter)}
+                description={
+                  filter !== "TODOS"
+                    ? "Pruebe con otro estado para ver el resto de su historial."
+                    : blockedAsMinor
+                      ? // "Cuando registre un pago" is an instruction this
+                        // reader cannot follow — the club registers it.
+                        "Cuando el club registre un pago suyo aparecerá aquí, con el período que cubre."
+                      : "Cuando registre un pago aparecerá aquí, junto con el resultado de su validación."
+                }
+                // D11's third part. The action used to appear ONLY when a filter
+                // was on, which is backwards: a filtered empty list is the
+                // recoverable case, and the family with no payments at all — the
+                // socio nuevo D11b says to design for FIRST — was the one left
+                // with nothing to do. `?registrar=1` is the same door the home
+                // screen's band already opens, so this adds a way in, not a
+                // behaviour.
+                action={
+                  filter !== "TODOS" ? (
+                    <Button size="sm" onClick={() => setFilter("TODOS")}>
+                      Ver todos los pagos
+                    </Button>
+                  ) : canRegisterHere ? (
+                    <Link
+                      href={withSelectedStudent(
+                        "/student/payments?registrar=1",
+                        selectedProfile.personaId,
+                      )}
+                      className={buttonClasses("secondary", "sm")}
+                    >
+                      {/* Issue #400 slice 06: a 100% benefit has nothing to
+                          "registrar" — this door leads to `ApplyBenefitForm`,
+                          not `RenewPaymentForm`, so it says so. */}
+                      {isFullBenefit ? "Aplicar mi beneficio" : "Registrar un pago"}
+                    </Link>
+                  ) : undefined
+                }
+              />
+            </div>
           ) : (
-            <ul className="flex flex-col">
-              {filteredPagos.map((pago) => (
-                <PagoRow
-                  key={pago.id}
+            // Issue #513: the same `ResponsiveList`/`Table*`/`Badge`
+            // primitives `/payments` (the admin validation queue) already
+            // uses — same `breakpoint`/`order`, so this history keeps
+            // whichever DOM-first order that screen already settled on
+            // (see `ResponsiveList`'s own doc comment on why that order is
+            // not a no-op). `ResponsiveList` supplies its own `card`
+            // surface, which is why the title bar above sits outside one.
+            <ResponsiveList
+              breakpoint="md"
+              order="tableFirst"
+              tableTestId="student-payments-table"
+              cardsTestId="student-payments-cards"
+              items={filteredPagos}
+              getKey={(pago) => pago.id}
+              columns={[
+                <TableHeaderCell key="estado" type="badge">Estado</TableHeaderCell>,
+                <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
+                <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
+                <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
+                <TableHeaderCell key="accion" type="action">
+                  <span className="sr-only">Acción</span>
+                </TableHeaderCell>,
+              ]}
+              renderRow={(pago) => (
+                <PagoTableRow
                   pago={pago}
+                  isOpen={openPagoDetailIds.has(pago.id)}
+                  onToggleDetail={() => togglePagoDetail(pago.id)}
                   onUploadFile={handleSelectFile}
                   uploadingId={uploadingId}
                   registerHref={registerHref}
                 />
-              ))}
-            </ul>
+              )}
+              renderCard={(pago) => (
+                <PagoCard
+                  pago={pago}
+                  isOpen={openPagoDetailIds.has(pago.id)}
+                  onToggleDetail={() => togglePagoDetail(pago.id)}
+                  onUploadFile={handleSelectFile}
+                  uploadingId={uploadingId}
+                  registerHref={registerHref}
+                />
+              )}
+            />
           )}
         </section>
       )}
