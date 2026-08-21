@@ -104,6 +104,7 @@ import {
   formatFileSize,
   TIPO_PAGO_LABEL,
   PAGO_FILTER_LABELS,
+  voucherFileTypeError,
   type PagoStatusFilter,
 } from "./payments-utils";
 import { CreditCard, Download, Loader2, Minus, Paperclip, Plus, RefreshCw, Upload, X } from "lucide-react";
@@ -825,6 +826,27 @@ function RenewPaymentForm({
     setVoucherFile(null);
   }
 
+  /**
+   * Issue #482: `accept` on the voucher `<input>` only filters the OS
+   * picker's own dropdown — a reader who switches it to "All Files" can
+   * still pick a `.txt`. Reject it here, the moment it is selected, instead
+   * of letting `registrarPago` succeed and only failing the follow-up
+   * `subirVoucherPago` call once the backend's own content-type check does.
+   */
+  function handleVoucherChange(file: File | null): void {
+    if (file) {
+      const typeError = voucherFileTypeError(file);
+      if (typeError) {
+        setVoucherFile(null);
+        action.setError(typeError);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+    }
+    setVoucherFile(file);
+    action.setError(null);
+  }
+
   async function handleSubmit(): Promise<void> {
     // Re-checked rather than trusted: the fields stay live behind the
     // checkpoint, so the summary always describes what will actually be sent.
@@ -985,7 +1007,7 @@ function RenewPaymentForm({
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,application/pdf"
-              onChange={(e) => setVoucherFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
               className="hidden"
               data-testid="renew-voucher-input"
             />
@@ -1790,6 +1812,14 @@ function PaymentsContent({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Issue #482: `accept` alone lets a reader pick a `.txt` via "All Files"
+    // — caught here before it ever reaches the preview/confirm step below.
+    const typeError = voucherFileTypeError(file);
+    if (typeError) {
+      setUploadError(typeError);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploadError(null);
     setPreviewFile(file);
   }

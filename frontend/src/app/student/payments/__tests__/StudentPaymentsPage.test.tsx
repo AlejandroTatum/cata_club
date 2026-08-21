@@ -746,6 +746,29 @@ describe("StudentPaymentsPage — the history", () => {
       expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(2);
     });
   });
+
+  // Issue #482: `accept="image/jpeg,image/png,application/pdf"` on the input
+  // only filters the OS picker's own "All Files" dropdown — a `.txt` picked
+  // that way used to stage a preview and only fail once `subirVoucherPago`
+  // hit the backend's own content-type check.
+  it("rejects a .txt file with an inline error instead of staging a preview (#482)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /^reintentar subir comprobante$/i }));
+
+    const file = new File(["notas"], "notas.txt", { type: "text/plain" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El comprobante debe ser un archivo PDF, JPG o PNG.",
+    );
+    expect(screen.queryByText("notas.txt")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+  });
 });
 
 describe("StudentPaymentsPage — registering a payment", () => {

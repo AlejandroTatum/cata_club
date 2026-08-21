@@ -20,7 +20,11 @@ import { registrarPago } from "@/services/api";
 import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
-import { addMonthsIso, wholeMonthsFor } from "@/app/student/payments/payments-utils";
+import {
+  addMonthsIso,
+  voucherFileTypeError,
+  wholeMonthsFor,
+} from "@/app/student/payments/payments-utils";
 import type { MemberStudentSummary } from "./members-utils";
 
 interface RegisterPaymentFormProps {
@@ -74,6 +78,27 @@ export default function RegisterPaymentForm({
     const months = wholeMonthsFor(amount, monthlyPrice);
     if (months === null) return "";
     return addMonthsIso(calendarIsoDate(baseDate), months);
+  }
+
+  /**
+   * Issue #482: reject an out-of-type voucher the moment it is picked,
+   * instead of letting it through `accept`'s soft filter and only failing
+   * once the backend's own `content_type` check rejects it after the pago
+   * already exists (see `voucherFileTypeError`'s docstring).
+   */
+  function handleVoucherChange(file: File | null): void {
+    if (file) {
+      const typeError = voucherFileTypeError(file);
+      if (typeError) {
+        setVoucherFile(null);
+        setError(typeError);
+        setErrorAnnounceKey((key) => key + 1);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+    }
+    setVoucherFile(file);
+    setError(null);
   }
 
   function handleMontoChange(value: string): void {
@@ -278,7 +303,7 @@ export default function RegisterPaymentForm({
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,application/pdf"
-            onChange={(e) => setVoucherFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
             className="hidden"
             aria-describedby={error ? errorId : undefined}
             aria-invalid={error ? true : undefined}
