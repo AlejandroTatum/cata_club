@@ -209,11 +209,12 @@ describe("TarifasPage — editar precio", () => {
 
   it.each([
     ["0", "cero"],
-    ["-5", "negativo"],
-    ["abc", "no numérico"],
     ["45.999", "más de dos decimales"],
     ["", "vacío"],
   ])("rejects a %s price (%s) without reaching the API", async (valorInvalido) => {
+    // "-5" and "abc" are no longer meaningful cases here: the masking added
+    // for #506 filters "-" and letters out at typing time (see the masking
+    // describe block below), so they never survive to reach validation.
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
@@ -261,5 +262,78 @@ describe("TarifasPage — editar precio", () => {
     expect(within(juniorRow).queryByLabelText(/precio de junior/i)).not.toBeInTheDocument();
     expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
     expect(within(juniorRow).getByText("$ 45.00")).toBeInTheDocument();
+  });
+});
+
+// Issue #506 — the price input let anything through and only ever accepted
+// "." as the decimal separator, rejecting the "45,50" an es-EC/es-AR admin
+// naturally types.
+describe("TarifasPage — masking y separador decimal", () => {
+  it("filters out letters while typing, keeping only digits and separators", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "4a5b" } });
+
+    expect(input.value).toBe("45");
+  });
+
+  it("filters out symbols such as a minus sign while typing", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "-5" } });
+
+    expect(input.value).toBe("5");
+  });
+
+  it("drops a second decimal separator while typing", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "45,,50" } });
+
+    expect(input.value).toBe("45,50");
+  });
+
+  it("accepts a comma as decimal separator and normalizes it to a dot when saving", async () => {
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...JUNIOR, precio: "45.50" });
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
+      target: { value: "45,50" },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cambiar precio/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(1, { precio: "45.50" });
+    });
+  });
+
+  it("does not show the invalid-price error for a comma-separated value", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
+      target: { value: "45,50" },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    expect(within(juniorRow).queryByText(/precio válido/i)).not.toBeInTheDocument();
   });
 });
