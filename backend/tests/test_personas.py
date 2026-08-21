@@ -129,6 +129,26 @@ def test_actualizar_persona_con_apellido_vacio_da_mensaje_claro(client):
     assert resp.json()["detail"] == "El apellido es obligatorio."
 
 
+# --- Issue #486: teléfono vacío reusaba el mensaje de formato inválido ------
+# `_validar_telefono` solo comprobaba `isdigit()`, y `"".isdigit()` es False,
+# así que el campo vacío caía en la misma rama que "abc123" y mostraba "El
+# teléfono solo puede tener dígitos." en vez de avisar que es obligatorio.
+def test_actualizar_persona_con_telefono_vacio_da_mensaje_claro(client):
+    persona = client.post("/api/v1/personas/", json=_payload_persona()).json()
+
+    resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"telefono": ""})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El teléfono es obligatorio."
+
+
+def test_actualizar_persona_con_telefono_formato_invalido_da_mensaje_distinto(client):
+    persona = client.post("/api/v1/personas/", json=_payload_persona()).json()
+
+    resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"telefono": "abc123"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El teléfono solo puede tener dígitos."
+
+
 # El tramo de borrado que vivía en este test murió con `DELETE /personas/{id}`:
 # la baja de una persona hoy es lógica y se prueba en
 # `test_baja_logica_persona.py`.

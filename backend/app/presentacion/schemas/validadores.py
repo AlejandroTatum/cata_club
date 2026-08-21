@@ -30,6 +30,8 @@ def _validar_cedula(valor: str) -> str:
 
 
 def _validar_telefono(valor: str) -> str:
+    if not valor.strip():
+        raise ValueError("El teléfono es obligatorio.")
     if not valor.isdigit():
         raise ValueError("El teléfono solo puede tener dígitos.")
     if not es_telefono_valido(valor):
