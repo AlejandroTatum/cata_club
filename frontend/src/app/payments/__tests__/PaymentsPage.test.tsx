@@ -1222,7 +1222,12 @@ describe("PaymentsPage — «Cómo se decide» pliega el procedimiento, no el ri
     // same "Período" field the queue table already uses.
     expect(screen.queryByLabelText(/fecha de inicio/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^meses$/i)).not.toBeInTheDocument();
-    expect(screen.getByText(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod))).toBeInTheDocument();
+    // Issue #510: the period now also repeats as a fixed caption over the
+    // comprobante (intentional redundancy), so it appears twice — once in
+    // "Detalle de la solicitud", once in the voucher caption.
+    expect(
+      screen.getAllByText(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod)).length,
+    ).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/faltan 3 puntos de la lista/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rechazar pago/i })).toBeInTheDocument();
   });
@@ -1853,5 +1858,49 @@ describe("PaymentsPage — defers /api/payments until the role resolves", () => 
     renderPage();
 
     await waitFor(() => expect(mockFetchPaymentValidations).toHaveBeenCalled());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #510 — three stacked cards (Detalle / Antes de aprobar / Decisión)
+// become one panel with internal bands, separated by rules and labels
+// instead of independent borders/shadows per card. Pure regrouping: no
+// checklist, approval, rejection, or API behaviour changes here — those stay
+// covered by the describe blocks above.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — panel único de validar pago (issue #510)", () => {
+  it("fusiona Detalle, Antes de aprobar y Decisión en un solo panel, no en tres tarjetas", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    const detalle = screen.getByRole("heading", { name: /detalle de la solicitud/i });
+    const antesDeAprobar = screen.getByRole("heading", { name: /antes de aprobar/i });
+    const decision = screen.getByRole("heading", { name: /^decisión$/i });
+
+    const panel = detalle.closest(".card");
+    expect(panel).not.toBeNull();
+    // The three zone headings share the exact same panel — a single fused
+    // container, not three independent `.card` sections stacked with gaps.
+    expect(antesDeAprobar.closest(".card")).toBe(panel);
+    expect(decision.closest(".card")).toBe(panel);
+  });
+
+  it("repite el monto esperado y el período como caption fija sobre el comprobante", async () => {
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    const proof = screen.getByText("comprobante.pdf").closest(".card") as HTMLElement;
+    expect(proof).not.toBeNull();
+
+    // Intentional redundancy (documented in the design artifact): the same
+    // amount and period that lead "Detalle de la solicitud" repeat right
+    // above the voucher, so both are visible together without scrolling.
+    expect(within(proof).getByText("$50,00")).toBeInTheDocument();
+    expect(
+      within(proof).getByText(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod)),
+    ).toBeInTheDocument();
   });
 });
