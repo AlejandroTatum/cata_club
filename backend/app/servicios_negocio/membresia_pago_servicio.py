@@ -1777,6 +1777,7 @@ class PagoServicio:
         pasar por este chequeo), para que la firma se genere después de que
         la autorización ya pasó, no antes."""
         from app.infraestructura.cloudinary_cliente import resolver_url_entrega
+        from app.soporte_transversal.configuracion import settings
 
         if not pago.voucher_url:
             return None
@@ -1784,6 +1785,7 @@ class PagoServicio:
         return resolver_url_entrega(
             pago.voucher_url,
             resource_type="raw" if es_pdf else "image",
+            folder=settings.cloudinary_carpeta_vouchers,
             formato="pdf" if es_pdf else None,
         )
 
@@ -1796,11 +1798,15 @@ class PagoServicio:
         (`formato_archivo="pdf"`, `resource_type="raw"` -- nunca imagen, a
         diferencia del voucher que el alumno puede subir en JPEG/PNG)."""
         from app.infraestructura.cloudinary_cliente import resolver_url_entrega
+        from app.soporte_transversal.configuracion import settings
 
         if pago.comprobante is None:
             return None
         return resolver_url_entrega(
-            pago.comprobante.archivo_url, resource_type="raw", formato="pdf",
+            pago.comprobante.archivo_url,
+            resource_type="raw",
+            folder=settings.cloudinary_carpeta_comprobantes,
+            formato="pdf",
         )
 
     def pago_a_response_dto(self, pago: Pago) -> PagoResponseDTO:

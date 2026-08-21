@@ -325,7 +325,11 @@ def test_url_firmada_no_es_igual_a_una_url_publica_de_upload():
     firmar) que tendría el mismo public_id. Si en algún momento alguien
     revierte `generar_url_firmada` a construir la URL a mano en vez de pedirle
     la firma al SDK, este test se rompe."""
-    url = cc.generar_url_firmada("voucher-pago-00000012", resource_type="image")
+    url = cc.generar_url_firmada(
+        "voucher-pago-00000012",
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
 
     url_publica_sin_firmar = (
         f"https://res.cloudinary.com/{settings.cloudinary_cloud_name}"
@@ -338,7 +342,10 @@ def test_url_firmada_no_es_igual_a_una_url_publica_de_upload():
 
 def test_url_firmada_de_pdf_fuerza_formato_y_resource_type_raw():
     url = cc.generar_url_firmada(
-        "comprobante-00000005", resource_type="raw", formato="pdf",
+        "comprobante-00000005",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
     )
     assert "/raw/authenticated/" in url
     assert url.endswith(".pdf") or ".pdf?" in url
@@ -347,7 +354,11 @@ def test_url_firmada_de_pdf_fuerza_formato_y_resource_type_raw():
 def test_url_firmada_sin_clave_de_token_queda_firmada_pero_sin_vencer(monkeypatch):
     monkeypatch.setattr(settings, "cloudinary_auth_token_key", "")
 
-    url = cc.generar_url_firmada("voucher-pago-00000001", resource_type="image")
+    url = cc.generar_url_firmada(
+        "voucher-pago-00000001",
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
 
     assert "__cld_token__" not in url
 
@@ -358,7 +369,11 @@ def test_url_firmada_con_clave_de_token_agrega_vencimiento_real(monkeypatch):
     with patch("app.infraestructura.cloudinary_cliente.cloudinary.utils.cloudinary_url") as mock_url:
         mock_url.return_value = ("https://cdn.test/firmada", {})
 
-        cc.generar_url_firmada("voucher-pago-00000001", resource_type="image")
+        cc.generar_url_firmada(
+            "voucher-pago-00000001",
+            resource_type="image",
+            folder=settings.cloudinary_carpeta_vouchers,
+        )
 
         _, kwargs = mock_url.call_args
         assert kwargs["auth_token"] == {
@@ -377,7 +392,11 @@ def test_url_firmada_no_hace_red_ni_consulta_el_circuito():
     assert cc._circuito_cloudinary.estado == "abierto"
 
     with _parchear_upload() as mock_upload:
-        url = cc.generar_url_firmada("voucher-pago-00000001", resource_type="image")
+        url = cc.generar_url_firmada(
+            "voucher-pago-00000001",
+            resource_type="image",
+            folder=settings.cloudinary_carpeta_vouchers,
+        )
 
         assert url
         assert mock_upload.call_count == 0
@@ -386,8 +405,12 @@ def test_url_firmada_no_hace_red_ni_consulta_el_circuito():
 # --- 11. `resolver_url_entrega`: filas previas al fix no se rompen ----------
 
 def test_resolver_url_entrega_sin_valor_devuelve_none():
-    assert cc.resolver_url_entrega(None, resource_type="image") is None
-    assert cc.resolver_url_entrega("", resource_type="image") is None
+    assert cc.resolver_url_entrega(
+        None, resource_type="image", folder=settings.cloudinary_carpeta_vouchers,
+    ) is None
+    assert cc.resolver_url_entrega(
+        "", resource_type="image", folder=settings.cloudinary_carpeta_vouchers,
+    ) is None
 
 
 def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_se_toca():
@@ -398,13 +421,19 @@ def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_se_toca():
     romperlas en silencio; ver docs/archive/fixes/16-voucher-no-enumerable.md."""
     url_heredada = "https://res.cloudinary.com/cataclub/image/upload/voucher-pago-00000003.jpg"
 
-    resultado = cc.resolver_url_entrega(url_heredada, resource_type="image")
+    resultado = cc.resolver_url_entrega(
+        url_heredada, resource_type="image", folder=settings.cloudinary_carpeta_vouchers,
+    )
 
     assert resultado == url_heredada
 
 
 def test_resolver_url_entrega_de_un_public_id_lo_firma():
-    resultado = cc.resolver_url_entrega("voucher-pago-00000004", resource_type="image")
+    resultado = cc.resolver_url_entrega(
+        "voucher-pago-00000004",
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
 
     assert resultado != "voucher-pago-00000004"
     assert "/authenticated/" in resultado
@@ -419,7 +448,11 @@ def test_resolver_url_entrega_de_una_fila_previa_al_fix_con_esquema_en_mayuscula
     y produciría una URL basura."""
     url_heredada_mayusculas = "HTTPS://res.cloudinary.com/cataclub/image/upload/voucher-pago-00000005.jpg"
 
-    resultado = cc.resolver_url_entrega(url_heredada_mayusculas, resource_type="image")
+    resultado = cc.resolver_url_entrega(
+        url_heredada_mayusculas,
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
 
     assert resultado == url_heredada_mayusculas
 
@@ -430,7 +463,62 @@ def test_resolver_url_entrega_de_un_public_id_con_dos_puntos_no_se_confunde_con_
     firmarse como cualquier otro `public_id`, no tratarse como URL heredada."""
     public_id_con_dos_puntos = "foo:bar/baz"
 
-    resultado = cc.resolver_url_entrega(public_id_con_dos_puntos, resource_type="image")
+    resultado = cc.resolver_url_entrega(
+        public_id_con_dos_puntos, resource_type="image", folder="cataclub/vouchers",
+    )
 
     assert resultado != public_id_con_dos_puntos
     assert "/authenticated/" in resultado
+
+
+# --- 12. La URL de entrega incluye la carpeta de subida (issue #480) --------
+# Cloudinary indexa un recurso subido con `folder=` + `public_id=` bajo
+# `{folder}/{public_id}`, NO bajo `public_id` solo -- eso es un detalle del
+# vendor que ningún mock revela (por eso el bug real llegó a producción sin
+# que ningún test lo agarrara, ver docs/archive/fixes/16-voucher-no-enumerable.md).
+# `Pago.voucher_url`/`ComprobantePago.archivo_url` persisten el `public_id`
+# SIN la carpeta (`membresia_pago_servicio.py`); si `generar_url_firmada` no
+# la vuelve a anteponer, firma una URL para un recurso que Cloudinary nunca
+# tuvo bajo ese nombre exacto -- firma válida, 404 igual.
+
+def test_url_firmada_antepone_la_carpeta_de_subida():
+    url = cc.generar_url_firmada(
+        "voucher-pago-00000004",
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert f"{settings.cloudinary_carpeta_vouchers}/voucher-pago-00000004" in url
+
+
+def test_url_firmada_de_comprobante_antepone_su_propia_carpeta():
+    url = cc.generar_url_firmada(
+        "comprobante-00000004",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
+    )
+
+    assert f"{settings.cloudinary_carpeta_comprobantes}/comprobante-00000004" in url
+
+
+def test_resolver_url_entrega_de_un_public_id_antepone_la_carpeta():
+    resultado = cc.resolver_url_entrega(
+        "voucher-pago-00000004",
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert f"{settings.cloudinary_carpeta_vouchers}/voucher-pago-00000004" in resultado
+
+
+def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_antepone_carpeta():
+    """Las filas heredadas (URL pública completa, detectadas por esquema)
+    siguen devolviéndose tal cual -- `folder` no debe tocarlas."""
+    url_heredada = "https://res.cloudinary.com/cataclub/image/upload/voucher-pago-00000003.jpg"
+
+    resultado = cc.resolver_url_entrega(
+        url_heredada, resource_type="image", folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert resultado == url_heredada

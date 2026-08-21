@@ -309,12 +309,22 @@ def subir_foto_perfil(
 def generar_url_firmada(
     public_id: str,
     resource_type: str,
+    folder: str,
     formato: Optional[str] = None,
 ) -> str:
     """
     Genera una URL de entrega para un recurso `type="authenticated"`
     (comprobante/voucher subido por `subir_voucher_pago`/`subir_pdf_membresia`
     desde este fix en adelante).
+
+    `folder`: la MISMA carpeta (`settings.cloudinary_carpeta_vouchers` /
+    `..._comprobantes`) que se usó al subir. Cloudinary indexa un recurso
+    subido con `folder=` + `public_id=` como `{folder}/{public_id}` -- NO
+    como `public_id` solo -- así que sin esto se firma (correctamente) una
+    URL para un recurso que Cloudinary nunca tuvo bajo ese nombre exacto:
+    firma válida, 404 igual (bug real, issue #480 -- ningún test lo agarró
+    porque los tests firman localmente sin tocar la cuenta real, y ese
+    detalle de indexado es del vendor, no de este código).
 
     NO hace red: `cloudinary.utils.cloudinary_url` firma localmente con las
     credenciales ya cargadas por `_configurar_cliente()`, así que esto corre
@@ -352,19 +362,24 @@ def generar_url_firmada(
             "duration": CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS,
         }
 
-    url, _opciones_restantes = cloudinary.utils.cloudinary_url(public_id, **opciones)
+    id_completo = f"{folder}/{public_id}"
+    url, _opciones_restantes = cloudinary.utils.cloudinary_url(id_completo, **opciones)
     return url
 
 
 def resolver_url_entrega(
     valor_almacenado: Optional[str],
     resource_type: str,
+    folder: str,
     formato: Optional[str] = None,
 ) -> Optional[str]:
     """
     Traduce lo persistido en `Pago.voucher_url` / `ComprobantePago.archivo_url`
     a una URL de entrega. Desde este fix se persiste el `public_id` (no la
     URL), así que el caso normal es firmar fresco con `generar_url_firmada`.
+    `folder`: se reenvía tal cual a `generar_url_firmada` -- ver su docstring
+    (issue #480). No aplica a las filas heredadas de abajo: esas ya son una
+    URL completa y se devuelven sin tocar.
 
     Filas anteriores al fix guardaron el `secure_url` completo de un recurso
     `type="upload"` (público, enumerable -- exactamente el hallazgo que este
@@ -386,4 +401,6 @@ def resolver_url_entrega(
         return None
     if urlparse(valor_almacenado).scheme in ("http", "https"):
         return valor_almacenado
-    return generar_url_firmada(valor_almacenado, resource_type=resource_type, formato=formato)
+    return generar_url_firmada(
+        valor_almacenado, resource_type=resource_type, folder=folder, formato=formato,
+    )
