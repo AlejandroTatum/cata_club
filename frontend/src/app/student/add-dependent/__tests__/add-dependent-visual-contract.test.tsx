@@ -118,8 +118,8 @@ afterEach(() => {
   cleanup();
 });
 
-/** Walk to a later step by filling the identity block the first one asks for. */
-function goToHealthStep(): void {
+/** Fill the identity block the first step asks for, without advancing. */
+function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Mateo Andres" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano Loor" } });
   fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
@@ -127,7 +127,17 @@ function goToHealthStep(): void {
     target: { value: "2014-05-12" },
   });
   fireEvent.change(screen.getByLabelText(/^Teléfono$/), { target: { value: "0991234567" } });
+}
+
+/** Walk to the credentials step (step 2) from the identity step. */
+function goToCredentialsStep(): void {
+  fillChildStep();
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
+}
+
+/** Walk to a later step by filling the identity block the first one asks for. */
+function goToHealthStep(): void {
+  goToCredentialsStep();
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 }
 
@@ -191,6 +201,27 @@ describe("one mark for one idea", () => {
       `label[for="${addDependentFieldId("enfermedades")}"]`,
     ) as HTMLElement;
     expect(diseasesLabel.textContent).toContain("(opcional)");
+  });
+
+  /**
+   * `correo` and `contrasenia` hardcoded "(opcional)" into their own label
+   * text on top of the one `WizardInput` already appends for every
+   * non-required field, so the step read "(opcional)(opcional)" — the same
+   * mark said twice this describe block is about, just on a different step.
+   */
+  it("marks the credentials step's optional fields exactly once", () => {
+    render(<AddDependentPage />);
+    goToCredentialsStep();
+
+    const correoInput = screen.getByLabelText(/^Correo electrónico/);
+    const contraseniaInput = screen.getByLabelText(/^Contraseña/);
+    const correoLabel = document.querySelector(`label[for="${correoInput.id}"]`) as HTMLElement;
+    const contraseniaLabel = document.querySelector(
+      `label[for="${contraseniaInput.id}"]`,
+    ) as HTMLElement;
+
+    expect(correoLabel.textContent?.match(/\(opcional\)/g)).toHaveLength(1);
+    expect(contraseniaLabel.textContent?.match(/\(opcional\)/g)).toHaveLength(1);
   });
 
   it("keeps the action colour off the one control this screen renders itself", () => {
