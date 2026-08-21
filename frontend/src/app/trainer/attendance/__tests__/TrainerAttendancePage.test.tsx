@@ -1789,7 +1789,7 @@ describe("TrainerAttendancePage — la corrección por fila (issue #389)", () =>
     }
   });
 
-  it("abre el formulario, exige motivo, envía la corrección y actualiza la fila en el sitio con la traza", async () => {
+  it("abre un diálogo modal, exige motivo, envía la corrección y actualiza la fila en el sitio con la traza", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
     await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
     mockCorrectAttendance.mockResolvedValue({
@@ -1812,17 +1812,23 @@ describe("TrainerAttendancePage — la corrección por fila (issue #389)", () =>
     const attendanceRecordsCallsBefore = mockFetchAttendanceRecords.mock.calls.length;
     const alumnosCallsBefore = mockFetchAlumnosPorHorario.mock.calls.length;
 
-    // Submitting with an empty motivo is refused client-side, no network call.
+    // Issue #508 — the form no longer sits inline in the row; "Corregir"
+    // opens a dedicated `role="dialog"` modal, same shell as
+    // `EmergencyCardDialog`/`ConfirmDialog`.
     fireEvent.click(within(row).getByRole("button", { name: "Corregir" }));
-    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
-    expect(await within(row).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
+    const dialog = within(row).getByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+
+    // Submitting with an empty motivo is refused client-side, no network call.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
     expect(mockCorrectAttendance).not.toHaveBeenCalled();
 
-    fireEvent.click(within(row).getByRole("radio", { name: "Presente" }));
-    fireEvent.change(within(row).getByPlaceholderText("Por qué se corrige este registro"), {
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Presente" }));
+    fireEvent.change(within(dialog).getByPlaceholderText("Por qué se corrige este registro"), {
       target: { value: "Se confirmó presencia con el profesor." },
     });
-    fireEvent.click(within(row).getByRole("button", { name: "Guardar corrección" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
 
     await waitFor(() => expect(mockCorrectAttendance).toHaveBeenCalledWith(9001, {
       estado: "present",
@@ -1834,6 +1840,8 @@ describe("TrainerAttendancePage — la corrección por fila (issue #389)", () =>
     // Updated in place — no full roster refetch.
     expect(mockFetchAlumnosPorHorario.mock.calls.length).toBe(alumnosCallsBefore);
     expect(mockFetchAttendanceRecords.mock.calls.length).toBe(attendanceRecordsCallsBefore);
+    // The dialog closes itself on a successful save.
+    expect(within(row).queryByRole("dialog")).not.toBeInTheDocument();
     expect(await within(row).findByText("Presente")).toBeInTheDocument();
     expect(
       within(row).getByText(/Corregido por Admin User el.*antes: Ausente.*motivo: Se confirmó presencia/),
@@ -1842,6 +1850,67 @@ describe("TrainerAttendancePage — la corrección por fila (issue #389)", () =>
     // Corregir stays available on the SAME row afterward — unlimited
     // sequential corrections within the window, never hidden after one.
     expect(within(row).getByRole("button", { name: "Corregir" })).toBeEnabled();
+  });
+
+  it("Cancelar cierra el diálogo sin llamar a la API y devuelve el foco a Corregir", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    const trigger = within(row).getByRole("button", { name: "Corregir" });
+    // `fireEvent.click` does not focus the element the way a real click or
+    // `userEvent.click` would — the trap's "return focus to the trigger"
+    // promise only has something to return TO if the trigger was focused
+    // first (same idiom EmergencyCardDialog's own trap tests use).
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = within(row).getByRole("dialog");
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Por qué se corrige este registro"), {
+      target: { value: "Borrador que nunca se guarda." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    expect(within(row).queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockCorrectAttendance).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("Escape cierra el diálogo sin llamar a la API y devuelve el foco a Corregir", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    const trigger = within(row).getByRole("button", { name: "Corregir" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    within(row).getByRole("dialog");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(within(row).queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockCorrectAttendance).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+  });
+
+  // El fondo es hermano del panel, no su contenedor — el mismo contrato que
+  // `EmergencyCardDialog`: tocar un control adentro (el radiogroup) no puede
+  // cerrar el diálogo encima.
+  it("cierra al tocar el fondo, y NO al tocar dentro del panel", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin User"));
+    await openReadOnlyRoster(existingRecordsWithAsistenciaIds());
+
+    const row = screen.getByText("Student 01").closest("li") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "Corregir" }));
+    const dialog = within(row).getByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Presente" }));
+    expect(within(row).queryByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.click(within(row).getByTestId("attendance-correction-backdrop"));
+
+    expect(within(row).queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockCorrectAttendance).not.toHaveBeenCalled();
   });
 
   it("el historial de correcciones se ve bajo demanda, más reciente primero", async () => {

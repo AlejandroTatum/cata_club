@@ -3,9 +3,18 @@
  * issue #389 (slice 4b) adds beside it.
  *
  * Extracted out of `page.tsx`'s `renderMarkAttendance` readOnly branch:
- * the row now owns three genuinely separate concerns (the static
- * name/badge, the correction form, and the correction history panel), and
- * `page.tsx` is already the largest file in this flow.
+ * the row owns three genuinely separate concerns (the static name/badge,
+ * the correction form, and the correction history panel), and `page.tsx`
+ * is already the largest file in this flow.
+ *
+ * Issue #508 moved the correction form itself out of the row's own layout
+ * and into `AttendanceCorrectionDialog`, a dedicated `role="dialog"` modal —
+ * the row no longer pushes every sibling row down the page while one form is
+ * open. This is a container change only: the row still owns every bit of the
+ * correction's business logic (validation, the API call, the in-place patch
+ * on success). `AttendanceCorrectionDialog` renders what this file tells it
+ * to and reports back through callbacks; it does not know what a correction
+ * is.
  *
  * The correction form asks for `estado` + `motivo` only. `justificativo`/
  * `estadoJustificativo` are NOT exposed here as inputs — the original
@@ -26,11 +35,11 @@ import { formatDateTime } from "@/lib/format-utils";
 import { getAttendanceBadgeTone } from "@/app/attendance/attendance-utils";
 import {
   ATTENDANCE_LABELS,
-  ATTENDANCE_STATES,
   UNMARKED,
   isWithinCorrectionWindow,
   type SessionStudent,
 } from "./attendance-utils";
+import AttendanceCorrectionDialog from "./AttendanceCorrectionDialog";
 import {
   correctAttendance,
   fetchAttendanceCorrections,
@@ -62,8 +71,6 @@ interface AttendanceCorrectionRowProps {
   onCorrected: (personaId: string, patch: CorrectionPatch) => void;
 }
 
-const MOTIVO_MAX_LENGTH = 500;
-
 /** Mirrors `history/page.tsx`'s own MOTIVO_CORRECCION_VENCIDA/aria-describedby
  *  idiom (issue #373): a blocked control names why, right next to it. */
 const MOTIVO_VENTANA_VENCIDA = "La ventana de corrección de 30 días ya cerró para esta sesión.";
@@ -79,7 +86,7 @@ export default function AttendanceCorrectionRow({
   const withinWindow = isWithinCorrectionWindow(sessionDate);
   const reasonId = `correccion-vencida-${student.id}`;
 
-  const [formOpen, setFormOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [estado, setEstado] = useState<EstadoAsistencia>(
     student.attendance === UNMARKED ? "present" : student.attendance,
   );
@@ -92,11 +99,11 @@ export default function AttendanceCorrectionRow({
   const [historyState, setHistoryState] = useState<"idle" | "loading" | "error">("idle");
   const [history, setHistory] = useState<AttendanceCorrectionEntry[]>([]);
 
-  function openForm(): void {
+  function openDialog(): void {
     setEstado(student.attendance === UNMARKED ? "present" : student.attendance);
     setMotivo("");
     setError(null);
-    setFormOpen(true);
+    setDialogOpen(true);
   }
 
   async function loadHistory(): Promise<void> {
@@ -138,7 +145,7 @@ export default function AttendanceCorrectionRow({
         motivo: trimmed,
       });
       setLastCorrection(result);
-      setFormOpen(false);
+      setDialogOpen(false);
       onCorrected(student.id, {
         attendance: result.asistencia.estado,
         justificativo: result.asistencia.justificativo ?? null,
@@ -182,13 +189,8 @@ export default function AttendanceCorrectionRow({
           </button>
         )}
         {canCorrect && asistenciaId !== null && withinWindow && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => (formOpen ? setFormOpen(false) : openForm())}
-          >
-            {formOpen ? "Cancelar" : "Corregir"}
+          <Button type="button" variant="secondary" size="sm" onClick={openDialog}>
+            Corregir
           </Button>
         )}
         {canCorrect && asistenciaId !== null && !withinWindow && (
@@ -204,79 +206,19 @@ export default function AttendanceCorrectionRow({
         </p>
       )}
 
-      {canCorrect && formOpen && (
-        // A `<div>`, not a nested `<form>`: the whole three-step wizard is
-        // already wrapped in ONE `<form onSubmit={handleConfirm}>`
-        // (`page.tsx`) for step 3's "Confirmar asistencia". HTML forbids a
-        // form inside a form — the parser drops the inner tag rather than
-        // nesting it — so a real `<form>` here would have silently routed
-        // "Guardar corrección" into submitting THAT outer form instead.
-        <div
-          role="group"
-          aria-label={`Corregir asistencia de ${student.name}`}
-          className="flex flex-col gap-2 rounded-ctl border border-line bg-canvas p-3"
-        >
-          <div role="radiogroup" aria-label={`Nuevo estado de ${student.name}`} className="flex flex-wrap gap-1.5">
-            {ATTENDANCE_STATES.map((state) => (
-              <button
-                key={state}
-                type="button"
-                role="radio"
-                aria-checked={estado === state}
-                onClick={() => setEstado(state)}
-                className={`h-badge rounded-full border px-3 text-2xs font-semibold ${
-                  estado === state
-                    ? "border-transparent bg-coal text-white"
-                    : "border-line-2 bg-paper text-ink-2 hover:border-ink-3"
-                }`}
-              >
-                {ATTENDANCE_LABELS[state]}
-              </button>
-            ))}
-          </div>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-2xs font-bold uppercase text-ink-3">
-              Motivo <span className="text-state-bad">*</span>
-            </span>
-            <textarea
-              rows={2}
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value.slice(0, MOTIVO_MAX_LENGTH))}
-              maxLength={MOTIVO_MAX_LENGTH}
-              placeholder="Por qué se corrige este registro"
-              className="resize-y rounded-ctl border border-line-2 bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-ink-3"
-              disabled={submitting}
-            />
-          </label>
-
-          {error && (
-            <p role="alert" className="text-xs text-state-bad">
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              disabled={submitting}
-              onClick={() => void handleSubmit()}
-            >
-              {submitting ? "Guardando…" : "Guardar corrección"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={submitting}
-              onClick={() => setFormOpen(false)}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </div>
+      {canCorrect && (
+        <AttendanceCorrectionDialog
+          open={dialogOpen}
+          studentName={student.name}
+          estado={estado}
+          onEstadoChange={setEstado}
+          motivo={motivo}
+          onMotivoChange={setMotivo}
+          submitting={submitting}
+          error={error}
+          onSubmit={() => void handleSubmit()}
+          onCancel={() => setDialogOpen(false)}
+        />
       )}
 
       {lastCorrection && (
