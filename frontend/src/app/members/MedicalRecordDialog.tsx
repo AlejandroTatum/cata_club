@@ -1,0 +1,76 @@
+"use client";
+
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
+import { Button } from "@/components/ui";
+import { ICON } from "@/lib/icon-size";
+import { useNativeDialog } from "./useNativeDialog";
+import MedicalRecordEditor from "./MedicalRecordEditor";
+import type { MemberAccount } from "./members-utils";
+
+interface MedicalRecordDialogProps {
+  account: MemberAccount;
+  onClose: () => void;
+}
+
+/**
+ * Issue #505's first direct entry point: the row's "Ficha médica" trigger
+ * used to require opening the generic account dialog first and then an
+ * internal "Ficha médica" toggle per student before `MedicalRecordEditor`
+ * ever appeared. This dialog renders that same editor straight away — no
+ * intermediate click, no roles/estado/datos-personales content in the way.
+ *
+ * One section per student in `account.estudiantes` (a represented minor's
+ * row still surfaces one persona — issue #388 — but the shape supports more
+ * than one, same as `StudentEditPanel` always has).
+ */
+export default function MedicalRecordDialog({
+  account,
+  onClose,
+}: MedicalRecordDialogProps): React.ReactElement {
+  const { dialogRef, closeButtonRef } = useNativeDialog(onClose);
+  const titleId = `medical-record-title-${account.id}`;
+
+  return createPortal(
+    <dialog
+      ref={dialogRef}
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onCancel={(event) => event.preventDefault()}
+      className="fixed inset-0 z-50 m-auto flex h-fit max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
+        <h2
+          id={titleId}
+          className="truncate font-display text-lg uppercase leading-tight tracking-flat text-ink"
+        >
+          Ficha médica — {account.nombres} {account.apellidos}
+        </h2>
+        <button
+          ref={closeButtonRef}
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar ventana"
+          className="rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-sunken hover:text-ink"
+        >
+          <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
+        {account.estudiantes.map((student) => (
+          <MedicalRecordEditor
+            key={student.id}
+            personaId={Number(student.id)}
+            studentName={`${student.nombres} ${student.apellidos}`}
+          />
+        ))}
+      </div>
+
+      <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+        <Button onClick={onClose}>Cerrar</Button>
+      </div>
+    </dialog>,
+    document.body,
+  );
+}
