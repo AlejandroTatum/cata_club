@@ -273,6 +273,20 @@ function ProofViewer({
 }): React.ReactElement {
   return (
     <div className="card overflow-hidden lg:sticky lg:top-6">
+      {/* Issue #510: the two facts the decision turns on repeat here, right
+          above the file itself — intentional redundancy (documented in the
+          design artifact), not a stray duplicate. "Detalle de la solicitud"
+          leads with the same pair; this caption means the admin never has to
+          scroll away from the voucher to re-check what they're comparing it
+          against. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-field border-b border-line bg-canvas px-4 py-2.5">
+        <span className="text-sm font-extrabold tabular-nums text-ink">
+          {formatCurrency(request.expectedAmount)}
+        </span>
+        <span className="text-xs font-semibold text-ink-2">
+          {humanizePaymentPeriod(request.membershipPeriod)}
+        </span>
+      </div>
       <div className="flex items-center gap-2 border-b border-line bg-sunken px-4 py-3">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofFileName}
@@ -1337,65 +1351,67 @@ export default function PaymentsPage(): React.ReactElement {
                   <DataBox>{request.membershipType}</DataBox>
                 </DetailCell>
               </dl>
-            </section>
 
-            {isPending && (
-              <section
-                className="card overflow-hidden"
-                aria-labelledby="antes-de-aprobar"
-              >
-                <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
-                  <h2 id="antes-de-aprobar" className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-                    Antes de aprobar
-                  </h2>
-                  <Badge tone={checklistComplete ? "ok" : "warn"}>
-                    {checklist.items.length - remainingChecks} de {checklist.items.length}
-                  </Badge>
-                </div>
-                {/* `checklist.note` ya no se dibuja acá. Explica POR QUÉ esta
-                    lista trae estas preguntas y no otras — procedimiento, no
-                    dato — y se mudó, entera, al desplegable «Cómo se decide» de
-                    la tarjeta de Decisión, junto al aviso del deshacer: los dos
-                    contestan la misma pregunta, y contestarla en dos lugares
-                    distintos era parte del amontonamiento que el dueño leyó
-                    como «demasiado».
+              {/* Issue #510: the three former cards (Detalle / Antes de
+                  aprobar / Decisión) are one panel now — a single `.card`
+                  shell, its zones separated by `border-t` rules and internal
+                  labels instead of independent borders/shadows per card.
+                  Nothing about the checklist, the approval/rejection logic,
+                  or the API calls below changed — only the container. */}
+              {isPending && (
+                <section aria-labelledby="antes-de-aprobar" className="border-t border-line">
+                  <div className="flex items-center gap-3 border-b border-line px-[18px] py-4">
+                    <h2 id="antes-de-aprobar" className="flex-1 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+                      Antes de aprobar
+                    </h2>
+                    <Badge tone={checklistComplete ? "ok" : "warn"}>
+                      {checklist.items.length - remainingChecks} de {checklist.items.length}
+                    </Badge>
+                  </div>
+                  {/* `checklist.note` ya no se dibuja acá. Explica POR QUÉ esta
+                      lista trae estas preguntas y no otras — procedimiento, no
+                      dato — y se mudó, entera, al desplegable «Cómo se decide» de
+                      la tarjeta de Decisión, junto al aviso del deshacer: los dos
+                      contestan la misma pregunta, y contestarla en dos lugares
+                      distintos era parte del amontonamiento que el dueño leyó
+                      como «demasiado».
 
-                    Cuánto texto saca de acá depende del caso, y en el más
-                    común no saca ninguno: `buildApprovalChecklist` solo pone
-                    `note` cuando el pago es en efectivo o cuando es una
-                    transferencia SIN comprobante adjunto. Una transferencia
-                    CON comprobante — la que llena esta cola — nunca trajo
-                    nota, así que en esa tarjeta lo que se aliviana es el
-                    encabezado, no la prosa.
-                    Los checkboxes se quedan enteros: son los que habilitan el
-                    botón de aprobar. */}
-                <div
-                  role="group"
-                  aria-labelledby="antes-de-aprobar"
-                  className="flex flex-col px-[18px] py-2"
-                >
-                  {checklist.items.map((item) => (
-                    <label
-                      key={item.key}
-                      className="flex cursor-pointer items-center gap-3 py-2.5 text-sm text-ink-2"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(checked[item.key])}
-                        onChange={(e) =>
-                          setChecked((prev) => ({ ...prev, [item.key]: e.target.checked }))
-                        }
-                        className="h-[18px] w-[18px] flex-none accent-coal"
-                      />
-                      {item.label}
-                    </label>
-                  ))}
-                </div>
-              </section>
-            )}
+                      Cuánto texto saca de acá depende del caso, y en el más
+                      común no saca ninguno: `buildApprovalChecklist` solo pone
+                      `note` cuando el pago es en efectivo o cuando es una
+                      transferencia SIN comprobante adjunto. Una transferencia
+                      CON comprobante — la que llena esta cola — nunca trajo
+                      nota, así que en esa tarjeta lo que se aliviana es el
+                      encabezado, no la prosa.
+                      Los checkboxes se quedan enteros: son los que habilitan el
+                      botón de aprobar. */}
+                  <div
+                    role="group"
+                    aria-labelledby="antes-de-aprobar"
+                    className="flex flex-col px-[18px] py-2"
+                  >
+                    {checklist.items.map((item) => (
+                      <label
+                        key={item.key}
+                        className="flex cursor-pointer items-center gap-3 py-2.5 text-sm text-ink-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(checked[item.key])}
+                          onChange={(e) =>
+                            setChecked((prev) => ({ ...prev, [item.key]: e.target.checked }))
+                          }
+                          className="h-[18px] w-[18px] flex-none accent-coal"
+                        />
+                        {item.label}
+                      </label>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-            {isPending && (
-              <section className="flex flex-col gap-3 card p-[18px]">
+              {isPending && (
+                <div className="border-t border-line">
                 {/* El título y su desplegable comparten fila. El desplegable
                     junta el procedimiento de LA DECISIÓN —por qué la lista de
                     verificación trae estas preguntas, cuando hay nota que lo
@@ -1413,7 +1429,7 @@ export default function PaymentsPage(): React.ReactElement {
                     explica adentro es del camino de aprobación, y un
                     desplegable que contesta otra pregunta es peor que
                     ninguno. */}
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-4">
                   <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">Decisión</h2>
                   {!showRejectForm && (
                     <ContextualHelp title="Cómo se decide">
@@ -1426,6 +1442,7 @@ export default function PaymentsPage(): React.ReactElement {
                   )}
                 </div>
 
+                <div className="flex flex-col gap-3 px-[18px] py-4">
                 {!showRejectForm ? (
                   <>
                     {/* No editable "Período de vigencia" here (issue #400):
@@ -1610,8 +1627,10 @@ export default function PaymentsPage(): React.ReactElement {
                     </div>
                   </div>
                 )}
-              </section>
-            )}
+                </div>
+              </div>
+              )}
+            </section>
 
             {request.validationStatus === "rechazado" && request.rejectionReason && (
               <section className="rounded-card border border-state-bad/25 bg-state-bad-bg p-[18px]">
