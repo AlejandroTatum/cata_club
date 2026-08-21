@@ -24,20 +24,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { createAuthenticatedAuth, createLoadingAuth } from "@/components/__tests__/test-utils";
 
 const mockUseAuth = vi.mocked(useAuth);
-const mockShowInfo = vi.fn();
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({
-    showToast: vi.fn(),
-    showError: vi.fn(),
-    showSuccess: vi.fn(),
-    showInfo: mockShowInfo,
-    showWarning: vi.fn(),
-  }),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -138,7 +127,6 @@ beforeEach(() => {
   mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
   mockFetchPaymentValidations.mockReset().mockResolvedValue([]);
   mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("admin"));
-  mockShowInfo.mockReset();
 });
 
 // ---------------------------------------------------------------------------
@@ -461,46 +449,5 @@ describe("DashboardPage — defers admin API calls until the role resolves", () 
     await waitFor(() => expect(mockFetchDashboardStats).toHaveBeenCalled());
     expect(mockFetchAttendanceRecords).toHaveBeenCalled();
     expect(mockFetchPaymentValidations).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Silent bounce, explained (issue #319 hallazgo #68).
-//
-// `ProtectedRoute` (mocked to a pass-through here) already redirects a
-// non-admin session away from /dashboard — but silently, with nothing in the
-// UI naming why. Same pattern as the medical-record minor bounce (#315
-// hallazgo #69): a toast at the landing spot.
-// ---------------------------------------------------------------------------
-
-describe("DashboardPage — names the reason when a non-admin session lands here", () => {
-  it("shows no toast while the session is still hydrating", async () => {
-    mockUseAuth.mockReturnValue(createLoadingAuth());
-
-    render(<DashboardPage />);
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mockShowInfo).not.toHaveBeenCalled();
-  });
-
-  it("shows a visible reason for a resolved non-admin role", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante"));
-
-    render(<DashboardPage />);
-
-    await waitFor(() =>
-      expect(mockShowInfo).toHaveBeenCalledWith(
-        expect.stringMatching(/permiso|autorizad|acceso|no corresponde/i),
-      ),
-    );
-  });
-
-  it("shows no toast for the admin role that actually belongs here", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin"));
-
-    render(<DashboardPage />);
-
-    await screen.findByText("Miembros");
-    expect(mockShowInfo).not.toHaveBeenCalled();
   });
 });

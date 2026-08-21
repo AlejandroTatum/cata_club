@@ -44,7 +44,6 @@ import {
   TableRow,
 } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/contexts/ToastContext";
 import {
   Users,
   UserCheck,
@@ -937,7 +936,6 @@ function MemberEditDialog({
 
 export default function MembersPage(): React.ReactElement {
   const { session, isLoading } = useAuth();
-  const { showInfo } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFlag, setActiveFlag] = useState<MemberFilterFlag>("all");
   const [accounts, setAccounts] = useState<MemberAccount[]>([]);
@@ -995,15 +993,6 @@ export default function MembersPage(): React.ReactElement {
     if (!isAdmin) return;
     void loadMembers();
   }, [isAdmin, loadMembers]);
-
-  // #319 hallazgo #68: `ProtectedRoute` already bounces a non-admin session
-  // away, but silently — the URL changed and nothing said why. Same pattern
-  // as the medical-record minor bounce (#315 hallazgo #69): a toast at the
-  // landing spot names the reason instead of leaving a mute redirect.
-  useEffect(() => {
-    if (isLoading || !session || session.user.role === "admin") return;
-    showInfo("No tiene permiso para acceder a esa sección.");
-  }, [isLoading, session, showInfo]);
 
   // Reset to page 1 whenever the search term or filter chip changes, so the
   // paginator never gets stuck on a stale/out-of-range page.

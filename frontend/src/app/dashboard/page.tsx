@@ -33,7 +33,6 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/contexts/ToastContext";
 import { ArrowRight, CalendarCheck, ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -80,7 +79,6 @@ const ACTIVITY_LIMIT = 5;
 
 export default function DashboardPage(): React.ReactElement {
   const { session, isLoading: authLoading } = useAuth();
-  const { showInfo } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,15 +125,6 @@ export default function DashboardPage(): React.ReactElement {
     void loadStats();
     void loadDetail();
   }, [isAdmin, loadStats, loadDetail]);
-
-  // #319 hallazgo #68: `ProtectedRoute` already bounces a non-admin session
-  // away, but silently — the URL changed and nothing said why. Same pattern
-  // as the medical-record minor bounce (#315 hallazgo #69): a toast at the
-  // landing spot names the reason instead of leaving a mute redirect.
-  useEffect(() => {
-    if (authLoading || !session || session.user.role === "admin") return;
-    showInfo("No tiene permiso para acceder a esa sección.");
-  }, [authLoading, session, showInfo]);
 
   const attendanceStats: AttendanceDayStats = buildAttendanceStats(records);
   const fourWeeks = buildFourWeekAttendance(records);
