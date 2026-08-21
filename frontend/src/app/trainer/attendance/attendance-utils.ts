@@ -403,6 +403,24 @@ export function buildRosterFromAlumnoHorarios(
   });
 }
 
+/**
+ * Tally a flat list of attendance records by their horario.
+ *
+ * Feeds step 1's "lista tomada" indicator (issue #310 / #22, widened to every
+ * day by #483): pair with `weekWindowStartIso()` / `clubIsoDate()` from
+ * `club-date.ts` for a `fetchAttendanceRecords` call that covers every day
+ * "Ver todos los días" can show, and each horario's single weekly occurrence
+ * lands in the window exactly once, so keying by `horarioId` alone (no date)
+ * stays unambiguous.
+ */
+export function countRecordsByHorario(records: AttendanceRecord[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const record of records) {
+    counts.set(record.horarioId, (counts.get(record.horarioId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 // ---------------------------------------------------------------------------
 // Correction window (issue #389, slice 4b)
 // ---------------------------------------------------------------------------

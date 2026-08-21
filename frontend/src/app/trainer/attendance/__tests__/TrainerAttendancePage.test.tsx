@@ -1968,7 +1968,7 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     // Un click no selecciona nada: ni se abre el paso 2/3, ni aparece el
     // aviso de "ya fue tomada hoy", ni "Continuar" se habilita.
     fireEvent.click(scheduleButton);
-    expect(screen.queryByText("Esta lista ya fue tomada hoy.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Esta lista ya fue tomada.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 
@@ -1986,7 +1986,81 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
     expect(scheduleButton).toBeDisabled();
 
     fireEvent.click(scheduleButton);
-    expect(screen.queryByText("Esta lista ya fue tomada hoy.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Esta lista ya fue tomada.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  });
+
+  /**
+   * Issue #483 — #368's whole mechanism (indicator + real `disabled`) only
+   * ever asked for TODAY's records, so a horario reached through "Ver todos
+   * los días" that was NOT today's own day looked untouched no matter how
+   * many records it already had on file. The trainer only found out in step
+   * 2, exactly the defect #368 had already closed for today.
+   */
+  it("deshabilita también la tarjeta de otro día con lista ya registrada, no solo la de hoy", async () => {
+    const MONDAY_SCHEDULE = {
+      id: 13,
+      diaSemana: "lun",
+      horaInicio: "10:00",
+      horaFin: "11:00",
+      entrenadorId: 17,
+      entrenadorNombre: "Coach Torres",
+    };
+    // The Monday just past, as `lastOccurrenceOfDiaSemana` resolves it from
+    // Tuesday 2026-07-21 (the fixed `TUESDAY_IN_CLUB_TIME`) — 2026-07-15 is
+    // 6 days back, the far edge of the window the fix has to cover.
+    const LAST_MONDAY = "2026-07-20";
+    const WEEK_WINDOW_START = "2026-07-15";
+
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+    mockFetchTrainingSchedules.mockResolvedValue([SCHEDULE, MONDAY_SCHEDULE]);
+    mockFetchAttendanceRecords.mockResolvedValue([
+      {
+        id: "att-201",
+        fecha: LAST_MONDAY,
+        horario: "Lunes 10:00 — 11:00",
+        horarioId: 13,
+        personaId: 201,
+        estudiante: "Student 01",
+        estado: "present",
+        entrenador: "Coach Torres",
+      },
+      {
+        id: "att-202",
+        fecha: LAST_MONDAY,
+        horario: "Lunes 10:00 — 11:00",
+        horarioId: 13,
+        personaId: 202,
+        estudiante: "Student 02",
+        estado: "present",
+        entrenador: "Coach Torres",
+      },
+    ]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    // The counts effect now has to reach back far enough to cover any day
+    // "Ver todos los días" can show, not just today.
+    await waitFor(() =>
+      expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
+        fechaInicio: WEEK_WINDOW_START,
+        fechaFin: "2026-07-21",
+      }),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Ver todos los días" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
+    const mondayScheduleButton = await screen.findByRole("button", { name: /10:00/i });
+
+    expect(
+      await within(mondayScheduleButton).findByText(/Lista tomada · 2 registros/),
+    ).toBeInTheDocument();
+    // Not "hoy" — Monday isn't today, and the card says so.
+    expect(within(mondayScheduleButton).queryByText(/Lista tomada hoy/)).not.toBeInTheDocument();
+    expect(mondayScheduleButton).toBeDisabled();
+
+    fireEvent.click(mondayScheduleButton);
+    expect(screen.queryByText("Esta lista ya fue tomada.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 });
@@ -3321,21 +3395,21 @@ describe("TrainerAttendancePage — el detalle de la sesión coincide con lo ya 
     vi.useRealTimers();
   });
 
-  /** Hoy es domingo y no hay nada programado, así que el acordeón ya
-   *  muestra la semana completa (misma razón que en el bloque "#308"). */
-  async function openWednesdayRoster(): Promise<void> {
-    fireEvent.click(await screen.findByRole("button", { name: /^miércoles/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /17:00/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
-  }
-
   it("abre en modo lectura con las 15 marcas ya registradas, visto un domingo (candado #346)", async () => {
+    // Issue #483: la tarjeta del miércoles ya tiene lista registrada, así
+    // que el acordeón la deshabilita de verdad (issue #397) y un click ya no
+    // llega a step 2 — se entra como entraría un reload real, por URL (#95),
+    // igual que el resto de los tests de modo solo lectura de este archivo.
+    window.history.replaceState(
+      null,
+      "",
+      `/trainer/attendance?horario=${WEDNESDAY_SCHEDULE.id}&fecha=${WEDNESDAY_SESSION_DATE}&paso=lista`,
+    );
     render(
       <ToastProvider>
         <TrainerAttendancePage />
       </ToastProvider>,
     );
-    await openWednesdayRoster();
     await screen.findByText("Student 01");
 
     // El pedido de prefill tiene que direccionarse con la fecha DE LA SESIÓN
