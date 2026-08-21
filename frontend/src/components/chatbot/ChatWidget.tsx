@@ -4,19 +4,20 @@
  * ## The assistant has a name and a face
  *
  * It used to introduce itself as "Cata Club" behind the club's own JPEG
- * wordmark, which is wrong twice: it made the bot indistinguishable from the
- * human channel one row below it ("Hablar con el club"), and the wordmark
- * rendered at 32px is an unreadable red smudge — that mark carries three
- * lines of type inside a wreath and needs ~100px to resolve. The assistant is
- * now CATA-BOT everywhere it identifies itself (header, greeting, ARIA
- * labels, failure copy), drawn as `/brand/cata-bot.png`, a purpose-made
- * circular avatar that survives 32px. That is the 512px master, and it is what
- * both callers request — this header and `HelpChatDock`'s launcher — because
- * `next/image` picks a source off `sizes`, not off the layout box, so a
- * 32px-wide avatar on a 2x display still needs real pixels behind it; the
- * 128px copy beside it in `public/brand` is asked for by nobody. See the
- * header's own comment below for the sizing. "Hablar con el club" keeps the
- * club's name on purpose: that link hands off to a person.
+ * wordmark, which was wrong: it made the bot indistinguishable from the
+ * human channel one row below it ("Hablar con el club"). The assistant is
+ * CATA-BOT everywhere it identifies itself (header, greeting, ARIA labels,
+ * failure copy). "Hablar con el club" keeps the club's name on purpose: that
+ * link hands off to a person.
+ *
+ * A purpose-made circular illustration was explored for the avatar and
+ * dropped (issue #512): the product owner's call is the club's own logo
+ * (`/brand/cata-club-logo.jpeg`), cropped to a circle with `object-cover`,
+ * no new image generated and no external image-generation tool involved. The
+ * logo's laurel wreath is itself roughly circular and centred in the frame,
+ * so the default crop keeps the player silhouette intact; the wordmark text
+ * below it is expected to blur out at 32/40px — see the header's own comment
+ * below for how that trade-off was made.
  *
  * Talks to the backend's FAQ chatbot (no RAG, no persistence) via the BFF
  * proxy at POST /api/chatbot (see src/app/api/chatbot/route.ts), which itself
@@ -219,23 +220,28 @@ export default function ChatWidget({
       {/* `.chat > header` — coal, avatar disc, "Responde en segundos". */}
       <header className="flex flex-none items-center gap-[11px] bg-coal px-[15px] py-3 text-white">
         {/*
-          The 512px master with `sizes="96px"`, NOT the 128px copy at "32px".
-          `sizes` is CSS pixels: at "32px" Next serves a 32-pixel-wide file, so
-          a 2x or 3x display upscales it and the avatar reads as a smudge.
-          Asking for 96 lets the browser pick a source with real pixels at any
-          density; it still lays out at 32.
+          `sizes="96px"`, not the 32px layout box: `sizes` is CSS pixels, so
+          asking for 32 would make Next serve a 32-pixel-wide file and a 2x or
+          3x display would upscale it into a smudge. Asking for 96 gives the
+          browser room to pick real pixels at any density; it still lays out
+          at 32.
 
-          No `bg-white` behind it either — the PNG is transparent outside its
-          own coal disc, so a white fill bled through the antialiased rim as a
-          halo. The mark carries its own black edge against the coal header.
+          `object-cover`, not `contain`: the JPEG is a full opaque square
+          (light-grey background, no alpha), so `contain` would show that
+          square's corners inside the circular disc instead of a clean crop.
+          No explicit `object-position` either — the logo's laurel wreath is
+          already roughly centred and circular in the source frame, so the
+          default centred crop keeps the player silhouette whole and only
+          trims the wordmark band at the bottom, which is illegible at this
+          size regardless.
         */}
         <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-full">
           <Image
-            src="/brand/cata-bot.png"
+            src="/brand/cata-club-logo.jpeg"
             alt=""
             fill
             sizes="96px"
-            className="object-contain"
+            className="object-cover"
           />
         </span>
         <span className="min-w-0 flex-1 leading-tight">

@@ -430,13 +430,20 @@ export default function HelpChatDock(): React.ReactElement {
         style={clearance.lift ? { transform: `translateY(-${clearance.lift}px)` } : undefined}
       >
         {/*
-          The 512px master at `sizes="128px"`, for the same reason the panel
-          header asks for 96: `sizes` is CSS pixels, so asking for the laid-out
-          size makes Next serve exactly that many real pixels and every HiDPI
-          screen upscales them.
+          `sizes="128px"`, for the same reason the panel header asks for 96:
+          `sizes` is CSS pixels, so asking for the laid-out size makes Next
+          serve exactly that many real pixels and every HiDPI screen upscales
+          them. The club's real logo (see `ChatWidget`'s own comment for why),
+          `object-cover` to fill the disc from the JPEG's opaque background.
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
-          <Image src="/brand/cata-bot.png" alt="" fill sizes="128px" className="object-contain" />
+          <Image
+            src="/brand/cata-club-logo.jpeg"
+            alt=""
+            fill
+            sizes="128px"
+            className="object-cover"
+          />
         </span>
       </button>
 
