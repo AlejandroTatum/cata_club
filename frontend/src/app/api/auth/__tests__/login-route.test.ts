@@ -99,7 +99,7 @@ describe("POST /api/auth/login", () => {
 
     expect(JSON.stringify(json)).not.toMatch(/super-secret/);
     expect(json).toEqual({
-      user: { id: "1", name: "Ana Torres", email: "admin@cataclub.com", role: "admin", representanteId: null },
+      user: { id: "1", name: "Ana Torres", email: "admin@cataclub.com", role: "admin", representanteId: null, fotoUrl: null },
       roles: ["ADMINISTRADOR"],
       loggedInAt: expect.any(String),
     });

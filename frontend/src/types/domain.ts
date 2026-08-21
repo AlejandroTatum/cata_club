@@ -48,6 +48,14 @@ interface UsuarioBase {
   representanteId: string | null;
   avatarUrl?: string;
   createdAt?: string;
+  /**
+   * The account's uploaded profile photo (Cloudinary URL), or `null`/`undefined`
+   * when none was uploaded. Sourced from `/auth/me`'s `fotoUrl` via
+   * `buildSession` (src/lib/server/auth.ts) — see issue #509: before this
+   * field existed, AppShell's sidebar/user-menu avatar could only ever show
+   * initials, even for a user who had already uploaded a photo on /profile.
+   */
+  fotoUrl?: string | null;
 }
 
 /** Account with an active student profile. */

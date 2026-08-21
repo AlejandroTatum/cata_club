@@ -183,12 +183,21 @@ export interface BackendMeResponse {
   apellidos: string;
   roles: string[];
   // Not validated in `isBackendMeResponse` below, same as `telefono` /
-  // `fechaCreacion` / `fotoUrl` — this interface only names the subset of
+  // `fechaCreacion` — this interface only names the subset of
   // `/auth/me`'s real response the client actually reads. `buildSession`
   // uses this to populate `UsuarioEstudiante.fechaNacimiento` (see
   // src/types/domain.ts), which `getNavGroupsForRoles` needs to decide whether
   // a self-managed student is an adult.
   fechaNacimiento?: string;
+  /**
+   * The uploaded profile photo URL (Cloudinary), or absent/null when none was
+   * uploaded. `/auth/me` has always returned this (see backend
+   * auth_router.py::obtener_perfil, `"foto_url": usuario.persona.foto_url` ->
+   * camelCased to `fotoUrl` by `ResponseBase`'s alias_generator) — it just
+   * never made it past this interface into `AuthSession.user` until issue
+   * #509, which is why AppShell's avatar could only ever render initials.
+   */
+  fotoUrl?: string | null;
 }
 
 export interface BackendRefreshResponse {
@@ -704,6 +713,7 @@ export function buildSession(me: BackendMeResponse): ServerSession {
     // a representante who logs in gets role "representante" via the
     // REPRESENTANTE backend role, not via this field.
     representanteId: null,
+    fotoUrl: me.fotoUrl ?? null,
   };
 
   const user: Usuario =

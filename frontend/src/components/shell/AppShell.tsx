@@ -862,8 +862,17 @@ export default function AppShell({
                   collapsed ? "lg:justify-center lg:px-0" : ""
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cata-red/[0.28] text-2xs tracking-flat font-bold">
-                  {getUserInitials(session.user.name)}
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cata-red/[0.28] text-2xs tracking-flat font-bold">
+                  {session.user.fotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as /profile's IdentityPanel)
+                    <img
+                      src={session.user.fotoUrl}
+                      alt="Foto de perfil"
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    getUserInitials(session.user.name)
+                  )}
                 </span>
                 <span className={`min-w-0 flex-1 leading-tight ${collapsed ? "lg:hidden" : ""}`}>
                   <span className="block truncate text-xs font-semibold">
