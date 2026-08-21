@@ -211,6 +211,7 @@ describe("POST /api/membresias/pagos", () => {
     expect(await response.json()).toEqual({
       message: "Esta membresía ya tiene un pago pendiente de validación. "
         + "Espere a que sea validado antes de registrar uno nuevo.",
+      mensaje_seguro: false,
     });
   });
 

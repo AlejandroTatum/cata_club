@@ -66,6 +66,6 @@ describe("POST /api/chatbot", () => {
     const response = await POST(postRequest());
 
     expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ message: detail });
+    expect(await response.json()).toEqual({ message: detail, mensaje_seguro: false });
   });
 });

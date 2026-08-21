@@ -241,7 +241,7 @@ describe("passthroughBackendError", () => {
     const response = await passthroughBackendError(jsonResponse({ detail: "No se pudo" }, 422), "fallback");
 
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ message: "No se pudo" });
+    expect(await response.json()).toEqual({ message: "No se pudo", mensaje_seguro: false });
   });
 
   it("prefers `message` over `detail` when the backend sends both", async () => {
@@ -250,7 +250,7 @@ describe("passthroughBackendError", () => {
       "fallback",
     );
 
-    expect(await response.json()).toEqual({ message: "Mensaje" });
+    expect(await response.json()).toEqual({ message: "Mensaje", mensaje_seguro: false });
   });
 
   it("falls back when the body is not JSON at all", async () => {
@@ -265,13 +265,39 @@ describe("passthroughBackendError", () => {
     const response = await passthroughBackendError(html, "El servicio no está disponible");
 
     expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ message: "El servicio no está disponible" });
+    expect(await response.json()).toEqual({ message: "El servicio no está disponible", mensaje_seguro: false });
   });
 
   it("falls back when the body is JSON without a usable message", async () => {
     const response = await passthroughBackendError(jsonResponse({ codigo: 7 }, 500), "fallback");
 
-    expect(await response.json()).toEqual({ message: "fallback" });
+    expect(await response.json()).toEqual({ message: "fallback", mensaje_seguro: false });
+  });
+
+  // Issue #481: `subirFotoPersona`/`subirFotoPerfil` got the generic
+  // `SERVER_FAILURE` copy on every Cloudinary 503 in QA instead of the
+  // backend's specific, safe `_MENSAJE_SUBIDA_NO_DISPONIBLE` — this helper
+  // was dropping `mensaje_seguro` on the floor, so `services/api.ts` could
+  // never see the backend's opt-in marker (`ErrorDominio.seguro_mostrar`).
+  it("forwards `mensaje_seguro: true` so a backend-marked-safe 5xx detail survives the BFF hop", async () => {
+    const response = await passthroughBackendError(
+      jsonResponse({ detail: "No se pudo subir el archivo en este momento.", mensaje_seguro: true }, 503),
+      "fallback",
+    );
+
+    expect(await response.json()).toEqual({
+      message: "No se pudo subir el archivo en este momento.",
+      mensaje_seguro: true,
+    });
+  });
+
+  it("treats a non-boolean `mensaje_seguro` as unsafe (fail-closed)", async () => {
+    const response = await passthroughBackendError(
+      jsonResponse({ detail: "No se pudo", mensaje_seguro: "true" }, 503),
+      "fallback",
+    );
+
+    expect(await response.json()).toEqual({ message: "No se pudo", mensaje_seguro: false });
   });
 });
 
@@ -368,7 +394,7 @@ describe("proxyBackendPdfGet", () => {
     // `Content-Type: application/pdf`.
     expect(response.status).toBe(422);
     expect(response.headers.get("Content-Type")).toContain("application/json");
-    expect(await response.json()).toEqual({ message: "Rango inválido" });
+    expect(await response.json()).toEqual({ message: "Rango inválido", mensaje_seguro: false });
   });
 });
 

@@ -111,7 +111,7 @@ describe("GET /api/attendance/recent-sessions", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ message: "No autorizado" });
+    expect(await response.json()).toEqual({ message: "No autorizado", mensaje_seguro: false });
   });
 
   it("returns 503 when the backend is unreachable", async () => {

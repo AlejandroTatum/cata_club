@@ -115,6 +115,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       message: "El descuento debe definir exactamente uno: porcentaje o monto fijo",
+      mensaje_seguro: false,
     });
   });
 
