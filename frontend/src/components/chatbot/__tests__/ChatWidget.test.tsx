@@ -201,12 +201,15 @@ describe("ChatWidget — design system", () => {
 
     const avatar = container.querySelector("header img");
     // Issue #512: the purpose-made illustration is gone in favor of the
-    // club's actual logo (`public/brand/cata-club-logo.jpeg`) — no new image
-    // generated, no external tool involved. `object-cover` (not `contain`)
-    // is what makes the circular crop work: the JPEG has an opaque
-    // light-grey background, so `contain` would leave visible corners inside
-    // the disc instead of a clean circle.
-    expect(avatar).toHaveAttribute("src", "/brand/cata-club-logo.jpeg");
+    // club's actual logo — no new illustration, no AI/external tool. The
+    // full `public/brand/cata-club-logo.jpeg` under plain `object-cover`
+    // was tried and rejected on inspection: it's wider than tall, so the
+    // browser only trims ~4% off each side and the wordmark band survives
+    // almost whole inside the circle. `cata-club-logo-avatar.png` is a
+    // deterministic (non-AI) crop of that same JPEG ending above the
+    // wordmark, with its background keyed to transparent. `object-cover`
+    // (not `contain`) still fills the disc from that square source.
+    expect(avatar).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
     expect(avatar?.className).toContain("object-cover");
   });
 

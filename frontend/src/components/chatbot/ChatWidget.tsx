@@ -11,13 +11,20 @@
  * link hands off to a person.
  *
  * A purpose-made circular illustration was explored for the avatar and
- * dropped (issue #512): the product owner's call is the club's own logo
- * (`/brand/cata-club-logo.jpeg`), cropped to a circle with `object-cover`,
- * no new image generated and no external image-generation tool involved. The
- * logo's laurel wreath is itself roughly circular and centred in the frame,
- * so the default crop keeps the player silhouette intact; the wordmark text
- * below it is expected to blur out at 32/40px — see the header's own comment
- * below for how that trade-off was made.
+ * dropped (issue #512): the product owner's call is the club's own logo, not
+ * a new illustration and not any AI/external image-generation tool. Running
+ * the full `/brand/cata-club-logo.jpeg` (1080×996, wordmark below the
+ * wreath) through plain `object-cover` was tried first and failed on
+ * inspection: the source is wider than tall, so the browser scales it down
+ * by height and only trims ~4% off each side — the "CATA CLUB / TENIS DE
+ * MESA" band survives almost whole inside the circle and reads as noise at
+ * 32/40px, not as a crest. `/brand/cata-club-logo-avatar.png` is a
+ * deterministic derivative of that same JPEG — a 620×620 crop of the wreath
+ * and player silhouette ending above the wordmark band, background
+ * chroma-keyed to transparent (Python/Pillow: threshold + edge unblend, no
+ * AI) so `bg-coal` shows through instead of the JPEG's light-grey square.
+ * See the header's own comment below for the exact crop and why the source
+ * JPEG stays untouched (the landing and other pages still use it whole).
  *
  * Talks to the backend's FAQ chatbot (no RAG, no persistence) via the BFF
  * proxy at POST /api/chatbot (see src/app/api/chatbot/route.ts), which itself
@@ -226,18 +233,21 @@ export default function ChatWidget({
           browser room to pick real pixels at any density; it still lays out
           at 32.
 
-          `object-cover`, not `contain`: the JPEG is a full opaque square
-          (light-grey background, no alpha), so `contain` would show that
-          square's corners inside the circular disc instead of a clean crop.
-          No explicit `object-position` either — the logo's laurel wreath is
-          already roughly centred and circular in the source frame, so the
-          default centred crop keeps the player silhouette whole and only
-          trims the wordmark band at the bottom, which is illegible at this
-          size regardless.
+          `cata-club-logo-avatar.png`, not the raw `cata-club-logo.jpeg`: the
+          source is 1080×996 (wider than tall), so `object-cover` alone
+          scales it by height and barely trims the sides — the "CATA CLUB /
+          TENIS DE MESA" wordmark below the wreath survives almost whole
+          inside the circle and stays legible-but-wrong at 32px. The PNG is a
+          620×620 crop of the same source, cut above the wordmark band, with
+          the JPEG's light-grey background chroma-keyed to transparent —
+          `object-cover` is still correct here (a square source into a square
+          box needs no cropping, just scaling), and the transparent margin
+          around the wreath's oval lets this header's own `bg-coal` show
+          through instead of that light-grey square.
         */}
         <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-full">
           <Image
-            src="/brand/cata-club-logo.jpeg"
+            src="/brand/cata-club-logo-avatar.png"
             alt=""
             fill
             sizes="96px"

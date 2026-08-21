@@ -433,12 +433,15 @@ export default function HelpChatDock(): React.ReactElement {
           `sizes="128px"`, for the same reason the panel header asks for 96:
           `sizes` is CSS pixels, so asking for the laid-out size makes Next
           serve exactly that many real pixels and every HiDPI screen upscales
-          them. The club's real logo (see `ChatWidget`'s own comment for why),
-          `object-cover` to fill the disc from the JPEG's opaque background.
+          them. The cropped `cata-club-logo-avatar.png`, not the raw JPEG —
+          see `ChatWidget`'s own comment for why the full logo's wordmark
+          band can't just be `object-cover`'d away. Its transparent margin
+          relies on this button's own `bg-coal` (`LAUNCHER_CLASSES` below)
+          showing through instead of the JPEG's light-grey square.
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
           <Image
-            src="/brand/cata-club-logo.jpeg"
+            src="/brand/cata-club-logo-avatar.png"
             alt=""
             fill
             sizes="128px"
