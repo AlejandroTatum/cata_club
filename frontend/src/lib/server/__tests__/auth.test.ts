@@ -691,6 +691,7 @@ describe("buildSession", () => {
       email: "admin@cataclub.com",
       role: "admin",
       representanteId: null,
+      fotoUrl: null,
     });
     expect(session.roles).toEqual(["ADMINISTRADOR"]);
     expect(JSON.stringify(session)).not.toMatch(/token/i);
@@ -761,6 +762,34 @@ describe("buildSession", () => {
     });
 
     expect(session.user.role).toBe("unsupported");
+  });
+
+  // Issue #509: AppShell's avatar only ever rendered initials because
+  // `fotoUrl` never left `/auth/me`'s response on its way into the session —
+  // `buildSession` read the subset of fields it needed and stopped there.
+  it("carries fotoUrl through when the backend returns it", () => {
+    const session = buildSession({
+      correo: "conFoto@cataclub.com",
+      personaId: "12",
+      nombres: "Sofia",
+      apellidos: "Leon",
+      roles: ["ADMINISTRADOR"],
+      fotoUrl: "https://res.cloudinary.com/cata-club/perfil-fake.jpg",
+    });
+
+    expect(session.user.fotoUrl).toBe("https://res.cloudinary.com/cata-club/perfil-fake.jpg");
+  });
+
+  it("defaults fotoUrl to null when the backend omits it, so AppShell falls back to initials", () => {
+    const session = buildSession({
+      correo: "sinFoto@cataclub.com",
+      personaId: "13",
+      nombres: "Mateo",
+      apellidos: "Diaz",
+      roles: ["ADMINISTRADOR"],
+    });
+
+    expect(session.user.fotoUrl).toBeNull();
   });
 });
 

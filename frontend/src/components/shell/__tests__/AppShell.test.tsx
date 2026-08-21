@@ -296,6 +296,31 @@ describe("AppShell", (): void => {
     expect(screen.getByText("AC")).toBeInTheDocument();
   });
 
+  // Issue #509: the sidebar avatar only ever painted initials because
+  // `session.user` never carried the profile photo `/profile` already shows
+  // — this covers both sides of that fallback now that it does.
+  it("renders the profile photo instead of initials when session.user.fotoUrl is set", (): void => {
+    const auth = createAuthenticatedAuth("admin", "Admin Cata Club");
+    auth.session = {
+      ...auth.session!,
+      user: { ...auth.session!.user, fotoUrl: "https://res.cloudinary.com/cata-club/perfil-fake.jpg" },
+    };
+    mockUseAuth.mockReturnValue(auth);
+
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const avatar = screen.getByRole("img", { name: "Foto de perfil" });
+    expect(avatar).toHaveAttribute("src", "https://res.cloudinary.com/cata-club/perfil-fake.jpg");
+    expect(screen.queryByText("AC")).not.toBeInTheDocument();
+  });
+
+  it("keeps showing initials when session.user.fotoUrl is absent", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    expect(screen.getByText("AC")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Foto de perfil" })).not.toBeInTheDocument();
+  });
+
   // --- Notification bell ---
 
   it("renders the notification bell in the topbar when a session is present", (): void => {
