@@ -100,6 +100,52 @@ describe("MedicalRecordEditor blood type", () => {
   });
 });
 
+/**
+ * #514 — the air rule (`DESIGN.md`'s "regla del aire"), applied the same way
+ * `EmptyState`'s `fill` already does: `flex-1` stretches the card to the
+ * column instead of leaving canvas underneath it (D11b measured 57% dead air
+ * as a titular, 42% as a representante), and the read-mode rows share that
+ * surplus between themselves instead of stacking it below the last row.
+ *
+ * Pure layout: no field, no request payload, no branch changes here — only
+ * the two assertions below, on classes.
+ */
+describe("MedicalRecordEditor layout — the air rule (#514)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("stretches the card with flex-1 so it fills its column", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    const card = await screen.findByTestId("medical-record-card");
+    expect(card.className).toMatch(/\bflex-1\b/);
+  });
+
+  it("spreads the surplus air between the read-mode rows instead of stacking it below the last one", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    const rows = await screen.findByTestId("medical-record-rows");
+    expect(rows.className).toMatch(/\bjustify-around\b/);
+  });
+});
+
 describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
