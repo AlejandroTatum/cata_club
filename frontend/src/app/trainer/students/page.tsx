@@ -179,24 +179,9 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-x-2">
-                          <span className="truncate text-sm font-semibold text-ink">
-                            {alumno.nombreCompleto}
-                          </span>
-                          <span className="flex-none text-xs text-ink-3">
-                            {alumno.edad} {alumno.edad === 1 ? "año" : "años"}
-                          </span>
-                        </div>
-                        {/*
-                         * El `null` de `horarios` no es lo mismo que una cadena
-                         * vacía: dice que el club le asignó filas que no se
-                         * pueden leer, y decirlo es más honesto que dejar el
-                         * renglón mudo — el entrenador tiene que poder notar
-                         * que ahí falta algo.
-                         */}
-                        <p className="truncate text-xs text-ink-3">
-                          {alumno.horarios ?? "Sin horario que se pueda leer"}
-                        </p>
+                        <span className="truncate text-sm font-semibold text-ink">
+                          {alumno.nombreCompleto}
+                        </span>
                       </div>
 
                       {/*

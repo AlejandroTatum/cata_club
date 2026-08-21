@@ -145,13 +145,21 @@ beforeEach(() => {
 });
 
 describe("un entrenador llega a la pantalla y ve la nómina", () => {
-  it("lista a cada alumno con su nombre, su edad y cuándo entrena", async () => {
+  it("lista a cada alumno por su nombre completo", async () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
     expect(within(melany).getByText("Melany Quimis")).toBeInTheDocument();
-    expect(melany.textContent).toMatch(/12 años/);
-    expect(melany.textContent).toMatch(/Lun 18:00 · Mié 18:00 · Vie 18:00/);
+  });
+
+  it("no muestra la edad ni el resumen de horarios del alumno", async () => {
+    // El renglón se achicó a nombre + ficha de emergencia (issue #511): edad y
+    // horarios eran ruido que no ayudaba a decidir a quién llamar.
+    render(<TrainerStudentsPage />);
+
+    const melany = await screen.findByTestId("student-row-7");
+    expect(melany.textContent).not.toMatch(/años/);
+    expect(melany.textContent).not.toMatch(/Lun 18:00/);
   });
 
   it("se titula «Alumnos del club» y nunca dice que los alumnos son suyos", async () => {
