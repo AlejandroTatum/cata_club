@@ -13,12 +13,14 @@ Si es tu primera vez acá, leé esta sección y nada más. El repositorio tiene
 cata_club/
 ├── backend/     El servidor. Guarda los datos y decide qué puede hacer cada persona.
 ├── frontend/    Las pantallas. Todo lo que un socio, un entrenador o un admin ve y toca.
-├── docs/        Todo lo escrito: decisiones, manuales de operación, historia.
 ├── tests/       Pruebas que no son ni del servidor ni de las pantallas, sino del armado.
 ├── DESIGN.md    Las reglas visuales: colores, tipografías, medidas. Manda sobre el código.
 ├── Makefile     Los atajos. `make help` los lista todos.
 └── CLAUDE.md    Cómo se trabaja en este repo: ramas, commits, pull requests.
 ```
+
+La documentación (decisiones, manuales de operación, historia) vive en un
+repo aparte: **[`cata_club-docs`](https://github.com/AlejandroTatum/cata_club-docs)**.
 
 ### ¿Qué estás buscando?
 
@@ -26,23 +28,21 @@ cata_club/
 |---|---|
 | Levantar el sistema en tu máquina | [Inicio Rápido](#inicio-rápido), más abajo |
 | Un entorno de prueba con datos de mentira | [Entorno de QA](#entorno-de-qa) — un comando, `make qa-up` |
-| Cómo se ve cada pantalla, antes y después del rediseño | [`docs/ux/comparaciones/`](docs/ux/comparaciones/README.md) |
+| Cómo se ve cada pantalla, antes y después del rediseño | [`ux/comparaciones/`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/ux/comparaciones/README.md) |
 | Por qué una pantalla usa ese color o esa letra | [`DESIGN.md`](DESIGN.md) |
-| Qué se le prometió al club y por cuánto | [`docs/product/`](docs/product/) |
-| Poner el sistema en producción | [`docs/operations/deployment.md`](docs/operations/deployment.md) |
-| Qué falta antes de lanzar | [`docs/operations/production-readiness.md`](docs/operations/production-readiness.md) |
-| Qué significa cada variable de entorno | [`docs/reference/configuration.md`](docs/reference/configuration.md) |
-| Quién aprueba qué | [`docs/reference/ownership.md`](docs/reference/ownership.md) |
-| Qué datos personales guardamos y por cuánto tiempo | [`docs/security/privacy-retention.md`](docs/security/privacy-retention.md) |
-| Algo que se hizo antes y ya no está vigente | [`docs/archive/`](docs/archive/README.md) |
-| El índice completo de la documentación | [`docs/README.md`](docs/README.md) |
+| Qué se le prometió al club y por cuánto | [`product/`](https://github.com/AlejandroTatum/cata_club-docs/tree/main/product) |
+| Poner el sistema en producción | [`operations/deployment.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/operations/deployment.md) |
+| Qué falta antes de lanzar | [`operations/production-readiness.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/operations/production-readiness.md) |
+| Qué significa cada variable de entorno | [`reference/configuration.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/reference/configuration.md) |
+| Quién aprueba qué | [`reference/ownership.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/reference/ownership.md) |
+| Qué datos personales guardamos y por cuánto tiempo | [`security/privacy-retention.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/security/privacy-retention.md) |
+| Algo que se hizo antes y ya no está vigente | [`archive/`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/archive/README.md) |
+| El índice completo de la documentación | [`cata_club-docs`](https://github.com/AlejandroTatum/cata_club-docs) |
 
 ### Dónde NO buscar
 
 - **`node_modules/`, `coverage/`, `test-results/`, `.next/`** — los genera la
   máquina y no se versionan. Si los ves, ignoralos.
-- **`docs/archive/`** — es un registro congelado. Sirve para entender por qué
-  algo es como es, nunca para saber cómo está hoy.
 - **`.claude/`, `.impeccable/`** — estado local de herramientas. Aparecen en tu
   disco, no en el repositorio.
 
@@ -254,20 +254,21 @@ El sistema gestiona un club de tenis de mesa con:
 Ver `frontend/Dockerfile` y `backend/Dockerfile` para las imágenes de
 producción. El frontend usa modo `standalone` de Next.js. El procedimiento
 de despliegue, rollback y backup vive en
-[`docs/operations/`](docs/operations/) — empezar por
-[`docs/operations/production-readiness.md`](docs/operations/production-readiness.md).
+[`operations/`](https://github.com/AlejandroTatum/cata_club-docs/tree/main/operations) — empezar por
+[`operations/production-readiness.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/operations/production-readiness.md).
 
 ## Documentación
 
 El índice completo (operación, configuración, ownership, privacidad y
-evidencia) está en [`docs/README.md`](docs/README.md). Si no sabés por dónde
-empezar, el [mapa del repositorio](#mapa-del-repositorio) al principio de este
-archivo tiene una tabla de «si buscás X, andá a Y».
+evidencia) vive en el repo aparte
+[`cata_club-docs`](https://github.com/AlejandroTatum/cata_club-docs). Si no
+sabés por dónde empezar, el [mapa del repositorio](#mapa-del-repositorio) al
+principio de este archivo tiene una tabla de «si buscás X, andá a Y».
 
 Tres reglas que evitan buscar en el lugar equivocado:
 
-1. **Lo vigente vive en la raíz de `docs/`**; lo superado, en
-   [`docs/archive/`](docs/archive/README.md). El archivo no se actualiza nunca.
+1. **Lo vigente vive en la raíz de `cata_club-docs`**; lo superado, en
+   [`archive/`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/archive/README.md). El archivo no se actualiza nunca.
 2. **`DESIGN.md` manda sobre el código visual**, no al revés. Si una pantalla
    contradice a `DESIGN.md`, la pantalla está mal.
 3. **Un comentario no es documentación.** El estado real se deriva corriendo un
