@@ -149,7 +149,13 @@ import {
   Stepper,
 } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
-import { clubIsoDate, lastOccurrenceOfDiaSemana, todayDiaSemana } from "@/lib/club-date";
+import {
+  calendarIsoDate,
+  clubIsoDate,
+  clubToday,
+  lastOccurrenceOfDiaSemana,
+  todayDiaSemana,
+} from "@/lib/club-date";
 import { formatDateTime } from "@/lib/format-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
@@ -334,12 +340,19 @@ export default function TrainerAttendancePage(): React.ReactElement {
    */
   const [sessionAlreadyRegistered, setSessionAlreadyRegistered] = useState(false);
   /**
-   * Per-horario count of TODAY's attendance records, fetched once the
-   * schedules land. Powers step 1's "lista tomada hoy" indicator (issue #310
-   * / #22) — without it, a horario that was just registered looked identical
-   * to one nobody has touched yet.
+   * Per-horario count of attendance records for the current club week
+   * (today back through 6 days ago), fetched once the schedules land. Powers
+   * step 1's "lista tomada" indicator (issue #310 / #22, extended by #483 to
+   * every day the "Ver todos los días" picker can show, not only today).
+   *
+   * A 7-day trailing window is exactly wide enough: each horario meets on a
+   * single `diaSemana`, and `lastOccurrenceOfDiaSemana` — the same function
+   * that resolves WHICH date a non-today horario files under — never looks
+   * back further than 6 days, so every horario's most recent occurrence
+   * falls inside this window exactly once. Keying the map by `horarioId`
+   * alone (no date) is therefore still unambiguous.
    */
-  const [todaysRecordCounts, setTodaysRecordCounts] = useState<Map<number, number>>(new Map());
+  const [weekRecordCounts, setWeekRecordCounts] = useState<Map<number, number>>(new Map());
 
   const loadOptions = useCallback(async (): Promise<void> => {
     try {
@@ -384,27 +397,34 @@ export default function TrainerAttendancePage(): React.ReactElement {
   }, [schedules]);
 
   /**
-   * Feeds step 1's "lista tomada hoy" indicator (issue #310 / #22): without
-   * it, a horario registered minutes ago read identical to the 25 still
-   * pending, and the only way to tell them apart was opening each one.
-   * Scoped to TODAY only — step 1 offers no way to address a different date
-   * before a horario is chosen, so a count for any other day would not
-   * describe what the trainer is looking at.
+   * Feeds step 1's "lista tomada" indicator (issue #310 / #22): without it, a
+   * horario registered minutes ago read identical to the 25 still pending,
+   * and the only way to tell them apart was opening each one.
+   *
+   * Issue #483: the original version fetched only today's date, so the same
+   * indicator #368 relied on to warn BEFORE "Continuar" never lit up for a
+   * horario reached through "Ver todos los días" — a Monday or Friday slot
+   * with a list already on file looked exactly like one nobody had touched.
+   * Fetching the trailing 7-day window instead covers every day the picker
+   * can show, using the same `lastOccurrenceOfDiaSemana` reasoning that
+   * decides which date a non-today horario files under (issue #308).
    */
   useEffect(() => {
     if (schedules.length === 0) return;
     let cancelled = false;
-    fetchAttendanceRecords({ fechaInicio: clubIsoDate(), fechaFin: clubIsoDate() })
+    const windowStart = clubToday();
+    windowStart.setDate(windowStart.getDate() - 6);
+    fetchAttendanceRecords({ fechaInicio: calendarIsoDate(windowStart), fechaFin: clubIsoDate() })
       .then((records) => {
         if (cancelled) return;
         const counts = new Map<number, number>();
         for (const record of records) {
           counts.set(record.horarioId, (counts.get(record.horarioId) ?? 0) + 1);
         }
-        setTodaysRecordCounts(counts);
+        setWeekRecordCounts(counts);
       })
       .catch((err: unknown) => {
-        console.error("[trainer/attendance] fetchAttendanceRecords today-counts failed", err);
+        console.error("[trainer/attendance] fetchAttendanceRecords week-counts failed", err);
       });
     return () => {
       cancelled = true;
@@ -452,13 +472,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
    * motivo puede decirse junto al control que ofrece continuar en vez de en la
    * pantalla siguiente.
    *
-   * Acotado a HOY igual que la tarjeta: `todaysRecordCounts` solo trae la
-   * fecha de hoy, y un horario de otro día no tiene conteo que reportar (#308).
+   * Issue #483: ya no está acotado a HOY — `weekRecordCounts` cubre la
+   * semana completa, así que un horario de otro día elegido dentro de "Ver
+   * todos los días" reporta el mismo impedimento que uno de hoy.
    */
-  const selectedListTakenToday =
-    selectedSchedule !== null &&
-    selectedSchedule.diaSemana === today &&
-    (todaysRecordCounts.get(selectedSchedule.id) ?? 0) > 0;
+  const selectedListTaken =
+    selectedSchedule !== null && (weekRecordCounts.get(selectedSchedule.id) ?? 0) > 0;
 
   /** The draft's key — null until a session is actually chosen. */
   const draftKey = useMemo(
@@ -1288,14 +1307,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
                       <div id={panelId} className="grid gap-2 border-t border-line p-3 sm:grid-cols-2">
                         {group.schedules.map((sched) => {
                           const isActive = sched.id === selectedScheduleId;
-                          // Only meaningful for TODAY's group: `todaysRecordCounts`
-                          // is fetched for today's date alone (see the effect that
-                          // builds it), so a horario from another day group has no
-                          // count to report here — asserting one either way would
-                          // describe a session nobody has opened yet (issue #310 /
-                          // #22).
-                          const recordedToday =
-                            group.day === today ? todaysRecordCounts.get(sched.id) ?? 0 : 0;
+                          // Issue #483: `weekRecordCounts` covers the whole
+                          // trailing week (see the effect that builds it),
+                          // not just today, so every day group — not only
+                          // today's — has a real count to report here
+                          // (issue #310 / #22).
+                          const recordedCount = weekRecordCounts.get(sched.id) ?? 0;
                           // Issue #368: ese conteo no es un dato más, es un
                           // IMPEDIMENTO — la sesión ya registrada solo se abre
                           // en modo consulta. Issue #389: la ventana de 30
@@ -1303,7 +1320,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                           // cerrar una lista es permanente para todos, así que
                           // la tarjeta se deshabilita también para él, por el
                           // mismo motivo que para cualquier otro usuario.
-                          const takenForThisUser = recordedToday > 0;
+                          const takenForThisUser = recordedCount > 0;
                           return (
                             <button
                               key={sched.id}
@@ -1336,10 +1353,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
                                   />
                                 )}
                               </span>
-                              {recordedToday > 0 && (
+                              {recordedCount > 0 && (
                                 <span className="flex items-center gap-1 text-2xs font-bold text-ink-3">
-                                  Lista tomada hoy · {recordedToday}{" "}
-                                  {recordedToday === 1 ? "registro" : "registros"}
+                                  {group.day === today ? "Lista tomada hoy" : "Lista tomada"} ·{" "}
+                                  {recordedCount} {recordedCount === 1 ? "registro" : "registros"}
                                 </span>
                               )}
                             </button>
@@ -1367,12 +1384,12 @@ export default function TrainerAttendancePage(): React.ReactElement {
          * `role="status"`, no `alert`: describe el estado del horario elegido,
          * no el resultado de algo que el entrenador acaba de hacer mal.
          */}
-        {selectedListTakenToday && (
+        {selectedListTaken && (
           <div
             role="status"
             className="rounded-ctl border border-state-warn/30 bg-state-warn-bg p-4 text-sm text-state-warn"
           >
-            <p className="font-semibold">Esta lista ya fue tomada hoy.</p>
+            <p className="font-semibold">Esta lista ya fue tomada.</p>
             <p>
               Puede continuar para consultarla, pero no para volver a tomarla: una vez registrada,
               la lista queda cerrada. Ante un error, consulte con administración.
