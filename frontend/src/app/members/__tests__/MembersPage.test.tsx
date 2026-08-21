@@ -2406,6 +2406,66 @@ describe('MembersPage — "Representado por" (issue #388)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Issue #504 — missing emergency data is optional at registration (backend:
+// test_crear_ficha_medica_sin_datos_de_emergencia_son_opcionales in
+// test_ficha_medica.py has no validation requiring it), so the row notice
+// must read as informational, not borrow the same warn tone and alert
+// vocabulary the product uses for real errors (ErrorState.tsx,
+// wizard-fields.tsx).
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — missing emergency data reads as informational, not an error (issue #504)", () => {
+  const NO_EMERGENCY_DATA: MemberAccount = {
+    ...ACCOUNT,
+    id: "20",
+    sinDatosEmergencia: true,
+  };
+
+  it("does not use warn tone or the old alert copy for an optional, unfilled field", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [NO_EMERGENCY_DATA] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    // The old copy borrowed the product's error vocabulary for something the
+    // backend never requires — assert it is gone, not just that new text
+    // exists alongside it.
+    expect(within(row).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
+    const notice = within(row).getByText(/ficha médica/i);
+    expect(notice).not.toHaveClass("text-state-warn");
+    expect(notice).toHaveClass("text-state-neutral");
+  });
+
+  it("shows the same neutral notice on the phone card", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [NO_EMERGENCY_DATA] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+
+    expect(within(card).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
+    expect(within(card).getByText(/ficha médica/i)).toHaveClass("text-state-neutral");
+  });
+
+  it("shows no notice at all once emergency data is present", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    expect(within(row).queryByText(/ficha médica/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // D9 — a column is named for what it holds, never for the button inside it.
 // ---------------------------------------------------------------------------
 

@@ -62,7 +62,6 @@ import {
   Pencil,
   X,
   UserPlus,
-  AlertTriangle,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchMembers, fetchFichaMedica, actualizarFichaMedica } from "@/services/api";
@@ -456,15 +455,23 @@ function EditAccountButton({ account, onEdit }: AccountListItemProps): React.Rea
 /**
  * Issue #362's per-row signal: no legal representative at all AND no ficha
  * médica (`MemberAccount.sinDatosEmergencia`, computed in
- * `members-adapter.ts`). Same icon+text idiom as every other inline warning
- * in the product (`wizard-fields.tsx`, `ErrorState.tsx`) — `text-state-warn`
- * paired with `AlertTriangle`, never a bespoke color or shape.
+ * `members-adapter.ts`).
+ *
+ * Issue #504: this used to reuse the product's warn idiom — `text-state-warn`
+ * paired with `AlertTriangle`, the same pairing `wizard-fields.tsx` and
+ * `ErrorState.tsx` use for real errors. Emergency data is optional at
+ * registration (backend: `test_crear_ficha_medica_sin_datos_de_emergencia_son_opcionales`
+ * in `test_ficha_medica.py`, no validation requires it), so warning the admin
+ * about a field the system never demanded was contradictory. This now uses
+ * `text-state-neutral` (the same informational tone `Badge`'s `neutral` tone
+ * and `ChatWidget` already use) and `Stethoscope` — already the ficha médica
+ * icon elsewhere on this page — instead of a bespoke alert.
  */
 function EmergencyDataWarning(): React.ReactElement {
   return (
-    <span className="flex items-center gap-1 text-2xs font-semibold text-state-warn">
-      <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-      Sin datos de emergencia
+    <span className="flex items-center gap-1 text-2xs font-semibold text-state-neutral">
+      <Stethoscope size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+      Sin ficha médica cargada
     </span>
   );
 }
