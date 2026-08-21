@@ -45,12 +45,40 @@ const MODALIDAD_LABEL: Record<TipoMembresiaCatalogo["modalidad"], string> = {
  * "0", "-5", "45.123" or letters. A STRING check on purpose: `precio` never
  * becomes a JS `number` on this screen, so "positive" is excluded by
  * construction (a leading 1-9, or a `0.xx` with a non-zero digit) rather than
- * by a numeric comparison to 0.
+ * by a numeric comparison to 0. Always matched against a dot-normalized
+ * value (see `normalizePrecio`) — it never sees a comma.
  */
 const PRECIO_REGEX = /^(?:[1-9]\d*(?:\.\d{1,2})?|0\.(?:[1-9]\d?|0[1-9]))$/;
 
 const PRECIO_ERROR =
   "Ingrese un precio válido: un número positivo con hasta 2 decimales (ej. 45.00).";
+
+/**
+ * Input mask for the price field (issue #506): keeps digits and at most one
+ * decimal separator — "," or "." — dropping everything else (letters,
+ * symbols, a second separator) as it's typed. Runs on every keystroke, so it
+ * never rejects input outright; it just filters what makes it into state.
+ */
+function sanitizePrecioInput(raw: string): string {
+  let sawSeparator = false;
+  let result = "";
+  for (const char of raw) {
+    if (char >= "0" && char <= "9") {
+      result += char;
+    } else if ((char === "," || char === ".") && !sawSeparator) {
+      result += char;
+      sawSeparator = true;
+    }
+  }
+  return result;
+}
+
+/** Both "," and "." are accepted as the decimal separator (es-EC/es-AR admins
+ *  type a comma); normalized to "." before validation and before the payload
+ *  reaches `actualizarTipoMembresia`, which expects a `Decimal` string. */
+function normalizePrecio(value: string): string {
+  return value.trim().replace(",", ".");
+}
 
 const PRECIO_INPUT_CLASS =
   "h-ctl w-28 rounded-ctl border border-line-2 bg-paper px-3 text-right text-sm text-ink tabular-nums outline-none focus:border-cata-red";
@@ -105,7 +133,7 @@ export default function TarifasPage(): React.ReactElement {
   /** "Guardar" click: validate locally, then open the confirmation — nothing
    *  mutates until the admin confirms it there. */
   function requestConfirm(tarifa: TipoMembresiaCatalogo): void {
-    const value = precioInput.trim();
+    const value = normalizePrecio(precioInput);
     if (!PRECIO_REGEX.test(value)) {
       setInputError(PRECIO_ERROR);
       return;
@@ -152,7 +180,7 @@ export default function TarifasPage(): React.ReactElement {
             inputMode="decimal"
             value={precioInput}
             onChange={(e) => {
-              setPrecioInput(e.target.value);
+              setPrecioInput(sanitizePrecioInput(e.target.value));
               setInputError(null);
             }}
             className={PRECIO_INPUT_CLASS}
