@@ -899,6 +899,26 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(detach).toHaveClass("h-6", "w-6");
     expect(detach).toHaveClass("items-center", "justify-center");
   });
+
+  // Issue #488: switching to Efectivo removes the Comprobante field, but the
+  // "falta el comprobante" alert findProblem() had set for the earlier
+  // Transferencia attempt was never cleared alongside it — it hung around
+  // pointing at a field no longer on screen.
+  it("clears the missing-comprobante alert when switching to Efectivo (#488)", async () => {
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    // Transferencia is the default method; requesting the checkpoint with no
+    // voucher attached surfaces findProblem()'s message.
+    fireEvent.click(screen.getByRole("button", { name: /^registrar pago$/i }));
+    expect(await screen.findByText(/adjunte el comprobante/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/forma de pago/i), {
+      target: { value: "EFECTIVO" },
+    });
+
+    expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+  });
 });
 
 /**
