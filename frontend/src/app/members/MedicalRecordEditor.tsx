@@ -261,7 +261,17 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
   }
 
   return (
-    <div className="mt-3 rounded-2xl border border-line bg-paper">
+    // `flex flex-1 flex-col` — D11b's "regla del aire" (`DESIGN.md`), the
+    // same mechanism `EmptyState`'s `fill` already uses: the callers of this
+    // editor (`/student/medical-record`) sit as a direct child of `AppShell`'s
+    // `<main className="flex flex-1 flex-col …">`, so stretching this card
+    // absorbs the column's leftover height instead of leaving it as bare
+    // canvas below the card (57% dead air as a titular, 42% as a
+    // representante, both measured by #266).
+    <div
+      data-testid="medical-record-card"
+      className="mt-3 flex flex-1 flex-col rounded-2xl border border-line bg-paper"
+    >
       {/* `sticky top-0`, not a plain header: on a narrow screen this card's
           own fields can outgrow the viewport, and the student's identity —
           shown only once, above this editor, by the caller — scrolls out of
@@ -322,7 +332,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
         )}
       </header>
 
-      <div className="p-3 sm:p-4">
+      <div className="flex flex-1 flex-col p-3 sm:p-4">
       {!editing && state.status === "ready" && !state.isNew && (
         /* El reposo: filas etiqueta-valor, no la grilla de dos columnas de
          * abajo. Son dos formas distintas porque dicen dos cosas distintas —
@@ -331,8 +341,13 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
          *
          * Sin fecha. `FichaMedicaEditable` no trae ningún timestamp, así que
          * acá no se puede decir cuándo se cargó ni cuándo se actualizó el
-         * dato, y una línea «actualizado el…» sería inventada. */
-        <div>
+         * dato, y una línea «actualizado el…» sería inventada.
+         *
+         * `flex-1 justify-around` (#514): the same surplus `EmptyState`'s
+         * `fill` centres for a single statement, spread between these FIVE
+         * rows instead — the sobrante lands as air between them rather than
+         * as bare canvas below the last one. */
+        <div data-testid="medical-record-rows" className="flex flex-1 flex-col justify-around">
           <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
           <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
           <FilaLectura
@@ -345,7 +360,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
       )}
 
       {editing && (
-      <>
+      <div className="flex flex-1 flex-col">
       {state.isNew && (
         <p className="mb-3 rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
           Todavía no hay una ficha médica cargada para esta persona. Complete los datos y guárdelos.
@@ -459,7 +474,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
           )}
         </div>
       )}
-      </>
+      </div>
       )}
       </div>
     </div>
