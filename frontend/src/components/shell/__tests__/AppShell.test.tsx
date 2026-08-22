@@ -1002,7 +1002,7 @@ describe("AppShell — user menu dismissal", (): void => {
 /**
  * Utilities that take the panel off the flow and let it paint over its
  * siblings. Matched after stripping Tailwind variant prefixes (`lg:`, `sm:`),
- * so `lg:absolute` is caught exactly like `absolute`.
+ * so the mobile drawer cannot be taken out of its flow.
  */
 const OUT_OF_FLOW_UTILITY =
   /^-?(?:absolute|fixed|sticky|inset(?:$|-)|top-|bottom-|left-|right-|start-|end-)/;
@@ -1015,7 +1015,31 @@ describe("AppShell — el menú de cuenta no tapa las salidas de ayuda", (): voi
     vi.stubGlobal("localStorage", createMemoryStorage());
   });
 
-  it("keeps the open panel in the footer's flow instead of over its two help rows", (): void => {
+  it("floats the account popup immediately to the right of its card at desktop widths, including a collapsed sidebar", (): void => {
+        const { container } = render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+        fireEvent.click(screen.getByRole("button", { name: /Colapsar menú/i }));
+        fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
+
+        const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
+        expect(panel.parentElement).toHaveClass("lg:relative");
+        expect(panel).toHaveClass("lg:absolute", "lg:bottom-0", "lg:left-full", "lg:ml-2", "lg:w-56");
+        expect(container.querySelector("aside")).toHaveClass("lg:w-[76px]");
+      });
+
+      it("keeps the account popup in flow and visible inside the mobile drawer", (): void => {
+        stubViewport(false);
+        render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+        fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
+        fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
+
+        const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
+        expect(panel).toHaveClass("w-full");
+        expect(panel).not.toHaveClass("absolute", "left-full", "bottom-0", "ml-2");
+      });
+
+      it("keeps the open panel in the footer's flow instead of over its two help rows", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
     fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
 
@@ -1030,7 +1054,7 @@ describe("AppShell — el menú de cuenta no tapa las salidas de ayuda", (): voi
     expect(foot?.contains(panel)).toBe(true);
 
     for (const className of panel.className.split(/\s+/).filter(Boolean)) {
-      const utility = className.split(":").pop() ?? "";
+      const utility = className.includes(":") ? "" : className;
       expect(
         utility,
         `«${className}» saca el panel del flujo y lo pinta sobre las filas de ayuda`,
