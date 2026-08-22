@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import StudentSearch from "@/components/StudentSearch";
 import type { PersonaBusqueda } from "@/types/domain";
 
@@ -85,6 +85,37 @@ describe("StudentSearch — selection identity contract (issue #200)", () => {
 });
 
 describe("StudentSearch — autocomplete and accessibility contract", () => {
+  it("uses the requested role and excludes roster persona ids", async () => {
+    render(<StudentSearch onSelect={() => {}} role="ALUMNO" excludeIds={[ANA.id]} />);
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "An" } });
+
+    expect(await screen.findByRole("option", { name: /León Fernández/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Ana García/i })).not.toBeInTheDocument();
+    expect(mockSearchStudents).toHaveBeenCalledWith("An", { limit: 10, rol: "ALUMNO" });
+  });
+
+  it("supports keyboard navigation, Enter selection, and Escape close/clear", async () => {
+    const onSelect = vi.fn();
+    renderSearch(onSelect);
+
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "An" } });
+    const firstOption = await screen.findByRole("option", { name: /Ana García/i });
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input).toHaveAttribute("aria-activedescendant", firstOption.id);
+    expect(firstOption).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith(ANA);
+    expect(input).toHaveValue("Ana García");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("keeps the autocomplete contract: 2 chars, 300ms debounce, 10 results max", async () => {
     vi.useFakeTimers();
     try {
@@ -96,7 +127,9 @@ describe("StudentSearch — autocomplete and accessibility contract", () => {
       await vi.advanceTimersByTimeAsync(299);
       expect(mockSearchStudents).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
       expect(mockSearchStudents).toHaveBeenCalledTimes(1);
       expect(mockSearchStudents).toHaveBeenCalledWith("an", { limit: 10 });
     } finally {

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import GroupsPage from "@/app/groups/page";
 import { ApiClientError } from "@/services/api";
 import type { AlumnoHorario } from "@/services/api";
@@ -74,6 +74,7 @@ const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchRosterDeTodosLosHorarios = vi.fn().mockResolvedValue([]);
 const mockAsignarAlumnoAHorario = vi.fn();
 const mockDesasignarAlumnoDeHorario = vi.fn();
+const mockSearchStudents = vi.fn();
 
 // Stand-in for the live categoria catalog `@/services/categorias` now fetches
 // via `fetchCategoriasCatalogo` (`GET /api/attendance/categories`) instead of
@@ -112,6 +113,7 @@ vi.mock("@/services/api", () => {
     fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
     asignarAlumnoAHorario: (dto: unknown) => mockAsignarAlumnoAHorario(dto),
     desasignarAlumnoDeHorario: (personaId: number, horarioId: number) => mockDesasignarAlumnoDeHorario(personaId, horarioId),
+    searchStudents: (query: string, options?: unknown) => mockSearchStudents(query, options),
     fetchCategoriasCatalogo: () => mockFetchCategoriasCatalogo(),
     ApiClientError: MockApiClientError,
   };
@@ -980,6 +982,24 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
   }
 
+  async function searchForStudent(query: string): Promise<void> {
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByRole("combobox", { name: "Seleccionar alumno" }), { target: { value: query } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  async function selectDiego(): Promise<void> {
+    mockSearchStudents.mockResolvedValue([{ id: 70, nombres: "Diego", apellidos: "Vega" }]);
+    await searchForStudent("Di");
+    fireEvent.click(await screen.findByRole("option", { name: /Diego Vega/i }));
+  }
+
   it("puts 'Asignar nuevo estudiante' before the roster, not after it", async () => {
     // On the 44-student categoría the picker sat under every enrolled name, so
     // adding somebody meant scrolling the whole roster to reach it.
@@ -987,6 +1007,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     const roster = await screen.findByText("Alumnos asignados (2)");
     const picker = screen.getByLabelText("Seleccionar alumno");
 
+    expect(picker).toHaveAttribute("id", "alumno-select");
     expect(picker.compareDocumentPosition(roster) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -1043,6 +1064,25 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.queryByRole("button", { name: "Mié" })).not.toBeInTheDocument();
   });
 
+  it("searches global active students and excludes people already assigned to the group", async () => {
+    mockSearchStudents.mockResolvedValue([
+      { id: 20, nombres: "Ana", apellidos: "Pérez" },
+      { id: 999, nombres: "Diego", apellidos: "Vega" },
+    ]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const [multiDiaCard] = cards();
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+
+    await searchForStudent("Di");
+
+    expect(mockSearchStudents).toHaveBeenCalledWith("Di", { rol: "ALUMNO", limit: 10 });
+    expect(await screen.findByRole("option", { name: /Diego Vega/i })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Ana Pérez/i })).not.toBeInTheDocument();
+  });
+
   it("assigning a student calls asignarAlumnoAHorario ONCE, anchored on the first row of the group (backend enrolls the whole categoria atomically)", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     render(<ToastProvider><GroupsPage /></ToastProvider>);
@@ -1053,7 +1093,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
-    fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
+    await selectDiego();
     fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
 
     await waitFor(() => {
@@ -1083,7 +1123,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
-    fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
+    await selectDiego();
     fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
 
     // The assignment itself still succeeds -- the warning rides alongside
@@ -1107,7 +1147,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
-    fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
+    await selectDiego();
     const rosterCallsBeforeAssign = mockFetchAlumnosPorHorario.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
 
@@ -1135,7 +1175,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
 
-    fireEvent.change(screen.getByLabelText("Seleccionar alumno"), { target: { value: "70" } });
+    await selectDiego();
     fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
 
     await waitFor(() => {
