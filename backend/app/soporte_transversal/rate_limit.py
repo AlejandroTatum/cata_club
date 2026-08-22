@@ -27,9 +27,13 @@ class _NoOpLimiter:
 
 
 def clave_cliente(request: Request) -> str:
-    """Clave del rate limiter: por usuario autenticado, o por IP remota
-    (compartida por todo el tráfico anónimo -- ver diseño D3) en cualquier
-    otro caso.
+    """Clave del rate limiter: por usuario autenticado, o por IP remota en
+    cualquier otro caso. La IP remota es la del VISITANTE real, no la del
+    BFF: uvicorn corre con `--proxy-headers --forwarded-allow-ips` (ver
+    backend/scripts/entrypoint.sh y el CMD del Dockerfile, issues #235/#550)
+    y reescribe `request.client.host` desde X-Forwarded-For cuando el peer
+    es la red interna de Docker, así que el tráfico anónimo tiene un cubo
+    por visitante.
 
     Espeja SOLO la regla de decodificación de
     `GestorAutenticacion.decodificar_token` (firma HS256 pinneada vía
@@ -40,7 +44,7 @@ def clave_cliente(request: Request) -> str:
     `key_func(request)` de forma sincrónica, sin inyección de dependencias.
 
     Confiar en un claim `sub` SIN verificar la firma sería estrictamente
-    peor que la clave global de hoy: un atacante podría acuñar `sub`
+    peor que una clave por IP: un atacante podría acuñar `sub`
     aleatorios y obtener un cubo nuevo por request. La verificación de firma
     es, por eso, el argumento de seguridad completo de esta función -- ver
     diseño D1.

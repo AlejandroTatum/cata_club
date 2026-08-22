@@ -223,10 +223,12 @@ class InstitucionResponseDTO(ResponseBase, BaseModel):
 # `api-abuse-protection`. Deliberadamente SIN autenticación (documentado en
 # `frontend/src/app/api/personas/instituciones/route.ts:5-8`: debe seguir
 # pública para visitantes anónimos de `student/enroll`); la mitigación acá es
-# el límite, no un login. Como todo el tráfico anónimo comparte la única IP
-# del BFF (D3), la clave es GLOBAL para siempre -- 60/min es el mismo tope
-# que ya rige `login`, un techo de club entero, no un presupuesto por
-# usuario: una carga de formulario por visita no se acerca a esa cifra.
+# el límite, no un login. La clave anónima es POR VISITANTE: uvicorn arranca
+# con `--proxy-headers --forwarded-allow-ips` (backend/scripts/entrypoint.sh,
+# fix de #235 restaurado en #550), así que `get_remote_address` ve la IP real
+# de cada visitante vía X-Forwarded-For, no la IP única del BFF -- 60/min es
+# el mismo tope que ya rige `login`, y por visitante sobra: una carga de
+# formulario por visita no se acerca a esa cifra.
 @router.get("/instituciones", response_model=PaginatedResponse[InstitucionResponseDTO])
 @limiter.limit("60/minute")
 async def listar_instituciones(

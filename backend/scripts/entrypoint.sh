@@ -31,4 +31,14 @@ fi
 # hijo: uvicorn pasa a ser PID 1 dentro del contenedor, así que
 # `docker stop` (SIGTERM) llega directo a él y el shutdown es limpio, en vez
 # de perderse porque `sh` no lo reenvía a sus hijos.
-exec uv run --frozen --no-build uvicorn main:app --host 0.0.0.0 --port 8000
+#
+# `--proxy-headers --forwarded-allow-ips=172.16.0.0/12` (issues #235/#550):
+# el `command:` de docker-compose.yml invoca ESTE script y con eso pisa el
+# CMD del Dockerfile, así que los flags tienen que vivir acá (mantener ambos
+# en sincronía -- lo vigila
+# tests/test_rate_limit_por_visitante.py::test_dockerfile_y_entrypoint_declaran_los_mismos_flags_de_proxy).
+# Sin ellos uvicorn no reescribe `scope["client"]` desde X-Forwarded-For y
+# todo el tráfico anónimo comparte la IP del contenedor frontend: los cubos
+# de rate limit por visitante colapsan en uno global. NUNCA "*": solo la red
+# interna de Docker puede declarar la IP real del visitante.
+exec uv run --frozen --no-build uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=172.16.0.0/12

@@ -6,10 +6,15 @@ siempre era el contenedor del frontend (BFF).
 
 El arreglo necesita TRES piezas (ninguna alcanza sola):
   1. uvicorn corre con `--proxy-headers --forwarded-allow-ips=<red interna>`
-     (backend/Dockerfile) para que reescriba `scope["client"]` a partir de
-     `X-Forwarded-For`, SOLO cuando el peer inmediato es la red interna de
-     Docker -- nunca "*", o cualquiera podría forjar su propia cabecera y
-     estrenar cubo en cada request (peor que el bug original).
+     para que reescriba `scope["client"]` a partir de `X-Forwarded-For`,
+     SOLO cuando el peer inmediato es la red interna de Docker -- nunca "*",
+     o cualquiera podría forjar su propia cabecera y estrenar cubo en cada
+     request (peor que el bug original). El comando AUTORITATIVO es el de
+     `backend/scripts/entrypoint.sh`: el `command:` del servicio backend en
+     docker-compose.yml lo invoca y con eso PISA el CMD del Dockerfile
+     (regresión del issue #550 -- la primera versión de esta suite solo
+     grepeaba el Dockerfile y quedó verde mientras producción arrancaba sin
+     los flags).
   2. `clave_cliente` (rate_limit.py) sigue leyendo `get_remote_address`, que
      lee `request.client.host` -- una vez que (1) reescribe ese campo, la
      clave cambia sola, sin tocar `clave_cliente`.
@@ -36,7 +41,7 @@ producción, envuelta en el `ProxyHeadersMiddleware` de uvicorn -- exactamente
 la pieza que la topología real inserta ENTRE Caddy/frontend y la app ASGI, y
 que un TestClient contra `main.app` nunca ejercita.
 
-`--forwarded-allow-ips` se lee del Dockerfile real (no se hardcodea acá): si
+`--forwarded-allow-ips` se lee del entrypoint real (no se hardcodea acá): si
 alguien lo afloja a "*" o lo cambia sin actualizar esta suite, estas pruebas
 igual seleccionan un peer DENTRO de ese rango vía `ipaddress`, así que solo
 la regla estructural (`test_forwarded_allow_ips_no_es_comodin`) puede
@@ -57,6 +62,7 @@ from app.soporte_transversal.rate_limit import clave_cliente
 from main import _manejador_limite_excedido
 
 RUTA_DOCKERFILE = Path(__file__).resolve().parent.parent / "Dockerfile"
+RUTA_ENTRYPOINT = Path(__file__).resolve().parent.parent / "scripts" / "entrypoint.sh"
 
 # IP pública real (DNS de Google) -- garantizada fuera de CUALQUIER rango
 # privado que `--forwarded-allow-ips` pueda declarar (RFC 1918), así que
@@ -77,19 +83,64 @@ def _cmd_dockerfile() -> str:
     raise AssertionError("Dockerfile no declara un CMD")
 
 
-def _forwarded_allow_ips_del_dockerfile() -> str:
-    coincidencia = re.search(r"--forwarded-allow-ips=([^\s\"]+)", _cmd_dockerfile())
-    assert coincidencia, "El CMD de uvicorn no declara --forwarded-allow-ips"
+def _cmd_entrypoint() -> str:
+    """Devuelve la línea que arranca uvicorn en entrypoint.sh -- el comando
+    que REALMENTE ejecuta producción: docker-compose.yml declara
+    `command: sh scripts/entrypoint.sh`, y un `command:` de compose PISA el
+    CMD del Dockerfile. Grepeaba solo el Dockerfile y esta suite quedó
+    falsa-verde durante la regresión del issue #550."""
+    for linea in RUTA_ENTRYPOINT.read_text().splitlines():
+        limpia = linea.strip()
+        if "uvicorn" in limpia and not limpia.startswith("#"):
+            return limpia
+    raise AssertionError("entrypoint.sh no invoca uvicorn")
+
+
+def _forwarded_allow_ips_de(cmd: str) -> str:
+    coincidencia = re.search(r"--forwarded-allow-ips=([^\s\"]+)", cmd)
+    assert coincidencia, f"el comando de uvicorn no declara --forwarded-allow-ips: {cmd}"
     return coincidencia.group(1)
+
+
+def _forwarded_allow_ips_del_entrypoint() -> str:
+    return _forwarded_allow_ips_de(_cmd_entrypoint())
 
 
 def _peer_dentro_de_la_red_confiable() -> str:
     """Primer host utilizable de la primera red declarada en
     --forwarded-allow-ips -- simula el peer TCP real en producción (el
     contenedor `frontend`, dentro de la red interna de docker compose)."""
-    primera_red = _forwarded_allow_ips_del_dockerfile().split(",")[0].strip()
+    primera_red = _forwarded_allow_ips_del_entrypoint().split(",")[0].strip()
     red = ipaddress.ip_network(primera_red)
     return str(next(red.hosts()))
+
+
+# --- Guardias estructurales sobre el comando ejecutado (entrypoint.sh) ------
+
+def test_entrypoint_habilita_proxy_headers():
+    """El comando autoritativo es el del entrypoint (compose pisa el CMD del
+    Dockerfile); sin `--proxy-headers` ahí, TODO el tráfico anónimo colapsa
+    en un solo cubo global -- issue #550, regresión de #235."""
+    assert "--proxy-headers" in _cmd_entrypoint()
+
+
+def test_forwarded_allow_ips_no_es_comodin():
+    """CRÍTICO de seguridad: `*` deja que cualquiera en internet forje su
+    propia X-Forwarded-For y estrene cubo en cada request -- sería PEOR que
+    el bug original (ver issue #235)."""
+    valor = _forwarded_allow_ips_del_entrypoint()
+    assert valor not in ("*", "'*'")
+    for red in valor.split(","):
+        assert ipaddress.ip_network(red.strip()).is_private
+
+
+def test_dockerfile_y_entrypoint_declaran_los_mismos_flags_de_proxy():
+    """El CMD del Dockerfile queda como respaldo documental (y como comando
+    efectivo si alguien corre la imagen sin compose): debe declarar
+    exactamente la misma red confiable que el entrypoint, o divergen en
+    silencio como en el issue #550."""
+    assert "--proxy-headers" in _cmd_dockerfile()
+    assert _forwarded_allow_ips_de(_cmd_dockerfile()) == _forwarded_allow_ips_del_entrypoint()
 
 
 # --- Guardias estructurales sobre el Dockerfile -----------------------------
@@ -107,16 +158,6 @@ def test_dockerfile_uv_run_no_resuelve_ni_construye_en_el_arranque():
     cmd = _cmd_dockerfile()
     assert "--frozen" in cmd
     assert "--no-build" in cmd
-
-
-def test_forwarded_allow_ips_no_es_comodin():
-    """CRÍTICO de seguridad: `*` deja que cualquiera en internet forje su
-    propia X-Forwarded-For y estrene cubo en cada request -- sería PEOR que
-    el bug original (ver issue #235)."""
-    valor = _forwarded_allow_ips_del_dockerfile()
-    assert valor not in ("*", "'*'")
-    for red in valor.split(","):
-        assert ipaddress.ip_network(red.strip()).is_private
 
 
 # --- App mínima que replica el cableado real de main.py --------------------
@@ -140,7 +181,7 @@ def _armar_app(limite: str) -> tuple[FastAPI, Limiter]:
 
 def _cliente(limite: str, peer: str) -> TestClient:
     app, _ = _armar_app(limite)
-    confiables = _forwarded_allow_ips_del_dockerfile()
+    confiables = _forwarded_allow_ips_del_entrypoint()
     envuelta = ProxyHeadersMiddleware(app, trusted_hosts=confiables)
     return TestClient(envuelta, client=(peer, 12345))
 
