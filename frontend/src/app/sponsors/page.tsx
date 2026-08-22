@@ -35,7 +35,7 @@ export default function SponsorsPage(): React.ReactElement {
     title="Patrocinadores"
     subtitle="Suba el logo y el nombre que se leerá como texto alternativo en la landing."
   >
-    <div className="space-y-page p-page">
+    <>
       <form onSubmit={submit} className="card flex flex-wrap items-end gap-4 p-5">
         <label className="flex flex-col gap-field text-sm font-semibold">Nombre corto<input value={nombre} maxLength={80} onChange={(e) => setNombre(e.target.value)} className="h-ctl rounded-ctl border border-line-2 px-3" /></label>
         <label className="flex flex-col gap-field text-sm font-semibold">Logo (JPG o PNG)<input type="file" accept="image/jpeg,image/png" onChange={(e: ChangeEvent<HTMLInputElement>) => setArchivo(e.target.files?.[0] ?? null)} /></label>
@@ -45,6 +45,6 @@ export default function SponsorsPage(): React.ReactElement {
       <section aria-label="Logos cargados" className="card p-5">
         {sponsors.length === 0 ? <p className="text-ink-2">Aún no hay patrocinadores cargados.</p> : <ul className="divide-y divide-line">{sponsors.map((sponsor) => <li key={sponsor.id} className="flex items-center justify-between gap-4 py-3"><div className="flex items-center gap-4"><img src={sponsor.logoUrl} alt={sponsor.nombre} className="h-12 w-24 object-contain" /><span>{sponsor.nombre}</span></div><button type="button" onClick={() => void remove(sponsor)} className="text-state-bad underline">Eliminar</button></li>)}</ul>}
       </section>
-    </div>
+    </>
   </AppShell></ProtectedRoute>;
 }
