@@ -213,14 +213,15 @@ describe("TrainerAttendanceHistoryPage", () => {
       }),
     ).toBeInTheDocument();
     // One bar per row, and nothing left of the four-badge table it replaces.
-    expect(screen.getAllByRole("img", { name: /sobre \d+ registros/ })).toHaveLength(2);
+    expect(within(screen.getByTestId("history-desktop-table")).getAllByRole("img", { name: /sobre \d+ registros/ })).toHaveLength(2);
   });
 
   it("shows Corregir for every session within 30 days when the user is admin", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
-    const links = await screen.findAllByRole("link", { name: "Corregir" });
+    await screen.findByTestId("history-desktop-table");
+    const links = within(screen.getByTestId("history-desktop-table")).getAllByRole("link", { name: "Corregir" });
     expect(links).toHaveLength(2);
   });
 
@@ -228,7 +229,8 @@ describe("TrainerAttendanceHistoryPage", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
-    const links = await screen.findAllByRole("link", { name: "Corregir" });
+    await screen.findByTestId("history-desktop-table");
+    const links = within(screen.getByTestId("history-desktop-table")).getAllByRole("link", { name: "Corregir" });
     const rows = await screen.findAllByRole("row");
 
     // Row order is most recent first, and each href must belong to the row it
@@ -302,7 +304,8 @@ describe("TrainerAttendanceHistoryPage", () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
     render(<TrainerAttendanceHistoryPage />);
 
-    const links = await screen.findAllByRole("link", { name: "Corregir" });
+    await screen.findByTestId("history-desktop-table");
+    const links = within(screen.getByTestId("history-desktop-table")).getAllByRole("link", { name: "Corregir" });
     expect(links).toHaveLength(2);
     // Nada de la superficie vencida se filtra a una sesión que todavía se puede
     // corregir: ni botón muerto ni línea de motivo.
@@ -451,7 +454,8 @@ describe("TrainerAttendanceHistoryPage", () => {
 
     // The sessions still render; only the horario select is left with its
     // single "Todos los horarios" option.
-    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
+    await screen.findByTestId("history-desktop-table");
+    expect(within(screen.getByTestId("history-desktop-table")).getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
     expect(screen.queryByText(/No se pudieron cargar los registros/)).not.toBeInTheDocument();
     expect(within(screen.getByLabelText("Filtrar por horario")).getAllByRole("option")).toHaveLength(
       1,
@@ -508,7 +512,29 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(valor.className).toMatch(/max-w-\[/);
   });
 
-  it("leads back to Mi día", async () => {
+  it("shows the admin correction expiry and its explanation on the mobile card", async () => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Carlos Mendoza"));
+    mockFetchAttendanceRecords.mockResolvedValue([record("present", "Sofia Vera", "2026-07-15")]);
+    render(<TrainerAttendanceHistoryPage />);
+    const mobile = await screen.findByTestId("history-mobile-list");
+    const card = within(mobile).getByTestId("history-mobile-card-2026-07-15-12");
+    expect(within(card).getByRole("button", { name: "Corregir" })).toBeDisabled();
+    expect(card).toHaveTextContent("La ventana de corrección de 30 días ya cerró para esta sesión.");
+  });
+
+    it("renders mobile cards below sm and preserves the desktop table", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+    const mobile = await screen.findByTestId("history-mobile-list");
+    const desktop = screen.getByTestId("history-desktop-table");
+    expect(mobile).toHaveClass("sm:hidden");
+    expect(desktop).toHaveClass("hidden", "sm:block");
+    const card = within(mobile).getByTestId("history-mobile-card-2026-07-20-12");
+    expect(card).toHaveTextContent(/20\/07\/2026/);
+    expect(card).toHaveTextContent(/Carlos Mendoza/);
+    expect(card).toHaveTextContent(/2 presentes/);
+  });
+
+    it("leads back to Mi día", async () => {
     render(<TrainerAttendanceHistoryPage />);
 
     await screen.findAllByRole("row");
@@ -579,9 +605,10 @@ describe("TrainerAttendanceHistoryPage — el conteo de una sesión sale de su p
 
     // El preset por defecto ("Este mes") tiene que alcanzar una sesión de
     // días antes en la misma semana/mes -- nunca solo hoy.
-    const bar = await screen.findByRole("img", { name: /sobre 15 registros/ });
-    expect(bar).toBeInTheDocument();
-    expect(screen.getByText("15 presentes")).toBeInTheDocument();
+    await screen.findByTestId("history-desktop-table");
+    const desktop = within(screen.getByTestId("history-desktop-table"));
+    expect(desktop.getByRole("img", { name: /sobre 15 registros/ })).toBeInTheDocument();
+    expect(desktop.getByText("15 presentes")).toBeInTheDocument();
   });
 });
 
@@ -648,10 +675,12 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
 
     await screen.findAllByRole("row");
     const estimado = tile("Sin lista (estimado)");
-    // La palabra, entera, en el rótulo Y en la aclaración de la tarjeta.
-    expect(estimado).toHaveTextContent(/Estimación/);
-    expect(estimado).toHaveTextContent(/feriados/);
-    expect(estimado).toHaveTextContent(/cancelaciones/);
+    // La tarjeta declara que es estimado y la explicación accesible nombra sus límites.
+    expect(estimado).toHaveTextContent(/estimado/i);
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent(/Estimación/);
+    expect(note).toHaveTextContent(/feriados/);
+    expect(note).toHaveTextContent(/cancelaciones/);
   });
 
   it("no pinta el hueco como un problema confirmado", async () => {
