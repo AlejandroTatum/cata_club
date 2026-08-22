@@ -329,10 +329,11 @@ jobs:
       # credenciales de Postgres por defecto de `docker-compose.yml`
       # (`usuario`/`password`), sin importar el host -- por eso hacia falta
       # este chequeo agnostico al host y no solo la comparacion de URL
-      # completa contra `_DATABASE_URL_DE_EJEMPLO`. Sin fijar estas dos
+      # completa contra `_DATABASE_URL_DE_EJEMPLO`. Sin fijar estas tres
       # variables, el backend de este job se cae al arrancar.
       POSTGRES_USER: cataclub_ci
       POSTGRES_PASSWORD: ci-${{ github.run_id }}
+      POSTGRES_DB: cataclub_ci
 
     steps:
       - uses: actions/checkout@v4
