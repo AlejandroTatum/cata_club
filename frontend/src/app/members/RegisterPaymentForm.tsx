@@ -235,9 +235,9 @@ export default function RegisterPaymentForm({
       <button
         type="button"
         onClick={handleOpen}
-        className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
+        className="inline-flex h-ctl items-center gap-2 rounded-lg bg-cata-red/15 px-4 text-sm font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
       >
-        <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+        <Plus size={ICON.base} strokeWidth={2} aria-hidden="true" />
         Registrar pago
       </button>
     );
@@ -253,7 +253,7 @@ export default function RegisterPaymentForm({
   return (
     <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs font-semibold text-ink-2">
+        <label className="text-sm font-semibold text-ink-2">
           Monto
           <input
             type="number"
@@ -261,15 +261,15 @@ export default function RegisterPaymentForm({
             min="0"
             value={monto}
             onChange={(e) => handleMontoChange(e.target.value)}
-            className="mt-0.5 w-full rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-ink"
+            className="mt-0.5 h-ctl w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink"
             placeholder="0.00"
           />
         </label>
         {/* No picker: EFECTIVO is not offered here (see the module comment),
             so there is nothing for the admin to choose between. */}
-        <div className="text-xs font-semibold text-ink-2">
+        <div className="text-sm font-semibold text-ink-2">
           Método
-          <p className="mt-0.5 w-full rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs text-ink">
+          <p className="mt-0.5 flex h-ctl w-full items-center rounded-lg border border-line bg-paper px-3 text-sm text-ink">
             Transferencia
           </p>
         </div>
@@ -296,7 +296,7 @@ export default function RegisterPaymentForm({
 
       {/* TRANSFERENCIA is the only method, so the voucher is always required
           (see the check in `validate`). */}
-      <label className="block text-xs font-semibold text-ink-2">
+      <label className="block text-sm font-semibold text-ink-2">
         Comprobante
         <div className="mt-0.5 flex items-center gap-2">
           <input
@@ -311,16 +311,16 @@ export default function RegisterPaymentForm({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 rounded-lg border border-dashed border-line bg-paper px-2.5 py-1.5 text-xs text-ink-2 transition-colors hover:border-cata-red/30 hover:text-ink"
+            className="flex h-ctl items-center gap-2 rounded-lg border border-dashed border-line bg-paper px-4 text-sm text-ink-2 transition-colors hover:border-cata-red/30 hover:text-ink"
           >
-            <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            <Upload size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
             {voucherFile ? voucherFile.name : "Seleccionar archivo"}
           </button>
           {voucherFile && (
             <button
               type="button"
               onClick={() => setVoucherFile(null)}
-              className="text-2xs tracking-flat text-ink-3 hover:text-state-bad"
+              className="h-ctl rounded-lg px-3 text-sm text-ink-3 transition-colors hover:text-state-bad"
             >
               Quitar
             </button>
@@ -351,9 +351,9 @@ export default function RegisterPaymentForm({
           type="button"
           onClick={() => void handleSubmit()}
           disabled={loading || !monto || !fechaInicio || !fechaFin}
-          className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
+          className="inline-flex h-ctl items-center gap-2 rounded-lg bg-cata-red px-4 text-sm font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
         >
-          {loading ? <Loader2 size={ICON.sm} className="animate-spin" /> : <Plus size={ICON.sm} />}
+          {loading ? <Loader2 size={ICON.base} className="animate-spin" /> : <Plus size={ICON.base} />}
           Registrar pago
         </button>
         <button
@@ -362,7 +362,7 @@ export default function RegisterPaymentForm({
             setOpen(false);
             setVoucherFile(null);
           }}
-          className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
+          className="inline-flex h-ctl items-center rounded-lg border border-line px-4 text-sm text-ink-2 transition-colors hover:bg-paper"
         >
           Cancelar
         </button>

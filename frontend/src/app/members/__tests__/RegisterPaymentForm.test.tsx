@@ -57,6 +57,33 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe("RegisterPaymentForm — controls follow the md sizing standard (#539)", () => {
+  it("uses 40px text-sm controls with standard padding and icons throughout Registrar pago", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+
+    const opener = screen.getByRole("button", { name: "Registrar pago" });
+    expect(opener).toHaveClass("h-ctl", "text-sm", "px-4");
+    expect(opener.querySelector("svg")).toHaveAttribute("width", "18");
+    fireEvent.click(opener);
+
+    expect(screen.getByRole("spinbutton")).toHaveClass("h-ctl", "text-sm", "px-3");
+    expect(screen.getByText("Transferencia")).toHaveClass("h-ctl", "text-sm", "px-3");
+
+    const voucher = screen.getByRole("button", { name: "Seleccionar archivo" });
+    expect(voucher).toHaveClass("h-ctl", "text-sm", "px-4");
+    expect(voucher.querySelector("svg")).toHaveAttribute("width", "18");
+
+    const submit = screen.getByRole("button", { name: "Registrar pago" });
+    expect(submit).toHaveClass("h-ctl", "text-sm", "px-4");
+    expect(submit.querySelector("svg")).toHaveAttribute("width", "18");
+    expect(screen.getByRole("button", { name: "Cancelar" })).toHaveClass("h-ctl", "text-sm", "px-4");
+
+    const file = new File(["contenido"], "voucher.png", { type: "image/png" });
+    fireEvent.change(fileInput(), { target: { files: [file] } });
+    expect(screen.getByRole("button", { name: "Quitar" })).toHaveClass("h-ctl", "text-sm", "px-3");
+  });
+});
+
 describe("RegisterPaymentForm — el error de comprobante faltante ya no es silencioso (#465)", () => {
   it("gives the error message its own id and role=alert", () => {
     openAndSubmitEmpty();
