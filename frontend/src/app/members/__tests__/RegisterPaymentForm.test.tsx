@@ -67,7 +67,7 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
     fireEvent.click(opener);
 
     expect(screen.getByRole("spinbutton")).toHaveClass("h-ctl", "text-sm", "px-3");
-    expect(screen.getByText("Transferencia")).toHaveClass("h-ctl", "text-sm", "px-3");
+    expect(screen.getByRole("radiogroup", { name: "Método de pago" })).toHaveClass("h-ctl", "text-sm", "px-3");
 
     const voucher = screen.getByRole("button", { name: "Seleccionar archivo" });
     expect(voucher).toHaveClass("h-ctl", "text-sm", "px-4");
@@ -81,6 +81,45 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
     const file = new File(["contenido"], "voucher.png", { type: "image/png" });
     fireEvent.change(fileInput(), { target: { files: [file] } });
     expect(screen.getByRole("button", { name: "Quitar" })).toHaveClass("h-ctl", "text-sm", "px-3");
+  });
+});
+
+describe("RegisterPaymentForm — método de pago (#540)", () => {
+  it("offers an accessible Efectivo/Transferencia selector and requires a voucher for transfer", () => {
+    openAndSubmitEmpty();
+
+    expect(screen.getByRole("radio", { name: "Transferencia" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Efectivo" })).not.toBeChecked();
+    expect(screen.getByRole("alert")).toHaveTextContent("El comprobante de transferencia es obligatorio.");
+  });
+
+  it("registers cash without a voucher and sends EFECTIVO without uploading one", async () => {
+    mockRegistrarPago.mockResolvedValue({ id: 501 });
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => {
+      expect(mockRegistrarPago).toHaveBeenCalledWith(expect.objectContaining({ tipoPago: "EFECTIVO" }));
+    });
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+    expect(fileInput()).not.toBeInTheDocument();
+  });
+
+  it("clears the staged voucher and voucher error when switching to cash", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(fileInput(), {
+      target: { files: [new File(["notas"], "notas.txt", { type: "text/plain" })] },
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("notas.txt")).not.toBeInTheDocument();
+    expect(fileInput()).not.toBeInTheDocument();
   });
 });
 
