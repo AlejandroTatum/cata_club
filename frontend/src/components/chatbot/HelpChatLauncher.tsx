@@ -55,7 +55,7 @@ export interface HelpChatLauncherProps {
 const DEFAULT_LABEL = "Pregúntale al asistente";
 
 const TRIGGER_CLASSES: Record<HelpChatLauncherProps["variant"], string> = {
-  landing: "landing-button landing-button-quiet landing-button-block",
+  landing: "landing-button landing-button-quiet landing-button-block bg-white",
   // `min-h-[24px]`: the label plus `py-0.5` measured 21px tall at 11.5px and
   // measures 18.7px now that it rides `2xs`, both under the 24x24 WCAG 2.2 AA
   // target size (SC 2.5.8). The height is hit area only —
