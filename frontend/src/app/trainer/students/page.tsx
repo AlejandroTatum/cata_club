@@ -60,6 +60,7 @@ import EmergencyCardDialog, {
   type EmergencyCardStudent,
 } from "@/app/trainer/attendance/EmergencyCardDialog";
 import { agruparAlumnosDelPadron, filtrarPorNombre } from "./students-utils";
+import ScheduleDialog from "./ScheduleDialog";
 
 /** Diez, como toda lista paginada del producto — ver `list-page-size.test.ts`. */
 const PAGE_SIZE = 10;
@@ -76,6 +77,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
    * 66 lecturas auditadas, y el backend registra quién consultó a quién.
    */
   const [fichaAbierta, setFichaAbierta] = useState<EmergencyCardStudent | null>(null);
+    const [horarioAbierto, setHorarioAbierto] = useState<{ name: string; horarios: string | null } | null>(null);
 
   const cargarPadron = useCallback(async (): Promise<void> => {
     setCargando(true);
@@ -191,18 +193,23 @@ export default function TrainerStudentsPage(): React.ReactElement {
                        * entrenador la misma lección dos veces.
                        */}
                       <button
-                        type="button"
-                        onClick={() =>
-                          setFichaAbierta({
-                            id: alumno.personaId,
-                            name: alumno.nombreCompleto,
-                          })
-                        }
-                        aria-label={`Ficha de emergencia de ${alumno.nombreCompleto}`}
-                        className="flex h-11 w-11 flex-none items-center justify-center rounded-ctl text-state-bad transition-colors hover:bg-state-bad-bg"
-                      >
-                        <AlertTriangle size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
-                      </button>
+                            type="button"
+                            onClick={() => setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })}
+                            aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
+                            className="flex h-11 flex-none items-center justify-center gap-2 rounded-ctl px-3 text-sm font-semibold text-state-bad transition-colors hover:bg-state-bad-bg"
+                          >
+                            <AlertTriangle size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
+                            Ficha médica
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })}
+                            aria-label={`Horario de ${alumno.nombreCompleto}`}
+                            className="flex h-11 flex-none items-center justify-center rounded-ctl border border-line px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunken"
+                          >
+                            Horario
+                          </button>
+                          {/* extra closing control removed */}
                     </li>
                   ))}
                 </ul>
@@ -229,6 +236,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
         )}
 
         <EmergencyCardDialog student={fichaAbierta} onClose={() => setFichaAbierta(null)} />
+            <ScheduleDialog student={horarioAbierto} onClose={() => setHorarioAbierto(null)} />
       </AppShell>
     </ProtectedRoute>
   );
