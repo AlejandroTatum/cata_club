@@ -66,6 +66,9 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // A validation queue: the actions are per row, and the batch bar only exists
   // when there are reviewed rows to flush.
   "app/payments/page.tsx": "queue — actions are per row",
+  // Uploading needs the name and logo fields beside its submit control; separating
+  // it into the page header would disconnect the action from the required inputs.
+  "app/sponsors/page.tsx": "upload form — the submit action belongs with its required fields",
   // --- The five family screens, decided in #43 -----------------------------
   // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
   // through the steps rather than act on the page, and which one is showing is
