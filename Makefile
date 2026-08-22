@@ -146,9 +146,14 @@ QA_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.override.yml
 QA_JWT_SECRET_KEY := $(shell openssl rand -hex 32)
 QA_ENV = JWT_SECRET_KEY=$(QA_JWT_SECRET_KEY)
 
-# `celery-worker`/`celery-beat` quedan fuera a propósito: el QA de pantallas no
-# necesita tareas programadas y cada worker cuesta memoria.
-QA_SERVICIOS = db redis mailpit backend frontend
+# `celery-worker` SÍ entra: reset de contraseña y generación de comprobante
+# son tareas encoladas (recuperacion_tareas.py/comprobante_tareas.py), no se
+# ejecutan en la misma request -- sin worker que las levante, la API responde
+# 200 pero el correo nunca sale (falla silenciosa). `celery-beat` queda fuera
+# a propósito: solo dispara los cron diarios de vencimientos/alertas
+# (celery_app.py, beat_schedule), nada que el QA de pantallas necesite, y cada
+# proceso extra cuesta memoria.
+QA_SERVICIOS = db redis mailpit backend frontend celery-worker
 
 # `--build` y no solo `up`: el objetivo del entorno es mirar el código ACTUAL.
 # Sin esto, Compose reutiliza la imagen que ya exista y se puede terminar
@@ -180,7 +185,7 @@ qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo "  Admin:     admin@cataclub.com / admin12345"
 	@echo "  Entrenador: entrenador@cataclub.com / trainer12345"
 	@echo "  Alumnos del dataset grande: contrasenia alumno123"
-	@echo "  AVISO:     los correos no se envian en este entorno (falta el worker de Celery, QA_SERVICIOS los deja afuera a proposito para ahorrar memoria)."
+	@echo "  Correos:   el worker de Celery SI corre en este entorno; van a donde apunte SMTP_HOST de tu .env (mailpit por defecto, http://localhost:8025)."
 	@echo "  Destruir:  make qa-down"
 
 qa-down: ## Destruir por completo el entorno de QA (contenedores, red y datos)
