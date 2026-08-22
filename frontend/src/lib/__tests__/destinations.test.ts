@@ -56,6 +56,7 @@ const EXPECTED_PHRASES: Record<string, string> = {
   "/groups": "Volver a Horarios",
   "/payments": "Volver a Membresías y Pagos",
   "/discounts": "Volver a Descuentos",
+  "/sponsors": "Volver a Patrocinadores",
   "/tarifas": "Volver a Tarifas",
   "/attendance": "Volver a Asistencias",
   "/reports": "Volver a Reportes",

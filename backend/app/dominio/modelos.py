@@ -1539,6 +1539,17 @@ class Notificacion(Base):
 # vinculación, nunca actualizada ni borrada -- un log de eventos, no el
 # estado actual (para eso está `Persona.representante_id`, que sí muta).
 # ---------------------------------------------------------------------------
+class Sponsor(Base):
+    """Logo público administrado por el club; sin URL comercial ni estado extra."""
+    __tablename__ = "sponsor"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(80))
+    logo_url: Mapped[str] = mapped_column(String(500))
+    # Identificador interno para retirar el recurso del proveedor al borrar.
+    logo_public_id: Mapped[str] = mapped_column(String(64), unique=True)
+
+
 class VinculacionRepresentante(Base):
     __tablename__ = "vinculacion_representante"
     __table_args__ = (
