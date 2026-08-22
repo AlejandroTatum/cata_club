@@ -292,8 +292,16 @@ def subir_foto_perfil(
     `persona_id` del caller (mismo valor en cada subida), así una foto nueva
     SOBRESCRIBE la anterior en vez de acumular recursos huérfanos.
 
+    `type="authenticated"` (issue #553, Problema 2): la foto de una persona
+    (incluye menores) se subía como recurso público con `public_id`
+    predecible (`perfil_{persona_id}`) -- enumerable sin autenticación,
+    misma clase de hallazgo que "voucher no enumerable".
+
     Returns:
-        URL pública HTTPS del recurso subido.
+        URL que devuelve el SDK al subir. NO es una URL de entrega válida
+        (ver el docstring de `subir_pdf_membresia`, mismo criterio): el
+        caller debe persistir `nombre_publico` y resolver la URL de entrega
+        con `resolver_url_foto_perfil` en cada lectura autorizada.
     """
     _configurar_cliente()
 
@@ -305,6 +313,7 @@ def subir_foto_perfil(
 
     upload_kwargs = {
         "resource_type": "image",
+        "type": "authenticated",
         "public_id": nombre_publico,
         "folder": settings.cloudinary_carpeta_fotos_perfil,
         "overwrite": True,
@@ -447,4 +456,21 @@ def resolver_url_entrega(
         return valor_almacenado
     return generar_url_firmada(
         valor_almacenado, resource_type=resource_type, folder=folder, formato=formato,
+    )
+
+
+def resolver_url_foto_perfil(valor_almacenado: Optional[str]) -> Optional[str]:
+    """
+    `resolver_url_entrega` aplicado a `Persona.foto_url` (issue #553,
+    Problema 2): fija `resource_type="image"` y la carpeta de fotos de
+    perfil para que TODOS los puntos que serializan una foto (auth +
+    personas) firmen contra el mismo recurso indexado
+    (`{carpeta}/{public_id}`, issue #480). Las filas heredadas (URL pública
+    completa) pasan sin tocar hasta que el operador corra
+    `scripts/migrar_fotos_perfil_autenticadas.py`.
+    """
+    return resolver_url_entrega(
+        valor_almacenado,
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_fotos_perfil,
     )

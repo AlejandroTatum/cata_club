@@ -26,6 +26,17 @@ _FAKE_FOTO_URL = "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg"
 _JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100  # JPEG-ish
 
 
+def _assert_url_firmada_de_perfil(url, persona_id):
+    """Issue #553 (Problema 2): la respuesta HTTP lleva una URL de entrega
+    FIRMADA para el recurso `type="authenticated"` -- nunca el `public_id`
+    crudo ni la URL que devolvió el SDK al subir."""
+    from app.soporte_transversal.configuracion import settings
+
+    assert url is not None
+    assert "/authenticated/" in url
+    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{persona_id}" in url
+
+
 def _crear_persona(db_session, cedula, nombres, representante_id=None, fecha_nacimiento=None):
     p = Persona(
         nombres=nombres,
@@ -65,10 +76,10 @@ def test_representante_subir_foto_de_representado(_mock_cloudinary, client, db_s
         files={"archivo": ("foto.jpg", _JPEG, "image/jpeg")},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL
+    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], dependiente.id)
 
     db_session.refresh(dependiente)
-    assert dependiente.foto_url == _FAKE_FOTO_URL
+    assert dependiente.foto_url == f"perfil_{dependiente.id}"
 
 
 @patch("app.infraestructura.cloudinary_cliente.subir_foto_perfil")
@@ -103,10 +114,10 @@ def test_admin_subir_foto_de_cualquier_persona(_mock_cloudinary, client, db_sess
         files={"archivo": ("foto.jpg", _JPEG, "image/jpeg")},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL
+    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], objetivo.id)
 
     db_session.refresh(objetivo)
-    assert objetivo.foto_url == _FAKE_FOTO_URL
+    assert objetivo.foto_url == f"perfil_{objetivo.id}"
 
 
 @patch(
@@ -122,10 +133,41 @@ def test_titular_subir_su_propia_foto(_mock_cloudinary, client, db_session):
         files={"archivo": ("foto.jpg", _JPEG, "image/jpeg")},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL
+    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], persona.id)
 
     db_session.refresh(persona)
-    assert persona.foto_url == _FAKE_FOTO_URL
+    assert persona.foto_url == f"perfil_{persona.id}"
+
+
+def test_get_persona_foto_heredada_url_publica_se_devuelve_sin_tocar(client, db_session):
+    """Compatibilidad durante la transición (issue #553): una foto subida
+    ANTES del fix persiste la `secure_url` pública completa en
+    `Persona.foto_url`; los `PersonaResponseDTO` la devuelven tal cual hasta
+    que el operador corra `scripts/migrar_fotos_perfil_autenticadas.py`."""
+    admin = _crear_persona(db_session, cedula_valida(210), "Admin")
+    objetivo = _crear_persona(db_session, cedula_valida(211), "Elsa")
+    objetivo.foto_url = _FAKE_FOTO_URL
+    db_session.commit()
+    _restaurar_override_token(admin.id, ["ADMINISTRADOR"])
+
+    resp = client.get(f"/api/v1/personas/{objetivo.id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL
+
+
+def test_get_persona_foto_migrada_se_firma_en_la_respuesta(client, db_session):
+    """La fila migrada persiste el `public_id`; el DTO de respuesta firma la
+    URL de entrega fresca en cada lectura autorizada (mismo patrón que el
+    voucher de pago, `resolver_url_entrega`)."""
+    admin = _crear_persona(db_session, cedula_valida(212), "Admin")
+    objetivo = _crear_persona(db_session, cedula_valida(213), "Nadia")
+    objetivo.foto_url = f"perfil_{objetivo.id}"
+    db_session.commit()
+    _restaurar_override_token(admin.id, ["ADMINISTRADOR"])
+
+    resp = client.get(f"/api/v1/personas/{objetivo.id}")
+    assert resp.status_code == 200, resp.text
+    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], objetivo.id)
 
 
 def test_falta_archivo_da_422(client, db_session):

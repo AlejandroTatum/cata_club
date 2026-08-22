@@ -199,15 +199,29 @@ def test_patch_perfil_incluye_fecha_creacion(client, db_session):
 # Cloudinary no está disponible en el entorno de test, así que se mockea
 # `app.infraestructura.cloudinary_cliente.subir_foto_perfil` y se prueba solo
 # la lógica de validación + persistencia de este módulo.
+#
+# Issue #553 (Problema 2): el servicio persiste el `public_id`
+# (`perfil_{persona_id}`), NUNCA la URL que devuelve el SDK, y la respuesta
+# HTTP lleva una URL de entrega FIRMADA (mismo patrón que el voucher de
+# pago). La firma es local (sin red), con las credenciales falsas del
+# autouse `_cloudinary_credenciales_de_prueba` de conftest.py.
 _FAKE_FOTO_URL_JPG = "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg"
 _FAKE_FOTO_URL_PNG = "https://res.cloudinary.com/test/image/upload/perfil-fake.png"
+
+
+def _assert_url_firmada_de_perfil(url: str, persona_id: int) -> None:
+    from app.soporte_transversal.configuracion import settings
+
+    assert url is not None
+    assert "/authenticated/" in url
+    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{persona_id}" in url
 
 
 @patch(
     "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
     return_value=_FAKE_FOTO_URL_JPG,
 )
-def test_subir_foto_perfil_jpg_actualiza_foto_url_y_se_refleja_en_get(_mock_cloudinary, client, db_session):
+def test_subir_foto_perfil_jpg_persiste_public_id_y_firma_en_get(_mock_cloudinary, client, db_session):
     persona = _crear_persona(db_session, cedula=cedula_valida(167), nombres="Paola", telefono="0991112223")
     rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
     _crear_usuario_para_persona(db_session, persona, correo="paola@cataclub.com", roles=[rol_admin])
@@ -219,11 +233,15 @@ def test_subir_foto_perfil_jpg_actualiza_foto_url_y_se_refleja_en_get(_mock_clou
         files={"archivo": ("foto.jpg", contenido, "image/jpeg")},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL_JPG
+    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], persona.id)
+
+    # La fila persiste el `public_id`, no la URL del SDK ni la firmada.
+    db_session.refresh(persona)
+    assert persona.foto_url == f"perfil_{persona.id}"
 
     resp_get = client.get("/api/v1/auth/me")
     assert resp_get.status_code == 200, resp_get.text
-    assert resp_get.json()["fotoUrl"] == _FAKE_FOTO_URL_JPG
+    _assert_url_firmada_de_perfil(resp_get.json()["fotoUrl"], persona.id)
 
 
 @patch(
@@ -242,7 +260,26 @@ def test_subir_foto_perfil_png_actualiza_foto_url(_mock_cloudinary, client, db_s
         files={"archivo": ("foto.png", contenido, "image/png")},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL_PNG
+    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], persona.id)
+    db_session.refresh(persona)
+    assert persona.foto_url == f"perfil_{persona.id}"
+
+
+def test_auth_me_foto_heredada_url_publica_se_devuelve_sin_tocar(client, db_session):
+    """Compatibilidad durante la transición (issue #553): una foto subida
+    ANTES del fix persiste la `secure_url` pública completa. Se devuelve tal
+    cual (sin firmar) hasta que el operador corra
+    `scripts/migrar_fotos_perfil_autenticadas.py`."""
+    persona = _crear_persona(db_session, cedula=cedula_valida(173), nombres="Hilda", telefono="0991112229")
+    persona.foto_url = _FAKE_FOTO_URL_JPG
+    db_session.commit()
+    rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
+    _crear_usuario_para_persona(db_session, persona, correo="hilda@cataclub.com", roles=[rol_admin])
+    _restaurar_override_token(correo="hilda@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    resp = client.get("/api/v1/auth/me")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["fotoUrl"] == _FAKE_FOTO_URL_JPG
 
 
 def test_subir_foto_perfil_tipo_no_permitido_da_400(client, db_session):

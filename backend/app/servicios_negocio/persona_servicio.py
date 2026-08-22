@@ -348,13 +348,16 @@ class PersonaServicio:
         from app.infraestructura.cloudinary_cliente import subir_foto_perfil
 
         public_id = f"perfil_{persona.id}"
-        url = subir_foto_perfil(
+        # Issue #553 (Problema 2): se persiste el `public_id`, nunca la URL que
+        # devuelve el SDK (`type="authenticated"`); la URL firmada se resuelve al
+        # serializar la respuesta (`PersonaResponseDTO`, mismo patrón voucher).
+        subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             persona_id=persona.id,
         )
-        return self.repo.actualizar(persona, {"foto_url": url})
+        return self.repo.actualizar(persona, {"foto_url": public_id})
 
 
     # --- Baja lógica (reemplaza el borrado duro) --------------------------
