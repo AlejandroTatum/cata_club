@@ -7,6 +7,9 @@ import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import LandingPage from "@/app/landing/LandingPage";
 
+const { fetchSponsors } = vi.hoisted(() => ({ fetchSponsors: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/services/api", () => ({ fetchSponsors }));
+
 vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }) => React.ReactElement } => ({
   __esModule: true,
   default: ({ priority, fill: _fill, sizes: _sizes, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }): React.ReactElement => (
@@ -115,6 +118,12 @@ describe("LandingPage", (): void => {
     expect(screen.getByText(landingConfig.contact.hours)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
+  });
+
+  it("renders uploaded sponsor logos instead of placeholder marks", async (): Promise<void> => {
+    fetchSponsors.mockResolvedValueOnce([{ id: 1, nombre: "Municipio de Loja", logoUrl: "https://cdn/logo.png" }]);
+    render(<LandingPage />);
+    expect(await screen.findByRole("img", { name: "Municipio de Loja" })).toHaveAttribute("src", "https://cdn/logo.png");
   });
 
   it("renders each configured schedule as its own card", (): void => {

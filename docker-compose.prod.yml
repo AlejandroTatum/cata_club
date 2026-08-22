@@ -56,6 +56,15 @@ services:
   # límite y el disco se llena en silencio: Postgres es el primer servicio en
   # morir sin espacio (no puede escribir WAL).
   db:
+    # La base compone DATABASE_URL para los servicios Python. No puede
+    # inicializarse primero con los defaults de desarrollo: aunque Settings
+    # luego rechace esa URL, Postgres ya habría creado un volumen persistente
+    # con usuario/contraseña conocidos. El render de producción falla antes de
+    # arrancar si el operador no entrega los tres valores reales.
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:?Error: define POSTGRES_USER en el entorno de producción}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Error: define POSTGRES_PASSWORD en el entorno de producción}"
+      POSTGRES_DB: "${POSTGRES_DB:?Error: define POSTGRES_DB en el entorno de producción}"
     mem_limit: 320m
     logging:
       driver: json-file

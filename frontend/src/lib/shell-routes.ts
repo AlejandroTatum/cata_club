@@ -79,6 +79,7 @@ const APP_SHELL_PREFIXES = [
   "/tarifas",
   "/trainer",
   "/reports",
+  "/sponsors",
   "/student",
   "/profile",
   // `/admin/crear-cuenta` (admin account CRUD) renders `AppShell` itself.

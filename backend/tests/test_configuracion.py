@@ -136,6 +136,37 @@ def test_produccion_acepta_una_configuracion_completa():
     assert ajustes.cors_origenes == ["https://cataclub.com"]
 
 
+@pytest.mark.parametrize(
+    "origenes",
+    [
+        "*",
+        "https://*.cataclub.com",
+        "cataclub.com",
+        "https://cataclub.com:puerto-invalido",
+        "https://cataclub.com/ruta",
+        "https://usuario:clave@cataclub.com",
+        "https://cataclub.com?origen=alterno",
+    ],
+)
+def test_produccion_rechaza_origenes_cors_que_no_son_origenes_exactos(origenes):
+    """CORS compara Origin, no URLs arbitrarias; un comodín además abre la API
+    a cualquier sitio que el navegador visite con una sesión del socio."""
+    with pytest.raises(ValidationError) as error:
+        _construir(ambiente="production", cors_origenes_raw=origenes)
+    assert "CORS_ORIGENES" in str(error.value)
+
+
+def test_produccion_acepta_origenes_cors_http_https_con_puerto():
+    ajustes = _construir(
+        ambiente="production",
+        cors_origenes_raw="https://cataclub.com,http://admin.cataclub.com:8080",
+    )
+    assert ajustes.cors_origenes == [
+        "https://cataclub.com",
+        "http://admin.cataclub.com:8080",
+    ]
+
+
 @pytest.mark.parametrize("ambiente", ["development", "test"])
 def test_fuera_de_produccion_los_defaults_de_desarrollo_no_tumban_el_arranque(ambiente):
     """Guardia anti-regresión del riesgo principal de este cambio: un clon

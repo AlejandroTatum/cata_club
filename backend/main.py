@@ -30,6 +30,7 @@ from app.presentacion.routers import (
     enrollment_router,
     dashboard_router,
     chatbot_router,
+    sponsors_router,
 )
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
@@ -293,6 +294,7 @@ app.include_router(notificaciones_router.router, prefix="/api/v1")
 app.include_router(enrollment_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 app.include_router(chatbot_router.router, prefix="/api/v1")
+app.include_router(sponsors_router.router, prefix="/api/v1")
 
 
 @app.get("/", tags=["Salud"])
