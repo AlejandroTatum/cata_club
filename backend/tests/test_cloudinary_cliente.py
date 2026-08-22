@@ -166,6 +166,35 @@ def test_fallo_por_credencial_ausente_no_filtra_el_error_crudo_del_vendor(nombre
     assert "Must supply api_key" in exc.detalle_tecnico
 
 
+def test_fallo_cloudinary_redacta_credenciales_de_log_y_detalle(monkeypatch, caplog):
+    secreto = "cloudinary-secret-no-registrar"
+    monkeypatch.setattr(settings, "cloudinary_api_secret", secreto)
+    monkeypatch.setattr(cc.logger, "disabled", False)
+
+    with _parchear_upload() as mock_upload:
+        mock_upload.side_effect = RuntimeError(f"vendor rechazó secret={secreto}")
+        with caplog.at_level(logging.ERROR, logger="cataclub.cloudinary"):
+            with pytest.raises(ServicioNoDisponible) as error:
+                _subir_pdf()
+
+    assert secreto not in caplog.text
+    assert secreto not in error.value.detalle_tecnico
+    assert "[REDACTED]" in caplog.text
+
+
+def test_subida_exitosa_no_registra_la_url_firmada(monkeypatch, caplog):
+    url_firmada = "https://cdn.test/recurso?__cld_token__=sensible"
+    monkeypatch.setattr(cc.logger, "disabled", False)
+
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": url_firmada}
+        with caplog.at_level(logging.INFO, logger="cataclub.cloudinary"):
+            _subir_pdf()
+
+    assert url_firmada not in caplog.text
+    assert "__cld_token__" not in caplog.text
+
+
 # --- 4c. Guardia (issue #355): los 3 `raise ServicioNoDisponible(...)` de
 # `_subir()` -- circuito abierto, fallo del SDK, `secure_url` ausente --
 # marcan `seguro_mostrar=True`. Es el único mensaje de todo el backend

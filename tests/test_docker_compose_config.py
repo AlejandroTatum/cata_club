@@ -46,6 +46,12 @@ _CORS_PARA_RENDER = "http://localhost-para-tests.invalid"
 _DOMINIO_PARA_RENDER = "ejemplo-para-tests.invalid"
 _ACME_EMAIL_PARA_RENDER = "acme-tests@ejemplo.invalid"
 
+# Producción exige estos tres valores incluso para renderizar. Son centinelas
+# locales de esta suite, no credenciales ni defaults de Compose.
+_POSTGRES_USER_PARA_RENDER = "postgres-tests"
+_POSTGRES_PASSWORD_PARA_RENDER = "postgres-password-tests"
+_POSTGRES_DB_PARA_RENDER = "postgres-tests-db"
+
 
 def _ejecutar_config(
     *archivos_compose: str,
@@ -64,6 +70,9 @@ def _ejecutar_config(
         "CORS_ORIGENES": _CORS_PARA_RENDER,
         "DOMINIO": _DOMINIO_PARA_RENDER,
         "ACME_EMAIL": _ACME_EMAIL_PARA_RENDER,
+        "POSTGRES_USER": _POSTGRES_USER_PARA_RENDER,
+        "POSTGRES_PASSWORD": _POSTGRES_PASSWORD_PARA_RENDER,
+        "POSTGRES_DB": _POSTGRES_DB_PARA_RENDER,
         **os.environ,
         **(entorno or {}),
     }
@@ -206,6 +215,24 @@ def test_el_overlay_de_produccion_exige_cors_origenes():
     assert "CORS_ORIGENES" in resultado.stderr, (
         f"el render falló, pero el mensaje no menciona CORS_ORIGENES -- no es "
         f"accionable para quien despliega: {resultado.stderr!r}"
+    )
+
+
+@pytest.mark.parametrize("variable", ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"))
+def test_el_overlay_de_produccion_exige_configuracion_real_de_postgres(variable):
+    """Postgres no debe crear su volumen persistente con los defaults locales
+    antes de que Settings pueda rechazar la DATABASE_URL resultante."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=(variable,),
+    )
+    assert resultado.returncode != 0, (
+        f"el render de producción tiene que fallar sin {variable} -- en cambio "
+        "completó con éxito y permitiría los defaults de desarrollo"
+    )
+    assert variable in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona {variable}: {resultado.stderr!r}"
     )
 
 

@@ -291,6 +291,35 @@ def _problemas_de_cors(origenes: list[str]) -> list[str]:
             "CORS_ORIGENES está vacío; define los orígenes del frontend "
             "(CSV, ej: https://cataclub.com)."
         ]
+
+    for origen in origenes:
+        partes = urlparse(origen)
+        try:
+            partes.port  # valida que un puerto explícito sea numérico y esté en rango
+        except ValueError:
+            origen_invalido = True
+        else:
+            # CORSMiddleware compara el header Origin (esquema + host + puerto), no
+            # URLs con path, query o fragmento. Aceptar una de esas variantes deja el
+            # frontend bloqueado y suele terminar en un comodín agregado a las apuradas.
+            origen_invalido = (
+                origen == "*"
+                or partes.scheme.lower() not in _ESQUEMAS_PUBLICOS
+                or not partes.hostname
+                or "*" in partes.hostname
+                or partes.username
+                or partes.password
+                or partes.path not in ("", "/")
+                or partes.params
+                or partes.query
+                or partes.fragment
+            )
+        if origen_invalido:
+            return [
+                f"CORS_ORIGENES contiene '{origen}', que no es un origen HTTP/HTTPS "
+                "válido (esquema y host, sin comodín, path, credenciales, query ni "
+                "fragmento). Define el origen exacto del frontend (ej: https://cataclub.com)."
+            ]
     return []
 
 
