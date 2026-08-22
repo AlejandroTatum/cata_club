@@ -117,8 +117,13 @@ export default function TipoSelectorForm({
 
   return (
     <div className="mt-2.5 space-y-section rounded-ctl border border-line bg-sunken p-3">
+      <label htmlFor="tipo-membresia" className="block text-xs font-semibold text-ink-2">
+        Tipo de membresía <span aria-hidden="true" className="text-state-bad">*</span>
+      </label>
       <select
+        id="tipo-membresia"
         value={selectedTipoId}
+        required
         onChange={(e) => setSelectedTipoId(e.target.value ? Number(e.target.value) : "")}
         className="input-field text-xs"
       >

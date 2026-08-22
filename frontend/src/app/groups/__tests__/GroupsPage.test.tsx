@@ -173,9 +173,12 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
-    expect(screen.getByLabelText("Hora de inicio")).toBeInTheDocument();
-    expect(screen.getByLabelText("Hora de fin")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Nombre/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Hora de inicio/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Hora de fin/)).toBeRequired();
+    expect(screen.getByLabelText(/^Nombre/)).toBeRequired();
+    expect(screen.getByLabelText(/^Hora de inicio/)).toBeRequired();
+    expect(screen.getByRole("group", { name: /^Días de la semana/ })).toHaveAttribute("aria-required", "true");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
@@ -1347,9 +1350,9 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
     await waitForHorarios();
     fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
 
-    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Preinfantil" } });
-    fireEvent.change(screen.getByLabelText("Hora de inicio"), { target: { value: "15:00" } });
-    fireEvent.change(screen.getByLabelText("Hora de fin"), { target: { value: "16:00" } });
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 

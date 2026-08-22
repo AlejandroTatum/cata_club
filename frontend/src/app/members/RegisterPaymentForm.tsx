@@ -265,10 +265,11 @@ export default function RegisterPaymentForm({
   return (
     <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-sm font-semibold text-ink-2">
-          Monto
+<label className="text-sm font-semibold text-ink-2">
+              Monto <span aria-hidden="true" className="text-state-bad">*</span>
           <input
             type="number"
+            required
             step={monthlyPrice > 0 ? monthlyPrice : "0.01"}
             min="0"
             value={monto}
@@ -329,13 +330,14 @@ export default function RegisterPaymentForm({
 
       {/* Only transfer payments require a voucher
           (see the check in `validate`). */}
-      {tipoPago === "TRANSFERENCIA" && (
-        <label className="block text-sm font-semibold text-ink-2">
-          Comprobante
+{tipoPago === "TRANSFERENCIA" && (
+            <label className="block text-sm font-semibold text-ink-2">
+              Comprobante <span aria-hidden="true" className="text-state-bad">*</span>
         <div className="mt-0.5 flex items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
+            aria-required="true"
             accept="image/jpeg,image/png,application/pdf"
             onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
             className="hidden"

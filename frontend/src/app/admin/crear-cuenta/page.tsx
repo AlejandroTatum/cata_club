@@ -53,6 +53,7 @@ import {
   BLOOD_TYPE_OPTIONS,
   crearCuentaFieldId,
   initialCrearCuentaFormData,
+  hasCrearCuentaMedicalData,
   validateCrearCuentaStep,
   validateCrearCuentaForm,
   getCrearCuentaErrorMessage,
@@ -464,6 +465,7 @@ function CrearCuentaContent(): React.ReactElement {
         <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Ingrese los datos personales de la cuenta a crear:
         </p>
+        <div className="grid gap-x-4 sm:grid-cols-2">
 
         <WizardInput
           idPrefix={CREAR_CUENTA_ID_PREFIX}
@@ -531,7 +533,8 @@ function CrearCuentaContent(): React.ReactElement {
           numericMode="phone"
         />
 
-        {/* School selector — only for MENOR type */}
+        </div>
+            {/* School selector — only for MENOR type */}
         {formData.accountType === "MENOR" && instituciones.length > 0 && (
           <div className="mt-4">
             <label
@@ -588,10 +591,10 @@ function CrearCuentaContent(): React.ReactElement {
         )}
 
         {formData.accountType === "MENOR" && (
-          <div className="mt-4 rounded-card border border-cuenta-menor/25 bg-cuenta-menor-bg p-page">
-            <h3 className="mb-2 text-sm font-semibold text-cuenta-menor">
-              Representante legal
-            </h3>
+          <fieldset aria-required="true" className="mt-4 rounded-card border border-cuenta-menor/25 bg-cuenta-menor-bg p-page">
+            <legend className="mb-2 text-sm font-semibold text-cuenta-menor">
+              Representante legal <span aria-hidden="true" className="text-state-bad">*</span>
+            </legend>
             <p className="mb-3 text-xs text-cuenta-menor">
               Busque y seleccione el representante legal para este menor:
             </p>
@@ -637,13 +640,14 @@ function CrearCuentaContent(): React.ReactElement {
                 Seleccionado: <strong>{representanteSelected.nombre}</strong> (ID: {representanteSelected.id})
               </p>
             )}
-          </div>
+          </fieldset>
         )}
       </div>
     );
   }
 
   function renderHealthStep(): React.ReactElement {
+    const medicalDetailsRequired = hasCrearCuentaMedicalData(formData);
     return (
       <div className="space-y-section">
         <p className="text-sm leading-relaxed text-ink-2">
@@ -661,19 +665,26 @@ function CrearCuentaContent(): React.ReactElement {
          * is the vocabulary leaking. What the block needed was a boundary, and
          * a hairline on the sunken step is what the system gives for that.
          */}
-        <div className="rounded-card border border-line bg-sunken p-page">
-          <div className="mb-3">
+        <div className="grid gap-x-4 rounded-card border border-line bg-sunken p-page sm:grid-cols-2">
+          <div className="mb-3 sm:col-span-2">
             <label
               htmlFor={crearCuentaFieldId("tipoSangre")}
               className="mb-1.5 block text-sm font-semibold text-ink"
             >
               Tipo de sangre
+              {medicalDetailsRequired ? (
+                <>
+                  <span aria-hidden="true" className="ml-1 text-state-bad">*</span>
+                  <span className="sr-only"> (obligatorio)</span>
+                </>
+              ) : <span className="ml-1 font-normal text-ink-3">(opcional)</span>}
             </label>
             <select
               id={crearCuentaFieldId("tipoSangre")}
               value={formData.tipoSangre}
               onChange={(e) => updateField("tipoSangre", e.target.value)}
               disabled={submitting}
+              required={medicalDetailsRequired}
               className="input-field"
             >
               <option value="">Seleccione tipo de sangre</option>
@@ -712,6 +723,7 @@ function CrearCuentaContent(): React.ReactElement {
             value={formData.contactoEmergencia}
             onChange={(v) => updateField("contactoEmergencia", v)}
             disabled={submitting}
+            required={medicalDetailsRequired}
             placeholder={example("María Rodríguez")}
           />
 
@@ -722,6 +734,7 @@ function CrearCuentaContent(): React.ReactElement {
             value={formData.telefonoEmergencia}
             onChange={(v) => updateField("telefonoEmergencia", v)}
             disabled={submitting}
+            required={medicalDetailsRequired}
             pattern="[0-9]+"
             minLength={7}
             inputMode="tel"
@@ -738,6 +751,7 @@ function CrearCuentaContent(): React.ReactElement {
         <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Ingrese las credenciales de acceso para la cuenta:
         </p>
+        <div className="grid gap-x-4 sm:grid-cols-2">
 
         <WizardInput
           idPrefix={CREAR_CUENTA_ID_PREFIX}
@@ -762,6 +776,7 @@ function CrearCuentaContent(): React.ReactElement {
           required
           icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
         />
+        </div>
       </div>
     );
   }
@@ -775,8 +790,8 @@ function CrearCuentaContent(): React.ReactElement {
       ENTRENADOR: "Entrenador del club",
     };
     return (
-      <div className="space-y-section">
-        <p className="text-sm leading-relaxed text-ink-2">
+      <div className="grid gap-section sm:grid-cols-2">
+        <p className="text-sm leading-relaxed text-ink-2 sm:col-span-2">
           Revise la información antes de crear la cuenta:
         </p>
 
@@ -851,7 +866,7 @@ function CrearCuentaContent(): React.ReactElement {
           </SummaryBlock>
         )}
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-state-ok/30 bg-state-ok-bg p-page text-sm text-state-ok">
+        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-state-ok/30 bg-state-ok-bg p-page text-sm text-state-ok sm:col-span-2">
           <input
             type="checkbox"
             checked={summaryReviewed}
@@ -891,7 +906,7 @@ function CrearCuentaContent(): React.ReactElement {
          * message floating in the middle of it. It says what happened and what
          * comes next, at the top of the column, and stops.
          */
-        <div className="card mx-auto w-full max-w-lg p-page text-center">
+        <div className="card mx-auto w-full max-w-[1080px] p-page text-center">
           <span className="mx-auto mb-section flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
@@ -922,23 +937,27 @@ function CrearCuentaContent(): React.ReactElement {
               inscripción pública ya corrigió en su propia pantalla final. */}
           <div className="mb-page text-left">
             <p className="mb-section text-2xs font-bold uppercase text-ink-3">
-              Qué falta para que quede activo
+              {formData.accountType === "ENTRENADOR" ? "Próximo paso" : "Qué falta para que quede activo"}
             </p>
-            <ol className="space-y-section">
-              {[
-                <>
-                  Asignar un horario: en <Link href="/groups" className="font-semibold text-ink underline">Horarios</Link>, abra el grupo del estudiante y use &quot;Ver alumnos&quot; para inscribirlo.
-                </>,
-                <>
-                  Registrar el primer pago: desde la ficha del socio en Miembros.
-                </>,
-              ].map((linea, i) => (
-                <li key={i} className="flex items-start gap-3 text-sm text-ink-2">
-                  <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-ink-3" />
-                  {linea}
-                </li>
-              ))}
-            </ol>
+            {formData.accountType === "ENTRENADOR" ? (
+              <p className="text-sm text-ink-2">
+                La cuenta ya tiene acceso de entrenador. Puede iniciar sesión y entrar a <Link href="/trainer" className="font-semibold text-ink underline">Mi día</Link> para gestionar sus entrenamientos.
+              </p>
+            ) : (
+              <ol className="space-y-section">
+                {[
+                  <>
+                    Asignar un horario: en <Link href="/groups" className="font-semibold text-ink underline">Horarios</Link>, abra el grupo del estudiante y use &quot;Ver alumnos&quot; para inscribirlo.
+                  </>,
+                  <>Registrar el primer pago: desde la ficha del socio en Miembros.</>,
+                ].map((linea, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm text-ink-2">
+                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-ink-3" />
+                    {linea}
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -970,7 +989,7 @@ function CrearCuentaContent(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <>
+        <div data-testid="create-account-wizard-frame" className="mx-auto flex w-full max-w-[1080px] flex-col gap-section">
           <BackLink href="/members" />
 
           {/*
@@ -1017,7 +1036,7 @@ function CrearCuentaContent(): React.ReactElement {
            * `/student/add-dependent` already uses, so the two flows that
            * collect the same person are the same width.
            */}
-          <div className="card w-full max-w-[760px] p-page">
+          <div className="card w-full p-page">
             <div className="mb-page flex items-center gap-2">
               {/* `ink-3`. Five decorative red icons — one per step — on a
                   wizard whose single red control is the button that creates
@@ -1076,7 +1095,7 @@ function CrearCuentaContent(): React.ReactElement {
               />
             </form>
           </div>
-        </>
+        </div>
       )}
     </AppShell>
   );

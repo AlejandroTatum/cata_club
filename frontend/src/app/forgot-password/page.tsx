@@ -119,7 +119,7 @@ export default function ForgotPasswordPage(): React.ReactElement {
         <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="correo" className={AUTH_LABEL_CLASSES}>
-              Correo electrónico
+              Correo electrónico <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <div className="relative">
               <Mail

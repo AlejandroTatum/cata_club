@@ -703,7 +703,7 @@ export default function GroupsPage(): React.ReactElement {
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
             <label htmlFor="categoria-nombre" className="mb-1 block text-xs font-semibold text-ink-2">
-              Nombre
+              Nombre <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <input
               id="categoria-nombre"
@@ -717,7 +717,7 @@ export default function GroupsPage(): React.ReactElement {
           </div>
           <div>
             <label htmlFor="categoria-hora-inicio" className="mb-1 block text-xs font-semibold text-ink-2">
-              Hora de inicio
+              Hora de inicio <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <input
               id="categoria-hora-inicio"
@@ -730,7 +730,7 @@ export default function GroupsPage(): React.ReactElement {
           </div>
           <div>
             <label htmlFor="categoria-hora-fin" className="mb-1 block text-xs font-semibold text-ink-2">
-              Hora de fin
+              Hora de fin <span aria-hidden="true" className="text-state-bad">*</span>
             </label>
             <input
               id="categoria-hora-fin"
@@ -741,10 +741,10 @@ export default function GroupsPage(): React.ReactElement {
               required
             />
           </div>
-          <div className="sm:col-span-2 lg:col-span-4">
-            <span className="mb-1 block text-xs font-semibold text-ink-2">
-              Días de la semana
-            </span>
+          <fieldset className="sm:col-span-2 lg:col-span-4" aria-required="true">
+            <legend className="mb-1 block text-xs font-semibold text-ink-2">
+              Días de la semana <span aria-hidden="true" className="text-state-bad">*</span>
+            </legend>
             <div className="flex flex-wrap gap-3">
               {DIA_ORDER.map((dia) => (
                 <label key={dia} className="inline-flex items-center gap-1.5 text-xs text-ink">
@@ -757,7 +757,7 @@ export default function GroupsPage(): React.ReactElement {
                 </label>
               ))}
             </div>
-          </div>
+          </fieldset>
           <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={formSubmitting}>
               {formSubmitting && <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />}

@@ -126,7 +126,7 @@ function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/), {
     target: { value: "2014-05-12" },
   });
-  fireEvent.change(screen.getByLabelText(/^Teléfono$/), { target: { value: "0991234567" } });
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
 }
 
 /** Walk to the credentials step (step 2) from the identity step. */
@@ -188,14 +188,14 @@ describe("the field ids are declared, not slugged from the label", () => {
 });
 
 describe("one mark for one idea", () => {
-  it("marks the optional fields and leaves the required blood type unmarked", () => {
+  it("marks the optional fields and marks the required blood type", () => {
     render(<AddDependentPage />);
     goToHealthStep();
 
     const bloodLabel = document.querySelector(
       `label[for="${addDependentFieldId("tipoSangre")}"]`,
     ) as HTMLElement;
-    expect(bloodLabel.textContent).not.toContain("*");
+    expect(bloodLabel.textContent).toContain("*");
     // The two textareas beside it are genuinely optional and say the word.
     const diseasesLabel = document.querySelector(
       `label[for="${addDependentFieldId("enfermedades")}"]`,
@@ -222,6 +222,18 @@ describe("one mark for one idea", () => {
 
     expect(correoLabel.textContent?.match(/\(opcional\)/g)).toHaveLength(1);
     expect(contraseniaLabel.textContent?.match(/\(opcional\)/g)).toHaveLength(1);
+  });
+
+  it("requires both child credentials as soon as either one is entered", () => {
+    render(<AddDependentPage />);
+    goToCredentialsStep();
+    const correo = screen.getByLabelText(/^Correo electrónico/);
+    const contrasenia = screen.getByLabelText(/^Contraseña/);
+    expect(correo).not.toBeRequired();
+    expect(contrasenia).not.toBeRequired();
+    fireEvent.change(correo, { target: { value: "menor@ejemplo.com" } });
+    expect(correo).toBeRequired();
+    expect(contrasenia).toBeRequired();
   });
 
   it("keeps the action colour off the one control this screen renders itself", () => {

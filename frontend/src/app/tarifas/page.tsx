@@ -300,9 +300,10 @@ export default function TarifasPage(): React.ReactElement {
         </h2>
         <div className="flex flex-col gap-section">
           <label className={FIELD_LABEL}>
-            Categoría
+            Categoría <span aria-hidden="true" className="text-state-bad">*</span>
             <input
               type="text"
+              required
               value={newTarifa.categoria}
               onChange={(e) => {
                 setNewTarifa({ ...newTarifa, categoria: e.target.value });
@@ -315,10 +316,11 @@ export default function TarifasPage(): React.ReactElement {
             />
           </label>
           <label className={FIELD_LABEL}>
-            Precio
+            Precio <span aria-hidden="true" className="text-state-bad">*</span>
             <input
               type="text"
               inputMode="decimal"
+              required
               value={newTarifa.precioInput}
               onChange={(e) => {
                 setNewTarifa({ ...newTarifa, precioInput: sanitizePrecioInput(e.target.value) });
@@ -330,9 +332,10 @@ export default function TarifasPage(): React.ReactElement {
             />
           </label>
           <label className={FIELD_LABEL}>
-            Modalidad
+            Modalidad <span aria-hidden="true" className="text-state-bad">*</span>
             <select
               value={newTarifa.modalidad}
+              required
               onChange={(e) =>
                 setNewTarifa({
                   ...newTarifa,

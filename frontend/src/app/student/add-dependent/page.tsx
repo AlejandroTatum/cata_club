@@ -373,6 +373,7 @@ function AddDependentContent(): React.ReactElement {
   }
 
   function renderCredentialsStep(): React.ReactElement {
+    const credentialsRequired = Boolean(formData.correo || formData.contrasenia);
     return (
       <div className="space-y-section">
         <p className="mb-4 text-sm leading-relaxed text-ink-2">
@@ -386,6 +387,7 @@ function AddDependentContent(): React.ReactElement {
           value={formData.correo}
           onChange={(v) => updateField("correo", v)}
           type="email"
+          required={credentialsRequired}
           placeholder="correo@ejemplo.com"
           disabled={submitting}
           icon={<Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
@@ -399,6 +401,7 @@ function AddDependentContent(): React.ReactElement {
           value={formData.contrasenia}
           onChange={(v) => updateField("contrasenia", v)}
           type="password"
+          required={credentialsRequired}
           placeholder="Mínimo 8 caracteres"
           disabled={submitting}
           icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
@@ -446,7 +449,7 @@ function AddDependentContent(): React.ReactElement {
             htmlFor={addDependentFieldId("tipoSangre")}
             className="mb-1.5 block text-sm font-semibold text-ink"
           >
-            Tipo de sangre
+            Tipo de sangre <span aria-hidden="true" className="text-state-bad">*</span>
           </label>
           <select
             id={addDependentFieldId("tipoSangre")}

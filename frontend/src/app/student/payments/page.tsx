@@ -510,8 +510,10 @@ function MonthCountField({
   disabled?: boolean;
 }): React.ReactElement {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className={FIELD_LABEL_CLASSES}>Meses a pagar</span>
+    <fieldset className="flex flex-col gap-1.5" aria-required="true">
+      <legend className={FIELD_LABEL_CLASSES}>
+        Meses a pagar <span aria-hidden="true" className="text-state-bad">*</span>
+      </legend>
       <div className="inline-flex h-ctl w-fit items-center gap-1 rounded-ctl border border-line-2 bg-paper px-1.5">
         <button
           type="button"
@@ -538,7 +540,7 @@ function MonthCountField({
           <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -1005,9 +1007,10 @@ function RenewPaymentForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <MonthCountField value={months} onChange={setMonths} disabled={action.loading} />
         <label className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL_CLASSES}>Forma de pago</span>
+          <span className={FIELD_LABEL_CLASSES}>Forma de pago <span aria-hidden="true" className="text-state-bad">*</span></span>
           <select
             value={tipoPago}
+            required
             onChange={(e) => {
               const value = e.target.value as "EFECTIVO" | "TRANSFERENCIA";
               setTipoPago(value);
@@ -1052,11 +1055,12 @@ function RenewPaymentForm({
 
       {tipoPago === "TRANSFERENCIA" && (
         <div className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL_CLASSES}>Comprobante</span>
+          <span className={FIELD_LABEL_CLASSES}>Comprobante <span aria-hidden="true" className="text-state-bad">*</span></span>
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileInputRef}
               type="file"
+              aria-required="true"
               accept="image/jpeg,image/png,application/pdf"
               onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
               className="hidden"

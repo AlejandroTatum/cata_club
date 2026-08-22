@@ -994,6 +994,8 @@ describe("MembersPage — Crear membresía inline form", () => {
     fireEvent.click(crearButton);
 
     const combobox = await within(dialog).findByRole("combobox");
+    expect(combobox).toBeRequired();
+    expect(combobox).toHaveAccessibleName(/^Tipo de membresía/);
     // Scoped to the create-membership form itself: the modal footer also has
     // its own "Cancelar" button, so a dialog-wide query would be ambiguous.
     const form = combobox.parentElement as HTMLElement;
@@ -1265,6 +1267,9 @@ describe("MembersPage — Registrar pago inline form", () => {
     // shows the owed months before anything is written.
     fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
     expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/fecha inicio/i)).toBeRequired();
+    expect(within(dialog).getByLabelText(/fecha fin/i)).toBeRequired();
+    expect(within(dialog).getByLabelText(/^motivo/i)).toBeRequired();
 
     fireEvent.change(within(dialog).getByLabelText(/fecha inicio/i), { target: { value: "2026-04-01" } });
     fireEvent.change(within(dialog).getByLabelText(/fecha fin/i), { target: { value: "2026-04-30" } });
