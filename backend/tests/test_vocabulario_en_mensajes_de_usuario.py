@@ -454,7 +454,7 @@ MENSAJES_NO_VERIFICABLES = sorted(
 # texto sin revisar -- solo el mismo, leído dos veces por dos sitios.
 NO_VERIFICABLES_ADMITIDOS = (
     "app/infraestructura/repositorios/eliminacion_segura.py:29",
-    "main.py:206",
+    "main.py:207",
 )
 
 FUGAS_EN_PROSA = sorted(
