@@ -107,24 +107,27 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_test
         run: uv run --frozen --no-build pytest tests/ -v --cov=app --cov-report=term-missing
 
-      - name: Compose config tests (production layering)
-        # `tests/test_docker_compose_config.py` vive FUERA de `backend/tests/`
-        # a propósito, así que el paso de arriba (`pytest tests/` con
-        # working-directory: backend, o sea `backend/tests`) nunca lo veía:
-        # su único invocador era `make test-compose` y en CI no lo corría
-        # nadie. Se engancha aquí y no en el job `docker-images` porque:
-        #   - solo necesita Docker Compose (preinstalado en ubuntu-latest) y
-        #     JWT_SECRET_KEY (docker-compose.yml lo declara con `:?`, así que
-        #     `docker compose config` falla sin él); NO necesita Postgres.
-        #   - este job ya tiene el venv del backend con pytest instalado, así
-        #     que el paso cuesta ~1s en vez de re-montar Python + uv.
-        #   - da señal temprana: si el layering de producción se rompe, falla
-        #     acá en segundos en vez de esperar a que se construyan las dos
-        #     imágenes en `docker-images`.
-        # Mismo comando que `make test-compose` (ruta relativa desde backend/).
-        env:
-          JWT_SECRET_KEY: "clave_super_secreta_y_segura_de_mas_de_32_caracteres_para_los_tests"
-        run: uv run --frozen --no-build pytest ../tests/test_docker_compose_config.py -v
+      - name: Root-level tests (tests/ del repo, no backend/tests/)
+        # Los tests de `tests/` (raíz del repo) viven FUERA de `backend/tests/`
+        # a propósito: no necesitan Postgres ni los fixtures de
+        # `backend/tests/conftest.py` (ver el docstring de cada archivo). El
+        # paso de arriba (`pytest tests/` con working-directory: backend, o
+        # sea `backend/tests`) nunca los ve, y la versión anterior de este
+        # paso enganchaba a mano SOLO `test_docker_compose_config.py`: una
+        # lista manual que se pudre — `test_alembic_cabeza_unica.py` y
+        # `test_qa_verify_build_sha.py` existieron durante meses sin que CI
+        # los corriera jamás (issue #552, misma clase de bug que este
+        # comentario ya documentaba para el compose). Por eso ahora se corre
+        # el DIRECTORIO entero: un test raíz nuevo queda cubierto solo.
+        # Se engancha aquí y no en un job propio porque este job ya tiene el
+        # venv del backend con pytest (y alembic, que usa el test de cabeza
+        # única), y Docker Compose viene preinstalado en ubuntu-latest.
+        # Sin bloque `env:`: la suite es autocontenida — el test de compose
+        # inyecta sus propios centinelas (JWT_SECRET_KEY, CORS_ORIGENES, ...)
+        # en el subproceso de `docker compose config`, y el resto mockea o
+        # stubea sus fronteras (git, red, crontab, docker). Que este paso
+        # corra sin variables ES la prueba de que siguen autocontenidos.
+        run: uv run --frozen --no-build pytest ../tests/ -v
 
   migraciones-desde-cero:
     name: Migraciones desde DB vacia (empty -> head)
@@ -250,6 +253,19 @@ jobs:
   docker-images:
     name: Imagenes Docker (build, arranque real y publicacion en GHCR)
     runs-on: ubuntu-latest
+    # `needs` sobre el job COMPLETO, no solo sobre los pasos de publicación:
+    # sin esto, en un push a main este job publicaba `:sha` y `:latest` a
+    # GHCR aunque backend/frontend/migraciones estuvieran FALLANDO en ese
+    # mismo run (issue #552) — el droplet arrastra `:latest` con `docker
+    # compose pull`, así que una suite roja terminaba en producción. El
+    # costo asumido: en PRs (donde nada se publica) el build de imágenes
+    # ahora espera a que los otros jobs terminen en vez de correr en
+    # paralelo. Se prefiere igual el `needs` simple sobre el job entero
+    # antes que condicionales por-paso más finos pero frágiles: la
+    # verificación de arranque sigue corriendo en todos los PRs, solo que
+    # después de los gates baratos. `guard-secretos` también entra: jamás
+    # construir ni publicar imágenes de un árbol que committeó un `.env`.
+    needs: [guard-secretos, backend, frontend, migraciones-desde-cero]
     # Hasta este job, NINGUNA parte del pipeline construía un contenedor ni
     # levantaba la pila: las imágenes que corre producción no las validaba
     # nadie. Ese hueco fue el que dejó pasar un contenedor de frontend que
