@@ -69,6 +69,48 @@ describe("clearCrearCuentaDraft", () => {
   });
 });
 
+describe("password stripping (issue #553)", () => {
+  const DRAFT_KEY = "cata_crear_cuenta_draft";
+  const DRAFT_WITH_PASSWORD: CrearCuentaFormData = {
+    ...SOME_DRAFT,
+    contrasenia: "SecretaAdmin3!",
+  };
+
+  it("never persists the password field in the stored draft", () => {
+    saveCrearCuentaDraft(DRAFT_WITH_PASSWORD);
+    const stored = JSON.parse(window.sessionStorage.getItem(DRAFT_KEY) as string);
+    expect(stored).not.toHaveProperty("contrasenia");
+    // The rest of the draft still round-trips.
+    expect(stored.nombres).toBe("Mateo");
+  });
+
+  it("loads a saved draft with the password field blanked, not resurrected", () => {
+    saveCrearCuentaDraft(DRAFT_WITH_PASSWORD);
+    expect(loadCrearCuentaDraft()).toEqual({ ...DRAFT_WITH_PASSWORD, contrasenia: "" });
+  });
+
+  it("strips the password from a legacy stored draft and rewrites storage sanitized", () => {
+    // A draft written by the pre-fix code: password stored in plaintext.
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(DRAFT_WITH_PASSWORD));
+
+    expect(loadCrearCuentaDraft()).toEqual({ ...DRAFT_WITH_PASSWORD, contrasenia: "" });
+
+    // First load must overwrite the stored value so the plaintext password
+    // does not keep living in sessionStorage.
+    const rewritten = window.sessionStorage.getItem(DRAFT_KEY) as string;
+    expect(rewritten).not.toContain("SecretaAdmin3!");
+    expect(JSON.parse(rewritten)).not.toHaveProperty("contrasenia");
+  });
+
+  it("parseCrearCuentaDraft accepts a stored draft without the password key", () => {
+    const { contrasenia: _c, ...stored } = SOME_DRAFT;
+    expect(parseCrearCuentaDraft(JSON.stringify(stored))).toEqual({
+      ...SOME_DRAFT,
+      contrasenia: "",
+    });
+  });
+});
+
 describe("parseCrearCuentaDraft", () => {
   it("discards malformed JSON wholesale, rather than partially trusting it", () => {
     expect(parseCrearCuentaDraft("{not json")).toBeNull();

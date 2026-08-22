@@ -57,6 +57,61 @@ describe("clearEnrollDraft", () => {
   });
 });
 
+describe("password stripping (issue #553)", () => {
+  const DRAFT_KEY = "cata_enroll_draft";
+  const DRAFT_WITH_PASSWORDS: EnrollFormData = {
+    ...SOME_DRAFT,
+    contrasenia: "SecretaAlumno1!",
+    contraseniaRepresentante: "SecretaRepre2!",
+  };
+
+  it("never persists password fields in the stored draft", () => {
+    saveEnrollDraft(DRAFT_WITH_PASSWORDS);
+    const stored = JSON.parse(window.sessionStorage.getItem(DRAFT_KEY) as string);
+    expect(stored).not.toHaveProperty("contrasenia");
+    expect(stored).not.toHaveProperty("contraseniaRepresentante");
+    // The rest of the draft still round-trips.
+    expect(stored.nombres).toBe("Lucas");
+  });
+
+  it("loads a saved draft with the password fields blanked, not resurrected", () => {
+    saveEnrollDraft(DRAFT_WITH_PASSWORDS);
+    expect(loadEnrollDraft()).toEqual({
+      ...DRAFT_WITH_PASSWORDS,
+      contrasenia: "",
+      contraseniaRepresentante: "",
+    });
+  });
+
+  it("strips passwords from a legacy stored draft and rewrites storage sanitized", () => {
+    // A draft written by the pre-fix code: passwords stored in plaintext.
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(DRAFT_WITH_PASSWORDS));
+
+    expect(loadEnrollDraft()).toEqual({
+      ...DRAFT_WITH_PASSWORDS,
+      contrasenia: "",
+      contraseniaRepresentante: "",
+    });
+
+    // First load must overwrite the stored value so the plaintext passwords
+    // do not keep living in sessionStorage.
+    const rewritten = window.sessionStorage.getItem(DRAFT_KEY) as string;
+    expect(rewritten).not.toContain("SecretaAlumno1!");
+    expect(rewritten).not.toContain("SecretaRepre2!");
+    expect(JSON.parse(rewritten)).not.toHaveProperty("contrasenia");
+    expect(JSON.parse(rewritten)).not.toHaveProperty("contraseniaRepresentante");
+  });
+
+  it("parseEnrollDraft accepts a stored draft without password keys", () => {
+    const { contrasenia: _c, contraseniaRepresentante: _r, ...stored } = SOME_DRAFT;
+    expect(parseEnrollDraft(JSON.stringify(stored))).toEqual({
+      ...SOME_DRAFT,
+      contrasenia: "",
+      contraseniaRepresentante: "",
+    });
+  });
+});
+
 describe("parseEnrollDraft", () => {
   it("discards malformed JSON wholesale, rather than partially trusting it", () => {
     expect(parseEnrollDraft("{not json")).toBeNull();

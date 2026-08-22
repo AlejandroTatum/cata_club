@@ -563,48 +563,98 @@ function isBloodType(value: string): value is BloodType {
 
 const ENROLL_DRAFT_KEY = "cata_enroll_draft";
 
-function isEnrollFormData(value: unknown): value is EnrollFormData {
+/**
+ * Password fields NEVER reach `sessionStorage` (issue #553): a draft used to
+ * persist `contrasenia`/`contraseniaRepresentante` in plaintext beside the
+ * cédulas and medical data of a minor. The stored draft omits these keys; on
+ * restore the visitor re-types the password, and the wizard's own per-field
+ * validation walks them back to the step that asks for it.
+ */
+const ENROLL_PASSWORD_FIELDS = ["contrasenia", "contraseniaRepresentante"] as const;
+
+/** What actually lands in `sessionStorage` — the form minus its passwords. */
+type StoredEnrollDraft = Omit<EnrollFormData, (typeof ENROLL_PASSWORD_FIELDS)[number]>;
+
+function stripEnrollPasswords(data: EnrollFormData): StoredEnrollDraft {
+  const { contrasenia: _c, contraseniaRepresentante: _r, ...stored } = data;
+  return stored;
+}
+
+function isStoredEnrollDraft(value: unknown): value is StoredEnrollDraft {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   if (record.enrollmentType !== ENROLLMENT_TYPES.SELF && record.enrollmentType !== ENROLLMENT_TYPES.CHILD) {
     return false;
   }
-  return Object.keys(initialFormData).every(
-    (key) => key === "enrollmentType" || typeof record[key] === "string",
-  );
+  return Object.keys(initialFormData).every((key) => {
+    if (key === "enrollmentType") return true;
+    // Password keys are absent from post-#553 drafts and present (about to be
+    // dropped) in legacy ones — both shapes are valid stored drafts.
+    if ((ENROLL_PASSWORD_FIELDS as readonly string[]).includes(key)) {
+      return record[key] === undefined || typeof record[key] === "string";
+    }
+    return typeof record[key] === "string";
+  });
 }
 
 /**
- * Parse a stored draft. Returns `null` for anything that is not a complete,
- * well-typed `EnrollFormData` — a corrupted or tampered-with value is dropped
- * rather than half-applied, same rule `parseAttendanceDraft` follows.
+ * Parse a stored value into a draft plus whether it still carried password
+ * keys — a legacy, pre-#553 draft that `loadEnrollDraft` must rewrite.
  */
-export function parseEnrollDraft(raw: string | null): EnrollFormData | null {
-  if (!raw) return null;
+function parseStoredEnrollDraft(raw: string | null): {
+  draft: EnrollFormData | null;
+  hadStoredPasswords: boolean;
+} {
+  if (!raw) return { draft: null, hadStoredPasswords: false };
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { draft: null, hadStoredPasswords: false };
   }
-  return isEnrollFormData(parsed) ? parsed : null;
+  if (!isStoredEnrollDraft(parsed)) return { draft: null, hadStoredPasswords: false };
+  const record = parsed as Record<string, unknown>;
+  return {
+    // Passwords are ALWAYS blanked, never read back from storage.
+    draft: { ...parsed, contrasenia: "", contraseniaRepresentante: "" },
+    hadStoredPasswords: ENROLL_PASSWORD_FIELDS.some((field) => record[field] !== undefined),
+  };
 }
 
-/** Persist the draft. Losing draft persistence must never take the wizard down with it. */
+/**
+ * Parse a stored draft. Returns `null` for anything that is not a complete,
+ * well-typed stored draft — a corrupted or tampered-with value is dropped
+ * rather than half-applied, same rule `parseAttendanceDraft` follows. The
+ * password fields come back empty regardless of what storage held (#553).
+ */
+export function parseEnrollDraft(raw: string | null): EnrollFormData | null {
+  return parseStoredEnrollDraft(raw).draft;
+}
+
+/** Persist the draft — minus its passwords (#553). Losing draft persistence must never take the wizard down with it. */
 export function saveEnrollDraft(data: EnrollFormData): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage?.setItem(ENROLL_DRAFT_KEY, JSON.stringify(data));
+    window.sessionStorage?.setItem(ENROLL_DRAFT_KEY, JSON.stringify(stripEnrollPasswords(data)));
   } catch {
     // Best-effort: the wizard works exactly as before without it.
   }
 }
 
-/** Read a stored draft, or `null` when there is none / storage is unavailable. */
+/**
+ * Read a stored draft, or `null` when there is none / storage is unavailable.
+ *
+ * A legacy draft that still holds plaintext passwords is rewritten sanitized
+ * on this first read, so the passwords stop living in `sessionStorage` (#553).
+ */
 export function loadEnrollDraft(): EnrollFormData | null {
   if (typeof window === "undefined") return null;
   try {
-    return parseEnrollDraft(window.sessionStorage?.getItem(ENROLL_DRAFT_KEY) ?? null);
+    const { draft, hadStoredPasswords } = parseStoredEnrollDraft(
+      window.sessionStorage?.getItem(ENROLL_DRAFT_KEY) ?? null,
+    );
+    if (draft && hadStoredPasswords) saveEnrollDraft(draft);
+    return draft;
   } catch {
     return null;
   }
