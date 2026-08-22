@@ -55,7 +55,7 @@ export default function CampoFormularioAdmin({
 
   return (
     <label className={labelClassName}>
-      {label}
+      <span>{label}{required && <span aria-hidden="true" className="ml-1 text-state-bad">*</span>}</span>
       {type === "textarea" ? (
         <textarea
           value={value}

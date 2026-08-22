@@ -69,10 +69,10 @@ const mockUseAuth = vi.mocked(useAuth);
 
 /** Fill and submit the login form with the given credentials. */
 function submitLoginForm(email = "user@cataclub.com", password = "secret123"): void {
-  fireEvent.change(screen.getByLabelText("Correo electrónico"), {
+  fireEvent.change(screen.getByLabelText(/^Correo electrónico/), {
     target: { value: email },
   });
-  fireEvent.change(screen.getByLabelText("Contraseña"), {
+  fireEvent.change(screen.getByLabelText(/^Contraseña/), {
     target: { value: password },
   });
   fireEvent.click(screen.getByRole("button", { name: /iniciar sesión/i }));
@@ -111,7 +111,8 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
 
-    expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Correo electrónico/)).toBeRequired();
+    expect(screen.getByLabelText(/^Contraseña/)).toBeRequired();
     expect(screen.queryByText("Cargando sesión…")).not.toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
@@ -200,7 +201,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     fireEvent.change(screen.getByLabelText(/correo electrónico/i), { target: { value: "  user@example.com  " } });
-    fireEvent.change(screen.getByLabelText(/^contraseña$/i), { target: { value: "  safe-password  " } });
+    fireEvent.change(screen.getByLabelText(/^contraseña/i), { target: { value: "  safe-password  " } });
     fireEvent.submit(screen.getByRole("button", { name: /iniciar sesión/i }).closest("form") as HTMLFormElement);
 
     expect(mockLogin).toHaveBeenCalledWith("user@example.com", "safe-password");
@@ -214,7 +215,7 @@ describe("LoginPage", () => {
     render(<LoginPage />);
 
     fireEvent.change(screen.getByLabelText(/correo electrónico/i), { target: { value: "   " } });
-    fireEvent.change(screen.getByLabelText(/^contraseña$/i), { target: { value: "safe-password" } });
+    fireEvent.change(screen.getByLabelText(/^contraseña/i), { target: { value: "safe-password" } });
     fireEvent.submit(screen.getByRole("button", { name: /iniciar sesión/i }).closest("form") as HTMLFormElement);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Ingrese su correo electrónico.");
@@ -340,8 +341,8 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
     render(<LoginPage />);
     submitLoginForm();
 
-    const email = screen.getByLabelText("Correo electrónico");
-    const password = screen.getByLabelText("Contraseña");
+    const email = screen.getByLabelText(/^Correo electrónico/);
+    const password = screen.getByLabelText(/^Contraseña/);
     await waitFor(() => expect(email).toHaveAttribute("aria-invalid", "true"));
     expect(password).toHaveAttribute("aria-invalid", "true");
 
@@ -366,7 +367,7 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
     submitLoginForm();
 
     await waitFor(() => expect(mockShowError).toHaveBeenCalled());
-    expect(screen.getByLabelText("Correo electrónico")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("aria-invalid", "false");
     expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
   });
 
@@ -378,11 +379,11 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
     submitLoginForm();
     await screen.findByTestId("credentials-error");
 
-    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "otra-clave" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "otra-clave" } });
 
     // An error that outlives the thing it describes trains people to ignore it.
     expect(screen.queryByTestId("credentials-error")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Contraseña")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("aria-invalid", "false");
   });
 
   // #312 / hallazgo #30: tras el 401 el foco quedaba en <body> — el aviso
@@ -394,7 +395,7 @@ describe("LoginPage — the failed credentials leave a mark on the form", () => 
     render(<LoginPage />);
     submitLoginForm();
 
-    const password = screen.getByLabelText("Contraseña");
+    const password = screen.getByLabelText(/^Contraseña/);
     await waitFor(() => expect(password).toHaveAttribute("aria-invalid", "true"));
     expect(document.activeElement).toBe(password);
   });

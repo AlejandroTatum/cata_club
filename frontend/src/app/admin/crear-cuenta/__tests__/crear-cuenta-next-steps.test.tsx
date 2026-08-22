@@ -69,7 +69,7 @@ afterEach(() => {
   cleanup();
 });
 
-async function createAccountAndConfirm(): Promise<void> {
+async function createAccountAndConfirm(accountType: "Jugador" | "Entrenador" = "Jugador"): Promise<void> {
   vi.mocked(crearCuentaAdmin).mockResolvedValueOnce({
     access_token: "a",
     refresh_token: "b",
@@ -79,14 +79,14 @@ async function createAccountAndConfirm(): Promise<void> {
 
   render(<CrearCuentaPage />);
 
-  fireEvent.click(screen.getByRole("button", { name: /^Jugador/ }));
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${accountType}`) }));
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Mateo Andres" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano Loor" } });
   fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
   fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/), { target: { value: "1998-03-20" } });
-  fireEvent.change(screen.getByLabelText(/^Teléfono$/), { target: { value: "0991234567" } });
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
   // Health step: every field optional, nothing to fill.
@@ -109,6 +109,13 @@ describe("CrearCuentaPage — qué falta después de crear la cuenta (#317 / #36
     expect(screen.getByRole("link", { name: /^horarios$/i })).toHaveAttribute("href", "/groups");
     expect(screen.getByText(/ver alumnos/i)).toBeInTheDocument();
     expect(screen.getByText(/primer pago/i)).toBeInTheDocument();
+  });
+
+  it("da solo acceso y navegación al entrenador, sin instrucciones de socio", async () => {
+    await createAccountAndConfirm("Entrenador");
+
+    expect(screen.getByRole("link", { name: "Mi día" })).toHaveAttribute("href", "/trainer");
+    expect(document.body).not.toHaveTextContent(/pago|mensualidad|membresía|inscribir|estudiante|asignar un horario/i);
   });
 
   it("no lo dice como un paso nuevo del asistente — el wizard sigue en 5 pasos", async () => {

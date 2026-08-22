@@ -308,7 +308,7 @@ export default function DiscountsPage(): React.ReactElement {
          */}
         <div className="flex flex-col gap-section">
           <label className={FIELD_LABEL}>
-            Nombre
+            Nombre <span aria-hidden="true" className="text-state-bad">*</span>
             {/* No `maxLength` here on purpose (issue #314, K6 hallazgo #34):
                 the DOM attribute used to clip a paste to 100 chars with zero
                 feedback, and the toast on submit still said "correctamente"
@@ -318,6 +318,7 @@ export default function DiscountsPage(): React.ReactElement {
                 other than what was typed. */}
             <input
               type="text"
+              required
               value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
               className={FIELD_CONTROL}
@@ -338,9 +339,10 @@ export default function DiscountsPage(): React.ReactElement {
             </span>
           </label>
           <label className={FIELD_LABEL}>
-            Tipo
+            Tipo <span aria-hidden="true" className="text-state-bad">*</span>
             <select
               value={form.modalidad}
+              required
               onChange={(e) => setForm({ ...form, modalidad: e.target.value as Modalidad })}
               className={FIELD_CONTROL}
             >
@@ -349,9 +351,10 @@ export default function DiscountsPage(): React.ReactElement {
             </select>
           </label>
           <label className={FIELD_LABEL}>
-            Valor
+            Valor <span aria-hidden="true" className="text-state-bad">*</span>
             <input
               type="number"
+              required
               min="0"
               max={form.modalidad === "PORCENTAJE" ? 100 : undefined}
               step="0.01"

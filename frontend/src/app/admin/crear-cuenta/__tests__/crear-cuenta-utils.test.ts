@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   initialCrearCuentaFormData,
+  hasCrearCuentaMedicalData,
   validateCrearCuentaForm,
   type AccountType,
   type CrearCuentaFormData,
@@ -86,6 +87,22 @@ describe("validateCrearCuentaForm — edad imposible (326 años)", () => {
       form({ accountType: "MENOR", fechaNacimiento: "1700-01-01", representanteId: 1 }),
     );
     expect(errors).not.toEqual([]);
+  });
+});
+
+describe("hasCrearCuentaMedicalData", () => {
+  it("keeps all medical controls optional when every field is empty", () => {
+    expect(hasCrearCuentaMedicalData(initialCrearCuentaFormData)).toBe(false);
+  });
+
+  it.each<Partial<CrearCuentaFormData>>([
+    { tipoSangre: "O_POSITIVO" },
+    { condicionesSalud: "Asma" },
+    { alergias: "Maní" },
+    { contactoEmergencia: "Ana Pérez" },
+    { telefonoEmergencia: "0991234567" },
+  ])("requires the core details once a medical value is present: %o", (medical) => {
+    expect(hasCrearCuentaMedicalData({ ...initialCrearCuentaFormData, ...medical })).toBe(true);
   });
 });
 

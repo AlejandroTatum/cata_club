@@ -166,7 +166,7 @@ function ResetPasswordContent(): React.ReactElement {
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <div>
           <label htmlFor="password" className={AUTH_LABEL_CLASSES}>
-            Nueva contraseña
+            Nueva contraseña <span aria-hidden="true" className="text-state-bad">*</span>
           </label>
           <div className="relative">
             <Lock
@@ -227,7 +227,7 @@ function ResetPasswordContent(): React.ReactElement {
 
         <div>
           <label htmlFor="confirmPassword" className={AUTH_LABEL_CLASSES}>
-            Repetir contraseña
+            Repetir contraseña <span aria-hidden="true" className="text-state-bad">*</span>
           </label>
           <div className="relative">
             <Lock

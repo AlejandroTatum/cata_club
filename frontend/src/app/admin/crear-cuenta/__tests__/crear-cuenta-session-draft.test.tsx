@@ -148,7 +148,7 @@ describe("CrearCuentaPage — el borrador sobrevive una sesión expirada (issue 
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano Loor" } });
     fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/), { target: { value: "1998-03-20" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono$/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
     // Health step: every field optional, nothing to fill.

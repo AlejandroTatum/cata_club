@@ -58,6 +58,13 @@ beforeEach(() => {
 });
 
 describe("RegisterPaymentForm — el error de comprobante faltante ya no es silencioso (#465)", () => {
+  it("marks the amount and transfer proof as required", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    expect(screen.getByRole("spinbutton", { name: /^Monto/ })).toBeRequired();
+    expect(fileInput()).toHaveAttribute("aria-required", "true");
+  });
+
   it("gives the error message its own id and role=alert", () => {
     openAndSubmitEmpty();
 

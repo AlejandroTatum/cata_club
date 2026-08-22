@@ -81,10 +81,10 @@ vi.mock("@/services/api", () => {
 // ---------------------------------------------------------------------------
 
 function fillMatchingPasswords(password = "password123"): void {
-  fireEvent.change(screen.getByLabelText("Nueva contraseña"), {
+  fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
     target: { value: password },
   });
-  fireEvent.change(screen.getByLabelText("Repetir contraseña"), {
+  fireEvent.change(screen.getByLabelText(/^Repetir contraseña/), {
     target: { value: password },
   });
 }
@@ -142,7 +142,8 @@ describe("ResetPasswordPage", () => {
   it("renders the form when a token is present", () => {
     render(<ResetPasswordPage />);
 
-    expect(screen.getByLabelText("Nueva contraseña")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Nueva contraseña/)).toBeRequired();
+    expect(screen.getByLabelText(/^Repetir contraseña/)).toBeRequired();
     expect(screen.queryByText(/enlace no válido/i)).not.toBeInTheDocument();
   });
 
@@ -211,12 +212,12 @@ describe("ResetPasswordPage", () => {
     it("ticks the length rule over as soon as it is satisfied", () => {
       render(<ResetPasswordPage />);
 
-      fireEvent.change(screen.getByLabelText("Nueva contraseña"), {
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "short" },
       });
       expect(ruleItem("Al menos 8 caracteres")).toHaveAttribute("data-met", "false");
 
-      fireEvent.change(screen.getByLabelText("Nueva contraseña"), {
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "password123" },
       });
       expect(ruleItem("Al menos 8 caracteres")).toHaveAttribute("data-met", "true");
@@ -226,16 +227,16 @@ describe("ResetPasswordPage", () => {
     it("flags a mismatch inline on the second field and keeps submit disabled", () => {
       render(<ResetPasswordPage />);
 
-      fireEvent.change(screen.getByLabelText("Nueva contraseña"), {
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "password123" },
       });
-      fireEvent.change(screen.getByLabelText("Repetir contraseña"), {
+      fireEvent.change(screen.getByLabelText(/^Repetir contraseña/), {
         target: { value: "password456" },
       });
 
       const error = screen.getByRole("alert");
       expect(error).toHaveTextContent("No coincide con la anterior.");
-      expect(screen.getByLabelText("Repetir contraseña")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText(/^Repetir contraseña/)).toHaveAttribute("aria-invalid", "true");
       expect(ruleItem("Las dos contraseñas coinciden")).toHaveAttribute("data-met", "false");
       expect(screen.getByRole("button", { name: "Guardar contraseña" })).toBeDisabled();
       expect(mockShowError).not.toHaveBeenCalled();
@@ -255,14 +256,14 @@ describe("ResetPasswordPage", () => {
     it("marks the mismatched field with the state ramp and no translucent halo", () => {
       render(<ResetPasswordPage />);
 
-      fireEvent.change(screen.getByLabelText("Nueva contraseña"), {
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "password123" },
       });
-      fireEvent.change(screen.getByLabelText("Repetir contraseña"), {
+      fireEvent.change(screen.getByLabelText(/^Repetir contraseña/), {
         target: { value: "password456" },
       });
 
-      const field = screen.getByLabelText("Repetir contraseña");
+      const field = screen.getByLabelText(/^Repetir contraseña/);
       expect(field.className).toMatch(/\bborder-state-bad\b/);
       // The RESTING border only. `focus:border-cata-red` stays and is meant to:
       // that is the field reacting, a measured 5.00:1 state change the shell

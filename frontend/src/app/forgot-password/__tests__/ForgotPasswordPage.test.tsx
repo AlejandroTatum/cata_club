@@ -53,7 +53,7 @@ vi.mock("@/services/api", () => {
 
 /** Fill and submit the forgot-password form with the given email. */
 function submitForgotPasswordForm(email = "user@cataclub.com"): void {
-  fireEvent.change(screen.getByLabelText("Correo electrónico"), {
+  fireEvent.change(screen.getByLabelText(/^Correo electrónico/), {
     target: { value: email },
   });
   fireEvent.click(
@@ -70,7 +70,7 @@ describe("ForgotPasswordPage", () => {
   it("renders the form by default", () => {
     render(<ForgotPasswordPage />);
 
-    expect(screen.getByLabelText("Correo electrónico")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Correo electrónico/)).toBeRequired();
     expect(
       screen.queryByText(/revise su correo/i),
     ).not.toBeInTheDocument();
@@ -111,7 +111,7 @@ describe("ForgotPasswordPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /enviar otro enlace/i }));
 
       // Back on the form — same screen, the address still there to correct or resend.
-      const field = await screen.findByLabelText("Correo electrónico");
+      const field = await screen.findByLabelText(/^Correo electrónico/);
       expect(field).toHaveValue("abuelo.audit@ejemplo.com");
       expect(screen.queryByText(/revise su correo/i)).not.toBeInTheDocument();
     });

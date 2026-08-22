@@ -921,6 +921,10 @@ describe("StudentPaymentsPage — registering a payment", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
 
+    expect(screen.getByRole("group", { name: /^Meses a pagar/ })).toHaveAttribute("aria-required", "true");
+    expect(screen.getByLabelText(/^Forma de pago/)).toBeRequired();
+    expect(screen.getByTestId("renew-voucher-input")).toHaveAttribute("aria-required", "true");
+
     // $25,00 at a $25 monthly price = one month, starting at the end of the
     // approved coverage.
     expect(

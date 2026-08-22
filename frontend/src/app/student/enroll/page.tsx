@@ -558,6 +558,7 @@ function EnrollWizard(): React.ReactElement {
 
   function renderPersonalStep(): React.ReactElement {
     const isSelf = formData.enrollmentType === ENROLLMENT_TYPES.SELF;
+    const childCredentialsRequired = !isSelf && Boolean(formData.correo || formData.contrasenia);
     return (
       <div className="space-y-1">
         <p className="mb-page text-sm text-ink-2">
@@ -690,7 +691,7 @@ function EnrollWizard(): React.ReactElement {
             value: formData.correo,
             onChange: (v) => updateField("correo", v),
             type: "email",
-            required: isSelf,
+            required: isSelf || childCredentialsRequired,
             placeholder: example("correo@ejemplo.com"),
             autoComplete: "email",
           })}
@@ -699,7 +700,7 @@ function EnrollWizard(): React.ReactElement {
             value: formData.contrasenia,
             onChange: (v) => updateField("contrasenia", v),
             type: "password",
-            required: isSelf,
+            required: isSelf || childCredentialsRequired,
             hint: "Al menos 8 caracteres.",
             autoComplete: "new-password",
           })}
@@ -819,7 +820,7 @@ function EnrollWizard(): React.ReactElement {
 
         <div className="mb-4">
           <label htmlFor="enroll-tipo-sangre" className="mb-field block text-sm font-semibold text-ink">
-            Tipo de sangre
+            Tipo de sangre <span aria-hidden="true" className="text-state-bad">*</span>
           </label>
           <select
             id="enroll-tipo-sangre"
