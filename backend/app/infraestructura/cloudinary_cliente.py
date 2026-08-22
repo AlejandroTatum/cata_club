@@ -36,6 +36,19 @@ from app.soporte_transversal.resiliencia import (
 
 logger = logging.getLogger("cataclub.cloudinary")
 
+
+def _redactar_detalle_sensible(detalle: str) -> str:
+    """Evita que errores del SDK copien credenciales configuradas a los logs."""
+    for valor in (
+        settings.cloudinary_api_key,
+        settings.cloudinary_api_secret,
+        settings.cloudinary_auth_token_key,
+    ):
+        if valor:
+            detalle = detalle.replace(valor, "[REDACTED]")
+    return detalle
+
+
 # Mensaje de cara al usuario para CUALQUIER fallo de `_subir()` (issue #347):
 # genérico a propósito porque cubre las 3 funciones públicas de este módulo
 # (comprobante PDF, voucher de transferencia, foto de perfil) y CUALQUIER
@@ -112,15 +125,14 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
         resultado = cloudinary.uploader.upload(contenido, timeout=timeout, **upload_kwargs)
     except Exception as exc:
         _circuito_cloudinary.registrar_fallo()
-        logger.exception("Fallo subiendo %s a Cloudinary", descripcion)
-        # `mensaje` (lo que el socio lee) NUNCA lleva `{exc}`: el texto crudo
-        # del vendor -- incluido `ValueError: Must supply api_key` cuando
-        # falta la credencial -- queda en `detalle_tecnico`, solo para el
-        # log (ver el manejador de main.py y el contrato documentado en
-        # `ErrorDominio`).
+        detalle = _redactar_detalle_sensible(str(exc))
+        logger.error("Fallo subiendo %s a Cloudinary: %s", descripcion, detalle)
+        # `mensaje` (lo que el socio lee) NUNCA lleva el detalle del vendor.
+        # El detalle técnico puede llegar al log del manejador global, por
+        # eso se redacta antes de guardarlo también en la excepción.
         raise ServicioNoDisponible(
             _MENSAJE_SUBIDA_NO_DISPONIBLE,
-            detalle_tecnico=f"Error subiendo {descripcion} a Cloudinary: {exc}",
+            detalle_tecnico=f"Error subiendo {descripcion} a Cloudinary: {detalle}",
             seguro_mostrar=True,
         ) from exc
 
@@ -139,9 +151,9 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
 
     elapsed = time.perf_counter() - inicio
     if elapsed >= UMBRAL_SUBIDA_LENTA_SEGUNDOS:
-        logger.warning("Subida lenta a Cloudinary (%s, %.2fs): %s", descripcion, elapsed, url)
+        logger.warning("Subida lenta a Cloudinary (%s, %.2fs)", descripcion, elapsed)
     else:
-        logger.info("Subida a Cloudinary (%s, %.2fs): %s", descripcion, elapsed, url)
+        logger.info("Subida a Cloudinary (%s, %.2fs)", descripcion, elapsed)
     return url
 
 
