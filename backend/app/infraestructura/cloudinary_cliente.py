@@ -305,6 +305,38 @@ def subir_foto_perfil(
     )
 
 
+def subir_logo_sponsor(contenido: bytes, nombre_publico: str, content_type: str) -> str:
+    """Sube un logo deliberadamente público para su entrega en la landing."""
+    _configurar_cliente()
+    if not contenido:
+        raise ValueError("El contenido del logo está vacío; no se puede subir.")
+    if content_type not in ("image/jpeg", "image/png"):
+        raise ValueError(f"Tipo MIME no soportado para logo de patrocinador: {content_type}")
+    return _subir(contenido, {
+        "resource_type": "image",
+        "type": "upload",
+        "public_id": nombre_publico,
+        "folder": "cataclub/sponsors",
+        "overwrite": False,
+    }, f"logo de patrocinador (public_id={nombre_publico})")
+
+
+def eliminar_logo_sponsor(nombre_publico: str) -> None:
+    """Retira un logo público; la fila se borra solo si el proveedor responde."""
+    _configurar_cliente()
+    try:
+        cloudinary.uploader.destroy(
+            f"cataclub/sponsors/{nombre_publico}", resource_type="image", type="upload", invalidate=True,
+        )
+    except Exception as exc:
+        logger.exception("Fallo eliminando logo de patrocinador de Cloudinary")
+        raise ServicioNoDisponible(
+            "No se pudo eliminar el logo del patrocinador. Intente nuevamente.",
+            detalle_tecnico=f"Error eliminando logo sponsor {nombre_publico}: {exc}",
+            seguro_mostrar=True,
+        ) from exc
+
+
 # --- URL de entrega firmada (hallazgo de privacidad "voucher no enumerable") -
 def generar_url_firmada(
     public_id: str,
