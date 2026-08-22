@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -16,6 +19,7 @@ import LandingMotionLoader from "./LandingMotionLoader";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink, type LandingSchedule } from "./landing-config";
 import { GALLERY_PHOTOS, slideSizes } from "./landing-gallery";
+import { fetchSponsors, type Sponsor } from "@/services/api";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -261,6 +265,30 @@ function Schedule(): React.ReactElement {
   );
 }
 
+function Sponsors(): React.ReactElement | null {
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+
+  useEffect(() => {
+    void fetchSponsors().then(setSponsors).catch(() => setSponsors([]));
+  }, []);
+
+  if (sponsors.length === 0) return null;
+  return (
+    <section className="landing-section" aria-label="Patrocinadores" data-motion-section data-testid="motion-section">
+      <SectionHeader eyebrow="Con el apoyo de" title="Patrocinadores" />
+      <ul className="flex flex-wrap items-center gap-6 border-y border-white/20 py-8" aria-label="Logos de patrocinadores">
+        {sponsors.map((sponsor): React.ReactElement => (
+          <li key={sponsor.id} className="flex h-20 w-40 items-center justify-center bg-white p-3">
+            {/* Remote Cloudinary delivery is public by product decision. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={sponsor.logoUrl} alt={sponsor.nombre} className="max-h-full max-w-full object-contain" />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function Location(): React.ReactElement {
   const { contact } = landingConfig;
   return (
@@ -335,7 +363,7 @@ export default function LandingPage(): React.ReactElement {
        * land inside the region it exists to skip past.
        */}
       <main>
-        <Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Location />
+        <Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Sponsors /><Location />
       </main>
       <Footer />
     </div>
