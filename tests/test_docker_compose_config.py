@@ -46,6 +46,12 @@ _CORS_PARA_RENDER = "http://localhost-para-tests.invalid"
 _DOMINIO_PARA_RENDER = "ejemplo-para-tests.invalid"
 _ACME_EMAIL_PARA_RENDER = "acme-tests@ejemplo.invalid"
 
+# Producción exige estos tres valores incluso para renderizar. Son centinelas
+# locales de esta suite, no credenciales ni defaults de Compose.
+_POSTGRES_USER_PARA_RENDER = "postgres-tests"
+_POSTGRES_PASSWORD_PARA_RENDER = "postgres-password-tests"
+_POSTGRES_DB_PARA_RENDER = "postgres-tests-db"
+
 
 def _ejecutar_config(
     *archivos_compose: str,
@@ -64,6 +70,9 @@ def _ejecutar_config(
         "CORS_ORIGENES": _CORS_PARA_RENDER,
         "DOMINIO": _DOMINIO_PARA_RENDER,
         "ACME_EMAIL": _ACME_EMAIL_PARA_RENDER,
+        "POSTGRES_USER": _POSTGRES_USER_PARA_RENDER,
+        "POSTGRES_PASSWORD": _POSTGRES_PASSWORD_PARA_RENDER,
+        "POSTGRES_DB": _POSTGRES_DB_PARA_RENDER,
         **os.environ,
         **(entorno or {}),
     }
@@ -206,6 +215,24 @@ def test_el_overlay_de_produccion_exige_cors_origenes():
     assert "CORS_ORIGENES" in resultado.stderr, (
         f"el render falló, pero el mensaje no menciona CORS_ORIGENES -- no es "
         f"accionable para quien despliega: {resultado.stderr!r}"
+    )
+
+
+@pytest.mark.parametrize("variable", ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"))
+def test_el_overlay_de_produccion_exige_configuracion_real_de_postgres(variable):
+    """Postgres no debe crear su volumen persistente con los defaults locales
+    antes de que Settings pueda rechazar la DATABASE_URL resultante."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=(variable,),
+    )
+    assert resultado.returncode != 0, (
+        f"el render de producción tiene que fallar sin {variable} -- en cambio "
+        "completó con éxito y permitiría los defaults de desarrollo"
+    )
+    assert variable in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona {variable}: {resultado.stderr!r}"
     )
 
 
@@ -700,6 +727,38 @@ def test_qa_sigue_publicando_los_puertos_documentados():
     for servicio, puerto in (("backend", "8000"), ("frontend", "3000")):
         publicados = {p["published"] for p in config["services"][servicio].get("ports", [])}
         assert puerto in publicados, f"'{servicio}' ya no publica {puerto} en QA"
+
+
+def test_qa_fuerza_mailpit_sin_credenciales_en_todos_los_servicios_python():
+    """QA no puede heredar SMTP_HOST, credenciales ni TLS desde el entorno del
+    operador: el smoke de recuperación debe terminar siempre en el Mailpit local,
+    nunca en un proveedor SMTP real."""
+    config = _config_qa()
+    esperado = {
+        "SMTP_HOST": "mailpit",
+        "SMTP_PORT": "1025",
+        "SMTP_USER": "",
+        "SMTP_PASSWORD": "",
+        "SMTP_STARTTLS": "false",
+    }
+    for servicio in ("backend", "celery-worker", "celery-beat"):
+        environment = config["services"][servicio]["environment"]
+        for variable, valor in esperado.items():
+            assert str(environment.get(variable)).lower() == valor, (
+                f"'{servicio}.{variable}' no fuerza el valor QA seguro {valor!r}: "
+                f"{environment.get(variable)!r}"
+            )
+
+
+def test_qa_up_incluye_worker_y_excluye_beat():
+    """La recuperación se entrega desde Celery, por lo que el worker es parte
+    del stack QA. Beat solo ejecuta cron y debe quedar fuera para no gastar memoria."""
+    makefile = (RAIZ / "Makefile").read_text()
+    match = re.search(r"^QA_SERVICIOS\s*=\s*(.+)$", makefile, flags=re.MULTILINE)
+    assert match, "Makefile no declara QA_SERVICIOS"
+    servicios = set(match.group(1).split())
+    assert "celery-worker" in servicios
+    assert "celery-beat" not in servicios
 
 
 # ─── Memoria de producción (droplet de 2GB) ─────────────────────────────────

@@ -115,6 +115,7 @@ RUTAS_PUBLICAS = {
     ("GET", "/personas/instituciones"),
     ("GET", "/membresias/tarifas"),  # issue #394/#331: mitad pública del catálogo
                                       # de tarifas, misma clase que /personas/instituciones.
+    ("GET", "/sponsors/"),
     ("POST", "/auth/login"),
     ("POST", "/auth/recuperar-contrasenia"),
     ("POST", "/auth/refresh"),
@@ -200,6 +201,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # que asignarlo (ver su hermano POST más abajo). El GET vecino se relajó
     # en el issue #400 (slice 06, ver Balde 2) -- POST/DELETE no cambiaron.
     ("DELETE", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
+    ("DELETE", "/sponsors/{sponsor_id}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -291,6 +293,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # club cobra, así que lleva el mismo rol que crearla.
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/admin/cuentas"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     # Issue #398: solo el club (ADMINISTRADOR) concede un beneficio -- el
