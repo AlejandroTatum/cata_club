@@ -114,10 +114,11 @@ export default function AttendanceCorrectionDialog({
 
         <label className="flex flex-col gap-1">
           <span className="text-2xs font-bold uppercase text-ink-3">
-            Motivo <span className="text-state-bad">*</span>
+            Motivo <span aria-hidden="true" className="text-state-bad">*</span>
           </span>
           <textarea
             rows={2}
+            required
             value={motivo}
             onChange={(e) => onMotivoChange(e.target.value.slice(0, MOTIVO_MAX_LENGTH))}
             maxLength={MOTIVO_MAX_LENGTH}
