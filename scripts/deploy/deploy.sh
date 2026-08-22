@@ -43,6 +43,24 @@ check_remote_image() {
     || die "no se encontró la imagen configurada (o el registro no autoriza el acceso)"
 }
 
+# Dump lógico ANTES de `up -d`: el entrypoint del backend migra en cada
+# arranque y no existen down-migrations, así que el único camino de vuelta es
+# este backup. En el primer aprovisionamiento la base nunca arrancó y no hay
+# nada que respaldar: se omite con aviso y se tolera la ausencia de dump solo
+# durante este deploy (las corridas del cron siguen alertando).
+pre_deploy_backup() {
+  cd "$STACK_DIR"
+  local running
+  running="$(docker compose "${COMPOSE_FILES[@]}" ps --status running --services 2>/dev/null || true)"
+  if ! printf '%s\n' "$running" | grep -qx 'db'; then
+    log "AVISO: el servicio db no está corriendo (primer aprovisionamiento); no hay nada que respaldar"
+    export BACKUP_TOLERATE_MISSING=1
+    return 0
+  fi
+  log "Backup pre-deploy: dump lógico antes de migrar"
+  "$SCRIPT_DIR/../backup/backup-db.sh"
+}
+
 do_checks() {
   cd "$STACK_DIR"
   log "Validación: servicios"
@@ -62,6 +80,7 @@ else: raise SystemExit('/docs responde en producción')"
 case "$cmd" in
   deploy)
     load_image_tag
+    pre_deploy_backup
     "$SCRIPT_DIR/../ops/preflight-production.sh"
     check_remote_image
     cd "$STACK_DIR"
@@ -77,10 +96,14 @@ case "$cmd" in
     do_checks
     ;;
   install-cron)
-    log "Instalando cron de backup (03:30) tras confirmación explícita del operador"
-    (crontab -l 2>/dev/null | grep -v 'backup-db.sh' || true
+    log "Instalando cron de backup (03:30) y de frescura (07:00) tras confirmación explícita del operador"
+    # La verificación de frescura escribe 1-2 líneas por día en el mismo log
+    # del backup para no multiplicar archivos sin rotación.
+    (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' || true
      printf '30 3 * * * cd %s && ./scripts/backup/backup-db.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
+     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
     ) | crontab -
-    crontab -l | grep 'backup-db.sh' >/dev/null || die "el cron no quedó instalado"
+    crontab -l | grep 'backup-db.sh' >/dev/null || die "el cron de backup no quedó instalado"
+    crontab -l | grep 'check-backup-freshness.sh' >/dev/null || die "el cron de frescura no quedó instalado"
     ;;
 esac
