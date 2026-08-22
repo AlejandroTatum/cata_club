@@ -101,21 +101,17 @@ describe("MedicalRecordEditor blood type", () => {
 });
 
 /**
- * #514 — the air rule (`DESIGN.md`'s "regla del aire"), applied the same way
- * `EmptyState`'s `fill` already does: `flex-1` stretches the card to the
- * column instead of leaving canvas underneath it (D11b measured 57% dead air
- * as a titular, 42% as a representante), and the read-mode rows share that
- * surplus between themselves instead of stacking it below the last row.
- *
- * Pure layout: no field, no request payload, no branch changes here — only
- * the two assertions below, on classes.
+ * #514 — this editor is compact and content-driven. It must not stretch a
+ * short medical record to fill a parent column or distribute artificial space
+ * between its read-mode rows. Layout only: fields, payloads and modes stay
+ * untouched.
  */
-describe("MedicalRecordEditor layout — the air rule (#514)", () => {
+describe("MedicalRecordEditor compact layout (#514)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("stretches the card with flex-1 so it fills its column", async () => {
+  it("keeps the card sized to its content instead of stretching its column", async () => {
     mockFetchFichaMedica.mockResolvedValue({
       tipoSangre: "O_POSITIVO",
       enfermedades: [],
@@ -127,10 +123,10 @@ describe("MedicalRecordEditor layout — the air rule (#514)", () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     const card = await screen.findByTestId("medical-record-card");
-    expect(card.className).toMatch(/\bflex-1\b/);
+    expect(card.className).not.toMatch(/\bflex-1\b/);
   });
 
-  it("spreads the surplus air between the read-mode rows instead of stacking it below the last one", async () => {
+  it("keeps read-mode rows compact instead of distributing surplus air", async () => {
     mockFetchFichaMedica.mockResolvedValue({
       tipoSangre: "O_POSITIVO",
       enfermedades: [],
@@ -142,7 +138,7 @@ describe("MedicalRecordEditor layout — the air rule (#514)", () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     const rows = await screen.findByTestId("medical-record-rows");
-    expect(rows.className).toMatch(/\bjustify-around\b/);
+    expect(rows.className).not.toMatch(/\b(?:flex-1|justify-around|justify-between)\b/);
   });
 });
 
