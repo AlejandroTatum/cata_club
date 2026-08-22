@@ -81,6 +81,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import StudentSearch from "@/components/StudentSearch";
 import AppShell from "@/components/shell/AppShell";
 import {
   Calendar,
@@ -901,21 +902,16 @@ export default function GroupsPage(): React.ReactElement {
             <label htmlFor="alumno-select" className="mb-1 block text-xs font-semibold text-ink-2">
               Seleccionar alumno
             </label>
-            <select
+            <StudentSearch
               id="alumno-select"
-              className="input-field w-full"
-              value={roster.selectedId ?? ""}
-              onChange={(e) => roster.setSelectedId(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">Seleccionar alumno…</option>
-              {allStudents
-                .filter((s) => s.activo && !roster.alumnos.some((a) => a.personaId === Number(s.id)))
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombres} {s.apellidos}
-                  </option>
-                ))}
-            </select>
+              ariaLabel="Seleccionar alumno"
+              placeholder="Buscar alumno por nombre…"
+              role="ALUMNO"
+              excludeIds={roster.alumnos.map((alumno) => alumno.personaId)}
+              disabled={roster.assigning}
+              onSelect={(alumno) => roster.setSelectedId(alumno.id)}
+              onClear={() => roster.setSelectedId(null)}
+            />
           </div>
           {/* `ui/Button`, not a raw `.btn-primary`. The global class carries
               a 12px radius and its own padding — a third shape and a fourth
