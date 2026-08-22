@@ -339,7 +339,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                   desktopTableTestId="history-desktop-table"
                   tableHead={<tr><TableHeaderCell className="w-px">Sesión</TableHeaderCell><TableHeaderCell>Registró</TableHeaderCell><TableHeaderCell className="w-full">Resultado</TableHeaderCell>{esAdmin && <TableHeaderCell align="right"><span className="sr-only">Acciones</span></TableHeaderCell>}</tr>}
                   renderCard={(sessionRow) => (
-                    <li className="space-y-3 px-4 py-4" data-testid={`history-mobile-card-${sessionRow.fecha}-${sessionRow.horarioId}`}>
+                    <li className="space-y-section px-4 py-4" data-testid={`history-mobile-card-${sessionRow.fecha}-${sessionRow.horarioId}`}>
                       <div><p className="font-semibold text-ink">{formatDate(sessionRow.fecha)}</p><p className="text-xs text-ink-3">{sessionRow.horario}</p></div>
                       <p className="text-sm text-ink-2"><span className="font-semibold text-ink">Registró: </span>{sessionRow.registradoPorNombre ?? "No registrado"}</p>
                       {renderComposition(sessionRow)}
