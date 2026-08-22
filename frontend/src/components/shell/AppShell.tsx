@@ -847,7 +847,7 @@ export default function AppShell({
           </Link>
 
           {session && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 lg:relative">
               <button
                 ref={userMenuTriggerRef}
                 type="button"
@@ -924,7 +924,7 @@ export default function AppShell({
                   id={userMenuId}
                   onLogout={logout}
                   onNavigate={closeUserMenu}
-                  className={collapsed ? "lg:w-56" : "w-full"}
+                  className="w-full lg:absolute lg:bottom-0 lg:left-full lg:ml-2 lg:w-56"
                 />
               )}
             </div>
