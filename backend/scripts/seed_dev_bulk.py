@@ -60,6 +60,8 @@ from app.dominio.enums import (
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.dominio.cedula import cedula_valida
+from app.soporte_transversal.configuracion import settings
+from scripts.seed_guard import SeedNoPermitidoError, validar_seed_permitido
 
 CONTRASENIA_COMPARTIDA = "alumno123"
 DEFAULT_SEED_VOUCHER_BASE_URL = "https://placehold.co/600x400.png?text=Cata+Club+Voucher"
@@ -585,5 +587,15 @@ def main() -> None:
         db.close()
 
 
-if __name__ == "__main__":
+def ejecutar_como_script() -> None:
+    """Guard ANTES de sembrar; `main()` queda sin guard para los tests."""
+    try:
+        validar_seed_permitido(settings.ambiente, settings.database_url)
+    except SeedNoPermitidoError as exc:
+        print(f"Seed denegado: {exc}", file=sys.stderr)
+        sys.exit(1)
     main()
+
+
+if __name__ == "__main__":
+    ejecutar_como_script()
