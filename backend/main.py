@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.soporte_transversal.circuito_breaker import resumen_circuitos
 from app.soporte_transversal.configuracion import settings, urls_documentacion
+from app.soporte_transversal.configuracion_logging import configurar_logging
 from app.soporte_transversal.rate_limit import limiter
 from app.presentacion.routers import (
     auth_router,
@@ -37,6 +38,12 @@ from app.dominio.excepciones import (
     CredencialesInvalidas, PermisosInsuficientes, ServicioNoDisponible,
     ConflictoConcurrencia,
 )
+
+# Logging del proceso, ANTES de crear la app: uvicorn arranca sin
+# `--log-config`, así que sin esto el raíz no tiene handlers y todo
+# INFO/DEBUG de `cataclub.*` se pierde (issue #554). Idempotente: un
+# re-import de main (suites de test) no vuelve a tocar los handlers.
+configurar_logging()
 
 # `urls_documentacion` apaga /docs, /redoc y /openapi.json solo cuando
 # AMBIENTE=production; en development y test siguen encendidas (PR-10b).
