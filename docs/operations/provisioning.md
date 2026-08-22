@@ -32,6 +32,25 @@ preflight, descarga esa imagen configurada, arranca el stack, valida
 health/readiness y registra la clase de migración y la fecha en un registro por
 SHA y en `current.env`.
 
+## Primer administrador (una sola vez, tras el primer deploy)
+
+Una base recién migrada no tiene ningún usuario: el seed solo corre con
+`AMBIENTE=development`, el registro público crea usuarios sin rol y asignar
+roles exige un administrador existente. El bootstrap rompe ese ciclo:
+
+```bash
+docker compose exec \
+  -e BOOTSTRAP_ADMIN_EMAIL=duenio@club.com \
+  -e BOOTSTRAP_ADMIN_PASSWORD='<contraseña fuerte>' \
+  -e BOOTSTRAP_ADMIN_CEDULA=1712345678 \
+  backend uv run python scripts/crear_primer_admin.py
+```
+
+Exige una contraseña de 12+ caracteres (rechaza las publicadas en el seed),
+crea persona + usuario + rol en una transacción y se niega si ya existe un
+ADMINISTRADOR — repetirlo es inofensivo. Los siguientes administradores se
+asignan desde la aplicación con esta cuenta.
+
 ## Límite de compatibilidad de migraciones
 
 Los scripts **no pueden inferir** si una migración Alembic admite rollback. La

@@ -32,6 +32,8 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.infraestructura.db import SessionLocal
+from app.soporte_transversal.configuracion import settings
+from scripts.seed_guard import SeedNoPermitidoError, validar_seed_permitido
 from datetime import datetime, timezone
 
 from app.dominio.modelos import (
@@ -623,5 +625,15 @@ def main() -> None:
         db.close()
 
 
-if __name__ == "__main__":
+def ejecutar_como_script() -> None:
+    """Guard ANTES de sembrar; `main()` queda sin guard para los tests."""
+    try:
+        validar_seed_permitido(settings.ambiente, settings.database_url)
+    except SeedNoPermitidoError as exc:
+        print(f"Seed denegado: {exc}", file=sys.stderr)
+        sys.exit(1)
     main()
+
+
+if __name__ == "__main__":
+    ejecutar_como_script()
