@@ -27,10 +27,20 @@ render de Compose, deriva la imagen del servicio `backend` y comprueba que Docke
 esté disponible y que el backup lógico esté dentro del RPO. El registro (GHCR
 actualmente) y el repositorio de imagen son una decisión del proyecto en
 `docker-compose.yml`, no una constante de los scripts; la imagen resuelta queda
-en el registro de release junto con el SHA. `deploy.sh` vuelve a ejecutar el
-preflight, descarga esa imagen configurada, arranca el stack, valida
-health/readiness y registra la clase de migración y la fecha en un registro por
-SHA y en `current.env`.
+en el registro de release junto con el SHA. `deploy.sh` primero toma un backup
+pre-deploy (`backup-db.sh`) mientras la base todavía corre con el esquema
+anterior — las migraciones Alembic se ejecutan en cada arranque del backend y
+no existen down-migrations, así que ese dump es el único camino de vuelta de
+datos. Después vuelve a ejecutar el preflight, descarga esa imagen configurada,
+arranca el stack, valida health/readiness y registra la clase de migración y la
+fecha en un registro por SHA y en `current.env`.
+
+En el **primer aprovisionamiento** la base nunca arrancó: no hay nada que
+respaldar, el backup pre-deploy se omite con un aviso y la verificación de
+frescura tolera la ausencia de dump solo durante ese deploy
+(`BACKUP_TOLERATE_MISSING=1`). El camino documentado del día uno pasa sin que
+el cron de backup haya corrido; a partir del segundo deploy, el backup
+pre-deploy y el cron diario mantienen la alarma exigente.
 
 ## Límite de compatibilidad de migraciones
 
@@ -51,12 +61,16 @@ producción.
 
 ## Backup y rollback
 
-Instalar el backup diario solo después de que el operador haya revisado el
-cron que administra su host:
+Instalar los crons solo después de que el operador haya revisado el crontab
+que administra su host:
 
 ```bash
 ./scripts/deploy/deploy.sh install-cron --confirm-install-cron
 ```
+
+Instala dos entradas: el backup diario (03:30) y la verificación de frescura
+(`check-backup-freshness.sh`, 07:00), que alerta si el dump más reciente supera
+el RPO de 26 h. Ambas escriben en el mismo log (`BACKUP_CRON_LOG`).
 
 `backup-db.sh` escribe el dump de forma atómica y no elimina backups: cuando se
 supera `BACKUP_RETENTION`, avisa. La retención, cifrado y réplica fuera del host
