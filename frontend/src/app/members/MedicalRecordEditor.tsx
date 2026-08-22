@@ -270,7 +270,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
     // representante, both measured by #266).
     <div
       data-testid="medical-record-card"
-      className="mt-3 flex flex-1 flex-col rounded-2xl border border-line bg-paper"
+      className="mt-3 rounded-2xl border border-line bg-paper"
     >
       {/* `sticky top-0`, not a plain header: on a narrow screen this card's
           own fields can outgrow the viewport, and the student's identity —
@@ -332,7 +332,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
         )}
       </header>
 
-      <div className="flex flex-1 flex-col p-3 sm:p-4">
+      <div className="p-3 sm:p-4">
       {!editing && state.status === "ready" && !state.isNew && (
         /* El reposo: filas etiqueta-valor, no la grilla de dos columnas de
          * abajo. Son dos formas distintas porque dicen dos cosas distintas —
@@ -347,7 +347,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
          * `fill` centres for a single statement, spread between these FIVE
          * rows instead — the sobrante lands as air between them rather than
          * as bare canvas below the last one. */
-        <div data-testid="medical-record-rows" className="flex flex-1 flex-col justify-around">
+        <div data-testid="medical-record-rows" className="space-y-0">
           <FilaLectura label="Tipo de sangre" value={etiquetaTipoSangre(state.ficha.tipoSangre)} />
           <FilaLectura label="Alergias" value={state.ficha.alergias ?? ""} />
           <FilaLectura
@@ -360,7 +360,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
       )}
 
       {editing && (
-      <div className="flex flex-1 flex-col">
+      <div>
       {state.isNew && (
         <p className="mb-3 rounded-ctl border border-line bg-sunken px-3 py-2 text-xs text-ink-3-strong">
           Todavía no hay una ficha médica cargada para esta persona. Complete los datos y guárdelos.
