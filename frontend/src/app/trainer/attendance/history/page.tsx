@@ -54,15 +54,14 @@ import { fetchAttendanceRecords, fetchTrainingSchedules } from "@/services/api";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
 import {
   Button,
-  DataBox,
   EmptyState,
   ErrorState,
   LoadingState,
   Pagination,
-  Table,
-  TableBody,
+  ResponsiveListTable,
+  STAT_GRID,
+  StatCard,
   TableCell,
-  TableHead,
   TableHeaderCell,
   TableNameCell,
   TableRow,
@@ -167,31 +166,6 @@ const AVISO_FILTRO_ALUMNO =
   "El período no se compara contra el horario semanal al filtrar por alumno: las listas " +
   "donde figura una persona y las sesiones programadas del club no son la misma medida.";
 
-interface PeriodFigureProps {
-  label: string;
-  value: number;
-  /** Aclaración bajo la cifra, cuando la cifra necesita una. */
-  note?: string;
-}
-
-/**
- * Una de las tres cifras del período.
- *
- * La figura va en el `DataBox` numérico que el producto ya usa para todo valor
- * suelto, y el color —cuando lo haya— vive en el rótulo, nunca en el número:
- * es la regla que `StatCard` y `StatGrid` ya declaran. Acá los tres rótulos son
- * neutros a propósito; ninguna de las tres cifras carga un juicio.
- */
-function PeriodFigure({ label, value, note }: PeriodFigureProps): React.ReactElement {
-  return (
-    <div className="flex max-w-[320px] flex-col items-start gap-1.5">
-      <DataBox variant="numeric">{value}</DataBox>
-      <span className="text-2xs font-bold uppercase tracking-flat text-ink-2">{label}</span>
-      {note ? <p className="text-xs text-ink-3">{note}</p> : null}
-    </div>
-  );
-}
-
 export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
@@ -277,6 +251,15 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
     [sessions, schedules, query],
   );
 
+  const renderCorrectionAction = (sessionRow: SessionSummary): React.ReactNode => {
+    if (!esAdmin) return null;
+    if (sessionRow.fecha >= corteCorreccion) return <Link href={buildCorrectionHref(sessionRow)} className={buttonClasses("secondary", "sm")}>Corregir</Link>;
+    return <div className="flex flex-col items-end gap-1.5"><Button variant="secondary" size="sm" disabled aria-describedby={buildReasonId(sessionRow)}>Corregir</Button><p id={buildReasonId(sessionRow)} className="max-w-[240px] text-balance text-xs text-ink-3">{MOTIVO_CORRECCION_VENCIDA}</p></div>;
+  };
+  const renderComposition = (sessionRow: SessionSummary): React.ReactElement => (
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[320px]"><SessionCompositionBar counts={sessionRow.counts} total={sessionRow.total} /><SessionCompositionCounts counts={sessionRow.counts} total={sessionRow.total} /></div>
+  );
+
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell
@@ -310,26 +293,20 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           justamente el momento en que el hueco es toda la información que hay.
         */}
         {!loading && !error && query !== null && (
-          <div className="card flex flex-wrap items-start gap-x-10 gap-y-section px-4 py-3">
-            {filters.student ? (
-              <p className="max-w-[560px] text-xs text-ink-3">{AVISO_FILTRO_ALUMNO}</p>
-            ) : (
-              <>
-                <PeriodFigure label="Listas tomadas" value={coverage.listasTomadas} />
-                <PeriodFigure
-                  label="Sesiones programadas"
-                  value={coverage.sesionesProgramadas}
-                />
-                <PeriodFigure
-                  label="Sin lista (estimado)"
-                  value={coverage.sinLista}
-                  note={AVISO_ESTIMACION}
-                />
-              </>
-            )}
-          </div>
+          filters.student ? (
+            <p className="card px-4 py-3 text-sm text-ink-2">{AVISO_FILTRO_ALUMNO}</p>
+          ) : (
+            <section aria-labelledby="period-summary-title" className="space-y-field">
+              <h2 id="period-summary-title" className="sr-only">Resumen del período</h2>
+              <div className={STAT_GRID}>
+                <StatCard label="Listas tomadas" value={coverage.listasTomadas} hint="registradas en el período" />
+                <StatCard label="Sesiones programadas" value={coverage.sesionesProgramadas} hint="según el horario semanal" />
+                <StatCard label="Sin lista (estimado)" value={coverage.sinLista} hint="diferencia estimada" />
+              </div>
+              <p className="card px-4 py-3 text-sm text-ink-2" role="note">{AVISO_ESTIMACION}</p>
+            </section>
+          )
         )}
-
         {loading && <LoadingState label="Cargando historial…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadHistory()} />}
@@ -355,179 +332,30 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                 }
               />
             ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHead>
-                      <tr>
-                        {/*
-                          Densidad: cada columna pide el ancho de lo que
-                          realmente lleva. "Sesión" es una fecha y una etiqueta
-                          de horario — mide siempre lo mismo, así que `w-px`
-                          (el idioma de "encogé hasta el contenido" en una tabla
-                          al 100%) le da eso y ni un píxel más. Lo que sobra se
-                          lo lleva "Resultado", que es la única columna donde el
-                          ancho es legibilidad y no aire: ahí vive la barra de
-                          composición.
-                        */}
-                        <TableHeaderCell className="w-px">Sesión</TableHeaderCell>
-                        <TableHeaderCell>Registró</TableHeaderCell>
-                        <TableHeaderCell className="w-full">Resultado</TableHeaderCell>
-                        {/*
-                         * "Corregir" is the only action this column has ever
-                         * offered, and only an admin may correct an
-                         * already-registered session (the same backend rule
-                         * `renderReadOnlyReason` explains in the wizard, issue
-                         * #310 / #27). For a trainer that action never exists,
-                         * so the column itself — header included — is omitted
-                         * rather than promising one under an "ACCIONES" label
-                         * that stayed empty on every row.
-                         */}
-                        {esAdmin && (
-                          <TableHeaderCell align="right">
-                            <span className="sr-only">Acciones</span>
-                          </TableHeaderCell>
-                        )}
-                      </tr>
-                    </TableHead>
-                    <TableBody>
-                      {visible.map((sessionRow: SessionSummary) => (
-                        <TableRow key={`${sessionRow.fecha}|${sessionRow.horario}`}>
-                          <TableNameCell
-                            className="w-px whitespace-nowrap"
-                            name={formatDate(sessionRow.fecha)}
-                            sub={sessionRow.horario}
-                          />
-                          <TableCell>
-                            {/*
-                              Un nombre completo ecuatoriano son cuatro palabras
-                              y se comía el ancho de la columna de al lado. Se
-                              topa y se trunca — pero truncar no puede PERDER el
-                              dato: el `title` conserva el nombre entero, que es
-                              lo que el navegador muestra al pasar el mouse y lo
-                              que un lector de pantalla anuncia junto al texto
-                              recortado.
-
-                              El `title` solo cuelga del nombre real. "No
-                              registrado" es un marcador de posición: repetirlo
-                              en un tooltip no agrega nada que la celda no diga.
-                            */}
-                            {sessionRow.registradoPorNombre ? (
-                              <span
-                                className="block max-w-[240px] truncate"
-                                title={sessionRow.registradoPorNombre}
-                              >
-                                {sessionRow.registradoPorNombre}
-                              </span>
-                            ) : (
-                              "No registrado"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {/*
-                              The composition, drawn the way the panel already
-                              draws it on "Mi día" — see `SessionComposition`
-                              for why there is only one drawing of it now. The
-                              state name still rides along as real, visible
-                              text: a bare "9" next to a colored dot would
-                              force every reader to memorize what each color
-                              meant.
-                            */}
-                            {/*
-                              Sin techo: la barra mide una proporción, y una
-                              proporción de cuatro estados dibujada en 220px
-                              deja tramos de dos píxeles que no se distinguen
-                              entre sí. El mínimo sube y el máximo se va, para
-                              que la columna se quede con todo el ancho que las
-                              otras dos no reclamaron.
-                            */}
-                            <div className="flex w-full min-w-[320px] flex-col gap-2">
-                              <SessionCompositionBar
-                                counts={sessionRow.counts}
-                                total={sessionRow.total}
-                              />
-                              <SessionCompositionCounts
-                                counts={sessionRow.counts}
-                                total={sessionRow.total}
-                              />
-                            </div>
-                          </TableCell>
-                          {esAdmin && (
-                            <TableCell align="right">
-                              {sessionRow.fecha >= corteCorreccion ? (
-                                <Link
-                                  href={buildCorrectionHref(sessionRow)}
-                                  className={buttonClasses("secondary", "sm")}
-                                >
-                                  Corregir
-                                </Link>
-                              ) : (
-                                /*
-                                 * Vencida: la acción se queda, apagada y con el
-                                 * motivo al lado (issue #373).
-                                 *
-                                 * Deja de ser un `<Link>` a propósito. Un ancla
-                                 * deshabilitada no existe en HTML — `disabled`
-                                 * no le aplica — así que seguiría navegando al
-                                 * asistente para que el backend rechace la
-                                 * corrección al final del camino. Un `<button
-                                 * disabled>` sí se lee bloqueado, y encima no
-                                 * promete un destino que no va a cumplir.
-                                 *
-                                 * El motivo es texto visible de la celda, no un
-                                 * `title`: un `title` solo aparece al pasar el
-                                 * mouse, no existe en pantalla táctil y no todo
-                                 * lector de pantalla lo anuncia.
-                                 * `aria-describedby` lo ata al control, que es
-                                 * como el asistente ya bloquea "Revisar y
-                                 * confirmar" cuando faltan alumnos por marcar
-                                 * (`../page.tsx`, `unmarkedReasonId`).
-                                 *
-                                 * Ese par allá usa `role="status"` porque el
-                                 * motivo aparece y desaparece mientras el
-                                 * entrenador marca. Acá no: la fila nace
-                                 * vencida y no cambia sola, y diez sesiones
-                                 * viejas en una página serían diez regiones
-                                 * vivas anunciándose al cargar la tabla.
-                                 */
-                                <div className="flex flex-col items-end gap-1.5">
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled
-                                    aria-describedby={buildReasonId(sessionRow)}
-                                  >
-                                    Corregir
-                                  </Button>
-                                  <p
-                                    id={buildReasonId(sessionRow)}
-                                    className="max-w-[240px] text-balance text-xs text-ink-3"
-                                  >
-                                    {MOTIVO_CORRECCION_VENCIDA}
-                                  </p>
-                                </div>
-                              )}
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {totalPages > 1 && (
-                  <Pagination
-                    variant="footer"
-                    page={page}
-                    totalPages={totalPages}
-                    onPageChange={setPage}
-                    totalItems={sessions.length}
-                    pageSize={PAGE_SIZE}
-                    itemNoun="sesión"
-                    itemNounPlural="sesiones"
-                  />
-                )}
-              </>
+                <ResponsiveListTable
+                  items={visible}
+                  getKey={(sessionRow) => `${sessionRow.fecha}|${sessionRow.horario}`}
+                  mobileListTestId="history-mobile-list"
+                  desktopTableTestId="history-desktop-table"
+                  tableHead={<tr><TableHeaderCell className="w-px">Sesión</TableHeaderCell><TableHeaderCell>Registró</TableHeaderCell><TableHeaderCell className="w-full">Resultado</TableHeaderCell>{esAdmin && <TableHeaderCell align="right"><span className="sr-only">Acciones</span></TableHeaderCell>}</tr>}
+                  renderCard={(sessionRow) => (
+                    <li className="space-y-section px-4 py-4" data-testid={`history-mobile-card-${sessionRow.fecha}-${sessionRow.horarioId}`}>
+                      <div><p className="font-semibold text-ink">{formatDate(sessionRow.fecha)}</p><p className="text-xs text-ink-3">{sessionRow.horario}</p></div>
+                      <p className="text-sm text-ink-2"><span className="font-semibold text-ink">Registró: </span>{sessionRow.registradoPorNombre ?? "No registrado"}</p>
+                      {renderComposition(sessionRow)}
+                      {esAdmin && <div className="flex justify-end">{renderCorrectionAction(sessionRow)}</div>}
+                    </li>
+                  )}
+                  renderRow={(sessionRow) => (
+                    <TableRow>
+                      <TableNameCell className="w-px whitespace-nowrap" name={formatDate(sessionRow.fecha)} sub={sessionRow.horario} />
+                      <TableCell>{sessionRow.registradoPorNombre ? <span className="block max-w-[240px] truncate" title={sessionRow.registradoPorNombre}>{sessionRow.registradoPorNombre}</span> : "No registrado"}</TableCell>
+                      <TableCell>{renderComposition(sessionRow)}</TableCell>
+                      {esAdmin && <TableCell align="right">{renderCorrectionAction(sessionRow)}</TableCell>}
+                    </TableRow>
+                  )}
+                  footer={totalPages > 1 ? <Pagination variant="footer" page={page} totalPages={totalPages} onPageChange={setPage} totalItems={sessions.length} pageSize={PAGE_SIZE} itemNoun="sesión" itemNounPlural="sesiones" /> : undefined}
+                />
             )}
           </div>
         )}
