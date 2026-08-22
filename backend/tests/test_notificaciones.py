@@ -3,6 +3,7 @@ Tests del servicio de notificaciones y de la tarea de recuperación de
 contraseña.
 """
 import inspect
+import logging
 import re
 import smtplib
 import socket
@@ -145,6 +146,27 @@ def test_fallo_de_transporte_es_servicio_no_disponible(monkeypatch, excepcion):
             )
 
     assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 1
+
+
+def test_fallo_smtp_redacta_credenciales_de_log_y_detalle(monkeypatch, caplog):
+    _configurar_smtp(monkeypatch)
+    secreto = "smtp-password-no-registrar"
+    monkeypatch.setattr(settings, "smtp_user", "smtp-user-no-registrar")
+    monkeypatch.setattr(settings, "smtp_password", secreto)
+    monkeypatch.setattr(notificaciones_servicio_mod.logger, "disabled", False)
+
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP",
+        side_effect=OSError(f"fallo autenticando smtp-user-no-registrar/{secreto}"),
+    ):
+        with caplog.at_level(logging.ERROR, logger="cataclub.notificaciones"):
+            with pytest.raises(ServicioNoDisponible) as error:
+                ServicioNotificaciones().enviar_correo("user@example.com", "Asunto", "cuerpo")
+
+    assert secreto not in caplog.text
+    assert "smtp-user-no-registrar" not in caplog.text
+    assert secreto not in str(error.value)
+    assert "[REDACTED]" in caplog.text
 
 
 _RECHAZOS_DE_DESTINATARIO = [

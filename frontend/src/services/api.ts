@@ -2388,6 +2388,30 @@ export async function invalidarOtrasSesiones(): Promise<{ mensaje: string }> {
 /** Longer than DEFAULT_TIMEOUT_MS (10s) — subirFotoPerfil is the only caller
  * that uploads a binary body (up to the backend's 5MB cap), which can take
  * longer than a small JSON payload on a slow connection. */
+export interface Sponsor {
+  id: number;
+  nombre: string;
+  logoUrl: string;
+}
+
+/** Public logos shown on the landing page. */
+export async function fetchSponsors(): Promise<Sponsor[]> {
+  return request<Sponsor[]>(apiEndpoint("/sponsors"));
+}
+
+/** Admin-only: upload the sponsor's one public logo and its accessible name. */
+export async function crearSponsor(nombre: string, archivo: File): Promise<Sponsor> {
+  const formData = new FormData();
+  formData.append("nombre", nombre);
+  formData.append("archivo", archivo);
+  return request<Sponsor>(apiEndpoint("/sponsors"), { method: "POST", body: formData }, 30_000);
+}
+
+/** Admin-only: remove a sponsor and its hosted logo. */
+export async function eliminarSponsor(id: number): Promise<void> {
+  await request<unknown>(apiEndpoint(`/sponsors/${id}`), { method: "DELETE" });
+}
+
 const FOTO_PERFIL_UPLOAD_TIMEOUT_MS = 30_000;
 
 /**
