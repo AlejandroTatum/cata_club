@@ -1819,6 +1819,8 @@ describe("TrainerAttendancePage — la corrección por fila (issue #389)", () =>
     const dialog = within(row).getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
 
+    expect(within(dialog).getByPlaceholderText("Por qué se corrige este registro")).toBeRequired();
+
     // Submitting with an empty motivo is refused client-side, no network call.
     fireEvent.click(within(dialog).getByRole("button", { name: "Guardar corrección" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("El motivo es obligatorio.");
