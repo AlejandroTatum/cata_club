@@ -420,10 +420,11 @@ function MedicalRecordAccessButton({
         event.currentTarget.focus();
         onMedical();
       }}
-      aria-label={`Ficha médica de ${account.nombres} ${account.apellidos}`}
+      aria-label={`Ficha médica de ${account.nombres} ${account.apellidos}${account.sinDatosEmergencia ? ": Sin ficha médica cargada" : ""}`}
     >
       <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Ficha médica
+      {account.sinDatosEmergencia ? <span className="text-2xs text-state-neutral">· Sin ficha médica cargada</span> : null}
     </Button>
   );
 }
@@ -438,6 +439,8 @@ function PaymentsAccessButton({
   account,
   onPayments,
 }: Pick<AccountListItemProps, "account" | "onPayments">): React.ReactElement {
+  const debtLabel = getMembershipDebtLabel(account);
+
   return (
     <Button
       variant="tertiary"
@@ -446,59 +449,24 @@ function PaymentsAccessButton({
         event.currentTarget.focus();
         onPayments();
       }}
-      aria-label={`Pagos de ${account.nombres} ${account.apellidos}`}
+      aria-label={`Pagos de ${account.nombres} ${account.apellidos}${debtLabel ? `: ${debtLabel}` : ""}`}
     >
       <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Pagos
+      {debtLabel ? <span className="text-2xs text-state-bad">· {debtLabel}</span> : null}
     </Button>
   );
 }
 
-/**
- * Issue #362's per-row signal: no legal representative at all AND no ficha
- * médica (`MemberAccount.sinDatosEmergencia`, computed in
- * `members-adapter.ts`).
- *
- * Issue #504: this used to reuse the product's warn idiom — `text-state-warn`
- * paired with `AlertTriangle`, the same pairing `wizard-fields.tsx` and
- * `ErrorState.tsx` use for real errors. Emergency data is optional at
- * registration (backend: `test_crear_ficha_medica_sin_datos_de_emergencia_son_opcionales`
- * in `test_ficha_medica.py`, no validation requires it), so warning the admin
- * about a field the system never demanded was contradictory. This now uses
- * `text-state-neutral` (the same informational tone `Badge`'s `neutral` tone
- * and `ChatWidget` already use) and `Stethoscope` — already the ficha médica
- * icon elsewhere on this page — instead of a bespoke alert.
- */
-function EmergencyDataWarning(): React.ReactElement {
-  return (
-    <span className="flex items-center gap-1 text-2xs font-semibold text-state-neutral">
-      <Stethoscope size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-      Sin ficha médica cargada
-    </span>
-  );
-}
-
-/**
- * Issue #326: overdue amount + months, right on the list row instead of
- * requiring the admin to open the edit dialog's "Regularizar deuda" form
- * (`RegularizarDeudaForm.tsx`, which fetches the SAME debt per-membership on
- * demand — a different surface, not replaced by this). Sourced from
- * `estudiantes[0].membresia.mesesAdeudados`/`montoAdeudado`
- * (`members-adapter.ts`, built from the bulk debt endpoint) — renders
- * nothing when either is missing (membership isn't `"vencida"`, or the bulk
- * lookup didn't resolve it), never a fabricated "$0".
- */
-function MembershipDebtInfo({ account }: { account: MemberAccount }): React.ReactElement | null {
+/** Returns the bulk-derived debt state without fabricating a value when it is unavailable. */
+function getMembershipDebtLabel(account: MemberAccount): string | null {
   const membresia = account.estudiantes[0]?.membresia;
   if (!membresia || membresia.estado !== "vencida") return null;
   if (membresia.montoAdeudado === undefined || membresia.mesesAdeudados === undefined) return null;
 
-  return (
-    <span className="mt-1 block text-2xs font-semibold text-state-bad">
-      {formatCurrency(membresia.montoAdeudado)} adeudado ·{" "}
-      {membresia.mesesAdeudados === 1 ? "1 mes" : `${membresia.mesesAdeudados} meses`}
-    </span>
-  );
+  return `${formatCurrency(membresia.montoAdeudado)} adeudado · ${
+    membresia.mesesAdeudados === 1 ? "1 mes" : `${membresia.mesesAdeudados} meses`
+  }`;
 }
 
 /** One account as a table row (`sm` and up). */
@@ -517,16 +485,10 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
           roles are read one account at a time, in the edit dialog. */}
       <TableCell>
         <IdentityCell name={fullName} />
-        {account.sinDatosEmergencia ? (
-          <div className="mt-1">
-            <EmergencyDataWarning />
-          </div>
-        ) : null}
       </TableCell>
       <TableCell>{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-        <MembershipDebtInfo account={account} />
       </TableCell>
       <TableCell type="action">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -558,15 +520,9 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
           {account.representadoPor ? (
             <DataBox>Representado por {account.representadoPor}</DataBox>
           ) : null}
-          {account.sinDatosEmergencia ? <EmergencyDataWarning /> : null}
         </>
       }
-      status={
-        <>
-          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-          <MembershipDebtInfo account={account} />
-        </>
-      }
+      status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
       actions={
         <>
           <MedicalRecordAccessButton account={account} onMedical={onMedical} />

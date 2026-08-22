@@ -1627,14 +1627,12 @@ describe("MembersPage — capped results help", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Issue #326: overdue amount + months on the members list for VENCIDA rows.
-// Sourced from `MemberStudentSummary.membresia.mesesAdeudados`/
-// `montoAdeudado` (built server-side by the adapter from the bulk debt
-// endpoint) — MembersPage only renders what it's given, no fetch here.
+// Issue #538: debt/month state belongs to the existing Pagos action rather
+// than appearing as a detached message in the row/card.
 // ---------------------------------------------------------------------------
 
-describe("MembersPage — deuda en la fila (issue #326)", () => {
-  it("shows overdue amount and months on a VENCIDA membership row and card", async () => {
+describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
+  it("shows overdue amount and months inside Pagos on a VENCIDA row and card", async () => {
     const cuentaConDeuda: MemberAccount = {
       ...ACCOUNT,
       estudiantes: [
@@ -1662,15 +1660,17 @@ describe("MembersPage — deuda en la fila (issue #326)", () => {
     );
 
     const row = await findAccountRow();
-    expect(within(row).getByText(/90/)).toBeInTheDocument();
-    expect(within(row).getByText(/3\s*meses/i)).toBeInTheDocument();
+    const rowPayments = within(row).getByRole("button", { name: /pagos de maría gonzález.*90.*3 meses/i });
+    expect(rowPayments).toHaveTextContent(/90/);
+    expect(rowPayments).toHaveTextContent(/3\s*meses/i);
 
     const card = await findAccountCard();
-    expect(within(card).getByText(/90/)).toBeInTheDocument();
-    expect(within(card).getByText(/3\s*meses/i)).toBeInTheDocument();
+    const cardPayments = within(card).getByRole("button", { name: /pagos de maría gonzález.*90.*3 meses/i });
+    expect(cardPayments).toHaveTextContent(/90/);
+    expect(cardPayments).toHaveTextContent(/3\s*meses/i);
   });
 
-  it("uses singular 'mes' for exactly one overdue month", async () => {
+  it("uses singular 'mes' inside Pagos for exactly one overdue month", async () => {
     const cuentaConUnMes: MemberAccount = {
       ...ACCOUNT,
       estudiantes: [
@@ -1698,8 +1698,9 @@ describe("MembersPage — deuda en la fila (issue #326)", () => {
     );
 
     const row = await findAccountRow();
-    expect(within(row).getByText(/1\s*mes\b/i)).toBeInTheDocument();
-    expect(within(row).queryByText(/1\s*meses/i)).not.toBeInTheDocument();
+    const payments = within(row).getByRole("button", { name: /pagos de maría gonzález.*1 mes/i });
+    expect(payments).toHaveTextContent(/1\s*mes\b/i);
+    expect(payments).not.toHaveTextContent(/1\s*meses/i);
   });
 
   it("shows nothing extra when a VENCIDA membership has no resolved debt data (bulk lookup degraded)", async () => {
@@ -1728,7 +1729,7 @@ describe("MembersPage — deuda en la fila (issue #326)", () => {
     );
 
     const row = await findAccountRow();
-    expect(within(row).queryByText(/adeudad/i)).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos de maría gonzález$/i })).toBeInTheDocument();
   });
 
   it("does not show debt info for an ACTIVA membership even if debt fields were somehow present", async () => {
@@ -1757,7 +1758,7 @@ describe("MembersPage — deuda en la fila (issue #326)", () => {
     );
 
     const row = await findAccountRow();
-    expect(within(row).queryByText(/adeudad/i)).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos de maría gonzález$/i })).toBeInTheDocument();
   });
 });
 
@@ -2434,12 +2435,10 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     // backend never requires — assert it is gone, not just that new text
     // exists alongside it.
     expect(within(row).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    // Scoped to the full notice text (not a bare `/ficha médica/i` substring):
-    // issue #505 added a "Ficha médica" row action beside this notice, and a
-    // loose match now finds both.
-    const notice = within(row).getByText(/sin ficha médica cargada/i);
-    expect(notice).not.toHaveClass("text-state-warn");
-    expect(notice).toHaveClass("text-state-neutral");
+    const ficha = within(row).getByRole("button", {
+      name: /ficha médica de maría gonzález.*sin ficha médica cargada/i,
+    });
+    expect(ficha).toHaveTextContent(/sin ficha médica cargada/i);
   });
 
   it("shows the same neutral notice on the phone card", async () => {
@@ -2452,7 +2451,9 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     const card = await findAccountCard();
 
     expect(within(card).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    expect(within(card).getByText(/sin ficha médica cargada/i)).toHaveClass("text-state-neutral");
+    expect(
+      within(card).getByRole("button", { name: /ficha médica de maría gonzález.*sin ficha médica cargada/i }),
+    ).toHaveTextContent(/sin ficha médica cargada/i);
   });
 
   it("shows no notice at all once emergency data is present", async () => {
