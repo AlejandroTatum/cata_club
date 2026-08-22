@@ -60,6 +60,14 @@ services:
   backend:
     environment:
       AMBIENTE: development
+      # Literales, no `${SMTP_*:-...}`: QA jamás puede heredar el proveedor SMTP
+      # del operador. La recuperación se entrega exclusivamente al Mailpit de
+      # esta red de Compose, sin STARTTLS ni credenciales.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_STARTTLS: "false"
 
   # `make qa-up` no los arranca (QA no necesita tareas programadas y cada
   # worker cuesta memoria), pero comparten el `environment` de `backend` vía
@@ -68,7 +76,17 @@ services:
   celery-worker:
     environment:
       AMBIENTE: development
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_STARTTLS: "false"
 
   celery-beat:
     environment:
       AMBIENTE: development
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_STARTTLS: "false"

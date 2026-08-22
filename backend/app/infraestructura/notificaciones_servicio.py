@@ -25,6 +25,18 @@ from app.soporte_transversal.resiliencia import (
 
 logger = logging.getLogger("cataclub.notificaciones")
 
+
+# Los errores de SMTP pueden repetir el usuario o la contraseña que el cliente
+# intentó usar. Antes de ponerlos en un log o en un detalle técnico, se eliminan
+# los valores configurados; el marcador conserva que hubo un error sin copiar
+# credenciales a un agregador de logs.
+def _redactar_detalle_sensible(detalle: str) -> str:
+    for valor in (settings.smtp_user, settings.smtp_password):
+        if valor:
+            detalle = detalle.replace(valor, "[REDACTED]")
+    return detalle
+
+
 # Circuit breaker en proceso (degradacion-controlada, slice 3): instancia a
 # nivel de MÓDULO, no de instancia. `ServicioNotificaciones` se crea nueva en
 # cada llamada (ver `alertas_tareas.py::_disparar_notificacion_
@@ -115,8 +127,9 @@ class ServicioNotificaciones:
             # `SMTPHeloError`, `SMTPAuthenticationError`, `socket.timeout` y
             # cualquier `OSError` genérico de la capa de transporte.
             _circuito_smtp.registrar_fallo()
-            logger.exception("Fallo de transporte SMTP enviando a %s", destinatario)
-            raise ServicioNoDisponible(f"SMTP no disponible: {exc}") from exc
+            detalle = _redactar_detalle_sensible(str(exc))
+            logger.error("Fallo de transporte SMTP enviando a %s: %s", destinatario, detalle)
+            raise ServicioNoDisponible(f"SMTP no disponible: {detalle}") from exc
         else:
             _circuito_smtp.registrar_exito()
 

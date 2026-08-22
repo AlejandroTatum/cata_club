@@ -1,5 +1,5 @@
 .PHONY: help dev dev-backend dev-frontend test test-backend test-frontend test-compose \
-       test-qa-guard \
+       test-qa-guard test-qa-recovery-delivery \
        lint lint-backend lint-frontend typecheck build build-frontend \
        install install-backend install-frontend \
        docker-up docker-down docker-build \
@@ -71,6 +71,9 @@ test-compose: ## Validate production compose layering (no build/ports leak into 
 # pytest (issue #350, scripts/qa_verify_build_sha.py).
 test-qa-guard: ## Test the qa-up build-SHA guard script
 	cd backend && uv run pytest ../tests/test_qa_verify_build_sha.py -v
+
+test-qa-recovery-delivery: ## Test the QA Mailpit recovery-delivery smoke
+	cd backend && uv run pytest ../tests/test_qa_verify_recovery_delivery.py -v
 
 # ─── Linting ────────────────────────────────────────────────────────────────
 lint: lint-backend lint-frontend ## Lint both projects
@@ -178,6 +181,8 @@ qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo ""
 	@echo "Verificando el SHA servido contra origin/main (issue #350)..."
 	python3 scripts/qa_verify_build_sha.py
+	@echo "Verificando recuperación de contraseña entregada solo a Mailpit..."
+	python3 scripts/qa_verify_recovery_delivery.py
 	@echo ""
 	@echo "  Frontend:  http://localhost:3000"
 	@echo "  Backend:   http://localhost:8000/docs"
@@ -185,7 +190,7 @@ qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo "  Admin:     admin@cataclub.com / admin12345"
 	@echo "  Entrenador: entrenador@cataclub.com / trainer12345"
 	@echo "  Alumnos del dataset grande: contrasenia alumno123"
-	@echo "  Correos:   el worker de Celery SI corre en este entorno; van a donde apunte SMTP_HOST de tu .env (mailpit por defecto, http://localhost:8025)."
+	@echo "  Correos:   celery-worker SÍ corre y QA fuerza Mailpit (http://localhost:8025); celery-beat queda excluido."
 	@echo "  Destruir:  make qa-down"
 
 qa-down: ## Destruir por completo el entorno de QA (contenedores, red y datos)
