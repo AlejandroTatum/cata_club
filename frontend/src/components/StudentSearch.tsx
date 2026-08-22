@@ -7,18 +7,18 @@ import { searchStudents } from "@/services/api";
 import type { PersonaBusqueda } from "@/types/domain";
 
 interface StudentSearchProps {
-  onSelect: (alumno: PersonaBusqueda) => void;
+  readonly onSelect: (alumno: PersonaBusqueda) => void;
   /** Notified when a selected identity is cleared or edited. */
-  onClear?: () => void;
-  placeholder?: string;
-  disabled?: boolean;
+  readonly onClear?: () => void;
+  readonly placeholder?: string;
+  readonly disabled?: boolean;
   /** Restricts the global active-person search to a role when needed. */
-  role?: string;
+  readonly role?: string;
   /** Student ids that must not be offered for the current operation. */
-  excludeIds?: readonly number[];
+  readonly excludeIds?: readonly number[];
   /** Optional id for associating an external visible label with the input. */
-  id?: string;
-  ariaLabel?: string;
+  readonly id?: string;
+  readonly ariaLabel?: string;
 }
 
 export default function StudentSearch({
@@ -167,16 +167,26 @@ export default function StudentSearch({
         )}
       </div>
       {isOpen && (
-        <ul id="student-search-listbox" role="listbox" className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-cata-border bg-white shadow-elevated">
+        <div id="student-search-listbox" role="listbox" className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-cata-border bg-white shadow-elevated">
           {visibleResults.map((alumno, index) => (
-            <li key={alumno.id} id={`student-search-option-${alumno.id}`} role="option" aria-selected={activeIndex === index} onClick={() => handleSelect(alumno)} className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm hover:bg-cata-surface transition-colors">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cata-red/15 text-xs font-semibold text-cata-red">
+            <button
+              key={alumno.id}
+              id={`student-search-option-${alumno.id}`}
+              type="button"
+              role="option"
+              tabIndex={-1}
+              aria-selected={activeIndex === index}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleSelect(alumno)}
+              className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-cata-surface transition-colors"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cata-red/15 text-xs font-semibold text-cata-red" aria-hidden="true">
                 {alumno.nombres.charAt(0)}{alumno.apellidos.charAt(0)}
-              </div>
-              <div><p className="font-semibold text-cata-text">{alumno.nombres} {alumno.apellidos}</p></div>
-            </li>
+              </span>
+              <span className="font-semibold text-cata-text">{alumno.nombres} {alumno.apellidos}</span>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
