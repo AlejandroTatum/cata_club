@@ -257,6 +257,12 @@ de despliegue, rollback y backup vive en
 [`operations/`](https://github.com/AlejandroTatum/cata_club-docs/tree/main/operations) — empezar por
 [`operations/production-readiness.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/operations/production-readiness.md).
 
+Los controles ejecutables provider-neutral están en este checkout:
+[`docs/operations/provisioning.md`](docs/operations/provisioning.md) documenta
+preflight, releases y rollback guardado; [`docs/operations/monitoring.md`](docs/operations/monitoring.md)
+deja explícito que la réplica off-host y el monitoreo externo requieren una
+configuración posterior del proveedor.
+
 ## Documentación
 
 El índice completo (operación, configuración, ownership, privacidad y
