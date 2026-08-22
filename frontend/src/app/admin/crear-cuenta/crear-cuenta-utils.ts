@@ -309,7 +309,22 @@ const CREAR_CUENTA_DRAFT_KEY = "cata_crear_cuenta_draft";
 
 const KNOWN_ACCOUNT_TYPES: readonly (AccountType | "")[] = ["", "JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"];
 
-function isCrearCuentaFormData(value: unknown): value is CrearCuentaFormData {
+/**
+ * The password NEVER reaches `sessionStorage` (issue #553): the draft used to
+ * persist `contrasenia` in plaintext beside the person's cédula and medical
+ * data. The stored draft omits the key; on restore the admin re-types it, and
+ * the credentials step's own validation blocks "Siguiente" until they do.
+ */
+
+/** What actually lands in `sessionStorage` — the form minus its password. */
+type StoredCrearCuentaDraft = Omit<CrearCuentaFormData, "contrasenia">;
+
+function stripCrearCuentaPassword(data: CrearCuentaFormData): StoredCrearCuentaDraft {
+  const { contrasenia: _c, ...stored } = data;
+  return stored;
+}
+
+function isStoredCrearCuentaDraft(value: unknown): value is StoredCrearCuentaDraft {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   if (!KNOWN_ACCOUNT_TYPES.includes(record.accountType as AccountType | "")) return false;
@@ -318,41 +333,73 @@ function isCrearCuentaFormData(value: unknown): value is CrearCuentaFormData {
   if (typeof record.representanteId !== "number" && record.representanteId !== "") return false;
   return Object.keys(initialCrearCuentaFormData).every((key) => {
     if (key === "accountType" || key === "representanteId") return true;
+    // Absent from post-#553 drafts, present (about to be dropped) in legacy
+    // ones — both shapes are valid stored drafts.
+    if (key === "contrasenia") return record[key] === undefined || typeof record[key] === "string";
     return typeof record[key] === "string";
   });
 }
 
 /**
- * Parse a stored draft. Returns `null` for anything that is not a complete,
- * well-typed `CrearCuentaFormData` — a corrupted or tampered-with value is
- * dropped rather than half-applied, same rule `parseEnrollDraft` follows.
+ * Parse a stored value into a draft plus whether it still carried the
+ * password key — a legacy, pre-#553 draft `loadCrearCuentaDraft` must rewrite.
  */
-export function parseCrearCuentaDraft(raw: string | null): CrearCuentaFormData | null {
-  if (!raw) return null;
+function parseStoredCrearCuentaDraft(raw: string | null): {
+  draft: CrearCuentaFormData | null;
+  hadStoredPassword: boolean;
+} {
+  if (!raw) return { draft: null, hadStoredPassword: false };
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { draft: null, hadStoredPassword: false };
   }
-  return isCrearCuentaFormData(parsed) ? parsed : null;
+  if (!isStoredCrearCuentaDraft(parsed)) return { draft: null, hadStoredPassword: false };
+  return {
+    // The password is ALWAYS blanked, never read back from storage.
+    draft: { ...parsed, contrasenia: "" },
+    hadStoredPassword: (parsed as Record<string, unknown>).contrasenia !== undefined,
+  };
 }
 
-/** Persist the draft. Losing draft persistence must never take the wizard down with it. */
+/**
+ * Parse a stored draft. Returns `null` for anything that is not a complete,
+ * well-typed stored draft — a corrupted or tampered-with value is dropped
+ * rather than half-applied, same rule `parseEnrollDraft` follows. The
+ * password field comes back empty regardless of what storage held (#553).
+ */
+export function parseCrearCuentaDraft(raw: string | null): CrearCuentaFormData | null {
+  return parseStoredCrearCuentaDraft(raw).draft;
+}
+
+/** Persist the draft — minus its password (#553). Losing draft persistence must never take the wizard down with it. */
 export function saveCrearCuentaDraft(data: CrearCuentaFormData): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage?.setItem(CREAR_CUENTA_DRAFT_KEY, JSON.stringify(data));
+    window.sessionStorage?.setItem(
+      CREAR_CUENTA_DRAFT_KEY,
+      JSON.stringify(stripCrearCuentaPassword(data)),
+    );
   } catch {
     // Best-effort: the wizard works exactly as before without it.
   }
 }
 
-/** Read a stored draft, or `null` when there is none / storage is unavailable. */
+/**
+ * Read a stored draft, or `null` when there is none / storage is unavailable.
+ *
+ * A legacy draft that still holds a plaintext password is rewritten sanitized
+ * on this first read, so the password stops living in `sessionStorage` (#553).
+ */
 export function loadCrearCuentaDraft(): CrearCuentaFormData | null {
   if (typeof window === "undefined") return null;
   try {
-    return parseCrearCuentaDraft(window.sessionStorage?.getItem(CREAR_CUENTA_DRAFT_KEY) ?? null);
+    const { draft, hadStoredPassword } = parseStoredCrearCuentaDraft(
+      window.sessionStorage?.getItem(CREAR_CUENTA_DRAFT_KEY) ?? null,
+    );
+    if (draft && hadStoredPassword) saveCrearCuentaDraft(draft);
+    return draft;
   } catch {
     return null;
   }
