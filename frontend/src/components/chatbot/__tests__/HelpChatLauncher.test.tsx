@@ -91,4 +91,10 @@ describe("HelpChatLauncher", () => {
       "landing-button-quiet",
     );
   });
+
+  it("uses a white resting background for the landing launcher", () => {
+    render(<HelpChatLauncher variant="landing" />);
+
+    expect(screen.getByRole("button", { name: /asistente/i })).toHaveClass("bg-white");
+  });
 });
