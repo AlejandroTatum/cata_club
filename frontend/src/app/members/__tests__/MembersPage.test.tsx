@@ -1132,15 +1132,28 @@ describe("MembersPage — Registrar pago inline form", () => {
    * "administrator on someone else's behalf" path, so it must not offer
    * EFECTIVO as a choice at all — TRANSFERENCIA is the only method.
    */
-  it("does not offer EFECTIVO as a payment method", async () => {
+  it("offers accessible transfer and cash payment methods", async () => {
     const dialog = await openMemberDialog();
     await openPaymentForm(dialog);
 
-    expect(within(dialog).queryByText(/efectivo/i)).not.toBeInTheDocument();
-    expect(within(dialog).getByText("Transferencia")).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: "Efectivo" })).not.toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "Transferencia" })).toBeChecked();
   });
 
-  it("opens the payment form with monto/tipo/fechas, calls registrarPago on submit, shows success", async () => {
+  it("registers cash from the Members flow without a voucher", async () => {
+        const dialog = await openMemberDialog();
+        await openPaymentForm(dialog);
+
+        fireEvent.click(within(dialog).getByRole("radio", { name: "Efectivo" }));
+        fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+
+        await waitFor(() => {
+          expect(mockRegistrarPago).toHaveBeenCalledWith(expect.objectContaining({ tipoPago: "EFECTIVO" }));
+        });
+        expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+      });
+
+      it("opens the payment form with monto/tipo/fechas, calls registrarPago on submit, shows success", async () => {
     const dialog = await openMemberDialog();
     await openPaymentForm(dialog);
 
@@ -1181,7 +1194,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     await openPaymentForm(dialog);
     await within(dialog).findByDisplayValue("85");
 
-    expect(within(dialog).queryByRole("radio")).not.toBeInTheDocument();
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
     expect(within(dialog).queryByText(/descuento/i)).not.toBeInTheDocument();
     expect(mockFetchDescuentos).not.toHaveBeenCalled();
   });

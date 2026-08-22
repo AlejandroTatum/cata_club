@@ -2,12 +2,12 @@
  * Register a payment against an existing membership — the second of the two
  * independent forms inside a student's edit panel.
  *
- * No method picker on purpose: a cash payment is a declaration by whoever
- * handed over the money, so only the payer (or their representative) can
- * register one. An administrator registering on someone else's behalf, which
- * is exactly this form, no longer offers it — TRANSFERENCIA is the only method
- * this form can submit, which is also why the voucher is unconditionally
- * required.
+ * Administrators can select cash or transfer when registering on a member's behalf.
+ * Transfer payments require a voucher; cash payments do not.
+ *
+ *
+ *
+ *
  */
 
 "use client";
@@ -49,6 +49,7 @@ export default function RegisterPaymentForm({
   const [registered, setRegistered] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
+    const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
 
   // Issue #465: the error message below used to be a plain, unannounced
   // `<p>` — no `id`, no `role="alert"`/`aria-live` on it or on any ancestor
@@ -101,7 +102,16 @@ export default function RegisterPaymentForm({
     setError(null);
   }
 
-  function handleMontoChange(value: string): void {
+  function handleTipoPagoChange(value: "EFECTIVO" | "TRANSFERENCIA"): void {
+      setTipoPago(value);
+      if (value === "EFECTIVO") {
+        setVoucherFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        setError(null);
+      }
+    }
+
+    function handleMontoChange(value: string): void {
     setMonto(value);
     if (!fechaInicio) return;
     const amount = parseFloat(value.replace(/[^0-9.]/g, "")) || 0;
@@ -141,7 +151,9 @@ export default function RegisterPaymentForm({
     if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias.";
     if (fechaInicio >= fechaFin) return "La fecha de inicio debe ser anterior a la fecha de fin.";
     if (!membresia.id) return "No se encontró la membresía.";
-    if (!voucherFile) return "El comprobante de transferencia es obligatorio.";
+    if (tipoPago === "TRANSFERENCIA" && !voucherFile) {
+        return "El comprobante de transferencia es obligatorio.";
+      }
     return null;
   }
 
@@ -181,7 +193,7 @@ export default function RegisterPaymentForm({
         // already confirmed this typed amount is a whole number of months,
         // so the derivation cannot be `null` here.
         meses: wholeMonthsFor(montoNum, monthlyPrice) as number,
-        tipoPago: "TRANSFERENCIA",
+        tipoPago,
         // No fechaInicio/fechaFin (fix período de cobertura, PAG-5): el backend
         // las calcula de `meses`. Las de acá existen solo para la vista
         // previa "Inicio: / Fin:" de más abajo.
@@ -189,7 +201,7 @@ export default function RegisterPaymentForm({
         membresiaId: membresia.id,
       };
       const nuevoPago = await registrarPago(input);
-      if (voucherFile && nuevoPago?.id) {
+      if (tipoPago === "TRANSFERENCIA" && voucherFile && nuevoPago?.id) {
         const { subirVoucherPago } = await import("@/services/api");
         await subirVoucherPago(nuevoPago.id, voucherFile);
       }
@@ -265,13 +277,34 @@ export default function RegisterPaymentForm({
             placeholder="0.00"
           />
         </label>
-        {/* No picker: EFECTIVO is not offered here (see the module comment),
-            so there is nothing for the admin to choose between. */}
         <div className="text-sm font-semibold text-ink-2">
           Método
-          <p className="mt-0.5 flex h-ctl w-full items-center rounded-lg border border-line bg-paper px-3 text-sm text-ink">
-            Transferencia
-          </p>
+          <div
+            role="radiogroup"
+            aria-label="Método de pago"
+            className="mt-0.5 flex h-ctl w-full items-center rounded-lg border border-line bg-paper px-3 text-sm text-ink"
+          >
+            <label className="mr-3 inline-flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="tipoPago"
+                value="TRANSFERENCIA"
+                checked={tipoPago === "TRANSFERENCIA"}
+                onChange={() => handleTipoPagoChange("TRANSFERENCIA")}
+              />
+              Transferencia
+            </label>
+            <label className="inline-flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="tipoPago"
+                value="EFECTIVO"
+                checked={tipoPago === "EFECTIVO"}
+                onChange={() => handleTipoPagoChange("EFECTIVO")}
+              />
+              Efectivo
+            </label>
+          </div>
         </div>
       </div>
 
@@ -294,10 +327,11 @@ export default function RegisterPaymentForm({
         </p>
       )}
 
-      {/* TRANSFERENCIA is the only method, so the voucher is always required
+      {/* Only transfer payments require a voucher
           (see the check in `validate`). */}
-      <label className="block text-sm font-semibold text-ink-2">
-        Comprobante
+      {tipoPago === "TRANSFERENCIA" && (
+        <label className="block text-sm font-semibold text-ink-2">
+          Comprobante
         <div className="mt-0.5 flex items-center gap-2">
           <input
             ref={fileInputRef}
@@ -326,7 +360,8 @@ export default function RegisterPaymentForm({
             </button>
           )}
         </div>
-      </label>
+        </label>
+      )}
 
       {error && (
         // `role="alert"` announces this on mount without waiting for focus;

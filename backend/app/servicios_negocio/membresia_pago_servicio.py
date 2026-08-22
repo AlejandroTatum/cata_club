@@ -475,15 +475,20 @@ class PagoServicio:
                 "pueden registrar este pago"
             )
 
-        # Un pago EFECTIVO es la declaración de quien entregó el dinero -- el
-        # dueño del club confirmó (observación de su propio docente) que solo
-        # esa persona, o quien paga en su representación, puede hacerla. Un
-        # ADMINISTRADOR conserva la vía de TRANSFERENCIA para registrar en
-        # nombre de un tercero, pero no puede declarar una entrega de efectivo
-        # que no presenció. `es_representante` puede no estar resuelto todavía
-        # (el chequeo de arriba lo saltea cuando `es_admin` ya autorizaba de
-        # entrada por sí solo), así que se resuelve acá si hace falta.
-        if datos.tipo_pago == TipoPago.EFECTIVO and not es_duenio and not es_representante:
+        # El administrador autorizado puede registrar EFECTIVO desde Members;
+        # los demás solicitantes siguen sujetos a la autorización owner/representative.
+        # La rama siguiente solo conserva la defensa para una llamada que hubiera
+        # atravesado este punto sin dueño, representante ni rol administrativo;
+        # normalmente el guard de autorización anterior ya la rechazó.
+        #
+        #
+        #
+        if (
+                datos.tipo_pago == TipoPago.EFECTIVO
+                and not es_duenio
+                and not es_representante
+                and not es_admin
+            ):
             if persona_id_solicitante is not None:
                 persona_objetivo = self.repo_persona.obtener_por_id(datos.persona_id)
                 es_representante = bool(
