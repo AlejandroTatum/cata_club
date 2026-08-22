@@ -193,7 +193,7 @@ describe("un alumno es una persona, no una asignación", () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
-    expect(within(melany).getAllByRole("button")).toHaveLength(1);
+    expect(within(melany).getAllByRole("button")).toHaveLength(2);
   });
 });
 
@@ -203,7 +203,7 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
 
     const diego = await screen.findByTestId("student-row-3");
     fireEvent.click(
-      within(diego).getByRole("button", { name: /ficha de emergencia de Diego Mendoza/i }),
+      within(diego).getByRole("button", { name: /ficha médica de Diego Mendoza/i }),
     );
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
@@ -211,7 +211,34 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
     expect(mockFetchFichaEmergencia).toHaveBeenCalledTimes(1);
   });
 
-  it("no pide ninguna ficha hasta que alguien toca un botón", async () => {
+  it("abre Horario con todas las ventanas y restaura el foco al cerrar", async () => {
+      render(<TrainerStudentsPage />);
+      const melany = await screen.findByTestId("student-row-7");
+      const trigger = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
+      trigger.focus();
+      fireEvent.click(trigger);
+      const dialog = screen.getByRole("dialog", { name: "Horario" });
+      expect(within(dialog).getByText("Melany Quimis")).toBeInTheDocument();
+      for (const window of ["Lun 18:00", "Mié 18:00", "Vie 18:00"]) expect(within(dialog).getByText(window)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar horario" }));
+      await waitFor(() => expect(trigger).toHaveFocus());
+      expect(screen.queryByRole("dialog", { name: "Horario" })).not.toBeInTheDocument();
+    });
+
+    it("explica cuando el padrón no trae un horario legible", async () => {
+      const unreadable = fila(11, "Noelia Paz", 13, "DIA_INVALIDO");
+      unreadable.horarioHoraInicio = "";
+      unreadable.horarioHoraFin = "";
+      mockFetchRoster.mockResolvedValue([unreadable]);
+      render(<TrainerStudentsPage />);
+      const noelia = await screen.findByTestId("student-row-11");
+      fireEvent.click(within(noelia).getByRole("button", { name: "Horario de Noelia Paz" }));
+      const dialog = screen.getByRole("dialog", { name: "Horario" });
+      expect(within(dialog).getByText("Sin horario disponible")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Cerrar horario" })).toBeInTheDocument();
+    });
+
+    it("no pide ninguna ficha hasta que alguien toca un botón", async () => {
     // 66 alumnos en pantalla no pueden ser 66 lecturas auditadas: el backend
     // registra quién consultó a quién, y precargarlas ensuciaría esa bitácora
     // con consultas que nadie hizo.
