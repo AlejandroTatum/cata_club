@@ -85,6 +85,8 @@ services:
       CLOUDINARY_CARPETA_FOTOS_PERFIL: cataclub/fotos_perfil
       CELERY_HORA_AUTOMATIZACIONES: "02:30"
       AMBIENTE: ${AMBIENTE:-production}
+      # Nivel del logger raíz del backend (ver configuracion_logging.py).
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # --- Correo / SMTP -----------------------------------------------------
       # En desarrollo con Docker se usa el contenedor mailpit (SMTP sin auth).
       # En producción sobrescribí estas variables con tu proveedor SMTP real.

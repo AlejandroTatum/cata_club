@@ -452,9 +452,16 @@ MENSAJES_NO_VERIFICABLES = sorted(
 # `ValueError`, y ESE literal sí lo barre esta guarda (`es_schema=True` en
 # `mensajes_de_usuario`) en el archivo donde se escribió. No hay un segundo
 # texto sin revisar -- solo el mismo, leído dos veces por dos sitios.
+#
+# Se admiten por ARCHIVO, sin número de línea: el renglón exacto del call
+# site es incidental y se mueve con cualquier commit que toque el archivo
+# por encima (el logging de PR #560 movió el `_respuesta_error` de `main.py`
+# de la 207 a la 214 sin tocar el mensaje). Comparar el archivo conserva la
+# guarda -- "ningún mensaje se escapa por ilegible" -- sin que una línea
+# incidental la rompa.
 NO_VERIFICABLES_ADMITIDOS = (
-    "app/infraestructura/repositorios/eliminacion_segura.py:29",
-    "main.py:207",
+    "app/infraestructura/repositorios/eliminacion_segura.py",
+    "main.py",
 )
 
 FUGAS_EN_PROSA = sorted(
@@ -493,7 +500,10 @@ class TestNingunMensajeVisibleNombraLaImplementacion:
         assert FUGAS_EN_PROSA == []
 
     def test_ningun_mensaje_escapa_por_ser_ilegible_para_la_guarda(self):
-        assert MENSAJES_NO_VERIFICABLES == sorted(NO_VERIFICABLES_ADMITIDOS)
+        archivos = sorted(
+            sitio.rsplit(":", 1)[0] for sitio in MENSAJES_NO_VERIFICABLES
+        )
+        assert archivos == sorted(NO_VERIFICABLES_ADMITIDOS)
 
 
 class TestLasEtiquetasSonElUnicoPuenteYNoFiltran:

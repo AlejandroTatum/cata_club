@@ -46,6 +46,11 @@ def urls_documentacion(ambiente: str) -> dict[str, Optional[str]]:
 # Marcadores que indican que `jwt_secret_key` NO fue reemplazado por una clave
 # real. Si el arranque detecta uno de ellos, lanza (fail-fast) para impedir
 # firmar tokens con un secreto público que cualquiera puede reproducir.
+# Niveles que acepta `LOG_LEVEL`. Son los nombres estándar de `logging`,
+# SIN "NOTSET": en el logger raíz NOTSET no significa "heredar" (no hay de
+# quién) sino un comportamiento residual que nadie configura a propósito.
+_NIVELES_DE_LOG_VALIDOS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+
 _PLACEHOLDERS_SECRETO = (
     "CAMBIAR",
     "CAMBIAR-POR",
@@ -227,6 +232,11 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     "reset_hosts_permitidos_raw": (
         "solo lo consume scripts/reset_dev_db.py, que nunca corre en "
         "producción; su propia allow-list incondicional lo valida"
+    ),
+    "log_level": (
+        "verbosidad operativa con default seguro (INFO); ya lo valida "
+        "_nivel_de_log_debe_ser_valido de forma INCONDICIONAL, en todos "
+        "los ambientes, así que un valor inválido nunca llega a producción"
     ),
 }
 
@@ -481,6 +491,26 @@ class Settings(BaseSettings):
 
     # --- Chatbot de FAQ (gateway OpenCode Zen, OpenAI-compatible) ---
     opencode_api_key: str = ""
+
+    # --- Logging (ver configuracion_logging.py) ---
+    # Nivel del logger RAÍZ del proceso. INFO por defecto: es el nivel al que
+    # ya emiten los handlers de main.py y los servicios; DEBUG se reserva
+    # para diagnosticar un despliegue puntual vía LOG_LEVEL=DEBUG.
+    log_level: str = "INFO"
+
+    @field_validator("log_level")
+    @classmethod
+    def _nivel_de_log_debe_ser_valido(cls, v: str) -> str:
+        """Normaliza a mayúsculas (`LOG_LEVEL=debug` escrito a mano funciona)
+        y rechaza al arrancar cualquier nombre que `logging` no reconozca:
+        un typo acá no puede degradar en silencio a un nivel inesperado."""
+        nivel = v.strip().upper()
+        if nivel not in _NIVELES_DE_LOG_VALIDOS:
+            raise ValueError(
+                f"LOG_LEVEL='{v}' no es un nivel de logging válido; usa uno "
+                f"de {', '.join(_NIVELES_DE_LOG_VALIDOS)}."
+            )
+        return nivel
 
     # --- Reset de la base de datos de desarrollo (backend/scripts/reset_dev_db.py) ---
     # Hosts que el script de reset tiene permitido destruir (DROP SCHEMA).
