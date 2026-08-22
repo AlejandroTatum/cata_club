@@ -331,7 +331,15 @@ def test_umbral_cloudinary_referencia_la_constante_no_un_literal():
 
 @pytest.mark.parametrize(
     "nombre, invocar",
-    [("subir_pdf_membresia", _subir_pdf), ("subir_voucher_pago", _subir_voucher)],
+    [
+        ("subir_pdf_membresia", _subir_pdf),
+        ("subir_voucher_pago", _subir_voucher),
+        # Issue #553 (Problema 2): la foto de perfil se subía SIN
+        # `type="authenticated"` y con `public_id` predecible
+        # (`perfil_{persona_id}`) -- misma clase de hallazgo que el voucher,
+        # mismo candado.
+        ("subir_foto_perfil", _subir_foto),
+    ],
 )
 def test_voucher_y_comprobante_se_suben_como_type_authenticated(nombre, invocar):
     with _parchear_upload() as mock_upload:
@@ -551,3 +559,32 @@ def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_antepone_carpeta():
     )
 
     assert resultado == url_heredada
+
+
+# --- 13. `resolver_url_foto_perfil` (issue #553, Problema 2) ----------------
+# La foto de perfil replica el patrón del voucher: `Persona.foto_url` pasa a
+# persistir el `public_id` (`perfil_{persona_id}`) y la URL de entrega se
+# firma fresca en cada lectura autorizada. Este helper fija resource_type y
+# carpeta para que TODOS los puntos de serialización (auth + personas) firmen
+# contra el mismo recurso indexado (`{carpeta}/{public_id}`, issue #480).
+
+def test_resolver_url_foto_perfil_de_un_public_id_lo_firma_con_su_carpeta():
+    resultado = cc.resolver_url_foto_perfil("perfil_7")
+
+    assert resultado != "perfil_7"
+    assert "/authenticated/" in resultado
+    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7" in resultado
+
+
+def test_resolver_url_foto_perfil_de_una_fila_previa_al_fix_no_se_toca():
+    """Fotos subidas antes del fix guardaron la `secure_url` completa de un
+    recurso `type="upload"` (público). Se devuelven sin cambios hasta que el
+    operador corra `scripts/migrar_fotos_perfil_autenticadas.py`."""
+    url_heredada = "https://res.cloudinary.com/cataclub/image/upload/perfil_7.jpg"
+
+    assert cc.resolver_url_foto_perfil(url_heredada) == url_heredada
+
+
+def test_resolver_url_foto_perfil_sin_valor_devuelve_none():
+    assert cc.resolver_url_foto_perfil(None) is None
+    assert cc.resolver_url_foto_perfil("") is None

@@ -7,9 +7,10 @@ Patrón de nomenclatura consistente con el resto de schemas del proyecto:
     cuando la respuesta se mapea directamente desde un modelo ORM.
 """
 from datetime import date, datetime
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_serializer
 from typing import List, Optional
 
+from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.presentacion.schemas.base import ResponseBase
 from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
 
@@ -52,6 +53,14 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # ficha_medica_router.py::_es_titular_mayor_de_edad para la mitad
     # backend de la misma decisión.
     fecha_nacimiento: date
+
+    @field_serializer("foto_url")
+    def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
+        # Issue #553 (Problema 2): `Persona.foto_url` persiste el
+        # `public_id`; la respuesta HTTP expone SIEMPRE una URL de entrega
+        # firmada. Una fila heredada (URL pública completa) se devuelve sin
+        # tocar hasta que corra `scripts/migrar_fotos_perfil_autenticadas.py`.
+        return resolver_url_foto_perfil(valor)
 
 
 class LogoutResponseDTO(ResponseBase, BaseModel):
@@ -98,6 +107,12 @@ class ActualizarPerfilPropioResponseDTO(ResponseBase, BaseModel):
     telefono: str
     fecha_creacion: datetime
     foto_url: Optional[str] = None
+
+    @field_serializer("foto_url")
+    def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
+        # Mismo criterio que `UsuarioMeResponseDTO`: nunca se expone el
+        # `public_id` crudo ni una URL pública sin firmar (issue #553).
+        return resolver_url_foto_perfil(valor)
 
 
 # --- Foto de perfil (self-service, POST /auth/me/foto) -----------------------

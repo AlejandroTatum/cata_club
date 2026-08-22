@@ -282,14 +282,18 @@ class AuthServicio:
         from app.infraestructura.cloudinary_cliente import subir_foto_perfil
 
         public_id = f"perfil_{usuario.persona_id}"
-        url = subir_foto_perfil(
+        # Issue #553 (Problema 2): la URL que devuelve el SDK al subir NO es una
+        # URL de entrega válida (`type="authenticated"`). Se persiste el
+        # `public_id` y la URL firmada se resuelve al serializar la respuesta
+        # (`ActualizarFotoPerfilResponseDTO`, mismo patrón que el voucher).
+        subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             persona_id=usuario.persona_id,
         )
 
-        self.repo_persona.actualizar(usuario.persona, {"foto_url": url})
+        self.repo_persona.actualizar(usuario.persona, {"foto_url": public_id})
         self.db.commit()
         self.db.refresh(usuario)
 

@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from datetime import date, datetime
 from typing import Optional, List
 
 from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoManoDominante
+from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from pydantic import EmailStr
 from app.presentacion.schemas.base import ResponseBase
 from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
@@ -109,6 +110,14 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
     # listando) y ofrecer reincorporarlo.
     activo: bool = Field(default=True, examples=[True])
 
+    @field_serializer("foto_url")
+    def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
+        # Issue #553 (Problema 2): `Persona.foto_url` persiste el `public_id`;
+        # la respuesta HTTP expone SIEMPRE una URL de entrega firmada (mismo
+        # patrón que el voucher). Una fila heredada (URL pública completa) se
+        # devuelve sin tocar hasta que corra la migración.
+        return resolver_url_foto_perfil(valor)
+
 
 class PersonaBusquedaDTO(ResponseBase, BaseModel):
     """Resultado ligero para el autocomplete de búsqueda de personas."""
@@ -116,6 +125,12 @@ class PersonaBusquedaDTO(ResponseBase, BaseModel):
     nombres: str
     apellidos: str
     foto_url: Optional[str] = None
+
+    @field_serializer("foto_url")
+    def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
+        # Mismo criterio que `PersonaResponseDTO`: nunca se expone el
+        # `public_id` crudo ni una URL pública sin firmar.
+        return resolver_url_foto_perfil(valor)
 
 
 # --- AntecedentesClub ---
