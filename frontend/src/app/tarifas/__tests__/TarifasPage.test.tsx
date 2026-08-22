@@ -353,8 +353,11 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
+    expect(screen.getByLabelText(/categoría/i)).toBeRequired();
+    expect(screen.getByLabelText(/^precio/i)).toBeRequired();
+    expect(screen.getByLabelText(/modalidad/i)).toBeRequired();
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
-    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "25.00" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "25.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     await waitFor(() => {
@@ -378,7 +381,7 @@ describe("TarifasPage — crear tarifa", () => {
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Clases sueltas" } });
     fireEvent.change(screen.getByLabelText(/modalidad/i), { target: { value: "PERSONALIZADA" } });
-    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "10.00" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "10.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     await waitFor(() => {
@@ -395,7 +398,7 @@ describe("TarifasPage — crear tarifa", () => {
     await screen.findByTestId("tarifas-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
-    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "25.00" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "25.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
@@ -408,7 +411,7 @@ describe("TarifasPage — crear tarifa", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
-    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     expect(mockCrearTipoMembresia).not.toHaveBeenCalled();
@@ -425,7 +428,7 @@ describe("TarifasPage — crear tarifa", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /nueva tarifa/i }));
     fireEvent.change(screen.getByLabelText(/categoría/i), { target: { value: "Mensual Infantil" } });
-    fireEvent.change(screen.getByLabelText(/^precio$/i), { target: { value: "25.00" } });
+    fireEvent.change(screen.getByLabelText(/^precio/i), { target: { value: "25.00" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
 
     expect(await screen.findByText("Ya existe una tarifa con esa categoría")).toBeInTheDocument();

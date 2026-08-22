@@ -182,6 +182,19 @@ describe("the red is the action and nothing else", () => {
     expect(screen.getAllByText("(opcional)").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("requires both child credentials as soon as either one is entered", () => {
+    render(<EnrollPage />);
+    chooseRepresentative();
+    next();
+    const correo = screen.getByLabelText(/^Correo electrónico/);
+    const contrasenia = screen.getByLabelText(/^Contraseña/);
+    expect(correo).not.toBeRequired();
+    expect(contrasenia).not.toBeRequired();
+    fireEvent.change(correo, { target: { value: "menor@ejemplo.com" } });
+    expect(correo).toBeRequired();
+    expect(contrasenia).toBeRequired();
+  });
+
   it("keeps the action colour off a field in error", () => {
     render(<EnrollPage />);
     next();

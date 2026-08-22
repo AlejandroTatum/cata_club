@@ -181,6 +181,9 @@ describe("DiscountsPage — crear", () => {
     await screen.findByTestId("discounts-table");
 
     fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+    expect(screen.getByLabelText(/^Nombre/)).toBeRequired();
+    expect(screen.getByLabelText(/^Tipo/)).toBeRequired();
+    expect(screen.getByLabelText(/^Valor/)).toBeRequired();
     fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Media beca" } });
     fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: "50" } });
     fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));

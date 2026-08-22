@@ -107,7 +107,7 @@ function goToHealthStep(): void {
   fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/), {
     target: { value: "1998-03-20" },
   });
-  fireEvent.change(screen.getByLabelText(/^Teléfono$/), { target: { value: "0991234567" } });
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 }
 
@@ -256,6 +256,16 @@ describe("one vocabulary for an example", () => {
 });
 
 describe("the progress is the named stepper, not an anonymous bar", () => {
+  it("centers every wizard control in one responsive frame", () => {
+    render(<CrearCuentaPage />);
+    const frame = screen.getByTestId("create-account-wizard-frame");
+    expect(frame).toHaveClass("mx-auto", "w-full", "max-w-[1080px]");
+    expect(frame).toContainElement(screen.getByRole("link", { name: /volver/i }));
+    expect(frame).toContainElement(screen.getByText("Paso 1 de 5"));
+    expect(frame).toContainElement(screen.getByRole("list", { name: /pasos para crear una cuenta/i }));
+    expect(frame).toContainElement(screen.getByRole("button", { name: /siguiente/i }));
+  });
+
   /**
    * The two student wizards draw `Stepper`: five named pills, so the visitor
    * can see what is behind and what is ahead. This one drew a filled bar and a
@@ -270,5 +280,16 @@ describe("the progress is the named stepper, not an anonymous bar", () => {
     for (const label of ["Tipo", "Datos", "Salud", "Acceso", "Confirmar"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+  });
+});
+
+
+describe("required representative selection", () => {
+  it("marks the MENOR selection group, not its search input", () => {
+    render(<CrearCuentaPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Menor/ }));
+    fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
+    expect(screen.getByRole("group", { name: /^Representante legal/ })).toHaveAttribute("aria-required", "true");
+    expect(screen.getByPlaceholderText("Buscar por nombre...")).not.toBeRequired();
   });
 });

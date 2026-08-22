@@ -200,7 +200,11 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
         {opts.label}
-        {!opts.required && <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
+        {opts.required ? (
+          <>
+            <span aria-hidden="true" className="ml-1 text-state-bad">*</span>
+          </>
+        ) : <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
       </label>
       <div className="relative">
         {opts.icon && (
@@ -282,7 +286,11 @@ export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
         {opts.label}
-        {!opts.required && <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
+        {opts.required ? (
+          <>
+            <span aria-hidden="true" className="ml-1 text-state-bad">*</span>
+          </>
+        ) : <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
       </label>
       <div className="relative">
         {opts.icon && (

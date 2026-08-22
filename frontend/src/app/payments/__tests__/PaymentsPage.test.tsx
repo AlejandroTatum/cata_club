@@ -651,6 +651,8 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
     await openResolvedRequestDetail();
 
     fireEvent.click(await screen.findByRole("button", { name: /corregir pago/i }));
+    expect(screen.getByLabelText(/monto final/i)).not.toBeRequired();
+    expect(screen.getByLabelText(/^motivo/i)).toBeRequired();
     fireEvent.change(screen.getByLabelText(/monto final/i), { target: { value: "45.00" } });
     fireEvent.change(screen.getByLabelText(/^motivo/i), { target: { value: "Descuento mal aplicado" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar corrección/i }));

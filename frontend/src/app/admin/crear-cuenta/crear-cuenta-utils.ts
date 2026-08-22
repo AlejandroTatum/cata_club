@@ -201,6 +201,20 @@ export function validateCrearCuentaForm(data: CrearCuentaFormData): string[] {
   return [...validateType(data), ...validatePersonal(data), ...validateCredentials(data), ...validateMedical(data)];
 }
 
+/**
+ * Whether completing any medical field turns the record's core emergency
+ * details into a required set. This is the single contract shared by validation
+ * and the health-step labels/HTML required state.
+ */
+export function hasCrearCuentaMedicalData(data: Pick<CrearCuentaFormData,
+  "tipoSangre" | "condicionesSalud" | "alergias" | "contactoEmergencia" | "telefonoEmergencia"
+>): boolean {
+  return Boolean(
+    data.tipoSangre || data.condicionesSalud.trim() || data.alergias.trim() ||
+    data.contactoEmergencia.trim() || data.telefonoEmergencia.trim(),
+  );
+}
+
 function validateType(data: CrearCuentaFormData): string[] {
   const errors: string[] = [];
   if (!data.accountType) errors.push("Seleccione un tipo de cuenta.");
@@ -259,10 +273,7 @@ function validateCredentials(data: CrearCuentaFormData): string[] {
 
 function validateMedical(data: CrearCuentaFormData): string[] {
   const errors: string[] = [];
-  const hasAnyMedicalData =
-    data.tipoSangre || data.condicionesSalud.trim() || data.alergias.trim() ||
-    data.contactoEmergencia.trim() || data.telefonoEmergencia.trim();
-  if (!hasAnyMedicalData) return errors;
+  if (!hasCrearCuentaMedicalData(data)) return errors;
   if (!BLOOD_TYPE_OPTIONS.includes(data.tipoSangre as typeof BLOOD_TYPE_OPTIONS[number])) {
     errors.push("El tipo de sangre es obligatorio.");
   }
