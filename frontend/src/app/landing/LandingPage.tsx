@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -246,10 +246,17 @@ function Gallery(): React.ReactElement {
   );
 }
 
-function ScheduleCard({ category, audience, hours, days }: ScheduleCardProps): React.ReactElement {
+function ScheduleCard({ category, audience, slots }: ScheduleCardProps): React.ReactElement {
   return (
     <article className="landing-schedule-card" data-reveal>
-      <h3>{category}</h3><span>{audience}</span><strong>{hours}</strong><b>{days}</b>
+      <h3>{category}</h3><span>{audience}</span>
+      {/* One flat hours/days pair per slot: the card keeps its original DOM
+          shape, a category that trains twice simply renders two pairs. */}
+      {slots.map((slot): React.ReactElement => (
+        <Fragment key={`${slot.on}-${slot.hours}-${slot.days}`}>
+          <strong>{slot.hours}</strong><b>{slot.days}</b>
+        </Fragment>
+      ))}
     </article>
   );
 }

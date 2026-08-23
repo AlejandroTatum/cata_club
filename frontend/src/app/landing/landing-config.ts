@@ -4,11 +4,16 @@ export interface LandingStat {
   label: string;
 }
 
+export interface LandingScheduleSlot {
+  hours: string;
+  days: string;
+  on: "week" | "sat";
+}
+
 export interface LandingSchedule {
   category: string;
   audience: string;
-  hours: string;
-  days: string;
+  slots: LandingScheduleSlot[];
 }
 
 export interface LandingContact {
@@ -80,8 +85,9 @@ export function buildLandingStats(now: Date = new Date()): LandingStat[] {
 /** Start/end of an `"HH:MM – HH:MM"` block, zero-padded so it sorts lexically. */
 const TIME_RANGE = /(\d{2}:\d{2})\D+(\d{2}:\d{2})/;
 
-/** Abbreviation of the latest weekday any session runs on. */
-function lastDayOfWeek(days: string): string {
+/** Abbreviation of the latest weekday any slot, across every schedule, runs on. */
+function lastDayOfWeek(slots: LandingScheduleSlot[]): string {
+  const days = slots.map((slot): string => slot.days).join(" ");
   if (days.includes("Domingo")) return "Dom";
   if (days.includes("Sábado")) return "Sáb";
   return "Vie";
@@ -90,10 +96,16 @@ function lastDayOfWeek(days: string): string {
 /**
  * Public attention hours, derived from the published training schedule so the
  * card can never advertise a narrower window than the club actually opens.
+ *
+ * Iterates every slot of every category — not just the first slot per
+ * category — so a category with more than one time block (e.g. Adultos'
+ * morning session, Competitivo's Saturday session) can move the derived
+ * opening time or extend the day range on its own.
  */
 export function deriveContactHours(schedules: LandingSchedule[]): string {
-  const ranges = schedules
-    .map((schedule): RegExpExecArray | null => TIME_RANGE.exec(schedule.hours))
+  const allSlots = schedules.flatMap((schedule): LandingScheduleSlot[] => schedule.slots);
+  const ranges = allSlots
+    .map((slot): RegExpExecArray | null => TIME_RANGE.exec(slot.hours))
     .filter((match): match is RegExpExecArray => match !== null);
 
   // Explicit comparator, not a bare `.sort()`. These are zero-padded "HH:MM"
@@ -106,7 +118,7 @@ export function deriveContactHours(schedules: LandingSchedule[]): string {
   const ends = ranges.map((match): string => match[2]).sort(byTime);
   const opensAt = starts[0] ?? "";
   const closesAt = ends[ends.length - 1] ?? "";
-  const lastDay = lastDayOfWeek(schedules.map((schedule): string => schedule.days).join(" "));
+  const lastDay = lastDayOfWeek(allSlots);
 
   return `Lun – ${lastDay} · ${opensAt} – ${closesAt}`;
 }
@@ -115,32 +127,38 @@ const schedules: LandingSchedule[] = [
   {
     category: "Formativo",
     audience: "5 a 10 años",
-    hours: "15:00 – 16:00",
-    days: "Lunes a Viernes",
+    slots: [{ hours: "15:00 – 16:00", days: "Lunes a Viernes", on: "week" }],
   },
   {
     category: "Infantil",
     audience: "8 a 12 años",
-    hours: "16:00 – 17:00",
-    days: "Lunes a Viernes",
+    slots: [{ hours: "16:00 – 17:00", days: "Lunes a Viernes", on: "week" }],
   },
   {
     category: "Juvenil",
     audience: "Mayores de 12 años",
-    hours: "17:00 – 18:00",
-    days: "Lunes a Viernes",
+    slots: [{ hours: "17:00 – 18:00", days: "Lunes a Viernes", on: "week" }],
   },
   {
     category: "Competitivo",
     audience: "Selección",
-    hours: "18:00 – 20:00",
-    days: "Lunes a Sábado",
+    slots: [
+      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
+      { hours: "18:00 – 20:00", days: "Sábado", on: "sat" },
+    ],
   },
   {
     category: "Adultos",
     audience: "Mayores de 18 años",
-    hours: "20:00 – 21:15",
-    days: "Lunes a Viernes",
+    slots: [
+      { hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" },
+      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
+    ],
+  },
+  {
+    category: "Juego Libre",
+    audience: "Abierto a todos",
+    slots: [{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }],
   },
 ];
 
