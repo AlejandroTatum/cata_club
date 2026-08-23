@@ -114,7 +114,7 @@ describe("LandingPage", (): void => {
   it("renders client-pending values from the centralized config", (): void => {
     render(<LandingPage />);
 
-    expect(screen.getByText(landingConfig.schedules[0].hours)).toBeInTheDocument();
+    expect(screen.getByText(landingConfig.schedules[0].slots[0].hours)).toBeInTheDocument();
     expect(screen.getByText(landingConfig.contact.hours)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
@@ -136,8 +136,10 @@ describe("LandingPage", (): void => {
     landingConfig.schedules.forEach((schedule, index): void => {
       expect(scheduleCards[index]).toHaveTextContent(schedule.category);
       expect(scheduleCards[index]).toHaveTextContent(schedule.audience);
-      expect(scheduleCards[index]).toHaveTextContent(schedule.hours);
-      expect(scheduleCards[index]).toHaveTextContent(schedule.days);
+      schedule.slots.forEach((slot): void => {
+        expect(scheduleCards[index]).toHaveTextContent(slot.hours);
+        expect(scheduleCards[index]).toHaveTextContent(slot.days);
+      });
     });
   });
 

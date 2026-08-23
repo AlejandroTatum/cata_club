@@ -89,22 +89,72 @@ describe("buildLandingStats", (): void => {
 });
 
 describe("deriveContactHours", (): void => {
-  it("spans the earliest start and the latest end of the published schedule", (): void => {
-    expect(deriveContactHours(landingConfig.schedules)).toBe("Lun – Sáb · 15:00 – 21:15");
+  it("spans the earliest start and the latest end across every slot, including the Adultos morning block", (): void => {
+    expect(deriveContactHours(landingConfig.schedules)).toBe("Lun – Sáb · 08:00 – 21:15");
   });
 
-  it("stops at Friday when no session runs on Saturday", (): void => {
+  it("stops at Friday when no slot runs on Saturday", (): void => {
     const weekdaysOnly = landingConfig.schedules.map((schedule): typeof schedule => ({
       ...schedule,
-      days: "Lunes a Viernes",
+      slots: schedule.slots.map((slot): typeof slot => ({ ...slot, on: "week", days: "Lunes a Viernes" })),
     }));
 
-    expect(deriveContactHours(weekdaysOnly)).toBe("Lun – Vie · 15:00 – 21:15");
+    expect(deriveContactHours(weekdaysOnly)).toBe("Lun – Vie · 08:00 – 21:15");
+  });
+
+  it("spans every slot of a single multi-slot category, not just its first one", (): void => {
+    const onlyAdultos = landingConfig.schedules.filter((schedule): boolean => schedule.category === "Adultos");
+
+    expect(deriveContactHours(onlyAdultos)).toBe("Lun – Vie · 08:00 – 21:15");
+  });
+
+  it("extends the day range to Saturday from a Saturday-only category with no weekday slot", (): void => {
+    const onlyJuegoLibre = landingConfig.schedules.filter((schedule): boolean => schedule.category === "Juego Libre");
+
+    expect(deriveContactHours(onlyJuegoLibre)).toBe("Lun – Sáb · 15:00 – 18:00");
   });
 });
 
 describe("landingConfig", (): void => {
   it("publishes contact hours derived from the schedule, not a placeholder", (): void => {
     expect(landingConfig.contact.hours).toBe(deriveContactHours(landingConfig.schedules));
+  });
+});
+
+describe("landingConfig.schedules", (): void => {
+  it("lists six categories in the approved prototype order", (): void => {
+    expect(landingConfig.schedules.map((schedule): string => schedule.category)).toEqual([
+      "Formativo",
+      "Infantil",
+      "Juvenil",
+      "Competitivo",
+      "Adultos",
+      "Juego Libre",
+    ]);
+  });
+
+  it("gives Adultos both a weekday morning and a weekday evening slot", (): void => {
+    const adultos = landingConfig.schedules.find((schedule): boolean => schedule.category === "Adultos");
+
+    expect(adultos?.slots).toEqual([
+      { hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" },
+      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
+    ]);
+  });
+
+  it("gives Competitivo both a weekday slot and a Saturday slot at the same hours", (): void => {
+    const competitivo = landingConfig.schedules.find((schedule): boolean => schedule.category === "Competitivo");
+
+    expect(competitivo?.slots).toEqual([
+      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
+      { hours: "18:00 – 20:00", days: "Sábado", on: "sat" },
+    ]);
+  });
+
+  it("adds Juego Libre as a new Saturday-only category open to everyone", (): void => {
+    const juegoLibre = landingConfig.schedules.find((schedule): boolean => schedule.category === "Juego Libre");
+
+    expect(juegoLibre?.audience).toBe("Abierto a todos");
+    expect(juegoLibre?.slots).toEqual([{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }]);
   });
 });
