@@ -8,9 +8,6 @@ import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
 import LandingPage from "@/app/landing/LandingPage";
 
-const { fetchSponsors } = vi.hoisted(() => ({ fetchSponsors: vi.fn().mockResolvedValue([]) }));
-vi.mock("@/services/api", () => ({ fetchSponsors }));
-
 vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }) => React.ReactElement } => ({
   __esModule: true,
   default: ({ priority, fill: _fill, sizes: _sizes, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }): React.ReactElement => (
@@ -121,10 +118,19 @@ describe("LandingPage", (): void => {
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
   });
 
-  it("renders uploaded sponsor logos instead of placeholder marks", async (): Promise<void> => {
-    fetchSponsors.mockResolvedValueOnce([{ id: 1, nombre: "Municipio de Loja", logoUrl: "https://cdn/logo.png" }]);
+  it("renders an honest, duplicated pending sponsor marquee", (): void => {
     render(<LandingPage />);
-    expect(await screen.findByRole("img", { name: "Municipio de Loja" })).toHaveAttribute("src", "https://cdn/logo.png");
+
+    const sponsors = screen.getByRole("region", { name: "Auspiciantes del club" });
+    expect(within(sponsors).getByText("Nos acompañan")).toBeInTheDocument();
+    expect(within(sponsors).getByText("Auspiciantes pendientes de confirmación.")).toHaveClass("sr-only");
+    const track = sponsors.querySelector("[data-sponsors-track]");
+    const copies = Array.from(track?.querySelectorAll(".landing-sponsors-copy") ?? []);
+    expect(copies).toHaveLength(2);
+    expect(copies[0]).toHaveAttribute("aria-hidden", "true");
+    expect(copies[0]?.textContent).toBe(copies[1]?.textContent);
+    expect(track?.querySelectorAll(".landing-sponsor-pending")).toHaveLength(12);
+    expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("renders every category as a tab in the schedule tablist", (): void => {
@@ -401,6 +407,21 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     expect(screen.getByRole("link", { name: "Inicio" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("links the navbar to every section anchor in the approved order", (): void => {
+    render(<LandingPage />);
+
+    const navLinks = document.querySelector(".landing-nav-links") as HTMLElement;
+    const links = Array.from(navLinks.querySelectorAll("a"));
+    expect(links.map((link): [string | null, string | null] => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["Inicio", "#inicio"],
+      ["Horarios", "#horarios"],
+      ["Valores", "#valores"],
+      ["Logros", "#logros"],
+      ["Galería", "#galeria"],
+      ["Contacto", "#contacto"],
+    ]);
   });
 
   it("leaves the h1 free of a redundant aria-label", (): void => {

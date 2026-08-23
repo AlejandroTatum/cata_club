@@ -275,6 +275,28 @@
 .landing-contact .landing-button-outline { border-color: var(--landing-action); color: var(--landing-action); }
 .landing-contact .landing-button-outline:hover { border-color: var(--landing-action-hover); background: var(--landing-action-hover); color: var(--landing-on-action); }
 
+/* Sponsor data remains deliberately provisional until the club supplies
+   approved names/logos. The visual strip repeats once so its CSS marquee can
+   wrap without a gap; the component provides one non-duplicated sr-only status. */
+.landing-sponsors { padding: 46px 0 52px; overflow: hidden; border-top: 1px solid var(--landing-border); background: var(--landing-surface); }
+.landing-sponsors-head { display: flex; align-items: center; gap: 14px; margin: 0 var(--landing-gutter) 26px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 3.4px; text-transform: uppercase; }
+.landing-sponsors-head::before { content: ""; width: 30px; height: 2px; background: var(--landing-action); }
+.landing-sponsors-viewport { overflow: hidden; }
+.landing-sponsors-track { display: flex; width: max-content; animation: landing-sponsors-marquee 28s linear infinite; will-change: transform; }
+.landing-sponsors-track:hover, .landing-sponsors-track:focus-within { animation-play-state: paused; }
+/* Every copy spans at least the viewport, so the following identical copy is
+   already under the viewport when the first reaches its repeat boundary. */
+.landing-sponsors-copy { --landing-sponsor-gap: 18px; display: flex; width: max-content; min-width: 100vw; box-sizing: border-box; flex: none; justify-content: space-between; gap: var(--landing-sponsor-gap); padding-right: var(--landing-sponsor-gap); }
+.landing-sponsors-item { display: block; width: clamp(150px, 15vw, 208px); flex: none; }
+.landing-sponsor { display: flex; width: 100%; height: 84px; align-items: center; justify-content: center; border-radius: 14px; background: var(--landing-background); box-shadow: inset 0 0 0 1px var(--landing-border); }
+.landing-sponsor img { max-width: 74%; max-height: 62%; object-fit: contain; filter: grayscale(1); opacity: 0.72; }
+.landing-sponsor[href]:hover img { filter: none; opacity: 1; }
+.landing-sponsor-pending { flex-direction: column; gap: 5px; border: 2px dashed var(--landing-border); background: transparent; box-shadow: none; color: var(--landing-text-muted); }
+.landing-sponsor-pending b { font-family: var(--font-landing-graduate), serif; font-size: 12px; letter-spacing: 1.6px; }
+.landing-sponsor-pending span { font-size: 11px; letter-spacing: 0.6px; }
+/* Two equal logical copies make -50% exactly one complete track width. */
+@keyframes landing-sponsors-marquee { to { transform: translateX(-50%); } }
+
 .landing-footer { position: relative; display: flex; flex-direction: column; gap: 34px; padding: 60px 8.33vw 44px; overflow: hidden; background: var(--landing-footer); }
 .landing-footer .landing-halftone { mask-image: radial-gradient(circle at 96% 100%,var(--landing-brand-black),transparent 42%); }
 .landing-footer-top { position: relative; display: flex; gap: 64px; align-items: flex-start; }
@@ -303,6 +325,7 @@
   .landing-value-row { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; }
   .landing-value, .landing-value + .landing-value { padding: 34px 0 0; border-left: 0; }
   .landing-contact { width: 360px; }
+  .landing-sponsors-copy { --landing-sponsor-gap: 14px; }
 }
 
 @media (max-width: 768px) {
@@ -334,10 +357,15 @@
   .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-map { width: 100%; flex: none; }
   .landing-contact { width: 100%; }
+  .landing-sponsors { padding-inline: 24px; }
+  .landing-sponsors-copy { --landing-sponsor-gap: 12px; }
+  .landing-sponsors-item { width: 150px; }
+  .landing-sponsor { height: 84px; }
   .landing-footer-top { flex-direction: column; gap: 36px; }
   .landing-footer nav { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-page *, .landing-page *::before, .landing-page *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .landing-sponsors-track { animation: none; transform: none; }
 }
