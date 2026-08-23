@@ -17,6 +17,7 @@ import HeroCarousel from "./HeroCarousel";
 import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
 import NavScrollSpy from "./NavScrollSpy";
+import Palmares from "./Palmares";
 import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
@@ -239,9 +240,24 @@ function Location(): React.ReactElement {
   const { contact } = landingConfig;
   return (
     <section className="landing-section landing-location" id="contacto" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Visítanos" title="Ubicación" />
+      <SectionHeader eyebrow="Visítanos" title="Cómo llegar" />
       <div className="landing-location-row">
-        <LandingMap />
+        <div className="landing-map-stage">
+          <LandingMap />
+          {/* A small, real view of the club grounds the map without pretending
+              it is a street-facing photograph. It remains non-interactive so
+              Leaflet's map and controls retain their expected behavior. */}
+          <figure className="landing-map-inset">
+            <Image
+              src="/landing/photo-arrival.png"
+              alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
+              width={1600}
+              height={1200}
+              loading="lazy"
+            />
+            <figcaption>Así se ve al llegar</figcaption>
+          </figure>
+        </div>
         <aside className="landing-contact" data-reveal>
           <h3>Información de contacto</h3>
           <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja</span></p>
@@ -310,7 +326,7 @@ export default function LandingPage(): React.ReactElement {
        * land inside the region it exists to skip past.
        */}
       <main>
-        <Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Location />
+        <Hero /><Stats /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Schedule /><Location />
       </main>
       {/* The sponsor strip sits between the page's main landmark and the footer:
           it is neither primary content nor site chrome. */}
