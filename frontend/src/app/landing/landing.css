@@ -13,6 +13,8 @@
   /* Darker fuchsia for fuchsia-as-TEXT on white: 5.87:1, where
      --landing-brand-fuchsia only reaches 4.03:1. */
   --landing-brand-fuchsia-strong: #c2185b;
+  /* Accent reserved for the hero's ball choreographies. */
+  --landing-ball: #ff6a13;
   --landing-bg-base: #f9fafb;
   --landing-surface-base: #ffffff;
   --landing-text-base: #1f2937;
@@ -91,10 +93,10 @@
 /* @touch-target Rides on `.landing-button-quiet` and lowers it; still 44px. */
 .landing-nav-cta { min-height: 44px; padding: 12px 22px; font-size: 13px; }
 
-.landing-hero { position: relative; display: flex; justify-content: center; align-items: center; gap: 40px; min-height: 578px; padding: 84px 5.55vw; overflow: hidden; background: var(--landing-action); }
+.landing-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr); align-items: center; gap: 52px; padding: 76px var(--landing-gutter) 88px; overflow: hidden; background: var(--landing-action); }
 .landing-ribbon { position: absolute; width: 440px; height: 190px; pointer-events: none; border-radius: 50%; border-bottom: 28px solid var(--landing-highlight); box-shadow: 0 14px 0 color-mix(in srgb, var(--landing-surface) 42%, transparent), 0 34px 0 var(--landing-brand-red-strong); }
 .landing-ribbon-top { top: -100px; right: -80px; transform: rotate(27deg); }
-.landing-hero-copy { position: relative; z-index: 1; display: flex; flex: 0 1 620px; max-width: 620px; flex-direction: column; gap: 24px; }
+.landing-hero-copy { position: relative; z-index: 14; display: flex; flex-direction: column; align-items: flex-start; gap: 22px; }
 .landing-hero-brand { display: block; color: var(--landing-on-action); font-family: var(--font-landing-barlow); font-size: 15px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
 .landing-hero-brand b { color: var(--landing-highlight-on-action); font-weight: 800; }
 .landing-hero .landing-eyebrow { color: var(--landing-on-action); }
@@ -107,10 +109,23 @@
 .landing-button-outline { border: 2px solid var(--landing-on-action); background: transparent; color: var(--landing-on-action); box-shadow: none; }
 .landing-hero .landing-button-outline:hover { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
 .landing-hero-note { display: flex; align-items: center; gap: 14px; color: var(--landing-on-action); font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
-.landing-hero-animation { position: relative; z-index: 1; flex: 0 0 620px; height: 508px; padding: 14px; border-radius: 20px; background: var(--landing-brand-black); box-shadow: 14px 14px 0 color-mix(in srgb, var(--landing-brand-black) 28%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 8%, transparent); }
-.landing-hero-screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 14px; background: var(--landing-brand-black); box-shadow: inset 0 0 0 2px var(--landing-highlight); }
+.landing-hero-frame { position: relative; z-index: 10; padding: 14px; border-radius: 20px; background: var(--landing-brand-black); box-shadow: 14px 14px 0 color-mix(in srgb, var(--landing-brand-black) 28%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 8%, transparent); }
+.landing-hero-screen { position: relative; aspect-ratio: 6 / 5; overflow: hidden; border-radius: 14px; background: var(--landing-brand-black); box-shadow: inset 0 0 0 2px var(--landing-highlight); }
 .landing-hero-screen::after { content: ""; position: absolute; z-index: 5; inset: 0; background: radial-gradient(ellipse, transparent 55%, color-mix(in srgb, var(--landing-brand-black) 45%, transparent)); pointer-events: none; }
-.landing-hero-photo { object-fit: cover; pointer-events: none; }
+/* Baseline: instant swap via `data-active`; the GSAP wipe writes clip-path. */
+.landing-hero-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; clip-path: inset(0% 0% 0% 100%); opacity: 0; }
+.landing-hero-slide[data-active="true"] { clip-path: inset(0% 0% 0% 0%); opacity: 1; }
+/* The crossing ball inside the screen during a tab switch; GSAP animates it in. */
+.landing-hero-frameball { position: absolute; left: 0; top: 0; z-index: 5; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--landing-ball); box-shadow: 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 55%, transparent), inset -4px -5px 0 color-mix(in srgb, var(--landing-brand-black) 14%, transparent); opacity: 0; pointer-events: none; }
+.landing-hero-screen-bar { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 17px; background: linear-gradient(to top, color-mix(in srgb, var(--landing-brand-black) 90%, transparent), transparent); }
+.landing-hero-screen-cap { display: flex; align-items: center; gap: 10px; color: var(--landing-on-action); font-size: 12.5px; font-weight: 800; letter-spacing: 2.2px; text-transform: uppercase; }
+.landing-hero-screen-dots { display: flex; gap: 6px; }
+/* @touch-target Matches the 44px floor every other tappable control here uses. */
+.landing-hero-screen-dots button { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); font-family: var(--font-landing-graduate), serif; font-size: 12.5px; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
+.landing-hero-screen-dots button:hover { border-color: var(--landing-highlight); color: var(--landing-highlight); }
+.landing-hero-screen-dots button[aria-selected="true"] { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
+/* Visible at rest incl. reduced motion; playServe adds the bounce. */
+.landing-hero-serve-ball { position: absolute; right: clamp(28px, 8vw, 132px); bottom: clamp(26px, 5vw, 68px); z-index: 12; width: clamp(28px, 3vw, 38px); height: clamp(28px, 3vw, 38px); border: 2px solid color-mix(in srgb, var(--landing-brand-black) 38%, transparent); border-radius: 50%; background: var(--landing-surface); box-shadow: 0 7px 15px color-mix(in srgb, var(--landing-brand-black) 42%, transparent), inset -5px -5px 0 color-mix(in srgb, var(--landing-brand-black) 12%, transparent); pointer-events: none; will-change: transform; }
 
 .landing-stats { position: relative; display: flex; padding: 48px 8.33vw; overflow: hidden; background: var(--landing-surface); }
 .landing-stats::before, .landing-section:not(.landing-motto)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
@@ -279,8 +294,7 @@
 @media (max-width: 1024px) {
   .landing-navbar { padding-inline: 32px; }
   .landing-nav-links { gap: 18px; }
-  .landing-hero { gap: 40px; padding-inline: 48px; }
-  .landing-hero-animation { flex-basis: 524px; height: 449px; }
+  .landing-hero { gap: 40px; }
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
   /* Two up. The vertical dividers go with the single row that justified them —
@@ -302,9 +316,8 @@
   .landing-logo img { height: 46px; }
   .landing-logo { font-size: 14px; }
   .landing-nav-cta { padding-inline: 18px; }
-  .landing-hero { min-height: auto; flex-direction: column; align-items: stretch; padding: 64px 24px; }
+  .landing-hero { min-height: auto; grid-template-columns: 1fr; padding: 64px var(--landing-gutter); }
   .landing-hero-copy { align-items: flex-start; }
-  .landing-hero-animation { width: 100%; height: min(76vw, 410px); flex: none; }
   .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 12px; padding: 42px 20px; }
   .landing-stat strong { font-size: 38px; }
   .landing-page { --landing-gutter: 24px; }

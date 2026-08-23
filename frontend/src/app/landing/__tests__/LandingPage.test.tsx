@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
+import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
 import LandingPage from "@/app/landing/LandingPage";
 
 const { fetchSponsors } = vi.hoisted(() => ({ fetchSponsors: vi.fn().mockResolvedValue([]) }));
@@ -242,7 +243,72 @@ describe("LandingPage", (): void => {
     expect(hero).not.toBeNull();
     const heroPrimary = within(hero as HTMLElement).getByRole("link", { name: /inscríbete/i });
     expect(heroPrimary).toHaveAttribute("href", "/student/enroll");
-    expect(within(hero as HTMLElement).getByRole("link", { name: "Conoce el club" })).toHaveAttribute("href", "#nosotros");
+    expect(within(hero as HTMLElement).getByRole("link", { name: "Ver horarios" })).toHaveAttribute("href", "#horarios");
+  });
+
+  it("keeps a single decorative serve ball inside the hero", (): void => {
+    render(<LandingPage />);
+
+    const hero = document.querySelector(".landing-hero") as HTMLElement;
+    const ball = hero.querySelector("[data-serve-ball]");
+
+    expect(document.querySelectorAll("[data-serve-ball]")).toHaveLength(1);
+    expect(ball).not.toBeNull();
+    expect(ball).toHaveAttribute("aria-hidden", "true");
+    expect(ball?.parentElement).toBe(hero);
+  });
+
+  // Progressive enhancement like the gallery: never assert GSAP internals.
+  describe("hero photo carousel", (): void => {
+    it("renders three tabs and their slides from HERO_PHOTOS", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const tabs = within(hero).getAllByRole("tab");
+      expect(tabs).toHaveLength(HERO_PHOTOS.length);
+      tabs.forEach((tab, index): void => {
+        expect(tab).toHaveTextContent(String(index + 1).padStart(2, "0"));
+        expect(tab).toHaveAttribute("aria-selected", index === 0 ? "true" : "false");
+      });
+
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
+      expect(slides).toHaveLength(HERO_PHOTOS.length);
+      HERO_PHOTOS.forEach((photo, index): void => {
+        expect(slides[index]).toHaveAttribute("src", photo.src);
+        expect(slides[index]).toHaveAttribute("alt", photo.alt);
+      });
+      expect(slides[0]).toHaveStyle({ objectPosition: HERO_PHOTOS[0].objectPosition });
+    });
+
+    it("switches slide and aria-selected instantly on click, without GSAP", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const tabs = within(hero).getAllByRole("tab");
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
+
+      fireEvent.click(tabs[1]);
+
+      expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+      expect(slides[1]).toHaveAttribute("data-active", "true");
+      expect(slides[0]).toHaveAttribute("data-active", "false");
+    });
+
+    it("moves selection and focus with arrow keys on the tablist", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const tablist = within(hero).getByRole("tablist");
+      const tabs = within(hero).getAllByRole("tab");
+
+      fireEvent.keyDown(tablist, { key: "ArrowRight" });
+      expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+      expect(tabs[1]).toHaveFocus();
+
+      fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+      expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+      expect(tabs[0]).toHaveFocus();
+    });
   });
 
   it("never routes an enrollment CTA through the /register demo placeholder", (): void => {
@@ -356,7 +422,7 @@ describe("LandingPage", (): void => {
 
     const prioritized = Array.from(document.querySelectorAll("img[data-priority='true']"));
     expect(prioritized).toHaveLength(1);
-    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-action.jpeg");
+    expect(prioritized[0]).toHaveAttribute("src", "/landing/photo-coach-athlete.jpeg");
   });
 
   /**

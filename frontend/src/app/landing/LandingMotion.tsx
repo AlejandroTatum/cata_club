@@ -6,6 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Draggable } from "gsap/Draggable";
 import { InertiaPlugin } from "gsap/InertiaPlugin";
 import { SplitText } from "gsap/SplitText";
+import type { HeroSlideChangeDetail } from "./HeroCarousel";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
@@ -141,6 +142,112 @@ function enhanceCarousel(track: HTMLElement): () => void {
   };
 }
 
+/**
+ * Ball-crossing wipe for the hero tab-carousel, driven by the
+ * `landing:hero-slide-change` event. React has already committed the new
+ * active state when it fires; this rewinds the DOM and tweens forward to what
+ * CSS declares, so it is purely additive.
+ */
+function enhanceHeroCarousel(frame: HTMLElement): () => void {
+  // Rapid tab switching: finish-in-place beats stacking crossings.
+  let timeline: gsap.core.Timeline | null = null;
+  let busy = false;
+  const ball = frame.querySelector<HTMLElement>("[data-frame-ball]");
+  const caption = frame.querySelector<HTMLElement>("[data-hero-caption]");
+  const screen = frame.querySelector<HTMLElement>(".landing-hero-screen");
+
+  // Remove only the properties this layer writes; HeroCarousel owns objectPosition.
+  const clearTransitionProps = (incoming: HTMLElement, outgoing: HTMLElement): void => {
+    gsap.set([incoming, outgoing], { clearProps: "clipPath,opacity,zIndex" });
+    gsap.set(ball, { clearProps: "opacity,x,y,rotation" });
+  };
+
+  const onSlideChange = (event: Event): void => {
+    const { current, previous } = (event as CustomEvent<HeroSlideChangeDetail>).detail;
+    const outgoing = frame.querySelector<HTMLElement>(`[data-slide="${previous}"]`);
+    const incoming = frame.querySelector<HTMLElement>(`[data-slide="${current}"]`);
+    if (!outgoing || !incoming || !ball || !screen) return;
+
+    if (busy) {
+      timeline?.kill();
+      clearTransitionProps(incoming, outgoing);
+      busy = false;
+      return;
+    }
+
+    timeline?.kill();
+    const forward = current > previous;
+    const rect = screen.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+
+    // Rewind to the pre-switch arrangement, then tween to the committed state.
+    gsap.set(incoming, { zIndex: 2, clipPath: forward ? "inset(0 0 0 100%)" : "inset(0 100% 0 0)", opacity: 1 });
+    gsap.set(outgoing, { zIndex: 1, opacity: 1 });
+    gsap.set(ball, { opacity: 0, x: forward ? -34 : w + 34, y: h * 0.5, rotation: 0 });
+
+    const proxy = { p: 0 };
+    busy = true;
+
+    timeline = gsap.timeline({
+      onComplete(): void {
+        busy = false;
+        clearTransitionProps(incoming, outgoing);
+      },
+    });
+
+    timeline
+      .to(ball, { opacity: 1, duration: 0.15, ease: "power1.out" }, 0)
+      .to(proxy, {
+        p: 1,
+        duration: 0.9,
+        ease: "power2.inOut",
+        onUpdate(): void {
+          const p = proxy.p;
+          const x = forward ? -34 + p * (w + 68) : w + 34 - p * (w + 68);
+          const y = h * 0.5 - Math.sin(p * Math.PI) * (h * 0.2);
+          gsap.set(ball, {
+            x,
+            y,
+            rotation: (forward ? 1 : -1) * p * 420,
+          });
+          const pct = ((1 - p) * 100).toFixed(2);
+          gsap.set(incoming, {
+            clipPath: forward ? `inset(0 0 0 ${pct}%)` : `inset(0 ${pct}% 0 0)`,
+          });
+        },
+      }, 0)
+      .to(ball, { opacity: 0, duration: 0.22, ease: "power1.in" }, 0.68);
+
+    if (caption) {
+      gsap.fromTo(caption, { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out", delay: 0.35 });
+    }
+  };
+
+  frame.addEventListener("landing:hero-slide-change", onSlideChange);
+  return (): void => {
+    frame.removeEventListener("landing:hero-slide-change", onSlideChange);
+    timeline?.kill();
+  };
+}
+
+/* Independent decorative bounce for the hero's white ball; nothing else touches it. */
+function playServe(): (() => void) | undefined {
+  const serveBall = document.querySelector<HTMLElement>("[data-serve-ball]");
+  if (!serveBall) return undefined;
+
+  gsap.set(serveBall, { opacity: 1, x: 0, y: 0, rotation: 0 });
+  const serve = gsap.to(serveBall, {
+    y: -86,
+    duration: 0.56,
+    ease: "sine.inOut",
+    repeat: -1,
+    yoyo: true,
+  });
+
+  return (): void => { serve.kill(); };
+}
+
 export default function LandingMotion(): null {
   useEffect((): (() => void) => {
     gsap.registerPlugin(ScrollTrigger, Draggable, InertiaPlugin, SplitText);
@@ -156,6 +263,8 @@ export default function LandingMotion(): null {
 
       let split: SplitText | null = null;
       let teardownCarousel: (() => void) | undefined;
+      let teardownHeroCarousel: (() => void) | undefined;
+      let teardownServe: (() => void) | undefined;
 
       const context = gsap.context((): void => {
         const heading = document.querySelector<HTMLElement>("[data-split]");
@@ -175,7 +284,6 @@ export default function LandingMotion(): null {
         gsap.from("[data-media-reveal]", {
           clipPath: "inset(0% 0% 100% 0%)", duration: 1.1, ease: "power4.inOut",
         });
-        gsap.from("[data-hero-parallax]", { scale: 1.2, duration: 1.4, ease: "power3.out" });
 
         gsap.utils.toArray<HTMLElement>("[data-motion-section]").forEach((section): void => {
           const targets = section.querySelectorAll<HTMLElement>("[data-reveal]");
@@ -208,14 +316,14 @@ export default function LandingMotion(): null {
           });
         });
 
-        gsap.to("[data-hero-parallax]", {
-          yPercent: 8,
-          ease: "none",
-          scrollTrigger: { trigger: ".landing-hero", start: "top top", end: "bottom top", scrub: 0.5 },
-        });
+
+        teardownServe = playServe();
 
         const track = document.querySelector<HTMLElement>("[data-carousel]");
         if (track) teardownCarousel = enhanceCarousel(track);
+
+        const heroFrame = document.querySelector<HTMLElement>("[data-media-reveal]");
+        if (heroFrame) teardownHeroCarousel = enhanceHeroCarousel(heroFrame);
 
         // No count-up on the trust band. It seeded itself at 0 and overwrote
         // `textContent`, so any trigger that failed to fire left the real figure
@@ -225,13 +333,15 @@ export default function LandingMotion(): null {
 
       return (): void => {
         teardownCarousel?.();
+        teardownHeroCarousel?.();
+        teardownServe?.();
         split?.revert();
         context.revert();
       };
     });
 
     media.add("(prefers-reduced-motion: reduce)", (): void => {
-      gsap.set("[data-reveal], [data-hero-parallax], [data-media-reveal], [data-rule]", { clearProps: "all" });
+      gsap.set("[data-reveal], [data-media-reveal], [data-rule]", { clearProps: "all" });
     });
 
     return (): void => {

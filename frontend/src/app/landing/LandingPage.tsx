@@ -14,6 +14,7 @@ import {
   Phone,
   Star,
 } from "lucide-react";
+import HeroCarousel from "./HeroCarousel";
 import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
 import ScheduleSelector from "./ScheduleSelector";
@@ -92,43 +93,20 @@ function Hero(): React.ReactElement {
     <header className="landing-hero" id="inicio" data-motion-section data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
+      <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
       <div className="landing-hero-copy">
         <span className="landing-hero-brand"><b>Tenis de Mesa</b> · Cata Club</span>
         <h1 className="landing-display" data-split>FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
         <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
           <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
-          <a className="landing-button landing-button-outline" href="#nosotros">Conoce el club</a>
+          <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>
         </div>
         <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Fundado en 2013</span></div>
       </div>
-      <div className="landing-hero-animation" data-media-reveal>
-        <div className="landing-hero-screen">
-          {/*
-           * The only true action photograph in the set: a rally in progress
-           * beats another posed group shot as the first thing anyone sees.
-           *
-           * The asset is pre-cropped to the 6:5 of this box. `sizes` only ever
-           * describes WIDTH, so against a box taller than the image `object-fit:
-           * cover` makes HEIGHT the binding dimension and scales the picture up
-           * to cover it — detail the browser was never asked to download.
-           * Matching the ratio leaves cover with nothing to crop.
-           *
-           * `quality` overrides Next's default 75, which visibly mushed a
-           * photograph this busy.
-           */}
-          <Image
-            className="landing-hero-photo"
-            src="/landing/hero-action.jpeg"
-            alt="Deportista de Cata Club ejecutando un saque durante un torneo"
-            fill
-            priority
-            quality={90}
-            sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
-            data-hero-parallax
-          />
-        </div>
-      </div>
+      {/* 01/02/03 photo tab-carousel: a plain React state machine that stays
+          fully usable without the GSAP motion layer. */}
+      <HeroCarousel />
     </header>
   );
 }
