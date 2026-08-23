@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -16,8 +16,9 @@ import {
 } from "lucide-react";
 import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
+import ScheduleSelector from "./ScheduleSelector";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
-import { buildLandingStats, landingConfig, toWhatsAppLink, type LandingSchedule } from "./landing-config";
+import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
 import { GALLERY_PHOTOS, slideSizes } from "./landing-gallery";
 import { fetchSponsors, type Sponsor } from "@/services/api";
 
@@ -25,8 +26,6 @@ interface SectionHeaderProps {
   eyebrow: string;
   title: string;
 }
-
-interface ScheduleCardProps extends LandingSchedule {}
 
 interface ValueCardProps {
   index: string;
@@ -246,28 +245,12 @@ function Gallery(): React.ReactElement {
   );
 }
 
-function ScheduleCard({ category, audience, slots }: ScheduleCardProps): React.ReactElement {
-  return (
-    <article className="landing-schedule-card" data-reveal>
-      <h3>{category}</h3><span>{audience}</span>
-      {/* One flat hours/days pair per slot: the card keeps its original DOM
-          shape, a category that trains twice simply renders two pairs. */}
-      {slots.map((slot): React.ReactElement => (
-        <Fragment key={`${slot.on}-${slot.hours}-${slot.days}`}>
-          <strong>{slot.hours}</strong><b>{slot.days}</b>
-        </Fragment>
-      ))}
-    </article>
-  );
-}
-
 function Schedule(): React.ReactElement {
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Entrenamientos" title="Horarios" />
-      <div className="landing-schedule-row">
-        {landingConfig.schedules.map((schedule): React.ReactElement => <ScheduleCard key={schedule.category} {...schedule} />)}
-      </div>
+      {/* Master-detail selector: a client component, like the gallery's lightbox. */}
+      <SectionHeader eyebrow="Entrenamientos" title="Elegí tu categoría" />
+      <ScheduleSelector schedules={landingConfig.schedules} />
     </section>
   );
 }
