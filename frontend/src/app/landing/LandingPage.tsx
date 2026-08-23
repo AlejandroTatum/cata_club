@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -17,11 +16,12 @@ import {
 import HeroCarousel from "./HeroCarousel";
 import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
+import NavScrollSpy from "./NavScrollSpy";
 import ScheduleSelector from "./ScheduleSelector";
+import Sponsors from "./Sponsors";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
 import { GALLERY_PHOTOS, slideSizes } from "./landing-gallery";
-import { fetchSponsors, type Sponsor } from "@/services/api";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -75,9 +75,11 @@ function Navbar(): React.ReactElement {
       </a>
       <div className="landing-nav-links">
         <a className="active" href="#inicio" aria-current="page">Inicio</a>
-        <a href="#nosotros">Nosotros</a>
+        <a href="#horarios">Horarios</a>
+        <a href="#valores">Valores</a>
+        <a href="#logros">Logros</a>
         <a href="#galeria">Galería</a>
-        <a href="#contacto">Soporte</a>
+        <a href="#contacto">Contacto</a>
       </div>
       {/* Deliberately quiet: existing members already know where to log in, so
           this must not compete with the hero's registration CTA. */}
@@ -233,30 +235,6 @@ function Schedule(): React.ReactElement {
   );
 }
 
-function Sponsors(): React.ReactElement | null {
-  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-
-  useEffect(() => {
-    void fetchSponsors().then(setSponsors).catch(() => setSponsors([]));
-  }, []);
-
-  if (sponsors.length === 0) return null;
-  return (
-    <section className="landing-section" aria-label="Patrocinadores" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Con el apoyo de" title="Patrocinadores" />
-      <ul className="flex flex-wrap items-center gap-6 border-y border-white/20 py-8" aria-label="Logos de patrocinadores">
-        {sponsors.map((sponsor): React.ReactElement => (
-          <li key={sponsor.id} className="flex h-20 w-40 items-center justify-center bg-white p-3">
-            {/* Remote Cloudinary delivery is public by product decision. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sponsor.logoUrl} alt={sponsor.nombre} className="max-h-full max-w-full object-contain" />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function Location(): React.ReactElement {
   const { contact } = landingConfig;
   return (
@@ -284,7 +262,7 @@ function Location(): React.ReactElement {
           {/*
            * The assistant — quiet, and ABOVE the WhatsApp CTA, which keeps
            * closing the card as the primary conversion. `POST /api/chatbot` is
-           * public, and this is where the navbar's "Soporte" link already
+           * public, and this is where the navbar's "Contacto" link already
            * points, so a visitor with a question finds both options at once:
            * the bot for "¿cuáles son los horarios?", a real person for
            * everything else. No floating button — the one that used to hover
@@ -323,6 +301,7 @@ export default function LandingPage(): React.ReactElement {
       <a className="landing-skip-link" href="#inicio">Saltar al contenido</a>
       <LandingMotionLoader />
       <Navbar />
+      <NavScrollSpy />
       {/*
        * The landmark opens at `Hero`, which is what `#inicio` — the skip link's
        * target — already points at, and closes before `Footer`. `Navbar` and
@@ -331,8 +310,11 @@ export default function LandingPage(): React.ReactElement {
        * land inside the region it exists to skip past.
        */}
       <main>
-        <Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Sponsors /><Location />
+        <Hero /><Stats /><MissionVision /><Values /><Motto /><Gallery /><Schedule /><Location />
       </main>
+      {/* The sponsor strip sits between the page's main landmark and the footer:
+          it is neither primary content nor site chrome. */}
+      <Sponsors />
       <Footer />
     </div>
   );
