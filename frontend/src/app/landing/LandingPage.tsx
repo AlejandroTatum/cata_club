@@ -227,7 +227,7 @@ function Schedule(): React.ReactElement {
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
       {/* Master-detail selector: a client component, like the gallery's lightbox. */}
-      <SectionHeader eyebrow="Entrenamientos" title="Elegí tu categoría" />
+      <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />
       <ScheduleSelector schedules={landingConfig.schedules} />
     </section>
   );
