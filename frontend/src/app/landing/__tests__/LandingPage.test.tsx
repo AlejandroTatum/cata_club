@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
@@ -105,7 +105,7 @@ describe("LandingPage", (): void => {
       "Misión y Visión",
       "Nuestros Valores",
       "Galería",
-      "Horarios",
+      "Elegí tu categoría",
       "Ubicación",
     ]));
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
@@ -126,20 +126,112 @@ describe("LandingPage", (): void => {
     expect(await screen.findByRole("img", { name: "Municipio de Loja" })).toHaveAttribute("src", "https://cdn/logo.png");
   });
 
-  it("renders each configured schedule as its own card", (): void => {
+  it("renders every category as a tab in the schedule tablist", (): void => {
     render(<LandingPage />);
 
-    const scheduleSection = screen.getByRole("heading", { name: "Horarios" }).closest("section");
+    const scheduleSection = screen.getByRole("heading", { name: "Elegí tu categoría" }).closest("section");
     expect(scheduleSection).not.toBeNull();
-    const scheduleCards = Array.from(scheduleSection?.querySelectorAll("article") ?? []);
-    expect(scheduleCards).toHaveLength(landingConfig.schedules.length);
+    const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
+    const tabs = within(tablist).getAllByRole("tab");
+    expect(tabs).toHaveLength(landingConfig.schedules.length);
+
     landingConfig.schedules.forEach((schedule, index): void => {
-      expect(scheduleCards[index]).toHaveTextContent(schedule.category);
-      expect(scheduleCards[index]).toHaveTextContent(schedule.audience);
+      expect(tabs[index]).toHaveTextContent(schedule.category);
+      expect(tabs[index]).toHaveTextContent(schedule.audience);
+      // One line per DISTINCT band, compacted to "HH:MM–HH:MM".
       schedule.slots.forEach((slot): void => {
-        expect(scheduleCards[index]).toHaveTextContent(slot.hours);
-        expect(scheduleCards[index]).toHaveTextContent(slot.days);
+        expect(tabs[index]).toHaveTextContent(slot.hours.replace(/\s/g, ""));
       });
+    });
+  });
+
+  /**
+   * Regression guard for the schedule migration to multiple slots per
+   * category: the master-detail panel must show every slot of Adultos
+   * (weekday morning + evening) and Competitivo (weekday + Saturday), not
+   * just the first.
+   */
+  it("shows every slot of a multi-slot category in the detail panel", (): void => {
+    render(<LandingPage />);
+
+    const scheduleSection = screen.getByRole("heading", { name: "Elegí tu categoría" }).closest("section");
+    const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
+    const panel = screen.getByRole("tabpanel");
+
+    fireEvent.click(within(tablist).getByRole("tab", { name: /adultos/i }));
+    expect(within(panel).getByText(/08:00 – 09:15/)).toBeInTheDocument();
+    expect(within(panel).getByText(/20:00 – 21:15/)).toBeInTheDocument();
+
+    fireEvent.click(within(tablist).getByRole("tab", { name: /competitivo/i }));
+    expect(within(panel).getByText(/Lunes a Viernes y Sábado/)).toBeInTheDocument();
+  });
+
+  describe("schedule selector — master-detail", (): void => {
+    const getSchedule = (): { tablist: HTMLElement; tabs: HTMLElement[]; panel: HTMLElement } => {
+      const section = screen.getByRole("heading", { name: "Elegí tu categoría" }).closest("section") as HTMLElement;
+      const tablist = within(section).getByRole("tablist", { name: "Categorías" });
+      const tabs = within(tablist).getAllByRole("tab");
+      const panel = screen.getByRole("tabpanel");
+      return { tablist, tabs, panel };
+    };
+
+    it("selects a category on click and points the panel at it", (): void => {
+      render(<LandingPage />);
+      const { tablist, tabs, panel } = getSchedule();
+
+      fireEvent.click(within(tablist).getByRole("tab", { name: /juvenil/i }));
+
+      expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+      expect(within(panel).getByRole("heading", { level: 3 })).toHaveTextContent("Juvenil");
+      expect(within(panel).getByText(/17:00 – 18:00/)).toBeInTheDocument();
+    });
+
+    it("moves selection and focus with ArrowDown and ArrowUp", (): void => {
+      render(<LandingPage />);
+      const { tablist, tabs } = getSchedule();
+
+      fireEvent.keyDown(tablist, { key: "ArrowDown" });
+      expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+      expect(tabs[1]).toHaveFocus();
+
+      fireEvent.keyDown(tablist, { key: "ArrowUp" });
+      expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+      expect(tabs[0]).toHaveFocus();
+    });
+
+    it("wires each tab to the single panel and labels it with the selected tab", (): void => {
+      render(<LandingPage />);
+      const { tabs, panel } = getSchedule();
+
+      expect(panel).toHaveAttribute("id", "schedule-panel");
+      tabs.forEach((tab, index): void => {
+        expect(tab).toHaveAttribute("id", `schedule-tab-${index}`);
+        expect(tab).toHaveAttribute("aria-controls", "schedule-panel");
+      });
+      expect(panel).toHaveAttribute("aria-labelledby", "schedule-tab-0");
+
+      fireEvent.click(tabs[2]);
+      expect(panel).toHaveAttribute("aria-labelledby", "schedule-tab-2");
+    });
+
+    it("keeps only the selected tab in the tab order via roving tabIndex", (): void => {
+      render(<LandingPage />);
+      const { tabs } = getSchedule();
+
+      expect(tabs[0]).toHaveAttribute("tabindex", "0");
+      tabs.slice(1).forEach((tab): void => {
+        expect(tab).toHaveAttribute("tabindex", "-1");
+      });
+
+      fireEvent.click(tabs[3]);
+      expect(tabs[3]).toHaveAttribute("tabindex", "0");
+      expect(tabs[0]).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("declares the schedule tablist as vertical", (): void => {
+      render(<LandingPage />);
+      const { tablist } = getSchedule();
+      expect(tablist).toHaveAttribute("aria-orientation", "vertical");
     });
   });
 
