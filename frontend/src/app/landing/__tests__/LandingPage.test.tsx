@@ -106,7 +106,7 @@ describe("LandingPage", (): void => {
       "Misión y Visión",
       "Nuestros Valores",
       "Galería",
-      "Elegí tu categoría",
+      "Elija una categoría",
       "Ubicación",
     ]));
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
@@ -130,7 +130,7 @@ describe("LandingPage", (): void => {
   it("renders every category as a tab in the schedule tablist", (): void => {
     render(<LandingPage />);
 
-    const scheduleSection = screen.getByRole("heading", { name: "Elegí tu categoría" }).closest("section");
+    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
     expect(scheduleSection).not.toBeNull();
     const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
     const tabs = within(tablist).getAllByRole("tab");
@@ -155,7 +155,7 @@ describe("LandingPage", (): void => {
   it("shows every slot of a multi-slot category in the detail panel", (): void => {
     render(<LandingPage />);
 
-    const scheduleSection = screen.getByRole("heading", { name: "Elegí tu categoría" }).closest("section");
+    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
     const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
     const panel = screen.getByRole("tabpanel");
 
@@ -169,7 +169,7 @@ describe("LandingPage", (): void => {
 
   describe("schedule selector — master-detail", (): void => {
     const getSchedule = (): { tablist: HTMLElement; tabs: HTMLElement[]; panel: HTMLElement } => {
-      const section = screen.getByRole("heading", { name: "Elegí tu categoría" }).closest("section") as HTMLElement;
+      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
       const tablist = within(section).getByRole("tablist", { name: "Categorías" });
       const tabs = within(tablist).getAllByRole("tab");
       const panel = screen.getByRole("tabpanel");

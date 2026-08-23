@@ -200,7 +200,7 @@ const ROSTER: readonly (readonly [string, number])[] = [
   ["app/trainer/attendance/AttendanceRosterRow.tsx", 1],
   // The public landing: two buttons, the skip link, the nav links, the nav CTA
   // and the `max-width: 768px` override that once shrank a link to 40px.
-  ["app/landing/landing.css", 6],
+  ["app/landing/landing.css", 7],
 ];
 
 describe("a promised touch surface stays at 44px", () => {
