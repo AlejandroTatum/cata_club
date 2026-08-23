@@ -104,7 +104,7 @@ describe("LandingPage", (): void => {
       "Nuestros Valores",
       "Galería",
       "Elija una categoría",
-      "Ubicación",
+      "Cómo llegar",
     ]));
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
@@ -118,8 +118,15 @@ describe("LandingPage", (): void => {
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
   });
 
-  it("renders an honest, duplicated pending sponsor marquee", (): void => {
+  it("renders the arrival inset and an honest, duplicated pending sponsor marquee", (): void => {
     render(<LandingPage />);
+
+    const arrival = screen.getByRole("img", { name: /entrada de cata club junto al coliseo ciudad de loja/i });
+    expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.png");
+    expect(arrival).toHaveAttribute("width", "1600");
+    expect(arrival).toHaveAttribute("height", "1200");
+    expect(arrival).toHaveAttribute("loading", "lazy");
+    expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
 
     const sponsors = screen.getByRole("region", { name: "Auspiciantes del club" });
     expect(within(sponsors).getByText("Nos acompañan")).toBeInTheDocument();
@@ -373,7 +380,10 @@ describe("LandingPage", (): void => {
   it("promotes the championship specifics into the visible gallery caption", (): void => {
     render(<LandingPage />);
 
-    expect(screen.getByText(/Sudamericano Sub-11 y Sub-13/i)).toHaveTextContent("Asunción");
+    // Scoped to the gallery: the Logros section now also carries this same
+    // fact, so an unscoped query would match more than one element.
+    const gallery = document.querySelector(".landing-gallery") as HTMLElement;
+    expect(within(gallery).getByText(/Sudamericano Sub-11 y Sub-13/i)).toHaveTextContent("Asunción");
   });
 
   it("renders every configured photo as a carousel slide", (): void => {
