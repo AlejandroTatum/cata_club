@@ -157,10 +157,15 @@ function MissionVision(): React.ReactElement {
   );
 }
 
-function ValueCard({ index, title, children }: ValueCardProps): React.ReactElement {
+/** Decorative guide stage animated by `playRally` in LandingMotion.tsx. */
+    function Rally(): React.ReactElement {
+      return <div className="landing-rally" data-rally aria-hidden="true"><svg viewBox="0 0 1200 190" preserveAspectRatio="none"><path className="landing-rally-guide" data-rally-guide d="M -60 170 Q 45 26 150 170 Q 300 26 450 170 Q 600 26 750 170 Q 900 26 1050 170 Q 1150 60 1270 170" /></svg><span className="landing-rally-ball" data-rally-ball /><span className="landing-rally-impact" data-rally-impact /><span className="landing-rally-count">RALLY <b data-rally-counter>0</b>/4</span></div>;
+    }
+
+    function ValueCard({ index, title, children }: ValueCardProps): React.ReactElement {
   return (
-    <article className="landing-value" data-reveal data-value>
-      <span className="landing-value-rule" aria-hidden="true" data-rule />
+    <article className="landing-value" data-value>
+      <span className="landing-value-rule" aria-hidden="true" />
       <span className="landing-index" aria-hidden="true">{index}</span>
       <h3>{title}</h3>
       <p>{children}</p>
@@ -172,6 +177,7 @@ function Values(): React.ReactElement {
   return (
     <section className="landing-section landing-values" id="valores" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Lo que nos mueve" title="Nuestros Valores" />
+      <Rally />
       <div className="landing-value-row">
         <ValueCard index="01" title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
         <ValueCard index="02" title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>

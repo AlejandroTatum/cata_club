@@ -293,7 +293,38 @@ function playServe(): (() => void) | undefined {
 /* The motto is a self-contained entrance: its decorative paddle settles in,
    then the invitation and stars follow. It never shares a timeline with the
    ticker or any other landing section. */
-function playMotto(): (() => void) | undefined {
+function playRally(): void {
+      const section = document.querySelector<HTMLElement>(".landing-values");
+      const guide = section?.querySelector<SVGPathElement>("[data-rally-guide]");
+      const ball = section?.querySelector<HTMLElement>("[data-rally-ball]");
+      const impact = section?.querySelector<HTMLElement>("[data-rally-impact]");
+      const stage = section?.querySelector<HTMLElement>("[data-rally]");
+      const counter = section?.querySelector<HTMLElement>("[data-rally-counter]");
+      const values = section ? gsap.utils.toArray<HTMLElement>("[data-value]", section) : [];
+      if (!guide || !ball || !impact || !stage || !counter || values.length === 0) return;
+      const hitAt = [0.19, 0.42, 0.62, 0.82];
+      let reached = -1;
+      gsap.set(guide, { drawSVG: "0%" });
+      gsap.set(ball, { opacity: 0 });
+      gsap.set(values.map((value): Element | null => value.querySelector(".landing-value-rule")), { scaleX: 0 });
+      values.forEach((value): void => value.classList.add("dim"));
+      const reach = (index: number): void => {
+        if (index === reached) return;
+        reached = index;
+        counter.textContent = String(Math.max(0, index + 1));
+        values.forEach((value, i): void => { value.classList.toggle("hit", i === index); value.classList.toggle("dim", i > index); });
+        if (index < 0) return;
+        const rule = values[index].querySelector<HTMLElement>(".landing-value-rule");
+        if (rule) gsap.to(rule, { scaleX: 1, duration: 0.5, ease: "power3.out", overwrite: true });
+        const b = ball.getBoundingClientRect();
+        const s = stage.getBoundingClientRect();
+        gsap.set(impact, { x: b.left - s.left + b.width / 2, y: b.top - s.top + b.height / 2, opacity: 1, scale: 0.4 });
+        gsap.to(impact, { scale: 2.6, opacity: 0, duration: 0.55, ease: "power2.out" });
+      };
+      gsap.to(ball, { motionPath: { path: guide, align: guide, alignOrigin: [0.5, 0.5], start: 0, end: 1, autoRotate: false }, ease: "none", scrollTrigger: { trigger: section, start: "top top", end: "+=1900", pin: true, scrub: 0.7, onEnter(): void { gsap.to(ball, { opacity: 1, duration: 0.2 }); }, onLeaveBack(): void { gsap.to(ball, { opacity: 0, duration: 0.2 }); reach(-1); } }, onUpdate(this: gsap.core.Tween): void { const progress = this.progress(); gsap.set(guide, { drawSVG: `0% ${(progress * 100).toFixed(2)}%` }); let next = -1; for (let i = 0; i < hitAt.length; i += 1) if (progress >= hitAt[i]) next = i; reach(next); } });
+    }
+
+    function playMotto(): (() => void) | undefined {
   const motto = document.querySelector<HTMLElement>("[data-motto]");
   if (!motto) return undefined;
 
@@ -358,7 +389,7 @@ export default function LandingMotion(): null {
         });
 
         gsap.utils.toArray<HTMLElement>("[data-motion-section]").forEach((section): void => {
-          const targets = section.querySelectorAll<HTMLElement>("[data-reveal]");
+          const targets = section.querySelectorAll<HTMLElement>("[data-reveal]:not([data-value])");
           if (targets.length > 0) {
             gsap.from(targets, {
               y: 40,
@@ -378,7 +409,7 @@ export default function LandingMotion(): null {
          * count-up made — would leave them invisible whenever a trigger fails
          * to fire.
          */
-        gsap.utils.toArray<HTMLElement>("[data-rule]").forEach((rule): void => {
+        gsap.utils.toArray<HTMLElement>("[data-rule]:not(.landing-value-rule)").forEach((rule): void => {
           gsap.from(rule, {
             width: 0,
             duration: 0.7,
@@ -390,6 +421,7 @@ export default function LandingMotion(): null {
 
 
         teardownServe = playServe();
+          playRally();
         teardownMotto = playMotto();
 
         const ticker = document.querySelector<HTMLElement>("[data-credentials-ticker]");
@@ -420,6 +452,7 @@ export default function LandingMotion(): null {
 
     media.add("(prefers-reduced-motion: reduce)", (): void => {
       gsap.set("[data-reveal], [data-media-reveal], [data-rule]", { clearProps: "all" });
+          document.querySelectorAll("[data-value]").forEach((value): void => value.classList.remove("dim", "hit"));
     });
 
     return (): void => {

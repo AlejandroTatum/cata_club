@@ -598,7 +598,19 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("gives every footer service link its own destination", (): void => {
+  it("renders the rally guide, ball, impact, counter, and four motion hooks", (): void => {
+        render(<LandingPage />);
+        const rally = document.querySelector("[data-rally]");
+        expect(rally).toHaveAttribute("aria-hidden", "true");
+        expect(rally?.querySelector("[data-rally-guide]")).toBeInTheDocument();
+        expect(rally?.querySelector("[data-rally-ball]")).toBeInTheDocument();
+        expect(rally?.querySelector("[data-rally-impact]")).toBeInTheDocument();
+        expect(rally?.querySelector("[data-rally-counter]")).toHaveTextContent("0");
+        expect(document.querySelectorAll("[data-value]")).toHaveLength(4);
+        expect(document.querySelectorAll(".landing-value[data-reveal]")).toHaveLength(0);
+      });
+
+      it("gives every footer service link its own destination", (): void => {
     render(<LandingPage />);
 
     const services = screen.getByRole("navigation", { name: "Servicios" });
