@@ -255,10 +255,28 @@
 .landing-slide:hover img { transform: scale(1.05); }
 .landing-slide::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 72%, transparent) 0%, transparent 42%); }
 .landing-slide figcaption { position: absolute; z-index: 2; right: 18px; bottom: 18px; left: 18px; color: var(--landing-on-action); font-size: 14px; font-weight: 600; line-height: 1.4; }
+/* The whole slide is the open affordance: a real button stretched over the
+   figure, so pointer and keyboard users share one target. Sits under the
+   caption and the edge gradients so neither blocks its clicks. */
+.landing-slide-open { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.landing-slide-open:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: -3px; }
 /* Tells the eye the strip continues past the viewport edge. */
 .landing-carousel-wrap::before, .landing-carousel-wrap::after { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; width: var(--landing-gutter); pointer-events: none; }
 .landing-carousel-wrap::before { left: 0; background: linear-gradient(90deg, var(--landing-background), transparent); }
 .landing-carousel-wrap::after { right: 0; background: linear-gradient(270deg, var(--landing-background), transparent); }
+/* Lightbox: a fixed overlay owned by React state. Above the sticky navbar
+   (z-index 50) so no landing chrome shows through the scrim. */
+.landing-lightbox { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: clamp(16px, 4vw, 48px); }
+.landing-lightbox-backdrop { position: absolute; inset: 0; padding: 0; border: 0; background: color-mix(in srgb, var(--landing-brand-black) 86%, transparent); cursor: zoom-out; }
+.landing-lightbox-figure { position: relative; display: grid; justify-items: center; gap: 14px; margin: 0; max-width: min(1100px, 100%); }
+/* Fit inside the viewport on every axis: `max-height` keeps tall portraits on
+   screen without cropping, the way `object-fit: cover` would. */
+.landing-lightbox-figure img { display: block; max-width: 100%; max-height: calc(100dvh - 168px); width: auto; height: auto; border-radius: 16px; background: var(--landing-brand-black); }
+.landing-lightbox-figure figcaption { color: var(--landing-on-action); font-size: 15px; font-weight: 600; text-align: center; }
+.landing-lightbox-controls { position: absolute; bottom: clamp(16px, 3vw, 32px); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+.landing-lightbox-button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid color-mix(in srgb, var(--landing-on-action) 30%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--landing-brand-black) 70%, transparent); color: var(--landing-on-action); cursor: pointer; transition: background 160ms ease; }
+.landing-lightbox-button:hover { background: var(--landing-brand-red); }
+.landing-lightbox-button:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
 .landing-schedule { background: var(--landing-surface); }
 
 /* Master-detail schedule selector: a tablist drives one panel with a shared

@@ -13,6 +13,7 @@ import {
   Phone,
   Star,
 } from "lucide-react";
+import Gallery from "./Gallery";
 import HeroCarousel from "./HeroCarousel";
 import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
@@ -22,7 +23,6 @@ import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
-import { GALLERY_PHOTOS, slideSizes } from "./landing-gallery";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -189,39 +189,6 @@ function Motto(): React.ReactElement {
       <p className="landing-motto-lead">Cada entrenamiento es una oportunidad para superarte.</p>
       <Link className="landing-button" href={ENROLL_HREF}>Inscríbete ahora <ArrowRight aria-hidden="true" /></Link>
       <Stars />
-    </section>
-  );
-}
-
-/**
- * Ships as a plain overflow-scrolling strip. The motion layer upgrades it to a
- * seamless drag-and-inertia loop by adding `is-enhanced`, so the gallery is
- * fully usable before that script runs, if it never runs, and when the visitor
- * prefers reduced motion.
- */
-function Gallery(): React.ReactElement {
-  return (
-    <section className="landing-section landing-gallery" id="galeria" data-motion-section data-testid="motion-section">
-      <SectionHeader eyebrow="Nuestra academia" title="Galería" />
-      <div className="landing-carousel-wrap">
-        <div className="landing-carousel" data-carousel role="group" aria-label="Galería de fotos del club">
-          {GALLERY_PHOTOS.map((photo): React.ReactElement => (
-            <figure className="landing-slide" key={photo.src}>
-              <Image
-                src={photo.src}
-                alt={photo.alt}
-                width={photo.width}
-                height={photo.height}
-                loading="lazy"
-                quality={85}
-                sizes={slideSizes(photo)}
-                draggable={false}
-              />
-              <figcaption>{photo.caption}</figcaption>
-            </figure>
-          ))}
-        </div>
-      </div>
     </section>
   );
 }

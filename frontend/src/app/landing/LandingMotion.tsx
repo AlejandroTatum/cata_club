@@ -7,6 +7,7 @@ import { Draggable } from "gsap/Draggable";
 import { InertiaPlugin } from "gsap/InertiaPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
+import type { GalleryLightboxDetail } from "./Gallery";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
@@ -117,8 +118,31 @@ function enhanceCarousel(track: HTMLElement): () => void {
     onDrag(this: Draggable): void { loop.progress(progressFor(this)); },
     onThrowUpdate(this: Draggable): void { loop.progress(progressFor(this)); },
     onRelease(): void { track.classList.remove("is-dragging"); },
-    onThrowComplete(): void { loop.play(); },
+    onThrowComplete(): void { resumeLoop(); },
   });
+
+  // The lightbox pauses the loop over this DOM-event channel — the same
+  // one the hero carousel uses — so a photo under study never drifts out
+  // of view. `resumeLoop` is the single path back to autoplay: every other
+  // resumer (drag throw, wheel idle) must respect a held pause, or closing
+  // the lightbox would race whatever gesture ended underneath the overlay.
+  let lightboxOpen = false;
+  const resumeLoop = (): void => {
+    if (!lightboxOpen) loop.play();
+  };
+  const onLightbox = (event: Event): void => {
+    const { open } = (event as CustomEvent<GalleryLightboxDetail>).detail;
+    if (open === lightboxOpen) return;
+    lightboxOpen = open;
+    if (open) {
+      loop.pause();
+      resume?.kill();
+      resume = undefined;
+    } else {
+      resumeLoop();
+    }
+  };
+  track.addEventListener("landing:gallery-lightbox", onLightbox);
 
   let resume: gsap.core.Tween | undefined;
   const onWheel = (event: WheelEvent): void => {
@@ -128,12 +152,13 @@ function enhanceCarousel(track: HTMLElement): () => void {
     loop.pause();
     loop.progress(wrap(loop.progress() + delta * 0.0004));
     resume?.kill();
-    resume = gsap.delayedCall(0.5, (): void => { loop.play(); });
+    resume = gsap.delayedCall(0.5, resumeLoop);
   };
   track.addEventListener("wheel", onWheel, { passive: false });
 
   return (): void => {
     track.removeEventListener("wheel", onWheel);
+    track.removeEventListener("landing:gallery-lightbox", onLightbox);
     resume?.kill();
     draggable?.kill();
     loop.kill();
