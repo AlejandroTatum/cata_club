@@ -84,7 +84,7 @@ export default function Gallery(): React.ReactElement {
       <div className="landing-carousel-wrap">
         <div className="landing-carousel" data-carousel role="group" aria-label="Galería de fotos del club" ref={trackRef}>
           {GALLERY_PHOTOS.map((photo, index): React.ReactElement => (
-            <figure className="landing-slide" key={photo.src}>
+            <figure className="landing-slide" key={photo.src} style={{ aspectRatio: `${photo.width} / ${photo.height}` }}>
               <button
                 type="button"
                 className="landing-slide-open"
