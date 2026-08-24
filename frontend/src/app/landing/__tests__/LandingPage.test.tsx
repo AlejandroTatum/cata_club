@@ -413,6 +413,82 @@ describe("LandingPage", (): void => {
     expect(track?.className).not.toContain("is-enhanced");
   });
 
+  // The lightbox is plain React state: it must work identically before the
+  // motion layer loads and under reduced motion, so these tests render the
+  // page with LandingMotion mocked out — no GSAP internals asserted.
+  describe("gallery lightbox", (): void => {
+    const openButtons = (): HTMLElement[] =>
+      within(document.querySelector(".landing-gallery") as HTMLElement).getAllByRole("button", {
+        name: /^Ampliar foto:/i,
+      });
+
+    it("opens the clicked photo in a modal dialog and tells the motion layer", (): void => {
+      render(<LandingPage />);
+
+      const track = document.querySelector("[data-carousel]") as HTMLElement;
+      const pauseSignals: boolean[] = [];
+      track.addEventListener("landing:gallery-lightbox", (event): void => {
+        pauseSignals.push((event as CustomEvent<{ open: boolean }>).detail.open);
+      });
+
+      expect(openButtons()).toHaveLength(GALLERY_PHOTOS.length);
+      fireEvent.click(openButtons()[2]);
+
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toHaveAttribute("aria-modal", "true");
+      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[2].alt })).toBeInTheDocument();
+      expect(within(dialog).getByText(GALLERY_PHOTOS[2].caption)).toBeInTheDocument();
+      expect(pauseSignals).toEqual([true]);
+    });
+
+    it("closes on Escape, resumes the loop signal, and returns focus to the slide", (): void => {
+      render(<LandingPage />);
+
+      const track = document.querySelector("[data-carousel]") as HTMLElement;
+      const pauseSignals: boolean[] = [];
+      track.addEventListener("landing:gallery-lightbox", (event): void => {
+        pauseSignals.push((event as CustomEvent<{ open: boolean }>).detail.open);
+      });
+      const trigger = openButtons()[1];
+      trigger.focus();
+      fireEvent.click(trigger);
+
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(pauseSignals).toEqual([true, false]);
+      expect(trigger).toHaveFocus();
+    });
+
+    it("steps through photos with arrow keys, wrapping at both ends", (): void => {
+      render(<LandingPage />);
+
+      fireEvent.click(openButtons()[0]);
+      const dialog = screen.getByRole("dialog");
+
+      fireEvent.keyDown(dialog, { key: "ArrowLeft" });
+      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[GALLERY_PHOTOS.length - 1].alt })).toBeInTheDocument();
+
+      fireEvent.keyDown(dialog, { key: "ArrowRight" });
+      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[0].alt })).toBeInTheDocument();
+
+      fireEvent.keyDown(dialog, { key: "ArrowRight" });
+      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[1].alt })).toBeInTheDocument();
+    });
+
+    it("closes on backdrop click and releases the page scroll lock", (): void => {
+      render(<LandingPage />);
+
+      fireEvent.click(openButtons()[0]);
+      expect(document.body.style.overflow).toBe("hidden");
+
+      fireEvent.click(document.querySelector(".landing-lightbox-backdrop") as HTMLElement);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(document.body.style.overflow).toBe("");
+    });
+  });
+
   it("exposes the active landing destination to assistive technology", (): void => {
     render(<LandingPage />);
 
