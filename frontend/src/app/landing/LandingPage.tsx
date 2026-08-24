@@ -184,11 +184,11 @@ function Values(): React.ReactElement {
 
 function Motto(): React.ReactElement {
   return (
-    <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-testid="motion-section">
+    <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-motto data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
-      <span className="landing-paddle" aria-hidden="true"><i /></span>
-      <p className="landing-motto-lead">Cada entrenamiento es una oportunidad para superarte.</p>
-      <Link className="landing-button" href={ENROLL_HREF}>Inscríbete ahora <ArrowRight aria-hidden="true" /></Link>
+      <span className="landing-paddle" data-motto-paddle aria-hidden="true"><i /></span>
+      <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarte.</p>
+      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ahora <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );

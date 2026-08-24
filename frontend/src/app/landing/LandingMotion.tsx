@@ -290,6 +290,34 @@ function playServe(): (() => void) | undefined {
   return (): void => { serve.kill(); };
 }
 
+/* The motto is a self-contained entrance: its decorative paddle settles in,
+   then the invitation and stars follow. It never shares a timeline with the
+   ticker or any other landing section. */
+function playMotto(): (() => void) | undefined {
+  const motto = document.querySelector<HTMLElement>("[data-motto]");
+  if (!motto) return undefined;
+
+  const paddle = motto.querySelector<HTMLElement>("[data-motto-paddle]");
+  const copy = motto.querySelector<HTMLElement>("[data-motto-copy]");
+  const cta = motto.querySelector<HTMLElement>("[data-motto-cta]");
+  const stars = motto.querySelector<HTMLElement>(".landing-stars");
+  const timeline = gsap.timeline({
+    paused: true,
+    scrollTrigger: { trigger: motto, start: "top 82%", once: true },
+  });
+
+  if (paddle) timeline.from(paddle, { y: 28, rotation: -12, opacity: 0, duration: 0.7, ease: "back.out(1.6)" });
+  if (copy) timeline.from(copy, { y: 18, opacity: 0, duration: 0.55, ease: "power3.out" }, "-=0.35");
+  if (cta) timeline.from(cta, { y: 14, opacity: 0, duration: 0.45, ease: "power2.out" }, "-=0.22");
+  if (stars) timeline.from(stars, { y: 10, opacity: 0, duration: 0.35, ease: "power2.out" }, "-=0.16");
+  timeline.play();
+
+  return (): void => {
+    timeline.scrollTrigger?.kill();
+    timeline.kill();
+  };
+}
+
 export default function LandingMotion(): null {
   useEffect((): (() => void) => {
     gsap.registerPlugin(ScrollTrigger, Draggable, InertiaPlugin, SplitText);
@@ -308,6 +336,7 @@ export default function LandingMotion(): null {
       let teardownHeroCarousel: (() => void) | undefined;
       let teardownTicker: (() => void) | undefined;
       let teardownServe: (() => void) | undefined;
+      let teardownMotto: (() => void) | undefined;
 
       const context = gsap.context((): void => {
         const heading = document.querySelector<HTMLElement>("[data-split]");
@@ -361,6 +390,7 @@ export default function LandingMotion(): null {
 
 
         teardownServe = playServe();
+        teardownMotto = playMotto();
 
         const ticker = document.querySelector<HTMLElement>("[data-credentials-ticker]");
         if (ticker) teardownTicker = enhanceTicker(ticker);
@@ -382,6 +412,7 @@ export default function LandingMotion(): null {
         teardownHeroCarousel?.();
         teardownTicker?.();
         teardownServe?.();
+        teardownMotto?.();
         split?.revert();
         context.revert();
       };
