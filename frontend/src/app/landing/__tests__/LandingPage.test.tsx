@@ -363,7 +363,11 @@ describe("LandingPage", (): void => {
 
     const motto = document.querySelector(".landing-motto");
     expect(motto).not.toBeNull();
+    expect(motto).toHaveAttribute("data-motto");
+    expect(motto?.querySelector("[data-motto-paddle]")).toHaveAttribute("aria-hidden", "true");
+    expect(motto?.querySelector("[data-motto-copy]")).toHaveTextContent("Cada entrenamiento es una oportunidad");
     const mottoCta = within(motto as HTMLElement).getByRole("link");
+    expect(mottoCta).toHaveAttribute("data-motto-cta", "true");
     expect(mottoCta).toHaveAttribute("href", "/student/enroll");
   });
 

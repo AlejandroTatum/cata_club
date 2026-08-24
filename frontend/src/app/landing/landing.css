@@ -236,7 +236,7 @@
 
 .landing-motto { gap: 22px; padding: 84px 14vw; background: var(--landing-action); }
 .landing-motto .landing-halftone { mask-image: radial-gradient(circle at 4% 96%,var(--landing-brand-black),transparent 42%); }
-.landing-paddle { position: relative; width: 62px; height: 62px; border-radius: 50%; background: var(--landing-highlight); }
+.landing-paddle { position: relative; width: 62px; height: 62px; border-radius: 50%; background: var(--landing-highlight); transform-origin: 50% 100%; }
 .landing-paddle::after { content: ""; position: absolute; top: 6px; right: -3px; width: 13px; height: 13px; border-radius: 50%; background: var(--landing-surface); }
 .landing-paddle i { position: absolute; right: -10px; bottom: -7px; width: 31px; height: 11px; border-radius: 10px; background: var(--landing-highlight); transform: rotate(45deg); }
 .landing-motto .landing-motto-lead { max-width: 1000px; color: var(--landing-on-action); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 34px; font-weight: 600; line-height: 1.4; text-align: center; }
@@ -465,4 +465,5 @@
   .landing-page *, .landing-page *::before, .landing-page *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .landing-sponsors-track { animation: none; transform: none; }
       .landing-ticker-track { animation: none; transform: none; }
+      .landing-motto [data-motto-paddle], .landing-motto [data-motto-copy], .landing-motto [data-motto-cta], .landing-motto .landing-stars { opacity: 1 !important; transform: none !important; }
 }
