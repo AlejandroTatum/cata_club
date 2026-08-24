@@ -21,6 +21,7 @@ import NavScrollSpy from "./NavScrollSpy";
 import Palmares from "./Palmares";
 import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
+import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
 
@@ -293,7 +294,7 @@ export default function LandingPage(): React.ReactElement {
        * land inside the region it exists to skip past.
        */}
       <main>
-        <Hero /><Stats /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Schedule /><Location />
+        <Hero /><Ticker /><Stats /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Schedule /><Location />
       </main>
       {/* The sponsor strip sits between the page's main landmark and the footer:
           it is neither primary content nor site chrome. */}

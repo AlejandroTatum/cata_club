@@ -109,7 +109,20 @@ describe("LandingPage", (): void => {
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("renders client-pending values from the centralized config", (): void => {
+  it("renders the credentials ticker as a duplicated static marquee", (): void => {
+        render(<LandingPage />);
+
+        const ticker = screen.getByRole("region", { name: "Credenciales deportivas" });
+        const track = ticker.querySelector("[data-credentials-ticker]");
+        const copies = Array.from(track?.querySelectorAll(".landing-ticker-copy") ?? []);
+
+        expect(copies).toHaveLength(2);
+        expect(copies[0]?.textContent).toBe(copies[1]?.textContent);
+        expect(copies[1]).toHaveAttribute("aria-hidden", "true");
+        expect(ticker.querySelectorAll(".landing-ticker-item")).toHaveLength(8);
+      });
+
+      it("renders client-pending values from the centralized config", (): void => {
     render(<LandingPage />);
 
     expect(screen.getByText(landingConfig.schedules[0].slots[0].hours)).toBeInTheDocument();
