@@ -211,11 +211,24 @@ está en `backend/scripts/RUNBOOK_reset_db.md`.
 
 ## Testing
 
-```bash
-# Backend (pytest, SQLite en memoria)
-cd backend && uv run pytest tests/ -v
+Usá los targets de Make como ruta canónica; la suite del backend corre contra
+PostgreSQL real en `db-test`, no SQLite.
 
-# Frontend (Vitest unit + Playwright E2E)
+```bash
+make test             # backend + frontend + gates raíz seleccionados
+make test-root        # todos los tests de tests/ (Compose, Alembic y QA)
+make ci-backend       # análogo local parcial del job backend de CI
+```
+
+`make test` no incluye todos los checks de `tests/`; `make test-root` sí. El
+preflight de backend levanta `db-test` si hace falta y mantiene la clave JWT
+de descarte solo para la interpolación de Compose. `db-test` publica el
+puerto `5436` y es single-tenant: no compartas ese servicio entre corridas
+concurrentes.
+
+Para las suites específicas del frontend o E2E, consultá sus instrucciones:
+
+```bash
 cd frontend && pnpm test
 cd frontend && pnpm exec playwright test
 ```
