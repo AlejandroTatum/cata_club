@@ -256,6 +256,23 @@ function enhanceHeroCarousel(frame: HTMLElement): () => void {
   };
 }
 
+/* Optional GSAP handoff for the credentials ticker; CSS remains the baseline. */
+function enhanceTicker(track: HTMLElement): () => void {
+  track.classList.add("is-enhanced");
+  const tween = gsap.to(track, {
+    xPercent: -50,
+    duration: 26,
+    ease: "none",
+    repeat: -1,
+  });
+
+  return (): void => {
+    tween.kill();
+    track.classList.remove("is-enhanced");
+    gsap.set(track, { clearProps: "transform" });
+  };
+}
+
 /* Independent decorative bounce for the hero's white ball; nothing else touches it. */
 function playServe(): (() => void) | undefined {
   const serveBall = document.querySelector<HTMLElement>("[data-serve-ball]");
@@ -289,6 +306,7 @@ export default function LandingMotion(): null {
       let split: SplitText | null = null;
       let teardownCarousel: (() => void) | undefined;
       let teardownHeroCarousel: (() => void) | undefined;
+      let teardownTicker: (() => void) | undefined;
       let teardownServe: (() => void) | undefined;
 
       const context = gsap.context((): void => {
@@ -344,6 +362,9 @@ export default function LandingMotion(): null {
 
         teardownServe = playServe();
 
+        const ticker = document.querySelector<HTMLElement>("[data-credentials-ticker]");
+        if (ticker) teardownTicker = enhanceTicker(ticker);
+
         const track = document.querySelector<HTMLElement>("[data-carousel]");
         if (track) teardownCarousel = enhanceCarousel(track);
 
@@ -359,6 +380,7 @@ export default function LandingMotion(): null {
       return (): void => {
         teardownCarousel?.();
         teardownHeroCarousel?.();
+        teardownTicker?.();
         teardownServe?.();
         split?.revert();
         context.revert();
