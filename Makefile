@@ -1,5 +1,6 @@
-.PHONY: help dev dev-backend dev-frontend test test-backend test-frontend test-compose \
-       test-qa-guard test-qa-recovery-delivery \
+.PHONY: help dev dev-backend dev-frontend test test-backend test-backend-preflight \
+       test-root ci-backend test-frontend test-compose test-qa-guard \
+       test-qa-recovery-delivery \
        lint lint-backend lint-frontend typecheck build build-frontend \
        install install-backend install-frontend \
        docker-up docker-down docker-build \
@@ -41,7 +42,18 @@ install-frontend: ## Install frontend dependencies (pnpm)
 # "Compose config tests" del job `backend` en .github/workflows/ci.yml), así
 # que una corrida local reproduce la señal de CI y no descubre el fallo
 # recién en el PR. No necesita Postgres, solo Docker Compose.
-test: test-backend test-compose test-qa-guard test-frontend ## Run all tests
+test: test-backend-preflight test-compose test-qa-guard test-frontend ## Run backend, frontend, and selected integration tests
+
+# `make test` cubre la suite del backend, frontend y algunos gates raíz, pero
+# NO incluye todos los tests de `tests/`; usá `make test-root` para eso.
+
+# El preflight solo aporta JWT_SECRET_KEY a Compose para que pueda interpolar
+# docker-compose.yml cuando falta `.env`. La clave de descarte no se hereda
+# al pytest ni se usa en producción; el contrato de la suite sigue viviendo
+# en backend/tests/conftest.py.
+test-backend-preflight: ## Start db-test without .env, then run backend tests
+	JWT_SECRET_KEY="$${JWT_SECRET_KEY:-clave-de-descarte-solo-para-compose}" docker compose --profile test up -d db-test
+	$(MAKE) test-backend
 
 # Requiere `db-test` corriendo (`docker compose --profile test up -d
 # db-test`, ver docker-compose.yml): la suite ya no tiene una rama SQLite de
@@ -56,6 +68,13 @@ test: test-backend test-compose test-qa-guard test-frontend ## Run all tests
 # secas roto, que era justamente el síntoma del issue #101.
 test-backend: ## Run backend tests (pytest, requires: docker compose --profile test up -d db-test)
 	cd backend && TEST_DATABASE_URL="$${TEST_DATABASE_URL:-postgresql+psycopg://usuario:password@localhost:5436/cataclub_test}" uv run pytest tests/ -v
+
+test-root: ## Run every root-level test in tests/ (reuses backend venv)
+	cd backend && uv run pytest ../tests/ -v
+
+# Analogue local deliberadamente parcial del job backend de CI: no incluye
+# cobertura, migraciones desde cero ni los servicios de GitHub Actions.
+ci-backend: lint-backend test-backend-preflight test-compose ## Run the partial local backend CI analogue
 
 test-frontend: ## Run frontend unit tests (vitest)
 	cd frontend && pnpm test
