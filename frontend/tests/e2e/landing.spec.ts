@@ -207,6 +207,23 @@ test.describe("Landing page", () => {
       expect(upscaled).toEqual([]);
     });
 
+    test("keeps vertical page scrolling with Lenis while wheel input belongs to the GSAP loop", async ({ page }) => {
+      await page.goto("/");
+      const track = page.locator("[data-carousel]");
+      await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
+      await track.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(250);
+
+      const before = await page.evaluate(() => scrollY);
+      await track.dispatchEvent("wheel", { deltaY: 700, bubbles: true, cancelable: true });
+      await page.waitForTimeout(700);
+      const after = await page.evaluate(() => scrollY);
+
+      // A wheel over the enhanced track must not feed Lenis the same delta
+      // and move the page vertically; the existing drag test covers GSAP motion.
+      expect(after).toBe(before);
+    });
+
     test("moves the strip exactly as far as the pointer drags it", async ({ page }) => {
       await page.goto("/");
       const track = page.locator("[data-carousel]");
