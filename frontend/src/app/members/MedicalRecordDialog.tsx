@@ -58,6 +58,14 @@ export default function MedicalRecordDialog({
       </div>
 
       <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
+        {/* Additive, explicit status (user-approved wording): the fact that no
+            emergency record exists yet is announced here, never as hidden text
+            on the table trigger. The form below stays fully available. */}
+        {account.sinDatosEmergencia ? (
+          <p role="status" className="rounded-lg border border-line bg-sunken px-3 py-2 text-sm font-semibold text-ink-2">
+            Sin ficha médica
+          </p>
+        ) : null}
         {account.estudiantes.map((student) => (
           <MedicalRecordEditor
             key={student.id}

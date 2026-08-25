@@ -1670,6 +1670,11 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
       ],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConDeuda] });
+    mockFetchMembresiaDeuda.mockReset().mockResolvedValue({
+      mesesAdeudados: 3,
+      ultimaCoberturaFin: "2026-05-31",
+      montoMensual: 30,
+    });
 
     render(
       <ToastProvider>
@@ -1678,14 +1683,19 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
     );
 
     const row = await findAccountRow();
-    const rowPayments = within(row).getByRole("button", { name: /pagos de maría gonzález.*90.*3 meses/i });
-    expect(rowPayments).toHaveTextContent(/90/);
-    expect(rowPayments).toHaveTextContent(/3\s*meses/i);
+    const rowPayments = within(row).getByRole("button", { name: "Pagos de María González" });
+    expect(within(row).queryByText(/90/)).not.toBeInTheDocument();
+    expect(within(row).queryByText(/adeudado/i)).not.toBeInTheDocument();
 
     const card = await findAccountCard();
-    const cardPayments = within(card).getByRole("button", { name: /pagos de maría gonzález.*90.*3 meses/i });
-    expect(cardPayments).toHaveTextContent(/90/);
-    expect(cardPayments).toHaveTextContent(/3\s*meses/i);
+    expect(within(card).getByRole("button", { name: "Pagos de María González" })).toBeInTheDocument();
+    expect(within(card).queryByText(/90/)).not.toBeInTheDocument();
+
+    // The debt stays INSIDE the Payments dialog.
+    fireEvent.click(rowPayments);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(await within(dialog).findByText(/3 meses adeudados/i)).toBeInTheDocument();
   });
 
   it("uses singular 'mes' inside Pagos for exactly one overdue month", async () => {
@@ -1708,6 +1718,11 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
       ],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConUnMes] });
+    mockFetchMembresiaDeuda.mockReset().mockResolvedValue({
+      mesesAdeudados: 1,
+      ultimaCoberturaFin: "2026-07-31",
+      montoMensual: 30,
+    });
 
     render(
       <ToastProvider>
@@ -1716,9 +1731,14 @@ describe("MembersPage — estado de deuda en Pagos (issue #538)", () => {
     );
 
     const row = await findAccountRow();
-    const payments = within(row).getByRole("button", { name: /pagos de maría gonzález.*1 mes/i });
-    expect(payments).toHaveTextContent(/1\s*mes\b/i);
-    expect(payments).not.toHaveTextContent(/1\s*meses/i);
+    const payments = within(row).getByRole("button", { name: "Pagos de María González" });
+    expect(within(row).queryByText(/1\s*mes/i)).not.toBeInTheDocument();
+
+    fireEvent.click(payments);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(await within(dialog).findByText(/1 mes adeudado/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/1 mes adeudados/i)).not.toBeInTheDocument();
   });
 
   it("shows nothing extra when a VENCIDA membership has no resolved debt data (bulk lookup degraded)", async () => {
@@ -2453,10 +2473,11 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     // backend never requires — assert it is gone, not just that new text
     // exists alongside it.
     expect(within(row).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    const ficha = within(row).getByRole("button", {
-      name: /ficha médica de maría gonzález.*sin ficha médica cargada/i,
-    });
-    expect(ficha).toHaveTextContent(/sin ficha médica cargada/i);
+    const ficha = within(row).getByRole("button", { name: "Ficha médica de María González" });
+    // No inline status text and no hidden status suffix on the trigger — the
+    // explicit "Sin ficha médica" status lives INSIDE the dialog only.
+    expect(within(row).queryByText(/ficha médica cargada/i)).not.toBeInTheDocument();
+    expect(within(row).queryByText(/sin ficha médica/i)).not.toBeInTheDocument();
   });
 
   it("shows the same neutral notice on the phone card", async () => {
@@ -2469,9 +2490,8 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     const card = await findAccountCard();
 
     expect(within(card).queryByText("Sin datos de emergencia")).not.toBeInTheDocument();
-    expect(
-      within(card).getByRole("button", { name: /ficha médica de maría gonzález.*sin ficha médica cargada/i }),
-    ).toHaveTextContent(/sin ficha médica cargada/i);
+    expect(within(card).getByRole("button", { name: "Ficha médica de María González" })).toBeInTheDocument();
+    expect(within(card).queryByText(/sin ficha médica/i)).not.toBeInTheDocument();
   });
 
   it("shows no notice at all once emergency data is present", async () => {
@@ -2484,6 +2504,50 @@ describe("MembersPage — missing emergency data reads as informational, not an 
     const row = await findAccountRow();
 
     expect(within(row).queryByText(/sin ficha médica cargada/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the explicit 'Sin ficha médica' banner INSIDE the dialog, keeping the form available", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [NO_EMERGENCY_DATA] });
+    mockFetchFichaMedica.mockReset().mockResolvedValue({
+      tipoSangre: "DESCONOCIDO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(within(row).getByRole("button", { name: "Ficha médica de María González" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Sin ficha médica");
+    // The editor stays fully available: the banner is additive.
+    expect(await within(dialog).findByText("Tipo de sangre")).toBeInTheDocument();
+  });
+
+  it("does not show the 'Sin ficha médica' banner once emergency data is present", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+    mockFetchFichaMedica.mockReset().mockResolvedValue({
+      tipoSangre: "DESCONOCIDO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(within(row).getByRole("button", { name: "Ficha médica de María González" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("status")).not.toBeInTheDocument();
   });
 });
 
@@ -2930,6 +2994,60 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(ficha.className).toContain("h-ctl-sm");
     expect(pagos.className).toContain("h-ctl-sm");
     expect(editar.className).toContain("h-ctl-sm");
+  });
+
+  it("gives the Ficha médica trigger a visible border and leaves Pagos borderless", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const ficha = getRowButton(row, /^ficha médica/i);
+    const pagos = getRowButton(row, /^pagos/i);
+
+    // Medical uses the bordered secondary skin; the payments trigger keeps the
+    // quiet tertiary skin — the visible border applies to Medical only.
+    expect(ficha.className).toContain("border-line-2");
+    expect(pagos.className).toContain("border-transparent");
+  });
+
+  it("keeps the derived debt inside the Pagos dialog when the table label is stripped", async () => {
+    mockFetchMembresiaDeuda.mockReset().mockResolvedValue({
+      mesesAdeudados: 4,
+      ultimaCoberturaFin: "2026-03-31",
+      montoMensual: 85,
+    });
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [
+        {
+          ...ACCOUNT,
+          estudiantes: [
+            {
+              ...ACCOUNT.estudiantes[0],
+              membresia: { id: 42, estado: "vencida", monto: 85 },
+            },
+          ],
+        },
+      ],
+    });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+
+    // The row trigger is plain: no debt label inline.
+    expect(getRowButton(row, /^pagos/i)).toHaveAccessibleName("Pagos de María González");
+    expect(within(row).queryByText(/adeudado/i)).not.toBeInTheDocument();
+
+    // The debt flows stay inside the Payments dialog: Regularizar deuda opens
+    // with the derived months — nothing was lost by cleaning the button.
+    fireEvent.click(getRowButton(row, /^pagos/i));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /regularizar deuda/i }));
+    expect(await within(dialog).findByText(/4 meses adeudados/i)).toBeInTheDocument();
   });
 
   it("opens the ficha médica editor directly from the row, with no generic dialog in between", async () => {

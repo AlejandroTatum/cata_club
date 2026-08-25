@@ -414,17 +414,16 @@ function MedicalRecordAccessButton({
 }: Pick<AccountListItemProps, "account" | "onMedical">): React.ReactElement {
   return (
     <Button
-      variant="tertiary"
+      variant="secondary"
       size="sm"
       onClick={(event) => {
         event.currentTarget.focus();
         onMedical();
       }}
-      aria-label={`Ficha médica de ${account.nombres} ${account.apellidos}${account.sinDatosEmergencia ? ": Sin ficha médica cargada" : ""}`}
+      aria-label={`Ficha médica de ${account.nombres} ${account.apellidos}`}
     >
       <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Ficha médica
-      {account.sinDatosEmergencia ? <span className="text-2xs text-state-neutral">· Sin ficha médica cargada</span> : null}
     </Button>
   );
 }
@@ -439,8 +438,6 @@ function PaymentsAccessButton({
   account,
   onPayments,
 }: Pick<AccountListItemProps, "account" | "onPayments">): React.ReactElement {
-  const debtLabel = getMembershipDebtLabel(account);
-
   return (
     <Button
       variant="tertiary"
@@ -449,24 +446,12 @@ function PaymentsAccessButton({
         event.currentTarget.focus();
         onPayments();
       }}
-      aria-label={`Pagos de ${account.nombres} ${account.apellidos}${debtLabel ? `: ${debtLabel}` : ""}`}
+      aria-label={`Pagos de ${account.nombres} ${account.apellidos}`}
     >
       <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
       Pagos
-      {debtLabel ? <span className="text-2xs text-state-bad">· {debtLabel}</span> : null}
     </Button>
   );
-}
-
-/** Returns the bulk-derived debt state without fabricating a value when it is unavailable. */
-function getMembershipDebtLabel(account: MemberAccount): string | null {
-  const membresia = account.estudiantes[0]?.membresia;
-  if (!membresia || membresia.estado !== "vencida") return null;
-  if (membresia.montoAdeudado === undefined || membresia.mesesAdeudados === undefined) return null;
-
-  return `${formatCurrency(membresia.montoAdeudado)} adeudado · ${
-    membresia.mesesAdeudados === 1 ? "1 mes" : `${membresia.mesesAdeudados} meses`
-  }`;
 }
 
 /** One account as a table row (`sm` and up). */
