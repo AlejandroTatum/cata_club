@@ -27,7 +27,11 @@ load_image_tag() {
 configured_backend_image() {
   (
     cd "$STACK_DIR"
-    IMAGE_TAG="$IMAGE_TAG" docker compose "${COMPOSE_FILES[@]}" config --images backend
+    # Compose >= 5.5 puede emitir varias líneas para `--images backend`.
+    # `sed -n '1p'` toma solo la primera sin cerrar el pipe antes de tiempo
+    # (a diferencia de `head -n 1`, que con `pipefail` revienta por SIGPIPE
+    # si el emisor escribe una segunda línea).
+    IMAGE_TAG="$IMAGE_TAG" docker compose "${COMPOSE_FILES[@]}" config --images backend | sed -n '1p'
   )
 }
 
