@@ -1,7 +1,15 @@
 /** @vitest-environment jsdom */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Sponsors, { mapSponsor, type PublicSponsorPayload } from "../Sponsors";
+
+// The colour/section rhythm lives in CSS that jsdom cannot compute, so the
+// style guards read the authored stylesheet and pin the exact token-backed
+// contract issues #611 sets out.
+const landingCss = (): string =>
+  readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
 
 const jsonResponse = (body: unknown, ok = true): { ok: boolean; status?: number; json: () => Promise<unknown> } =>
   ({ ok, status: ok ? 200 : 503, json: async () => body });
@@ -59,17 +67,64 @@ describe("Sponsors", (): void => {
     expect(screen.queryByText(/pendientes de confirmación/i)).not.toBeInTheDocument();
   });
 
+  it("uses the canonical 'Patrocinadores' label for the strip, its ready status, and its states", async (): Promise<void> => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse([
+      { id: 1, nombre: "Municipio", logoUrl: "https://cdn/muni.png" },
+    ]));
+    render(<Sponsors />);
+    // The strip header is the canonical public term, not "Nos acompañan".
+    expect(await screen.findByText("Patrocinadores")).toBeInTheDocument();
+    // The screen-reader ready-status names the section the same way.
+    expect(screen.getByText(/^Patrocinadores:/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Auspiciantes|Nos acompañan/i)).not.toBeInTheDocument();
+  });
+
+  it("renders each sponsor logo at ~double the previous size while preserving aspect via contain", async (): Promise<void> => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse([
+      { id: 1, nombre: "Municipio", logoUrl: "https://cdn/muni.png" },
+    ]));
+    render(<Sponsors />);
+    const [logo] = await screen.findAllByAltText("Municipio");
+    // The rendered logo grows from 156x60 to ~312x120 (issue #611).
+    expect(logo.getAttribute("width")).toBe("312");
+    expect(logo.getAttribute("height")).toBe("120");
+  });
+
+  it("keeps sponsor logos in full colour with contained sizing — no grayscale/dim, no dead href-hover restore", (): void => {
+    const css = landingCss();
+    const imgRule = css.match(/\.landing-sponsor img \{[\s\S]*?\}/)?.[0] ?? "";
+    expect(imgRule).toContain("object-fit: contain");
+    expect(imgRule).not.toMatch(/grayscale|opacity/);
+    // Sponsors are not links; the old `[href]:hover` colour restore must go.
+    expect(css).not.toMatch(/\.landing-sponsor\[href\]/);
+  });
+
+  it("doubles the sponsor card geometry (item width and tile height)", (): void => {
+    const css = landingCss();
+    const itemRule = css.match(/\.landing-sponsors-item \{[\s\S]*?\}/)?.[0] ?? "";
+    const sponsorRule = css.match(/\.landing-sponsor \{[\s\S]*?\}/)?.[0] ?? "";
+    expect(itemRule).toMatch(/clamp\(300px/);
+    expect(sponsorRule).toMatch(/height: 168px/);
+  });
+
+  it("applies the section colour rhythm from brand tokens (Horarios white, Misión/Visión black, Valores yellow)", (): void => {
+    const css = landingCss();
+    expect(css).toMatch(/\.landing-schedule \{[^}]*var\(--landing-surface\)/);
+    expect(css).toMatch(/\.landing-section#nosotros \{[^}]*var\(--landing-footer\)/);
+    expect(css).toMatch(/\.landing-values \{[^}]*var\(--landing-highlight\)/);
+  });
+
   it("shows an honest empty message when the backend returns no sponsors", async (): Promise<void> => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse([]));
     render(<Sponsors />);
-    expect(await screen.findByText(/aún no hay auspiciantes/i)).toBeInTheDocument();
+    expect(await screen.findByText(/aún no hay patrocinadores/i)).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("handles a backend error gracefully without inventing static placeholder slots", async (): Promise<void> => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse({}, false));
     render(<Sponsors />);
-    expect(await screen.findByText(/no se pudieron cargar los auspiciantes/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no se pudieron cargar los patrocinadores/i)).toBeInTheDocument();
     expect(screen.queryByText(/LOGO 0/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });

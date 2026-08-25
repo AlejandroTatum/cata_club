@@ -59,6 +59,11 @@ test.describe("Landing page", () => {
     );
     await page.goto("/");
     await expect(page.locator(".landing-sponsors-item")).toHaveCount(4);
+        // Canonical public term and full brand colour: the strip no longer greys
+        // or dims logos, and there is no dead href-hover restore.
+        await expect(page.locator(".landing-sponsors-head")).toHaveText("Patrocinadores");
+        await expect(page.locator(".landing-sponsor img").first()).toHaveCSS("filter", "none");
+        await expect(page.locator(".landing-sponsor img").first()).toHaveCSS("opacity", "1");
     const metrics = await page.locator(".landing-sponsors-item >> nth=0").evaluate((item) => {
       const img = item.querySelector("img")!;
       const imgBox = img.getBoundingClientRect();
@@ -73,14 +78,14 @@ test.describe("Landing page", () => {
         trackH: track.getBoundingClientRect().height,
       };
     });
-    // Rendered ~156x67 before this delta; the logo must keep the outer card
-    // (84px tile) while the usable image area grows materially with contain +
-    // minimal padding, and the marquee must not grow vertically.
-    expect(metrics.ratio).toBeGreaterThanOrEqual(0.8);
+    // Rendered ~312x120 now (issue #611): the card doubles from an 84px to a
+    // 168px tile, the logo keeps filling it via contain, and the marquee must
+    // not grow vertically beyond the tile.
+    expect(metrics.ratio).toBeGreaterThanOrEqual(0.7);
     expect(metrics.ratio).toBeLessThanOrEqual(1.05);
-    expect(metrics.imgW).toBeGreaterThanOrEqual(150);
-    expect(metrics.imgH).toBeGreaterThanOrEqual(70);
-    expect(metrics.tileH).toBe(84);
+    expect(metrics.imgW).toBeGreaterThanOrEqual(300);
+    expect(metrics.imgH).toBeGreaterThanOrEqual(120);
+    expect(metrics.tileH).toBe(168);
     expect(metrics.trackH).toBeLessThanOrEqual(metrics.tileH + 6);
   });
 

@@ -173,9 +173,9 @@ describe("LandingPage", (): void => {
   it("shows an honest empty sponsor message when public GET /api/sponsors returns none", async (): Promise<void> => {
     render(<LandingPage />);
 
-    const sponsors = screen.getByRole("region", { name: "Auspiciantes del club" });
-    expect(within(sponsors).getByText("Nos acompañan")).toBeInTheDocument();
-    expect(await within(sponsors).findByText(/aún no hay auspiciantes/i)).toBeInTheDocument();
+    const sponsors = screen.getByRole("region", { name: "Patrocinadores del club" });
+    expect(within(sponsors).getByText("Patrocinadores")).toBeInTheDocument();
+    expect(await within(sponsors).findByText(/aún no hay patrocinadores/i)).toBeInTheDocument();
     expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
 
