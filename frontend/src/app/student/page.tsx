@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
@@ -547,7 +546,8 @@ function Carnet({
               className="flex h-[78px] w-[62px] flex-none items-center justify-center overflow-hidden rounded-[3px] border-2 border-ball bg-white/10 print:h-[62px] print:w-[49px]"
             >
               {profile.fotoUrl && !fotoFallback ? (
-                <Image
+                /* eslint-disable-next-line @next/next/no-img-element -- remote Cloudinary URL, not a local/static asset (AppShell/Profile/Sponsors convention) */
+                <img
                   src={profile.fotoUrl}
                   alt={`Foto de ${fullName}`}
                   width={62}
@@ -1006,6 +1006,7 @@ function ActivePortalView({
   accountPersonaId,
   onIndependizar,
   onPhotoUploaded,
+  onOwnPhotoUploaded,
 }: {
   data: StudentPortalSummary;
   hasAlumnoRole: boolean;
@@ -1013,6 +1014,8 @@ function ActivePortalView({
   accountPersonaId: string;
   onIndependizar: () => void;
   onPhotoUploaded: () => void;
+  /** Extra refresh for the SESSION avatar, fired only when the OWN profile uploaded. */
+  onOwnPhotoUploaded?: () => void;
 }): React.ReactElement {
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
@@ -1321,7 +1324,13 @@ function ActivePortalView({
               profile={selectedProfile}
               horariosState={horariosState}
               canManagePhoto={canManagePhoto}
-              onPhotoUploaded={onPhotoUploaded}
+              onPhotoUploaded={() => {
+                onPhotoUploaded();
+                // Only the session-owner's photo is the AppShell avatar: an
+                // upload on a represented dependent must never refresh/replace
+                // the representative's avatar.
+                if (selectedProfile?.personaId === accountPersonaId) onOwnPhotoUploaded?.();
+              }}
             />
 
             {/* Only on the minor's OWN account. Shown to a guardian looking
@@ -1519,6 +1528,7 @@ function StudentPortalContent(): React.ReactElement {
             accountPersonaId={personaId}
             onIndependizar={() => setShowAgeUpModal(true)}
             onPhotoUploaded={() => setReloadToken((n) => n + 1)}
+            onOwnPhotoUploaded={() => void refreshSession()}
           />
         ))}
       <AgeUpConfirmation

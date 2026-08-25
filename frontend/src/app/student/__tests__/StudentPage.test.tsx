@@ -68,6 +68,8 @@ let mockAuthSession = {
   loggedInAt: "2026-07-01T12:00:00Z",
 };
 
+const { mockRefreshSession } = vi.hoisted(() => ({ mockRefreshSession: vi.fn() }));
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     session: mockAuthSession,
@@ -75,7 +77,7 @@ vi.mock("@/contexts/AuthContext", () => ({
     isLoading: false,
     login: vi.fn(),
     logout: vi.fn(),
-    refreshSession: vi.fn(),
+    refreshSession: mockRefreshSession,
   }),
 }));
 
@@ -177,6 +179,8 @@ beforeEach(() => {
   mockFetchHorariosPorAlumno.mockReset().mockResolvedValue([]);
   mockIndependizarPersona.mockReset().mockResolvedValue(undefined);
   mockSubirFotoPersona.mockReset().mockResolvedValue(undefined);
+  mockRefreshSession.mockReset();
+  mockRefreshSession.mockResolvedValue(undefined);
 });
 
 /**
@@ -553,10 +557,17 @@ describe("StudentPage — the carnet shows the student's photo", () => {
     render(<StudentPage />);
 
     const photo = await screen.findByTestId("carnet-photo");
-    expect(within(photo).getByRole("img")).toHaveAttribute(
+    const img = within(photo).getByRole("img");
+    // Remote Cloudinary photos render as RAW img (AppShell/Profile/Sponsors
+    // convention) — never a /_next/image optimizer URL.
+    expect(img).toHaveAttribute(
       "src",
       "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg",
     );
+    expect(img.getAttribute("src")).not.toContain("/_next/image");
+    expect(img).toHaveAttribute("alt", "Foto de Alumno Test");
+    expect(img).toHaveAttribute("width", "62");
+    expect(img).toHaveAttribute("height", "78");
   });
 
   it("falls back to initials instead of showing a broken image when the photo fails to load", async () => {
@@ -621,6 +632,30 @@ describe("StudentPage — the carnet shows the student's photo", () => {
     await waitFor(() => {
       expect(mockFetchStudentPortal).toHaveBeenCalledTimes(2);
     });
+    // The account's OWN photo is the session avatar: the portal must refresh
+    // the session so AppShell's avatar synchronizes immediately.
+    expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh the representative's session avatar when uploading a dependent's photo", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: null,
+      representados: [
+        { ...PORTAL.self!, personaId: "42", nombres: "Sofía", apellidos: "Vera", representanteId: 9 },
+      ],
+    });
+
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    const input = screen.getByTestId("carnet-photo-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "foto.jpg", { type: "image/jpeg" })] } });
+
+    await waitFor(() => {
+      expect(mockSubirFotoPersona).toHaveBeenCalledWith("42", expect.any(File));
+    });
+    expect(mockRefreshSession).not.toHaveBeenCalled();
   });
 });
 
