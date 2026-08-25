@@ -1064,7 +1064,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.queryByRole("button", { name: "Mié" })).not.toBeInTheDocument();
   });
 
-  it("searches global active students and excludes people already assigned to the group", async () => {
+  it("searches global active students and explains people already assigned to the group", async () => {
     mockSearchStudents.mockResolvedValue([
       { id: 20, nombres: "Ana", apellidos: "Pérez" },
       { id: 999, nombres: "Diego", apellidos: "Vega" },
@@ -1080,7 +1080,7 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
 
     expect(mockSearchStudents).toHaveBeenCalledWith("Di", { rol: "ALUMNO", limit: 10 });
     expect(await screen.findByRole("option", { name: /Diego Vega/i })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /Ana Pérez/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /Ana Pérez.*Ya asignado/i })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("assigning a student calls asignarAlumnoAHorario ONCE, anchored on the first row of the group (backend enrolls the whole categoria atomically)", async () => {

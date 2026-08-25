@@ -522,6 +522,19 @@ def test_buscar_sin_resultados_devuelve_lista_vacia_sin_romperse(client):
     assert resp.json() == []
 
 
+def test_buscar_es_insensible_a_acentos_y_preserva_la_ene(client):
+    _crear_persona_buscable(client, "Anahí", "Muñoz", cedula_valida(534))
+
+    for query in ("Anahi", "Anahí", "Muño", "Muñoz"):
+        resp = client.get("/api/v1/personas/buscar", params={"q": query})
+        assert resp.status_code == 200
+        assert any(p["nombres"] == "Anahí" and p["apellidos"] == "Muñoz" for p in resp.json())
+
+    resp = client.get("/api/v1/personas/buscar", params={"q": "Muno"})
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 # --- `GET /personas/`: paginación acotada -----------------------------------
 # Era el único de los cuatro endpoints paginados declarado con defaults planos
 # de Python (`skip: int = 0, limit: int = 50`), sin `Query(...)`: aceptaba

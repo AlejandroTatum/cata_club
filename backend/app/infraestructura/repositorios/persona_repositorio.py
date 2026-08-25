@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
@@ -125,10 +125,21 @@ class PersonaRepositorio:
         # palabra el comportamiento es idéntico al de antes.
         palabras = q.split()
         if palabras:
+
+            def normalizador(expresion):
+                return func.lower(func.translate(expresion, "áéíóúü", "aeiouu"))
+
             stmt = stmt.where(
                 and_(
                     *[
-                        or_(Persona.nombres.ilike(f"%{palabra}%"), Persona.apellidos.ilike(f"%{palabra}%"))
+                        or_(
+                            normalizador(Persona.nombres).like(
+                                func.concat("%", normalizador(literal(palabra)), "%")
+                            ),
+                            normalizador(Persona.apellidos).like(
+                                func.concat("%", normalizador(literal(palabra)), "%")
+                            ),
+                        )
                         for palabra in palabras
                     ]
                 )

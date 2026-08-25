@@ -16,6 +16,8 @@ interface StudentSearchProps {
   readonly role?: string;
   /** Student ids that must not be offered for the current operation. */
   readonly excludeIds?: readonly number[];
+  /** Shows excluded ids as disabled results instead of hiding them. */
+  readonly showExcluded?: boolean;
   /** Optional id for associating an external visible label with the input. */
   readonly id?: string;
   readonly ariaLabel?: string;
@@ -28,19 +30,23 @@ export default function StudentSearch({
   disabled = false,
   role,
   excludeIds = [],
+  showExcluded = false,
   id,
   ariaLabel = "Buscar alumno",
 }: StudentSearchProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonaBusqueda[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<PersonaBusqueda | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const visibleResults = results.filter((alumno) => !excludeIds.includes(alumno.id));
-  const isOpen = open && visibleResults.length > 0;
+  const isExcluded = (alumno: PersonaBusqueda): boolean => excludeIds.includes(alumno.id);
+  const visibleResults = showExcluded ? results : results.filter((alumno) => !isExcluded(alumno));
+  const selectableResults = visibleResults.filter((alumno) => !isExcluded(alumno));
+  const isOpen = open && (loading || visibleResults.length > 0 || error || query.trim().length >= 2);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -56,6 +62,7 @@ export default function StudentSearch({
     if (timerRef.current) clearTimeout(timerRef.current);
     if (query.trim().length < 2) {
       setResults([]);
+      setError(false);
       setOpen(false);
       setActiveIndex(-1);
       return;
@@ -64,6 +71,8 @@ export default function StudentSearch({
     let cancelled = false;
     timerRef.current = setTimeout(async () => {
       setLoading(true);
+      setError(false);
+      setOpen(true);
       try {
         const data = await searchStudents(query.trim(), { limit: 10, ...(role ? { rol: role } : {}) });
         if (cancelled) return;
@@ -75,7 +84,8 @@ export default function StudentSearch({
       } catch {
         if (!cancelled) {
           setResults([]);
-          setOpen(false);
+          setError(true);
+          setOpen(true);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -106,6 +116,7 @@ export default function StudentSearch({
   function handleClear(): void {
     setQuery("");
     setResults([]);
+    setError(false);
     setOpen(false);
     setSelected(null);
     setActiveIndex(-1);
@@ -114,18 +125,18 @@ export default function StudentSearch({
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>): void {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      if (visibleResults.length === 0) return;
+      if (selectableResults.length === 0) return;
       e.preventDefault();
       setOpen(true);
       setActiveIndex((current) => {
-        if (e.key === "ArrowDown") return current < visibleResults.length - 1 ? current + 1 : 0;
-        return current > 0 ? current - 1 : visibleResults.length - 1;
+        if (e.key === "ArrowDown") return current < selectableResults.length - 1 ? current + 1 : 0;
+        return current > 0 ? current - 1 : selectableResults.length - 1;
       });
       return;
     }
     if (e.key === "Enter" && isOpen && activeIndex >= 0) {
       e.preventDefault();
-      handleSelect(visibleResults[activeIndex]);
+      handleSelect(selectableResults[activeIndex]);
       return;
     }
     if (e.key === "Escape") {
@@ -168,24 +179,41 @@ export default function StudentSearch({
       </div>
       {isOpen && (
         <div id="student-search-listbox" role="listbox" className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-cata-border bg-white shadow-elevated">
-          {visibleResults.map((alumno, index) => (
-            <button
-              key={alumno.id}
-              id={`student-search-option-${alumno.id}`}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              aria-selected={activeIndex === index}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSelect(alumno)}
-              className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-cata-surface transition-colors"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cata-red/15 text-xs font-semibold text-cata-red" aria-hidden="true">
-                {alumno.nombres.charAt(0)}{alumno.apellidos.charAt(0)}
-              </span>
-              <span className="font-semibold text-cata-text">{alumno.nombres} {alumno.apellidos}</span>
-            </button>
-          ))}
+          {loading ? (
+            <p role="status" aria-label="Buscando alumnos" className="px-4 py-3 text-sm text-ink-2">Buscando alumnos…</p>
+          ) : error ? (
+            <p role="alert" aria-label="No se pudo buscar alumnos" className="px-4 py-3 text-sm text-state-bad">No se pudo buscar alumnos.</p>
+          ) : visibleResults.length === 0 ? (
+            <p role="status" aria-label="No se encontraron alumnos" className="px-4 py-3 text-sm text-ink-2">No se encontraron alumnos.</p>
+          ) : (
+            visibleResults.map((alumno) => {
+              const excluded = isExcluded(alumno);
+              const selectableIndex = selectableResults.indexOf(alumno);
+              return (
+                <button
+                  key={alumno.id}
+                  id={`student-search-option-${alumno.id}`}
+                  type="button"
+                  role="option"
+                  tabIndex={-1}
+                  disabled={excluded}
+                  aria-disabled={excluded ? "true" : undefined}
+                  aria-selected={!excluded && activeIndex === selectableIndex}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => !excluded && handleSelect(alumno)}
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors enabled:hover:bg-cata-surface disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cata-red/15 text-xs font-semibold text-cata-red" aria-hidden="true">
+                    {alumno.nombres.charAt(0)}{alumno.apellidos.charAt(0)}
+                  </span>
+                  <span className="font-semibold text-cata-text">
+                    {alumno.nombres} {alumno.apellidos}
+                    {excluded && <span className="ml-2 font-normal text-ink-3">Ya asignado</span>}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
       )}
     </div>

@@ -95,6 +95,37 @@ describe("StudentSearch — autocomplete and accessibility contract", () => {
     expect(mockSearchStudents).toHaveBeenCalledWith("An", { limit: 10, rol: "ALUMNO" });
   });
 
+  it("shows an already-assigned result as disabled instead of hiding it", async () => {
+    render(<StudentSearch onSelect={() => {}} showExcluded excludeIds={[ANA.id]} />);
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "An" } });
+
+    const assigned = await screen.findByRole("option", { name: /Ana García.*Ya asignado/i });
+    expect(assigned).toHaveAttribute("aria-disabled", "true");
+    expect(assigned).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("shows loading and no-match states explicitly", async () => {
+    let resolveSearch!: (value: PersonaBusqueda[]) => void;
+    mockSearchStudents.mockReturnValueOnce(new Promise((resolve) => { resolveSearch = resolve; }));
+    renderSearch();
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "An" } });
+    expect(await screen.findByRole("status", { name: /Buscando alumnos/i })).toBeInTheDocument();
+
+    await act(async () => resolveSearch([]));
+    expect(await screen.findByRole("status", { name: /No se encontraron alumnos/i })).toBeInTheDocument();
+  });
+
+  it("shows an explicit error state when the search fails", async () => {
+    mockSearchStudents.mockRejectedValueOnce(new Error("network"));
+    renderSearch();
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "An" } });
+
+    expect(await screen.findByRole("alert", { name: /No se pudo buscar alumnos/i })).toBeInTheDocument();
+  });
+
   it("supports keyboard navigation, Enter selection, and Escape close/clear", async () => {
     const onSelect = vi.fn();
     renderSearch(onSelect);

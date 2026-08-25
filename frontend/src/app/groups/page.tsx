@@ -908,6 +908,7 @@ export default function GroupsPage(): React.ReactElement {
               placeholder="Buscar alumno por nombre…"
               role="ALUMNO"
               excludeIds={roster.alumnos.map((alumno) => alumno.personaId)}
+                  showExcluded
               disabled={roster.assigning}
               onSelect={(alumno) => roster.setSelectedId(alumno.id)}
               onClear={() => roster.setSelectedId(null)}
