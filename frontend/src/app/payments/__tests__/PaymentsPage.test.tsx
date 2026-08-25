@@ -3,7 +3,7 @@
  *
  * Covers the four behavioural decisions of the Fase 3 redesign, each of which
  * was a measured defect before it:
- *   1. the screen opens on Pendientes, not on "Todas";
+ *   1. the screen opens on Todos, not on a status-specific filter;
  *   2. every row is operable from the keyboard through a real button (the old
  *      `<tr onClick>` was unreachable without a mouse);
  *   3. approving or rejecting advances to the next pending request instead of
@@ -295,17 +295,17 @@ afterEach(() => {
 // 1. The queue opens on the work of the day
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — opens on the pending queue", () => {
-  it("defaults the state filter to Pendientes instead of Todas", async () => {
+describe("PaymentsPage — opens on all payments", () => {
+  it("defaults the state filter to Todos", async () => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
-    const pendientes = await screen.findByRole("button", { name: /^pendientes/i });
-    expect(pendientes).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^todas/i })).toHaveAttribute("aria-pressed", "false");
+    const todos = await screen.findByRole("button", { name: /^todos/i });
+    expect(todos).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^pendientes/i })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("shows only pending requests until the admin asks for the rest", async () => {
+  it("shows every payment status in the default table", async () => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
@@ -316,15 +316,18 @@ describe("PaymentsPage — opens on the pending queue", () => {
     // (header + the one pending row) is a positive, deterministic signal
     // that the filtered render is done, so the absence check that follows it
     // means something.
-    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
     expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
-    expect(within(queueTable()).queryByText("Kevin Sabando")).not.toBeInTheDocument();
+    expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
 
     // Issue #400 (criterio 4/5): switching tabs now re-fetches the visible
     // page from the (mocked) backend — `activeFilter` drives `estadoPago`
     // in `loadPage` — instead of re-filtering an already-fetched array
     // synchronously, so this needs to wait for that round trip.
-    fireEvent.click(screen.getByRole("button", { name: /^todas/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
     await waitFor(() => expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument());
   });
 });
@@ -382,12 +385,9 @@ describe("PaymentsPage — pagination reaches every request, past the old 200 ca
     }));
     mockFetchPaymentValidations.mockResolvedValue(many);
     renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /^pendientes/i }));
 
-    await screen.findByTestId("payments-table");
-    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(11));
-    expect(within(queueTable()).queryByText("Zoe Especial")).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/buscar estudiante/i), { target: { value: "Zoe Especial" } });
+    fireEvent.change(await screen.findByLabelText(/buscar estudiante/i), { target: { value: "Zoe Especial" } });
 
     expect(await within(queueTable()).findByText("Zoe Especial")).toBeInTheDocument();
   });
@@ -432,7 +432,8 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
-    // "Pendientes" is the default tab: every visible row is already pending,
+    fireEvent.click(await screen.findByRole("button", { name: /^pendientes/i }));
+    // "Pendientes" is the selected tab: every visible row is already pending,
     // so a per-row "Pendiente" badge would only restate the tab.
     await screen.findByTestId("payments-table");
     // `findByTestId` resolves the instant the table SHELL mounts, not once
@@ -445,11 +446,11 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
     // that the filtered render has settled, so the absence check that
     // follows it means something instead of getting lucky on timing.
     await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
-    expect(within(queueTable()).queryByText("Pendiente")).not.toBeInTheDocument();
+    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
 
     const cards = screen.getByTestId("payments-cards");
     await waitFor(() => expect(within(cards).getAllByRole("listitem")).toHaveLength(1));
-    expect(within(cards).queryByText("Pendiente")).not.toBeInTheDocument();
+    expect(within(cards).getByText("Pendiente de validar")).toBeInTheDocument();
   });
 
   it("shows the per-row status badge once the tab stops fixing a single status", async () => {
@@ -458,14 +459,14 @@ describe("PaymentsPage — the status badge doesn't echo the active tab", () => 
 
     await screen.findByTestId("payments-table");
     // Same async round trip as the previous describe block's note.
-    fireEvent.click(screen.getByRole("button", { name: /^todas/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
 
-    await waitFor(() => expect(within(queueTable()).getByText("Pendiente")).toBeInTheDocument());
+    await waitFor(() => expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument());
     expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
     // The mobile cards render the same rows through their own branch
     // (`payments-cards`), which carries its own copy of this badge.
     const cards = screen.getByTestId("payments-cards");
-    expect(within(cards).getByText("Pendiente")).toBeInTheDocument();
+    expect(within(cards).getByText("Pendiente de validar")).toBeInTheDocument();
     expect(within(cards).getByText("Validado")).toBeInTheDocument();
   });
 });
@@ -496,7 +497,7 @@ describe("PaymentsPage — every visible column header has matching content", ()
     renderPage();
     await screen.findByTestId("payments-table");
 
-    for (const tabName of ["Pendientes", "Validados", "Rechazados", "Todas"]) {
+    for (const tabName of ["Pendientes", "Validados", "Rechazados", "Todos"]) {
       fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${tabName}`, "i") }));
       const table = await screen.findByTestId("payments-table");
       await waitFor(() => {
@@ -560,7 +561,7 @@ describe("PaymentsPage — the queue is operable without a mouse", () => {
     mockFetchPaymentValidations.mockResolvedValue([RESOLVED_REQUEST]);
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: /^todas/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^todos/i }));
     await screen.findByTestId("payments-table");
     expect(
       within(queueTable()).getByRole("button", { name: /ver el detalle del pago de Kevin Sabando/i }),
@@ -584,7 +585,7 @@ describe("PaymentsPage — comprobante oficial y correcciones", () => {
 
   async function openResolvedRequestDetail(): Promise<void> {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: /^todas/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^todos/i }));
     await openRequest("Kevin Sabando");
   }
 
@@ -1821,7 +1822,7 @@ describe("PaymentsPage — la ayuda y la salida", () => {
     renderPage();
     // The queue opens on "Pendientes"; the branch under test is the "Todas"
     // one, which is the only state that means "the club has no requests".
-    fireEvent.click(await screen.findByRole("button", { name: /^Todas/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Todos/ }));
     await screen.findByText(/aún no hay solicitudes/i);
 
     expect(screen.getByRole("link", { name: /ir a miembros/i })).toBeInTheDocument();

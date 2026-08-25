@@ -134,7 +134,6 @@ import {
   TableRow,
 } from "@/components/ui";
 import {
-  VALIDATION_STATUS_LABELS,
   VALIDATION_STATUS_TONES,
   MEMBERSHIP_STATUS_LABELS,
   MEMBERSHIP_STATUS_TONES,
@@ -164,11 +163,17 @@ function isFilterKey(value: string): value is FilterKey {
   return FILTERS.some((filter) => filter.key === value);
 }
 
+const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
+  pendiente: "Pendiente de validar",
+  validado: "Validado",
+  rechazado: "Rechazado",
+};
+
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "pendiente", label: "Pendientes" },
   { key: "validado", label: "Validados" },
   { key: "rechazado", label: "Rechazados" },
-  { key: "all", label: "Todas" },
+  { key: "all", label: "Todos" },
 ];
 
 /** Feminine plural agreeing with "solicitudes", for the filtered empty state. */
@@ -419,7 +424,7 @@ export default function PaymentsPage(): React.ReactElement {
    */
   const [activeFilter, setActiveFilter] = usePersistentPreference<FilterKey>(
     "payments-queue-filter",
-    "pendiente",
+    "all",
     isFilterKey,
   );
   const [query, setQuery] = useState("");
@@ -995,11 +1000,11 @@ export default function PaymentsPage(): React.ReactElement {
   function renderRowActions(req: PaymentValidationRequest): React.ReactElement {
     return (
       <>
-        {/* No "Estado" column/badge outside "Todas": the active tab already
+        {/* Estado now has a dedicated column: the active tab already
             filters to one status, so repeating it per row would only echo
             the tab. Under "Todas" it is the one thing on the row that says
             what state a payment is in. */}
-        {activeFilter === "all" && (
+        {/* Estado is rendered in its dedicated column. */ false && (
           <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
             {VALIDATION_STATUS_LABELS[req.validationStatus]}
           </Badge>
@@ -1165,6 +1170,7 @@ export default function PaymentsPage(): React.ReactElement {
               <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
               <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
               <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
+                  <TableHeaderCell key="estado" type="text">Estado</TableHeaderCell>,
               <TableHeaderCell key="accion" type="action">
                 <span className="sr-only">Acción</span>
               </TableHeaderCell>,
@@ -1181,6 +1187,11 @@ export default function PaymentsPage(): React.ReactElement {
                   <TableCell type="text">{fields.period}</TableCell>
                   <TableCell type="number">{fields.amount}</TableCell>
                   <TableCell type="text">{fields.method}</TableCell>
+                      <TableCell type="text">
+                        <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                          {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                        </Badge>
+                      </TableCell>
                   <TableCell type="action">
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {renderRowActions(req)}
@@ -1204,7 +1215,12 @@ export default function PaymentsPage(): React.ReactElement {
                     {fields.period} · {fields.method}
                   </p>
                   <div className="flex items-center justify-between gap-3">
-                    <DataBox variant="numeric">{fields.amount}</DataBox>
+                    <div className="flex flex-wrap items-center gap-2">
+                          <DataBox variant="numeric">{fields.amount}</DataBox>
+                          <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
+                            {VALIDATION_STATUS_LABELS[req.validationStatus]}
+                          </Badge>
+                        </div>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {renderRowActions(req)}
                     </div>
