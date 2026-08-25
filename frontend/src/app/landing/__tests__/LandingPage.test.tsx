@@ -152,6 +152,44 @@ describe("LandingPage", (): void => {
     expect(track?.querySelectorAll(".landing-sponsor-pending")).toHaveLength(12);
     expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
+  it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
+    render(<LandingPage />);
+
+    const arrival = screen.getByRole("img", { name: /entrada de cata club junto al coliseo ciudad de loja/i });
+    expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.png");
+    expect(arrival).toHaveAttribute("width", "1600");
+    expect(arrival).toHaveAttribute("height", "1200");
+    expect(arrival).toHaveAttribute("loading", "lazy");
+    expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
+
+    const mission = screen.getByRole("img", { name: /el club reúne a su comunidad en un entrenamiento/i });
+    expect(mission).toHaveAttribute("src", "/landing/photo-community.jpeg");
+    const vision = screen.getByRole("img", { name: /el equipo de cata club posa en conjunto/i });
+    expect(vision).toHaveAttribute("src", "/landing/photo-squad.jpeg");
+  });
+
+  it("alternates Mission and Vision editorial blocks: photo left/text right, then text left/photo right", (): void => {
+    render(<LandingPage />);
+    const articles = screen.getByRole("heading", { name: "Nuestra Misión" }).parentElement
+      ? [
+          screen.getByRole("heading", { name: "Nuestra Misión" }).closest(".landing-editorial-item"),
+          screen.getByRole("heading", { name: "Nuestra Visión" }).closest(".landing-editorial-item"),
+        ]
+      : [];
+    const [missionItem, visionItem] = articles as HTMLElement[];
+    expect(missionItem).not.toBeNull();
+    expect(visionItem).not.toBeNull();
+
+    const missionChildren = Array.from(missionItem.children);
+    const visionChildren = Array.from(visionItem.children);
+    // Mission leads with the photo (left), then the copy; Vision is inverted.
+    expect(missionChildren[0]?.classList.contains("landing-editorial-media")).toBe(true);
+    expect(missionChildren[1]?.classList.contains("landing-editorial-copy")).toBe(true);
+    expect(visionChildren[0]?.classList.contains("landing-editorial-copy")).toBe(true);
+    expect(visionChildren[1]?.classList.contains("landing-editorial-media")).toBe(true);
+  });
+
+
 
   it("renders every category as a tab in the schedule tablist", (): void => {
     render(<LandingPage />);
@@ -191,6 +229,42 @@ describe("LandingPage", (): void => {
 
     fireEvent.click(within(tablist).getByRole("tab", { name: /competitivo/i }));
     expect(within(panel).getByText(/Lunes a Viernes y Sábado/)).toBeInTheDocument();
+  });
+
+  it("orders the main content Hero → Ticker → Stats → Horarios → rest", (): void => {
+    const { container } = render(<LandingPage />);
+    const main = container.querySelector("main");
+    expect(main).not.toBeNull();
+    const sections = Array.from(main?.querySelectorAll("section, header") ?? []);
+    expect(sections[0]?.getAttribute("id")).toBe("inicio");
+    // The moving black ticker and the stats block ("Fundado en 2013") come
+    // BEFORE Horarios; the schedule is the third content block.
+    expect(sections[1]?.classList.contains("landing-credentials-ticker")).toBe(true);
+    expect(sections[2]?.classList.contains("landing-stats")).toBe(true);
+    expect(sections[3]?.querySelector(".landing-sched")).not.toBeNull();
+  });
+
+  it("marks the selected schedule's band inside the day timeline with a decorative ball that moves on selection", (): void => {
+    render(<LandingPage />);
+    const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
+    const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
+    const tabs = within(tablist).getAllByRole("tab");
+
+    // The ball no longer sits on the selected LIST option.
+    expect(tablist.querySelector("[data-schedule-ball]")).toBeNull();
+
+    // It lives inside the graphical timeline lane, over the selected band.
+    const weekLane = scheduleSection?.querySelector('[data-day-lane="week"]');
+    expect(weekLane).not.toBeNull();
+    const ball = weekLane?.querySelector("[data-schedule-ball]");
+    expect(ball).not.toBeNull();
+    expect(ball).toHaveAttribute("aria-hidden", "true");
+
+    // Selecting another category remounts the ball at its own band position.
+    fireEvent.click(tabs[1]);
+    const moved = scheduleSection?.querySelector('[data-day-lane="week"] [data-schedule-ball]');
+    expect(moved).not.toBeNull();
+    expect(document.body.contains(ball as Element)).toBe(false);
   });
 
   describe("schedule selector — master-detail", (): void => {
@@ -358,6 +432,14 @@ describe("LandingPage", (): void => {
     expect(loginLinks[0]?.className).not.toMatch(/(^|\s)landing-button(\s|$)/);
   });
 
+  it("renders the transparent brand crest in the navbar logo so the light card shows", (): void => {
+    render(<LandingPage />);
+    const logoImg = document.querySelector("a.landing-logo img");
+    expect(logoImg).not.toBeNull();
+    expect(logoImg).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
+    expect(logoImg?.getAttribute("alt")).toBe("");
+  });
+
   it("offers a mid-page enrollment CTA below the hero", (): void => {
     render(<LandingPage />);
 
@@ -369,6 +451,7 @@ describe("LandingPage", (): void => {
     const mottoCta = within(motto as HTMLElement).getByRole("link");
     expect(mottoCta).toHaveAttribute("data-motto-cta", "true");
     expect(mottoCta).toHaveAttribute("href", "/student/enroll");
+    expect(mottoCta).toHaveTextContent("Inscríbete ya");
   });
 
   it("turns every WhatsApp contact number into a wa.me link", (): void => {

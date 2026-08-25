@@ -111,6 +111,24 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
     return bars;
   };
 
+  const renderBall = (which: "week" | "sat"): React.ReactElement | null => {
+    const slot = active.slots.find((candidate): boolean => candidate.on === which);
+    if (!slot) return null;
+    const geometry = barGeometry(slot.hours, range);
+    // One decorative ball centered on the selected schedule's first band of the
+    // lane. Keyed by selection + lane so it remounts (and replays its bounce)
+    // whenever the user picks another category.
+    return (
+      <span
+        key={`schedule-ball-${selected}-${which}`}
+        className="landing-sched-ball"
+        data-schedule-ball
+        aria-hidden="true"
+        style={{ left: `${(geometry.left + geometry.width / 2).toFixed(3)}%` } as React.CSSProperties}
+      />
+    );
+  };
+
   return (
     <div className="landing-sched">
       <div className="landing-sched-list-wrap">
@@ -181,11 +199,11 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
           <div className="landing-day-track" role="img" aria-label={DAY_TRACK_LABEL}>
             <div className="landing-day-row">
               <b>Lun – Vie</b>
-              <div className="landing-day-lane">{renderBars("week")}</div>
+              <div className="landing-day-lane" data-day-lane="week">{renderBars("week")}{renderBall("week")}</div>
             </div>
             <div className="landing-day-row">
               <b>Sábado</b>
-              <div className="landing-day-lane">{renderBars("sat")}</div>
+              <div className="landing-day-lane" data-day-lane="sat">{renderBars("sat")}{renderBall("sat")}</div>
             </div>
           </div>
           <p className="landing-day-legend">

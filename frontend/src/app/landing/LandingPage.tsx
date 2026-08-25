@@ -72,7 +72,7 @@ function Navbar(): React.ReactElement {
   return (
     <nav className="landing-navbar" aria-label="Navegación principal">
       <a className="landing-logo" href="#inicio" aria-label="Cata Club, inicio">
-        <Image src="/landing/cata-club-logo.jpeg" alt="" width={62} height={62} />
+        <Image src="/brand/cata-club-logo-avatar.png" alt="" width={62} height={62} />
         <span className="landing-display"><small>TENIS DE MESA</small>Cata Club</span>
       </a>
       <div className="landing-nav-links">
@@ -135,22 +135,48 @@ function MissionVision(): React.ReactElement {
       <SectionHeader eyebrow="Quiénes somos" title="Misión y Visión" />
       <div className="landing-editorial">
         <article className="landing-editorial-item" data-reveal>
-          <span className="landing-index" aria-hidden="true">01</span>
-          <span className="landing-index-label" aria-hidden="true">Propósito</span>
-          <h3>Nuestra Misión</h3>
-          {/* Drawn in by the motion layer; the only movement in the block, so
-              it reads as emphasis rather than decoration. */}
-          <span className="landing-rule" aria-hidden="true" data-rule />
-          <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
-          <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
+          {/* Approved editorial photo: the community the club forms. Mission
+              leads with the image (left); the copy follows (right). */}
+          <figure className="landing-editorial-media">
+            <Image
+              src="/landing/photo-community.jpeg"
+              alt="El club reúne a su comunidad en un entrenamiento"
+              width={1200}
+              height={900}
+              loading="lazy"
+            />
+          </figure>
+          <div className="landing-editorial-copy">
+            <span className="landing-index" aria-hidden="true">01</span>
+            <span className="landing-index-label" aria-hidden="true">Propósito</span>
+            <h3>Nuestra Misión</h3>
+            {/* Drawn in by the motion layer; the only movement in the block, so
+                it reads as emphasis rather than decoration. */}
+            <span className="landing-rule" aria-hidden="true" data-rule />
+            <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
+            <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
+          </div>
         </article>
         <article className="landing-editorial-item" data-reveal>
-          <span className="landing-index" aria-hidden="true">02</span>
-          <span className="landing-index-label" aria-hidden="true">Horizonte</span>
-          <h3>Nuestra Visión</h3>
-          <span className="landing-rule" aria-hidden="true" data-rule />
-          <p className="landing-lead">Ser un club líder y referente provincial y nacional.</p>
-          <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
+          {/* Vision inverts the grid: copy leads (left), photo follows (right). */}
+          <div className="landing-editorial-copy">
+            <span className="landing-index" aria-hidden="true">02</span>
+            <span className="landing-index-label" aria-hidden="true">Horizonte</span>
+            <h3>Nuestra Visión</h3>
+            <span className="landing-rule" aria-hidden="true" data-rule />
+            <p className="landing-lead">Ser un club líder y referente provincial y nacional.</p>
+            <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
+          </div>
+          {/* Approved editorial photo: the squad heading for the selections. */}
+          <figure className="landing-editorial-media">
+            <Image
+              src="/landing/photo-squad.jpeg"
+              alt="El equipo de Cata Club posa en conjunto"
+              width={1200}
+              height={900}
+              loading="lazy"
+            />
+          </figure>
         </article>
       </div>
     </section>
@@ -194,7 +220,7 @@ function Motto(): React.ReactElement {
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-paddle" data-motto-paddle aria-hidden="true"><i /></span>
       <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarte.</p>
-      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ahora <ArrowRight aria-hidden="true" /></Link>
+      <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ya <ArrowRight aria-hidden="true" /></Link>
       <Stars />
     </section>
   );
@@ -300,7 +326,7 @@ export default function LandingPage(): React.ReactElement {
        * land inside the region it exists to skip past.
        */}
       <main>
-        <Hero /><Ticker /><Stats /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Schedule /><Location />
+        <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Location />
       </main>
       {/* The sponsor strip sits between the page's main landmark and the footer:
           it is neither primary content nor site chrome. */}
