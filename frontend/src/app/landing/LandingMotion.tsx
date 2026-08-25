@@ -150,7 +150,10 @@ function enhanceCarousel(track: HTMLElement): () => void {
   const onWheel = (event: WheelEvent): void => {
     const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
     if (Math.abs(delta) < 1) return;
+    // The enhanced track is the sole horizontal scroll owner. Stop the
+    // same wheel event before Lenis can interpret it as page scroll.
     event.preventDefault();
+    event.stopPropagation();
     loop.pause();
     loop.progress(wrap(loop.progress() + delta * 0.0004));
     resume?.kill();
