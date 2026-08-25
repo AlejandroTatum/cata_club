@@ -58,38 +58,58 @@ export default function StudentMembershipActions({
   onDebtRegularized,
   onMembresiaChanged,
 }: StudentMembershipActionsProps): React.ReactElement {
+  const membresia = student.membresia;
+  const debtKnown = membresia?.mesesAdeudados !== undefined;
+  const hasDebt = debtKnown && (membresia?.mesesAdeudados ?? 0) > 0;
+  const debtUnavailable = membresia?.estado === "vencida" && !debtKnown;
+  const regularizeDebt = membresia && (
+    <RegularizarDeudaForm
+      membresiaId={Number(membresia.id)}
+      montoMensual={membresia.monto ?? 0}
+      esGratuidadFamiliar={membresia.esGratuidadFamiliar}
+      onRegularized={onDebtRegularized}
+    />
+  );
+  const registerPayment = membresia && (
+    <RegisterPaymentForm personaId={personaId} membresia={membresia} />
+  );
+  const primaryAction = hasDebt
+    ? { name: "regularizar-deuda", content: regularizeDebt }
+    : { name: "registrar-pago", content: registerPayment };
+  const secondaryAction = hasDebt
+    ? { name: "registrar-pago", content: registerPayment }
+    : { name: "regularizar-deuda", content: regularizeDebt };
+
   return (
     <>
       {/* Beneficio del club attaches to the PERSONA, not the membership
-          (issue #398) — shown regardless of whether the student currently
-          has a membresia, unlike the two forms below it. */}
+          (issue #398) — shown in the dedicated Pagos entry point. */}
       <BeneficioSection personaId={personaId} />
 
-      {!student.membresia && (
+      {!membresia && (
         <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
       )}
-      {student.membresia && (
+      {membresia && (
         <div className="mt-2.5">
-          <RegisterPaymentForm personaId={personaId} membresia={student.membresia} />
-          <RegularizarDeudaForm
-            membresiaId={Number(student.membresia.id)}
-            montoMensual={student.membresia.monto ?? 0}
-            esGratuidadFamiliar={student.membresia.esGratuidadFamiliar}
-            onRegularized={onDebtRegularized}
-          />
-          {/* Issue #400, criterio 3: solo administración suspende/reactiva
-              (texto explícito del issue) — el componente decide por sí solo
-              si corresponde "Suspender" o "Reactivar" según el estado
-              actual, y no se ofrece ninguno de los dos desde VENCIDA. */}
+          {debtUnavailable && (
+            <p className="mb-2 text-2xs text-ink-3" role="status">
+              Estado de deuda no disponible; las acciones actuales siguen disponibles.
+            </p>
+          )}
+          <div data-primary-action={primaryAction.name} className="rounded-lg border border-cata-red/40 p-2">
+            {primaryAction.content}
+          </div>
+          <div data-secondary-action={secondaryAction.name}>
+            {secondaryAction.content}
+          </div>
+          {/* Suspension/reactivation and plan changes remain revealed secondary actions. */}
           <SuspenderReactivarForm
-            membresiaId={Number(student.membresia.id)}
-            estado={student.membresia.estado}
+            membresiaId={Number(membresia.id)}
+            estado={membresia.estado}
             onChanged={onMembresiaChanged}
           />
-          {/* Issue #400, criterio 1: cambio de plan PROSPECTIVO sobre esta
-              misma membresía — la cobertura ya pagada no se toca. */}
           <CambiarPlanForm
-            membresiaId={Number(student.membresia.id)}
+            membresiaId={Number(membresia.id)}
             onChanged={onMembresiaChanged}
           />
         </div>

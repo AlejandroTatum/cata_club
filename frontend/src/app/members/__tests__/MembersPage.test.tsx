@@ -453,7 +453,7 @@ describe("MembersPage — Editar member modal", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("Sofía González");
   });
 
-  it("shows each student's editable ficha médica action inside the modal", async () => {
+  it("shows each student without duplicating the dedicated ficha médica action", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -466,7 +466,7 @@ describe("MembersPage — Editar member modal", () => {
 
     expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
     expect(within(dialog).getByText("Sofía González")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /ficha médica/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
   });
 
   it("renders one edit panel per student when an account manages multiple students", async () => {
@@ -493,7 +493,7 @@ describe("MembersPage — Editar member modal", () => {
 
     expect(within(dialog).getByText("Sofía González")).toBeInTheDocument();
     expect(within(dialog).getByText("Mateo González")).toBeInTheDocument();
-    expect(within(dialog).getAllByRole("button", { name: /ficha médica/i })).toHaveLength(2);
+    expect(within(dialog).queryAllByRole("button", { name: /ficha médica/i })).toHaveLength(0);
   });
 
   it("opens a floating modal dialog with 4 checkable role rows when Editar is clicked", async () => {
@@ -987,7 +987,7 @@ describe("MembersPage — Crear membresía inline form", () => {
     // reachable via the account's edit modal — no more row expansion. The
     // card is fixed-width (no dynamic grid-column-span hack needed anymore,
     // unlike the old cramped 4-column row layout).
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
     const crearButton = await within(dialog).findByRole("button", { name: /crear membresía/i });
@@ -1039,6 +1039,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       ultimoPago?: MemberStudentSummary["ultimoPago"];
       descuentos?: DescuentoCatalogo[];
       registrarPagoRejects?: Error;
+          entryPoint?: "edit" | "payments";
     } = {},
   ): Promise<HTMLElement> {
     const cuentaConMembresia: MemberAccount = {
@@ -1065,7 +1066,11 @@ describe("MembersPage — Registrar pago inline form", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+        fireEvent.click(
+          options.entryPoint === "edit"
+            ? getEditButton(row)
+            : within(row).getByRole("button", { name: /^pagos/i }),
+        );
     return screen.getByRole("dialog");
   }
 
@@ -1357,6 +1362,7 @@ describe("MembersPage — Registrar pago inline form", () => {
         monto: 50,
         periodo: "2026-08-01 — 2026-09-05",
       },
+          entryPoint: "edit",
     });
 
     expect(within(dialog).getByText("Precio del plan")).toBeInTheDocument();
@@ -1400,7 +1406,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
 
     const dialog = screen.getByRole("dialog");
     await within(dialog).findByRole("button", { name: /crear membresía/i });
@@ -1497,7 +1503,7 @@ describe("MembersPage — Beneficio del club", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     return screen.getByRole("dialog");
   }
 
@@ -1919,7 +1925,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
     expect(within(dialog).queryByRole("button", { name: /guardar cambios/i })).not.toBeInTheDocument();
@@ -1935,7 +1941,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
     // Exactly one control is named plain "Cerrar" — the footer's secondary.
@@ -2055,7 +2061,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
@@ -2095,7 +2101,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
@@ -2132,7 +2138,7 @@ describe("MembersPage — edit modal footer does not fake a save", () => {
       </ToastProvider>,
     );
     const row = await findAccountRow();
-    fireEvent.click(getEditButton(row));
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
     const dialog = screen.getByRole("dialog");
 
     fireEvent.click(await within(dialog).findByRole("button", { name: /crear membresía/i }));
@@ -3084,7 +3090,7 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
 
-  it("keeps Editar itself unchanged: still opens the full account dialog with roles and estudiantes", async () => {
+  it("keeps Editar focused on account editing, without duplicated student actions", async () => {
     render(
       <ToastProvider>
         <MembersPage />
@@ -3097,6 +3103,51 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
     expect(within(dialog).getByRole("checkbox", { name: /admin/i })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /ficha médica/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda/i })).not.toBeInTheDocument();
+  });
+
+  it("puts Regularizar deuda before Registrar pago when canonical debt data exists", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [{
+        ...ACCOUNT,
+        estudiantes: [{
+          ...ACCOUNT.estudiantes[0],
+          membresia: { id: 42, estado: "vencida", monto: 85, mesesAdeudados: 2, montoAdeudado: 170 },
+        }],
+      }],
+    });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, /^pagos/i));
+    const dialog = await screen.findByRole("dialog");
+    const buttons = within(dialog).getAllByRole("button");
+    const regularizar = buttons.findIndex((button) => /regularizar deuda/i.test(button.textContent ?? ""));
+    const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
+    expect(regularizar).toBeGreaterThan(-1);
+    expect(regularizar).toBeLessThan(registrar);
+  });
+
+  it("keeps Registrar pago first without verified debt and marks degraded debt data explicitly", async () => {
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [{
+        ...ACCOUNT,
+        estudiantes: [{
+          ...ACCOUNT.estudiantes[0],
+          membresia: { id: 42, estado: "vencida", monto: 85 },
+        }],
+      }],
+    });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, /^pagos/i));
+    const dialog = await screen.findByRole("dialog");
+    const buttons = within(dialog).getAllByRole("button");
+    const registrar = buttons.findIndex((button) => /registrar pago/i.test(button.textContent ?? ""));
+    const regularizar = buttons.findIndex((button) => /regularizar deuda/i.test(button.textContent ?? ""));
+    expect(registrar).toBeGreaterThan(-1);
+    expect(registrar).toBeLessThan(regularizar);
+    expect(within(dialog).getByText(/deuda no disponible/i)).toBeInTheDocument();
   });
 
   it("only one row dialog is open at a time: Pagos closes an already-open Ficha médica dialog for the same row", async () => {

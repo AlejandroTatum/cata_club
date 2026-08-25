@@ -91,10 +91,9 @@ import type { BackendTipoRol, FichaMedicaEditable, TipoSangre } from "@/types/do
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { calculatePersonAge } from "@/lib/identity-validation";
 import { clubToday } from "@/lib/club-date";
-import MedicalRecordEditor from "./MedicalRecordEditor";
 import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
-import StudentMembershipActions, { type MembresiaCallbacks } from "./StudentMembershipActions";
+import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
 import { useNativeDialog } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
@@ -170,7 +169,7 @@ function ModalSection({
 // que es de donde se lo sacó.
 // ---------------------------------------------------------------------------
 
-interface StudentRowProps extends MembresiaCallbacks {
+interface StudentRowProps {
   student: MemberStudentSummary;
 }
 
@@ -194,15 +193,7 @@ function LabeledDataBox({
   );
 }
 
-function StudentEditPanel({
-  student,
-  onMembershipCreated,
-  onDebtRegularized,
-  onMembresiaChanged,
-}: StudentRowProps): React.ReactElement {
-  const [showMedical, setShowMedical] = useState(false);
-
-  const personaId = Number(student.id);
+function StudentEditPanel({ student }: StudentRowProps): React.ReactElement {
   const rawAge = student.fechaNacimiento
     ? calculatePersonAge(student.fechaNacimiento, clubToday())
     : NaN;
@@ -305,32 +296,8 @@ function StudentEditPanel({
         </div>
       )}
 
-      {/* Membership/payment write flows — extracted to `StudentMembershipActions`
-          (issue #505) so the exact same block also renders directly from the
-          row's "Pagos" entry point, with no duplicated business logic. */}
-      <StudentMembershipActions
-        personaId={personaId}
-        student={student}
-        onMembershipCreated={onMembershipCreated}
-        onDebtRegularized={onDebtRegularized}
-        onMembresiaChanged={onMembresiaChanged}
-      />
-
-      {/* Actions */}
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
-        <button
-          type="button"
-          onClick={() => setShowMedical((v) => !v)}
-          className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-2xs tracking-flat font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
-        >
-          <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Ficha médica
-        </button>
-      </div>
-
-      {showMedical && (
-        <MedicalRecordEditor personaId={personaId} studentName={`${student.nombres} ${student.apellidos}`} />
-      )}
+      {/* Medical, payment, benefit, debt, and plan actions belong to the
+          dedicated row entry points (issue #613), not this account editor. */}
     </li>
   );
 }
@@ -817,7 +784,6 @@ function MemberEditDialog({
                       <StudentEditPanel
                         key={estudiante.id}
                         student={estudiante}
-                        {...membresiaCallbacks}
                       />
                     ))}
                   </ul>
