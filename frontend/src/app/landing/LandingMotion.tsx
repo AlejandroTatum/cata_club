@@ -5,6 +5,8 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Draggable } from "gsap/Draggable";
 import { InertiaPlugin } from "gsap/InertiaPlugin";
+import { MotionPathPlugin } from "gsap/MotionPathPlugin";
+import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
 import type { GalleryLightboxDetail } from "./Gallery";
@@ -351,7 +353,7 @@ function playRally(): void {
 
 export default function LandingMotion(): null {
   useEffect((): (() => void) => {
-    gsap.registerPlugin(ScrollTrigger, Draggable, InertiaPlugin, SplitText);
+    gsap.registerPlugin(ScrollTrigger, Draggable, InertiaPlugin, MotionPathPlugin, DrawSVGPlugin, SplitText);
     const media = gsap.matchMedia();
     let lenis: Lenis | null = null;
     const updateLenis = (time: number): void => lenis?.raf(time * 1000);

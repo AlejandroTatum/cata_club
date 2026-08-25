@@ -15,6 +15,56 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Landing page", () => {
+  test("renders the navbar logo on a visibly light token-backed card", async ({ page }) => {
+    await page.goto("/");
+    // The logo keeps its optimizer URL for the local PNG (normal) while the
+    // card behind it renders with real computed token styles: generous padding
+    // around the transparent crest and the light-gray surface. A transparent
+    // computed background (or 5px of padding) fails this.
+    const img = page.locator("a.landing-logo img");
+    await expect(img).toHaveCSS("padding", "8px");
+    await expect(img).toHaveCSS("background-color", "rgb(249, 250, 251)");
+    await expect(img).toHaveAttribute("src", /\/_next\/image\?url=/);
+  });
+
+  test("stacks schedule list and panel without overflow on narrow phone widths", async ({ page }) => {
+    for (const width of [390, 500]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const layout = await page.evaluate(() => {
+        const sched = document.querySelector(".landing-sched");
+        if (!sched) return null;
+        const cs = getComputedStyle(sched);
+        return {
+          trackCount: cs.gridTemplateColumns.trim().split(/\s+/).filter(Boolean).length,
+          overflowPx: sched.scrollWidth - sched.clientWidth,
+        };
+      });
+      expect(layout, `layout at ${width}px`).not.toBeNull();
+      expect(layout?.trackCount, `stacked at ${width}px`).toBe(1);
+      expect(layout?.overflowPx ?? 0, `no overflow at ${width}px`).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test("enlarges the navbar crest and its light card, responsive on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const desktop = await page.locator("a.landing-logo img").evaluate((img) => {
+      const box = img.getBoundingClientRect();
+      const nav = document.querySelector(".landing-navbar")!.getBoundingClientRect();
+      return { height: box.height, navHeight: nav.height };
+    });
+    // The crest card was 54px; it must grow while the 86px navbar keeps its shape.
+    expect(desktop.height).toBeGreaterThanOrEqual(64);
+    expect(desktop.navHeight).toBeLessThanOrEqual(90);
+
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto("/");
+    const mobile = await page.locator("a.landing-logo img").evaluate((img) => img.getBoundingClientRect().height);
+    expect(mobile).toBeGreaterThanOrEqual(48);
+    await expect(page.getByRole("link", { name: /cata club, inicio/i })).toBeVisible();
+  });
+
   test("renders hero and navigates to login via CTA", async ({ page }) => {
     await page.goto("/");
 

@@ -57,7 +57,7 @@
 
 .landing-page *, .landing-page *::before, .landing-page *::after { box-sizing: border-box; }
 .landing-page a { text-decoration: none; }
-.landing-display { font-family: var(--font-landing-graduate), serif; text-transform: uppercase; }
+.landing-display { font-family: var(--font-landing-barlow), sans-serif; text-transform: uppercase; }
 .landing-page a:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 4px; }
 .landing-footer a:focus-visible { outline-color: var(--landing-highlight); }
 /* @touch-target The public page's conversion CTA, mostly tapped. */
@@ -82,7 +82,7 @@
 
 .landing-navbar { position: sticky; top: 0; z-index: 50; height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 0 5.55vw; border-bottom: 1px solid var(--landing-border); background: var(--landing-surface); }
 .landing-logo { display: flex; align-items: center; gap: 14px; color: var(--landing-text-strong); font-size: 17px; letter-spacing: 1px; }
-.landing-logo img { width: auto; height: 54px; }
+.landing-logo img { width: auto; height: clamp(58px, 6.5vw, 72px); border-radius: 12px; padding: 8px; background: var(--landing-bg-base); box-shadow: inset 0 0 0 1px var(--landing-border), 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 12%, transparent); }
 .landing-logo small, .landing-footer-brand small { display: block; color: var(--landing-action); font-family: var(--font-landing-barlow); font-size: 10px; font-weight: 700; letter-spacing: 3.5px; }
 .landing-nav-links { display: flex; gap: 8px; }
 /* @touch-target Declares `touch-action: manipulation`; a thumb is the pointer. */
@@ -97,7 +97,7 @@
 .landing-ribbon { position: absolute; width: 440px; height: 190px; pointer-events: none; border-radius: 50%; border-bottom: 28px solid var(--landing-highlight); box-shadow: 0 14px 0 color-mix(in srgb, var(--landing-surface) 42%, transparent), 0 34px 0 var(--landing-brand-red-strong); }
 .landing-ribbon-top { top: -100px; right: -80px; transform: rotate(27deg); }
 .landing-hero-copy { position: relative; z-index: 14; display: flex; flex-direction: column; align-items: flex-start; gap: 22px; }
-.landing-hero-brand { display: block; color: var(--landing-on-action); font-family: var(--font-landing-barlow); font-size: 15px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
+.landing-hero-brand { display: block; color: var(--landing-on-action); font-family: var(--font-landing-barlow); font-size: clamp(19px, 2.3vw, 27px); font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
 .landing-hero-brand b { color: var(--landing-highlight-on-action); font-weight: 800; }
 .landing-hero .landing-eyebrow { color: var(--landing-on-action); }
 .landing-hero h1 { max-width: 610px; color: var(--landing-on-action); font-size: clamp(38px, 3.35vw, 48px); line-height: 1.15; }
@@ -134,7 +134,7 @@
 .landing-hero-screen-cap { display: flex; align-items: center; gap: 10px; color: var(--landing-on-action); font-size: 12.5px; font-weight: 800; letter-spacing: 2.2px; text-transform: uppercase; }
 .landing-hero-screen-dots { display: flex; gap: 6px; }
 /* @touch-target Matches the 44px floor every other tappable control here uses. */
-.landing-hero-screen-dots button { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); font-family: var(--font-landing-graduate), serif; font-size: 12.5px; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
+.landing-hero-screen-dots button { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); font-family: var(--font-landing-barlow), sans-serif; font-size: 12.5px; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
 .landing-hero-screen-dots button:hover { border-color: var(--landing-highlight); color: var(--landing-highlight); }
 .landing-hero-screen-dots button[aria-selected="true"] { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
 /* Visible at rest incl. reduced motion; playServe adds the bounce. */
@@ -154,31 +154,36 @@
 .landing-section-header { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 16px; }
 .landing-section-header .landing-eyebrow { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
 .landing-section-header .landing-eyebrow::before { content: ""; width: 34px; height: 2px; background: currentColor; }
-.landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-graduate); font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; text-transform: uppercase; }
+.landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-barlow); font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; text-transform: uppercase; }
 .landing-value-row, .landing-location-row { display: flex; width: 100%; gap: 24px; }
 
 /* Editorial blocks. Rank comes from an index, a scale jump and one rule —
    no tinted icon chip, and no <hr> pretending to be structure. */
 .landing-editorial { display: grid; width: 100%; grid-template-columns: 1fr 1fr; }
-.landing-editorial-item { padding-right: 44px; }
+.landing-editorial-item { padding-right: 44px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: center; }
 .landing-editorial-item + .landing-editorial-item { padding-right: 0; padding-left: 44px; border-left: 1px solid var(--landing-border); }
-.landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-graduate); font-size: 15px; letter-spacing: 3px; }
+.landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
 .landing-index-label { color: var(--landing-text-muted); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
 .landing-index-label::before { content: "—"; margin: 0 8px; }
-.landing-editorial-item h3 { margin-top: 10px; color: var(--landing-text-strong); font-family: var(--font-landing-graduate); font-size: clamp(22px, 2.4vw, 32px); line-height: 1.1; text-transform: uppercase; }
+.landing-editorial-item h3 { margin-top: 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: clamp(22px, 2.4vw, 32px); line-height: 1.1; text-transform: uppercase; }
 /* Sized here, animated from 0 by the motion layer, so it is already drawn
    when that layer never runs or the visitor prefers reduced motion. */
 .landing-rule { display: block; width: 64px; height: 3px; margin: 20px 0 22px; background: var(--landing-action); }
 .landing-editorial-item p { max-width: 46ch; color: var(--landing-text); font-size: 17.5px; line-height: 1.72; }
 .landing-editorial-item p + p { margin-top: 16px; }
+/* The approved editorial photos sit on a token-light card so the jpegs read as
+   photographs, not as bleeding edges — and the 4/3 stage keeps both blocks the
+   same height at every breakpoint. */
+.landing-editorial-media { margin-top: 0; border-radius: 16px; overflow: hidden; background: var(--landing-bg-base); box-shadow: inset 0 0 0 1px var(--landing-border); }
+.landing-editorial-media img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
 .landing-lead { color: var(--landing-text-strong); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 21px !important; font-weight: 600; line-height: 1.5 !important; }
-.landing-contact h3 { font-family: var(--font-landing-graduate); font-size: 20px; text-transform: uppercase; }
+.landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
 .landing-values { background: var(--landing-background); }
     .landing-rally { position: relative; width: 100%; height: 190px; margin-bottom: -30px; pointer-events: none; }
     .landing-rally svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
     .landing-rally-guide { fill: none; stroke: var(--landing-action); stroke-width: 2.5; stroke-linecap: round; opacity: 0.4; }
-    .landing-rally-count { position: absolute; left: 0; top: 0; color: var(--landing-text-muted); font-family: var(--font-landing-graduate), serif; font-size: 12px; letter-spacing: 2.6px; }
+    .landing-rally-count { position: absolute; left: 0; top: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 12px; letter-spacing: 2.6px; }
     .landing-rally-count b { color: var(--landing-action); font-size: 15px; }
     .landing-rally-ball { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--landing-ball); opacity: 0; pointer-events: none; }
     .landing-rally-impact { position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid var(--landing-action); border-radius: 50%; opacity: 0; pointer-events: none; }
@@ -190,7 +195,7 @@
 .landing-value:hover .landing-index { color: var(--landing-action); transform: scale(1.1); }
     .landing-value.hit .landing-index { color: var(--landing-action); transform: scale(1.34); }
     .landing-value.dim { opacity: 0.32; }
-.landing-value h3 { margin: 16px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-graduate); font-size: 17px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-value h3 { margin: 16px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: 17px; letter-spacing: 1px; text-transform: uppercase; }
 .landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.65; }
 
 /* Logros / Palmarés. Dark trophy wall: the club's results read as a record on
@@ -206,7 +211,7 @@
 /* The "please fill this in" ask, shown whenever the demo toggle is off. Dark
    ground: a dashed highlight ring, the same idiom the pending rows use. */
 .landing-palmares-ask { display: flex; width: 100%; flex-direction: column; gap: 6px; padding: 20px 22px; border: 2px dashed color-mix(in srgb, var(--landing-highlight) 40%, transparent); border-radius: 14px; background: transparent; }
-.landing-palmares-ask b { color: var(--landing-highlight); font-family: var(--font-landing-graduate), serif; font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; }
+.landing-palmares-ask b { color: var(--landing-highlight); font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; }
 .landing-palmares-ask span { color: #b9c0c8; font-size: 14.5px; line-height: 1.55; }
 /* The demo warning, restyled for the trophy wall's dark ground rather than the
    app-wide destructive alert (whose light red tokens were illegible on black). */
@@ -222,17 +227,17 @@
 .landing-palmares-row.pending .landing-palmares-photo { opacity: 0.5; }
 /* The year carries the row now, scanning down like a record; it borrows its
    medal's colour so a gold result reads gold before the pill does. */
-.landing-palmares-year { display: block; color: var(--landing-highlight); font-family: var(--font-landing-graduate), serif; font-size: clamp(34px, 3.6vw, 52px); line-height: 0.9; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
+.landing-palmares-year { display: block; color: var(--landing-highlight); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(34px, 3.6vw, 52px); line-height: 0.9; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
 .landing-palmares-row:has(.landing-medal-oro) .landing-palmares-year { color: var(--landing-highlight); }
 .landing-palmares-row:has(.landing-medal-plata) .landing-palmares-year { color: #d6dbe1; }
 .landing-palmares-row:has(.landing-medal-bronce) .landing-palmares-year { color: #e0995a; }
 .landing-palmares-row:has(.landing-medal-part) .landing-palmares-year { color: #9aa2ab; }
 .landing-palmares-row.pending .landing-palmares-year { color: #7d848c; }
 .landing-palmares-body { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 7px; }
-.landing-palmares-body b { color: var(--landing-surface); font-family: var(--font-landing-graduate), serif; font-size: clamp(15px, 1.5vw, 19px); line-height: 1.25; letter-spacing: 0.5px; text-transform: uppercase; text-wrap: balance; }
+.landing-palmares-body b { color: var(--landing-surface); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(15px, 1.5vw, 19px); line-height: 1.25; letter-spacing: 0.5px; text-transform: uppercase; text-wrap: balance; }
 .landing-palmares-body .landing-palmares-venue { color: #b9c0c8; font-size: 14px; line-height: 1.5; }
 .landing-palmares-row.pending .landing-palmares-body b, .landing-palmares-row.pending .landing-palmares-body .landing-palmares-venue { color: #7d848c; }
-.landing-medal { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 6px 14px 6px 10px; border-radius: 999px; font-family: var(--font-landing-graduate), serif; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
+.landing-medal { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 6px 14px 6px 10px; border-radius: 999px; font-family: var(--font-landing-barlow), sans-serif; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
 .landing-medal svg { width: 15px; height: 20px; flex: none; }
 /* The placement carries the metal in its own colour. Gold is the brand yellow
    already — the palette had the medal in it the whole time. */
@@ -311,21 +316,27 @@
 /* One accent per category, carried from the list dot to the day-bar it owns. */
 .landing-cat-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--landing-cat, var(--landing-action)) 22%, transparent); transition: transform 260ms cubic-bezier(.22,1,.36,1); }
 .landing-sched-list button[aria-selected="true"] .landing-cat-dot { transform: scale(1.3); }
-.landing-sched-list button strong { display: block; font-family: var(--font-landing-graduate), serif; font-size: 19px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-sched-list button strong { display: block; font-family: var(--font-landing-barlow), sans-serif; font-size: 19px; letter-spacing: 1px; text-transform: uppercase; }
 .landing-sched-list button > span > span { display: block; margin-top: 3px; font-size: 14px; font-weight: 600; }
-.landing-sched-list button em { font-style: normal; font-family: var(--font-landing-graduate), serif; font-size: 13px; letter-spacing: 1px; opacity: 0.6; }
+.landing-sched-list button em { font-style: normal; font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 1px; opacity: 0.6; }
 .landing-sched-list button:hover { color: var(--landing-text); }
 .landing-sched-list button[aria-selected="true"] { color: var(--landing-text-strong); }
 .landing-sched-list button[aria-selected="true"] em { color: var(--landing-action); opacity: 1; }
 /* One marker element glided by a plain CSS transition — no motion-runtime dependency. */
 .landing-sched-marker { position: absolute; left: 0; width: 4px; border-radius: 4px; background: var(--landing-action); pointer-events: none; transition: top 260ms cubic-bezier(.22,1,.36,1), height 260ms cubic-bezier(.22,1,.36,1); }
+/* Small white bouncing ball inside the day timeline, centered on the selected
+   schedule's band. Pure CSS (no motion runtime, no GSAP) and distinct from the
+   Values rally ball: it lives on the schedule timeline, owns a different data
+   attribute, and remounts — replaying the bounce — when the selection moves. */
+.landing-sched-ball { position: absolute; top: 50%; left: 0; width: 12px; height: 12px; margin-top: -6px; margin-left: -6px; border-radius: 50%; background: var(--landing-surface); box-shadow: 0 0 0 2px color-mix(in srgb, var(--landing-brand-black) 30%, transparent), 0 6px 12px color-mix(in srgb, var(--landing-brand-black) 30%, transparent); pointer-events: none; animation: landing-sched-ball-bounce 0.9s ease-in-out infinite; }
+@keyframes landing-sched-ball-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 
 .landing-sched-panel { display: flex; flex-direction: column; gap: 26px; padding: 34px; border-radius: 18px; background: var(--landing-surface); box-shadow: 0 18px 40px -24px color-mix(in srgb, var(--landing-brand-black) 45%, transparent), inset 0 0 0 1px var(--landing-border); }
-.landing-sched-panel h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-graduate), serif; font-size: clamp(21px, 2.2vw, 28px); letter-spacing: 1px; text-transform: uppercase; }
+.landing-sched-panel h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(21px, 2.2vw, 28px); letter-spacing: 1px; text-transform: uppercase; }
 .landing-sched-facts { display: flex; flex-wrap: wrap; gap: 30px; }
 .landing-sched-fact { display: flex; flex-direction: column; gap: 5px; }
 .landing-sched-fact small { color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
-.landing-sched-fact b { color: var(--landing-text-strong); font-family: var(--font-landing-graduate), serif; font-size: 23px; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
+.landing-sched-fact b { color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: 23px; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
 
 /* The day at a glance. Every bar is positioned from the real published times,
    so the picture cannot drift from the table it is drawn from. */
@@ -405,7 +416,7 @@
 .landing-footer-brand small { color: var(--landing-highlight); }
 .landing-footer-brand p { color: var(--landing-surface); font-size: 14px; }
 .landing-footer nav { width: 240px; display: flex; flex-direction: column; gap: 13px; }
-.landing-footer nav h2 { color: var(--landing-highlight); font-family: var(--font-landing-graduate); font-size: 12.5px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-footer nav h2 { color: var(--landing-highlight); font-family: var(--font-landing-barlow); font-size: 12.5px; letter-spacing: 1px; text-transform: uppercase; }
 .landing-footer nav a { color: var(--landing-surface); font-size: 16px; font-weight: 500; }
 .landing-footer nav a:hover { color: var(--landing-highlight); }
 .landing-footer-bottom { position: relative; padding-top: 34px; border-top: 1px solid var(--landing-border); color: var(--landing-surface); font-size: 15px; }
@@ -435,7 +446,7 @@
 
      @touch-target The regression that made this whole guard worth writing. */
   .landing-nav-links a { min-height: 44px; flex: 1 1 auto; padding: 8px 10px; font-size: 12px; }
-  .landing-logo img { height: 46px; }
+  .landing-logo img { height: clamp(50px, 12vw, 60px); }
   .landing-logo { font-size: 14px; }
   .landing-nav-cta { padding-inline: 18px; }
   .landing-hero { min-height: auto; grid-template-columns: 1fr; padding: 64px var(--landing-gutter); }
@@ -450,6 +461,9 @@
   /* Stacked, the divider has to move to the top edge or it draws a rule down
      the side of a single column. */
   .landing-editorial { grid-template-columns: 1fr; }
+  .landing-editorial-item { grid-template-columns: 1fr; gap: 26px; }
+  .landing-sched { grid-template-columns: 1fr; gap: 30px; }
+  .landing-sched-panel { padding: 26px; }
   .landing-editorial-item { padding-right: 0; }
   .landing-editorial-item + .landing-editorial-item { margin-top: 34px; padding-top: 34px; padding-left: 0; border-top: 1px solid var(--landing-border); border-left: 0; }
   .landing-motto { padding-inline: 28px; }
@@ -473,6 +487,7 @@
 @media (prefers-reduced-motion: reduce) {
   .landing-page *, .landing-page *::before, .landing-page *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .landing-sponsors-track { animation: none; transform: none; }
+  .landing-sched-ball { animation: none; }
       .landing-ticker-track { animation: none; transform: none; }
       .landing-motto [data-motto-paddle], .landing-motto [data-motto-copy], .landing-motto [data-motto-cta], .landing-motto .landing-stars { opacity: 1 !important; transform: none !important; }
 }
