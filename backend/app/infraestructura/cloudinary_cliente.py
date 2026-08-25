@@ -454,6 +454,12 @@ def resolver_url_entrega(
         return None
     if urlparse(valor_almacenado).scheme in ("http", "https"):
         return valor_almacenado
+    if not (settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret):
+        # Cloudinary es opcional por diseño (las subidas fallan a demanda). Sin
+        # credenciales de firma no hay URL firmada que entregar: degradar a None
+        # en vez de reventar la serialización -- el SDK lanzaría
+        # `ValueError: Must supply api_secret` y tumba el login (`/auth/me`).
+        return None
     return generar_url_firmada(
         valor_almacenado, resource_type=resource_type, folder=folder, formato=formato,
     )

@@ -588,3 +588,12 @@ def test_resolver_url_foto_perfil_de_una_fila_previa_al_fix_no_se_toca():
 def test_resolver_url_foto_perfil_sin_valor_devuelve_none():
     assert cc.resolver_url_foto_perfil(None) is None
     assert cc.resolver_url_foto_perfil("") is None
+
+
+def test_resolver_url_foto_perfil_sin_credenciales_de_firma_devuelve_none(monkeypatch):
+    """Sin CLOUDINARY_API_SECRET (Cloudinary es opcional por diseño), firmar
+    reventaría el login (`/auth/me` 500 -> BFF 503) con
+    `ValueError: Must supply api_secret`. Debe degradar a None, no romper."""
+    monkeypatch.setattr(settings, "cloudinary_api_secret", "")
+
+    assert cc.resolver_url_foto_perfil("perfil_7") is None
