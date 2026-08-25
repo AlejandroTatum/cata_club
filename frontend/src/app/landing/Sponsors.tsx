@@ -80,13 +80,13 @@ export default function Sponsors(): React.ReactElement {
 
   let accessibleStatus: string;
   if (state.kind === "ready") {
-    accessibleStatus = `Auspiciantes: ${state.sponsors.map((sponsor): string => sponsor.name).join(", ")}.`;
+    accessibleStatus = `Patrocinadores: ${state.sponsors.map((sponsor): string => sponsor.name).join(", ")}.`;
   } else if (state.kind === "empty") {
-    accessibleStatus = "Aún no hay auspiciantes cargados.";
+    accessibleStatus = "Aún no hay patrocinadores cargados.";
   } else if (state.kind === "error") {
-    accessibleStatus = "No se pudieron cargar los auspiciantes.";
+    accessibleStatus = "No se pudieron cargar los patrocinadores.";
   } else {
-    accessibleStatus = "Cargando auspiciantes…";
+    accessibleStatus = "Cargando patrocinadores…";
   }
 
   const renderCopy = (duplicate: boolean): React.ReactElement[] => state.kind === "ready"
@@ -94,15 +94,15 @@ export default function Sponsors(): React.ReactElement {
         <span className="landing-sponsors-item" key={`${sponsor.id}-${duplicate ? "duplicate" : "primary"}`}>
           <span className="landing-sponsor">
             {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as AppShell's avatar / /profile's IdentityPanel) */}
-            <img src={sponsor.logoSrc} alt={sponsor.name} width={156} height={60} />
+            <img src={sponsor.logoSrc} alt={sponsor.name} width={312} height={120} />
           </span>
         </span>
       ))
     : [];
 
   return (
-    <section className="landing-sponsors" aria-label="Auspiciantes del club">
-      <p className="landing-sponsors-head">Nos acompañan</p>
+    <section className="landing-sponsors" aria-label="Patrocinadores del club">
+      <p className="landing-sponsors-head">Patrocinadores</p>
       {/* The empty/error paragraphs below are themselves the accessible status;
           only loading/ready states need a screen-reader-only copy. */}
       {state.kind === "loading" || state.kind === "ready" ? <p className="sr-only">{accessibleStatus}</p> : null}

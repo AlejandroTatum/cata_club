@@ -179,7 +179,7 @@
 .landing-lead { color: var(--landing-text-strong); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 21px !important; font-weight: 600; line-height: 1.5 !important; }
 .landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
-.landing-values { background: var(--landing-background); }
+.landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); }
     .landing-rally { position: relative; width: 100%; height: 190px; margin-bottom: -30px; pointer-events: none; }
     .landing-rally svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
     .landing-rally-guide { fill: none; stroke: var(--landing-action); stroke-width: 2.5; stroke-linecap: round; opacity: 0.4; }
@@ -197,6 +197,35 @@
     .landing-value.dim { opacity: 0.32; }
 .landing-value h3 { margin: 16px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: 17px; letter-spacing: 1px; text-transform: uppercase; }
 .landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.65; }
+
+/* Section colour rhythm (issue #611): each content band owns a solid brand
+   ground so the page scans white (Horarios) -> brand black (Mision/Vision) ->
+   yellow (Valores) as it descends, instead of three near-identical greys.
+   Text stays >= WCAG AA on every ground: Horarios was already dark-on-white;
+   the black and yellow grounds restate their text, indices and rules below. */
+.landing-section#nosotros { background: var(--landing-footer); color: var(--landing-surface); }
+.landing-section#nosotros .landing-eyebrow { color: var(--landing-highlight); }
+.landing-section#nosotros .landing-index,
+.landing-section#nosotros .landing-index-label { color: var(--landing-highlight-soft); }
+.landing-section#nosotros .landing-section-header h2,
+.landing-section#nosotros .landing-editorial-item h3,
+.landing-section#nosotros .landing-editorial-item p,
+.landing-section#nosotros .landing-lead { color: var(--landing-surface); }
+.landing-section#nosotros .landing-editorial-item + .landing-editorial-item { border-color: color-mix(in srgb, var(--landing-surface) 22%, transparent); }
+.landing-section#nosotros .landing-editorial-media { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 16%, transparent); }
+
+/* On the yellow ground the accents invert: text/guides become brand black
+   (brand red only reaches ~3.5:1 there; black ~14.9:1), dividers turn to
+   translucent black, and the hover/hit index accent stops depending on red. */
+.landing-values .landing-eyebrow,
+.landing-values .landing-value .landing-index { color: var(--landing-text-strong); }
+.landing-values .landing-rally-guide { stroke: var(--landing-text-strong); }
+.landing-values .landing-rally-count,
+.landing-values .landing-rally-count b { color: var(--landing-text-strong); }
+.landing-values .landing-value-rule { background: var(--landing-text-strong); }
+.landing-values .landing-value + .landing-value { border-color: color-mix(in srgb, var(--landing-brand-black) 18%, transparent); }
+.landing-values .landing-value:hover .landing-index,
+.landing-values .landing-value.hit .landing-index { color: var(--landing-text-strong); }
 
 /* Logros / Palmarés. Dark trophy wall: the club's results read as a record on
    black, mirroring the approved prototype's "wins" presentation while keeping
@@ -395,10 +424,13 @@
 /* Every copy spans at least the viewport, so the following identical copy is
    already under the viewport when the first reaches its repeat boundary. */
 .landing-sponsors-copy { --landing-sponsor-gap: 18px; display: flex; width: max-content; min-width: 100vw; box-sizing: border-box; flex: none; justify-content: space-between; gap: var(--landing-sponsor-gap); padding-right: var(--landing-sponsor-gap); }
-.landing-sponsors-item { display: block; width: clamp(150px, 15vw, 208px); flex: none; }
-.landing-sponsor { display: flex; width: 100%; height: 84px; align-items: center; justify-content: center; border-radius: 14px; background: var(--landing-background); box-shadow: inset 0 0 0 1px var(--landing-border); }
-.landing-sponsor img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; padding: 3px; box-sizing: border-box; object-fit: contain; filter: grayscale(1); opacity: 0.72; }
-.landing-sponsor[href]:hover img { filter: none; opacity: 1; }
+.landing-sponsors-item { display: block; width: clamp(300px, 30vw, 416px); flex: none; }
+.landing-sponsor { display: flex; width: 100%; height: 168px; align-items: center; justify-content: center; border-radius: 16px; background: var(--landing-background); box-shadow: inset 0 0 0 1px var(--landing-border); }
+/* Full colour, never grayscale or dimmed: sponsors pay to be seen in their
+   own brand colours. The tile stays a neutral stage and `contain` preserves
+   each logo's aspect, so a tall or wide lockup never stretches. (The old
+   `[href]:hover` restore assumed sponsors were links; the strip is not.) */
+.landing-sponsor img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; padding: 6px; box-sizing: border-box; object-fit: contain; }
 /* Honest fallback when the backend has no sponsors (or is unreachable): one
    quiet line inside the strip, never a row of invented slots. */
 .landing-sponsors-status { margin: 0 var(--landing-gutter); color: var(--landing-text-muted); font-size: 14px; line-height: 1.6; text-align: center; }
@@ -475,8 +507,8 @@
   .landing-sponsors { padding-inline: 24px; }
   .landing-sponsors-copy { --landing-sponsor-gap: 12px; }
   .landing-ticker-copy { gap: 28px; }
-      .landing-sponsors-item { width: 150px; }
-  .landing-sponsor { height: 84px; }
+      .landing-sponsors-item { width: 300px; }
+  .landing-sponsor { height: 168px; }
   .landing-footer-top { flex-direction: column; gap: 36px; }
   .landing-footer nav { width: 100%; }
   .landing-palmares-row { grid-template-columns: 1fr; gap: 14px; padding: 12px; }
