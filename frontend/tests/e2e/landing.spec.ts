@@ -28,9 +28,32 @@ test.describe("Landing page", () => {
   });
 
   test("stacks schedule list and panel without overflow on narrow phone widths", async ({ page }) => {
+    // The schedule list only exists once GET /api/schedules reaches the ready
+    // state (LandingPage's Schedule section -> ScheduleSelector), so pin the
+    // payload like the sponsor test above and auto-wait for the element.
+    // Measuring right after page.goto raced that fetch and flaked against a
+    // slow backend.
+    await page.route("**/api/schedules", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            category: "Infantil",
+            blocks: [{ days: ["LUNES", "MIERCOLES", "VIERNES"], startTime: "16:00", endTime: "17:30" }],
+          },
+          {
+            category: "Adultos",
+            blocks: [{ days: ["LUNES", "MIERCOLES", "VIERNES"], startTime: "19:00", endTime: "20:30" }],
+          },
+        ]),
+      })
+    );
     for (const width of [390, 500]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
+      // Auto-wait for the ready state before measuring the stacked layout.
+      await expect(page.locator(".landing-sched")).toBeVisible();
       const layout = await page.evaluate(() => {
         const sched = document.querySelector(".landing-sched");
         if (!sched) return null;

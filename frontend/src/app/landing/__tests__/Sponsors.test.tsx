@@ -72,10 +72,12 @@ describe("Sponsors", (): void => {
       { id: 1, nombre: "Municipio", logoUrl: "https://cdn/muni.png" },
     ]));
     render(<Sponsors />);
+    // The ready-status only exists once the fetch resolved, so awaiting it is
+    // what actually waits for the data: the header renders in every state, so
+    // awaiting that first would pass during loading and race the assertion below.
+    expect(await screen.findByText(/^Patrocinadores:/i)).toBeInTheDocument();
     // The strip header is the canonical public term, not "Nos acompañan".
-    expect(await screen.findByText("Patrocinadores")).toBeInTheDocument();
-    // The screen-reader ready-status names the section the same way.
-    expect(screen.getByText(/^Patrocinadores:/i)).toBeInTheDocument();
+    expect(screen.getByText("Patrocinadores")).toBeInTheDocument();
     expect(screen.queryByText(/Auspiciantes|Nos acompañan/i)).not.toBeInTheDocument();
   });
 
