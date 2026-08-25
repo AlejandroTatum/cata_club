@@ -67,6 +67,8 @@ describe("HelpChatDock — the launcher", () => {
     // 44px on a phone is the touch-target floor; the old FAB was 56px, which
     // is what made it impossible to fit beside anything.
     expect(launcher.className).toMatch(/\bh-11\b/);
+    expect(launcher.className).toContain("bg-white");
+    expect(launcher.className).toContain("border-line-2");
   });
 
   it("shows CATA-BOT's face big enough to read, without widening the phone corner", () => {

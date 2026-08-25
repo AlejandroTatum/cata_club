@@ -325,8 +325,8 @@ function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockCle
  */
 const LAUNCHER_CLASSES =
   "fixed bottom-4 right-2 z-40 flex h-11 w-11 items-center justify-center rounded-full " +
-  "bg-coal text-white shadow-float " +
-  "transition-[transform,opacity] duration-200 ease-out hover:bg-coal-3 " +
+  "bg-white text-ink border border-line-2 shadow-float " +
+  "transition-[transform,opacity] duration-200 ease-out hover:bg-paper " +
   "lg:bottom-5 lg:right-5 lg:h-[76px] lg:w-[76px]";
 
 /**
@@ -436,7 +436,7 @@ export default function HelpChatDock(): React.ReactElement {
           them. The cropped `cata-club-logo-avatar.png`, not the raw JPEG —
           see `ChatWidget`'s own comment for why the full logo's wordmark
           band can't just be `object-cover`'d away. Its transparent margin
-          relies on this button's own `bg-coal` (`LAUNCHER_CLASSES` below)
+          relies on this button's own `bg-white` (`LAUNCHER_CLASSES` below)
           showing through instead of the JPEG's light-grey square.
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">

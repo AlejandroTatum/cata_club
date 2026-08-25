@@ -114,6 +114,7 @@ describe("LoginPage", () => {
     expect(screen.getByLabelText(/^Correo electrónico/)).toBeRequired();
     expect(screen.getByLabelText(/^Contraseña/)).toBeRequired();
     expect(screen.queryByText("Cargando sesión…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Iniciar sesión" })).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 

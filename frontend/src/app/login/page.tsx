@@ -414,7 +414,7 @@ function LoginPageContent(): React.ReactElement {
         </Link>
 
         <Button type="submit" variant="primary" disabled={submitting} className="w-full">
-          {submitting ? "Iniciando sesión…" : "Iniciar Sesión"}
+          {submitting ? "Iniciando sesión…" : "Iniciar sesión"}
         </Button>
       </form>
 

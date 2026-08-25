@@ -22,7 +22,7 @@
  * deterministic derivative of that same JPEG — a 620×620 crop of the wreath
  * and player silhouette ending above the wordmark band, background
  * chroma-keyed to transparent (Python/Pillow: threshold + edge unblend, no
- * AI) so `bg-coal` shows through instead of the JPEG's light-grey square.
+ * AI) so `bg-white` shows through instead of the JPEG's light-grey square.
  * See the header's own comment below for the exact crop and why the source
  * JPEG stays untouched (the landing and other pages still use it whole).
  *
@@ -224,8 +224,8 @@ export default function ChatWidget({
          move every card in the product. */
       className="fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]"
     >
-      {/* `.chat > header` — coal, avatar disc, "Responde en segundos". */}
-      <header className="flex flex-none items-center gap-[11px] bg-coal px-[15px] py-3 text-white">
+      {/* `.chat > header` — white, avatar disc, "Responde en segundos". */}
+      <header className="flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] py-3 text-ink">
         {/*
           `sizes="96px"`, not the 32px layout box: `sizes` is CSS pixels, so
           asking for 32 would make Next serve a 32-pixel-wide file and a 2x or
@@ -242,7 +242,7 @@ export default function ChatWidget({
           the JPEG's light-grey background chroma-keyed to transparent —
           `object-cover` is still correct here (a square source into a square
           box needs no cropping, just scaling), and the transparent margin
-          around the wreath's oval lets this header's own `bg-coal` show
+          around the wreath's oval lets this header's own `bg-white` show
           through instead of that light-grey square.
         */}
         <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-full">
@@ -256,13 +256,13 @@ export default function ChatWidget({
         </span>
         <span className="min-w-0 flex-1 leading-tight">
           <span className="block truncate text-sm font-bold">{BOT_NAME}</span>
-          <span className="block truncate text-2xs tracking-flat text-white/55">Responde en segundos</span>
+          <span className="block truncate text-2xs tracking-flat text-ink-3">Responde en segundos</span>
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label={`Cerrar ${BOT_NAME}`}
-          className={`shrink-0 rounded-lg p-1 text-white/55 transition-colors hover:bg-white/10 hover:text-white ${ASSISTANT_FOCUS_RING}`}
+          className={`shrink-0 rounded-lg p-1 text-ink-3 transition-colors hover:bg-paper hover:text-ink ${ASSISTANT_FOCUS_RING}`}
         >
           <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
@@ -275,8 +275,8 @@ export default function ChatWidget({
       >
         {mensajes.length === 0 && (
           <p className={`${BUBBLE_BASE} self-start rounded-bl-[4px] bg-state-neutral-bg text-ink-2`}>
-            Hola 👋 Soy {BOT_NAME}, el asistente del club. Pregúntame cómo usar la app — o toca
-            «{TALK_TO_CLUB_LABEL}» si prefieres hablar con una persona.
+            Hola 👋 Soy {BOT_NAME}, el asistente del club. Pregúntele cómo usar la app — o toque
+            «{TALK_TO_CLUB_LABEL}» si prefiere hablar con una persona.
           </p>
         )}
 

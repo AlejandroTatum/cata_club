@@ -187,13 +187,14 @@ describe("ChatWidget — error copy per failure class", () => {
 
 describe("ChatWidget — design system", () => {
   it("heads the panel with the assistant's own identity and the response promise", () => {
-    render(<ChatWidget open onClose={vi.fn()} />);
+    const { container } = render(<ChatWidget open onClose={vi.fn()} />);
 
     // The assistant is CATA-BOT, not "Cata Club": named after the club it
     // was indistinguishable from the human channel one row below it.
     expect(screen.getByText("CATA-BOT")).toBeInTheDocument();
     expect(screen.queryByText("Cata Club")).not.toBeInTheDocument();
     expect(screen.getByText("Responde en segundos")).toBeInTheDocument();
+    expect(container.querySelector("header")).toHaveClass("bg-white", "text-ink");
   });
 
   it("wears the club's real logo, cropped to a circle over the disc", () => {
@@ -216,6 +217,7 @@ describe("ChatWidget — design system", () => {
   it("introduces itself by name in the opening bubble", () => {
     render(<ChatWidget open onClose={vi.fn()} />);
 
+    expect(screen.getByText(/Pregúntele cómo usar la app/)).toBeInTheDocument();
     expect(screen.getByText(/Soy CATA-BOT, el asistente del club/)).toBeInTheDocument();
   });
 
