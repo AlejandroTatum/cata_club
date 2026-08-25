@@ -207,7 +207,23 @@ test.describe("Landing page", () => {
       expect(upscaled).toEqual([]);
     });
 
-    test("keeps vertical page scrolling with Lenis while wheel input belongs to the GSAP loop", async ({ page }) => {
+    test("moves the strip continuously on its own, with no user steering", async ({ page }) => {
+      await page.goto("/");
+      const track = page.locator("[data-carousel]");
+      await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
+      await track.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
+
+      const firstSlide = page.locator(".landing-slide").first();
+      const before = (await firstSlide.boundingBox())?.x ?? 0;
+      // No pointer, wheel, or keyboard input of any kind: the strip advances
+      // by itself, so its position must drift without any gesture.
+      await page.waitForTimeout(1500);
+      const after = (await firstSlide.boundingBox())?.x ?? 0;
+      expect(Math.abs(after - before)).toBeGreaterThan(30);
+    });
+
+    test("keeps normal vertical page scrolling when the wheel passes over the gallery", async ({ page }) => {
       await page.goto("/");
       const track = page.locator("[data-carousel]");
       await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
@@ -219,12 +235,12 @@ test.describe("Landing page", () => {
       await page.waitForTimeout(700);
       const after = await page.evaluate(() => scrollY);
 
-      // A wheel over the enhanced track must not feed Lenis the same delta
-      // and move the page vertically; the existing drag test covers GSAP motion.
-      expect(after).toBe(before);
+      // The gallery intercepts nothing: wheel input keeps its usual meaning and
+      // scrolls the page vertically (smoothly, via Lenis).
+      expect(after).toBeGreaterThan(before);
     });
 
-    test("moves the strip exactly as far as the pointer drags it", async ({ page }) => {
+    test("does not let a pointer drag steer the strip", async ({ page }) => {
       await page.goto("/");
       const track = page.locator("[data-carousel]");
       await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
@@ -243,11 +259,32 @@ test.describe("Landing page", () => {
       const draggedLeft = (await firstSlide.boundingBox())?.x ?? 0;
       await page.mouse.up();
 
-      // Converting drag pixels to timeline progress against anything but the
-      // full loop width makes the strip outrun the pointer.
+      // No Draggable, no inertia: the 300px pointer travel must not become
+      // strip travel. Only the autonomous loop moves it (~60px/s), so anything
+      // near the drag distance is a regression.
       const travelled = startLeft - draggedLeft;
-      expect(travelled).toBeGreaterThan(240);
-      expect(travelled).toBeLessThan(360);
+      expect(travelled).toBeGreaterThan(0);
+      expect(travelled).toBeLessThan(150);
+    });
+
+    test("keeps the strip a static, non-interactive presentation under reduced motion", async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto("/");
+      const track = page.locator("[data-carousel]");
+      await expect(track).not.toHaveClass(/is-enhanced/);
+      await track.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
+
+      const firstSlide = page.locator(".landing-slide").first();
+      const before = (await firstSlide.boundingBox())?.x ?? 0;
+      await page.waitForTimeout(1200);
+      const after = (await firstSlide.boundingBox())?.x ?? 0;
+
+      // Static: no autonomous loop, no transform drift of any kind.
+      expect(Math.abs(after - before)).toBeLessThan(1);
+      // Still presentation-only: clicking a slide opens nothing.
+      await firstSlide.click({ position: { x: 20, y: 20 } });
+      await expect(page.locator("[role='dialog']")).toHaveCount(0);
     });
   });
 });

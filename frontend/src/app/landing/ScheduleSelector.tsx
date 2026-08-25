@@ -15,18 +15,12 @@ const CATEGORY_COLORS = [
   "var(--landing-brand-fuchsia-strong)",
 ] as const;
 
-const DAY_TRACK_LABEL =
-  "Distribución de las categorías a lo largo del día, de lunes a viernes y los sábados";
+const DAY_TRACK_LABEL = "Distribución de las categorías según sus horarios publicados";
 
 interface ScheduleSelectorProps {
   schedules: LandingSchedule[];
 }
 
-/**
- * One line per DISTINCT band. A category with a morning and an evening shows
- * both, but Competitivo repeats 18:00–20:00 on Saturday — printing it twice
- * looks like a data error, not two sessions.
- */
 function categoryTimes(schedule: LandingSchedule): string[] {
   const seen = new Set<string>();
   return schedule.slots
@@ -57,7 +51,17 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const range: DayRange = deriveDayRange(schedules);
-  const active = schedules[selected];
+  const active = schedules[selected] ?? schedules[0];
+  const rows = Array.from(
+    schedules
+      .flatMap((schedule): LandingSchedule["slots"] => schedule.slots)
+      .reduce((groups, slot): Map<string, string[]> => {
+        const labels = groups.get(slot.on) ?? [];
+        if (!labels.includes(slot.days)) labels.push(slot.days);
+        groups.set(slot.on, labels);
+        return groups;
+      }, new Map<string, string[]>()),
+  );
 
   /*
    * Keep the single marker element aligned with the selected tab. Measured
@@ -93,40 +97,20 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
         const geometry = barGeometry(slot.hours, range);
         bars.push(
           <span
-            key={`${categoryIndex}-${slotIndex}`}
+            key={`${schedule.category}-${slotIndex}-${slot.on}`}
             className="landing-day-bar"
-            data-on={String(categoryIndex === selected)}
+            data-on={String(schedule.category === active?.category)}
             title={`${schedule.category} · ${slot.hours} · ${slot.days}`}
-            style={
-              {
-                left: `${geometry.left.toFixed(3)}%`,
-                width: `calc(${geometry.width.toFixed(3)}% - 3px)`,
-                "--landing-cat": CATEGORY_COLORS[categoryIndex],
-              } as React.CSSProperties
-            }
+            style={{
+              left: `${geometry.left.toFixed(3)}%`,
+              width: `calc(${geometry.width.toFixed(3)}% - 3px)`,
+              "--landing-cat": CATEGORY_COLORS[categoryIndex % CATEGORY_COLORS.length],
+            } as React.CSSProperties}
           />,
         );
       });
     });
     return bars;
-  };
-
-  const renderBall = (which: "week" | "sat"): React.ReactElement | null => {
-    const slot = active.slots.find((candidate): boolean => candidate.on === which);
-    if (!slot) return null;
-    const geometry = barGeometry(slot.hours, range);
-    // One decorative ball centered on the selected schedule's first band of the
-    // lane. Keyed by selection + lane so it remounts (and replays its bounce)
-    // whenever the user picks another category.
-    return (
-      <span
-        key={`schedule-ball-${selected}-${which}`}
-        className="landing-sched-ball"
-        data-schedule-ball
-        aria-hidden="true"
-        style={{ left: `${(geometry.left + geometry.width / 2).toFixed(3)}%` } as React.CSSProperties}
-      />
-    );
   };
 
   return (
@@ -156,7 +140,7 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
               aria-selected={index === selected}
               aria-controls="schedule-panel"
               tabIndex={index === selected ? 0 : -1}
-              style={{ "--landing-cat": CATEGORY_COLORS[index] } as React.CSSProperties}
+              style={{ "--landing-cat": CATEGORY_COLORS[index % CATEGORY_COLORS.length] } as React.CSSProperties}
               onClick={(): void => select(index)}
             >
               <i className="landing-cat-dot" aria-hidden="true" />
@@ -193,23 +177,15 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
           <span className="landing-sched-fact"><small>Días</small><b>{categoryDays(active)}</b></span>
         </div>
 
-        {/* Two lanes on ONE shared scale derived from the published times, so a
-            Saturday band sits directly under the weekday hour it replaces. */}
         <div className="landing-day">
           <div className="landing-day-track" role="img" aria-label={DAY_TRACK_LABEL}>
-            <div className="landing-day-row">
-              <b>Lun – Vie</b>
-              <div className="landing-day-lane" data-day-lane="week">{renderBars("week")}{renderBall("week")}</div>
-            </div>
-            <div className="landing-day-row">
-              <b>Sábado</b>
-              <div className="landing-day-lane" data-day-lane="sat">{renderBars("sat")}{renderBall("sat")}</div>
-            </div>
+            {rows.map(([on, labels]): React.ReactElement => (
+              <div className="landing-day-row" key={on} data-day-row={on}>
+                <b>{labels.join(" y ")}</b>
+                <div className="landing-day-lane" data-day-lane={on}>{renderBars(on as "week" | "sat")}</div>
+              </div>
+            ))}
           </div>
-          <p className="landing-day-legend">
-            Dos bloques por día: <b>mañana</b> para adultos y <b>tarde</b> para el resto. El sábado cambia. La
-            categoría elegida queda resaltada en su franja.
-          </p>
         </div>
 
         <a className="landing-button" href="#contacto">

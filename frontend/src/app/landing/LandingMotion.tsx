@@ -3,13 +3,10 @@
 import { useEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { Draggable } from "gsap/Draggable";
-import { InertiaPlugin } from "gsap/InertiaPlugin";
 import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
-import type { GalleryLightboxDetail } from "./Gallery";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
@@ -79,95 +76,26 @@ function buildHorizontalLoop(items: HTMLElement[], speed: number, gap: number): 
       }, distanceToLoop / pixelsPerSecond);
   }
 
-  // Pre-render both ends so the first interaction does not jump.
+  // Pre-render both ends so the first frame does not jump.
   timeline.progress(1, true).progress(0, true);
   timeline.loopWidth = loopWidth;
   return timeline;
 }
 
-/**
- * Upgrades the server-rendered strip into a draggable infinite loop and returns
- * its teardown. The markup is usable as a plain scroll container before this
- * runs, so everything here is additive.
- */
+/** Runs the gallery's autonomous presentation loop. There are no user input
+ * listeners or mutable horizontal state; reduced motion never calls this. */
 function enhanceCarousel(track: HTMLElement): () => void {
   const slides = gsap.utils.toArray<HTMLElement>(".landing-slide", track);
   if (slides.length === 0) return (): void => {};
 
-  // Added before measuring: the class drops the scroll padding, and measuring
-  // first would bake that padding into every slide's offsetLeft.
   track.classList.add("is-enhanced");
   const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
   const loop = buildHorizontalLoop(slides, 0.6, gap);
   loop.play();
 
-  // Draggable writes to a detached proxy, never to the track: the track's own
-  // transform belongs to the loop timeline, and two writers fight every frame.
-  const proxy = document.createElement("div");
-  const wrap = gsap.utils.wrap(0, 1);
-  const progressFor = (drag: Draggable): number =>
-    wrap((drag as Draggable & { startProgress: number }).startProgress + (drag.startX - drag.x) / loop.loopWidth);
-
-  const [draggable] = Draggable.create(proxy, {
-    type: "x",
-    trigger: track,
-    inertia: true,
-    onPress(this: Draggable): void {
-      (this as Draggable & { startProgress: number }).startProgress = loop.progress();
-      track.classList.add("is-dragging");
-      loop.pause();
-    },
-    onDrag(this: Draggable): void { loop.progress(progressFor(this)); },
-    onThrowUpdate(this: Draggable): void { loop.progress(progressFor(this)); },
-    onRelease(): void { track.classList.remove("is-dragging"); },
-    onThrowComplete(): void { resumeLoop(); },
-  });
-
-  // The lightbox pauses the loop over this DOM-event channel — the same
-  // one the hero carousel uses — so a photo under study never drifts out
-  // of view. `resumeLoop` is the single path back to autoplay: every other
-  // resumer (drag throw, wheel idle) must respect a held pause, or closing
-  // the lightbox would race whatever gesture ended underneath the overlay.
-  let lightboxOpen = false;
-  const resumeLoop = (): void => {
-    if (!lightboxOpen) loop.play();
-  };
-  const onLightbox = (event: Event): void => {
-    const { open } = (event as CustomEvent<GalleryLightboxDetail>).detail;
-    if (open === lightboxOpen) return;
-    lightboxOpen = open;
-    if (open) {
-      loop.pause();
-      resume?.kill();
-      resume = undefined;
-    } else {
-      resumeLoop();
-    }
-  };
-  track.addEventListener("landing:gallery-lightbox", onLightbox);
-
-  let resume: gsap.core.Tween | undefined;
-  const onWheel = (event: WheelEvent): void => {
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (Math.abs(delta) < 1) return;
-    // The enhanced track is the sole horizontal scroll owner. Stop the
-    // same wheel event before Lenis can interpret it as page scroll.
-    event.preventDefault();
-    event.stopPropagation();
-    loop.pause();
-    loop.progress(wrap(loop.progress() + delta * 0.0004));
-    resume?.kill();
-    resume = gsap.delayedCall(0.5, resumeLoop);
-  };
-  track.addEventListener("wheel", onWheel, { passive: false });
-
   return (): void => {
-    track.removeEventListener("wheel", onWheel);
-    track.removeEventListener("landing:gallery-lightbox", onLightbox);
-    resume?.kill();
-    draggable?.kill();
     loop.kill();
-    track.classList.remove("is-enhanced", "is-dragging");
+    track.classList.remove("is-enhanced");
     gsap.set(slides, { clearProps: "all" });
   };
 }
@@ -356,7 +284,7 @@ function playRally(): void {
 
 export default function LandingMotion(): null {
   useEffect((): (() => void) => {
-    gsap.registerPlugin(ScrollTrigger, Draggable, InertiaPlugin, MotionPathPlugin, DrawSVGPlugin, SplitText);
+    gsap.registerPlugin(ScrollTrigger, MotionPathPlugin, DrawSVGPlugin, SplitText);
     const media = gsap.matchMedia();
     let lenis: Lenis | null = null;
     const updateLenis = (time: number): void => lenis?.raf(time * 1000);

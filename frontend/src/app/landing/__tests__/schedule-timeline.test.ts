@@ -74,6 +74,21 @@ describe("barGeometry", (): void => {
   });
 });
 
+describe("data-driven day groups", (): void => {
+  it("keeps every published slot inside the shared scale derived from the same data", (): void => {
+    const range = deriveDayRange(landingConfig.schedules);
+    landingConfig.schedules.forEach((schedule): void => {
+      schedule.slots.forEach((slot): void => {
+        const geometry = barGeometry(slot.hours, range);
+        expect(geometry.left).toBeGreaterThanOrEqual(0);
+        expect(geometry.width).toBeGreaterThan(0);
+        // Floating-point drift may push the right edge to 100.00000000000001.
+        expect(geometry.left + geometry.width).toBeLessThanOrEqual(100 + 1e-9);
+      });
+    });
+  });
+});
+
 describe("closedWeekdayGap", (): void => {
   it("finds the midday closure between the morning and afternoon weekday blocks", (): void => {
     expect(closedWeekdayGap(landingConfig.schedules)).toEqual({ start: 555, end: 900 });

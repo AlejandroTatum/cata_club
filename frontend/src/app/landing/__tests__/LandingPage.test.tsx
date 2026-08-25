@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
+import { barGeometry, deriveDayRange } from "@/app/landing/schedule-timeline";
+import { mapPublicSchedules } from "@/app/landing/schedule-data";
 import LandingPage from "@/app/landing/LandingPage";
 
 vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean }) => React.ReactElement } => ({
@@ -246,28 +248,73 @@ describe("LandingPage", (): void => {
     expect(sections[3]?.querySelector(".landing-sched")).not.toBeNull();
   });
 
-  it("marks the selected schedule's band inside the day timeline with a decorative ball that moves on selection", async (): Promise<void> => {
+  /**
+   * The day timeline is data-driven: one row per distinct day group in the
+   * published data, with every slot rendered exactly once as a bar on the
+   * shared scale. Adding or reordering categories or slots must change the
+   * picture without touching the component — no hardcoded two-lane layout
+   * or legend copy survives. Expectations derive from the same API payload
+   * the fetch stub feeds the page, so they track the real data, not any
+   * hardcoded lane structure.
+   */
+  it("derives timeline rows and bars from the published schedules on the shared scale", async (): Promise<void> => {
     render(<LandingPage />);
     const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
     await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
-    const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
-    const tabs = within(tablist).getAllByRole("tab");
 
-    // The ball no longer sits on the selected LIST option.
-    expect(tablist.querySelector("[data-schedule-ball]")).toBeNull();
+    // Mapped the same way the page maps the fetched payload.
+    const schedules = mapPublicSchedules(publicSchedulePayload);
+    const range = deriveDayRange(schedules);
+    const expectedGroups = [...new Set(schedules.flatMap((schedule): string[] => schedule.slots.map((slot): string => slot.on)))];
 
-    // It lives inside the graphical timeline lane, over the selected band.
-    const weekLane = scheduleSection?.querySelector('[data-day-lane="week"]');
-    expect(weekLane).not.toBeNull();
-    const ball = weekLane?.querySelector("[data-schedule-ball]");
-    expect(ball).not.toBeNull();
-    expect(ball).toHaveAttribute("aria-hidden", "true");
+    // One row per distinct day group actually present in the data.
+    const rows = Array.from(scheduleSection?.querySelectorAll("[data-day-row]") ?? []);
+    expect(rows.map((row): string | null => row.getAttribute("data-day-row"))).toEqual(expectedGroups);
 
-    // Selecting another category remounts the ball at its own band position.
-    fireEvent.click(tabs[1]);
-    const moved = scheduleSection?.querySelector('[data-day-lane="week"] [data-schedule-ball]');
-    expect(moved).not.toBeNull();
-    expect(document.body.contains(ball as Element)).toBe(false);
+    // Row labels come from the data's day strings — never hardcoded copy.
+    rows.forEach((row): void => {
+      const on = row.getAttribute("data-day-row") ?? "";
+      const expectedLabel = [
+        ...new Set(
+          schedules
+            .flatMap((schedule): { on: string; days: string }[] => schedule.slots.map((slot): { on: string; days: string } => ({ on: slot.on, days: slot.days })))
+            .filter((slot): boolean => slot.on === on)
+            .map((slot): string => slot.days),
+        ),
+      ].join(" y ");
+      expect(row.querySelector("b")?.textContent).toBe(expectedLabel);
+    });
+
+    // Every published slot renders exactly once, aligned to its own hours.
+    const allSlots = schedules.flatMap((schedule): { category: string; hours: string; days: string; on: string }[] =>
+      schedule.slots.map((slot): { category: string; hours: string; days: string; on: string } => ({
+        category: schedule.category,
+        hours: slot.hours,
+        days: slot.days,
+        on: slot.on,
+      })),
+    );
+    const bars = Array.from(scheduleSection?.querySelectorAll(".landing-day-bar") ?? []);
+    expect(bars).toHaveLength(allSlots.length);
+
+    const titles = new Set(bars.map((bar): string | null => bar.getAttribute("title")));
+    allSlots.forEach((slot): void => {
+      const geometry = barGeometry(slot.hours, range);
+      const bar = bars.find((candidate): boolean =>
+        candidate.getAttribute("title") === `${slot.category} · ${slot.hours} · ${slot.days}`,
+      );
+      expect(bar).not.toBeUndefined();
+      const style = bar?.getAttribute("style") ?? "";
+      expect(Number(style.match(/left:\s*([\d.]+)%/)?.[1])).toBeCloseTo(geometry.left, 3);
+      expect(Number(style.match(/width:\s*calc\(([\d.]+)%/)?.[1])).toBeCloseTo(geometry.width, 3);
+      expect(bar?.closest("[data-day-lane]")?.getAttribute("data-day-lane")).toBe(slot.on);
+    });
+    expect(titles.size).toBe(allSlots.length);
+
+    // No hardcoded two-lane legend or decorative ball remains.
+    expect(scheduleSection?.querySelector(".landing-day-legend")).toBeNull();
+    expect(scheduleSection?.querySelector("[data-schedule-ball]")).toBeNull();
+    expect(scheduleSection).not.toHaveTextContent(/Dos bloques por día/);
   });
 
   describe("schedule selector — master-detail", (): void => {
@@ -503,93 +550,59 @@ describe("LandingPage", (): void => {
   });
 
   /**
-   * The carousel is a progressive enhancement. The markup ships as a plain
-   * scrollable strip so it stays usable before the motion layer loads, when JS
-   * fails outright, and when the visitor prefers reduced motion — the script
-   * only takes the track over once it is ready to drive it.
+   * The gallery is presentation-only ("sin interacción con el usuario"):
+   * slides are decorative figures, not controls. There is no lightbox, no
+   * open affordance, and no pause/resume channel — clicking or keyboarding
+   * a slide must do nothing, and the markup carries no interaction state.
    */
-  it("ships the carousel as a scrollable strip that works without the motion layer", (): void => {
+  it("ships the gallery as a non-interactive strip with no open affordance", (): void => {
     render(<LandingPage />);
 
+    const gallery = document.querySelector(".landing-gallery");
     const track = document.querySelector(".landing-carousel");
     expect(track).not.toBeNull();
     expect(track).toHaveAttribute("data-carousel");
     expect(track?.className).not.toContain("is-enhanced");
+
+    // Slides are plain figures: no buttons, no lightbox, no drag handle.
+    expect(gallery?.querySelectorAll(".landing-slide")).toHaveLength(GALLERY_PHOTOS.length);
+    expect(gallery?.querySelectorAll("button")).toHaveLength(0);
+    expect(gallery?.querySelector(".landing-lightbox")).toBeNull();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  // The lightbox is plain React state: it must work identically before the
-  // motion layer loads and under reduced motion, so these tests render the
-  // page with LandingMotion mocked out — no GSAP internals asserted.
-  describe("gallery lightbox", (): void => {
-    const openButtons = (): HTMLElement[] =>
-      within(document.querySelector(".landing-gallery") as HTMLElement).getAllByRole("button", {
-        name: /^Ampliar foto:/i,
+  it("ignores clicks on slides: nothing opens and the page never locks scrolling", (): void => {
+    render(<LandingPage />);
+
+    const slide = document.querySelector(".landing-slide") as HTMLElement;
+    fireEvent.click(slide);
+    fireEvent.keyDown(slide, { key: "Enter" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.querySelector(".landing-lightbox")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("exposes the strip as a labelled group, not as a set of buttons", (): void => {
+    render(<LandingPage />);
+
+    const track = document.querySelector("[data-carousel]");
+    expect(track).toHaveAttribute("role", "group");
+    expect(track).toHaveAttribute("aria-label", "Galería de fotos del club");
+    expect(within(track as HTMLElement).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  describe("gallery motion contract", (): void => {
+    it("renders the strip with the markup the autonomous loop needs", (): void => {
+      render(<LandingPage />);
+
+      const track = document.querySelector(".landing-carousel");
+      const slides = Array.from(track?.querySelectorAll(".landing-slide") ?? []);
+      expect(slides).toHaveLength(GALLERY_PHOTOS.length);
+      // Images stay draggable=false so nothing can mis-interpret a pointer press.
+      slides.forEach((slide): void => {
+        expect(slide.querySelector("img")).toHaveAttribute("draggable", "false");
       });
-
-    it("opens the clicked photo in a modal dialog and tells the motion layer", (): void => {
-      render(<LandingPage />);
-
-      const track = document.querySelector("[data-carousel]") as HTMLElement;
-      const pauseSignals: boolean[] = [];
-      track.addEventListener("landing:gallery-lightbox", (event): void => {
-        pauseSignals.push((event as CustomEvent<{ open: boolean }>).detail.open);
-      });
-
-      expect(openButtons()).toHaveLength(GALLERY_PHOTOS.length);
-      fireEvent.click(openButtons()[2]);
-
-      const dialog = screen.getByRole("dialog");
-      expect(dialog).toHaveAttribute("aria-modal", "true");
-      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[2].alt })).toBeInTheDocument();
-      expect(within(dialog).getByText(GALLERY_PHOTOS[2].caption)).toBeInTheDocument();
-      expect(pauseSignals).toEqual([true]);
-    });
-
-    it("closes on Escape, resumes the loop signal, and returns focus to the slide", (): void => {
-      render(<LandingPage />);
-
-      const track = document.querySelector("[data-carousel]") as HTMLElement;
-      const pauseSignals: boolean[] = [];
-      track.addEventListener("landing:gallery-lightbox", (event): void => {
-        pauseSignals.push((event as CustomEvent<{ open: boolean }>).detail.open);
-      });
-      const trigger = openButtons()[1];
-      trigger.focus();
-      fireEvent.click(trigger);
-
-      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(pauseSignals).toEqual([true, false]);
-      expect(trigger).toHaveFocus();
-    });
-
-    it("steps through photos with arrow keys, wrapping at both ends", (): void => {
-      render(<LandingPage />);
-
-      fireEvent.click(openButtons()[0]);
-      const dialog = screen.getByRole("dialog");
-
-      fireEvent.keyDown(dialog, { key: "ArrowLeft" });
-      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[GALLERY_PHOTOS.length - 1].alt })).toBeInTheDocument();
-
-      fireEvent.keyDown(dialog, { key: "ArrowRight" });
-      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[0].alt })).toBeInTheDocument();
-
-      fireEvent.keyDown(dialog, { key: "ArrowRight" });
-      expect(within(dialog).getByRole("img", { name: GALLERY_PHOTOS[1].alt })).toBeInTheDocument();
-    });
-
-    it("closes on backdrop click and releases the page scroll lock", (): void => {
-      render(<LandingPage />);
-
-      fireEvent.click(openButtons()[0]);
-      expect(document.body.style.overflow).toBe("hidden");
-
-      fireEvent.click(document.querySelector(".landing-lightbox-backdrop") as HTMLElement);
-
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(document.body.style.overflow).toBe("");
     });
   });
 
