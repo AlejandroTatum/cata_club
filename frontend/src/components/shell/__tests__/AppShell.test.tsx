@@ -506,6 +506,14 @@ describe("AppShell", (): void => {
     expect(mockPush).toHaveBeenCalledWith("/ayuda");
   });
 
+  it("uses the circle-question glyph on the sidebar footer's Preguntas frecuentes", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    expect(faq.querySelector(".lucide-circle-help")).not.toBeNull();
+    expect(faq.querySelector(".lucide-book-open")).toBeNull();
+  });
+
   it("navigates and closes the palette when a result is clicked", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 

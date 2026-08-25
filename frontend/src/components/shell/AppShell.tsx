@@ -39,7 +39,6 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
-  BookOpen,
   CircleHelp,
   MoreHorizontal,
 } from "lucide-react";
@@ -835,7 +834,7 @@ export default function AppShell({
             aria-label="Preguntas frecuentes"
             className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}
           >
-            <BookOpen
+            <CircleHelp
               size={ICON.base}
               strokeWidth={1.75}
               className="shrink-0"
