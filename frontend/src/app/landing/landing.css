@@ -334,6 +334,7 @@
 .landing-lightbox-button:hover { background: var(--landing-brand-red); }
 .landing-lightbox-button:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
 .landing-schedule { background: var(--landing-surface); }
+.landing-schedule-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
 
 /* Master-detail schedule selector: a tablist drives one panel with a shared
    day timeline derived from the published schedule data. */

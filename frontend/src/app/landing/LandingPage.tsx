@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -24,6 +25,7 @@ import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
+import { mapPublicSchedules } from "./schedule-data";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -227,11 +229,36 @@ function Motto(): React.ReactElement {
 }
 
 function Schedule(): React.ReactElement {
+  const [state, setState] = useState<{ kind: "loading" } | { kind: "ready"; schedules: typeof landingConfig.schedules } | { kind: "empty" } | { kind: "error" }>({ kind: "loading" });
+
+  useEffect((): (() => void) => {
+    let cancelled = false;
+    fetch("/api/schedules", { cache: "no-store" })
+      .then((response): Promise<unknown> => {
+        if (!response.ok) throw new Error("schedules unavailable");
+        return response.json();
+      })
+      .then((payload: unknown): void => {
+        if (cancelled) return;
+        const schedules = mapPublicSchedules(payload);
+        setState(schedules.length > 0 ? { kind: "ready", schedules } : { kind: "empty" });
+      })
+      .catch((): void => {
+        if (!cancelled) setState({ kind: "error" });
+      });
+    return (): void => { cancelled = true; };
+  }, []);
+
+  const status = state.kind === "loading"
+    ? "Cargando horarios…"
+    : state.kind === "empty"
+      ? "Aún no hay horarios publicados."
+      : "No se pudieron cargar los horarios.";
+
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
-      {/* Master-detail selector: a client component, like the gallery's lightbox. */}
       <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />
-      <ScheduleSelector schedules={landingConfig.schedules} />
+      {state.kind === "ready" ? <ScheduleSelector schedules={state.schedules} /> : <p className="landing-schedule-status" role="status">{status}</p>}
     </section>
   );
 }

@@ -12,7 +12,7 @@ export interface LandingScheduleSlot {
 
 export interface LandingSchedule {
   category: string;
-  audience: string;
+  audience?: string;
   slots: LandingScheduleSlot[];
 }
 

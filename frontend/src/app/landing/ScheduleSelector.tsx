@@ -162,7 +162,7 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
               <i className="landing-cat-dot" aria-hidden="true" />
               <span>
                 <strong>{schedule.category}</strong>
-                <span>{schedule.audience}</span>
+                {schedule.audience ? <span>{schedule.audience}</span> : null}
               </span>
               <em>
                 {categoryTimes(schedule).map((time, timeIndex): React.ReactElement => (
@@ -185,7 +185,7 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
       >
         <h3>{active.category}</h3>
         <div className="landing-sched-facts">
-          <span className="landing-sched-fact"><small>Edad</small><b>{active.audience}</b></span>
+          {active.audience ? <span className="landing-sched-fact"><small>Edad</small><b>{active.audience}</b></span> : null}
           <span className="landing-sched-fact">
             <small>Horario</small>
             <b>{active.slots.map((slot): string => slot.hours).join("  ·  ")}</b>

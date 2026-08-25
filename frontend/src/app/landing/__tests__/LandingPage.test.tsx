@@ -42,6 +42,15 @@ interface MockedMediaQueryList extends MediaQueryList {
   removeEventListener: ReturnType<typeof vi.fn>;
 }
 
+const publicSchedulePayload = [
+  { category: "Formativo", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "15:00", endTime: "16:00" }] },
+  { category: "Infantil", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "16:00", endTime: "17:00" }] },
+  { category: "Juvenil", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "17:00", endTime: "18:00" }] },
+  { category: "Competitivo", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "18:00", endTime: "20:00" }, { days: ["SABADO"], startTime: "18:00", endTime: "20:00" }] },
+  { category: "Adultos", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "08:00", endTime: "09:15" }, { days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "20:00", endTime: "21:15" }] },
+  { category: "Juego Libre", blocks: [{ days: ["SABADO"], startTime: "15:00", endTime: "18:00" }] },
+];
+
 describe("LandingPage", (): void => {
   let reducedMotion = true;
   let matchMediaCalls: MockedMediaQueryList[] = [];
@@ -51,7 +60,10 @@ describe("LandingPage", (): void => {
     matchMediaCalls = [];
     motionMount.mockClear();
     // The sponsor strip is now data-driven: it calls public GET /api/sponsors on mount.
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+          const url = String(input);
+          return Promise.resolve({ ok: true, json: async (): Promise<unknown> => url.includes("/api/schedules") ? publicSchedulePayload : [] });
+        }));
     vi.stubGlobal("ResizeObserver", class {
       observe(): void {}
       unobserve(): void {}
@@ -124,10 +136,10 @@ describe("LandingPage", (): void => {
         expect(ticker.querySelectorAll(".landing-ticker-item")).toHaveLength(8);
       });
 
-      it("renders client-pending values from the centralized config", (): void => {
+      it("renders client-pending values from the centralized config", async (): Promise<void> => {
     render(<LandingPage />);
 
-    expect(screen.getByText(landingConfig.schedules[0].slots[0].hours)).toBeInTheDocument();
+    await waitFor((): void => { expect(screen.getByText(landingConfig.schedules[0].slots[0].hours)).toBeInTheDocument(); });
     expect(screen.getByText(landingConfig.contact.hours)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
@@ -179,18 +191,18 @@ describe("LandingPage", (): void => {
     expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("renders every category as a tab in the schedule tablist", (): void => {
+  it("renders every category as a tab in the schedule tablist", async (): Promise<void> => {
     render(<LandingPage />);
 
     const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
     expect(scheduleSection).not.toBeNull();
+    await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
     const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
     const tabs = within(tablist).getAllByRole("tab");
     expect(tabs).toHaveLength(landingConfig.schedules.length);
 
     landingConfig.schedules.forEach((schedule, index): void => {
       expect(tabs[index]).toHaveTextContent(schedule.category);
-      expect(tabs[index]).toHaveTextContent(schedule.audience);
       // One line per DISTINCT band, compacted to "HH:MM–HH:MM".
       schedule.slots.forEach((slot): void => {
         expect(tabs[index]).toHaveTextContent(slot.hours.replace(/\s/g, ""));
@@ -204,10 +216,11 @@ describe("LandingPage", (): void => {
    * (weekday morning + evening) and Competitivo (weekday + Saturday), not
    * just the first.
    */
-  it("shows every slot of a multi-slot category in the detail panel", (): void => {
+  it("shows every slot of a multi-slot category in the detail panel", async (): Promise<void> => {
     render(<LandingPage />);
 
     const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
+    await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
     const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
     const panel = screen.getByRole("tabpanel");
 
@@ -216,12 +229,13 @@ describe("LandingPage", (): void => {
     expect(within(panel).getByText(/20:00 – 21:15/)).toBeInTheDocument();
 
     fireEvent.click(within(tablist).getByRole("tab", { name: /competitivo/i }));
-    expect(within(panel).getByText(/Lunes a Viernes y Sábado/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Lunes, Martes, Miércoles, Jueves y Viernes y Sábado/)).toBeInTheDocument();
   });
 
-  it("orders the main content Hero → Ticker → Stats → Horarios → rest", (): void => {
+  it("orders the main content Hero → Ticker → Stats → Horarios → rest", async (): Promise<void> => {
     const { container } = render(<LandingPage />);
     const main = container.querySelector("main");
+    await waitFor((): void => { expect(container.querySelector(".landing-sched")).toBeInTheDocument(); });
     expect(main).not.toBeNull();
     const sections = Array.from(main?.querySelectorAll("section, header") ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
@@ -232,9 +246,10 @@ describe("LandingPage", (): void => {
     expect(sections[3]?.querySelector(".landing-sched")).not.toBeNull();
   });
 
-  it("marks the selected schedule's band inside the day timeline with a decorative ball that moves on selection", (): void => {
+  it("marks the selected schedule's band inside the day timeline with a decorative ball that moves on selection", async (): Promise<void> => {
     render(<LandingPage />);
     const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
+    await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
     const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
     const tabs = within(tablist).getAllByRole("tab");
 
@@ -256,17 +271,18 @@ describe("LandingPage", (): void => {
   });
 
   describe("schedule selector — master-detail", (): void => {
-    const getSchedule = (): { tablist: HTMLElement; tabs: HTMLElement[]; panel: HTMLElement } => {
+    const getSchedule = async (): Promise<{ tablist: HTMLElement; tabs: HTMLElement[]; panel: HTMLElement }> => {
       const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      await waitFor((): void => { expect(within(section).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
       const tablist = within(section).getByRole("tablist", { name: "Categorías" });
       const tabs = within(tablist).getAllByRole("tab");
       const panel = screen.getByRole("tabpanel");
       return { tablist, tabs, panel };
     };
 
-    it("selects a category on click and points the panel at it", (): void => {
+    it("selects a category on click and points the panel at it", async (): Promise<void> => {
       render(<LandingPage />);
-      const { tablist, tabs, panel } = getSchedule();
+      const { tablist, tabs, panel } = await getSchedule();
 
       fireEvent.click(within(tablist).getByRole("tab", { name: /juvenil/i }));
 
@@ -275,9 +291,9 @@ describe("LandingPage", (): void => {
       expect(within(panel).getByText(/17:00 – 18:00/)).toBeInTheDocument();
     });
 
-    it("moves selection and focus with ArrowDown and ArrowUp", (): void => {
+    it("moves selection and focus with ArrowDown and ArrowUp", async (): Promise<void> => {
       render(<LandingPage />);
-      const { tablist, tabs } = getSchedule();
+      const { tablist, tabs } = await getSchedule();
 
       fireEvent.keyDown(tablist, { key: "ArrowDown" });
       expect(tabs[1]).toHaveAttribute("aria-selected", "true");
@@ -288,9 +304,9 @@ describe("LandingPage", (): void => {
       expect(tabs[0]).toHaveFocus();
     });
 
-    it("wires each tab to the single panel and labels it with the selected tab", (): void => {
+    it("wires each tab to the single panel and labels it with the selected tab", async (): Promise<void> => {
       render(<LandingPage />);
-      const { tabs, panel } = getSchedule();
+      const { tabs, panel } = await getSchedule();
 
       expect(panel).toHaveAttribute("id", "schedule-panel");
       tabs.forEach((tab, index): void => {
@@ -303,9 +319,9 @@ describe("LandingPage", (): void => {
       expect(panel).toHaveAttribute("aria-labelledby", "schedule-tab-2");
     });
 
-    it("keeps only the selected tab in the tab order via roving tabIndex", (): void => {
+    it("keeps only the selected tab in the tab order via roving tabIndex", async (): Promise<void> => {
       render(<LandingPage />);
-      const { tabs } = getSchedule();
+      const { tabs } = await getSchedule();
 
       expect(tabs[0]).toHaveAttribute("tabindex", "0");
       tabs.slice(1).forEach((tab): void => {
@@ -317,9 +333,9 @@ describe("LandingPage", (): void => {
       expect(tabs[0]).toHaveAttribute("tabindex", "-1");
     });
 
-    it("declares the schedule tablist as vertical", (): void => {
+    it("declares the schedule tablist as vertical", async (): Promise<void> => {
       render(<LandingPage />);
-      const { tablist } = getSchedule();
+      const { tablist } = await getSchedule();
       expect(tablist).toHaveAttribute("aria-orientation", "vertical");
     });
   });
