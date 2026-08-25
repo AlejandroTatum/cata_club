@@ -68,7 +68,8 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
         'case " $* " in\n'
-        '  *" --images backend "*) echo "registry.example/cata-backend:${IMAGE_TAG}" ;;\n'
+        '  *" --images backend "*) echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi ;;\n'
+        '  *" manifest inspect "*) [ "$3" = "registry.example/cata-backend:${IMAGE_TAG}" ] || exit 1 ;;\n'
         '  *" --status running "*) if [ "${DB_RUNNING:-0}" = "1" ]; then echo db; fi ;;\n'
         "esac\n"
         "exit 0\n"
@@ -97,6 +98,19 @@ def test_first_deploy_passes_without_any_previous_backup(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "no hay nada que respaldar" in result.stdout
     assert not list(backups.glob("*.dump"))
+
+
+def test_deploy_resolves_single_backend_image_when_compose_emits_multiple_lines(tmp_path):
+    """Docker Compose >= 5.5 can emit more than one image line for
+    `config --images backend`; deploy must resolve a single backend reference
+    or `docker manifest inspect` rejects the newline and aborts the deploy."""
+    env, _, _ = _deploy_env(tmp_path, db_running=False)
+    env["MULTI_IMAGE_OUTPUT"] = "1"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Desplegando imágenes con SHA abcdef1" in result.stdout
 
 
 def test_deploy_backs_up_the_database_before_starting_new_images(tmp_path):
