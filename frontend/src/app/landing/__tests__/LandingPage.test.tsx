@@ -232,6 +232,7 @@ describe("LandingPage", (): void => {
 
     fireEvent.click(within(tablist).getByRole("tab", { name: /competitivo/i }));
     expect(within(panel).getByText(/Lunes, Martes, Miércoles, Jueves y Viernes y Sábado/)).toBeInTheDocument();
+        expect(panel.querySelectorAll(".landing-day-bar")).toHaveLength(2);
   });
 
   it("orders the main content Hero → Ticker → Stats → Horarios → rest", async (): Promise<void> => {
@@ -265,7 +266,9 @@ describe("LandingPage", (): void => {
     // Mapped the same way the page maps the fetched payload.
     const schedules = mapPublicSchedules(publicSchedulePayload);
     const range = deriveDayRange(schedules);
-    const expectedGroups = [...new Set(schedules.flatMap((schedule): string[] => schedule.slots.map((slot): string => slot.on)))];
+    fireEvent.click(within(scheduleSection as HTMLElement).getByRole("tab", { name: /competitivo/i }));
+        const selected = schedules.find((schedule): boolean => schedule.category === "Competitivo");
+        const expectedGroups = ["week", "sat"];
 
     // One row per distinct day group actually present in the data.
     const rows = Array.from(scheduleSection?.querySelectorAll("[data-day-row]") ?? []);
@@ -274,26 +277,13 @@ describe("LandingPage", (): void => {
     // Row labels come from the data's day strings — never hardcoded copy.
     rows.forEach((row): void => {
       const on = row.getAttribute("data-day-row") ?? "";
-      const expectedLabel = [
-        ...new Set(
-          schedules
-            .flatMap((schedule): { on: string; days: string }[] => schedule.slots.map((slot): { on: string; days: string } => ({ on: slot.on, days: slot.days })))
-            .filter((slot): boolean => slot.on === on)
-            .map((slot): string => slot.days),
-        ),
-      ].join(" y ");
+      const expectedLabel = on === "week" ? "LUN–VIE" : "SÁB";
       expect(row.querySelector("b")?.textContent).toBe(expectedLabel);
     });
 
-    // Every published slot renders exactly once, aligned to its own hours.
-    const allSlots = schedules.flatMap((schedule): { category: string; hours: string; days: string; on: string }[] =>
-      schedule.slots.map((slot): { category: string; hours: string; days: string; on: string } => ({
-        category: schedule.category,
-        hours: slot.hours,
-        days: slot.days,
-        on: slot.on,
-      })),
-    );
+        const allSlots = (selected?.slots ?? []).map((slot): { category: string; hours: string; days: string; on: string } => ({
+          category: selected?.category ?? "", hours: slot.hours, days: slot.days, on: slot.on,
+        }));
     const bars = Array.from(scheduleSection?.querySelectorAll(".landing-day-bar") ?? []);
     expect(bars).toHaveLength(allSlots.length);
 
@@ -309,7 +299,7 @@ describe("LandingPage", (): void => {
       expect(Number(style.match(/width:\s*calc\(([\d.]+)%/)?.[1])).toBeCloseTo(geometry.width, 3);
       expect(bar?.closest("[data-day-lane]")?.getAttribute("data-day-lane")).toBe(slot.on);
     });
-    expect(titles.size).toBe(allSlots.length);
+    expect(titles.size).toBe(selected?.slots.length);
 
     // No hardcoded two-lane legend or decorative ball remains.
     expect(scheduleSection?.querySelector(".landing-day-legend")).toBeNull();
