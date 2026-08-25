@@ -50,6 +50,8 @@ describe("LandingPage", (): void => {
     reducedMotion = true;
     matchMediaCalls = [];
     motionMount.mockClear();
+    // The sponsor strip is now data-driven: it calls public GET /api/sponsors on mount.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
     vi.stubGlobal("ResizeObserver", class {
       observe(): void {}
       unobserve(): void {}
@@ -131,27 +133,6 @@ describe("LandingPage", (): void => {
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
   });
 
-  it("renders the arrival inset and an honest, duplicated pending sponsor marquee", (): void => {
-    render(<LandingPage />);
-
-    const arrival = screen.getByRole("img", { name: /entrada de cata club junto al coliseo ciudad de loja/i });
-    expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.png");
-    expect(arrival).toHaveAttribute("width", "1600");
-    expect(arrival).toHaveAttribute("height", "1200");
-    expect(arrival).toHaveAttribute("loading", "lazy");
-    expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
-
-    const sponsors = screen.getByRole("region", { name: "Auspiciantes del club" });
-    expect(within(sponsors).getByText("Nos acompañan")).toBeInTheDocument();
-    expect(within(sponsors).getByText("Auspiciantes pendientes de confirmación.")).toHaveClass("sr-only");
-    const track = sponsors.querySelector("[data-sponsors-track]");
-    const copies = Array.from(track?.querySelectorAll(".landing-sponsors-copy") ?? []);
-    expect(copies).toHaveLength(2);
-    expect(copies[0]).toHaveAttribute("aria-hidden", "true");
-    expect(copies[0]?.textContent).toBe(copies[1]?.textContent);
-    expect(track?.querySelectorAll(".landing-sponsor-pending")).toHaveLength(12);
-    expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
-  });
   it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
     render(<LandingPage />);
 
@@ -189,7 +170,14 @@ describe("LandingPage", (): void => {
     expect(visionChildren[1]?.classList.contains("landing-editorial-media")).toBe(true);
   });
 
+  it("shows an honest empty sponsor message when public GET /api/sponsors returns none", async (): Promise<void> => {
+    render(<LandingPage />);
 
+    const sponsors = screen.getByRole("region", { name: "Auspiciantes del club" });
+    expect(within(sponsors).getByText("Nos acompañan")).toBeInTheDocument();
+    expect(await within(sponsors).findByText(/aún no hay auspiciantes/i)).toBeInTheDocument();
+    expect(within(sponsors).queryByRole("img")).not.toBeInTheDocument();
+  });
 
   it("renders every category as a tab in the schedule tablist", (): void => {
     render(<LandingPage />);

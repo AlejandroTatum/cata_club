@@ -46,6 +46,44 @@ test.describe("Landing page", () => {
     }
   });
 
+  test("sponsor logos fill their card with contained sizing and stable per-record keys", async ({ page }) => {
+    await page.route("**/api/sponsors", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { id: 1, nombre: "Municipio", logoUrl: "https://res.cloudinary.com/cata-club/image/upload/v1/logos/a.png" },
+          { id: 2, nombre: "Municipio", logoUrl: "https://res.cloudinary.com/cata-club/image/upload/v1/logos/b.png" },
+        ]),
+      })
+    );
+    await page.goto("/");
+    await expect(page.locator(".landing-sponsors-item")).toHaveCount(4);
+    const metrics = await page.locator(".landing-sponsors-item >> nth=0").evaluate((item) => {
+      const img = item.querySelector("img")!;
+      const imgBox = img.getBoundingClientRect();
+      const cardBox = item.getBoundingClientRect();
+      const tile = img.closest(".landing-sponsor")!.getBoundingClientRect();
+      const track = document.querySelector(".landing-sponsors-track")!;
+      return {
+        ratio: (imgBox.width * imgBox.height) / (cardBox.width * cardBox.height),
+        imgW: imgBox.width,
+        imgH: imgBox.height,
+        tileH: tile.height,
+        trackH: track.getBoundingClientRect().height,
+      };
+    });
+    // Rendered ~156x67 before this delta; the logo must keep the outer card
+    // (84px tile) while the usable image area grows materially with contain +
+    // minimal padding, and the marquee must not grow vertically.
+    expect(metrics.ratio).toBeGreaterThanOrEqual(0.8);
+    expect(metrics.ratio).toBeLessThanOrEqual(1.05);
+    expect(metrics.imgW).toBeGreaterThanOrEqual(150);
+    expect(metrics.imgH).toBeGreaterThanOrEqual(70);
+    expect(metrics.tileH).toBe(84);
+    expect(metrics.trackH).toBeLessThanOrEqual(metrics.tileH + 6);
+  });
+
   test("enlarges the navbar crest and its light card, responsive on mobile", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
