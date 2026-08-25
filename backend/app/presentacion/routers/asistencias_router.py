@@ -4,6 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date
 
+from app.dominio.enums import DiaSemana
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
@@ -12,6 +13,7 @@ from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCorreccionResponseDTO,
     AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
+    PublicScheduleBlockDTO, PublicScheduleCategoryDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     UltimaListaDTO,
 )
@@ -49,6 +51,30 @@ def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[d
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
         )
+
+
+@router.get(
+    "/horarios-publicos",
+    response_model=List[PublicScheduleCategoryDTO],
+)
+def listar_horarios_publicos(db: Session = Depends(obtener_sesion)):
+    """Public landing catalog: only labels, days and time blocks are exposed."""
+    categorias = sorted(
+        AsistenciaServicio(db).listar_categorias(), key=lambda categoria: categoria.label,
+    )
+    return [
+        PublicScheduleCategoryDTO(
+            category=categoria.label,
+            blocks=[
+                PublicScheduleBlockDTO(
+                    days=sorted(categoria.dias, key=lambda dia: list(DiaSemana).index(dia)),
+                    start_time=categoria.hora_inicio.strftime("%H:%M"),
+                    end_time=categoria.hora_fin.strftime("%H:%M"),
+                )
+            ],
+        )
+        for categoria in categorias
+    ]
 
 
 # Catálogo de categorías (M1): el frontend lo consulta acá en vez de

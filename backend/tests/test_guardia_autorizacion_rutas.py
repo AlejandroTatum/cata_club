@@ -116,6 +116,7 @@ RUTAS_PUBLICAS = {
     ("GET", "/membresias/tarifas"),  # issue #394/#331: mitad pública del catálogo
                                       # de tarifas, misma clase que /personas/instituciones.
     ("GET", "/sponsors/"),
+    ("GET", "/asistencias/horarios-publicos"),  # public landing catalog, no internal data
     ("POST", "/auth/login"),
     ("POST", "/auth/recuperar-contrasenia"),
     ("POST", "/auth/refresh"),

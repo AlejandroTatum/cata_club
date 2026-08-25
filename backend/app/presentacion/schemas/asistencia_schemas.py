@@ -35,6 +35,19 @@ class HorarioResponseDTO(ResponseBase, HorarioCreateDTO):
     hora_fin: time
 
 
+class PublicScheduleBlockDTO(ResponseBase, BaseModel):
+    """A public landing block without identifiers or staff data."""
+    days: list[DiaSemana]
+    start_time: str
+    end_time: str
+
+
+class PublicScheduleCategoryDTO(ResponseBase, BaseModel):
+    """A public category grouped into its published time blocks."""
+    category: str
+    blocks: list[PublicScheduleBlockDTO]
+
+
 class CategoriaResponseDTO(ResponseBase, BaseModel):
     """Una fila de `categoria_horario`: el frontend la consulta acá en vez
     de espejarla a mano (ver `frontend/src/services/categorias.ts`)."""
