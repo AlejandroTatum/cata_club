@@ -120,14 +120,15 @@ test.describe("Landing page", () => {
       const nav = document.querySelector(".landing-navbar")!.getBoundingClientRect();
       return { height: box.height, navHeight: nav.height };
     });
-    // The crest card was 54px; it must grow while the 86px navbar keeps its shape.
-    expect(desktop.height).toBeGreaterThanOrEqual(64);
-    expect(desktop.navHeight).toBeLessThanOrEqual(90);
+    // Issue #636: the #605 crest bump (64px card / 90px navbar) still read as
+    // too small in review. This is the follow-up floor.
+    expect(desktop.height).toBeGreaterThanOrEqual(76);
+    expect(desktop.navHeight).toBeLessThanOrEqual(104);
 
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto("/");
     const mobile = await page.locator("a.landing-logo img").evaluate((img) => img.getBoundingClientRect().height);
-    expect(mobile).toBeGreaterThanOrEqual(48);
+    expect(mobile).toBeGreaterThanOrEqual(55);
     await expect(page.getByRole("link", { name: /cata club, inicio/i })).toBeVisible();
   });
 
@@ -146,6 +147,27 @@ test.describe("Landing page", () => {
 
       const crest = paddle.locator("img");
       await expect(crest).toBeVisible();
+
+      // The motto section sits far below the fold (its exact distance shifts
+      // with unmocked /api/schedules and /api/sponsors payload sizes and with
+      // the navbar's own height), and this crest has no `priority` prop, so
+      // the browser genuinely defers its fetch under native `loading="lazy"`
+      // until it nears the viewport — it never requests the asset at all
+      // otherwise. `toBeVisible` only asserts CSS visibility, not that a byte
+      // of image data has arrived, so naturalWidth/Height stayed 0 (an
+      // undefined-vs-undefined NaN in the ratio check) whenever the section
+      // happened to load far enough away not to intersect yet. Scroll it into
+      // view first, exactly like a real visitor would, then wait for the
+      // resulting fetch to actually finish decoding.
+      await crest.scrollIntoViewIfNeeded();
+      await crest.evaluate((img: HTMLImageElement) =>
+        img.complete && img.naturalWidth > 0
+          ? undefined
+          : new Promise<void>((resolve, reject) => {
+              img.addEventListener("load", () => resolve(), { once: true });
+              img.addEventListener("error", () => reject(new Error("crest image failed to load")), { once: true });
+            })
+      );
 
       const metrics = await crest.evaluate((img: HTMLImageElement) => {
         const box = img.getBoundingClientRect();
@@ -172,6 +194,96 @@ test.describe("Landing page", () => {
       // ...and stays legible rather than shrinking to a speck.
       expect(metrics.width).toBeGreaterThanOrEqual(metrics.paddleWidth * 0.6);
     }
+  });
+
+  test("gives the TENIS DE MESA / Cata Club wordmark more visual presence", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const desktopText = await page.locator("a.landing-logo").evaluate((el) => {
+      const small = el.querySelector("small")!;
+      return {
+        nameSize: parseFloat(getComputedStyle(el).fontSize),
+        kickerSize: parseFloat(getComputedStyle(small).fontSize),
+      };
+    });
+    // #605 shipped 17px / 10px; #636 asks for a further, visible bump.
+    expect(desktopText.nameSize).toBeGreaterThanOrEqual(20);
+    expect(desktopText.kickerSize).toBeGreaterThanOrEqual(12);
+
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto("/");
+    const mobileNameSize = await page
+      .locator("a.landing-logo")
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    // #605 shipped 14px on mobile; must also grow here.
+    expect(mobileNameSize).toBeGreaterThanOrEqual(16);
+  });
+
+  test("keeps the navbar collision- and overflow-free at every relevant breakpoint", async ({ page }) => {
+    for (const width of [1280, 1024, 900, 768, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      const nav = page.locator(".landing-navbar");
+      await expect(nav).toBeVisible();
+      const overflow = await nav.evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+
+      // The lockup, the link list, and the CTA must not overlap one another.
+      const boxes = await page.evaluate(() => {
+        const rectOf = (selector: string) => document.querySelector(selector)?.getBoundingClientRect() ?? null;
+        return {
+          logo: rectOf("a.landing-logo"),
+          links: rectOf(".landing-nav-links"),
+          cta: rectOf(".landing-nav-cta"),
+        };
+      });
+      expect(boxes.logo, `logo box at ${width}px`).not.toBeNull();
+      expect(boxes.cta, `cta box at ${width}px`).not.toBeNull();
+
+      // Flex-wrap legitimately stacks .landing-nav-links onto its own row at
+      // narrow widths, so overlap is a real 2D rectangle intersection, not a
+      // same-row left/right comparison.
+      const intersects = (a: DOMRect, b: DOMRect, tolerance = 1) =>
+        a.left < b.right - tolerance &&
+        a.right > b.left + tolerance &&
+        a.top < b.bottom - tolerance &&
+        a.bottom > b.top + tolerance;
+
+      if (boxes.logo && boxes.links && boxes.links.width > 0) {
+        expect(intersects(boxes.logo, boxes.links), `logo/links overlap at ${width}px`).toBe(false);
+      }
+      if (boxes.logo && boxes.cta) {
+        expect(intersects(boxes.logo, boxes.cta), `logo/cta overlap at ${width}px`).toBe(false);
+      }
+      if (boxes.links && boxes.cta && boxes.links.width > 0) {
+        expect(intersects(boxes.links, boxes.cta), `links/cta overlap at ${width}px`).toBe(false);
+      }
+    }
+  });
+
+  test("keeps the crest's aspect ratio while it scales up", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    const ratio = await page.locator("a.landing-logo img").evaluate((img) => {
+      const box = img.getBoundingClientRect();
+      return box.width / box.height;
+    });
+    // Square crest (620x620 source): must stay square, not stretched.
+    expect(ratio).toBeGreaterThanOrEqual(0.9);
+    expect(ratio).toBeLessThanOrEqual(1.1);
+  });
+
+  test("shows a visible, operable keyboard focus ring on the brand lockup link", async ({ page }) => {
+    await page.goto("/");
+    const logo = page.locator("a.landing-logo");
+    await logo.focus();
+    await expect(logo).toBeFocused();
+    const outline = await logo.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth) };
+    });
+    expect(outline.style).not.toBe("none");
+    expect(outline.width).toBeGreaterThan(0);
   });
 
   test("renders hero and navigates to login via CTA", async ({ page }) => {
