@@ -138,6 +138,13 @@ _VARIABLES_CRITICAS_DE_PRODUCCION: dict[str, tuple[str, ...]] = {
     "CLOUDINARY_CLOUD_NAME": ("CLOUDINARY_CLOUD_NAME",),
     "CLOUDINARY_API_KEY": ("CLOUDINARY_API_KEY",),
     "CLOUDINARY_API_SECRET": ("CLOUDINARY_API_SECRET",),
+    # `OPENCODE_API_KEY` no es crítica para arrancar -- el chatbot es opcional
+    # y `Settings` la excluye del fail-fast a propósito -- pero sí comparte la
+    # propiedad que este bloque protege: es la ÚNICA vía por la que la clave
+    # del proveedor llega al backend (issue #645). Si alguna vez quedara
+    # hardcodeada, el operador no tendría forma de suministrarla y
+    # `scripts/verificar_chatbot.py` reportaría `ausente` para siempre.
+    "OPENCODE_API_KEY": ("OPENCODE_API_KEY",),
 }
 
 # Un centinela por variable exportable por el operador, único para que una
@@ -193,6 +200,47 @@ def test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion(
         f"`${{{operador}}}` o `${{{operador}:?mensaje}}` en el overlay de "
         f"producción, o `${{{operador}:-default}}` en la base."
     )
+
+
+# ─── Ningún secreto vive dentro del repositorio ────────────────────────────
+
+ARCHIVOS_COMPOSE = (
+    "docker-compose.yml",
+    "docker-compose.override.yml",
+    "docker-compose.prod.yml",
+    "docker-compose.qa.yml",
+)
+
+# Una variable de entorno cuyo NOMBRE la declara secreta. No se buscan valores
+# con "forma de secreto" (eso es una heurística que falla en los dos sentidos):
+# se exige que toda variable así declarada sea una interpolación, nunca un
+# literal escrito en un archivo versionado.
+_NOMBRE_DE_SECRETO = re.compile(r"^\s*([A-Z0-9_]*(?:API_KEY|SECRET|PASSWORD|TOKEN)[A-Z0-9_]*):(.*)$")
+
+# `""` y vacío son literales permitidos: son la forma de APAGAR una credencial
+# (QA fuerza `SMTP_PASSWORD: ""` para no heredar el proveedor del operador).
+_LITERALES_PERMITIDOS = ("", '""', "''")
+
+
+@pytest.mark.parametrize("archivo", ARCHIVOS_COMPOSE)
+def test_ningun_archivo_de_compose_declara_un_secreto_literal(archivo):
+    """`docker compose config` imprime los valores YA interpolados, así que
+    mirar el render no distingue un secreto que puso el operador de uno que
+    quedó escrito en el repositorio. Lo que hay que fijar es la FUENTE: en los
+    cuatro archivos versionados, toda variable con nombre de secreto --
+    `OPENCODE_API_KEY` incluida (issue #645) -- tiene que venir de `${...}`.
+    Un literal acá es un secreto commiteado, y el guard de `.env` de CI no lo
+    ve porque no está en un `.env`."""
+    for numero, linea in enumerate((RAIZ / archivo).read_text().splitlines(), start=1):
+        coincidencia = _NOMBRE_DE_SECRETO.match(linea)
+        if coincidencia is None:
+            continue
+        variable, valor = coincidencia.group(1), coincidencia.group(2).strip()
+        assert "${" in valor or valor in _LITERALES_PERMITIDOS, (
+            f"{archivo}:{numero} declara '{variable}' con un valor literal "
+            f"({valor!r}) en vez de interpolarlo del entorno del operador. "
+            f"Un secreto no puede vivir en un archivo versionado."
+        )
 
 
 def test_el_overlay_de_produccion_exige_cors_origenes():
