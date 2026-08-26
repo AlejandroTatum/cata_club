@@ -160,11 +160,9 @@ class ChatbotServicio:
                 max_tokens=MAX_TOKENS_RESPUESTA,
                 messages=mensajes,
             )
-        # El orden importa: RateLimitError, APITimeoutError y APIConnectionError
-        # son todas subclases de APIError, así que van de lo más específico a lo
-        # más general. Antes se capturaban las cuatro en un solo `except` con un
-        # único 502, y el usuario no podía distinguir "esperá un momento" de
-        # "el asistente está caído" ni de "tardó demasiado".
+        # Las fallas conocidas del proveedor degradan a la FAQ local. Se conserva
+        # un catch explícito de las excepciones del SDK: errores de autenticación,
+        # seguridad o programación fuera de OpenAIError no se convierten en éxito.
         except (
             openai.RateLimitError,
             openai.APITimeoutError,
@@ -173,14 +171,6 @@ class ChatbotServicio:
             openai.OpenAIError,
         ):
             return self._respuesta_local(mensaje)
-        # Catch-all DELIBERADO y al final: `OpenAIError` es la base de las
-        # cuatro excepciones de arriba (todas la heredan vía `APIError`), así
-        # que acá abajo solo cae lo que ninguna de ellas cubre -- el caso real
-        # es la construcción del cliente sin credencial (issue #337), que no
-        # es un fallo de RED ni de RATE LIMIT sino de configuración. Mismo
-        # tratamiento (503, "no disponible") que `APIConnectionError`: para
-        # quien pregunta, "falta la API key" y "el proveedor no responde" son
-        # la misma experiencia -- el asistente no está ahí.
         return self._limpiar_markdown(respuesta.choices[0].message.content or "")
 
     @staticmethod
