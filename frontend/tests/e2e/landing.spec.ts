@@ -1063,8 +1063,8 @@ test.describe("Landing page", () => {
   /**
    * The unit suite proves the link is built from one constant. This proves the
    * page a visitor actually receives still carries that link intact — marker
-   * and viewport on the same point — and that the Coliseo is gone from the
-   * location copy in real rendered output, not just in jsdom.
+   * and viewport on the same point — and that the landmark and the Plus Code
+   * both survive into real rendered output, not just into jsdom.
    */
   test("hands out one directions link whose marker and viewport agree", async ({ page }) => {
     await page.goto("/");
@@ -1085,6 +1085,8 @@ test.describe("Landing page", () => {
     expect(Number(hashLatitude)).toBe(Number(latitude));
     expect(Number(hashLongitude)).toBe(Number(longitude));
 
-    await expect(page.locator(".landing-location")).not.toContainText(/coliseo/i);
+    const location = page.locator(".landing-location");
+    await expect(location).toContainText(/junto al Coliseo Ciudad de Loja/i);
+    await expect(location).toContainText("XQVW+J63, 110102 Loja");
   });
 });

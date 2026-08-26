@@ -7,14 +7,28 @@
  * a marker that disagrees with its viewport sends a visitor to the wrong block
  * without anything looking broken. They all read from here now.
  *
- * NOTE (#641): this pair is the club's own access point — the coordinate the
- * repository's location asset, `public/landing/location-map-reference.png`,
- * already marks. Re-orienting the map around the Plaza de la Independencia is
- * still open: no product source in this repository records a coordinate for
- * that plaza, and the issue forbids assuming one. The value below is therefore
- * unchanged and deliberately not a guess.
+ * The pair below is the centre of the cell the product owner's Plus Code
+ * resolves to — see `CLUB_PLUS_CODE`. It is not a surveyed point: eleven
+ * significant digits resolve to roughly three metres square, which is well
+ * inside what a map at this zoom can express, but it is the reason nothing
+ * here claims more precision than the code carries.
  */
-export const CLUB_POSITION: [number, number] = [-4.0056095, -79.2046238];
+export const CLUB_POSITION: [number, number] = [-4.0059875, -79.2044531];
+
+/**
+ * The club's address as the product owner supplies it (#641), verbatim.
+ *
+ * It is a *short* Open Location Code: meaningless without a reference
+ * locality, which is why the locality travels with it. Recovered against
+ * Loja, Ecuador it is the full code `6772XQVW+J63`, and that recovery is what
+ * `CLUB_POSITION` was derived from — the two are one fact, written twice for
+ * two audiences, and must be changed together.
+ *
+ * This also settles the open question in #641. The code lands on the club's
+ * own address, not on the Plaza de la Independencia, so the Coliseo Ciudad de
+ * Loja stays as the landmark the visible copy leans on.
+ */
+export const CLUB_PLUS_CODE = "XQVW+J63, 110102 Loja";
 
 /**
  * Zoom for the external link only. Leaflet's own zoom belongs to the embedded

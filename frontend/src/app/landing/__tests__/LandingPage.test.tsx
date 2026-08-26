@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clubOpenStreetMapUrl } from "@/app/landing/club-location";
+import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-location";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
@@ -644,25 +644,37 @@ describe("LandingPage", (): void => {
   });
 
   /**
-   * The Coliseo was the landmark the copy leaned on, and the product decision
-   * (#641) is that it is no longer the reference a visitor is given. Dropping
-   * it has to hold in the two places a visitor actually reads a direction —
-   * the address line and the arrival photo's alt text — not just one.
+   * The Coliseo is the landmark the product owner gives, and #641 resolved to
+   * the club being beside it (#647). It has to survive in the two places a
+   * visitor actually reads a direction — the address line and the arrival
+   * photo's alt text — so a sighted visitor and a screen-reader one are handed
+   * the same reference, not one each.
    */
-  it("stops naming the Coliseo as the nearest reference", (): void => {
+  it("keeps the Coliseo as the landmark in the copy and the arrival alt", (): void => {
     render(<LandingPage />);
 
     const location = document.querySelector(".landing-location");
     expect(location).not.toBeNull();
-    expect(location?.textContent ?? "").not.toMatch(/coliseo/i);
+    expect(location?.textContent ?? "").toMatch(/junto al Coliseo Ciudad de Loja/i);
 
     const alts = Array.from((location as HTMLElement).querySelectorAll("img")).map(
       (image): string => image.getAttribute("alt") ?? "",
     );
     expect(alts.length).toBeGreaterThan(0);
-    alts.forEach((alt): void => {
-      expect(alt).not.toMatch(/coliseo/i);
-    });
+    expect(alts.some((alt): boolean => /coliseo/i.test(alt))).toBe(true);
+  });
+
+  /**
+   * The street the club sits on carries no number, so the landmark is the only
+   * thing narrowing the address down — and a landmark is not an address. The
+   * Plus Code is, and it has to reach the page as text a visitor can copy into
+   * a maps app, not stay buried in the coordinate the map is centred on.
+   */
+  it("shows the club's Plus Code alongside the street address", (): void => {
+    render(<LandingPage />);
+
+    const location = document.querySelector(".landing-location");
+    expect(location?.textContent ?? "").toContain(CLUB_PLUS_CODE);
   });
 
   /**

@@ -78,7 +78,7 @@ export function buildLandingStats(now: Date = new Date()): LandingStat[] {
     // still strand the band at 0 whenever its trigger does not fire.
     { value: String(FOUNDING_DATE.year), label: "Desde el 10 de octubre" },
     { value: String(years), label: "Años formando deportistas" },
-    { value: "Loja", label: "Barrio Perpetuo Socorro" },
+    { value: "Loja", label: "Junto al Coliseo Ciudad de Loja" },
   ];
 }
 

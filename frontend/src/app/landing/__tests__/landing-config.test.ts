@@ -99,23 +99,17 @@ describe("buildLandingStats", (): void => {
   });
 
   /**
-   * The venue figure used to locate the club by the Coliseo, which is no
-   * longer the reference a visitor is given (#641). It still has to say
-   * *where*, so it falls back to the neighbourhood already carried by the
-   * club's own street address — not to a second landmark, which this
-   * repository has no source to confirm either.
+   * The stats band is read at a glance, well above the map, so its venue
+   * figure has to give the same landmark the address line does (#641). A band
+   * naming the neighbourhood while the copy below names the Coliseo would
+   * leave a visitor holding two references and no way to tell they are one.
    */
-  it("locates the venue by its own address rather than by the Coliseo", (): void => {
+  it("locates the venue by the same landmark the address line uses", (): void => {
     const stats = buildLandingStats(new Date(2026, 6, 25));
-    const labels = stats.map((stat): string => stat.label);
-
-    labels.forEach((label): void => {
-      expect(label).not.toMatch(/coliseo/i);
-    });
 
     const venue = stats.find((stat): boolean => stat.value === "Loja");
     expect(venue).toBeDefined();
-    expect(venue?.label).toBe("Barrio Perpetuo Socorro");
+    expect(venue?.label).toBe("Junto al Coliseo Ciudad de Loja");
   });
 });
 

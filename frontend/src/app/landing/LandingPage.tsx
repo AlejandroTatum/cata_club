@@ -24,7 +24,7 @@ import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
-import { clubOpenStreetMapUrl } from "./club-location";
+import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
 import { mapPublicSchedules } from "./schedule-data";
 
@@ -306,7 +306,7 @@ function Location(): React.ReactElement {
           <figure className="landing-map-inset">
             <Image
               src="/landing/photo-arrival.png"
-              alt="Entrada de Cata Club"
+              alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
               width={1600}
               height={1200}
               loading="lazy"
@@ -316,11 +316,12 @@ function Location(): React.ReactElement {
         </div>
         <aside className="landing-contact" data-reveal>
           <h3>Información de contacto</h3>
-          {/* The street address only. The Coliseo is no longer the landmark a
-              visitor is pointed at (#641), and the reference that replaces it
-              is not something this repository can confirm yet — so nothing
-              stands in its place rather than a guess standing in it. */}
-          <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador</span></p>
+          {/* Street address, landmark, and Plus Code, in that order: the way a
+              visitor narrows down a place. The Coliseo stays — it is the
+              reference the product owner gives, and #641 resolved to the club
+              being beside it, not near a plaza. The Plus Code closes the last
+              gap, since the street here carries no number. */}
+          <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</span></p>
           <p>
             <Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>WhatsApp</strong>
             <span className="landing-contact-numbers">

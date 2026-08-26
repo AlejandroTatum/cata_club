@@ -19,17 +19,20 @@ describe("home page metadata", (): void => {
 
   /**
    * The share card is a direction a visitor reads before the page even opens,
-   * so it has to agree with the location copy rather than keep pointing at a
-   * landmark the page itself has dropped (#641). It also must not put the club
-   * inside the Plaza de la Independencia — a claim no source here supports.
+   * so it has to carry the same landmark the location copy does (#641). It
+   * also must not put the club inside the Plaza de la Independencia — the
+   * supplied Plus Code lands on the club's own address, not on a plaza, and no
+   * source here supports that claim.
    */
-  it("describes the club without the Coliseo and without placing it in the plaza", async (): Promise<void> => {
+  it("names the Coliseo and never places the club inside the plaza", async (): Promise<void> => {
     const { metadata } = await import("@/app/page");
-    const described = [metadata.description, metadata.openGraph?.description];
 
-    described.forEach((copy): void => {
+    // Only the search description gives a direction. The openGraph card sells
+    // the club rather than locating it, so it is held to the plaza claim only.
+    expect(metadata.description).toMatch(/junto al Coliseo Ciudad de Loja/i);
+
+    [metadata.description, metadata.openGraph?.description].forEach((copy): void => {
       expect(copy).toBeTruthy();
-      expect(copy).not.toMatch(/coliseo/i);
       expect(copy).not.toMatch(/\b(en|dentro de|interior de)\s+la\s+plaza\b/i);
     });
   });
