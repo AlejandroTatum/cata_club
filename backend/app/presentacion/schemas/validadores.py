@@ -18,6 +18,7 @@ from typing import Annotated
 from pydantic import AfterValidator
 
 from app.dominio.cedula import es_cedula_valida
+from app.dominio.enums import TipoSangre
 from app.dominio.telefono import es_telefono_valido
 
 
@@ -42,6 +43,25 @@ def _validar_telefono(valor: str) -> str:
     return valor
 
 
+def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:
+    """Issue #643: `DESCONOCIDO` no es un tipo de sangre, es la ausencia de
+    uno.
+
+    Sigue existiendo en el enum, y tiene que seguir existiendo: las fichas
+    escritas antes de esta regla lo tienen grabado, y ninguna migración puede
+    reemplazarlo sin inventar el dato. Lo que deja de poder es ENTRAR. La
+    distinción vive acá, al lado de cédula y teléfono, por el mismo motivo que
+    ellas: es una regla de negocio, no un detalle de formato, y una sola copia
+    evita que cada DTO decida por su cuenta qué cuenta como tipo de sangre.
+    """
+    if valor is TipoSangre.DESCONOCIDO:
+        raise ValueError(
+            "Debe indicar el tipo de sangre: «No lo sé» no es una opción "
+            "válida para una ficha médica."
+        )
+    return valor
+
+
 def _validar_nombre(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El nombre es obligatorio.")
@@ -56,6 +76,10 @@ def _validar_apellido(valor: str) -> str:
 
 CedulaValidada = Annotated[str, AfterValidator(_validar_cedula)]
 TelefonoValidado = Annotated[str, AfterValidator(_validar_telefono)]
+# Issue #643. `TipoSangre` a secas sigue sirviendo para LEER una ficha
+# (`FichaMedicaResponseDTO`, `FichaEmergenciaResponseDTO`); este alias es el
+# que se usa para ESCRIBIR una.
+TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 # `PersonaUpdateDTO.nombres`/`apellidos` (issue #312, hallazgo #65): antes
 # dependían del `min_length=1` propio de `Field`, cuyo mensaje de rechazo
 # ("String should have at least 1 character") es inglés de Pydantic y nunca

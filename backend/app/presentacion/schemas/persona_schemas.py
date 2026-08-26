@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, model_validator
 from datetime import date, datetime
 from typing import Optional, List
 
@@ -12,6 +12,7 @@ from app.presentacion.schemas.validadores import (
     CedulaValidada,
     NombreValidado,
     TelefonoValidado,
+    TipoSangreValidado,
 )
 
 
@@ -160,23 +161,62 @@ class EnfermedadResponseDTO(ResponseBase, EnfermedadCreateDTO):
 
 
 class FichaMedicaCreateDTO(BaseModel):
-    tipo_sangre: TipoSangre
+    """Creación COMPLETA de una ficha médica (issue #643).
+
+    `tipo_sangre` y `telefono_emergencia` son obligatorios y validados: son los
+    dos datos que existen para una emergencia, y una ficha sin ellos parece
+    cargada sin serlo.
+
+    `contacto_emergencia` (el NOMBRE) sigue siendo opcional acá, a propósito.
+    El issue prohíbe volverlo obligatorio salvo que un flujo existente ya lo
+    exija; este no lo exigía. `EnrollmentFichaMedicaDTO` sí lo exigía desde
+    antes, y allá se conserva — la diferencia entre los dos DTOs es la
+    decisión, no un descuido.
+    """
+    tipo_sangre: TipoSangreValidado
     persona_id: int
     enfermedades: List[str] = Field(default_factory=list)  # nombres de enfermedades, opcional
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
-    telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
+    telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
 
 class FichaMedicaUpdateDTO(BaseModel):
-    """Todos los campos opcionales: PATCH parcial. Si `enfermedades` viene
-    presente, REEMPLAZA la lista completa (no hace merge/append) — es más
-    predecible para el frontend que un merge implícito."""
-    tipo_sangre: Optional[TipoSangre] = None
+    """PATCH parcial: todo campo es omitible. Si `enfermedades` viene presente,
+    REEMPLAZA la lista completa (no hace merge/append) — es más predecible para
+    el frontend que un merge implícito.
+
+    Issue #643 no convierte esto en un PUT. Sigue siendo legítimo mandar un
+    solo campo. Lo que se acota es qué VALORES puede tomar un campo cuando sí
+    viene:
+
+    - `tipo_sangre` presente no puede ser `DESCONOCIDO`.
+    - `telefono_emergencia` presente no puede ser `null`. FIC-5 introdujo el
+      `null` explícito como "borrá esto", y para alergias y contacto sigue
+      valiendo; para el teléfono no, porque borrarlo deja la ficha en el estado
+      exacto que esta regla prohíbe.
+
+    Que el RESULTADO de aplicar el parche sea una ficha válida no se decide
+    acá: este DTO solo ve el payload, no la fila. Eso lo hace
+    `FichaMedicaServicio.actualizar_por_persona`.
+    """
+    tipo_sangre: Optional[TipoSangreValidado] = None
     enfermedades: Optional[List[str]] = None
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
     telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
+
+    @model_validator(mode="after")
+    def _el_telefono_de_emergencia_no_se_borra(self) -> "FichaMedicaUpdateDTO":
+        # `model_fields_set` distingue "no vino" de "vino en null" — la misma
+        # distinción que `exclude_unset=True` hace en el servicio. Sin ella,
+        # omitir el campo (legítimo) y borrarlo (prohibido) se leerían igual.
+        if "telefono_emergencia" in self.model_fields_set and self.telefono_emergencia is None:
+            raise ValueError(
+                "El teléfono de emergencia no puede quedar vacío: es el "
+                "número al que el club llamaría en una emergencia."
+            )
+        return self
 
 
 class FichaMedicaResponseDTO(ResponseBase, BaseModel):
