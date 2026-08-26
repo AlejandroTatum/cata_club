@@ -1610,3 +1610,39 @@ class InscripcionIdempotencia(Base):
         default=lambda: _ahora_utc() + timedelta(hours=24),
         nullable=False,
     )
+
+
+class RecuperacionOutbox(Base):
+    __tablename__ = "recuperacion_outbox"
+    __table_args__ = (
+        Index("ix_recuperacion_outbox_pending_next", "status", "next_attempt_at"),
+        Index("ix_recuperacion_outbox_usuario_id", "usuario_id"),
+        Index(
+            "uq_recuperacion_outbox_usuario_activo",
+            "usuario_id",
+            unique=True,
+            postgresql_where=text("status IN ('PENDIENTE', 'ENVIANDO')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+    sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error_redacted: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    usuario: Mapped["Usuario"] = relationship()
