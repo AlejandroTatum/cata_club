@@ -965,12 +965,43 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
 });
 
 // ===========================================================================
-// M — Cómo se presentan los mensajes de error del servidor
+test.describe("S07 · idempotencia de reintentos", () => {
+        test("un reintento tras un fallo conserva la clave y permite el replay", async ({ page }) => {
+        await goToSummary(page);
+        let calls = 0;
+        let retryCookie = "";
+        await page.route("**/api/enrollment/", async (route: Route) => {
+          calls += 1;
+          const cookie = route.request().headers().cookie ?? "";
+          if (calls === 1) {
+            await route.fulfill({
+              status: 503,
+              contentType: "application/json",
+              headers: { "set-cookie": "enrollment_attempt_key=replay-key; Path=/api/enrollment; HttpOnly" },
+              body: JSON.stringify({ detail: "Servicio temporalmente no disponible." }),
+            });
+            return;
+          }
+          retryCookie = cookie;
+          await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ enrolled: true }) });
+        });
+        await page.getByRole("checkbox").check();
+        await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+        await expect(stepAlert(page)).toBeVisible();
+        await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+        await expect(page.getByRole("heading", { name: /inscripción completada/i })).toBeVisible({ timeout: 20_000 });
+        expect(calls).toBe(2);
+        expect(retryCookie).toContain("enrollment_attempt_key=replay-key");
+        await shot(page, "S07", "reintento-replay-idempotente");
+      });
+    });
+
+    // M — Cómo se presentan los mensajes de error del servidor
 //
 // No qué dicen —eso ya está en S03-S09— sino cómo llegan a la pantalla.
 // ===========================================================================
 
-test.describe("M · Presentación de los mensajes", () => {
+    test.describe("M · Presentación de los mensajes", () => {
   const DUPLICADO = "Ya existe una cuenta registrada con los datos ingresados.";
 
   async function fallarConDuplicado(page: Page): Promise<void> {
