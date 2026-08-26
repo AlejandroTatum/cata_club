@@ -435,6 +435,51 @@ describe("LandingPage", (): void => {
     expect(ball?.parentElement).toBe(hero);
   });
 
+  /**
+   * The paddle that produces the serve (issue #640).
+   *
+   * Two things are asserted together because either one alone would pass while
+   * the feature was broken. The paddle has to EXIST in the markup the server
+   * sends, since that markup is the whole composition whenever the motion layer
+   * never loads — the static state is not a degraded mode here, it is the hit
+   * frozen at the moment of contact. And it has to be the club's own paddle:
+   * the shape and the crest that `Motto` already renders (issue #642), not a
+   * second, generic mark drawn only for the hero.
+   *
+   * It is also asserted to be a direct child of the hero, exactly like the ball,
+   * because that shared positioning context is what lets one pair of CSS
+   * anchors keep the two on the same vertical axis.
+   */
+  it("stands the club's crested paddle under the hero's serve ball", (): void => {
+    render(<LandingPage />);
+
+    const hero = document.querySelector(".landing-hero") as HTMLElement;
+    const paddle = hero.querySelector("[data-serve-paddle]") as HTMLElement;
+
+    expect(document.querySelectorAll("[data-serve-paddle]")).toHaveLength(1);
+    expect(paddle).not.toBeNull();
+    expect(paddle).toHaveAttribute("aria-hidden", "true");
+    expect(paddle.parentElement).toBe(hero);
+
+    // The same shape class the Motto paddle uses, so the two cannot diverge.
+    expect(paddle.classList.contains("landing-paddle")).toBe(true);
+
+    const crest = paddle.querySelector(".landing-paddle-crest") as HTMLImageElement;
+    expect(crest).not.toBeNull();
+    expect(crest.getAttribute("src")).toBe("/brand/cata-club-logo-avatar.png");
+    // Decorative: the hero already names the club in text above it.
+    expect(crest.getAttribute("alt")).toBe("");
+  });
+
+  it("ships the paddle in the server markup, so the still composition needs no JS", (): void => {
+    const html = renderToStaticMarkup(<LandingPage />);
+
+    expect(html).toContain("data-serve-paddle");
+    expect(html).toContain("data-serve-ball");
+    expect(html).toContain("landing-paddle-crest");
+    expect(motionMount).not.toHaveBeenCalled();
+  });
+
   it("states the founding year in the hero note as 'Desde 2013', not 'Fundado en 2013'", (): void => {
     render(<LandingPage />);
 

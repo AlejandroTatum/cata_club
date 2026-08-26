@@ -144,8 +144,22 @@
 .landing-hero-screen-dots button { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); font-family: var(--font-landing-barlow), sans-serif; font-size: 12.5px; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
 .landing-hero-screen-dots button:hover { border-color: var(--landing-highlight); color: var(--landing-highlight); }
 .landing-hero-screen-dots button[aria-selected="true"] { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
-/* Visible at rest incl. reduced motion; playServe adds the bounce. */
-.landing-hero-serve-ball { position: absolute; right: clamp(28px, 8vw, 132px); bottom: clamp(26px, 5vw, 68px); z-index: 12; width: clamp(28px, 3vw, 38px); height: clamp(28px, 3vw, 38px); border: 2px solid color-mix(in srgb, var(--landing-brand-black) 38%, transparent); border-radius: 50%; background: var(--landing-surface); box-shadow: 0 7px 15px color-mix(in srgb, var(--landing-brand-black) 42%, transparent), inset -5px -5px 0 color-mix(in srgb, var(--landing-brand-black) 12%, transparent); pointer-events: none; will-change: transform; }
+/* The serve: a ball resting on the club's paddle, bottom-right of the hero.
+   ONE anchor drives both. The paddle sits on `--landing-serve-y`; the ball's
+   own offsets are derived from that same origin, so "beneath and on the same
+   axis" is arithmetic rather than two clamps that agree until one is edited.
+   Everything here is the pose at the moment of impact, which is also what a
+   visitor sees when the motion layer never loads — `playServe` animates away
+   from it and returns to it, and reduced motion simply keeps it. */
+.landing-hero { --landing-serve-x: clamp(28px, 8vw, 132px); --landing-serve-y: clamp(26px, 5vw, 68px); --landing-serve-ball: clamp(28px, 3vw, 38px); --landing-serve-face: clamp(46px, 5vw, 62px); --landing-serve-contact: 2px; }
+/* Centres line up because the ball is inset by half the difference in width. */
+.landing-hero-serve-ball { position: absolute; right: calc(var(--landing-serve-x) + (var(--landing-serve-face) - var(--landing-serve-ball)) / 2); bottom: calc(var(--landing-serve-y) + var(--landing-serve-face) - var(--landing-serve-contact)); z-index: 12; width: var(--landing-serve-ball); height: var(--landing-serve-ball); border: 2px solid color-mix(in srgb, var(--landing-brand-black) 38%, transparent); border-radius: 50%; background: var(--landing-surface); box-shadow: 0 7px 15px color-mix(in srgb, var(--landing-brand-black) 42%, transparent), inset -5px -5px 0 color-mix(in srgb, var(--landing-brand-black) 12%, transparent); pointer-events: none; will-change: transform; }
+/* Two classes deep on purpose: `.landing-paddle` further down owns the shape
+   and is a later rule, so a single class here would lose its own position,
+   width and height to it. The handle's offsets are the Motto paddle's exact
+   numbers rewritten as ratios of the face, so they hold at every hero size. */
+.landing-hero .landing-hero-serve-paddle { position: absolute; right: var(--landing-serve-x); bottom: var(--landing-serve-y); z-index: 11; width: var(--landing-serve-face); height: var(--landing-serve-face); pointer-events: none; will-change: transform; }
+.landing-hero .landing-hero-serve-paddle i { right: calc(var(--landing-serve-face) * -0.16); bottom: calc(var(--landing-serve-face) * -0.11); width: calc(var(--landing-serve-face) * 0.5); height: calc(var(--landing-serve-face) * 0.18); }
 
 .landing-stats { position: relative; display: flex; padding: 48px 8.33vw; overflow: hidden; background: var(--landing-surface); }
 .landing-stats::before, .landing-section:not(.landing-motto)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
@@ -507,4 +521,10 @@
   .landing-sponsors-track { animation: none; transform: none; }
   .landing-ticker-track { animation: none; transform: none; }
       .landing-motto [data-motto-paddle], .landing-motto [data-motto-copy], .landing-motto [data-motto-cta], .landing-motto .landing-stars { opacity: 1 !important; transform: none !important; }
+  /* The serve keeps its composition and loses only the movement: the ball
+     stays standing on a square paddle face, which is the frame the animation
+     exists to show. `playServe` never runs under this query, so this is the
+     guard for a transform left inline by a run that started before the
+     preference changed — author `!important` outbids GSAP's inline write. */
+  .landing-hero [data-serve-ball], .landing-hero [data-serve-paddle] { opacity: 1 !important; transform: none !important; }
 }

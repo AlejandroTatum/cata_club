@@ -100,6 +100,27 @@ function Hero(): React.ReactElement {
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
       <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
+      {/* The paddle that produces that serve. It reuses `.landing-paddle` and
+          `.landing-paddle-crest` — the exact shape and crest the Motto section
+          renders — so the hero borrows the club's own mark instead of adding a
+          second, generic one beside it. `landing.css` anchors the pair from a
+          single origin so they cannot be positioned apart, and
+          `landing-serve.ts` puts them on one timeline so they cannot fall out
+          of phase. At rest — JS never loaded, or reduced motion — the ball
+          standing square on the face IS the impact, so the still frame states
+          the same thing the animation does. */}
+      <span className="landing-paddle landing-hero-serve-paddle" aria-hidden="true" data-serve-paddle>
+        {/* 84 rather than the Motto paddle's 62, though CSS sizes this to ~46px:
+            these numbers pick the srcset, not the rendered box. At 62 the crest
+            asks the optimizer for `w=64`/`w=128` — a transform of a 340KB PNG
+            that nothing else above the fold needs. At 84 it asks for the exact
+            URLs the navbar lockup is already fetching, so the hero adds no new
+            above-the-fold image work at all, and the face gets a denser source
+            into the bargain. The Motto crest stays at 62: it is below the fold,
+            loads lazily, and blocks nothing. */}
+        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={84} height={84} />
+        <i />
+      </span>
       {/* No brand mark here. The navbar lockup sits directly above this copy
           and already names the club, so a second one only duplicated the
           identity and ate the vertical space the headline wants. `landing.css`

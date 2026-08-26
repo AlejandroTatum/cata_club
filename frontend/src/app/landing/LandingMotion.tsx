@@ -9,6 +9,7 @@ import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
 import { rallyCanPin, rallyFlowAnchorsPx, rallyHitIndex } from "./landing-rally";
 import type { RallyValueBox } from "./landing-rally";
+import { buildServeTimeline } from "./landing-serve";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
@@ -208,21 +209,25 @@ function enhanceTicker(track: HTMLElement): () => void {
   };
 }
 
-/* Independent decorative bounce for the hero's white ball; nothing else touches it. */
+/* The hero's serve: the white ball, and the paddle underneath that hits it.
+   Both halves share one repeating timeline built in `landing-serve.ts`, which
+   is where the phase lock between them is documented and asserted. Nothing
+   else on the page touches either element. */
 function playServe(): (() => void) | undefined {
   const serveBall = document.querySelector<HTMLElement>("[data-serve-ball]");
   if (!serveBall) return undefined;
+  const paddle = document.querySelector<HTMLElement>("[data-serve-paddle]");
 
-  gsap.set(serveBall, { opacity: 1, x: 0, y: 0, rotation: 0 });
-  const serve = gsap.to(serveBall, {
-    y: -86,
-    duration: 0.56,
-    ease: "sine.inOut",
-    repeat: -1,
-    yoyo: true,
-  });
+  const serve = buildServeTimeline(serveBall, paddle);
 
-  return (): void => { serve.kill(); };
+  return (): void => {
+    serve.kill();
+    /* Hand the pair back to the stylesheet rather than leaving them frozen
+       wherever the timeline stopped. Their CSS rest position is the moment of
+       impact — the same composition reduced motion gets — so a torn-down serve
+       still reads as a serve. */
+    gsap.set(paddle ? [serveBall, paddle] : serveBall, { clearProps: "transform" });
+  };
 }
 
 /* The rally lights the four Valores in turn as a ball scrubs along their guide.
