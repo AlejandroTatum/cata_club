@@ -86,6 +86,17 @@ describe("buildLandingStats", (): void => {
 
     expect(labels).not.toContain("Deportistas en formación");
   });
+
+  it("labels the founding date with 'Desde', never the retired 'Fundado' wording", (): void => {
+    const stats = buildLandingStats(new Date(2026, 6, 25));
+
+    stats.forEach((stat): void => {
+      expect(stat.label).not.toMatch(/fundad/i);
+    });
+    expect(stats.find((stat): boolean => stat.value === String(FOUNDING_DATE.year))?.label).toBe(
+      "Desde el 10 de octubre",
+    );
+  });
 });
 
 describe("deriveContactHours", (): void => {

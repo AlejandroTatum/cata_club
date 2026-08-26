@@ -33,7 +33,7 @@ const ECUADOR_COUNTRY_CODE = "593";
 
 /**
  * The club's founding date, as published on the landing since its first
- * release ("Fundado el 10 de octubre" / "desde 2013"). Every "years of
+ * release ("Desde el 10 de octubre" / "Desde 2013"). Every "years of
  * experience" figure is derived from this so it can never drift out of date.
  */
 export const FOUNDING_DATE = { year: 2013, month: 10, day: 10 } as const;
@@ -76,7 +76,7 @@ export function buildLandingStats(now: Date = new Date()): LandingStat[] {
     // Every figure is rendered statically. An odometer counting 0 → 2013 reads
     // as a bug, and a count-up on a two-digit number adds nothing while it can
     // still strand the band at 0 whenever its trigger does not fire.
-    { value: String(FOUNDING_DATE.year), label: "Fundado el 10 de octubre" },
+    { value: String(FOUNDING_DATE.year), label: "Desde el 10 de octubre" },
     { value: String(years), label: "Años formando deportistas" },
     { value: "Loja", label: "Junto al Coliseo Ciudad de Loja" },
   ];
