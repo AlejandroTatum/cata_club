@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clubOpenStreetMapUrl } from "@/app/landing/club-location";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
@@ -150,7 +151,7 @@ describe("LandingPage", (): void => {
   it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
     render(<LandingPage />);
 
-    const arrival = screen.getByRole("img", { name: /entrada de cata club junto al coliseo ciudad de loja/i });
+    const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
     expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.png");
     expect(arrival).toHaveAttribute("width", "1600");
     expect(arrival).toHaveAttribute("height", "1200");
@@ -631,6 +632,56 @@ describe("LandingPage", (): void => {
 
     const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
     expect(directions.className).toContain("landing-button-outline");
+  });
+
+  it("points the directions link at the shared club coordinate", (): void => {
+    render(<LandingPage />);
+
+    const contact = document.querySelector(".landing-contact");
+    const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
+
+    expect(directions).toHaveAttribute("href", clubOpenStreetMapUrl());
+  });
+
+  /**
+   * The Coliseo was the landmark the copy leaned on, and the product decision
+   * (#641) is that it is no longer the reference a visitor is given. Dropping
+   * it has to hold in the two places a visitor actually reads a direction —
+   * the address line and the arrival photo's alt text — not just one.
+   */
+  it("stops naming the Coliseo as the nearest reference", (): void => {
+    render(<LandingPage />);
+
+    const location = document.querySelector(".landing-location");
+    expect(location).not.toBeNull();
+    expect(location?.textContent ?? "").not.toMatch(/coliseo/i);
+
+    const alts = Array.from((location as HTMLElement).querySelectorAll("img")).map(
+      (image): string => image.getAttribute("alt") ?? "",
+    );
+    expect(alts.length).toBeGreaterThan(0);
+    alts.forEach((alt): void => {
+      expect(alt).not.toMatch(/coliseo/i);
+    });
+  });
+
+  /**
+   * Orienting a visitor from the Plaza de la Independencia is not the same
+   * claim as sitting inside it. The club does not, so no phrase may put it
+   * there — in the visible copy or in an alt a screen reader announces.
+   */
+  it("never claims the club sits inside the Plaza de la Independencia", (): void => {
+    render(<LandingPage />);
+
+    const location = document.querySelector(".landing-location") as HTMLElement;
+    const alts = Array.from(location.querySelectorAll("img")).map(
+      (image): string => image.getAttribute("alt") ?? "",
+    );
+    const claims = /\b(en|dentro de|interior de|adentro de)\s+la\s+plaza\b/i;
+
+    [location.textContent ?? "", ...alts].forEach((copy): void => {
+      expect(copy).not.toMatch(claims);
+    });
   });
 
   it("promotes the championship specifics into the visible gallery caption", (): void => {
