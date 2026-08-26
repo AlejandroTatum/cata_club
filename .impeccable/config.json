@@ -15,6 +15,24 @@
         ],
         "createdAt": "2026-07-26T16:58:39.422Z",
         "reason": "Two false positives in one test file: the next/image vitest mock renders a raw <img> whose src arrives via props at runtime, and an it() description contains the literal string '<img>' while asserting that NO img is rendered. Neither ships an image."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "*",
+        "files": [
+          "frontend/src/app/landing/landing.css"
+        ],
+        "createdAt": "2026-08-26T16:27:48.543Z",
+        "reason": "Landing is a separate visual system: its token set is colour-only (no size/radius/spacing tokens) and the file has been literal-based since inception. DESIGN.md's token-based ramp governs the product UI and carves the landing out explicitly."
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "*",
+        "files": [
+          "frontend/src/app/landing/landing.css"
+        ],
+        "createdAt": "2026-08-26T16:27:48.584Z",
+        "reason": "Landing is a separate visual system: no radius token exists to snap to. DESIGN.md's rounded scale governs the product UI, not the landing."
       }
     ]
   }
