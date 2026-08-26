@@ -166,11 +166,16 @@ class TestEnrollmentDTOs:
     def test_ficha_medica_rechaza_telefono_emergencia_invalido(self):
         with pytest.raises(ValidationError):
             EnrollmentFichaMedicaDTO(
+                tipo_sangre="O_POSITIVO",
                 contacto_emergencia="Tía Rosa", telefono_emergencia=TELEFONO_INVALIDO,
             )
 
     def test_ficha_medica_acepta_telefono_emergencia_valido(self):
+        # `tipo_sangre` explícito desde #643: este DTO ya no lo asume
+        # `DESCONOCIDO` cuando falta, así que omitirlo acá probaría el default
+        # que se eliminó en vez del teléfono que este test mira.
         EnrollmentFichaMedicaDTO(
+            tipo_sangre="O_POSITIVO",
             contacto_emergencia="Tía Rosa", telefono_emergencia=TELEFONO_VALIDO,
         )
 

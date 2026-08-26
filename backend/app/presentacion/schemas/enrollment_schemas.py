@@ -10,8 +10,12 @@ from pydantic import BaseModel, Field, EmailStr, model_validator
 from datetime import date
 from typing import Optional, List
 
-from app.dominio.enums import TipoSangre, NivelTecnicoAlumno, TipoManoDominante
-from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
+from app.dominio.enums import NivelTecnicoAlumno, TipoManoDominante
+from app.presentacion.schemas.validadores import (
+    CedulaValidada,
+    TelefonoValidado,
+    TipoSangreValidado,
+)
 
 
 class EnrollmentRepresentanteDTO(BaseModel):
@@ -50,8 +54,27 @@ class EnrollmentCredencialesDTO(BaseModel):
 
 
 class EnrollmentFichaMedicaDTO(BaseModel):
-    """Ficha médica del alumno (opcional). tipo_sangre default DESCONOCIDO."""
-    tipo_sangre: TipoSangre = TipoSangre.DESCONOCIDO
+    """Ficha médica del alumno.
+
+    El bloque entero sigue siendo opcional dentro del alta (`ficha_medica:
+    Optional[...]`): un alta puede no traer ficha. Lo que ya no puede es traer
+    una a medias — si viene, viene completa.
+
+    Issue #643: `tipo_sangre` tenía default `DESCONOCIDO`, así que un alta que
+    nunca eligió tipo de sangre quedaba grabada como si hubiera elegido «no lo
+    sé». Eso era una suposición del sistema presentada como un dato del
+    usuario. Ahora la ausencia se rechaza, y `DESCONOCIDO` también.
+
+    Este DTO lo consumen TRES caminos — `enrollment_servicio` (alta pública),
+    `persona_servicio` (representados) y `admin_cuenta_servicio` (alta por
+    admin) — así que la regla entra una vez y vale en los tres.
+
+    `contacto_emergencia` era obligatorio ACÁ desde antes de #643 y se
+    conserva: es la "necesidad ya establecida por el dominio" que el issue
+    manda respetar. En `FichaMedicaCreateDTO` sigue siendo opcional, y esa
+    diferencia es deliberada.
+    """
+    tipo_sangre: TipoSangreValidado
     enfermedades: List[str] = Field(default_factory=list)
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: str = Field(..., min_length=1, max_length=150)
