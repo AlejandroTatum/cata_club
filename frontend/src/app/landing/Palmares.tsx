@@ -95,7 +95,7 @@ export default function Palmares(): React.ReactElement {
   return (
     <section className="landing-section landing-wins" id="logros" data-motion-section data-testid="motion-section">
       <header className="landing-section-header" data-reveal>
-        <span className="landing-eyebrow">El palmarés</span>
+        <span className="landing-eyebrow">Nuestra vitrina</span>
         <h2>Logros</h2>
         <p>El registro del club: año, puesto, competencia y sede. La foto es la prueba, no el titular.</p>
       </header>

@@ -242,8 +242,9 @@ describe("LandingPage", (): void => {
     expect(main).not.toBeNull();
     const sections = Array.from(main?.querySelectorAll("section, header") ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
-    // The moving black ticker and the stats block ("Fundado en 2013") come
-    // BEFORE Horarios; the schedule is the third content block.
+    // The moving black ticker and the stats block ("Desde 2013" / "Desde el
+    // 10 de octubre") come BEFORE Horarios; the schedule is the third
+    // content block.
     expect(sections[1]?.classList.contains("landing-credentials-ticker")).toBe(true);
     expect(sections[2]?.classList.contains("landing-stats")).toBe(true);
     expect(sections[3]?.querySelector(".landing-sched")).not.toBeNull();
@@ -432,6 +433,20 @@ describe("LandingPage", (): void => {
     expect(ball).not.toBeNull();
     expect(ball).toHaveAttribute("aria-hidden", "true");
     expect(ball?.parentElement).toBe(hero);
+  });
+
+  it("states the founding year in the hero note as 'Desde 2013', not 'Fundado en 2013'", (): void => {
+    render(<LandingPage />);
+
+    const hero = document.querySelector(".landing-hero") as HTMLElement;
+    const note = hero.querySelector(".landing-hero-note");
+    expect(note).toHaveTextContent("Club deportivo formativo · Desde 2013");
+  });
+
+  it("never renders the retired 'Fundado' wording anywhere on the landing", (): void => {
+    const { container } = render(<LandingPage />);
+
+    expect(container).not.toHaveTextContent(/fundad/i);
   });
 
   // Progressive enhancement like the gallery: never assert GSAP internals.

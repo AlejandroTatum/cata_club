@@ -112,7 +112,7 @@ function Hero(): React.ReactElement {
           <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
           <a className="landing-button landing-button-outline" href="#horarios">Ver horarios</a>
         </div>
-        <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Fundado en 2013</span></div>
+        <div className="landing-hero-note"><Stars /><span>Club deportivo formativo · Desde 2013</span></div>
       </div>
       {/* 01/02/03 photo tab-carousel: a plain React state machine that stays
           fully usable without the GSAP motion layer. */}

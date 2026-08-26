@@ -121,4 +121,11 @@ describe("Palmares", (): void => {
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByRole("checkbox", { name: /datos de ejemplo/i })).toBeInTheDocument();
   });
+
+  it("labels the section eyebrow 'Nuestra vitrina', not the retired 'El palmarés'", (): void => {
+    const { container } = render(<Palmares />);
+
+    expect(screen.getByText("Nuestra vitrina")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("El palmarés");
+  });
 });
