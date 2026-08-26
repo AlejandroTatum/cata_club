@@ -74,7 +74,7 @@ function Navbar(): React.ReactElement {
   return (
     <nav className="landing-navbar" aria-label="Navegación principal">
       <a className="landing-logo" href="#inicio" aria-label="Cata Club, inicio">
-        <Image src="/brand/cata-club-logo-avatar.png" alt="" width={62} height={62} />
+        <Image src="/brand/cata-club-logo-avatar.png" alt="" width={84} height={84} />
         <span className="landing-display"><small>TENIS DE MESA</small>Cata Club</span>
       </a>
       <div className="landing-nav-links">
