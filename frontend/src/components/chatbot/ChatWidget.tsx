@@ -107,11 +107,257 @@ function mensajeDeError(error: unknown): string {
 const BUBBLE_BASE =
   "max-w-[86%] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm";
 
+/**
+ * When the panel is a sheet rather than the corner card.
+ *
+ * The first clause is Tailwind's `sm` prefix inverted (`sm` is `min-width:
+ * 640px`, so everything it does not reach is `max-width: 639.98px`) and it is
+ * the phone held upright.
+ *
+ * The second clause is that same phone turned sideways, and it is not
+ * redundant: a 390x844 device in landscape is 844 CSS pixels WIDE, so the
+ * width clause hands it back to a corner card that is capped at `72vh` — 281px
+ * of panel on a 390px-tall screen, and perhaps 130px once the keyboard is up.
+ * Short-and-landscape is exactly where the sheet is worth most.
+ *
+ * `pointer: coarse` is what keeps that second clause off a desktop: a browser
+ * window dragged down to 1440x450 is also short and also landscape, and it has
+ * a mouse. Nothing with a fine pointer ever becomes a sheet.
+ *
+ * Read through `matchMedia` and not through `window.innerWidth`, because
+ * `innerWidth` is the visual viewport under pinch-zoom while the CSS
+ * breakpoint is not — a panel whose JavaScript and whose stylesheet disagreed
+ * about which shape it is would trap focus inside a 340px corner card.
+ *
+ * Exported for the tests: jsdom answers `false` to every media query, so the
+ * sheet can only be put under test by a stub that answers this exact string.
+ */
+export const SHEET_MEDIA_QUERY =
+  "(max-width: 639.98px), (max-height: 479.98px) and (pointer: coarse)";
+
+/** Everything inside the panel a browser will let the user Tab to. */
+const FOCUSABLE_SELECTOR =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),' +
+  'textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 /** `.quick` — 32px pill. */
 const QUICK_REPLY =
   "inline-flex h-ctl-sm items-center rounded-full border border-line-2 bg-paper px-3 " +
   "text-xs font-semibold text-ink-2 transition-colors hover:border-ink-3 hover:text-ink " +
   `${ASSISTANT_FOCUS_RING} disabled:cursor-not-allowed disabled:opacity-45`;
+
+/**
+ * Which of the two panels this is.
+ *
+ * ONE answer drives everything — the classes, `aria-modal`, the focus trap and
+ * the body scroll lock. The first draft split it: Tailwind's `sm:` prefix
+ * carried the geometry and this boolean carried the behaviour, and the two
+ * disagreed the moment `SHEET_MEDIA_QUERY` grew its landscape clause. A phone
+ * on its side was then a 340px corner card that had trapped focus and stopped
+ * the page scrolling. A breakpoint written down twice is a breakpoint that will
+ * be edited once.
+ *
+ * The initial value is read eagerly rather than left `false` until an effect
+ * runs, so the sheet is a sheet on its first paint and never flashes the card.
+ * That is safe here even though it reads the browser during render: the panel
+ * returns `null` while closed, it can only open from a click, and hydration
+ * therefore always compares `null` against `null`.
+ */
+function useSheetPresentation(): boolean {
+  const [isSheet, setIsSheet] = useState(matchesSheet);
+
+  useEffect((): undefined | (() => void) => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const query = window.matchMedia(SHEET_MEDIA_QUERY);
+    const sync = (): void => setIsSheet(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return (): void => query.removeEventListener("change", sync);
+  }, []);
+
+  return isSheet;
+}
+
+function matchesSheet(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(SHEET_MEDIA_QUERY).matches;
+}
+
+interface SheetGeometry {
+  /** Where the visible area starts inside the layout viewport. */
+  top: number;
+  /** How tall the visible area is right now. */
+  height: number;
+  /** How much of the layout viewport the virtual keyboard is eating. */
+  keyboardInset: number;
+}
+
+/**
+ * The sheet's box, measured from `visualViewport` rather than assumed.
+ *
+ * `100vh` — and `100%`, and `inset-0` — are the LAYOUT viewport, which on a
+ * phone browser is deliberately not what the user can see: it stays tall behind
+ * a collapsed URL bar, and it does not move at all when the virtual keyboard
+ * opens. A sheet sized to it puts its own composer under the keys, which is the
+ * exact complaint in #644. `100dvh` fixes the URL bar and still says nothing
+ * about the keyboard.
+ *
+ * `visualViewport` is the only surface that answers both questions, so the two
+ * numbers it gives — `offsetTop` and `height` — become the sheet's `top` and
+ * `height`, republished as CSS variables so the `sm:` breakpoint can still
+ * override them (an inline style cannot carry a media query, a variable it
+ * reads can be left unread).
+ */
+function useSheetGeometry(active: boolean): SheetGeometry | null {
+  const [geometry, setGeometry] = useState<SheetGeometry | null>(null);
+
+  useEffect((): undefined | (() => void) => {
+    if (!active) {
+      setGeometry(null);
+      return undefined;
+    }
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    function measure(): void {
+      const visible = viewport as VisualViewport;
+      const top = Math.max(0, visible.offsetTop);
+      setGeometry({
+        top,
+        height: visible.height,
+        // What is left of the layout viewport once the visible area and the
+        // offset above it are accounted for: on a phone that is the keyboard.
+        keyboardInset: Math.max(0, window.innerHeight - visible.height - top),
+      });
+    }
+
+    measure();
+    viewport.addEventListener("resize", measure);
+    viewport.addEventListener("scroll", measure);
+    return (): void => {
+      viewport.removeEventListener("resize", measure);
+      viewport.removeEventListener("scroll", measure);
+    };
+  }, [active]);
+
+  return geometry;
+}
+
+/**
+ * Stop the page scrolling behind the sheet — and only behind the sheet.
+ *
+ * The previous value is restored rather than cleared, so this composes with
+ * anything else that had already locked the body (a modal that opened the
+ * assistant from inside itself, for one).
+ */
+function useBodyScrollLock(locked: boolean): void {
+  useEffect((): undefined | (() => void) => {
+    if (!locked) return undefined;
+    const { body } = document;
+    const previous = body.style.overflow;
+    body.style.overflow = "hidden";
+    return (): void => {
+      body.style.overflow = previous;
+    };
+  }, [locked]);
+}
+
+/** The classes that differ between the two panels, and only those. */
+interface PanelSkin {
+  panel: string;
+  header: string;
+  close: string;
+  history: string;
+  form: string;
+  input: string;
+  send: string;
+}
+
+/**
+ * The corner card, unchanged.
+ *
+ * Every string here is the one that shipped before #644, character for
+ * character. That is the whole "desktop is untouched" claim, and it is
+ * asserted as an exact match in `ChatWidget.test.tsx` — a claim written in a
+ * comment is a claim nobody can check.
+ */
+const CARD: PanelSkin = {
+  panel:
+    "fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] " +
+    "w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated " +
+    "lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]",
+  header:
+    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] py-3 text-ink",
+  close: "shrink-0 rounded-lg p-1 text-ink-3 transition-colors hover:bg-paper hover:text-ink",
+  history: "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]",
+  form: "flex flex-none items-center gap-2 border-t border-line p-3",
+  input:
+    "h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink " +
+    "transition-colors placeholder:text-ink-3 focus:border-cata-red " +
+    "disabled:cursor-not-allowed disabled:opacity-50",
+  send:
+    "flex h-ctl w-10 flex-none items-center justify-center rounded-ctl bg-cata-red text-white " +
+    "transition-colors hover:bg-cata-red-dark",
+};
+
+/**
+ * The sheet: the panel IS the screen.
+ *
+ * Pinned to the VISUAL viewport rather than to `100vh`, square-cornered, inset
+ * from the notch on both sides, and with a composer sized for a thumb. `card`
+ * stays — it is the `@layer components` class that carries the surface — while
+ * `rounded-none` and `border-0` overrule its radius and hairline from the
+ * utilities layer, which sits above components in the cascade.
+ */
+const SHEET: PanelSkin = {
+  panel:
+    "fixed inset-x-0 top-[var(--chat-sheet-top,0px)] z-40 flex " +
+    "h-[var(--chat-sheet-height,100dvh)] flex-col card overflow-hidden rounded-none border-0 " +
+    "text-left pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]",
+  // The sheet's top edge IS the top of the screen, so the header clears the
+  // status bar itself; the card never touched a safe area.
+  header:
+    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] pb-3 " +
+    "pt-[max(0.75rem,env(safe-area-inset-top))] text-ink",
+  // 44x44 — the touch-target floor in `docs/ux/objetivo-tactil.md`, which a
+  // 15px glyph in 4px of padding (23px square) was half of.
+  close:
+    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-3 " +
+    "transition-colors hover:bg-paper hover:text-ink",
+  // `min-h-0` instead of the 250px floor: a flex child will not shrink below
+  // its content without it, so with the keyboard open the column overflowed a
+  // panel that is `overflow-hidden` and took the composer off screen with it.
+  // `overscroll-contain` keeps a flick at the top of the history from
+  // scrolling the page behind.
+  history:
+    "flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-canvas p-[15px]",
+  // Clear of the home indicator — but not on top of the keyboard, which has
+  // already taken that space: `max(12px, safe-area − keyboard)` collapses back
+  // to the ordinary padding while typing.
+  form:
+    "flex flex-none items-center gap-2 border-t border-line p-3 " +
+    "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)_-_var(--chat-keyboard-inset,0px)))]",
+  // `text-lg`, and the reason is the platform rather than the type system:
+  // mobile Safari zooms the page whenever a focused field is under 16px, and
+  // that zoom is the "escribir resulta incómodo" in #644 — it magnifies the
+  // sheet past the screen edge and never zooms back out. `maximum-scale=1`
+  // would also stop it and would break pinch-zoom for everyone, which is
+  // WCAG 1.4.4, so the field has to carry the floor itself.
+  //
+  // 16px is not a step on this ramp: `text-sm` is 13.5 and `text-base` is 15,
+  // both under the threshold, and `text-lg` (20px) is the smallest step at or
+  // above it. A literal `text-[16px]` would clear the threshold by less, and
+  // `arbitrary-style-values.test.ts` forbids it — the typography allowlist was
+  // emptied on purpose and reopening it for one field is how it refills. A
+  // named step it is.
+  input:
+    "h-12 min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-lg " +
+    "text-ink transition-colors placeholder:text-ink-3 focus:border-cata-red " +
+    "disabled:cursor-not-allowed disabled:opacity-50",
+  send:
+    "flex h-12 w-12 flex-none items-center justify-center rounded-ctl bg-cata-red text-white " +
+    "transition-colors hover:bg-cata-red-dark",
+};
 
 export interface ChatWidgetProps {
   /** Whether the panel is visible. Owned by the host (see `AppShell`). */
@@ -143,6 +389,11 @@ export default function ChatWidget({
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const isSheet = useSheetPresentation();
+  const skin = isSheet ? SHEET : CARD;
+  const sheet = useSheetGeometry(open && isSheet);
+  useBodyScrollLock(open && isSheet);
 
   // Opening moves focus into the panel. Without it the panel appears but the
   // caret stays on whatever trigger was clicked — which, now that the trigger
@@ -199,15 +450,58 @@ export default function ChatWidget({
     void enviarTexto(borrador);
   }
 
+  /**
+   * The focus trap, and the whole of it.
+   *
+   * This panel is a `<div role="dialog">`, not a native `<dialog>`, so nothing
+   * underneath keeps Tab inside it — the wrapping IS this handler. It only
+   * arms in the sheet, where the panel covers the page: trapping focus inside
+   * a 340px corner card that leaves two thirds of the screen usable would
+   * strand a keyboard user in it.
+   */
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (!isSheet || event.key !== "Tab") return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    const inside = active instanceof HTMLElement && panel.contains(active);
+
+    // `!inside` on both branches: focus can leave through a click on the page
+    // behind, and the next Tab has to come back rather than resume from the
+    // top of the document.
+    if (event.shiftKey ? !inside || active === first : !inside || active === last) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
+  }
+
   if (!open) return null;
 
   return (
     <div
+      ref={panelRef}
       role="dialog"
-      aria-modal="false"
+      /* A sheet owns the screen, so it says so and traps focus; the corner
+         card does neither, exactly as before. */
+      aria-modal={isSheet}
+      onKeyDown={handleKeyDown}
+      style={
+        sheet
+          ? ({
+              "--chat-sheet-top": `${sheet.top}px`,
+              "--chat-sheet-height": `${sheet.height}px`,
+              "--chat-keyboard-inset": `${sheet.keyboardInset}px`,
+            } as React.CSSProperties)
+          : undefined
+      }
       aria-label={`${BOT_NAME}, asistente del club`}
-      /* Lifted clear of the phone tab bar (62px + breathing room); back to the
-         corner from `lg` up, where the tab bar is not rendered. */
+      /* From `sm` up: lifted clear of the phone tab bar (62px + breathing
+         room); back to the corner from `lg` up, where it is not rendered. */
       /* `text-left` is not decoration: the panel is rendered as a sibling of
          whatever trigger opened it, so a centred host (AuthShell's small
          print) was centring every message bubble inside it. */
@@ -222,10 +516,10 @@ export default function ChatWidget({
          `shadow-card` before. Naming the intent is still worth it; making the
          intent win is a separate change to that shared rule, and it would
          move every card in the product. */
-      className="fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]"
+      className={skin.panel}
     >
       {/* `.chat > header` — white, avatar disc, "Responde en segundos". */}
-      <header className="flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] py-3 text-ink">
+      <header className={skin.header}>
         {/*
           `sizes="96px"`, not the 32px layout box: `sizes` is CSS pixels, so
           asking for 32 would make Next serve a 32-pixel-wide file and a 2x or
@@ -262,7 +556,7 @@ export default function ChatWidget({
           type="button"
           onClick={onClose}
           aria-label={`Cerrar ${BOT_NAME}`}
-          className={`shrink-0 rounded-lg p-1 text-ink-3 transition-colors hover:bg-paper hover:text-ink ${ASSISTANT_FOCUS_RING}`}
+          className={`${skin.close} ${ASSISTANT_FOCUS_RING}`}
         >
           <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
@@ -271,7 +565,7 @@ export default function ChatWidget({
       {/* `.chat .msgs` */}
       <div
         ref={listRef}
-        className="flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]"
+        className={skin.history}
       >
         {mensajes.length === 0 && (
           <p className={`${BUBBLE_BASE} self-start rounded-bl-[4px] bg-state-neutral-bg text-ink-2`}>
@@ -373,7 +667,7 @@ export default function ChatWidget({
       </div>
 
       {/* `.chat .inputrow` — 40px field, 40px red send button. */}
-      <form onSubmit={handleSubmit} className="flex flex-none items-center gap-2 border-t border-line p-3">
+      <form onSubmit={handleSubmit} className={skin.form}>
         <input
           ref={inputRef}
           type="text"
@@ -382,7 +676,8 @@ export default function ChatWidget({
           placeholder="Escriba su pregunta…"
           aria-label={`Mensaje para ${BOT_NAME}`}
           disabled={enviando}
-          className="h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink transition-colors placeholder:text-ink-3 focus:border-cata-red disabled:cursor-not-allowed disabled:opacity-50"
+          enterKeyHint="send"
+          className={skin.input}
         />
         <button
           type="submit"
@@ -391,7 +686,7 @@ export default function ChatWidget({
           /* `outline-ball` used to draw this ring. #FFD600 is 1.42:1 on the
              panel's white footer — a focus indicator that fails 2.4.11 by a
              factor of two. See `chat-focus-ring.ts`. */
-          className={`flex h-ctl w-10 flex-none items-center justify-center rounded-ctl bg-cata-red text-white transition-colors hover:bg-cata-red-dark ${ASSISTANT_FOCUS_RING} disabled:cursor-not-allowed disabled:opacity-45`}
+          className={`${skin.send} ${ASSISTANT_FOCUS_RING} disabled:cursor-not-allowed disabled:opacity-45`}
         >
           <Send size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </button>
