@@ -219,10 +219,46 @@ test.describe("Landing page", () => {
     expect(mobileNameSize).toBeGreaterThanOrEqual(16);
   });
 
+  /**
+   * Five breakpoints, ONE page load (issue #668).
+   *
+   * This test used to re-`goto("/")` inside the loop, so a single 30s budget
+   * had to cover five complete page loads. That fits on a warm laptop with one
+   * worker and does not fit on a 4-vCPU runner with four; CI failed here on
+   * both the first attempt and the retry, on more than one commit, while every
+   * other test passed. The budget was never the navbar's problem — it was the
+   * five loads.
+   *
+   * Dropping four of them is only legitimate if the layout genuinely
+   * re-evaluates on a viewport change alone, so that was measured rather than
+   * assumed. The navbar is static markup styled entirely by CSS — media
+   * queries at 1024px and 768px plus `vw` padding and a `clamp()` crest — with
+   * no JS that reads the width. Sampling every breakpoint both ways produced
+   * byte-identical results, down to sub-pixel box geometry, and five samples
+   * that differ from one another: `flex-wrap` nowrap→wrap, `order` 0→3,
+   * padding 71.04→32→16px, nav height 100→145→179.5px, link font 15→12px.
+   * Reload and resize see the same layout; resize alone still sees five
+   * different ones.
+   *
+   * Widest → narrowest for the same reason it always was: it reads as the
+   * layout progressively giving way. Order is not load-bearing — the reverse
+   * sweep measured identically — and the viewport is set before the load so
+   * the first measurement is of a freshly loaded page, not a resized one.
+   */
   test("keeps the navbar collision- and overflow-free at every relevant breakpoint", async ({ page }) => {
-    for (const width of [1280, 1024, 900, 768, 390]) {
+    const widths = [1280, 1024, 900, 768, 390];
+    await page.setViewportSize({ width: widths[0], height: 900 });
+    await page.goto("/");
+    // Web fonts change every text metric under test, and `load` does not wait
+    // for them. With one load there is one chance to get this right.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+
+    for (const width of widths) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto("/");
+      // A resize is applied at the next frame; measure after it has painted.
+      await page.evaluate(
+        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+      );
       const nav = page.locator(".landing-navbar");
       await expect(nav).toBeVisible();
       const overflow = await nav.evaluate((el) => el.scrollWidth - el.clientWidth);
