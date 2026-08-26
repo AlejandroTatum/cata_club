@@ -347,8 +347,8 @@
    the real published times, so the picture cannot drift from the data. */
 .landing-day { display: flex; flex-direction: column; gap: 10px; }
 .landing-day-track { display: flex; flex-direction: column; gap: 8px; }
-.landing-day-row { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 12px; align-items: center; }
-.landing-day-row > b { color: var(--landing-text-muted); font-size: 11px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; }
+.landing-day-row { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 14px; align-items: center; }
+.landing-day-row > b { color: var(--landing-text-muted); font-size: 11px; font-weight: 800; letter-spacing: 1px; line-height: 1; text-transform: uppercase; white-space: nowrap; }
 .landing-day-lane { position: relative; height: 46px; border-radius: 10px; background: color-mix(in srgb, var(--landing-brand-black) 5%, transparent); overflow: hidden; }
 /* No text inside the bars: the lane answers WHEN, the list answers WHAT. */
 .landing-day-bar { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; background: color-mix(in srgb, var(--landing-cat, var(--landing-action)) 22%, transparent); transition: background-color 300ms ease, box-shadow 300ms ease; }
@@ -468,6 +468,7 @@
   .landing-editorial-item { grid-template-columns: 1fr; gap: 26px; }
   .landing-sched { grid-template-columns: 1fr; gap: 30px; }
   .landing-sched-panel { padding: 26px; }
+      .landing-day-row { grid-template-columns: 82px minmax(0, 1fr); gap: 10px; }
   .landing-editorial-item { padding-right: 0; }
   .landing-editorial-item + .landing-editorial-item { margin-top: 34px; padding-top: 34px; padding-left: 0; border-top: 1px solid var(--landing-border); border-left: 0; }
   .landing-motto { padding-inline: 28px; }
