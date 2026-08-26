@@ -360,9 +360,11 @@ export default function HelpChatDock(): React.ReactElement {
 
   const handleClose = useCallback((): void => closeHelpChat(), []);
 
-  // Escape closes the panel from anywhere inside it. The panel is
-  // `aria-modal="false"` on purpose — it does not trap focus — so this is a
-  // document-level listener rather than a dialog-scoped one.
+  // Escape closes the panel from anywhere inside it, and — below `sm`, where
+  // the panel is a sheet that traps Tab — it is the only way out that does not
+  // need the close button. Document-level rather than dialog-scoped because
+  // the corner card from `sm` up is `aria-modal="false"` and leaves focus free
+  // to wander onto the page behind it.
   useEffect((): undefined | (() => void) => {
     if (!open) return undefined;
     function handleKeyDown(event: KeyboardEvent): void {

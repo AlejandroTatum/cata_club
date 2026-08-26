@@ -12,8 +12,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react";
-import ChatWidget from "@/components/chatbot/ChatWidget";
+import { render, screen, fireEvent, waitFor, within, cleanup, act } from "@testing-library/react";
+import ChatWidget, { SHEET_MEDIA_QUERY } from "@/components/chatbot/ChatWidget";
 import { getQuickReplies } from "@/components/chatbot/chat-quick-replies";
 
 // `src` and `className` are forwarded, not dropped: which asset the header
@@ -355,5 +355,399 @@ describe("getQuickReplies", () => {
     const studentPrompts = getQuickReplies("estudiante");
     expect(studentPrompts).not.toContain("¿Quién define los horarios?");
     expect(studentPrompts).not.toContain("¿Cómo valido un pago?");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #644 — the panel on a phone.
+//
+// The panel used to be one shape everywhere: a 340px card parked 74px off the
+// bottom-right corner, capped at `72vh`. On a phone that is a card floating
+// over a page you can no longer read, with a 23px close button, a 14px field
+// the browser zooms into on focus, and nothing at all between the composer and
+// the virtual keyboard. Below `sm` it is now a sheet that fills the VISUAL
+// viewport.
+//
+// ## What jsdom can and cannot prove here
+//
+// jsdom has no layout, no CSS media evaluation, no visual viewport and no
+// native focus movement. So this file:
+//
+//   · asserts the CLASSES that carry the geometry, which is structural — it
+//     proves the panel asks for the right box, not that the browser drew it.
+//     `tests/e2e/chatbot-mobile-panel.spec.ts` measures the real box.
+//   · drives a FAKE `visualViewport`, which is a real test of the component's
+//     own listeners and arithmetic: the numbers it publishes as CSS variables
+//     are the numbers a phone would produce.
+//   · tests the focus trap through the component's OWN key handler, which is
+//     the whole trap — this panel is a `<div role="dialog">`, not a native
+//     `<dialog>`, so there is no browser behaviour underneath it that jsdom
+//     could be faking. Forward and backward wrapping are asserted onto two
+//     DIFFERENT named controls, because a wrap test whose two directions land
+//     on the same element passes against a handler that ignores `shiftKey`.
+// ---------------------------------------------------------------------------
+
+interface FakeViewport {
+  /** Turn the phone: a new layout viewport, re-evaluated media queries. */
+  rotate: (width: number, height: number) => void;
+  /** The visual viewport shrinking, which is all a virtual keyboard is to CSS. */
+  resizeVisual: (visualHeight: number, offsetTop?: number) => void;
+}
+
+/**
+ * Stand a fake layout + visual viewport up around the component.
+ *
+ * `matchMedia` is stubbed rather than left to jsdom, which answers `false` to
+ * every query: without this the sheet could never be under test at all.
+ */
+function installViewport(
+  width: number,
+  height: number,
+  { coarsePointer = true }: { coarsePointer?: boolean } = {},
+): FakeViewport {
+  const state = { width, height, visualHeight: height, offsetTop: 0 };
+  const mediaListeners = new Set<() => void>();
+  const viewportListeners = new Set<() => void>();
+
+  vi.stubGlobal("visualViewport", {
+    get width(): number {
+      return state.width;
+    },
+    get height(): number {
+      return state.visualHeight;
+    },
+    get offsetTop(): number {
+      return state.offsetTop;
+    },
+    addEventListener: (_type: string, fn: () => void): void => void viewportListeners.add(fn),
+    removeEventListener: (_type: string, fn: () => void): void => void viewportListeners.delete(fn),
+  });
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    media: query,
+    get matches(): boolean {
+      // The two clauses of `SHEET_MEDIA_QUERY`, evaluated by hand because
+      // jsdom evaluates none: narrow, or short with a coarse pointer.
+      if (query !== SHEET_MEDIA_QUERY) return false;
+      return state.width <= 639 || (state.height <= 479 && coarsePointer);
+    },
+    addEventListener: (_type: string, fn: () => void): void => void mediaListeners.add(fn),
+    removeEventListener: (_type: string, fn: () => void): void => void mediaListeners.delete(fn),
+  }));
+  const publishSize = (): void => {
+    vi.stubGlobal("innerWidth", state.width);
+    vi.stubGlobal("innerHeight", state.height);
+  };
+  publishSize();
+
+  return {
+    rotate: (nextWidth: number, nextHeight: number): void => {
+      state.width = nextWidth;
+      state.height = nextHeight;
+      state.visualHeight = nextHeight;
+      state.offsetTop = 0;
+      publishSize();
+      act((): void => {
+        for (const fn of mediaListeners) fn();
+        for (const fn of viewportListeners) fn();
+      });
+    },
+    resizeVisual: (visualHeight: number, offsetTop = 0): void => {
+      state.visualHeight = visualHeight;
+      state.offsetTop = offsetTop;
+      act((): void => {
+        for (const fn of viewportListeners) fn();
+      });
+    },
+  };
+}
+
+function panel(): HTMLElement {
+  return screen.getByRole("dialog", { name: /cata-bot/i });
+}
+
+/** The CSS variables the panel publishes for its own mobile geometry. */
+function sheetVars(): Record<string, string> {
+  const style = panel().style;
+  return {
+    top: style.getPropertyValue("--chat-sheet-top"),
+    height: style.getPropertyValue("--chat-sheet-height"),
+    keyboard: style.getPropertyValue("--chat-keyboard-inset"),
+  };
+}
+
+describe("ChatWidget — the phone sheet (#644)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.style.overflow = "";
+  });
+
+  it("fills the visual viewport at 390x844 instead of floating in a corner", () => {
+    installViewport(390, 844);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    // `100vh` would be the LAYOUT viewport, which on a phone browser stays
+    // tall behind the URL bar. The height comes from `visualViewport`.
+    expect(sheetVars()).toEqual({ top: "0px", height: "844px", keyboard: "0px" });
+    expect(panel().className).toContain("inset-x-0");
+    expect(panel().className).toContain("h-[var(--chat-sheet-height,100dvh)]");
+    expect(panel().className).toContain("top-[var(--chat-sheet-top,0px)]");
+  });
+
+  it("is the pre-#644 corner card, character for character, on a desktop", () => {
+    installViewport(1440, 900);
+    const { container } = render(<ChatWidget open onClose={vi.fn()} />);
+
+    // The literal that shipped before #644. An exact match, not a `toContain`
+    // sweep: "desktop is untouched" is only a claim worth making if a single
+    // added utility class breaks it.
+    expect(panel().className).toBe(
+      "fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] " +
+        "w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated " +
+        "lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]",
+    );
+    expect(container.querySelector("header")?.className).toBe(
+      "flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] py-3 text-ink",
+    );
+    expect(container.querySelector("form")?.className).toBe(
+      "flex flex-none items-center gap-2 border-t border-line p-3",
+    );
+    expect(container.querySelector(".overflow-y-auto")?.className).toBe(
+      "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]",
+    );
+    // And no geometry is published at all: there is no sheet to place.
+    expect(sheetVars()).toEqual({ top: "", height: "", keyboard: "" });
+  });
+
+  it("becomes a sheet on a phone lying on its side, not a 281px corner card", () => {
+    // 390x844 turned over is 844 CSS pixels WIDE, so a width-only breakpoint
+    // hands a landscape phone back to a card capped at 72vh of a 390px screen.
+    installViewport(844, 390);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    expect(sheetVars()).toEqual({ top: "0px", height: "390px", keyboard: "0px" });
+    expect(panel()).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("leaves a short desktop window alone, because it has a mouse", () => {
+    // Same height as the landscape phone above, and also landscape. The only
+    // thing separating them is `pointer: coarse`, and it has to be enough.
+    installViewport(1440, 450, { coarsePointer: false });
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    expect(sheetVars()).toEqual({ top: "", height: "", keyboard: "" });
+    expect(panel()).toHaveAttribute("aria-modal", "false");
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("follows the visual viewport when the virtual keyboard opens", () => {
+    const viewport = installViewport(390, 844);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    // A 444px keyboard: the visual viewport is now 400px tall, and the sheet
+    // has to be 400px tall too or the composer is under the keys.
+    viewport.resizeVisual(400);
+
+    expect(sheetVars()).toEqual({ top: "0px", height: "400px", keyboard: "444px" });
+  });
+
+  it("tracks the visual viewport when the page scrolls under the keyboard", () => {
+    const viewport = installViewport(390, 844);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    // iOS scrolls the layout viewport under the visual one; a sheet pinned at
+    // `top: 0` would be that far off the top of what the user can see.
+    viewport.resizeVisual(400, 120);
+
+    expect(sheetVars()).toEqual({ top: "120px", height: "400px", keyboard: "324px" });
+  });
+
+  it("re-measures when the phone is turned, and stays a sheet through it", () => {
+    const viewport = installViewport(390, 844);
+    render(<ChatWidget open onClose={vi.fn()} />);
+    expect(sheetVars().height).toBe("844px");
+
+    viewport.rotate(844, 390);
+
+    expect(sheetVars()).toEqual({ top: "0px", height: "390px", keyboard: "0px" });
+    expect(panel()).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("still fills the screen on a viewport narrower than 390", () => {
+    installViewport(320, 568);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    expect(sheetVars()).toEqual({ top: "0px", height: "568px", keyboard: "0px" });
+    expect(panel()).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("stops the body scrolling behind the sheet, and gives it back on close", () => {
+    installViewport(390, 844);
+    const { rerender } = render(<ChatWidget open onClose={vi.fn()} />);
+
+    expect(document.body.style.overflow).toBe("hidden");
+
+    rerender(<ChatWidget open={false} onClose={vi.fn()} />);
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("never touches the body's scrolling on a desktop viewport", () => {
+    installViewport(1440, 900);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    // The corner card covers 340px of the page; locking the page behind it
+    // would be a regression, not a fix.
+    expect(document.body.style.overflow).toBe("");
+    expect(panel()).toHaveAttribute("aria-modal", "false");
+  });
+
+  it("scrolls the history on its own, inside a sheet that does not scroll", () => {
+    installViewport(390, 844);
+    const { container } = render(<ChatWidget open onClose={vi.fn()} />);
+
+    const history = container.querySelector(".overflow-y-auto");
+    // `min-h-0` is what lets the history shrink when the keyboard takes half
+    // the screen; with the old `min-h-[250px]` floor the flex column overflows
+    // and the composer leaves the viewport instead.
+    expect(history).toHaveClass("flex-1", "min-h-0", "overflow-y-auto", "overscroll-contain");
+    expect(history?.className).not.toContain("min-h-[250px]");
+    expect(panel()).toHaveClass("overflow-hidden");
+  });
+
+  it("gives the close control a 44px touch target without moving the desktop one", () => {
+    installViewport(390, 844);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    const close = screen.getByRole("button", { name: /cerrar cata-bot/i });
+    // Structural: jsdom has no layout, so this asserts the box the panel asks
+    // for. The measured 44x44 lives in the Playwright spec.
+    expect(close).toHaveClass("h-11", "w-11", "inline-flex");
+
+    cleanup();
+    installViewport(1440, 900);
+    render(<ChatWidget open onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /cerrar cata-bot/i }).className).toContain(
+      "shrink-0 rounded-lg p-1 text-ink-3",
+    );
+  });
+
+  it("types above the zoom threshold, so the browser has no reason to zoom in", () => {
+    installViewport(390, 844);
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    const input = screen.getByLabelText(/mensaje para cata-bot/i);
+    // Under 16px, mobile Safari zooms the page on focus and the sheet is
+    // suddenly wider than the screen. This ramp has no 16px step — `sm` is
+    // 13.5 and `base` is 15 — so the field takes `lg`, the smallest step that
+    // clears the threshold. A literal `text-[16px]` is what
+    // `arbitrary-style-values.test.ts` exists to keep out.
+    expect(input).toHaveClass("text-lg", "h-12");
+    expect(screen.getByRole("button", { name: /enviar mensaje/i })).toHaveClass("h-12", "w-12");
+
+    cleanup();
+    installViewport(1440, 900);
+    render(<ChatWidget open onClose={vi.fn()} />);
+    expect(screen.getByLabelText(/mensaje para cata-bot/i)).toHaveClass("h-ctl", "text-sm");
+  });
+
+  it("keeps the composer clear of the home indicator, and of nothing while typing", () => {
+    installViewport(390, 844);
+    const { container } = render(<ChatWidget open onClose={vi.fn()} />);
+
+    const form = container.querySelector("form");
+    // The safe-area inset is real estate the browser already reserved; adding
+    // it on top of the keyboard inset would strand the composer mid-screen.
+    expect(form?.className).toContain(
+      "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)_-_var(--chat-keyboard-inset,0px)))]",
+    );
+    expect(container.querySelector("header")?.className).toContain(
+      "pt-[max(0.75rem,env(safe-area-inset-top))]",
+    );
+    expect(panel().className).toContain("pl-[env(safe-area-inset-left)]");
+    expect(panel().className).toContain("pr-[env(safe-area-inset-right)]");
+  });
+});
+
+describe("ChatWidget — focus trapped in the sheet (#644)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.style.overflow = "";
+  });
+
+  /** Types, so the send button is enabled and is therefore the last stop. */
+  function openWithADraft(): { close: HTMLElement; send: HTMLElement } {
+    render(<ChatWidget open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/mensaje para cata-bot/i), { target: { value: "hola" } });
+    return {
+      close: screen.getByRole("button", { name: /cerrar cata-bot/i }),
+      send: screen.getByRole("button", { name: /enviar mensaje/i }),
+    };
+  }
+
+  it("wraps forward from the send button to the close button", () => {
+    installViewport(390, 844);
+    const { close, send } = openWithADraft();
+    send.focus();
+
+    const notCancelled = fireEvent.keyDown(send, { key: "Tab" });
+
+    expect(notCancelled).toBe(false);
+    expect(document.activeElement).toBe(close);
+  });
+
+  it("wraps backward from the close button to the send button", () => {
+    installViewport(390, 844);
+    const { close, send } = openWithADraft();
+    close.focus();
+
+    const notCancelled = fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+
+    // Deliberately a DIFFERENT element from the forward case: a wrap test
+    // whose two directions land on the same control is green against a
+    // handler that never reads `shiftKey`.
+    expect(notCancelled).toBe(false);
+    expect(document.activeElement).toBe(send);
+    expect(document.activeElement).not.toBe(close);
+  });
+
+  it("leaves the middle of the panel to the browser", () => {
+    installViewport(390, 844);
+    const { close } = openWithADraft();
+    close.focus();
+
+    // Tab off the FIRST element going forward is an ordinary move.
+    expect(fireEvent.keyDown(close, { key: "Tab" })).toBe(true);
+    expect(document.activeElement).toBe(close);
+  });
+
+  it("pulls focus back in when it has escaped the panel", () => {
+    installViewport(390, 844);
+    // A control on the page BEHIND the sheet. `document.body.focus()` was the
+    // first attempt and proved nothing: the body is not focusable, so focus
+    // never actually left the composer and the "outside" branch was never
+    // reached.
+    render(
+      <>
+        <button type="button">Un control de la página</button>
+        <ChatWidget open onClose={vi.fn()} />
+      </>,
+    );
+    const outside = screen.getByRole("button", { name: "Un control de la página" });
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
+
+    fireEvent.keyDown(panel(), { key: "Tab" });
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /cerrar cata-bot/i }));
+  });
+
+  it("does not trap anything on a desktop viewport", () => {
+    installViewport(1440, 900);
+    const { send } = openWithADraft();
+    send.focus();
+
+    // The corner card is not modal: Tab out of it goes on to the page, which
+    // is what it has always done.
+    expect(fireEvent.keyDown(send, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(send, { key: "Tab", shiftKey: true })).toBe(true);
   });
 });
