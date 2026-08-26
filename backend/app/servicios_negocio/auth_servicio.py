@@ -1,13 +1,13 @@
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import jwt
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Sesion, Usuario
+from app.dominio.modelos import RecuperacionOutbox, Sesion, Usuario
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
     ServicioNoDisponible,
@@ -488,34 +488,34 @@ class AuthServicio:
 
     # --- E01-RF003: recuperación de contraseña -------------------------------
     def solicitar_recuperacion(self, correo: str) -> dict:
-        """
-        Deliberadamente NO revela si el correo existe o no (mismo mensaje de
-        éxito en ambos casos) -- evita que este endpoint sirva para enumerar
-        correos registrados. Si existe, dispara la tarea de Celery que
-        realiza el envío (ver recuperacion_tareas.py).
+        """Registra la solicitud localmente; el worker enviará el enlace.
 
-        Hallazgo 6 (auditoría): si la publicación de la tarea falla, el
-        endpoint NO responde el mensaje de éxito -- eso le mentiría al
-        usuario legítimo, que se quedaría esperando un correo que jamás va
-        a llegar. Se propaga un error de servicio genérico (503) cuyo texto
-        no revela nada sobre la existencia del correo. Tradeoff aceptado:
-        durante una caída del broker, un atacante que SEPA de la caída
-        podría en teoría distinguir correos registrados (solo estos
-        intentan encolar y por lo tanto solo estos fallan); mentirle al
-        usuario legítimo es el peor de los dos fallos.
+        El token se genera al enviar y nunca se persiste. El commit del outbox
+        precede cualquier intento de hablar con Redis, por lo que una caída del
+        broker no pierde una solicitud aceptada por PostgreSQL.
         """
         usuario = self.repo.obtener_por_correo(correo)
         if usuario:
-            token = GestorAutenticacion.crear_token_recuperacion(
-                correo, usuario.version_contrasenia
-            )
-            from app.infraestructura.tareas.recuperacion_tareas import enviar_enlace_recuperacion
-            try:
-                enviar_enlace_recuperacion.delay(correo, token)
-            except Exception:
-                _log.exception(
-                    "No se pudo encolar la tarea de recuperación de contraseña"
+            evento = (
+                self.db.query(RecuperacionOutbox)
+                .filter(
+                    RecuperacionOutbox.usuario_id == usuario.id,
+                    RecuperacionOutbox.status.in_(("PENDIENTE", "ENVIANDO")),
                 )
+                .first()
+            )
+            if evento is None:
+                self.db.add(
+                    RecuperacionOutbox(
+                        usuario_id=usuario.id,
+                        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+                    )
+                )
+            try:
+                self.db.commit()
+            except Exception:
+                self.db.rollback()
+                _log.exception("No se pudo registrar la recuperación de contraseña")
                 raise ServicioNoDisponible(
                     "No se pudo procesar la solicitud. Intente nuevamente más tarde"
                 )

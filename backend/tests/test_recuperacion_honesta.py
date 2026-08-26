@@ -10,12 +10,9 @@ revele si el correo está registrado.
 También cierra dos huecos de cobertura de `restablecer_contrasenia`:
 token expirado y cuenta desactivada.
 """
-import jwt as pyjwt
-
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
-from app.soporte_transversal.configuracion import settings
 
 MENSAJE_EXITO = "Si el correo está registrado, se envió un enlace de recuperación"
 MENSAJE_ERROR_GENERICO = "No se pudo procesar la solicitud. Intente nuevamente más tarde"
@@ -49,20 +46,19 @@ def _romper_publicacion_celery(monkeypatch):
 
 
 # --- Solicitud: el éxito solo se informa si la tarea realmente se encoló -----
-def test_publicacion_fallida_con_correo_existente_no_informa_exito(client, monkeypatch):
+def test_solicitud_existente_queda_en_outbox_sin_depender_del_broker(client, db_session, monkeypatch):
+    from app.dominio.modelos import RecuperacionOutbox
+
     persona = _crear_persona(client, cedula_valida(540))
     _registrar_credenciales(client, persona["cedula"], "honesto@x.com")
     _romper_publicacion_celery(monkeypatch)
 
     resp = client.post("/api/v1/auth/recuperar-contrasenia", json={"correo": "honesto@x.com"})
 
-    assert resp.status_code == 503
-    cuerpo = resp.json()
-    assert cuerpo["detail"] == MENSAJE_ERROR_GENERICO
-    # El error no debe revelar nada sobre la existencia del correo.
-    assert "honesto@x.com" not in str(cuerpo)
-    assert "registrado" not in cuerpo["detail"]
-    assert "mensaje" not in cuerpo
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["mensaje"] == MENSAJE_EXITO
+    evento = db_session.query(RecuperacionOutbox).one()
+    assert evento.status == "PENDIENTE"
 
 
 def test_publicacion_fallida_con_correo_inexistente_mantiene_exito(client, monkeypatch):
@@ -77,31 +73,21 @@ def test_publicacion_fallida_con_correo_inexistente_mantiene_exito(client, monke
     assert resp.json()["mensaje"] == MENSAJE_EXITO
 
 
-def test_publicacion_exitosa_conserva_el_mensaje_de_siempre(client, monkeypatch):
-    """Regresión: con el broker sano, el camino feliz no cambia y la tarea
-    se encola con el correo y un token de recuperación válido."""
+def test_solicitud_repetida_no_crea_dos_eventos_activos(client, db_session, monkeypatch):
+    from app.dominio.modelos import RecuperacionOutbox
+
     persona = _crear_persona(client, cedula_valida(541))
     _registrar_credenciales(client, persona["cedula"], "feliz@x.com")
+    _romper_publicacion_celery(monkeypatch)
 
-    from app.infraestructura.tareas import recuperacion_tareas
-    llamadas = []
-    monkeypatch.setattr(
-        recuperacion_tareas.enviar_enlace_recuperacion, "delay",
-        lambda correo, token: llamadas.append((correo, token)),
-    )
+    for _ in range(2):
+        resp = client.post(
+            "/api/v1/auth/recuperar-contrasenia", json={"correo": "feliz@x.com"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["mensaje"] == MENSAJE_EXITO
 
-    resp = client.post("/api/v1/auth/recuperar-contrasenia", json={"correo": "feliz@x.com"})
-
-    assert resp.status_code == 200
-    assert resp.json()["mensaje"] == MENSAJE_EXITO
-    assert len(llamadas) == 1
-    correo_enviado, token_enviado = llamadas[0]
-    assert correo_enviado == "feliz@x.com"
-    payload = pyjwt.decode(
-        token_enviado, settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo]
-    )
-    assert payload["sub"] == "feliz@x.com"
-    assert payload["type"] == "reset_password"
+    assert db_session.query(RecuperacionOutbox).count() == 1
 
 
 # --- Restablecimiento: huecos de cobertura -----------------------------------
