@@ -1,12 +1,22 @@
 /**
- * The blood type must never leave this editor unset.
+ * The blood type and the emergency phone must never leave this editor unset —
+ * and, since issue #643, "set" no longer means "set to anything".
  *
- * The backend's PATCH upsert refuses to create a first medical record without
- * a blood type (400, `OperacionInvalida`). `DESCONOCIDO` is a valid value in
- * the `TipoSangre` enum, so the editor pre-selects it and always sends it —
- * which is why that error is unreachable from the UI. This test locks that in:
- * a refactor that starts the select empty, or drops `tipoSangre` from the
- * payload, brings the error back and fails here.
+ * The previous contract, locked by the two tests now inverted below, was that
+ * the select PRE-SELECTED `DESCONOCIDO` and always sent it, which made the
+ * backend's "no blood type" 400 unreachable from the UI. That solved the error
+ * by answering the question with a non-answer: "No lo sé" was stored as though
+ * it were a blood type, and a record full of `DESCONOCIDO` looked complete to
+ * every screen that read it.
+ *
+ * #643 replaces the pre-selection with a real gate. The editor now refuses to
+ * submit until a genuine blood type and a valid emergency phone are present,
+ * and it validates the phone with `phoneRule` — the project's one phone
+ * validator, shared with the enrollment wizards — rather than a second copy.
+ *
+ * Deliberately still optional, and asserted as such: alergias, enfermedades,
+ * and `contactoEmergencia` (the NAME). See the PR body for why the name stays
+ * optional here while remaining required in the enrollment DTO.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -43,34 +53,41 @@ describe("MedicalRecordEditor blood type", () => {
     mockActualizarFichaMedica.mockResolvedValue({});
   });
 
-  it("creates a first record with DESCONOCIDO instead of an unset blood type", async () => {
+  /**
+   * INVERTED (#643). Was: "creates a first record with DESCONOCIDO instead of
+   * an unset blood type". The pre-selection was the defect — it manufactured
+   * an answer nobody gave — so the new rule needs a lock exactly where the old
+   * one had one.
+   */
+  it("starts a first record with no blood type chosen, and refuses to save until one is", async () => {
     // No record yet: the backend answers the GET with a 404.
     mockFetchFichaMedica.mockRejectedValue(notFound());
 
     render(<MedicalRecordEditor personaId={7} />);
 
     const select = await screen.findByLabelText<HTMLSelectElement>("Tipo de sangre");
-    expect(select.value).toBe("DESCONOCIDO");
+    expect(select.value).toBe("");
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
-    await waitFor(() => {
-      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
-        7,
-        expect.objectContaining({ tipoSangre: "DESCONOCIDO" }),
-      );
-    });
+    expect(await screen.findByText("El tipo de sangre es obligatorio.")).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
   });
 
-  it("offers DESCONOCIDO as a selectable option, not just as a default", async () => {
+  /**
+   * INVERTED (#643). Was: "offers DESCONOCIDO as a selectable option, not just
+   * as a default".
+   */
+  it("never offers DESCONOCIDO as a choice, and offers an empty placeholder instead", async () => {
     mockFetchFichaMedica.mockRejectedValue(notFound());
 
     render(<MedicalRecordEditor personaId={7} />);
 
     const select = await screen.findByLabelText<HTMLSelectElement>("Tipo de sangre");
     const values = Array.from(select.options).map((option) => option.value);
-    expect(values).toContain("DESCONOCIDO");
-    expect(values).not.toContain("");
+    expect(values).not.toContain("DESCONOCIDO");
+    expect(values).toContain("");
+    expect(values).toContain("O_POSITIVO");
   });
 
   it("keeps sending the blood type when editing an existing record", async () => {
@@ -79,7 +96,7 @@ describe("MedicalRecordEditor blood type", () => {
       enfermedades: [],
       alergias: null,
       contactoEmergencia: null,
-      telefonoEmergencia: null,
+      telefonoEmergencia: "0991112233",
     });
 
     render(<MedicalRecordEditor personaId={7} />);
@@ -97,6 +114,246 @@ describe("MedicalRecordEditor blood type", () => {
         expect.objectContaining({ tipoSangre: "O_POSITIVO" }),
       );
     });
+  });
+
+  it("saves a first record once a real blood type and a valid phone are given", async () => {
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
+      target: { value: "AB_NEGATIVO" },
+    });
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+      target: { value: "0991112233" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => {
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ tipoSangre: "AB_NEGATIVO", telefonoEmergencia: "0991112233" }),
+      );
+    });
+  });
+});
+
+/**
+ * The emergency phone gate. `phoneRule` from `@/lib/identity-validation` is
+ * the project's single phone validator — the messages asserted here are its
+ * messages verbatim, which is what proves this editor did not grow a second
+ * copy of the rule with its own wording.
+ */
+describe("MedicalRecordEditor emergency phone (#643)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+  });
+
+  async function fillBloodType(): Promise<void> {
+    fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
+      target: { value: "O_POSITIVO" },
+    });
+  }
+
+  it("refuses to save with a blank emergency phone", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(await screen.findByText("El teléfono de emergencia es obligatorio.")).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+  });
+
+  it("refuses to save with a whitespace-only emergency phone", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), { target: { value: "   " } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(await screen.findByText("El teléfono de emergencia es obligatorio.")).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+  });
+
+  it("refuses to save a malformed emergency phone, quoting the shared rule", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), { target: { value: "123" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(
+      await screen.findByText(
+        "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      ),
+    ).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+  });
+
+  it("refuses a phone carrying letters, with the shared rule's own wording", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+      target: { value: "099abc1234" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(
+      await screen.findByText(
+        "El teléfono de emergencia solo puede contener dígitos y separadores (espacio, guion, paréntesis).",
+      ),
+    ).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+  });
+
+  it("accepts a landline, not only a mobile", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+      target: { value: "042345678" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ telefonoEmergencia: "042345678" }),
+      ),
+    );
+  });
+});
+
+/**
+ * Records written before #643 existed. No migration invents a phone number or
+ * a blood type for them, so they arrive here exactly as they were stored — and
+ * this editor is where a person, who actually knows the answer, completes them.
+ * Reading such a record must keep working; SAVING one must not be able to
+ * leave it invalid.
+ */
+describe("MedicalRecordEditor legacy records (#643)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+  });
+
+  const LEGACY = {
+    id: 3,
+    personaId: 7,
+    tipoSangre: "DESCONOCIDO",
+    enfermedades: [],
+    alergias: null,
+    contactoEmergencia: null,
+    telefonoEmergencia: null,
+  };
+
+  it("still displays a legacy DESCONOCIDO record in read mode", async () => {
+    mockFetchFichaMedica.mockResolvedValue(LEGACY);
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByRole("button", { name: "Editar" });
+    expect(screen.getByText("DESCONOCIDO")).toBeInTheDocument();
+  });
+
+  it("drops a legacy DESCONOCIDO to an unchosen select on entering edit mode", async () => {
+    mockFetchFichaMedica.mockResolvedValue(LEGACY);
+
+    render(<MedicalRecordEditor personaId={7} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+
+    // Not pre-filled with the legacy non-answer: the person editing has to
+    // supply the real value, which is the only honest way to backfill it.
+    expect(screen.getByLabelText<HTMLSelectElement>("Tipo de sangre").value).toBe("");
+  });
+
+  it("refuses to re-save a legacy record while it is still incomplete", async () => {
+    mockFetchFichaMedica.mockResolvedValue(LEGACY);
+
+    render(<MedicalRecordEditor personaId={7} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(await screen.findByText("El tipo de sangre es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText("El teléfono de emergencia es obligatorio.")).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
+  });
+
+  it("lets a legacy record be completed and saved in one pass", async () => {
+    mockFetchFichaMedica.mockResolvedValue(LEGACY);
+
+    render(<MedicalRecordEditor personaId={7} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Tipo de sangre"), { target: { value: "B_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+      target: { value: "0991112233" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ tipoSangre: "B_POSITIVO", telefonoEmergencia: "0991112233" }),
+      ),
+    );
+  });
+});
+
+/**
+ * The other half of #643, and the easier half to lose: exactly TWO fields
+ * became required. If this block ever goes green while the optional fields
+ * carry a required marker, the change overshot.
+ */
+describe("MedicalRecordEditor required markers (#643)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+  });
+
+  it("marks the blood type and the emergency phone as required", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    expect(await screen.findByLabelText("Tipo de sangre")).toHaveAttribute("aria-required", "true");
+    expect(screen.getByLabelText("Teléfono de emergencia")).toHaveAttribute("aria-required", "true");
+  });
+
+  it("marks nothing else as required", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    await screen.findByLabelText("Tipo de sangre");
+    for (const label of ["Alergias", "Enfermedades (separadas por coma)", "Contacto de emergencia"]) {
+      expect(screen.getByLabelText(label)).not.toHaveAttribute("aria-required", "true");
+    }
+  });
+
+  it("saves with every optional field left empty", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
+      target: { value: "O_NEGATIVO" },
+    });
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+      target: { value: "0991112233" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          tipoSangre: "O_NEGATIVO",
+          telefonoEmergencia: "0991112233",
+          alergias: null,
+          contactoEmergencia: null,
+          enfermedades: [],
+        }),
+      ),
+    );
   });
 });
 
@@ -157,7 +414,7 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
    * explicitly is what actually clears it (see the backend's
    * `test_vaciar_alergias_contacto_y_telefono_los_borra`).
    */
-  it("sends null, not undefined, for alergias/contactoEmergencia/telefonoEmergencia once emptied", async () => {
+  it("sends null, not undefined, for alergias/contactoEmergencia once emptied", async () => {
     mockFetchFichaMedica.mockResolvedValue({
       tipoSangre: "O_POSITIVO",
       enfermedades: [],
@@ -173,11 +430,9 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
     const alergias = screen.getByLabelText<HTMLInputElement>("Alergias");
     expect(alergias.value).toBe("Polen");
     const contacto = screen.getByLabelText<HTMLInputElement>("Contacto de emergencia");
-    const telefono = screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia");
 
     fireEvent.change(alergias, { target: { value: "" } });
     fireEvent.change(contacto, { target: { value: "" } });
-    fireEvent.change(telefono, { target: { value: "" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -187,10 +442,38 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
         expect.objectContaining({
           alergias: null,
           contactoEmergencia: null,
-          telefonoEmergencia: null,
         }),
       );
     });
+  });
+
+  /**
+   * #643 narrows FIC-5 by exactly one field, and this is the seam.
+   *
+   * FIC-5's fix — send `null` so an emptied field is actually erased — still
+   * holds for `alergias` and `contactoEmergencia`, which remain optional. It
+   * must NOT hold for the emergency phone any more: erasing that is erasing
+   * the one number the club would dial, and the record it leaves behind is
+   * exactly the invalid state #643 exists to forbid. The editor blocks the
+   * submit instead of sending `telefonoEmergencia: null`.
+   */
+  it("refuses to erase the emergency phone, rather than sending null for it", async () => {
+    mockFetchFichaMedica.mockResolvedValue({
+      tipoSangre: "O_POSITIVO",
+      enfermedades: [],
+      alergias: "Polen",
+      contactoEmergencia: "Ana Torres",
+      telefonoEmergencia: "0991112233",
+    });
+
+    render(<MedicalRecordEditor personaId={7} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(await screen.findByText("El teléfono de emergencia es obligatorio.")).toBeInTheDocument();
+    expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
   });
 });
 

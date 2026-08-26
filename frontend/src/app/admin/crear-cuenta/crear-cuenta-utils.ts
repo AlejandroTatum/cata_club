@@ -72,10 +72,17 @@ export const CREAR_CUENTA_SHORT_LABELS: Record<CrearCuentaStep, string> = {
   summary: "Confirmar",
 };
 
-/** Blood type options matching the backend TipoSangre enum. */
+/**
+ * Blood type options an admin may pick (issue #643).
+ *
+ * Not the whole `TipoSangre` enum any more: `DESCONOCIDO` still exists there
+ * for records written before this rule, but it is no longer offered, and
+ * `validateMedical` below rejects it for the same reason. A medical record the
+ * club is writing today either has a blood type or is not being written.
+ */
 export const BLOOD_TYPE_OPTIONS = [
   "A_POSITIVO", "A_NEGATIVO", "B_POSITIVO", "B_NEGATIVO",
-  "AB_POSITIVO", "AB_NEGATIVO", "O_POSITIVO", "O_NEGATIVO", "DESCONOCIDO",
+  "AB_POSITIVO", "AB_NEGATIVO", "O_POSITIVO", "O_NEGATIVO",
 ] as const;
 
 /** Shape of the create-account form data. */

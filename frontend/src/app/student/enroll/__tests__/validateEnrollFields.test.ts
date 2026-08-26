@@ -163,6 +163,28 @@ describe("validateEnrollFields", () => {
       "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
   });
+
+  /**
+   * Issue #643. `DESCONOCIDO` used to pass this gate because `isBloodType`
+   * asked "is it in the enum?", and the enum still contains it for the sake
+   * of legacy rows. A record being CREATED here is a complete one, so "No lo
+   * sé" is not an answer — it is the absence of one wearing a valid value's
+   * clothes.
+   */
+  it("rejects DESCONOCIDO as if the blood type had been left blank", () => {
+    const errors = validateEnrollFields("health", validForm({ tipoSangre: BLOOD_TYPES.DESCONOCIDO }));
+    expect(errors.tipoSangre).toBe("El tipo de sangre es obligatorio.");
+  });
+
+  it("leaves the optional medical details optional", () => {
+    // Alergias and condicionesSalud are not health-step gates and never were;
+    // #643 must not quietly promote them while tightening the two that matter.
+    const errors = validateEnrollFields("health", validForm({ alergias: "", condicionesSalud: "" }));
+    expect(errors.tipoSangre).toBeUndefined();
+    expect(errors.telefonoEmergencia).toBeUndefined();
+    expect(errors.alergias).toBeUndefined();
+    expect(errors.condicionesSalud).toBeUndefined();
+  });
 });
 
 describe("isStepComplete", () => {

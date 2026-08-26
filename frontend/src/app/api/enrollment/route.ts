@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { backendFetch, forwardedForFrom, setAuthCookies } from "@/lib/server/auth";
 import { passthroughBackendError } from "@/lib/server/backend-client";
 import { buildEnrollmentCreateDTO, isBackendEnrollmentResponse } from "@/lib/server/enrollment-adapter";
-import { BLOOD_TYPES, type EnrollmentRequest, type EnrollmentResponse } from "@/types/enrollment";
+import { isSelectableBloodType, type EnrollmentRequest, type EnrollmentResponse } from "@/types/enrollment";
+import { isValidEcuadorianPhone } from "@/lib/identity-validation";
 import { ENROLLMENT_ATTEMPT_COOKIE } from "@/lib/server/enrollment-constants";
 
 type JsonRecord = Record<string, unknown>;
@@ -176,7 +177,12 @@ function isMedicalRecord(value: unknown): boolean {
   return isRecord(value) &&
     isBloodType(value.tipoSangre) &&
     isNonEmptyString(value.contactoEmergencia) &&
+    // #643: non-empty was never enough for a phone number. The wizard already
+    // validates it with `phoneRule`; this is the same rule at the boundary,
+    // from the same module, so a body that skips the wizard cannot enroll a
+    // student whose emergency contact is `123`.
     isNonEmptyString(value.telefonoEmergencia) &&
+    isValidEcuadorianPhone(value.telefonoEmergencia) &&
     // Required by EnrollmentMedicalRecord, but "" is a legitimate value: an
     // empty condicionesSalud/alergias means "none", so the key must be present
     // and a string without being forced to carry text.
@@ -228,6 +234,13 @@ function isPassword(value: unknown): boolean {
   return typeof value === "string" && value.length >= 8;
 }
 
+/**
+ * Issue #643: the gate is "may this be CHOSEN", not "is it in the enum".
+ * `DESCONOCIDO` stays in the enum so records written before the rule still
+ * parse, but an enrollment writes a new complete record, so it dies here —
+ * at the BFF, without spending a backend round-trip on a body whose rejection
+ * is already certain.
+ */
 function isBloodType(value: unknown): boolean {
-  return typeof value === "string" && Object.values(BLOOD_TYPES).includes(value as typeof BLOOD_TYPES[keyof typeof BLOOD_TYPES]);
+  return isSelectableBloodType(value);
 }

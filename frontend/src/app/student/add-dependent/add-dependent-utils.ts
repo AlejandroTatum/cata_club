@@ -97,6 +97,13 @@ export const initialAddDependentFormData: AddDependentFormData = {
   telefonoEmergencia: "",
 };
 
+/**
+ * The blood types a dependent's record may be created with (issue #643).
+ *
+ * `DESCONOCIDO` is deliberately absent: it remains a valid `TipoSangre` for
+ * reading records written before the rule, but registering a dependent writes
+ * a new, complete record, and "No lo sé" is not an answer to give on one.
+ */
 const TIPO_SANGRE_VALUES: TipoSangre[] = [
   "A_POSITIVO",
   "A_NEGATIVO",
@@ -106,7 +113,6 @@ const TIPO_SANGRE_VALUES: TipoSangre[] = [
   "AB_NEGATIVO",
   "O_POSITIVO",
   "O_NEGATIVO",
-  "DESCONOCIDO",
 ];
 
 // ---------------------------------------------------------------------------

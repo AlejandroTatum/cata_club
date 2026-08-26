@@ -5,7 +5,7 @@
  * export conflicts — no React dependencies.
  */
 
-import { BLOOD_TYPES, type BloodType, type EnrollmentRequest } from "@/types/enrollment";
+import { isSelectableBloodType, type BloodType, type EnrollmentRequest } from "@/types/enrollment";
 import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
@@ -537,8 +537,14 @@ function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+/**
+ * Issue #643: this gate asks whether the value may be CHOSEN, not whether it
+ * exists in the enum. `DESCONOCIDO` exists — for the sake of records written
+ * before the rule — but a public enrollment writes a new, complete record, so
+ * "No lo sé" is the absence of an answer, not one.
+ */
 function isBloodType(value: string): value is BloodType {
-  return Object.values(BLOOD_TYPES).includes(value as BloodType);
+  return isSelectableBloodType(value);
 }
 
 // ---------------------------------------------------------------------------

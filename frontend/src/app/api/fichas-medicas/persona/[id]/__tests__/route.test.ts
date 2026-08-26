@@ -185,3 +185,75 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
     );
   });
 });
+
+/**
+ * Issue #643 — where this route does NOT enforce the rule, and why.
+ *
+ * The enrollment route validates its whole body because it already owned a
+ * full validator for it. This one is a transport: it forwards a partial PATCH
+ * and hands back what the backend says. Re-implementing "a complete medical
+ * record" here would be a second definition of the rule, sitting one process
+ * away from the first, free to drift from it — and the backend enforces it on
+ * every caller, not just this one.
+ *
+ * So what has to be true here is narrower and testable: the rejection must
+ * arrive intact. A rule the user never gets to read is a rule that, from the
+ * screen's point of view, did not fire.
+ */
+describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the caller", () => {
+  it("passes through the backend's 422 for a DESCONOCIDO blood type", async () => {
+    const detail = "El tipo de sangre es obligatorio.";
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail, message: detail }, 422));
+
+    const access = makeJwt(3600);
+    const response = await PATCH(
+      patchRequest("5", { tipoSangre: "DESCONOCIDO" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { id: "5" } },
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ message: expect.stringContaining("tipo de sangre") }),
+    );
+  });
+
+  it("passes through the backend's 400 when a PATCH would leave the record invalid", async () => {
+    const detail = "El teléfono de emergencia es obligatorio.";
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail, message: detail }, 400));
+
+    const access = makeJwt(3600);
+    const response = await PATCH(
+      patchRequest("5", { alergias: "Polen" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { id: "5" } },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ message: expect.stringContaining("teléfono de emergencia") }),
+    );
+  });
+
+  it("still forwards a complete, valid record untouched", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
+
+    const access = makeJwt(3600);
+    const response = await PATCH(
+      patchRequest(
+        "5",
+        { tipoSangre: "O_POSITIVO", telefonoEmergencia: "0997654321" },
+        `${ACCESS_TOKEN_COOKIE}=${access}`,
+      ),
+      { params: { id: "5" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/fichas-medicas/persona/5",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ tipo_sangre: "O_POSITIVO", telefono_emergencia: "0997654321" }),
+      }),
+    );
+  });
+});
