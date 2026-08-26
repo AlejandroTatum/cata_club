@@ -49,8 +49,15 @@ def _crear_familia(db_session, sufijo: int):
     )
     db_session.add(hijo)
     db_session.flush()
+    # `telefono_emergencia` explícito desde #643: sin él esta ficha sería una
+    # LEGADA (inválida), y todo PATCH sobre ella daría 400 por incompleta.
+    # Este archivo prueba QUIÉN puede tocar la ficha, no si la ficha está
+    # completa, así que se siembra completa para que el 400 de la regla nueva
+    # no se disfrace del 403 que estos tests persiguen. El caso legado tiene
+    # su propia cobertura en `test_ficha_medica_completa.py`.
     db_session.add(FichaMedica(
         tipo_sangre=TipoSangre.O_POSITIVO, persona_id=hijo.id, alergias="Ninguna",
+        telefono_emergencia="0991112233",
     ))
     db_session.commit()
     db_session.refresh(representante)
@@ -80,8 +87,12 @@ def _crear_alumno_adulto(db_session, sufijo: int):
     )
     db_session.add(adulto)
     db_session.flush()
+    # `telefono_emergencia` explícito desde #643 — mismo motivo que en
+    # `_crear_familia`: esta ficha se siembra COMPLETA para que el 400 de
+    # "ficha incompleta" no se confunda con el 403 que este archivo mide.
     db_session.add(FichaMedica(
         tipo_sangre=TipoSangre.A_POSITIVO, persona_id=adulto.id, alergias="Ninguna",
+        telefono_emergencia="0991112233",
     ))
     db_session.commit()
     db_session.refresh(adulto)
@@ -164,7 +175,10 @@ def test_el_representante_crea_la_ficha_via_patch_si_el_representado_no_tiene(db
     with _client_como(db_session, representante.id, ["REPRESENTANTE"]) as c:
         respuesta = c.patch(
             f"/api/v1/fichas-medicas/persona/{hijo.id}",
-            json={"tipo_sangre": "A_POSITIVO"},
+            # `telefono_emergencia` desde #643: el upsert CREA una ficha, y una
+            # ficha nueva nace completa. Lo que este test mide sigue siendo
+            # QUIÉN puede crearla por PATCH, no con qué campos.
+            json={"tipo_sangre": "A_POSITIVO", "telefono_emergencia": "0991112233"},
         )
     app.dependency_overrides.clear()
     assert respuesta.status_code == 200
