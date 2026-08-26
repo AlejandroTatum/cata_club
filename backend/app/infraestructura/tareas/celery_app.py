@@ -21,6 +21,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.alertas_tareas",
         "app.infraestructura.tareas.comprobante_tareas",
         "app.infraestructura.tareas.recuperacion_tareas",
+        "app.infraestructura.tareas.enrollment_notificacion_tareas",
         "app.infraestructura.tareas.vencimientos_tareas",
     ],
 )
@@ -52,6 +53,16 @@ def _parsear_hora_crontab(hhmm: str) -> crontab:
 
 _hora_diaria = _parsear_hora_crontab(settings.celery_hora_automatizaciones)
 celery_app.conf.beat_schedule = {
+    "despachar-inscripcion-notificaciones-cada-minuto": {
+        "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",
+        "schedule": crontab(minute="*/1"),
+    },
+    "limpiar-inscripcion-notificaciones-diaria": {
+        "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.limpiar_inscripcion_notificaciones",
+        "schedule": _hora_diaria,
+    },
+    # 1) Alertas de Vencimiento (Hoy + 5 días):
+    #    Busca Pagos APROBADOS con fecha_fin == hoy + 5 y dispara alertas.
     "alertas-vencimiento-membresias-diaria": {
         "task": "app.infraestructura.tareas.alertas_tareas.alertar_vencimientos_hoy_mas_5",
         "schedule": _hora_diaria,

@@ -1484,6 +1484,7 @@ class Notificacion(Base):
     __tablename__ = "notificacion"
     __table_args__ = (
         Index("ix_notificacion_persona_id", "persona_id"),
+            Index("uq_notificacion_enrollment_outbox_id", "enrollment_outbox_id", unique=True, postgresql_where=text("enrollment_outbox_id IS NOT NULL")),
     )
 
     # Ancho real, no un número elegido al azar. El peor caso conocido con los
@@ -1506,6 +1507,7 @@ class Notificacion(Base):
     # la notificación), sin FK estricta porque el tipo de entidad varía
     # según `tipo` -- mantenerlo simple evita una jerarquía de tablas.
     entidad_relacionada_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    enrollment_outbox_id: Mapped[Optional[int]] = mapped_column(nullable=True)
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     persona: Mapped["Persona"] = relationship(back_populates="notificaciones")
@@ -1532,6 +1534,28 @@ class Notificacion(Base):
 
 
 # ---------------------------------------------------------------------------
+class EnrollmentNotificacionOutbox(Base):
+    """Entrega durable de una notificación de inscripción."""
+    __tablename__ = "enrollment_notificacion_outbox"
+    __table_args__ = (
+        Index("ix_enrollment_notif_outbox_pending_next", "status", "next_attempt_at"),
+        Index("ix_enrollment_notif_outbox_alumno", "alumno_persona_id"),
+        UniqueConstraint("admin_persona_id", "alumno_persona_id", name="uq_enrollment_notif_outbox_admin_alumno"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    alumno_persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    mensaje: Mapped[str] = mapped_column(String(Notificacion.MENSAJE_MAX), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc, nullable=False)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc, nullable=False)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_redacted: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+
 # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): un representante puede
 # vincular a su cuenta un representado YA EXISTENTE escribiendo su cédula,
 # sin que nadie apruebe. El guardarraíl de auditoría de esa decisión ("queda
