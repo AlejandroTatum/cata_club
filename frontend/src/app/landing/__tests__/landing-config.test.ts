@@ -97,6 +97,26 @@ describe("buildLandingStats", (): void => {
       "Desde el 10 de octubre",
     );
   });
+
+  /**
+   * The venue figure used to locate the club by the Coliseo, which is no
+   * longer the reference a visitor is given (#641). It still has to say
+   * *where*, so it falls back to the neighbourhood already carried by the
+   * club's own street address — not to a second landmark, which this
+   * repository has no source to confirm either.
+   */
+  it("locates the venue by its own address rather than by the Coliseo", (): void => {
+    const stats = buildLandingStats(new Date(2026, 6, 25));
+    const labels = stats.map((stat): string => stat.label);
+
+    labels.forEach((label): void => {
+      expect(label).not.toMatch(/coliseo/i);
+    });
+
+    const venue = stats.find((stat): boolean => stat.value === "Loja");
+    expect(venue).toBeDefined();
+    expect(venue?.label).toBe("Barrio Perpetuo Socorro");
+  });
 });
 
 describe("deriveContactHours", (): void => {
