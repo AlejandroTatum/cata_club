@@ -7,6 +7,8 @@ import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
+import { rallyCanPin, rallyFlowAnchorsPx, rallyHitIndex } from "./landing-rally";
+import type { RallyValueBox } from "./landing-rally";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
@@ -223,10 +225,13 @@ function playServe(): (() => void) | undefined {
   return (): void => { serve.kill(); };
 }
 
-/* The motto is a self-contained entrance: its decorative paddle settles in,
-   then the invitation and stars follow. It never shares a timeline with the
-   ticker or any other landing section. */
-function playRally(): void {
+/* The rally lights the four Valores in turn as a ball scrubs along their guide.
+   It has two choreographies and picks between them by measurement, never by
+   breakpoint: pinned while the section fits the viewport, and scrolling
+   normally when it does not — see `landing-rally.ts` for why (issue #637).
+
+   (What used to sit here described `playMotto`, the next function down.) */
+function playRally(): (() => void) | undefined {
       const section = document.querySelector<HTMLElement>(".landing-values");
       const guide = section?.querySelector<SVGPathElement>("[data-rally-guide]");
       const ball = section?.querySelector<HTMLElement>("[data-rally-ball]");
@@ -234,13 +239,12 @@ function playRally(): void {
       const stage = section?.querySelector<HTMLElement>("[data-rally]");
       const counter = section?.querySelector<HTMLElement>("[data-rally-counter]");
       const values = section ? gsap.utils.toArray<HTMLElement>("[data-value]", section) : [];
-      if (!guide || !ball || !impact || !stage || !counter || values.length === 0) return;
-      const hitAt = [0.19, 0.42, 0.62, 0.82];
+      if (!section || !guide || !ball || !impact || !stage || !counter || values.length === 0) return undefined;
+
       let reached = -1;
-      gsap.set(guide, { drawSVG: "0%" });
-      gsap.set(ball, { opacity: 0 });
-      gsap.set(values.map((value): Element | null => value.querySelector(".landing-value-rule")), { scaleX: 0 });
-      values.forEach((value): void => value.classList.add("dim"));
+      /* The single place ball, impact, counter and card state move together —
+         both choreographies below route every hit through it, so they cannot
+         drift apart. */
       const reach = (index: number): void => {
         if (index === reached) return;
         reached = index;
@@ -254,7 +258,101 @@ function playRally(): void {
         gsap.set(impact, { x: b.left - s.left + b.width / 2, y: b.top - s.top + b.height / 2, opacity: 1, scale: 0.4 });
         gsap.to(impact, { scale: 2.6, opacity: 0, duration: 0.55, ease: "power2.out" });
       };
-      gsap.to(ball, { motionPath: { path: guide, align: guide, alignOrigin: [0.5, 0.5], start: 0, end: 1, autoRotate: false }, ease: "none", scrollTrigger: { trigger: section, start: "top top", end: "+=1900", pin: true, scrub: 0.7, onEnter(): void { gsap.to(ball, { opacity: 1, duration: 0.2 }); }, onLeaveBack(): void { gsap.to(ball, { opacity: 0, duration: 0.2 }); reach(-1); } }, onUpdate(this: gsap.core.Tween): void { const progress = this.progress(); gsap.set(guide, { drawSVG: `0% ${(progress * 100).toFixed(2)}%` }); let next = -1; for (let i = 0; i < hitAt.length; i += 1) if (progress >= hitAt[i]) next = i; reach(next); } });
+
+      const rest = (): void => {
+        reached = -1;
+        counter.textContent = "0";
+        gsap.set(guide, { drawSVG: "0%" });
+        gsap.set(ball, { opacity: 0 });
+        gsap.set(values.map((value): Element | null => value.querySelector(".landing-value-rule")), { scaleX: 0 });
+        values.forEach((value): void => { value.classList.remove("hit"); value.classList.add("dim"); });
+      };
+      const draw = (progress: number): void => { gsap.set(guide, { drawSVG: `0% ${(progress * 100).toFixed(2)}%` }); };
+      const fade = (visible: boolean): void => { gsap.to(ball, { opacity: visible ? 1 : 0, duration: 0.2 }); };
+      const travel = { path: guide, align: guide, alignOrigin: [0.5, 0.5] as [number, number], start: 0, end: 1, autoRotate: false };
+
+      /* Pinned: the section is held still and the ball's own progress along the
+         guide decides which value is lit. Unchanged from the original rally —
+         it is what runs whenever the section fits the viewport. */
+      const buildPinned = (): (() => void) => {
+        const tween = gsap.to(ball, {
+          motionPath: travel,
+          ease: "none",
+          scrollTrigger: {
+            trigger: section, start: "top top", end: "+=1900", pin: true, scrub: 0.7,
+            onEnter(): void { fade(true); },
+            onLeaveBack(): void { fade(false); reach(-1); },
+          },
+          onUpdate(this: gsap.core.Tween): void { const progress = this.progress(); draw(progress); reach(rallyHitIndex(progress)); },
+        });
+        return (): void => { tween.scrollTrigger?.kill(true); tween.kill(); };
+      };
+
+      /* Unpinned: the section is taller than the viewport, so it scrolls
+         normally and each value is reached as it arrives — the only way all
+         four can be lit somewhere the visitor is actually looking. The ball
+         still scrubs the guide across the section's own travel. */
+      const buildFlow = (): (() => void) => {
+        const tween = gsap.to(ball, {
+          motionPath: travel,
+          ease: "none",
+          scrollTrigger: {
+            trigger: section, start: "top bottom", end: "bottom top", scrub: 0.7,
+            onToggle(self: ScrollTrigger): void { fade(self.isActive); },
+          },
+          onUpdate(this: gsap.core.Tween): void { draw(this.progress()); },
+        });
+        /* Read from layout on every refresh rather than assumed from the
+           breakpoint: how many columns the values are in, and how tall each one
+           is, are CSS decisions, and measuring is the only honest way to ask
+           what they currently are. */
+        const anchors = (): number[] => rallyFlowAnchorsPx(
+          values.map((value): RallyValueBox => {
+            const box = value.getBoundingClientRect();
+            return { top: box.top + window.scrollY, height: box.height };
+          }),
+          window.innerHeight,
+        );
+        const cards = values.map((value, index): ScrollTrigger => ScrollTrigger.create({
+          trigger: value,
+          start: (): string => `top ${Math.round(anchors()[index])}px`,
+          end: "bottom top",
+          onEnter: (): void => reach(index),
+          onEnterBack: (): void => reach(index),
+          onLeaveBack: (): void => reach(index - 1),
+        }));
+        return (): void => { cards.forEach((card): void => card.kill()); tween.scrollTrigger?.kill(); tween.kill(); };
+      };
+
+      let teardown: (() => void) | undefined;
+      /* Measured only once the previous choreography has been reverted: a
+         pinned section reports the geometry the pin gave it, not its own. */
+      const layout = (): void => {
+        teardown?.();
+        rest();
+        teardown = rallyCanPin(section.getBoundingClientRect().height, window.innerHeight)
+          ? buildPinned()
+          : buildFlow();
+      };
+      layout();
+
+      /* Rotating a phone changes both the viewport height and — across the
+         768px/1024px breakpoints — the section's own height, so the pin
+         decision has to be taken again rather than kept from load. */
+      let pending: ReturnType<typeof setTimeout> | undefined;
+      const relayout = (): void => {
+        if (pending !== undefined) clearTimeout(pending);
+        pending = setTimeout((): void => { pending = undefined; layout(); ScrollTrigger.refresh(); }, 180);
+      };
+      window.addEventListener("resize", relayout);
+      window.addEventListener("orientationchange", relayout);
+
+      return (): void => {
+        if (pending !== undefined) clearTimeout(pending);
+        window.removeEventListener("resize", relayout);
+        window.removeEventListener("orientationchange", relayout);
+        teardown?.();
+      };
     }
 
     function playMotto(): (() => void) | undefined {
@@ -300,6 +398,7 @@ export default function LandingMotion(): null {
       let teardownHeroCarousel: (() => void) | undefined;
       let teardownTicker: (() => void) | undefined;
       let teardownServe: (() => void) | undefined;
+      let teardownRally: (() => void) | undefined;
       let teardownMotto: (() => void) | undefined;
 
       const context = gsap.context((): void => {
@@ -354,7 +453,7 @@ export default function LandingMotion(): null {
 
 
         teardownServe = playServe();
-          playRally();
+        teardownRally = playRally();
         teardownMotto = playMotto();
 
         const ticker = document.querySelector<HTMLElement>("[data-credentials-ticker]");
@@ -377,6 +476,7 @@ export default function LandingMotion(): null {
         teardownHeroCarousel?.();
         teardownTicker?.();
         teardownServe?.();
+        teardownRally?.();
         teardownMotto?.();
         split?.revert();
         context.revert();

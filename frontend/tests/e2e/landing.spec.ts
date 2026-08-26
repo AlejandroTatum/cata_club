@@ -206,6 +206,247 @@ test.describe("Landing page", () => {
   });
 
   /**
+   * The Valores rally (issue #594) pins the whole section under a ball that
+   * scrubs along an SVG guide, lighting each value as it passes. Issue #637
+   * reported that on a phone the rally "only reaches value 01" and that value
+   * 04 falls outside the viewport.
+   *
+   * The cause is geometric, so only a real browser can see it: at 390x844 the
+   * Valores section is ~1249px tall. Pinning freezes it with its top at the
+   * viewport top, so values 03 and 04 sit below the fold for the ENTIRE 1900px
+   * scrub. The counter still climbs to 4/4 and the `hit` class still lands on
+   * every card — off screen, where nobody can see it. Asserting the counter,
+   * or the class, or a screenshot of the top of the section would all have
+   * passed on the broken build.
+   *
+   * So the assertion is the one the reader actually cares about: each value is
+   * activated at a moment when that value is on screen.
+   */
+  test.describe("values rally", () => {
+    /** Runs in the page: one frame of rally state, measured, never inferred. */
+    const sampleRally = (): {
+      atEnd: boolean;
+      counter: string;
+      pageOverflowPx: number;
+      pinned: boolean;
+      sectionTop: number;
+      sectionBottom: number;
+      cards: { hit: boolean; dim: boolean; onScreen: boolean; opacity: string }[];
+    } => {
+      const root = document.documentElement;
+      const section = document.querySelector(".landing-values");
+      const rect = section?.getBoundingClientRect();
+      const viewport = window.innerHeight;
+      return {
+        atEnd: window.scrollY + viewport >= root.scrollHeight - 2,
+        counter: document.querySelector("[data-rally-counter]")?.textContent?.trim() ?? "",
+        pageOverflowPx: root.scrollWidth - root.clientWidth,
+        // ScrollTrigger pins by fixing the element in place; nothing else on
+        // this page makes the section `fixed`.
+        pinned: section ? getComputedStyle(section).position === "fixed" : false,
+        sectionTop: rect ? Math.round(rect.top) : Number.NaN,
+        sectionBottom: rect ? Math.round(rect.bottom) : Number.NaN,
+        cards: Array.from(document.querySelectorAll<HTMLElement>(".landing-values [data-value]")).map(
+          (card) => {
+            const box = card.getBoundingClientRect();
+            return {
+              hit: card.classList.contains("hit"),
+              dim: card.classList.contains("dim"),
+              // Fully inside the viewport — a card half off the fold is not a
+              // card the visitor saw light up.
+              onScreen: box.top >= 0 && box.bottom <= viewport,
+              opacity: getComputedStyle(card).opacity,
+            };
+          },
+        ),
+      };
+    };
+
+    type RallyWalk = {
+      /** Per value: did it carry `hit` while fully on screen at least once? */
+      activatedOnScreen: boolean[];
+      /** Per value: did it carry `hit` at any point, on screen or not? */
+      activatedAnywhere: boolean[];
+      highestCounter: number;
+      maxPageOverflowPx: number;
+      /** Was the section ever pinned — the desktop choreography's signature? */
+      everPinned: boolean;
+      /** Frames where the counter, `hit` and `dim` disagreed with each other. */
+      desyncs: string[];
+      cardCount: number;
+    };
+
+    /**
+     * Scrolls the page through the Valores section with real wheel input —
+     * Lenis owns the scroll, so `window.scrollTo` would be fighting it — and
+     * records what the rally did on the way.
+     */
+    async function walkRally(page: import("@playwright/test").Page): Promise<RallyWalk> {
+      const walk: RallyWalk = {
+        activatedOnScreen: [],
+        activatedAnywhere: [],
+        highestCounter: 0,
+        maxPageOverflowPx: 0,
+        everPinned: false,
+        desyncs: [],
+        cardCount: 0,
+      };
+
+      const record = (frame: ReturnType<typeof sampleRally>): void => {
+        walk.cardCount = frame.cards.length;
+        if (walk.activatedOnScreen.length === 0) {
+          walk.activatedOnScreen = frame.cards.map(() => false);
+          walk.activatedAnywhere = frame.cards.map(() => false);
+        }
+        walk.maxPageOverflowPx = Math.max(walk.maxPageOverflowPx, frame.pageOverflowPx);
+        if (frame.pinned) walk.everPinned = true;
+        const counter = Number.parseInt(frame.counter, 10);
+        if (Number.isFinite(counter)) walk.highestCounter = Math.max(walk.highestCounter, counter);
+        frame.cards.forEach((card, index) => {
+          if (card.hit) walk.activatedAnywhere[index] = true;
+          if (card.hit && card.onScreen) walk.activatedOnScreen[index] = true;
+        });
+        // Ball, impact and card state all move through one `reach(index)` call,
+        // so the counter and the classes may never disagree about which value
+        // the ball is on.
+        const lit = frame.cards.findIndex((card) => card.hit);
+        if (lit >= 0) {
+          if (counter !== lit + 1) walk.desyncs.push(`counter=${frame.counter} but value ${lit + 1} is lit`);
+          // Everything after the lit value stays dimmed; nothing before it does.
+          const wrongDim = frame.cards.findIndex((card, index) => card.dim !== (index > lit));
+          if (wrongDim >= 0) walk.desyncs.push(`value ${wrongDim + 1} dim=${frame.cards[wrongDim].dim} with value ${lit + 1} lit`);
+        }
+      };
+
+      // Approach: coarse steps, stopping a full coarse step short of the
+      // section. Handing over any later let one 600px stride carry a 390px
+      // viewport clean past the window in which value 01 is lit — the walk
+      // would have reported the bug it was still sampling too coarsely to see.
+      const viewport = page.viewportSize()!.height;
+      for (let step = 0; step < 40; step += 1) {
+        const frame = await page.evaluate(sampleRally);
+        record(frame);
+        if (frame.atEnd || frame.sectionTop <= viewport + 800) break;
+        await page.mouse.wheel(0, 600);
+        await page.waitForTimeout(70);
+      }
+
+      // Traverse: fine steps, so a value that is only lit for one card-height
+      // of scroll is still sampled while it is on screen.
+      for (let step = 0; step < 90; step += 1) {
+        const frame = await page.evaluate(sampleRally);
+        record(frame);
+        if (frame.atEnd || frame.sectionBottom < 0) break;
+        await page.mouse.wheel(0, 70);
+        await page.waitForTimeout(100);
+      }
+
+      return walk;
+    }
+
+    const PHONES = [
+      { label: "portrait", width: 390, height: 844 },
+      { label: "landscape", width: 844, height: 390 },
+    ];
+
+    for (const phone of PHONES) {
+      test(`activates all four values while each is on screen (${phone.label} ${phone.width}x${phone.height})`, async ({
+        page,
+      }) => {
+        test.setTimeout(120_000);
+        await page.setViewportSize({ width: phone.width, height: phone.height });
+        await page.goto("/");
+        await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
+
+        const walk = await walkRally(page);
+
+        expect(walk.cardCount, "four values render").toBe(4);
+        // The regression, stated plainly. On the build that shipped it, this
+        // failed at value 03 in portrait and at value 01 in landscape, each
+        // time with `lit anywhere=true` — the class was applied, off screen.
+        ["01", "02", "03", "04"].forEach((label, index) => {
+          expect(
+            walk.activatedOnScreen[index],
+            `value ${label} lit up while on screen (${phone.label}); lit anywhere=${walk.activatedAnywhere[index]}`,
+          ).toBe(true);
+        });
+        expect(walk.highestCounter, "counter reaches 4/4").toBe(4);
+        expect(walk.desyncs, "counter, hit and dim stay in step").toEqual([]);
+        expect(walk.maxPageOverflowPx, "no horizontal page scroll").toBeLessThanOrEqual(0);
+        // The mechanism, named: a section this much taller than the phone
+        // viewport must not be pinned, because pinning is what put three of the
+        // four values off screen.
+        expect(walk.everPinned, "the section never pins on a phone").toBe(false);
+      });
+    }
+
+    /**
+     * The other half of the fix: nothing above changes what a desktop already
+     * does. At 1440x900 the section is 711px, it fits, and the original pinned
+     * choreography is exactly what has to keep running.
+     */
+    test("keeps the pinned desktop choreography", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+      await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
+
+      const walk = await walkRally(page);
+
+      expect(walk.everPinned, "the section still pins on the desktop").toBe(true);
+      ["01", "02", "03", "04"].forEach((label, index) => {
+        expect(walk.activatedOnScreen[index], `value ${label} lit up while on screen on the desktop`).toBe(true);
+      });
+      expect(walk.highestCounter, "counter reaches 4/4").toBe(4);
+      expect(walk.desyncs, "counter, hit and dim stay in step").toEqual([]);
+      expect(walk.maxPageOverflowPx, "no horizontal page scroll").toBeLessThanOrEqual(0);
+    });
+
+    test("re-evaluates the rally after an orientation change", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
+      await walkRally(page);
+
+      // Rotate mid-visit without reloading: the rally has to rebuild against
+      // the new geometry rather than keep the layout it measured on load.
+      await page.setViewportSize({ width: 844, height: 390 });
+      await page.waitForTimeout(600);
+      await page.mouse.wheel(0, -20_000);
+      await page.waitForTimeout(600);
+
+      const walk = await walkRally(page);
+      ["01", "02", "03", "04"].forEach((label, index) => {
+        expect(walk.activatedOnScreen[index], `value ${label} lit up while on screen after rotating`).toBe(true);
+      });
+      expect(walk.maxPageOverflowPx, "no horizontal page scroll after rotating").toBeLessThanOrEqual(0);
+    });
+
+    test("leaves every value legible on a phone under reduced motion", async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+
+      const values = page.locator(".landing-values [data-value]");
+      await expect(values).toHaveCount(4);
+      for (const label of ["01", "02", "03", "04"]) {
+        const card = values.filter({ hasText: label });
+        await card.scrollIntoViewIfNeeded();
+        await expect(card).toBeVisible();
+        // Reduced motion must not leave a value stranded at the 0.32 opacity
+        // `dim` gives it, nor pinned off screen.
+        await expect(card).not.toHaveClass(/\bdim\b/);
+        await expect(card).toHaveCSS("opacity", "1");
+      }
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, "no horizontal page scroll under reduced motion").toBeLessThanOrEqual(0);
+    });
+  });
+
+  /**
    * The gallery carousel is driven by a GSAP timeline whose geometry only
    * exists once the browser has laid the strip out, so jsdom cannot see any of
    * this. Both regressions below shipped looking perfectly correct in a
