@@ -19,6 +19,9 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
   4. Emitir tokens JWT para auto-login del representante (o del alumno adulto).
 """
 import logging
+import hashlib
+import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, AntecedentesClub, Notificacion
 from app.dominio.enums import TipoRol, TipoNotificacion
 from app.soporte_transversal.tiempo import hoy_club
-from app.dominio.excepciones import EntidadDuplicada, OperacionInvalida
+from app.dominio.excepciones import EntidadDuplicada, ErrorDominio, OperacionInvalida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
@@ -35,6 +38,10 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 from app.infraestructura.repositorios.antecedentes_club_repositorio import AntecedentesClubRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
+from app.infraestructura.repositorios.inscripcion_idempotencia_repositorio import (
+    ESTADO_PENDIENTE,
+    InscripcionIdempotenciaRepositorio,
+)
 from app.presentacion.schemas.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
@@ -43,6 +50,44 @@ from app.servicios_negocio.persona_servicio import (
 )
 
 logger = logging.getLogger("cataclub.servicios.enrollment")
+
+
+# --- Idempotencia de la autoinscripción (enrollment-idempotency) -------------
+# `ConflictoIdempotencia` vive acá (no en `excepciones.py`) porque es un error
+# de ESTE flujo: el router de autoinscripción lo traduce a HTTP 409 / 425 +
+# `Retry-After` (ver `enrollment_router.py`).
+MENSAJE_IDEMPOTENCIA_EN_VUELO = (
+    "La inscripción ya está en proceso. Espere unos segundos e intente nuevamente."
+)
+MENSAJE_IDEMPOTENCIA_REUTILIZADA = (
+    "Esta solicitud de inscripción ya fue utilizada. Reinicie la inscripción "
+    "e intente nuevamente."
+)
+# Ventana que el cliente debe esperar antes de reintentar un intento en vuelo
+# (PENDIENTE). Segundos, HTTP `Retry-After`.
+REINTENTO_SEGUNDOS_EN_VUELO = 2
+
+
+class ConflictoIdempotencia(ErrorDominio):
+    """La clave de idempotencia está en vuelo (PENDIENTE) o ya fue consumida por
+    otro payload. `retry_after` no es None solo para el caso en vuelo: ahí el
+    reintento es legítimo y el router debe mandar `Retry-After`."""
+
+    def __init__(self, mensaje, *, retry_after=None, detalle_tecnico=None):
+        super().__init__(mensaje, detalle_tecnico)
+        self.retry_after = retry_after
+
+
+def _huella_de_cedula(cedula: str) -> str:
+    """Hash estable (sha256) de la cédula del alumno: identifica el intento sin
+    guardar el número — misma disciplina de no-oráculo que
+    `dominio/mensajes.py` (las respuestas públicas nunca confirman identidades)."""
+    return hashlib.sha256(cedula.encode("utf-8")).hexdigest()
+
+
+def _ahora_utc() -> datetime:
+    """Instante actual aware en UTC, mismo reloj que el default del modelo."""
+    return datetime.now(timezone.utc)
 
 
 class EnrollmentServicio:
@@ -55,8 +100,9 @@ class EnrollmentServicio:
         self.repo_ficha = FichaMedicaRepositorio(db)
         self.repo_antecedentes = AntecedentesClubRepositorio(db)
         self.repo_rol = RolRepositorio(db)
+        self.repo_idempotencia = InscripcionIdempotenciaRepositorio(db)
 
-    def enroll(self, datos: EnrollmentCreateDTO) -> dict:
+    def enroll(self, datos: EnrollmentCreateDTO, idempotency_key: str | None = None) -> dict:
         """
         Flujo completo de autoinscripción.
         Retorna: { access_token, refresh_token, token_type, persona_id }
@@ -71,6 +117,21 @@ class EnrollmentServicio:
         que solo se validaba en el último paso) dejaba al representante -- y
         a veces también al alumno -- persistidos con un 400 en la respuesta.
         """
+        # === Idempotencia: clave del intento y su historia ====================
+        # La clave la acuña el cliente (header `Idempotency-Key`); si no llega,
+        # el backend acuña una propia para que el endpoint público siga siendo
+        # robusto. La huella es un hash de la cédula del alumno (identidad
+        # estable del intento sin guardar el número).
+        clave = idempotency_key or uuid.uuid4().hex
+        huella = _huella_de_cedula(datos.alumno.cedula)
+        registro_previo = self.repo_idempotencia.obtener_por_clave(clave)
+        if registro_previo is not None:
+            # REPLAY / conflicto / expirada: solo devuelve algo cuando el intento
+            # YA está resuelto (o hay que responder un conflicto).
+            resultado = self._gestionar_intento_existente(registro_previo, huella, clave)
+            if resultado is not None:
+                return resultado
+
         # === Fase 1: validar TODO antes de escribir una sola fila =========
         edad = _calcular_edad(datos.alumno.fecha_nacimiento)
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
@@ -139,6 +200,11 @@ class EnrollmentServicio:
 
         # === Fase 2: escritura atómica -- todo o nada =======================
         try:
+            # El intento entra PENDIENTE en LA MISMA transacción que los
+            # creates (issue #338): si algo falla, el rollback lo borra y la
+            # clave queda libre; si dos requests concurrentes usan la misma
+            # clave, solo uno gana la PK y el otro recibe 425 + Retry-After.
+            registro = self.repo_idempotencia.crear_pendiente(clave, huella)
             representante_id = None
             correo_login_rep = None
             if datos.representante:
@@ -230,17 +296,97 @@ class EnrollmentServicio:
             self.db.commit()
         except IntegrityError as error:
             # Condición de carrera: dos requests concurrentes pasaron la
-            # validación de la Fase 1 para la misma cédula/correo y
-            # solo uno gana la restricción UNIQUE de la base. Mismo patrón
-            # que `MembresiaPagoServicio.registrar_pago`.
+            # validación de la Fase 1 para la misma cédula/correo y solo uno
+            # gana la restricción UNIQUE de la base. Mismo patrón que
+            # `MembresiaPagoServicio.registrar_pago`.
             self.db.rollback()
+            if self._es_conflicto_de_clave_idempotencia(error):
+                # La carrera fue por la PK de inscripcion_idempotencia: el
+                # otro request ganó la clave y probablemente sigue en vuelo.
+                # Reintentar sin cambiar nada suele alcanzar.
+                raise ConflictoIdempotencia(
+                    MENSAJE_IDEMPOTENCIA_EN_VUELO,
+                    retry_after=REINTENTO_SEGUNDOS_EN_VUELO,
+                    detalle_tecnico=(
+                        f"Clave de idempotencia {clave} ganada por otro request "
+                        "concurrente (PK inscripcion_idempotencia)."
+                    ),
+                ) from error
             raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA) from error
         except Exception:
             self.db.rollback()
             raise
 
         self._notificar_nueva_inscripcion(alumno)
+        respuesta = self._emitir_tokens(usuario)
+        # El intento queda COMPLETADA con la persona de la cuenta que recibió
+        # los tokens (la misma que devuelve la respuesta): un replay con la
+        # misma clave repone tokens SIN escribir nada nuevo.
+        self.repo_idempotencia.marcar_completada(registro, respuesta["persona_id"])
+        return respuesta
+
+    def _gestionar_intento_existente(
+        self, registro, huella: str, clave: str
+    ) -> dict | None:
+        """Resuelve qué hacer cuando la clave de idempotencia ya existe.
+
+        Retorna el dict de tokens SOLO en el REPLAY (misma clave, misma huella,
+        intento COMPLETADA y sin vencer): se reemiten tokens para la misma
+        cuenta sin escribir ninguna fila nueva. En cualquier otro caso lanza
+        `ConflictoIdempotencia` (clave en vuelo -> 425 + Retry-After; clave
+        reciclada hacia otro alumno -> 409) o devuelve None (clave vencida:
+        la fila se elimina y el intento se trata como fresco)."""
+        if registro.vence_en <= _ahora_utc():
+            # TTL de 24h vencido: la clave se reutiliza como intento fresco.
+            # La fila se borra dentro de la transacción del intento que la
+            # reemplaza (misma clave, así no puede chocar con su propia PK).
+            self.repo_idempotencia.eliminar(registro)
+            return None
+
+        if registro.estado == ESTADO_PENDIENTE:
+            raise ConflictoIdempotencia(
+                MENSAJE_IDEMPOTENCIA_EN_VUELO,
+                retry_after=REINTENTO_SEGUNDOS_EN_VUELO,
+                detalle_tecnico=(
+                    f"Clave de idempotencia {clave} aún en vuelo (PENDIENTE)."
+                ),
+            )
+
+        if registro.request_fingerprint != huella:
+            raise ConflictoIdempotencia(
+                MENSAJE_IDEMPOTENCIA_REUTILIZADA,
+                detalle_tecnico=(
+                    f"Clave de idempotencia {clave} reutilizada con la cédula de "
+                    "otro alumno (la huella no coincide)."
+                ),
+            )
+
+        # COMPLETADA, sin vencer, misma huella: REPLAY del intento original.
+        usuario = self.repo_usuario.obtener_por_persona_id(registro.persona_id)
+        if usuario is None:
+            # Caso límite: la cuenta original desapareció (borrado directo en
+            # base). La clave no se puede reponer ni reutilizar; se trata como
+            # reciclada para que el visitante reinicie la inscripción.
+            raise ConflictoIdempotencia(
+                MENSAJE_IDEMPOTENCIA_REUTILIZADA,
+                detalle_tecnico=(
+                    f"Clave {clave} COMPLETADA sin usuario para persona_id="
+                    f"{registro.persona_id}; no se pueden reponer los tokens."
+                ),
+            )
         return self._emitir_tokens(usuario)
+
+    @staticmethod
+    def _es_conflicto_de_clave_idempotencia(error: IntegrityError) -> bool:
+        """True si el `IntegrityError` viene de la PK de inscripcion_idempotencia
+        (la clave la ganó otro request concurrente) y no del UNIQUE de
+        cédula/correo. El nombre exacto lo pone Postgres en `error.orig.diag`;
+        el chequeo textual es solo el último recurso (otros drivers)."""
+        origen = getattr(error, "orig", None)
+        diag = getattr(origen, "diag", None)
+        if diag is not None and diag.constraint_name:
+            return diag.constraint_name == "inscripcion_idempotencia_pkey"
+        return "inscripcion_idempotencia" in str(error)
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
         """Asigna un rol al usuario si aún no lo tiene (idempotente).
