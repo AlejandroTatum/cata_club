@@ -220,7 +220,10 @@ function Motto(): React.ReactElement {
   return (
     <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-motto data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
-      <span className="landing-paddle" data-motto-paddle aria-hidden="true"><i /></span>
+      <span className="landing-paddle" data-motto-paddle aria-hidden="true">
+        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={62} height={62} />
+        <i />
+      </span>
       <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarte.</p>
       <Link className="landing-button" data-motto-cta href={ENROLL_HREF}>Inscríbete ya <ArrowRight aria-hidden="true" /></Link>
       <Stars />

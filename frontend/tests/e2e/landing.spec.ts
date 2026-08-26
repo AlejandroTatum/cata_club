@@ -131,6 +131,49 @@ test.describe("Landing page", () => {
     await expect(page.getByRole("link", { name: /cata club, inicio/i })).toBeVisible();
   });
 
+  test("keeps the club crest undistorted inside the motto paddle on desktop and mobile", async ({ page }) => {
+    for (const viewport of [
+      { width: 1280, height: 900 },
+      { width: 390, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+
+      const paddle = page.locator(".landing-motto [data-motto-paddle]");
+      await expect(paddle).toBeVisible();
+      // Decorative: excluded from the accessibility tree entirely.
+      await expect(paddle).toHaveAttribute("aria-hidden", "true");
+
+      const crest = paddle.locator("img");
+      await expect(crest).toBeVisible();
+
+      const metrics = await crest.evaluate((img: HTMLImageElement) => {
+        const box = img.getBoundingClientRect();
+        const paddleBox = img.closest("[data-motto-paddle]")!.getBoundingClientRect();
+        return {
+          width: box.width,
+          height: box.height,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          paddleWidth: paddleBox.width,
+          paddleHeight: paddleBox.height,
+        };
+      });
+
+      // The crest asset is square (620x620); rendered box must stay square
+      // too — any skew here would mean it got stretched instead of contained.
+      const naturalRatio = metrics.naturalWidth / metrics.naturalHeight;
+      const renderedRatio = metrics.width / metrics.height;
+      expect(Math.abs(renderedRatio - naturalRatio)).toBeLessThan(0.05);
+
+      // It sits inside the paddle blade, not overflowing it.
+      expect(metrics.width).toBeLessThanOrEqual(metrics.paddleWidth + 1);
+      expect(metrics.height).toBeLessThanOrEqual(metrics.paddleHeight + 1);
+      // ...and stays legible rather than shrinking to a speck.
+      expect(metrics.width).toBeGreaterThanOrEqual(metrics.paddleWidth * 0.6);
+    }
+  });
+
   test("renders hero and navigates to login via CTA", async ({ page }) => {
     await page.goto("/");
 
