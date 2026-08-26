@@ -64,6 +64,25 @@ def test_worker_materializa_notificacion_y_repetir_es_idempotente(monkeypatch, d
     assert db_session.query(Notificacion).filter_by(enrollment_outbox_id=event_id).count() == 1
 
 
+def test_worker_fallo_de_tarea_reencola(monkeypatch, db_session):
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
+
+    event = _evento(db_session, status="ENVIANDO", attempts=1)
+    event_id = event.id
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
+    original_add = db_session.add
+
+    def failing_add(value):
+        if isinstance(value, Notificacion):
+            raise RuntimeError("fallo de tarea")
+        original_add(value)
+
+    monkeypatch.setattr(db_session, "add", failing_add)
+    assert tasks.entregar_inscripcion_notificacion(event_id)["enviado"] is False
+    assert db_session.get(EnrollmentNotificacionOutbox, event_id).status == "PENDIENTE"
+    assert db_session.get(EnrollmentNotificacionOutbox, event_id).last_error_redacted == "RuntimeError: delivery failed"
+
+
 def test_dispatcher_fallo_de_broker_reencola(monkeypatch, db_session):
     from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
 
