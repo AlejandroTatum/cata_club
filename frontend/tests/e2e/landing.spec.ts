@@ -148,6 +148,27 @@ test.describe("Landing page", () => {
       const crest = paddle.locator("img");
       await expect(crest).toBeVisible();
 
+      // The motto section sits far below the fold (its exact distance shifts
+      // with unmocked /api/schedules and /api/sponsors payload sizes and with
+      // the navbar's own height), and this crest has no `priority` prop, so
+      // the browser genuinely defers its fetch under native `loading="lazy"`
+      // until it nears the viewport — it never requests the asset at all
+      // otherwise. `toBeVisible` only asserts CSS visibility, not that a byte
+      // of image data has arrived, so naturalWidth/Height stayed 0 (an
+      // undefined-vs-undefined NaN in the ratio check) whenever the section
+      // happened to load far enough away not to intersect yet. Scroll it into
+      // view first, exactly like a real visitor would, then wait for the
+      // resulting fetch to actually finish decoding.
+      await crest.scrollIntoViewIfNeeded();
+      await crest.evaluate((img: HTMLImageElement) =>
+        img.complete && img.naturalWidth > 0
+          ? undefined
+          : new Promise<void>((resolve, reject) => {
+              img.addEventListener("load", () => resolve(), { once: true });
+              img.addEventListener("error", () => reject(new Error("crest image failed to load")), { once: true });
+            })
+      );
+
       const metrics = await crest.evaluate((img: HTMLImageElement) => {
         const box = img.getBoundingClientRect();
         const paddleBox = img.closest("[data-motto-paddle]")!.getBoundingClientRect();
