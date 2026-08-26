@@ -13,6 +13,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { BLOOD_TYPES } from "@/types/enrollment";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/server/auth";
+import { ENROLLMENT_ATTEMPT_COOKIE } from "@/lib/server/enrollment-constants";
 import { POST } from "./route";
 
 const validBody = {
@@ -263,5 +264,105 @@ describe("POST /api/enrollment — optional field contract", () => {
     const response = await POST(enrollRequest(body));
 
     expect(response.status).toBe(201);
+  });
+});
+
+/**
+ * Idempotencia de la autoinscripción (enrollment-idempotency): el BFF es el
+ * dueño de la clave de intento. Acuña una por intento (si el cliente no mandó
+ * `Idempotency-Key`), la reenvía al backend, la persiste en una cookie para
+ * REUTILIZARLA en el reintento del MISMO intento, y la limpia cuando el
+ * intento se consumió (201) o murió de forma terminal (400/409).
+ */
+describe("POST /api/enrollment — idempotency", () => {
+  function forwardedKey(init: RequestInit | undefined): string | undefined {
+    return new Headers((init as RequestInit).headers).get("idempotency-key") ?? undefined;
+  }
+
+  it("mints a server-side Idempotency-Key when the client sends none", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    await POST(enrollRequest(validBody));
+
+    const key = forwardedKey(vi.mocked(global.fetch).mock.calls[0][1]);
+    expect(key).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it("forwards a client-supplied Idempotency-Key as-is", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    await POST(enrollRequest(validBody, "POST", { "idempotency-key": "clave-del-cliente" }));
+
+    expect(forwardedKey(vi.mocked(global.fetch).mock.calls[0][1])).toBe("clave-del-cliente");
+  });
+
+  it("persists the attempt key in a cookie so a failed attempt can be retried", async () => {
+    // Respuesta retryable (503 del backend): el intento puede haberse
+    // procesado; el reintento debe llevar la MISMA clave.
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "boom", message: "boom" }, 503));
+
+    const response = await POST(enrollRequest(validBody));
+
+    expect(response.status).toBe(503);
+    const cookie = response.cookies.get(ENROLLMENT_ATTEMPT_COOKIE);
+    expect(cookie?.value).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(cookie?.httpOnly).toBe(true);
+    expect(cookie?.sameSite).toBe("lax");
+    expect(forwardedKey(vi.mocked(global.fetch).mock.calls[0][1])).toBe(cookie?.value);
+  });
+
+  it("reuses the persisted attempt key on retry (cookie -> same forwarded header)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "boom", message: "boom" }, 503));
+    const primer = await POST(enrollRequest(validBody));
+    const clave = primer.cookies.get(ENROLLMENT_ATTEMPT_COOKIE)?.value;
+    expect(clave).toBeTruthy();
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+    await POST(enrollRequest(validBody, "POST", { cookie: `${ENROLLMENT_ATTEMPT_COOKIE}=${clave}` }));
+
+    expect(forwardedKey(vi.mocked(global.fetch).mock.calls[1][1])).toBe(clave);
+  });
+
+  it("clears the attempt key after a successful enrollment (intento consumido)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(validBody));
+
+    expect(response.status).toBe(201);
+    const cookie = response.cookies.get(ENROLLMENT_ATTEMPT_COOKIE);
+    expect(cookie === undefined || cookie.maxAge === 0).toBe(true);
+  });
+
+  it("clears the attempt key after a terminal 409 (clave reciclada / otro alumno)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "usada", message: "usada" }, 409));
+
+    const response = await POST(enrollRequest(validBody, "POST", { "idempotency-key": "clave-consumida" }));
+
+    expect(response.status).toBe(409);
+    const cookie = response.cookies.get(ENROLLMENT_ATTEMPT_COOKIE);
+    expect(cookie === undefined || cookie.maxAge === 0).toBe(true);
+  });
+
+  it("clears the attempt key on a validation 400 (el intento no se consumió)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "invalido", message: "invalido" }, 400));
+
+    const response = await POST(enrollRequest(validBody));
+
+    expect(response.status).toBe(400);
+    const cookie = response.cookies.get(ENROLLMENT_ATTEMPT_COOKIE);
+    expect(cookie === undefined || cookie.maxAge === 0).toBe(true);
+  });
+
+  it("mints a fresh key for a new student (attempt without cookie)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "boom", message: "boom" }, 503));
+    const fallido = await POST(enrollRequest(validBody));
+    const clavePrevia = fallido.cookies.get(ENROLLMENT_ATTEMPT_COOKIE)?.value;
+    expect(clavePrevia).toBeTruthy();
+
+    // Un visitante distinto / otro alumno no trae la cookie: clave nueva.
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+    await POST(enrollRequest(validBody));
+
+    expect(forwardedKey(vi.mocked(global.fetch).mock.calls[1][1])).not.toBe(clavePrevia);
   });
 });
