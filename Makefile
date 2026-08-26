@@ -240,6 +240,15 @@ qa-live: ## Correr los specs E2E que atraviesan el backend real de QA
 qa-logs: ## Ver los logs del entorno de QA
 	$(QA_ENV) $(QA_COMPOSE) logs -f
 
+# Smoke check NO SENSIBLE del proveedor del chatbot (issue #645). Corre dentro
+# del backend de QA, que es el proceso que atiende las consultas: mirar el
+# `.env` desde afuera no prueba que el contenedor lo haya recibido (el entorno
+# se fija al crearlo, y un `restart` conserva el valor viejo). No imprime la
+# clave ni contacta la red. Sin `--exigir`: QA es un entorno donde no tener
+# chatbot externo es una configuración válida.
+qa-chatbot-check: ## Verificar la config del proveedor del chatbot en QA (no imprime el secreto)
+	$(QA_ENV) $(QA_COMPOSE) exec backend uv run python scripts/verificar_chatbot.py
+
 # ─── Clean ──────────────────────────────────────────────────────────────────
 clean: clean-backend clean-frontend ## Clean caches from both projects
 

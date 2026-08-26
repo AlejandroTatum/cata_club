@@ -61,6 +61,113 @@ crea persona + usuario + rol en una transacción y se niega si ya existe un
 ADMINISTRADOR — repetirlo es inofensivo. Los siguientes administradores se
 asignan desde la aplicación con esta cuenta.
 
+## Clave del proveedor del chatbot (`OPENCODE_API_KEY`)
+
+El chatbot de FAQ consulta el gateway OpenCode Zen. El propietario entrega la
+clave **fuera de banda**: nunca se pega en el repositorio, en un issue, en un
+PR ni en un chat. El mecanismo aprobado es el mismo que el del resto de las
+credenciales de este stack — el archivo `.env` del host, junto a los archivos
+Compose, que `.gitignore` excluye y que un job de CI (`guard-secretos`) impide
+trackear.
+
+El chatbot es una función **opcional**. Sin clave, `ChatbotServicio` responde
+desde su FAQ embebida y el resto de la aplicación no se ve afectada: el backend
+arranca igual, y por eso `OPENCODE_API_KEY` no está en el fail-fast de
+producción. Ese respaldo es también lo que hace peligrosa una clave *mal*
+escrita: el usuario ve una respuesta plausible y nadie se entera de que el
+asistente externo nunca se usó. De ahí el chequeo de abajo.
+
+### Configuración inicial
+
+1. Escribir la clave en el `.env` del host, en una línea propia, sin comillas
+   y sin comentario pegado:
+
+   ```
+   OPENCODE_API_KEY=<clave-que-entrega-el-propietario>
+   ```
+
+2. Recrear los servicios Python para que tomen el nuevo entorno.
+   `docker-compose.yml` declara `OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}`
+   dentro del ancla `&backend_env`, así que la variable llega a `backend`,
+   `celery-worker` y `celery-beat` por interpolación de Compose — no hay que
+   editar ningún archivo del repositorio para suministrarla:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d \
+     backend celery-worker celery-beat
+   ```
+
+   Recrear el contenedor es obligatorio: el entorno de un contenedor se fija al
+   crearlo, y un `restart` conserva el valor viejo.
+
+### Verificación
+
+```bash
+docker compose exec backend uv run python scripts/verificar_chatbot.py --exigir
+```
+
+Corre dentro del proceso que atiende las consultas y mira exactamente el valor
+que el servicio le pasa al cliente del gateway. No contacta la red, no gasta
+tokens y **no imprime la clave**: solo el estado, una explicación y una huella
+`sha256:` truncada del valor completo, que es de una sola vía.
+
+| código | estado | qué significa |
+| --- | --- | --- |
+| 0 | `configurada` | llegó un valor plausible; que el proveedor lo acepte solo lo prueba una consulta real |
+| 0 | `ausente` sin `--exigir` | no hay clave y el despliegue no la exige: el chatbot usa su FAQ local |
+| 1 | `incompleta` | hay un valor que ninguna credencial puede tener (comillas, espacios, comentario pegado o el placeholder `<...>` de los ejemplos). Siempre es un error del operador |
+| 2 | `ausente` con `--exigir` | el despliegue declara que el chatbot está habilitado y la clave no llegó |
+
+`--exigir` es lo que separa los dos despliegues legítimos: usalo en el que
+habilitó el asistente externo, omitilo en el que no. La comprobación de punta a
+punta sigue siendo abrir el chat en la aplicación: si la respuesta empieza con
+«El asistente externo no está disponible en este momento», se está sirviendo el
+respaldo local.
+
+### Rotación
+
+Rotar es reemplazar el valor sin ventana de indisponibilidad visible: mientras
+el contenedor no se recree, sigue sirviendo con la clave anterior.
+
+1. Emitir la clave nueva en el proveedor y recibirla fuera de banda.
+2. Anotar la huella actual (`verificar_chatbot.py` la imprime) — es lo que
+   permite confirmar el cambio sin ver ningún secreto.
+3. Reemplazar la línea en el `.env` del host y recrear los tres servicios
+   Python con el mismo comando de la configuración inicial.
+4. Volver a correr la verificación: el estado debe seguir en `configurada` y la
+   huella debe ser **distinta** de la anotada. Si la huella no cambió, el
+   contenedor no se recreó.
+5. Recién entonces revocar la clave anterior en el proveedor.
+
+### Revocación
+
+1. Revocar la clave en el panel del proveedor. A partir de ese momento el
+   gateway la rechaza y el chatbot sirve su FAQ local, sin errores visibles.
+2. Vaciar la línea en el `.env` del host (`OPENCODE_API_KEY=`) o borrarla, y
+   recrear los tres servicios Python.
+3. Verificar **sin** `--exigir`: el estado esperado es `ausente` con código 0.
+   Dejar la clave revocada en el `.env` deja el despliegue en `configurada` con
+   un secreto muerto, que es justo lo que la revocación quiso evitar.
+
+Si la clave se filtró, el orden se invierte: revocar primero en el proveedor y
+después limpiar el `.env`.
+
+### QA y otros entornos
+
+El entorno de QA (`make qa-up`) hereda `OPENCODE_API_KEY` del `.env` de quien
+lo levanta, a diferencia de las variables `SMTP_*`, que el overlay de QA fija a
+Mailpit para que nunca use el proveedor del operador. Es deliberado: QA tiene
+que poder ejercitar el chatbot real. La contrapartida es que las consultas de
+QA se cobran contra la misma clave que producción.
+
+**Límite conocido:** este repositorio no describe ningún entorno de *staging*.
+Los únicos despliegues que puede documentar son el de producción
+(`docker-compose.yml` + `docker-compose.prod.yml`, vía `preflight-production.sh`
+y `deploy.sh`) y el de QA local (`docker-compose.qa.yml`, vía `make qa-up`). Si
+existe un staging, su suministro de secretos no está versionado acá y hay que
+tratarlo con el mismo procedimiento de producción, confirmando a mano dónde vive
+su `.env`.
+
 ## Límite de compatibilidad de migraciones
 
 Los scripts **no pueden inferir** si una migración Alembic admite rollback. La

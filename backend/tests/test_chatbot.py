@@ -261,6 +261,69 @@ def test_credencial_ausente_no_escapa_al_manejo_de_fallas(client, monkeypatch):
     assert resp.json()["respuesta"]
 
 
+# --- Credencial incompleta y no filtrado (issue #645) -----------------------
+# Una credencial INCOMPLETA (comillas, espacios, el placeholder de los
+# ejemplos) es distinta de una ausente: el SDK la acepta como cadena y el
+# rechazo llega desde el gateway, en tiempo de request. El respaldo local
+# tiene que cubrir ese caso igual, y la respuesta que ve el usuario nunca
+# puede arrastrar el valor configurado.
+
+CLAVE_FALSA_PARA_FUGAS = "clave-inventada-solo-para-tests-qwx9v8u7t6"
+
+
+def _fragmentos(clave: str, largo: int = 8) -> list[str]:
+    return [clave[i : i + largo] for i in range(len(clave) - largo + 1)]
+
+
+@pytest.mark.parametrize(
+    "clave",
+    ["<api-key>", f'"{CLAVE_FALSA_PARA_FUGAS}"', f" {CLAVE_FALSA_PARA_FUGAS}"],
+)
+def test_credencial_incompleta_tambien_degrada_al_respaldo_local(client, monkeypatch, clave):
+    monkeypatch.setattr(chatbot_servicio_mod.settings, "opencode_api_key", clave)
+    _mockear_cliente_openai_que_falla(
+        monkeypatch,
+        openai.APIError(
+            "invalid api key",
+            request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions"),
+            body=None,
+        ),
+    )
+
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "¿Cómo veo mis pagos?"})
+
+    assert resp.status_code == 200, resp.text
+    assert "Mi Cuenta" in resp.json()["respuesta"]
+
+
+def test_la_respuesta_del_endpoint_nunca_arrastra_la_credencial_configurada(
+    client, monkeypatch
+):
+    """El cuerpo de la respuesta es lo único que el chatbot expone a un
+    cliente ANÓNIMO: el endpoint es público y sin auth."""
+    monkeypatch.setattr(
+        chatbot_servicio_mod.settings, "opencode_api_key", CLAVE_FALSA_PARA_FUGAS
+    )
+    _mockear_cliente_openai_que_falla(
+        monkeypatch,
+        openai.APIError(
+            f"upstream rechazó la credencial {CLAVE_FALSA_PARA_FUGAS}",
+            request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions"),
+            body=None,
+        ),
+    )
+
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+
+    assert resp.status_code == 200, resp.text
+    for fragmento in _fragmentos(CLAVE_FALSA_PARA_FUGAS):
+        assert fragmento not in resp.text, (
+            "la respuesta pública del chatbot arrastró un fragmento de la "
+            "credencial; el texto del error del proveedor no puede llegar al "
+            "cliente"
+        )
+
+
 # --- Rate limit del endpoint ------------------------------------------------
 
 
