@@ -807,4 +807,220 @@ test.describe("Landing page", () => {
       expect(hero.copyToFrame).toBeLessThanOrEqual(44);
     });
   });
+
+  /**
+   * The paddle under the hero's serve ball (issue #640).
+   *
+   * Two separate claims live here and neither implies the other:
+   *
+   *   - WHERE the paddle is. Measured through `offsetLeft`/`offsetTop`, which
+   *     are layout values and therefore blind to the transforms GSAP writes —
+   *     a sample taken mid-flight reads the same as one taken at rest. Both
+   *     elements are direct children of `.landing-hero`, so they share one
+   *     offset parent and the numbers are directly comparable.
+   *   - WHEN the paddle is square to the ball. That one cannot be measured from
+   *     a still: it is a relationship over time, so the real timeline is
+   *     sampled frame by frame in the real browser and the pair is checked at
+   *     the frames where contact actually happens. A paddle that had drifted
+   *     out of phase would still be in the right PLACE — it would simply be
+   *     swinging at nothing — which is why the geometry test cannot stand in
+   *     for this one.
+   *
+   * `landing-serve.test.ts` proves the same phase lock against the timeline's
+   * own clock; what this adds is that the browser really runs it, at a real
+   * viewport, inside the hero's bounds.
+   */
+  test.describe("hero serve paddle", () => {
+    /** The two layouts the hero actually has: a two-column grid, and stacked. */
+    const VIEWPORTS = [
+      { name: "desktop", width: 1440, height: 900 },
+      { name: "phone", width: 390, height: 844 },
+    ];
+
+    /** Transform-blind layout facts about the ball/paddle pair. */
+    const measureServe = (page: import("@playwright/test").Page) =>
+      page.evaluate(() => {
+        const hero = document.querySelector(".landing-hero") as HTMLElement;
+        const ball = document.querySelector("[data-serve-ball]") as HTMLElement;
+        const paddle = document.querySelector("[data-serve-paddle]") as HTMLElement;
+        const root = document.documentElement;
+        return {
+          // Comparable offsets require one shared offset parent, so this is a
+          // precondition of every number below rather than a nicety.
+          sharedOffsetParent: ball.offsetParent === hero && paddle.offsetParent === hero,
+          ballCentreX: ball.offsetLeft + ball.offsetWidth / 2,
+          paddleCentreX: paddle.offsetLeft + paddle.offsetWidth / 2,
+          // Negative = the ball rests slightly into the face, which is contact.
+          contactGap: paddle.offsetTop - (ball.offsetTop + ball.offsetHeight),
+          ballWidth: ball.offsetWidth,
+          paddleWidth: paddle.offsetWidth,
+          paddleBottomInHero: hero.clientHeight - (paddle.offsetTop + paddle.offsetHeight),
+          pageOverflowPx: root.scrollWidth - root.clientWidth,
+        };
+      });
+
+    /**
+     * Records the live serve for ~1.6s — more than one full cycle — reading the
+     * transforms the motion layer writes, never the classes it sets.
+     */
+    const sampleServe = (page: import("@playwright/test").Page) =>
+      page.evaluate(
+        () =>
+          new Promise<{ ty: number; rot: number; ballTopInHero: number }[]>((resolve) => {
+            const hero = document.querySelector(".landing-hero") as HTMLElement;
+            const ball = document.querySelector("[data-serve-ball]") as HTMLElement;
+            const paddle = document.querySelector("[data-serve-paddle]") as HTMLElement;
+            // `transform: none` is not a matrix string — DOMMatrix rejects it.
+            const matrixOf = (element: HTMLElement): DOMMatrixReadOnly => {
+              const value = getComputedStyle(element).transform;
+              return value === "none" ? new DOMMatrixReadOnly() : new DOMMatrixReadOnly(value);
+            };
+            const samples: { ty: number; rot: number; ballTopInHero: number }[] = [];
+            const started = performance.now();
+            const tick = (now: number): void => {
+              const paddleMatrix = matrixOf(paddle);
+              samples.push({
+                ty: matrixOf(ball).m42,
+                rot: (Math.atan2(paddleMatrix.b, paddleMatrix.a) * 180) / Math.PI,
+                ballTopInHero:
+                  ball.getBoundingClientRect().top - hero.getBoundingClientRect().top,
+              });
+              if (now - started >= 1600) resolve(samples);
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }),
+      );
+
+    /** Resolves once the motion layer has loaded and is actually moving the ball. */
+    const waitForServe = async (page: import("@playwright/test").Page): Promise<void> => {
+      await page.waitForFunction(
+        () => {
+          const ball = document.querySelector("[data-serve-ball]");
+          if (!ball) return false;
+          const value = getComputedStyle(ball).transform;
+          return value !== "none" && value !== "matrix(1, 0, 0, 1, 0, 0)";
+        },
+        null,
+        { timeout: 20_000 },
+      );
+    };
+
+    for (const viewport of VIEWPORTS) {
+      test(`stands the paddle under the ball's path on ${viewport.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto("/");
+        await page.locator("[data-serve-paddle]").waitFor();
+        const serve = await measureServe(page);
+
+        expect(serve.sharedOffsetParent).toBe(true);
+        // On the ball's own vertical axis: the trajectory is straight up, so
+        // "aligned with the path" is exactly "same centre".
+        expect(Math.abs(serve.ballCentreX - serve.paddleCentreX)).toBeLessThanOrEqual(1);
+        // Beneath it, and touching — not floating below with a gap, and not
+        // swallowing the ball either.
+        expect(serve.contactGap).toBeGreaterThanOrEqual(-4);
+        expect(serve.contactGap).toBeLessThanOrEqual(6);
+        // A face the ball could actually be struck by.
+        expect(serve.paddleWidth).toBeGreaterThan(serve.ballWidth);
+        // Clear of the hero's bottom edge, so the whole paddle is on screen.
+        expect(serve.paddleBottomInHero).toBeGreaterThanOrEqual(12);
+        expect(serve.pageOverflowPx).toBeLessThanOrEqual(0);
+      });
+
+      test(`keeps ball and paddle in phase on ${viewport.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto("/");
+        await waitForServe(page);
+        const samples = await sampleServe(page);
+
+        const apex = samples.reduce((lowest, sample) => (sample.ty < lowest.ty ? sample : lowest));
+        // The serve really runs — without this the checks below are vacuous.
+        expect(apex.ty).toBeLessThanOrEqual(-60);
+        // ...and the paddle is swung away while the ball is up there.
+        expect(Math.abs(apex.rot)).toBeGreaterThanOrEqual(10);
+
+        // Every frame where the ball is on the face, the face is square to it.
+        const contacts = samples.filter((sample) => Math.abs(sample.ty) <= 6);
+        expect(contacts.length).toBeGreaterThanOrEqual(3);
+        const offSquare = contacts.filter((sample) => Math.abs(sample.rot) > 3);
+        expect(offSquare).toEqual([]);
+
+        // ...and the mirror of it: a paddle sitting square while the ball is
+        // still in the air has finished its swing early and is waiting at a
+        // contact that has not happened. Checking only the frames above would
+        // pass that, because those frames would look perfect.
+        const idleInFlight = samples.filter(
+          (sample) => Math.abs(sample.ty) > 10 && Math.abs(sample.rot) <= 0.5,
+        );
+        expect(idleInFlight).toEqual([]);
+
+        // The flight stays inside the hero: `overflow: hidden` would otherwise
+        // hide the top of the arc instead of failing.
+        const highest = Math.min(...samples.map((sample) => sample.ballTopInHero));
+        expect(highest).toBeGreaterThanOrEqual(0);
+      });
+
+      test(`holds the still composition under reduced motion on ${viewport.name}`, async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto("/");
+        await page.locator("[data-serve-paddle]").waitFor();
+
+        // Nothing moves...
+        const transforms = await page.evaluate(() => {
+          const flat = (selector: string): string => {
+            const value = getComputedStyle(document.querySelector(selector) as HTMLElement).transform;
+            return value === "none" ? "matrix(1, 0, 0, 1, 0, 0)" : value;
+          };
+          return { ball: flat("[data-serve-ball]"), paddle: flat("[data-serve-paddle]") };
+        });
+        expect(transforms.ball).toBe("matrix(1, 0, 0, 1, 0, 0)");
+        expect(transforms.paddle).toBe("matrix(1, 0, 0, 1, 0, 0)");
+
+        // ...and what is left standing is the hit itself: the ball at rest on a
+        // square face, which is the same frame the animation passes through.
+        const serve = await measureServe(page);
+        expect(Math.abs(serve.ballCentreX - serve.paddleCentreX)).toBeLessThanOrEqual(1);
+        expect(serve.contactGap).toBeGreaterThanOrEqual(-4);
+        expect(serve.contactGap).toBeLessThanOrEqual(6);
+        expect(serve.pageOverflowPx).toBeLessThanOrEqual(0);
+      });
+    }
+
+    test("carries the club crest on the paddle face", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+
+      const crest = page.locator("[data-serve-paddle] img");
+      await expect(crest).toHaveAttribute("src", /cata-club-logo-avatar/);
+
+      // `toBeVisible` only proves CSS visibility. The bytes have to have
+      // arrived before `naturalWidth` means anything, or a lazy image reports 0
+      // and every ratio computed from it comes out NaN.
+      //
+      // The scroll goes through `evaluate` rather than `scrollIntoViewIfNeeded`
+      // because that helper waits for the element to be STABLE, and this one
+      // lives inside a paddle that is never still — it retried itself to a
+      // timeout. `evaluate` runs no actionability check, so the guard survives
+      // the very animation this suite exists to assert.
+      await crest.evaluate((image: HTMLImageElement) => {
+        image.scrollIntoView({ block: "center" });
+        return (
+          image.complete ||
+          new Promise((resolve, reject) => {
+            image.addEventListener("load", resolve, { once: true });
+            image.addEventListener("error", reject, { once: true });
+          })
+        );
+      });
+      const drawn = await crest.evaluate((image: HTMLImageElement) => ({
+        naturalWidth: image.naturalWidth,
+        rendered: image.getBoundingClientRect().width,
+      }));
+
+      expect(drawn.naturalWidth).toBeGreaterThan(0);
+      expect(drawn.rendered).toBeGreaterThan(0);
+    });
+  });
 });

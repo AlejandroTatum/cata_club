@@ -100,6 +100,19 @@ function Hero(): React.ReactElement {
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
       <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
+      {/* The paddle that produces that serve. It reuses `.landing-paddle` and
+          `.landing-paddle-crest` — the exact shape and crest the Motto section
+          renders — so the hero borrows the club's own mark instead of adding a
+          second, generic one beside it. `landing.css` anchors the pair from a
+          single origin so they cannot be positioned apart, and
+          `landing-serve.ts` puts them on one timeline so they cannot fall out
+          of phase. At rest — JS never loaded, or reduced motion — the ball
+          standing square on the face IS the impact, so the still frame states
+          the same thing the animation does. */}
+      <span className="landing-paddle landing-hero-serve-paddle" aria-hidden="true" data-serve-paddle>
+        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={62} height={62} />
+        <i />
+      </span>
       {/* No brand mark here. The navbar lockup sits directly above this copy
           and already names the club, so a second one only duplicated the
           identity and ate the vertical space the headline wants. `landing.css`
