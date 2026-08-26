@@ -19,10 +19,10 @@ disponible. Cuando se resuelva el billing de Go, volver a `deepseek-v4-flash`
 + `https://opencode.ai/zen/go/v1`.
 """
 import re
+import unicodedata
 from typing import List, Optional
 
 import openai
-from fastapi import HTTPException, status
 
 from app.soporte_transversal.configuracion import settings
 
@@ -160,49 +160,38 @@ class ChatbotServicio:
                 max_tokens=MAX_TOKENS_RESPUESTA,
                 messages=mensajes,
             )
-        # El orden importa: RateLimitError, APITimeoutError y APIConnectionError
-        # son todas subclases de APIError, así que van de lo más específico a lo
-        # más general. Antes se capturaban las cuatro en un solo `except` con un
-        # único 502, y el usuario no podía distinguir "esperá un momento" de
-        # "el asistente está caído" ni de "tardó demasiado".
-        except openai.RateLimitError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=(
-                    "El asistente está recibiendo demasiadas consultas. "
-                    "Espera unos segundos e inténtalo de nuevo."
-                ),
-            ) from exc
-        except openai.APITimeoutError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="El asistente tardó demasiado en responder. Vuelve a intentarlo.",
-            ) from exc
-        except openai.APIConnectionError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="El asistente no está disponible en este momento. Inténtalo más tarde.",
-            ) from exc
-        except openai.APIError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="No se pudo contactar al asistente. Inténtalo de nuevo en un momento.",
-            ) from exc
-        # Catch-all DELIBERADO y al final: `OpenAIError` es la base de las
-        # cuatro excepciones de arriba (todas la heredan vía `APIError`), así
-        # que acá abajo solo cae lo que ninguna de ellas cubre -- el caso real
-        # es la construcción del cliente sin credencial (issue #337), que no
-        # es un fallo de RED ni de RATE LIMIT sino de configuración. Mismo
-        # tratamiento (503, "no disponible") que `APIConnectionError`: para
-        # quien pregunta, "falta la API key" y "el proveedor no responde" son
-        # la misma experiencia -- el asistente no está ahí.
-        except openai.OpenAIError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="El asistente no está disponible en este momento. Inténtalo más tarde.",
-            ) from exc
-
+        # Las fallas conocidas del proveedor degradan a la FAQ local. Se conserva
+        # un catch explícito de las excepciones del SDK: errores de autenticación,
+        # seguridad o programación fuera de OpenAIError no se convierten en éxito.
+        except (
+            openai.RateLimitError,
+            openai.APITimeoutError,
+            openai.APIConnectionError,
+            openai.APIError,
+            openai.OpenAIError,
+        ):
+            return self._respuesta_local(mensaje)
         return self._limpiar_markdown(respuesta.choices[0].message.content or "")
+
+    @staticmethod
+    def _respuesta_local(mensaje: str) -> str:
+        """Responde desde la FAQ embebida si el proveedor no está disponible."""
+        normalizado = unicodedata.normalize("NFD", mensaje.lower())
+        normalizado = "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
+        normalizado = re.sub(r"[^a-z0-9 ]", " ", normalizado)
+        normalizado = re.sub(r"\s+", " ", normalizado).strip()
+        respuestas = (
+            (("contrasena", "clave", "login", "iniciar sesion"), "Para iniciar sesión, ingrese su correo y contraseña en la pantalla de login. Si olvidó la contraseña, use la recuperación de contraseña vía correo electrónico desde esa pantalla."),
+            (("pago", "membresia"), "Puede ver el estado de sus pagos y de su membresía desde Mi Cuenta. El administrador registra pagos y membresías desde Membresías y Pagos."),
+            (("asistencia", "entrenamiento"), "Puede consultar su propio historial de asistencia desde Mi Cuenta. Cada registro muestra el día y horario de esa clase."),
+            (("ficha medica", "alergia", "tipo de sangre", "emergencia"), "La ficha médica se ve y se corrige desde Mi Cuenta; la de un hijo o dependiente la corrige su representante o un administrador."),
+            (("horario", "clase", "formativo", "infantil", "juvenil", "competitivo", "adulto"), "Los horarios de las clases los define y gestiona el administrador desde Horarios."),
+            (("report",), "El administrador genera reportes desde Reportes."),
+        )
+        for terminos, respuesta in respuestas:
+            if any(termino in normalizado for termino in terminos):
+                return "El asistente externo no está disponible en este momento. " + respuesta
+        return "El asistente externo no está disponible en este momento. No cuento con esa información; contacte a un administrador del club."
 
     @staticmethod
     def _limpiar_markdown(texto: str) -> str:

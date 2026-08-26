@@ -24,6 +24,7 @@ import { passthroughBackendError } from "@/lib/server/backend-client";
  * means redoing that arithmetic too.
  */
 const CHATBOT_TIMEOUT_MS = 30_000;
+const CHATBOT_MAX_MESSAGE_LENGTH = 2_000;
 
 interface ChatbotRequestBody {
   mensaje: string;
@@ -37,7 +38,11 @@ interface BackendChatbotResponse {
 function isChatbotRequestBody(value: unknown): value is ChatbotRequestBody {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  if (typeof v.mensaje !== "string" || v.mensaje.trim().length === 0) return false;
+  if (
+    typeof v.mensaje !== "string" ||
+    v.mensaje.trim().length === 0 ||
+    v.mensaje.length > CHATBOT_MAX_MESSAGE_LENGTH
+  ) return false;
   if (v.historial === undefined) return true;
   if (!Array.isArray(v.historial)) return false;
   return v.historial.every(
