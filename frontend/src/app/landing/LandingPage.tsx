@@ -110,7 +110,15 @@ function Hero(): React.ReactElement {
           standing square on the face IS the impact, so the still frame states
           the same thing the animation does. */}
       <span className="landing-paddle landing-hero-serve-paddle" aria-hidden="true" data-serve-paddle>
-        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={62} height={62} />
+        {/* 84 rather than the Motto paddle's 62, though CSS sizes this to ~46px:
+            these numbers pick the srcset, not the rendered box. At 62 the crest
+            asks the optimizer for `w=64`/`w=128` — a transform of a 340KB PNG
+            that nothing else above the fold needs. At 84 it asks for the exact
+            URLs the navbar lockup is already fetching, so the hero adds no new
+            above-the-fold image work at all, and the face gets a denser source
+            into the bargain. The Motto crest stays at 62: it is below the fold,
+            loads lazily, and blocks nothing. */}
+        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={84} height={84} />
         <i />
       </span>
       {/* No brand mark here. The navbar lockup sits directly above this copy
