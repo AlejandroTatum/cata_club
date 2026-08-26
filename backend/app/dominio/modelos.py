@@ -12,7 +12,7 @@ Correcciones aplicadas respecto al diagrama original:
 - Se agrega FK directa Pago -> Persona (estaba en el código base pero faltaba en el diagrama)
 """
 import logging
-from datetime import datetime, date, time, timezone
+from datetime import datetime, date, time, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -1577,3 +1577,36 @@ class VinculacionRepresentante(Base):
 
     representante_nuevo_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     representante_nuevo: Mapped["Persona"] = relationship(foreign_keys=[representante_nuevo_id])
+
+
+# ---------------------------------------------------------------------------
+# Idempotencia de la autoinscripción pública
+# ---------------------------------------------------------------------------
+# Una fila por intento de inscripción, identificada por la clave de
+# idempotencia. Deduplica reintentos y corta el reciclaje de una clave hacia
+# otro alumno. TTL de 24h; la limpieza borra las filas vencidas.
+class InscripcionIdempotencia(Base):
+    __tablename__ = "inscripcion_idempotencia"
+    __table_args__ = (
+        Index("ix_inscripcion_idempotencia_persona_id", "persona_id"),
+    )
+
+    # La clave ES la PK: la base detiene carreras concurrentes.
+    idempotency_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    estado: Mapped[str] = mapped_column(String(20), nullable=False)
+    persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    persona: Mapped[Optional["Persona"]] = relationship()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    vence_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: _ahora_utc() + timedelta(hours=24),
+        nullable=False,
+    )
