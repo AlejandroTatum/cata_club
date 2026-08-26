@@ -5,11 +5,11 @@
  * to the login page. This is deterministic and uses semantic queries only.
  *
  * The hero was rewritten: the page's single `<h1>` used to be the club's name
- * and is now its promise ("FORMANDO CAMPEONES PARA LA VIDA"), with the name
- * demoted to the brand mark and the kicker above the headline. Both halves of
- * what the old assertion protected are still checked — the hero renders its
- * headline, AND the page still identifies the club — they are just two
- * elements now instead of one.
+ * and is now its promise ("FORMANDO CAMPEONES PARA LA VIDA"). The name lives in
+ * the navbar lockup — the hero briefly carried a second copy of it and no
+ * longer does. Both halves of what the old assertion protected are still
+ * checked: the hero renders its headline, AND the page still identifies the
+ * club, just from two different components now.
  */
 
 import { test, expect } from "@playwright/test";
@@ -351,6 +351,107 @@ test.describe("Landing page", () => {
       // Still presentation-only: clicking a slide opens nothing.
       await firstSlide.click({ position: { x: 20, y: 20 } });
       await expect(page.locator("[role='dialog']")).toHaveCount(0);
+    });
+  });
+
+  /**
+   * The hero dropped its own brand mark ("Tenis de Mesa · Cata Club") because
+   * the navbar lockup right above it already names the club. Deleting an
+   * element is the easy half; the space it occupied is the half that regresses.
+   *
+   * Neither viewport can be reasoned about from the other, because the hero is
+   * a different layout in each:
+   *
+   *   - Desktop is a two-column grid whose height is set by the photo frame
+   *     (`aspect-ratio: 6/5` over its own column), NOT by the copy. So the copy
+   *     column cannot shrink the hero — it just floats, vertically centred,
+   *     inside a band it no longer fills. Removing 62px of copy turned ~58px of
+   *     slack above and below into ~89px: that is the "empty gap" this measures.
+   *     The fix is the responsive `gap` on `.landing-hero-copy`, which hands the
+   *     reclaimed height back to the copy's own rhythm.
+   *   - Mobile stacks the same grid into rows, so the copy's height IS the row's
+   *     height and no slack can open at all. The risk there is the opposite one:
+   *     with the brand gone the headline sat 64px under a sticky navbar and
+   *     crowded it, so the hero's top padding absorbs part of the reclaim.
+   *
+   * Both numbers are measured in a real browser after layout and fonts settle.
+   * jsdom computes none of this — it has no box model for `aspect-ratio`,
+   * `clamp()` or grid — which is why these assertions live here and not in
+   * `LandingPage.test.tsx`.
+   */
+  test.describe("hero spacing after the duplicate brand was removed", () => {
+    /** Hero box metrics that only exist once a real engine has laid it out. */
+    const measureHero = async (page: import("@playwright/test").Page) => {
+      await page.goto("/");
+      await page.evaluate(() => document.fonts.ready);
+      await page.locator(".landing-hero h1").waitFor();
+      return page.evaluate(() => {
+        const hero = document.querySelector(".landing-hero") as HTMLElement;
+        const copy = document.querySelector(".landing-hero-copy") as HTMLElement;
+        const frame = document.querySelector(".landing-hero-frame") as HTMLElement;
+        const headline = hero.querySelector("h1") as HTMLElement;
+        const heroStyle = getComputedStyle(hero);
+        const heroBox = hero.getBoundingClientRect();
+        const copyBox = copy.getBoundingClientRect();
+        // The hero's content box: what the two grid columns actually share.
+        const contentTop = heroBox.top + parseFloat(heroStyle.paddingTop);
+        const contentBottom = heroBox.bottom - parseFloat(heroStyle.paddingBottom);
+        return {
+          heroText: hero.textContent ?? "",
+          brandCount: hero.querySelectorAll(".landing-hero-brand").length,
+          copyRowGap: parseFloat(getComputedStyle(copy).rowGap),
+          contentHeight: contentBottom - contentTop,
+          copyHeight: copyBox.height,
+          slackAbove: copyBox.top - contentTop,
+          slackBelow: contentBottom - copyBox.bottom,
+          headlineInset: headline.getBoundingClientRect().top - heroBox.top,
+          copyToFrame: frame.getBoundingClientRect().top - copyBox.bottom,
+        };
+      });
+    };
+
+    test("closes the desktop slack instead of leaving a hole where the brand was", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const hero = await measureHero(page);
+
+      expect(hero.brandCount).toBe(0);
+      expect(hero.heroText).not.toMatch(/tenis de mesa/i);
+
+      // The mechanism: the copy's internal rhythm opens up on wide viewports so
+      // the column keeps its presence. At 22px (the old flat value) the numbers
+      // below cannot hold once the brand is gone.
+      expect(hero.copyRowGap).toBeGreaterThanOrEqual(36);
+
+      // The outcome: measured slack stays at the pre-removal ~58px rather than
+      // ballooning to ~89px, and stays even top-to-bottom.
+      expect(hero.slackAbove).toBeLessThanOrEqual(64);
+      expect(hero.slackBelow).toBeLessThanOrEqual(64);
+      expect(Math.abs(hero.slackAbove - hero.slackBelow)).toBeLessThanOrEqual(2);
+      // Same statement as a ratio, so a future taller frame cannot pass by
+      // growing the band while the copy stands still.
+      expect(hero.copyHeight / hero.contentHeight).toBeGreaterThanOrEqual(0.74);
+    });
+
+    test("keeps the mobile headline clear of the navbar without reopening the gap", async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const hero = await measureHero(page);
+
+      expect(hero.brandCount).toBe(0);
+      expect(hero.heroText).not.toMatch(/tenis de mesa/i);
+
+      // Stacked, there is no band to fill, so the desktop widening must not
+      // leak down here and push the copy apart.
+      expect(hero.copyRowGap).toBeLessThanOrEqual(24);
+
+      // The headline breathes under the sticky navbar (floor) without
+      // re-creating the void the brand used to fill (ceiling).
+      expect(hero.headlineInset).toBeGreaterThanOrEqual(72);
+      expect(hero.headlineInset).toBeLessThanOrEqual(100);
+
+      // And the copy still meets the photo on the grid's own row gap — no
+      // second hole opening between the two stacked halves.
+      expect(hero.copyToFrame).toBeGreaterThanOrEqual(36);
+      expect(hero.copyToFrame).toBeLessThanOrEqual(44);
     });
   });
 });

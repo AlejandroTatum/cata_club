@@ -100,8 +100,12 @@ function Hero(): React.ReactElement {
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
       <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
+      {/* No brand mark here. The navbar lockup sits directly above this copy
+          and already names the club, so a second one only duplicated the
+          identity and ate the vertical space the headline wants. `landing.css`
+          hands that height back to the copy's own rhythm rather than leaving
+          it as slack — see `.landing-hero-copy`'s gap. */}
       <div className="landing-hero-copy">
-        <span className="landing-hero-brand"><b>Tenis de Mesa</b> · Cata Club</span>
         <h1 className="landing-display" data-split>FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
         <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
