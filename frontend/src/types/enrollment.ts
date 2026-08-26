@@ -15,6 +15,37 @@ export const BLOOD_TYPES = {
 export type BloodType = (typeof BLOOD_TYPES)[keyof typeof BLOOD_TYPES];
 
 /**
+ * The blood types a person may CHOOSE (issue #643).
+ *
+ * `BLOOD_TYPES` above is the wire vocabulary — every value the backend may
+ * hand us — and it keeps `DESCONOCIDO` because records written before this
+ * rule existed still hold it, and no migration invents a real blood type for
+ * them. This narrower list is what may be written from now on.
+ *
+ * The two used to be one list, and that is precisely how the wizard came to
+ * offer "No lo sé" as an answer to a question the business rule says must be
+ * answered: `isBloodType` asked "is this in the enum?", the enum said yes, and
+ * a record full of `DESCONOCIDO` then looked complete to every screen reading
+ * it. Reading and writing need different vocabularies, so they get two lists.
+ */
+export const SELECTABLE_BLOOD_TYPES: readonly Exclude<BloodType, "DESCONOCIDO">[] = [
+  BLOOD_TYPES.A_POSITIVO,
+  BLOOD_TYPES.A_NEGATIVO,
+  BLOOD_TYPES.B_POSITIVO,
+  BLOOD_TYPES.B_NEGATIVO,
+  BLOOD_TYPES.AB_POSITIVO,
+  BLOOD_TYPES.AB_NEGATIVO,
+  BLOOD_TYPES.O_POSITIVO,
+  BLOOD_TYPES.O_NEGATIVO,
+];
+
+/** True when `value` is a blood type a person is allowed to pick. */
+export function isSelectableBloodType(value: unknown): value is Exclude<BloodType, "DESCONOCIDO"> {
+  return typeof value === "string" &&
+    (SELECTABLE_BLOOD_TYPES as readonly string[]).includes(value);
+}
+
+/**
  * What each blood type is CALLED on screen.
  *
  * The wizard used to print the enum with its underscore swapped for a space —

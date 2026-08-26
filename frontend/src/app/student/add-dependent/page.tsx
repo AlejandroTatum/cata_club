@@ -30,7 +30,7 @@ import { calculatePersonAge } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation, example } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
-import { BLOOD_TYPES } from "@/types/enrollment";
+import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
   Heart,
@@ -467,7 +467,10 @@ function AddDependentContent(): React.ReactElement {
             className={`input-field ${shownError("tipoSangre") ? "border-state-bad" : ""}`}
           >
             <option value="">Seleccione una opción</option>
-            {Object.values(BLOOD_TYPES).map((bloodType) => (
+            {/* `SELECTABLE_BLOOD_TYPES`, not the whole enum (#643): "No lo sé"
+                is no longer on offer, because the record this wizard creates
+                has to be a complete one. */}
+            {SELECTABLE_BLOOD_TYPES.map((bloodType) => (
               <option key={bloodType} value={bloodType}>
                 {bloodType.replace("_", " ")}
               </option>

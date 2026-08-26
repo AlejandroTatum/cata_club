@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { BLOOD_TYPES } from "@/types/enrollment";
+import { BLOOD_TYPES, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/server/auth";
 import { ENROLLMENT_ATTEMPT_COOKIE } from "@/lib/server/enrollment-constants";
 import { POST } from "./route";
@@ -222,6 +222,53 @@ describe("POST /api/enrollment — fichaMedica field contract", () => {
     const response = await POST(enrollRequest(bodyWithoutFichaMedicaField("observaciones")));
 
     expect(response.status).toBe(201);
+  });
+
+  /**
+   * Issue #643. `isBloodType` asked "is this value in the enum?", and the enum
+   * keeps `DESCONOCIDO` so that records written before this rule still parse.
+   * A public enrollment writes a NEW record, so "No lo sé" must die here — at
+   * the BFF, without spending a backend round-trip on a body we already know
+   * the business rule forbids.
+   */
+  it("rejects DESCONOCIDO as a blood type with 400, without calling the backend", async () => {
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ tipoSangre: "DESCONOCIDO" })));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ detail: expect.any(String) }));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a blank emergency phone with 400", async () => {
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ telefonoEmergencia: "   " })));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed emergency phone with 400", async () => {
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ telefonoEmergencia: "123" })));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing emergency phone with 400", async () => {
+    const response = await POST(enrollRequest(bodyWithoutFichaMedicaField("telefonoEmergencia")));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts every blood type that is not DESCONOCIDO", async () => {
+    for (const bloodType of SELECTABLE_BLOOD_TYPES) {
+      vi.mocked(global.fetch).mockClear();
+      vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+      const response = await POST(enrollRequest(bodyWithFichaMedica({ tipoSangre: bloodType })));
+
+      expect(response.status).toBe(201);
+    }
   });
 });
 

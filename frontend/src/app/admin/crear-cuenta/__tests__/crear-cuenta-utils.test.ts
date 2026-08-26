@@ -106,6 +106,50 @@ describe("hasCrearCuentaMedicalData", () => {
   });
 });
 
+/**
+ * Issue #643. This wizard keeps the medical record OPTIONAL as a whole —
+ * `hasCrearCuentaMedicalData` is the gate, and an admin who fills nothing
+ * creates no ficha at all, so no invalid row can result. What #643 tightens is
+ * the other branch: once the record IS being written, it must be a complete
+ * one, and `DESCONOCIDO` no longer counts as a blood type.
+ */
+describe("validateCrearCuentaForm — ficha médica (#643)", () => {
+  const withMedical = (overrides: Partial<CrearCuentaFormData> = {}): CrearCuentaFormData =>
+    form({
+      tipoSangre: "O_POSITIVO",
+      contactoEmergencia: "Ana Pérez",
+      telefonoEmergencia: "0991234567",
+      ...overrides,
+    });
+
+  it("accepts a complete medical record", () => {
+    expect(validateCrearCuentaForm(withMedical())).toEqual([]);
+  });
+
+  it("rejects DESCONOCIDO as if the blood type had been left blank", () => {
+    expect(validateCrearCuentaForm(withMedical({ tipoSangre: "DESCONOCIDO" })))
+      .toContain("El tipo de sangre es obligatorio.");
+  });
+
+  it("rejects a blank emergency phone", () => {
+    expect(validateCrearCuentaForm(withMedical({ telefonoEmergencia: "   " })))
+      .toContain("El teléfono de emergencia es obligatorio.");
+  });
+
+  it("rejects a malformed emergency phone", () => {
+    expect(validateCrearCuentaForm(withMedical({ telefonoEmergencia: "123" })).join(" "))
+      .toMatch(/El teléfono de emergencia debe ser un celular/);
+  });
+
+  it("keeps alergias and condicionesSalud optional inside a complete record", () => {
+    expect(validateCrearCuentaForm(withMedical({ alergias: "", condicionesSalud: "" }))).toEqual([]);
+  });
+
+  it("still creates no ficha, and demands nothing, when every medical field is empty", () => {
+    expect(validateCrearCuentaForm(form())).toEqual([]);
+  });
+});
+
 describe("AccountType", () => {
   it("covers the four account types the backend accepts", () => {
     const todos: AccountType[] = ["JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"];

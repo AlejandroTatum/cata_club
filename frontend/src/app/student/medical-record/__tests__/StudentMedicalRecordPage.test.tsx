@@ -206,6 +206,13 @@ describe("StudentMedicalRecordPage — reusing MedicalRecordEditor per represent
   });
 
   it("saves through the SAME editor the admin uses, for the selected representado", async () => {
+    // #643: the shared fixture is a pre-rule record — its emergency phone is
+    // `null` — and the editor now refuses to save one of those. What this test
+    // is about is WHICH persona the save is routed to, not whether an
+    // incomplete record may be written, so it supplies the phone the rule now
+    // requires rather than relaxing the rule.
+    mockFetchFichaMedica.mockResolvedValue(ficha({ telefonoEmergencia: "0991234567" }));
+
     render(<StudentMedicalRecordPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Editar" }));

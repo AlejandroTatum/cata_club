@@ -55,7 +55,7 @@ import {
   buttonClasses,
 } from "@/components/ui";
 import ContextualHelp from "@/components/ContextualHelp";
-import { BLOOD_TYPES, BLOOD_TYPE_LABELS } from "@/types/enrollment";
+import { BLOOD_TYPES, BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import {
   UserPlus,
   Heart,
@@ -836,7 +836,10 @@ function EnrollWizard(): React.ReactElement {
             {/* The enum with its underscore swapped for a space produced "O
                 POSITIVO" here and again in the summary. `BLOOD_TYPE_LABELS` is
                 the only spelling a person reads now. */}
-            {Object.values(BLOOD_TYPES).map((bloodType) => (
+            {/* `SELECTABLE_BLOOD_TYPES`, not the whole enum (#643): "No lo sé"
+                is no longer on offer, because the record this wizard creates
+                has to be a complete one. */}
+            {SELECTABLE_BLOOD_TYPES.map((bloodType) => (
               <option key={bloodType} value={bloodType}>
                 {BLOOD_TYPE_LABELS[bloodType]}
               </option>

@@ -8,7 +8,18 @@ import { useToast } from "@/contexts/ToastContext";
 import { Badge, Button, DataBox, ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
+import { phoneRule } from "@/lib/identity-validation";
 
+/**
+ * The blood types this editor OFFERS (issue #643).
+ *
+ * `DESCONOCIDO` is absent, and its absence is the change. It used to sit here
+ * and be pre-selected, so a record could be written whose blood type was
+ * literally "I don't know" — and every screen downstream read that as a
+ * complete record. It remains a valid `TipoSangre` for DISPLAY, because rows
+ * written before this rule still hold it and no migration invents a real value
+ * for them; see `etiquetaTipoSangre`, which still labels it in read mode.
+ */
 const TIPOS_SANGRE: TipoSangre[] = [
   "A_POSITIVO",
   "A_NEGATIVO",
@@ -18,8 +29,10 @@ const TIPOS_SANGRE: TipoSangre[] = [
   "AB_NEGATIVO",
   "O_POSITIVO",
   "O_NEGATIVO",
-  "DESCONOCIDO",
 ];
+
+/** What the select holds before a choice is made — never a stored value. */
+type TipoSangreElegido = TipoSangre | "";
 
 /**
  * El único lugar donde el enum del backend se vuelve texto legible.
@@ -55,14 +68,20 @@ function etiquetaTipoSangre(tipo: TipoSangre): string {
  * hasta que descarta un cambio y el valor viejo no vuelve.
  */
 function camposDe(ficha: FichaMedicaEditable): {
-  tipoSangre: TipoSangre;
+  tipoSangre: TipoSangreElegido;
   enfermedades: string;
   alergias: string;
   contactoEmergencia: string;
   telefonoEmergencia: string;
 } {
   return {
-    tipoSangre: ficha.tipoSangre,
+    // A stored `DESCONOCIDO` arrives here as "nothing chosen" (#643). Loading
+    // it into the select would re-offer the club's own non-answer as though
+    // someone had given it, and the next save would write it back unchanged —
+    // the record would launder itself as complete forever. Blank instead: the
+    // person editing knows the real value, and this is the only place it can
+    // be backfilled without inventing it.
+    tipoSangre: ficha.tipoSangre === "DESCONOCIDO" ? "" : ficha.tipoSangre,
     enfermedades: ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
     alergias: ficha.alergias ?? "",
     contactoEmergencia: ficha.contactoEmergencia ?? "",
@@ -126,15 +145,26 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
    */
   const [editing, setEditing] = useState(false);
 
-  // Load-bearing default, not cosmetic: the backend's PATCH upsert rejects
-  // creating a first record without a blood type (400). `DESCONOCIDO` is a
-  // valid TipoSangre, so pre-selecting it keeps that error unreachable from
-  // the UI — see MedicalRecordEditor.test.tsx.
-  const [tipoSangre, setTipoSangre] = useState<TipoSangre>("DESCONOCIDO");
+  // No pre-selection (#643). This used to default to `DESCONOCIDO` so that the
+  // backend's "no blood type" 400 could never be reached from the UI — which
+  // silenced the error by answering the question on the user's behalf, with a
+  // non-answer. The gate below reaches the same end honestly: nothing is sent
+  // until a real value is chosen.
+  const [tipoSangre, setTipoSangre] = useState<TipoSangreElegido>("");
   const [enfermedadesInput, setEnfermedadesInput] = useState("");
   const [alergias, setAlergias] = useState("");
   const [contactoEmergencia, setContactoEmergencia] = useState("");
   const [telefonoEmergencia, setTelefonoEmergencia] = useState("");
+  /**
+   * Field-level rejections, shown only after a save was attempted.
+   *
+   * Not computed on every keystroke like the enrollment wizards do: this editor
+   * opens on data that is ALREADY stored and may already be incomplete (a
+   * pre-#643 row), so validating on sight would greet whoever opened it with
+   * errors about someone else's omission. The complaint belongs to the moment
+   * they try to save.
+   */
+  const [fieldErrors, setFieldErrors] = useState<{ tipoSangre?: string; telefonoEmergencia?: string }>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +214,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
   function empezarEdicion(): void {
     setSaveError(null);
     setSaveSuccess(false);
+    setFieldErrors({});
     setEditing(true);
   }
 
@@ -207,10 +238,38 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
     }
     setSaveError(null);
     setSaveSuccess(false);
+    setFieldErrors({});
     setEditing(false);
   }
 
+  /**
+   * The two rules a persisted medical record must satisfy (#643).
+   *
+   * The phone is checked with `phoneRule` from `@/lib/identity-validation` —
+   * the project's one phone validator, the same one the enrollment wizards
+   * call. A second copy written here would be a second definition of "valid
+   * Ecuadorian phone", and the two would drift.
+   */
+  function validar(): { tipoSangre?: string; telefonoEmergencia?: string } {
+    const errores: { tipoSangre?: string; telefonoEmergencia?: string } = {};
+    if (!tipoSangre) errores.tipoSangre = "El tipo de sangre es obligatorio.";
+    const telefonoError = phoneRule(telefonoEmergencia, "El teléfono de emergencia");
+    if (telefonoError) errores.telefonoEmergencia = telefonoError;
+    return errores;
+  }
+
   async function handleSave(): Promise<void> {
+    const errores = validar();
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) {
+      // Nothing is sent. The record on the server keeps whatever it had —
+      // including, for a legacy row, its incompleteness — which is strictly
+      // better than a PATCH that overwrites part of it and leaves it invalid.
+      setSaveError(null);
+      setSaveSuccess(false);
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -222,16 +281,23 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
         .filter((e) => e.length > 0);
 
       await actualizarFichaMedica(personaId, {
-        tipoSangre,
+        // `validar()` above proved this is a real TipoSangre, not "".
+        tipoSangre: tipoSangre as TipoSangre,
         enfermedades,
         // FIC-5: `|| undefined` used to mean "field omitted", which the
         // backend's partial PATCH reads as "leave the stored value alone" —
         // so clearing the field and saving reported success but never erased
         // it. `null` is the explicit "erase this" signal (see
         // FichaMedicaUpdatePayload's doc comment).
+        //
+        // #643 narrows that by exactly one field. Alergias and the emergency
+        // contact NAME stay erasable; the emergency PHONE does not, because
+        // erasing it is erasing the only number the club would dial, and the
+        // record left behind is the invalid state this rule exists to forbid.
+        // It never reaches `null` here — the guard above returns first.
         alergias: alergias.trim() || null,
         contactoEmergencia: contactoEmergencia.trim() || null,
-        telefonoEmergencia: telefonoEmergencia.trim() || null,
+        telefonoEmergencia: telefonoEmergencia.trim(),
       });
       setSaveSuccess(true);
       setReloadToken((n) => n + 1);
@@ -385,21 +451,41 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
        * are one fact written in two boxes. */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor={`tipo-sangre-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-            Tipo de sangre
-          </label>
+          {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
+              becomes part of the control's accessible name, so the field a
+              screen reader announces stops being called "Tipo de sangre".
+              `aria-required` carries the meaning; this only carries the look. */}
+          <div className="mb-1 flex items-center gap-1">
+            <label htmlFor={`tipo-sangre-${personaId}`} className="block text-xs font-semibold text-ink-2">
+              Tipo de sangre
+            </label>
+            <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+          </div>
           <select
             id={`tipo-sangre-${personaId}`}
             value={tipoSangre}
-            onChange={(e) => setTipoSangre(e.target.value as TipoSangre)}
-            className="input-field w-full"
+            onChange={(e) => setTipoSangre(e.target.value as TipoSangreElegido)}
+            aria-required="true"
+            aria-invalid={fieldErrors.tipoSangre ? true : undefined}
+            aria-describedby={fieldErrors.tipoSangre ? `tipo-sangre-error-${personaId}` : undefined}
+            className={`input-field w-full ${fieldErrors.tipoSangre ? "border-state-bad" : ""}`}
           >
+            <option value="">Seleccione una opción</option>
             {TIPOS_SANGRE.map((t) => (
               <option key={t} value={t}>
                 {etiquetaTipoSangre(t)}
               </option>
             ))}
           </select>
+          {fieldErrors.tipoSangre && (
+            <p
+              id={`tipo-sangre-error-${personaId}`}
+              className="mt-1 text-xs font-semibold text-state-bad"
+              role="alert"
+            >
+              {fieldErrors.tipoSangre}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor={`alergias-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
@@ -442,16 +528,33 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
           />
         </div>
         <div>
-          <label htmlFor={`telefono-${personaId}`} className="mb-1 block text-xs font-semibold text-ink-2">
-            Teléfono de emergencia
-          </label>
+          <div className="mb-1 flex items-center gap-1">
+            <label htmlFor={`telefono-${personaId}`} className="block text-xs font-semibold text-ink-2">
+              Teléfono de emergencia
+            </label>
+            <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
+          </div>
           <input
             id={`telefono-${personaId}`}
             type="text"
             value={telefonoEmergencia}
             onChange={(e) => setTelefonoEmergencia(e.target.value)}
-            className="input-field w-full"
+            aria-required="true"
+            aria-invalid={fieldErrors.telefonoEmergencia ? true : undefined}
+            aria-describedby={
+              fieldErrors.telefonoEmergencia ? `telefono-error-${personaId}` : undefined
+            }
+            className={`input-field w-full ${fieldErrors.telefonoEmergencia ? "border-state-bad" : ""}`}
           />
+          {fieldErrors.telefonoEmergencia && (
+            <p
+              id={`telefono-error-${personaId}`}
+              className="mt-1 text-xs font-semibold text-state-bad"
+              role="alert"
+            >
+              {fieldErrors.telefonoEmergencia}
+            </p>
+          )}
         </div>
       </div>
 

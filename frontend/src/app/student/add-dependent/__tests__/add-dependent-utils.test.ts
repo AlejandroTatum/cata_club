@@ -155,6 +155,23 @@ describe("validateAddDependentStep — health step", () => {
     ).toContain("El tipo de sangre es obligatorio.");
   });
 
+  /**
+   * Issue #643: `DESCONOCIDO` is in the enum for the sake of rows written
+   * before the rule existed, so the old "is it in the enum?" check waved it
+   * through. A dependent being registered here gets a complete record.
+   */
+  it("rejects DESCONOCIDO as if the blood type had been left blank", () => {
+    expect(
+      validateAddDependentStep("health", validForm({ tipoSangre: "DESCONOCIDO" })),
+    ).toContain("El tipo de sangre es obligatorio.");
+  });
+
+  it("keeps alergias and enfermedades optional", () => {
+    expect(
+      validateAddDependentStep("health", validForm({ alergias: "", enfermedades: "" })),
+    ).toEqual([]);
+  });
+
   it("requires contactoEmergencia", () => {
     expect(validateAddDependentStep("health", validForm({ contactoEmergencia: "" })))
       .toContain("El nombre del contacto de emergencia es obligatorio.");

@@ -44,8 +44,10 @@ export interface BackendEnrollmentFichaMedica {
   tipo_sangre: BloodType;
   enfermedades: string[];
   alergias?: string;
-  contacto_emergencia?: string;
-  telefono_emergencia?: string;
+  /** Required by `EnrollmentFichaMedicaDTO`; always sent, blank included. */
+  contacto_emergencia: string;
+  /** Required by `EnrollmentFichaMedicaDTO`; always sent, blank included. */
+  telefono_emergencia: string;
 }
 
 export interface BackendEnrollmentCreateDTO {
@@ -79,9 +81,17 @@ function buildFichaMedica(fichaMedica: EnrollmentMedicalRecord): BackendEnrollme
   return {
     tipo_sangre: fichaMedica.tipoSangre,
     enfermedades,
+    // `alergias` is optional in the backend DTO, so omitting a blank one is
+    // the honest encoding of "nothing to record".
     ...(fichaMedica.alergias ? { alergias: fichaMedica.alergias } : {}),
-    ...(fichaMedica.contactoEmergencia ? { contacto_emergencia: fichaMedica.contactoEmergencia } : {}),
-    ...(fichaMedica.telefonoEmergencia ? { telefono_emergencia: fichaMedica.telefonoEmergencia } : {}),
+    // The two emergency fields are NOT optional there — `EnrollmentFichaMedicaDTO`
+    // has always declared both as required — so they are sent unconditionally,
+    // blank included. Spreading them away when falsy turned "you left the
+    // emergency phone blank" into "field missing", which is a different
+    // Pydantic error about a different problem, and the sentence the person
+    // read named the wrong one.
+    contacto_emergencia: fichaMedica.contactoEmergencia,
+    telefono_emergencia: fichaMedica.telefonoEmergencia,
   };
 }
 
