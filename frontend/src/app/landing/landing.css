@@ -96,9 +96,16 @@
 .landing-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr); align-items: center; gap: 52px; padding: 76px var(--landing-gutter) 88px; overflow: hidden; background: var(--landing-action); }
 .landing-ribbon { position: absolute; width: 440px; height: 190px; pointer-events: none; border-radius: 50%; border-bottom: 28px solid var(--landing-highlight); box-shadow: 0 14px 0 color-mix(in srgb, var(--landing-surface) 42%, transparent), 0 34px 0 var(--landing-brand-red-strong); }
 .landing-ribbon-top { top: -100px; right: -80px; transform: rotate(27deg); }
-.landing-hero-copy { position: relative; z-index: 14; display: flex; flex-direction: column; align-items: flex-start; gap: 22px; }
-.landing-hero-brand { display: block; color: var(--landing-on-action); font-family: var(--font-landing-barlow); font-size: clamp(19px, 2.3vw, 27px); font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
-.landing-hero-brand b { color: var(--landing-highlight-on-action); font-weight: 800; }
+/* The gap is responsive because the hero is two different layouts.
+   Wide, it is a two-column grid whose height comes from the photo frame's
+   `aspect-ratio` over its own column — the copy cannot shrink the section, it
+   can only sit centred inside a band it does not fill. Dropping the duplicated
+   brand mark freed ~62px of copy, and at a flat 22px every one of them would
+   have become slack: ~58px of emptiness above and below the copy grew to ~89px.
+   So above ~760px the reclaimed height goes back into the copy's own rhythm.
+   Narrow, the grid stacks and the copy IS the row height, so there is no band
+   and nothing to fill — the 22px floor keeps mobile exactly as it was. */
+.landing-hero-copy { position: relative; z-index: 14; display: flex; flex-direction: column; align-items: flex-start; gap: clamp(22px, 3vw, 42px); }
 .landing-hero .landing-eyebrow { color: var(--landing-on-action); }
 .landing-hero h1 { max-width: 610px; color: var(--landing-on-action); font-size: clamp(38px, 3.35vw, 48px); line-height: 1.15; }
 .landing-hero h1 span { color: var(--landing-highlight); }
@@ -454,7 +461,12 @@
   .landing-logo img { height: clamp(58px, 15vw, 72px); }
   .landing-logo { font-size: 17px; }
   .landing-nav-cta { padding-inline: 18px; }
-  .landing-hero { min-height: auto; grid-template-columns: 1fr; padding: 64px var(--landing-gutter); }
+  /* Stacked, the removed brand mark simply makes the hero shorter — the
+     reclaim the change was after. Part of it comes back as top padding: the
+     headline used to start ~114px below the hero's edge and would otherwise
+     have landed at 64px, crowding the sticky navbar it sits right under.
+     The bottom stays at 64px so the section still ends up ~46px shorter. */
+  .landing-hero { min-height: auto; grid-template-columns: 1fr; padding: 80px var(--landing-gutter) 64px; }
   .landing-hero-copy { align-items: flex-start; }
   .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 12px; padding: 42px 20px; }
   .landing-stat strong { font-size: 38px; }

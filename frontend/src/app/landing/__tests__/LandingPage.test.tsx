@@ -387,6 +387,41 @@ describe("LandingPage", (): void => {
     expect(within(hero as HTMLElement).getByRole("link", { name: "Ver horarios" })).toHaveAttribute("href", "#horarios");
   });
 
+  /**
+   * The hero used to open with its own brand mark ("Tenis de Mesa · Cata
+   * Club"), directly under a navbar that already carries the club's lockup.
+   * Two lockups a hundred pixels apart is not emphasis, it is a duplicate — so
+   * the hero drops its copy and the navbar keeps the single one.
+   *
+   * Both halves are asserted together on purpose: "the hero has no brand" is
+   * only correct while the page still names the club somewhere, and these two
+   * facts live in two different components that different changes touch.
+   */
+  it("names the club once, in the navbar, and never repeats it in the hero", (): void => {
+    render(<LandingPage />);
+
+    const hero = document.querySelector(".landing-hero") as HTMLElement;
+    expect(hero.querySelector(".landing-hero-brand")).toBeNull();
+    expect(hero.textContent).not.toMatch(/tenis de mesa/i);
+
+    expect(screen.getByRole("link", { name: /cata club, inicio/i })).toBeInTheDocument();
+  });
+
+  it("keeps the hero composition: headline, description, CTAs, note", (): void => {
+    render(<LandingPage />);
+
+    const copy = document.querySelector(".landing-hero-copy") as HTMLElement;
+    // Order is the hierarchy. With the brand gone the headline leads, and
+    // nothing else moved: a reshuffle here would read as a different hero.
+    expect(Array.from(copy.children).map((child): string => child.className)).toEqual([
+      "landing-display",
+      "",
+      "landing-hero-actions",
+      "landing-hero-note",
+    ]);
+    expect(copy.children[0].tagName).toBe("H1");
+  });
+
   it("keeps a single decorative serve ball inside the hero", (): void => {
     render(<LandingPage />);
 
