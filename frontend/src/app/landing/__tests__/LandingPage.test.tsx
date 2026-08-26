@@ -495,6 +495,26 @@ describe("LandingPage", (): void => {
     expect(mottoCta).toHaveTextContent("Inscríbete ya");
   });
 
+  it("embeds the official crest inside the motto paddle as pure decoration", (): void => {
+    render(<LandingPage />);
+
+    const motto = document.querySelector(".landing-motto") as HTMLElement;
+    const paddle = motto.querySelector("[data-motto-paddle]") as HTMLElement;
+    expect(paddle).toHaveAttribute("aria-hidden", "true");
+
+    // Same crest asset the navbar already renders — no new generic icon.
+    const crest = paddle.querySelector("img");
+    expect(crest).not.toBeNull();
+    expect(crest).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
+    expect(crest?.getAttribute("alt")).toBe("");
+
+    // Decorative only: the club name must not be duplicated for screen
+    // readers inside the motto, and the CTA's accessible name stays exactly
+    // "Inscríbete ya" — no extra noise leaked into the accessible tree.
+    expect(within(motto).queryByText(/cata club/i)).toBeNull();
+    expect(within(motto).getByRole("link", { name: "Inscríbete ya" })).toHaveAttribute("data-motto-cta", "true");
+  });
+
   it("turns every WhatsApp contact number into a wa.me link", (): void => {
     render(<LandingPage />);
 
