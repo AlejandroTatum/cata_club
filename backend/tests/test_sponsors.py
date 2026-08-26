@@ -1,4 +1,8 @@
+import pytest
+from pydantic import ValidationError
+
 from app.dominio.modelos import Sponsor
+from app.presentacion.schemas.sponsor_schemas import SponsorCreateDTO
 
 RUTA = "/api/v1/sponsors/"
 
@@ -22,11 +26,17 @@ def test_admin_sube_logo_jpg(client, monkeypatch):
         lambda contenido, public_id, content_type: f"https://cdn/{public_id}.jpg",
     )
 
-    response = client.post(RUTA, data={"nombre": "Municipio"}, files={"archivo": ("logo.jpg", b"jpg", "image/jpeg")})
+    response = client.post(RUTA, data={"nombre": "  Municipio  "}, files={"archivo": ("logo.jpg", b"jpg", "image/jpeg")})
 
     assert response.status_code == 201
     assert response.json()["nombre"] == "Municipio"
     assert response.json()["logoUrl"].startswith("https://cdn/")
+
+
+@pytest.mark.parametrize("nombre", ["", "   \t\n"])
+def test_no_puede_crear_sponsor_con_nombre_vacio_o_solo_espacios(nombre):
+    with pytest.raises(ValidationError):
+        SponsorCreateDTO(nombre=nombre)
 
 
 def test_admin_no_puede_subir_otro_tipo_de_archivo(client):
