@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("admin_persona_id", "alumno_persona_id", name="uq_enrollment_notif_outbox_admin_alumno"),
     )
     op.create_index("ix_enrollment_notif_outbox_pending_next", "enrollment_notificacion_outbox", ["status", "next_attempt_at"])
+    op.create_index("ix_enrollment_notif_outbox_admin", "enrollment_notificacion_outbox", ["admin_persona_id"])
     op.create_index("ix_enrollment_notif_outbox_alumno", "enrollment_notificacion_outbox", ["alumno_persona_id"])
     op.add_column("notificacion", sa.Column("enrollment_outbox_id", sa.Integer(), nullable=True))
     op.create_index(
@@ -41,5 +42,6 @@ def downgrade() -> None:
     op.drop_index("uq_notificacion_enrollment_outbox_id", table_name="notificacion")
     op.drop_column("notificacion", "enrollment_outbox_id")
     op.drop_index("ix_enrollment_notif_outbox_alumno", table_name="enrollment_notificacion_outbox")
+    op.drop_index("ix_enrollment_notif_outbox_admin", table_name="enrollment_notificacion_outbox")
     op.drop_index("ix_enrollment_notif_outbox_pending_next", table_name="enrollment_notificacion_outbox")
     op.drop_table("enrollment_notificacion_outbox")

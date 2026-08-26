@@ -1539,6 +1539,7 @@ class EnrollmentNotificacionOutbox(Base):
     __tablename__ = "enrollment_notificacion_outbox"
     __table_args__ = (
         Index("ix_enrollment_notif_outbox_pending_next", "status", "next_attempt_at"),
+        Index("ix_enrollment_notif_outbox_admin", "admin_persona_id"),
         Index("ix_enrollment_notif_outbox_alumno", "alumno_persona_id"),
         UniqueConstraint("admin_persona_id", "alumno_persona_id", name="uq_enrollment_notif_outbox_admin_alumno"),
     )

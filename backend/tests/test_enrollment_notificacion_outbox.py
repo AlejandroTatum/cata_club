@@ -92,8 +92,8 @@ def test_dispatcher_fallo_de_broker_reencola(monkeypatch, db_session):
     monkeypatch.setattr(tasks.entregar_inscripcion_notificacion, "delay", Mock(side_effect=ConnectionError("broker")))
     tasks.despachar_inscripcion_notificaciones()
     event = db_session.get(EnrollmentNotificacionOutbox, event_id)
-    assert event.status == "ENVIADO"
-    assert db_session.query(Notificacion).filter_by(enrollment_outbox_id=event_id).count() == 1
+    assert event.status == "ENVIANDO"
+    assert db_session.query(Notificacion).filter_by(enrollment_outbox_id=event_id).count() == 0
 
 
 def test_claim_recupera_lease_vencido(db_session):

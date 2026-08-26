@@ -446,42 +446,34 @@ class EnrollmentServicio:
         admins = [u.persona for u in rol_admin.usuarios if u.persona]
         nombre_alumno = acortar_nombre_para_notificacion(f"{alumno.nombres} {alumno.apellidos}")
         for admin in admins:
-            repo_outbox.crear(admin.id, alumno.id, f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).")
-            if False:
-                notif = Notificacion(
-                    tipo=TipoNotificacion.NUEVA_INSCRIPCION,
-                    mensaje=f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
-                    persona_id=admin.id,
-                    entidad_relacionada_id=alumno.id,
-                )
-                repo_outbox.crear(admin.id, alumno.id, notif.mensaje)
-            if False:
-                self.db.rollback()
-                logger.exception(
-                    "No se pudo avisar al administrador persona_id=%s de la nueva "
-                    "inscripción de persona_id=%s. La inscripción YA está commiteada.",
-                        admin.id, alumno.id,
-                    )
+            repo_outbox.crear(
+                admin.id,
+                alumno.id,
+                f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
+            )
 
     def _solicitar_despacho_notificaciones(self) -> None:
-        try:
-            # entrega directa tras confirmar la inscripción
-            repo = EnrollmentNotificacionOutboxRepositorio(self.db)
-            while True:
-                event = repo.claim_pending()
-                if not event:
-                    self.db.commit()
-                    break
+        """Entrega lo pendiente de inmediato; el beat reintenta lo que falle."""
+        repo = EnrollmentNotificacionOutboxRepositorio(self.db)
+        while True:
+            event = repo.claim_pending()
+            if not event:
                 self.db.commit()
+                return
+            try:
                 self.db.add(Notificacion(
-                        tipo=TipoNotificacion.NUEVA_INSCRIPCION,
-                        mensaje=event.mensaje,
-                        persona_id=event.admin_persona_id,
-                        entidad_relacionada_id=event.alumno_persona_id,
-                        enrollment_outbox_id=event.id,
-                    ))
+                    tipo=TipoNotificacion.NUEVA_INSCRIPCION,
+                    mensaje=event.mensaje,
+                    persona_id=event.admin_persona_id,
+                    entidad_relacionada_id=event.alumno_persona_id,
+                    enrollment_outbox_id=event.id,
+                ))
                 repo.mark_sent(event)
                 self.db.commit()
-        except Exception:
-            self.db.rollback()
-            logger.exception("No se pudo entregar la notificación de inscripción")
+            except Exception as error:
+                self.db.rollback()
+                event = self.db.get(type(event), event.id)
+                if event:
+                    repo.requeue(event, error)
+                    self.db.commit()
+                logger.exception("No se pudo entregar la notificación de inscripción")

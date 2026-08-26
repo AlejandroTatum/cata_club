@@ -11,22 +11,20 @@ logger = logging.getLogger("cataclub.tareas.enrollment_notificacion")
 
 @celery_app.task(name="app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones")
 def despachar_inscripcion_notificaciones():
-    db = SessionLocal()
-    try:
+    reclamadas = 0
+    with SessionLocal() as db:
+        repo = EnrollmentNotificacionOutboxRepositorio(db)
         while True:
-            event = EnrollmentNotificacionOutboxRepositorio(db).claim_pending()
+            event = repo.claim_pending()
             if not event:
-                db.commit()
-                return
-            event_id = event.id
+                break
             db.commit()
-            entregar_inscripcion_notificacion(event_id)
             try:
-                entregar_inscripcion_notificacion.delay(event_id)
+                entregar_inscripcion_notificacion.delay(event.id)
             except Exception as exc:
-                logger.warning("No se pudo encolar la entrega %s: %s", event_id, type(exc).__name__)
-    finally:
-        db.close()
+                logger.warning("No se pudo encolar la entrega %s: %s", event.id, type(exc).__name__)
+            reclamadas += 1
+    return {"reclamadas": reclamadas}
 
 
 @celery_app.task(name="app.infraestructura.tareas.enrollment_notificacion_tareas.entregar_inscripcion_notificacion")
