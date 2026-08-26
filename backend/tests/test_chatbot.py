@@ -157,19 +157,19 @@ def test_presupuesto_de_tiempo_queda_bajo_el_abort_del_bff():
             openai.RateLimitError(
                 "rate limited", response=_respuesta_httpx(429), body=None
             ),
-            429,
+            200,
         ),
         (
             openai.APITimeoutError(
                 request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions")
             ),
-            504,
+            200,
         ),
         (
             openai.APIConnectionError(
                 request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions")
             ),
-            503,
+            200,
         ),
         (
             openai.APIError(
@@ -177,23 +177,49 @@ def test_presupuesto_de_tiempo_queda_bajo_el_abort_del_bff():
                 request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions"),
                 body=None,
             ),
-            502,
+            200,
         ),
     ],
     ids=["rate_limit", "timeout", "conexion", "generico"],
 )
-def test_falla_del_proveedor_mapea_a_su_propio_status(
-    client, monkeypatch, excepcion, status_esperado
-):
+def test_falla_del_proveedor_degrada_a_respuesta_local(client, monkeypatch, excepcion, status_esperado):
     _mockear_cliente_openai_que_falla(monkeypatch, excepcion)
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "¿Cómo veo mis pagos?"})
+    assert resp.status_code == 200, resp.text
+    assert "Mi Cuenta" in resp.json()["respuesta"]
+    assert "no está disponible" in resp.json()["respuesta"]
 
-    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
 
-    assert resp.status_code == status_esperado, resp.text
-    assert resp.json()["detail"]
+def test_pregunta_desconocida_en_fallback_es_honesta(client, monkeypatch):
+    _mockear_cliente_openai_que_falla(monkeypatch, openai.APIConnectionError(request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions")))
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "¿Cuál es el clima?"})
+    assert resp.status_code == 200, resp.text
+    assert "No cuento con esa información" in resp.json()["respuesta"]
+    assert "administrador del club" in resp.json()["respuesta"]
 
 
-def test_cada_falla_tiene_su_propio_mensaje(client, monkeypatch):
+def test_mensaje_en_el_limite_maximo_responde(client, monkeypatch):
+    _mockear_cliente_openai(monkeypatch)
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "x" * 2000})
+    assert resp.status_code == 200, resp.text
+
+
+def test_mensaje_sobre_el_limite_da_422(client, monkeypatch):
+    _mockear_cliente_openai(monkeypatch)
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "x" * 2001})
+    assert resp.status_code == 422, resp.text
+
+
+def test_falla_del_proveedor_conocida_entrega_fallback(client, monkeypatch):
+    _mockear_cliente_openai_que_falla(monkeypatch, openai.APITimeoutError(request=httpx.Request("POST", "https://opencode.ai/zen/v1/chat/completions")))
+
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "¿Cómo veo mis pagos?"})
+
+    assert resp.status_code == 200, resp.text
+    assert "Mi Cuenta" in resp.json()["respuesta"]
+
+
+def test_cada_falla_entrega_una_respuesta_local(client, monkeypatch):
     mensajes = set()
     fallas = [
         openai.RateLimitError("rate limited", response=_respuesta_httpx(429), body=None),
@@ -212,9 +238,10 @@ def test_cada_falla_tiene_su_propio_mensaje(client, monkeypatch):
     for falla in fallas:
         _mockear_cliente_openai_que_falla(monkeypatch, falla)
         resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
-        mensajes.add(resp.json()["detail"])
+        assert resp.status_code == 200, resp.text
+        mensajes.add(resp.json()["respuesta"])
 
-    assert len(mensajes) == len(fallas), f"mensajes repetidos: {mensajes}"
+    assert mensajes
 
 
 # --- Credencial ausente (issue #337) ----------------------------------------
@@ -230,8 +257,8 @@ def test_credencial_ausente_no_escapa_al_manejo_de_fallas(client, monkeypatch):
 
     resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
 
-    assert resp.status_code == 503, resp.text
-    assert resp.json()["detail"]
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["respuesta"]
 
 
 # --- Rate limit del endpoint ------------------------------------------------

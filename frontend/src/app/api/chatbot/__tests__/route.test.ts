@@ -45,6 +45,21 @@ describe("POST /api/chatbot", () => {
     expect(await response.json()).toEqual({ reply: "En Mi Cuenta." });
   });
 
+  it("rejects messages over the bounded input size before contacting the backend", async () => {
+    const response = await POST(postRequest({ mensaje: "x".repeat(2001) }));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a message at the bounded input size", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ respuesta: "En Mi Cuenta." }));
+
+    const response = await POST(postRequest({ mensaje: "x".repeat(2000) }));
+
+    expect(response.status).toBe(200);
+  });
+
   it("forwards the visitor's X-Forwarded-For to the backend (issue #235)", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ respuesta: "En Mi Cuenta." }));
 
