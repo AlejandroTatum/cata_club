@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   AMOUNT_MAX_DECIMAL_DIGITS,
+  AMOUNT_MAX_VALUE,
   capDigits,
   filterNumericInput,
   isAllowedChar,
@@ -18,9 +19,12 @@ describe("isAllowedChar", () => {
     expect(isAllowedChar("phone", "a")).toBe(false);
   });
 
-  it("allows digits and a single decimal separator for amount", () => {
+  it("allows digits and both decimal separator spellings for amount", () => {
+    // Issue #667/#506: an es-EC/es-AR admin types "," on `/tarifas`; both
+    // spellings are accepted, but only one of either counts as THE separator.
     expect(isAllowedChar("amount", "5")).toBe(true);
     expect(isAllowedChar("amount", ".")).toBe(true);
+    expect(isAllowedChar("amount", ",")).toBe(true);
   });
 
   it("rejects letters and phone-style separators for amount", () => {
@@ -52,6 +56,10 @@ describe("NUMERIC_FIELD_MAX_DIGITS", () => {
   it("caps amount's integer part at 6 digits, with 2 decimal digits", () => {
     expect(NUMERIC_FIELD_MAX_DIGITS.amount).toBe(6);
     expect(AMOUNT_MAX_DECIMAL_DIGITS).toBe(2);
+  });
+
+  it("names the largest value those two caps allow, for a submit-time business ceiling", () => {
+    expect(AMOUNT_MAX_VALUE).toBe(999999.99);
   });
 });
 
@@ -100,6 +108,18 @@ describe("capDigits", () => {
   it("drops a second decimal separator", () => {
     expect(capDigits("amount", "45.6.7")).toEqual({ value: "45.67", limitReached: true });
   });
+
+  it("accepts a comma as the decimal separator", () => {
+    expect(capDigits("amount", "45,50")).toEqual({ value: "45,50", limitReached: false });
+  });
+
+  it("drops a second separator regardless of which spelling repeats", () => {
+    expect(capDigits("amount", "45,,50")).toEqual({ value: "45,50", limitReached: true });
+  });
+
+  it("treats a comma and a dot as the same separator slot — only the first counts", () => {
+    expect(capDigits("amount", "45,5.0")).toEqual({ value: "45,50", limitReached: true });
+  });
 });
 
 describe("filterNumericInput", () => {
@@ -126,7 +146,13 @@ describe("filterNumericInput", () => {
     expect(filterNumericInput("amount", "$45.00 USD")).toEqual({ value: "45.00", limitReached: false });
   });
 
-  it("strips a thousands separator, keeping only the decimal point", () => {
-    expect(filterNumericInput("amount", "1,234.56")).toEqual({ value: "1234.56", limitReached: false });
+  // Superseded by the comma-as-decimal-separator tests in `capDigits` above
+  // (issue #667/#506): a real `/tarifas` admin types "," as the DECIMAL
+  // mark ("45,50"), not as a thousands grouping symbol, so "1,234.56" is
+  // read as "1" + separator "," + "23" (2 decimal digits, the cap) — the
+  // "4" and the second separator ("." ) are both dropped, same as any other
+  // over-the-cap character.
+  it("reads a comma as the decimal separator, not a thousands grouping symbol", () => {
+    expect(filterNumericInput("amount", "1,234.56")).toEqual({ value: "1,23", limitReached: true });
   });
 });

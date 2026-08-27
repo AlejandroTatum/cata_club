@@ -42,6 +42,7 @@ import type { DescuentoCatalogo } from "@/services/api";
 import { cn } from "@/components/ui/cn";
 import { descuentoValorLabel } from "./discounts-utils";
 import { toUserMessage } from "@/lib/error-message";
+import { AMOUNT_MAX_VALUE } from "@/lib/numeric-input";
 
 type Modalidad = "PORCENTAJE" | "MONTO";
 
@@ -161,6 +162,14 @@ export default function DiscountsPage(): React.ReactElement {
     }
     if (form.modalidad === "PORCENTAJE" && valor > 100) {
       setFormError("El porcentaje no puede superar 100.");
+      return;
+    }
+    // Issue #667: MONTO had no business ceiling — `max={undefined}` on the
+    // native spinner below left it unbounded, and PORCENTAJE's own check
+    // just above never applied to it. `AMOUNT_MAX_VALUE` (numeric-input.ts)
+    // is the same ceiling `/tarifas`'s precio field enforces.
+    if (form.modalidad === "MONTO" && valor > AMOUNT_MAX_VALUE) {
+      setFormError(`El monto no puede superar $${AMOUNT_MAX_VALUE}.`);
       return;
     }
 
@@ -356,7 +365,7 @@ export default function DiscountsPage(): React.ReactElement {
               type="number"
               required
               min="0"
-              max={form.modalidad === "PORCENTAJE" ? 100 : undefined}
+              max={form.modalidad === "PORCENTAJE" ? 100 : AMOUNT_MAX_VALUE}
               step="0.01"
               value={form.valor}
               onChange={(e) => setForm({ ...form, valor: e.target.value })}

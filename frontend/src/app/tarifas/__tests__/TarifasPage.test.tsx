@@ -212,12 +212,15 @@ describe("TarifasPage — editar precio", () => {
 
   it.each([
     ["0", "cero"],
-    ["45.999", "más de dos decimales"],
     ["", "vacío"],
   ])("rejects a %s price (%s) without reaching the API", async (valorInvalido) => {
     // "-5" and "abc" are no longer meaningful cases here: the masking added
     // for #506 filters "-" and letters out at typing time (see the masking
     // describe block below), so they never survive to reach validation.
+    // "45.999" moved the same way (issue #667): the `"amount"` mode's cents
+    // cap now truncates a 3rd decimal digit as it's typed, so the field
+    // itself is "45.99" — a VALID price — by the time Guardar is clicked.
+    // See "caps the decimal part at 2 digits while typing" below.
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
@@ -338,6 +341,91 @@ describe("TarifasPage — masking y separador decimal", () => {
     fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
 
     expect(within(juniorRow).queryByText(/precio válido/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #667: `sanitizePrecioInput` only ever ran on `onChange` — there was
+ * no `keydown`/`paste` guard, so a letter or a second separator only got
+ * caught after it landed. This adopts `numeric-input.ts`'s shared `"amount"`
+ * mode (issue #667's foundation PR) for real-time keystroke rejection and a
+ * business ceiling on the integer part, the same discipline cédula/teléfono
+ * already have on the enrollment wizards.
+ */
+describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () => {
+  it("blocks a typed letter on the precio field (keydown)", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i);
+
+    expect(fireEvent.keyDown(input, { key: "a" })).toBe(false);
+  });
+
+  it("blocks a second decimal separator via keydown", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "45.5" } });
+
+    expect(fireEvent.keyDown(input, { key: "." })).toBe(false);
+  });
+
+  it("strips a currency symbol from a pasted price", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+    // Select JUNIOR's starting "45.00" first — the realistic "select, then
+    // paste to replace" gesture. Pasting at an unselected caret would
+    // INSERT instead (append/splice), which the masking still handles, but
+    // is a different scenario than what this test names.
+    input.setSelectionRange(0, input.value.length);
+
+    fireEvent.paste(input, { clipboardData: { getData: () => "$99.50" } });
+
+    expect(input.value).toBe("99.50");
+  });
+
+  it("caps the decimal part at 2 digits while typing", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "45.999" } });
+
+    expect(input.value).toBe("45.99");
+  });
+
+  it("caps the integer part at the business ceiling (6 digits) while typing", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "1234567" } }); // 7 digits, over the cap
+
+    expect(input.value).toBe("123456");
+  });
+
+  it("warns instead of silently truncating a keystroke past the cap", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    const input = within(juniorRow).getByLabelText(/precio de junior/i);
+    fireEvent.change(input, { target: { value: "123456" } }); // already at the 6-digit cap
+
+    fireEvent.keyDown(input, { key: "7" });
+
+    expect(await within(juniorRow).findByText(/alcanzó el máximo/i)).toBeInTheDocument();
   });
 });
 
