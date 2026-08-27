@@ -4,7 +4,8 @@
     "ignoreFiles": [
       "docs/archive/**",
       "/tmp/**",
-      "frontend/src/app/attendance/__tests__/AttendancePage.test.tsx"
+      "frontend/src/app/attendance/__tests__/AttendancePage.test.tsx",
+      "docs/manuales/*.html"
     ],
     "ignoreValues": [
       {
@@ -33,6 +34,12 @@
         ],
         "createdAt": "2026-08-26T16:27:48.584Z",
         "reason": "Landing is a separate visual system: no radius token exists to snap to. DESIGN.md's rounded scale governs the product UI, not the landing."
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "animate-bounce",
+        "createdAt": "2026-08-27T15:36:18.659Z",
+        "reason": "Indicador de escritura del chat: tres puntos tras motion-safe con aria-label; convencion de dominio, no easing decorativo"
       }
     ]
   }
