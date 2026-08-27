@@ -101,6 +101,11 @@ async function mockGuardianPortal(page: Page): Promise<void> {
   await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
+  // `/student/payments` also calls `fetchBeneficio()` on mount — unmocked
+  // this escaped to the real BFF, got a 401, and the app's global session
+  // handling redirected to /login mid-navigation (the "Asistencias" click
+  // then landed on a detached element instead of the next screen).
+  await page.route("**/api/personas/*/beneficio", (route: Route) => fulfillJson(route, null));
 }
 
 /** The sidebar row a guardian actually clicks — not a scripted `goto`. */

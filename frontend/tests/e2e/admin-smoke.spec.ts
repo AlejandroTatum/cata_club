@@ -42,6 +42,10 @@ const AUTHENTICATED_HEADERS = {
   "set-cookie": `access_token=${MOCK_ACCESS_TOKEN}; Path=/; HttpOnly; SameSite=Lax`,
 };
 
+async function fulfillJson(route: Route, body: unknown): Promise<void> {
+  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+}
+
 /**
  * Mocks the BFF's same-origin auth routes with a stateful handshake, not a
  * blanket "always authenticated" stub. `/api/auth/session` starts
@@ -53,6 +57,36 @@ const AUTHENTICATED_HEADERS = {
  */
 async function mockAuthRoutes(page: Page): Promise<void> {
   let authenticated = false;
+
+  // A catch-all first: the shell asks for more than this screen does, and an
+  // unanswered call reaches the real BFF, fails, and logs the session out.
+  // This walk goes dashboard -> members -> attendance, and the dashboard's
+  // AppShell alone calls `/api/dashboard` for the admin's pending-payments
+  // badge before either page under test is even reached.
+  await page.route("**/api/**", (route: Route) =>
+    route.request().method() === "GET" ? fulfillJson(route, []) : fulfillJson(route, {}),
+  );
+  // The catch-all above answers every GET with `[]`, but the bell (issue #281)
+  // reads `data.items` — an array breaks it. Last-registered wins, so this
+  // specific route overrides the catch-all.
+  await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
+  // The members page destructures `{ accounts }` from the response — the
+  // catch-all's bare `[]` has no such property and would leave `accounts`
+  // undefined, crashing the render this test still walks through.
+  await page.route("**/api/members", (route: Route) =>
+    fulfillJson(route, { accounts: [], personasCapped: false }),
+  );
+  // Issue #400 (criterio 4/5): `/api/payments` answers `{ items, total }`
+  // (real pagination), not a bare array — the dashboard's
+  // `fetchPaymentValidations()` reads `result.items`, which the catch-all's
+  // `[]` leaves `undefined` and crashes `buildActivityFeed` on render. The
+  // trailing `*` matches the `?skip=&limit=…` query string every GET here
+  // carries; an exact `**/api/payments` glob does not.
+  await page.route("**/api/payments*", (route: Route) =>
+    fulfillJson(route, { items: [], total: 0 }),
+  );
 
   await page.route("**/api/auth/session", (route: Route): Promise<void> => {
     if (!authenticated) {
