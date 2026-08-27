@@ -49,7 +49,6 @@ export default function HeroCarousel(): React.ReactElement {
     }
   };
 
-  const active = HERO_PHOTOS[current];
 
   return (
     <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
@@ -71,7 +70,6 @@ export default function HeroCarousel(): React.ReactElement {
           />
         ))}
         <div className="landing-hero-screen-bar">
-          <span className="landing-hero-screen-cap" data-hero-caption>{active.caption}</span>
           <div
             className="landing-hero-screen-dots"
             role="tablist"

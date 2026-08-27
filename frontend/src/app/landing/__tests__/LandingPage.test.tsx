@@ -160,8 +160,8 @@ describe("LandingPage", (): void => {
 
     const mission = screen.getByRole("img", { name: /el club reúne a su comunidad en un entrenamiento/i });
     expect(mission).toHaveAttribute("src", "/landing/photo-community.jpeg");
-    const vision = screen.getByRole("img", { name: /el equipo de cata club posa en conjunto/i });
-    expect(vision).toHaveAttribute("src", "/landing/photo-squad.jpeg");
+    const vision = screen.getByRole("img", { name: /el equipo y entrenadores de cata club posan en el área de entrenamiento/i });
+    expect(vision).toHaveAttribute("src", "/landing/vision-team-1329.jpg");
   });
 
   it("alternates Mission and Vision editorial blocks: photo left/text right, then text left/photo right", (): void => {
@@ -424,16 +424,18 @@ describe("LandingPage", (): void => {
     expect(copy.children[0].tagName).toBe("H1");
   });
 
-  it("keeps a single decorative serve ball inside the hero", (): void => {
+  it("keeps both hero balls and the crested paddle", (): void => {
     render(<LandingPage />);
 
     const hero = document.querySelector(".landing-hero") as HTMLElement;
-    const ball = hero.querySelector("[data-serve-ball]");
+    const paddle = hero.querySelector("[data-serve-paddle]");
 
     expect(document.querySelectorAll("[data-serve-ball]")).toHaveLength(1);
-    expect(ball).not.toBeNull();
-    expect(ball).toHaveAttribute("aria-hidden", "true");
-    expect(ball?.parentElement).toBe(hero);
+    expect(hero.querySelector("[data-serve-ball]")).not.toBeNull();
+    expect(document.querySelectorAll("[data-frame-ball]")).toHaveLength(1);
+    expect(hero.querySelector("[data-frame-ball]")).not.toBeNull();
+    expect(paddle).not.toBeNull();
+    expect(paddle?.querySelector(".landing-paddle-crest")).not.toBeNull();
   });
 
   /**
@@ -477,6 +479,7 @@ describe("LandingPage", (): void => {
 
     expect(html).toContain("data-serve-paddle");
     expect(html).toContain("data-serve-ball");
+        expect(html).toContain("data-frame-ball");
     expect(html).toContain("landing-paddle-crest");
     expect(motionMount).not.toHaveBeenCalled();
   });
@@ -696,13 +699,16 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("promotes the championship specifics into the visible gallery caption", (): void => {
+  it("keeps gallery captions out of visible markup", (): void => {
     render(<LandingPage />);
 
     // Scoped to the gallery: the Logros section now also carries this same
     // fact, so an unscoped query would match more than one element.
     const gallery = document.querySelector(".landing-gallery") as HTMLElement;
-    expect(within(gallery).getByText(/Sudamericano Sub-11 y Sub-13/i)).toHaveTextContent("Asunción");
+    expect(gallery.querySelectorAll("figcaption")).toHaveLength(0);
+        GALLERY_PHOTOS.forEach((photo): void => {
+          expect(gallery).not.toHaveTextContent(photo.caption);
+        });
   });
 
   it("renders every configured photo as a carousel slide", (): void => {
@@ -713,7 +719,7 @@ describe("LandingPage", (): void => {
     GALLERY_PHOTOS.forEach((photo, index): void => {
       expect(slides[index].querySelector("img")).toHaveAttribute("src", photo.src);
       expect(slides[index].querySelector("img")).toHaveAttribute("alt", photo.alt);
-      expect(slides[index].querySelector("figcaption")).toHaveTextContent(photo.caption);
+      expect(slides[index].querySelector("figcaption")).toBeNull();
     });
   });
 
@@ -814,7 +820,7 @@ describe("LandingPage", (): void => {
 
     const prioritized = Array.from(document.querySelectorAll("img[data-priority='true']"));
     expect(prioritized).toHaveLength(1);
-    expect(prioritized[0]).toHaveAttribute("src", "/landing/photo-coach-athlete.jpeg");
+    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-community.jpg");
   });
 
   /**
@@ -1025,7 +1031,7 @@ describe("LandingPage", (): void => {
       expect(html).toContain("Horarios");
       expect(html).toContain(landingConfig.contact.hours);
       GALLERY_PHOTOS.forEach((photo): void => {
-        expect(html).toContain(photo.caption);
+        expect(html).not.toContain(photo.caption);
       });
       expect(motionMount).not.toHaveBeenCalled();
     });

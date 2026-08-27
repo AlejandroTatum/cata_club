@@ -100,7 +100,7 @@ function Hero(): React.ReactElement {
     <header className="landing-hero" id="inicio" data-motion-section data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
-      <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
+        <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
       {/* The paddle that produces that serve. It reuses `.landing-paddle` and
           `.landing-paddle-crest` — the exact shape and crest the Motto section
           renders — so the hero borrows the club's own mark instead of adding a
@@ -198,10 +198,10 @@ function MissionVision(): React.ReactElement {
           {/* Approved editorial photo: the squad heading for the selections. */}
           <figure className="landing-editorial-media">
             <Image
-              src="/landing/photo-squad.jpeg"
-              alt="El equipo de Cata Club posa en conjunto"
-              width={1200}
-              height={900}
+              src="/landing/vision-team-1329.jpg"
+              alt="El equipo y entrenadores de Cata Club posan en el área de entrenamiento"
+              width={1600}
+              height={1200}
               loading="lazy"
             />
           </figure>
