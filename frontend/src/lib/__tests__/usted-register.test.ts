@@ -77,6 +77,10 @@ describe("usted register — app-wide copy sweep (issue #340 follow-up)", () => 
     // under-match. `findOffenders()` below already builds fresh per literal;
     // this test has to follow the same rule to test the regex honestly.
     expect(buildUstedRegisterRegex().test("Revisá el resumen")).toBe(true);
+    // The shape this sweep ran green past until the word list grew: the
+    // #666 cap message shipped "Reducí el monto ingresado." in #679.
+    expect(buildUstedRegisterRegex().test("Reducí el monto ingresado.")).toBe(true);
+    expect(buildUstedRegisterRegex().test("Reduzca el monto ingresado.")).toBe(false);
     expect(buildUstedRegisterRegex().test("tu cuenta")).toBe(true);
     expect(buildUstedRegisterRegex().test("vos podés")).toBe(true);
     expect(buildUstedRegisterRegex().test("apenas te lo asignen, entras directo")).toBe(true);

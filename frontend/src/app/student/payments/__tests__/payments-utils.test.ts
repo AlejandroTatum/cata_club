@@ -300,7 +300,7 @@ describe("excedeMesesMaximo", () => {
 describe("MENSAJE_MESES_MAXIMO_EXCEDIDO", () => {
   it("names the real cap, not the 36 the original issue asked for", () => {
     expect(MENSAJE_MESES_MAXIMO_EXCEDIDO).toBe(
-      "El pago no puede cubrir más de 12 meses. Reducí el monto ingresado.",
+      "El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado.",
     );
   });
 });

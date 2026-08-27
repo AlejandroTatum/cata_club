@@ -32,6 +32,29 @@ export const VOSEO_IMPERATIVOS = [
   "actualizá", "actualizás", "cambiá", "cambiás", "agregá", "agregás",
   "seleccioná", "seleccionás", "ingresá", "ingresás", "recordá", "recordás",
   "completá", "completás", "verificá", "verificás", "probá", "probás",
+  /*
+   * Second batch — the app-wide sweep is only ever as wide as this list, and
+   * "Reducí el monto ingresado." (the #666 cap message, shipped in #679) sat
+   * in `student/payments/payments-utils.ts` through every green run of that
+   * sweep for one reason: "reducir" was not on it. These are the verbs this
+   * product's copy actually gives instructions with — an amount to lower, a
+   * receipt to attach, a form to submit, a button to press.
+   *
+   * Ambiguous first-person preterites are deliberately absent. For -ir verbs
+   * the voseo imperative and "yo" preterite are the same word ("subí",
+   * "pedí", "recibí"), and this app's FAQ is written as questions a user asks
+   * in the first person ("Ya cargué el comprobante") — listing those would
+   * make the lock fire on correct usted-register copy. "reducí" carries that
+   * same ambiguity but earns its place: it is the defect this batch exists
+   * for, and no plausible screen says "yo reducí".
+   */
+  "reducí", "reducís", "cargá", "cargás", "adjuntá", "adjuntás",
+  "enviá", "enviás", "descargá", "descargás", "buscá", "buscás",
+  "intentá", "intentás", "esperá", "esperás", "aumentá", "aumentás",
+  "asigná", "asignás", "registrá", "registrás", "marcá", "marcás",
+  "cancelá", "cancelás", "pagá", "pagás", "usá", "usás",
+  "corregí", "corregís", "tocá", "tocás", "andá", "andás",
+  "vení", "venís",
 ];
 
 /**

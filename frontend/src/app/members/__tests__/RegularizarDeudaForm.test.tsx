@@ -81,7 +81,7 @@ describe("RegularizarDeudaForm — el monto no puede comprar más de 12 meses (#
     fireEvent.click(screen.getByRole("button", { name: /^Regularizar$/ }));
 
     expect(
-      await screen.findByText("El pago no puede cubrir más de 12 meses. Reducí el monto ingresado."),
+      await screen.findByText("El pago no puede cubrir más de 12 meses. Reduzca el monto ingresado."),
     ).toBeInTheDocument();
     expect(mockRegularizarDeuda).not.toHaveBeenCalled();
   });

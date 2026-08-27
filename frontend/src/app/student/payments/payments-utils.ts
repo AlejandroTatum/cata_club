@@ -212,7 +212,7 @@ export const MAX_MESES_COBERTURA = 12;
  * adjusted from the issue's own "36" to the real, owner-confirmed cap).
  */
 export const MENSAJE_MESES_MAXIMO_EXCEDIDO =
-  `El pago no puede cubrir más de ${MAX_MESES_COBERTURA} meses. Reducí el monto ingresado.`;
+  `El pago no puede cubrir más de ${MAX_MESES_COBERTURA} meses. Reduzca el monto ingresado.`;
 
 /**
  * Whether an amount would buy more than `MAX_MESES_COBERTURA` months at a
