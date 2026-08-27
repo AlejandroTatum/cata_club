@@ -33,6 +33,13 @@ export interface DataRowProps {
   /** Trailing actions. */
   actions?: ReactNode;
   variant?: DataRowVariant;
+  /**
+   * Opt-in only — DataRow is shared by six pages (discounts, groups, members,
+   * payments, student/enroll, tarifas), and flipping the default here would
+   * change name rendering everywhere at once. Set this on the caller that
+   * needs the full name (e.g. Tarifas, #660); everyone else keeps truncating.
+   */
+  nameWrap?: boolean;
   className?: string;
 }
 
@@ -43,6 +50,7 @@ export default function DataRow({
   status,
   actions,
   variant = "dense",
+  nameWrap = false,
   className,
 }: DataRowProps): ReactElement {
   const twoLine = variant === "two-line";
@@ -50,7 +58,14 @@ export default function DataRow({
   return (
     <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-field px-4 py-3", className)}>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-ink">{name}</p>
+        <p
+          className={cn(
+            "text-sm font-semibold text-ink",
+            nameWrap ? "break-words" : "truncate",
+          )}
+        >
+          {name}
+        </p>
         {twoLine && subtitle ? (
           <p className="mt-0.5 truncate text-xs text-ink-3">{subtitle}</p>
         ) : null}

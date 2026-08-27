@@ -421,6 +421,11 @@ export default function TarifasPage(): React.ReactElement {
                       <DataRow
                         key={tarifa.id}
                         name={tarifa.categoria}
+                        // Opt-in only (#660): long tarifa/descuento names were
+                        // truncating to "M…" on mobile. `nameWrap` is scoped
+                        // to this page — the other five DataRow callers keep
+                        // truncating by default.
+                        nameWrap
                         // Bundled into `meta` rather than `DataRow`'s own
                         // per-row `actions` prop: this row's actions are
                         // "Editar precio"/"Guardar"/"Cancelar", distinct from
