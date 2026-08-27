@@ -575,6 +575,38 @@ describe("accountMatchesFlag", () => {
     };
     expect(accountMatchesFlag(noPending, "pendiente")).toBe(false);
   });
+
+  /*
+   * Issue #730, mitad B. The "Sin datos de emergencia" stat tile has counted
+   * this population since issue #362, but a number is not a worklist: an
+   * admin could read "42" and had no way to reach the 42. The chip reuses the
+   * flag the adapter already computes, so the tile and the filter can never
+   * disagree about who is in the gap — which is exactly why this is a new
+   * `MemberFilterFlag` case and not a second predicate written next to it.
+   */
+  it('"sin-emergencia" matches exactly the accounts the stat tile counts', () => {
+    const enElHueco: MemberAccount = {
+      ...MOCK_MEMBER_ACCOUNTS[0],
+      sinDatosEmergencia: true,
+    };
+    expect(accountMatchesFlag(enElHueco, "sin-emergencia")).toBe(true);
+
+    const conFicha: MemberAccount = { ...enElHueco, sinDatosEmergencia: false };
+    expect(accountMatchesFlag(conFicha, "sin-emergencia")).toBe(false);
+  });
+
+  it('"sin-emergencia" treats an absent flag as not-in-the-gap', () => {
+    /*
+     * `sinDatosEmergencia` is optional: the adapter omits it (never
+     * fabricates `true`) when the bulk ficha lookup didn't resolve — see its
+     * doc comment in members-utils.ts. A filter that read `undefined` as "in
+     * the gap" would put every row of a degraded fetch on the worklist and
+     * send an admin chasing people who are fine.
+     */
+    const sinBandera: MemberAccount = { ...MOCK_MEMBER_ACCOUNTS[0] };
+    delete sinBandera.sinDatosEmergencia;
+    expect(accountMatchesFlag(sinBandera, "sin-emergencia")).toBe(false);
+  });
 });
 
 describe("countAccountsMatchingFlag", () => {

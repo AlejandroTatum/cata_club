@@ -356,7 +356,7 @@ export function filterAccounts(
  * Quick-filter chips shown above the members table
  * (design/admin-members-mockup-v1.html's `.chip-filters`).
  */
-export type MemberFilterFlag = "all" | "vencida" | "pendiente";
+export type MemberFilterFlag = "all" | "vencida" | "pendiente" | "sin-emergencia";
 
 /**
  * Does this account have at least one student matching the given filter
@@ -374,6 +374,21 @@ export function accountMatchesFlag(
       return account.estudiantes.some((s) => s.membresia?.estado === "vencida");
     case "pendiente":
       return account.estudiantes.some((s) => s.ultimoPago?.estado === "pendiente_validacion");
+    /*
+     * Issue #730. Reads the SAME field the "Sin datos de emergencia" stat
+     * tile counts (`buildMemberStats`), so the tile and the chip can never
+     * report different populations — the number on the tile IS the list this
+     * returns. Writing a second predicate here (e.g. re-deriving "no
+     * representative and no ficha") would have been a copy of the adapter's
+     * rule that could drift from it silently.
+     *
+     * `=== true`, not a truthy read: the flag is optional and the adapter
+     * omits it rather than fabricating it when the bulk ficha lookup didn't
+     * resolve. `undefined` means "we don't know", and an unknown must not
+     * land on a worklist of people to go chase.
+     */
+    case "sin-emergencia":
+      return account.sinDatosEmergencia === true;
   }
 }
 
