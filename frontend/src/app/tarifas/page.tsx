@@ -17,6 +17,8 @@ import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
+import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 import {
   Button,
   DataBox,
@@ -57,28 +59,17 @@ const PRECIO_ERROR =
   "Ingrese un precio válido: un número positivo con hasta 2 decimales (ej. 45.00).";
 
 /**
- * Input mask for the price field (issue #506): keeps digits and at most one
- * decimal separator — "," or "." — dropping everything else (letters,
- * symbols, a second separator) as it's typed. Runs on every keystroke, so it
- * never rejects input outright; it just filters what makes it into state.
+ * Both "," and "." are accepted as the decimal separator (es-EC/es-AR admins
+ * type a comma); normalized to "." before validation and before the payload
+ * reaches `actualizarTipoMembresia`, which expects a `Decimal` string.
+ *
+ * Issue #667: the keystroke-level masking that used to be this file's own
+ * `sanitizePrecioInput` (#506) now lives in `numeric-input.ts`'s `"amount"`
+ * mode, shared with every other numeric field in the product — see
+ * `precioMasking`/`newPrecioMasking` below. This function is unaffected: it
+ * still runs at submit time, after the masked value already only ever
+ * contains digits and at most one of either separator.
  */
-function sanitizePrecioInput(raw: string): string {
-  let sawSeparator = false;
-  let result = "";
-  for (const char of raw) {
-    if (char >= "0" && char <= "9") {
-      result += char;
-    } else if ((char === "," || char === ".") && !sawSeparator) {
-      result += char;
-      sawSeparator = true;
-    }
-  }
-  return result;
-}
-
-/** Both "," and "." are accepted as the decimal separator (es-EC/es-AR admins
- *  type a comma); normalized to "." before validation and before the payload
- *  reaches `actualizarTipoMembresia`, which expects a `Decimal` string. */
 function normalizePrecio(value: string): string {
   return value.trim().replace(",", ".");
 }
@@ -122,6 +113,31 @@ export default function TarifasPage(): React.ReactElement {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  /**
+   * Issue #667: keystroke/paste-level masking for the price row being
+   * edited, and a separate instance for "Nueva tarifa"'s own price field —
+   * two independent fields need two independent `limitReached` states.
+   * `fullFilterOnChange` keeps this screen's pre-existing "strip everything
+   * disallowed on every change" contract (#506's own test suite), rather
+   * than the cap-only backstop `WizardInput`/`MedicalRecordEditor` use.
+   */
+  const precioMasking = useNumericFieldMasking(
+    "amount",
+    (value) => {
+      setPrecioInput(value);
+      setInputError(null);
+    },
+    { fullFilterOnChange: true },
+  );
+  const newPrecioMasking = useNumericFieldMasking(
+    "amount",
+    (value) => {
+      setNewTarifa((prev) => ({ ...prev, precioInput: value }));
+      setCreateError(null);
+    },
+    { fullFilterOnChange: true },
+  );
+
   const loadCatalog = useCallback(async (): Promise<void> => {
     setLoading(true);
     setLoadError(null);
@@ -142,12 +158,14 @@ export default function TarifasPage(): React.ReactElement {
     setEditingId(tarifa.id);
     setPrecioInput(tarifa.precio);
     setInputError(null);
+    precioMasking.reset();
   }
 
   function cancelEdit(): void {
     setEditingId(null);
     setPrecioInput("");
     setInputError(null);
+    precioMasking.reset();
   }
 
   /** "Guardar" click: validate locally, then open the confirmation — nothing
@@ -201,11 +219,13 @@ export default function TarifasPage(): React.ReactElement {
     setNewTarifa(EMPTY_NEW_TARIFA);
     setCreateError(null);
     setCreateOpen(true);
+    newPrecioMasking.reset();
   }
 
   function closeCreateForm(): void {
     setCreateOpen(false);
     setCreateError(null);
+    newPrecioMasking.reset();
   }
 
   async function handleCreateSubmit(): Promise<void> {
@@ -242,18 +262,23 @@ export default function TarifasPage(): React.ReactElement {
             type="text"
             inputMode="decimal"
             value={precioInput}
-            onChange={(e) => {
-              setPrecioInput(sanitizePrecioInput(e.target.value));
-              setInputError(null);
-            }}
+            onChange={(e) => precioMasking.onChange(e.target.value)}
+            onKeyDown={precioMasking.onKeyDown}
+            onPaste={precioMasking.onPaste}
             className={PRECIO_INPUT_CLASS}
             aria-label={`Precio de ${tarifa.categoria}`}
             disabled={saving}
           />
-          {inputError && (
+          {inputError ? (
             <p className="text-xs text-state-bad" role="alert">
               {inputError}
             </p>
+          ) : (
+            precioMasking.limitReached && (
+              <p aria-live="polite" className="text-xs font-semibold text-state-warn">
+                {NUMERIC_FIELD_LIMIT_MESSAGE.amount}
+              </p>
+            )
           )}
         </div>
       );
@@ -322,14 +347,18 @@ export default function TarifasPage(): React.ReactElement {
               inputMode="decimal"
               required
               value={newTarifa.precioInput}
-              onChange={(e) => {
-                setNewTarifa({ ...newTarifa, precioInput: sanitizePrecioInput(e.target.value) });
-                setCreateError(null);
-              }}
+              onChange={(e) => newPrecioMasking.onChange(e.target.value)}
+              onKeyDown={newPrecioMasking.onKeyDown}
+              onPaste={newPrecioMasking.onPaste}
               className={FIELD_CONTROL}
               placeholder="45.00"
               disabled={creating}
             />
+            {newPrecioMasking.limitReached && (
+              <span aria-live="polite" className="text-2xs font-semibold normal-case text-state-warn">
+                {NUMERIC_FIELD_LIMIT_MESSAGE.amount}
+              </span>
+            )}
           </label>
           <label className={FIELD_LABEL}>
             Modalidad <span aria-hidden="true" className="text-state-bad">*</span>

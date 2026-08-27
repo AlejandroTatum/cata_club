@@ -23,6 +23,31 @@ export interface NumericFieldMasking {
   onPaste: (e: ClipboardEvent<HTMLInputElement>) => void;
   /** Wraps the caller's `onChange`: applies `capDigits` first when `mode` is set, then forwards the (possibly capped) value. */
   onChange: (raw: string) => void;
+  /**
+   * Clears `limitReached` without touching the field's value. `WizardInput`
+   * and `MedicalRecordEditor` never need this — their input unmounts with
+   * the rest of the form, which resets the hook's own state for free. A
+   * caller whose hook instance OUTLIVES the field it drives — `/tarifas`'s
+   * one `precioMasking` shared across every row's edit session — needs it:
+   * without a reset, cancelling a cap warning on one row and opening a
+   * different row would show a stale warning that row never triggered.
+   */
+  reset: () => void;
+}
+
+export interface NumericFieldMaskingOptions {
+  /**
+   * `WizardInput`/`MedicalRecordEditor`'s `onChange` is a cap-ONLY backstop
+   * (`capDigits`) that deliberately never strips a letter — see
+   * `numeric-input.ts`'s doc comment (V01, `enroll-qa.spec.ts`). `/tarifas`'s
+   * precio field never had that concern (issue #506's `sanitizePrecioInput`
+   * always stripped everything disallowed on every change, with no separate
+   * `keydown` guard at the time), and its own test suite already locks that
+   * full-strip behavior for a one-shot value set. Passing `true` here keeps
+   * that contract: `onChange` runs the full `filterNumericInput` instead of
+   * the bare cap.
+   */
+  fullFilterOnChange?: boolean;
 }
 
 /**
@@ -33,6 +58,7 @@ export interface NumericFieldMasking {
 export function useNumericFieldMasking(
   mode: NumericFieldMode | undefined,
   onChange: (value: string) => void,
+  options?: NumericFieldMaskingOptions,
 ): NumericFieldMasking {
   const [limitReached, setLimitReached] = useState(false);
 
@@ -41,7 +67,7 @@ export function useNumericFieldMasking(
       onChange(raw);
       return;
     }
-    const result = capDigits(mode, raw);
+    const result = options?.fullFilterOnChange ? filterNumericInput(mode, raw) : capDigits(mode, raw);
     setLimitReached(result.limitReached);
     onChange(result.value);
   }
@@ -86,5 +112,11 @@ export function useNumericFieldMasking(
     onChange(result.value);
   }
 
-  return { limitReached, onKeyDown: handleKeyDown, onPaste: handlePaste, onChange: handleChange };
+  return {
+    limitReached,
+    onKeyDown: handleKeyDown,
+    onPaste: handlePaste,
+    onChange: handleChange,
+    reset: () => setLimitReached(false),
+  };
 }

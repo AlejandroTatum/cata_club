@@ -211,6 +211,38 @@ describe("DiscountsPage — crear", () => {
     });
   });
 
+  /**
+   * Issue #667: PORCENTAJE already had a business ceiling (100 — enforced
+   * both by the `max` HTML attribute and by `handleSubmit`'s own check just
+   * below it). MONTO had neither: `max={... : undefined}` left the native
+   * spinner unbounded, and `handleSubmit` only checked `valor > 0`. This
+   * gives MONTO the same "límites de negocio" ceiling `AMOUNT_MAX_VALUE`
+   * (numeric-input.ts) already applies to `/tarifas`'s precio field.
+   */
+  it("carries a max attribute on the MONTO branch, matching the amount business ceiling", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: "MONTO" } });
+
+    expect(screen.getByLabelText(/valor/i)).toHaveAttribute("max", "999999.99");
+  });
+
+  it("refuses to save a MONTO value over the business ceiling", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo descuento/i }));
+    fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Convenio grande" } });
+    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: "MONTO" } });
+    fireEvent.change(screen.getByLabelText(/valor/i), { target: { value: "1000000" } });
+    fireEvent.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(await screen.findByText(/no puede superar/i)).toBeInTheDocument();
+    expect(mockCrearDescuento).not.toHaveBeenCalled();
+  });
+
   it("surfaces a backend 400 (duplicate name) as a form error", async () => {
     const { ApiClientError } = await import("@/services/api");
     mockCrearDescuento.mockRejectedValueOnce(new ApiClientError("Ya existe un descuento con ese nombre", 400));
