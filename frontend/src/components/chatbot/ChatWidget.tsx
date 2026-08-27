@@ -49,12 +49,19 @@
 
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { X, Send, AlertTriangle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { holdSmoothScroll } from "@/lib/smooth-scroll";
+import {
+  CHATBOT_MAX_MESSAGE_LENGTH,
+  CHATBOT_MAX_MESSAGE_LENGTH_LABEL,
+  CHATBOT_MESSAGE_TOO_LONG_CODE,
+  CHATBOT_MESSAGE_TOO_LONG_TEXT,
+  formatCharacterCount,
+} from "@/lib/chatbot-contract";
 import { consultarChatbot, ApiClientError, type ChatbotTurno } from "@/services/api";
 import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 import { getQuickReplies, TALK_TO_CLUB_LABEL } from "./chat-quick-replies";
@@ -63,6 +70,16 @@ import type { UserRole } from "@/types/domain";
 
 /** How many prior turns to send as `historial` on each request — mirrors the backend's own cap. */
 const MAX_TURNOS_HISTORIAL = 6;
+
+/**
+ * How close to the limit the counter appears.
+ *
+ * Not always on: a running count under a field nobody is near the end of is
+ * noise, and it would sit under every two-word question the assistant is
+ * actually for. It shows for the last 200 characters, which is long enough to
+ * finish a sentence and notice.
+ */
+const CONTADOR_DESDE = CHATBOT_MAX_MESSAGE_LENGTH - 200;
 
 /** The assistant's name, in the one place it is spelled. */
 export const BOT_NAME = "CATA-BOT";
@@ -91,6 +108,16 @@ let proximoId = 0;
  * actually do — wait, retry, or come back later.
  */
 function mensajeDeError(error: unknown): string {
+  // The named reason first, and only then the status. A `400` from this route
+  // can be a malformed body, an empty message OR a message over the limit, and
+  // the last one is the only one the person typing can do anything about — it
+  // used to fall through to "No se pudo contactar a CATA-BOT", which sent them
+  // to retry the one thing that cannot work. `code` is what tells them apart
+  // (see `src/app/api/chatbot/route.ts`); a 400 that carries no code is still
+  // a client bug and still gets the generic line.
+  if (error instanceof ApiClientError && error.code === CHATBOT_MESSAGE_TOO_LONG_CODE) {
+    return CHATBOT_MESSAGE_TOO_LONG_TEXT;
+  }
   const status = error instanceof ApiClientError ? error.status : null;
   switch (status) {
     case 429:
@@ -403,6 +430,7 @@ export default function ChatWidget({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const contadorId = useId();
   const isSheet = useSheetPresentation();
   const skin = isSheet ? SHEET : CARD;
   const sheet = useSheetGeometry(open && isSheet);
@@ -437,6 +465,15 @@ export default function ChatWidget({
   async function enviarTexto(texto: string): Promise<void> {
     const limpio = texto.trim();
     if (!limpio || enviando) return;
+
+    // The limit is enforced HERE, not only by the BFF. An over-length message
+    // used to make the round trip, come back 400, and be reported as a
+    // connection failure; now it never leaves the browser, and the draft is
+    // left in the composer so it can be shortened instead of retyped.
+    if (limpio.length > CHATBOT_MAX_MESSAGE_LENGTH) {
+      setError(CHATBOT_MESSAGE_TOO_LONG_TEXT);
+      return;
+    }
 
     const historial: ChatbotTurno[] = mensajes
       .slice(-MAX_TURNOS_HISTORIAL)
@@ -494,6 +531,13 @@ export default function ChatWidget({
   }
 
   if (!open) return null;
+
+  // Measured on what would actually be SENT — `enviarTexto` trims before it
+  // counts, and a counter that disagrees with the guard beside it would be a
+  // send button disabled for no visible reason.
+  const largo = borrador.trim().length;
+  const excedido = largo > CHATBOT_MAX_MESSAGE_LENGTH;
+  const mostrarContador = largo >= CONTADOR_DESDE;
 
   return (
     <div
@@ -697,6 +741,31 @@ export default function ChatWidget({
         </a>
       </div>
 
+      {/*
+        The limit, where it can still be acted on.
+
+        It appears for the last 200 characters and turns red past the cap,
+        which is the whole point: the message used to be typed to any length,
+        sent, rejected with a 400 by the BFF and reported to the user as a
+        failure to reach the assistant. There is deliberately no `maxLength` on
+        the field — a hard cap silently swallows the tail of a pasted message,
+        and a message quietly shortened by the browser is worse than one the
+        user is told to shorten. `aria-live="polite"` so this is heard, not
+        only seen.
+      */}
+      {mostrarContador && (
+        <p
+          id={contadorId}
+          aria-live="polite"
+          className={`flex-none bg-canvas px-[15px] pb-2 text-right text-2xs tabular-nums ${
+            excedido ? "font-semibold text-state-bad" : "text-ink-3"
+          }`}
+        >
+          {formatCharacterCount(largo)} / {CHATBOT_MAX_MESSAGE_LENGTH_LABEL} caracteres
+          {excedido ? " — acórtelo para poder enviarlo" : ""}
+        </p>
+      )}
+
       {/* `.chat .inputrow` — 40px field, 40px red send button. */}
       <form onSubmit={handleSubmit} className={skin.form}>
         <input
@@ -706,13 +775,15 @@ export default function ChatWidget({
           onChange={(e): void => setBorrador(e.target.value)}
           placeholder="Escriba su pregunta…"
           aria-label={`Mensaje para ${BOT_NAME}`}
+          aria-invalid={excedido || undefined}
+          aria-describedby={mostrarContador ? contadorId : undefined}
           disabled={enviando}
           enterKeyHint="send"
           className={skin.input}
         />
         <button
           type="submit"
-          disabled={enviando || borrador.trim().length === 0}
+          disabled={enviando || largo === 0 || excedido}
           aria-label="Enviar mensaje"
           /* `outline-ball` used to draw this ring. #FFD600 is 1.42:1 on the
              panel's white footer — a focus indicator that fails 2.4.11 by a

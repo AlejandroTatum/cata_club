@@ -255,6 +255,48 @@ describe("error handling", () => {
 });
 
 // ---------------------------------------------------------------------------
+// ApiClientError.code — the failure's NAME, next to its class
+//
+// A status is a class of failure, not a reason: one route answers 400 for a
+// malformed body, an empty field AND a message over the length limit. A client
+// that only sees the number has to guess, and guessing is how "your message is
+// 2500 characters" came to be reported to the user as "we could not reach the
+// assistant". Whoever answers can now say which one it was.
+// ---------------------------------------------------------------------------
+
+describe("ApiClientError.code", () => {
+  it("carries the responder's code when the body names one", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(400, { message: "El mensaje es muy largo.", code: "chatbot_mensaje_demasiado_largo" }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).code).toBe("chatbot_mensaje_demasiado_largo");
+    }
+  });
+
+  it.each([
+    ["absent", {}],
+    ["an empty string", { code: "" }],
+    ["a number", { code: 400 }],
+    ["null", { code: null }],
+  ])("stays undefined when the code is %s, so callers fall back to the status", async (_label, extra) => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(400, { message: "mensaje", ...extra }));
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).code).toBeUndefined();
+      expect((error as ApiClientError).status).toBe(400);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ApiClientError.safe (issue #355) — the backend's "safe to show" marker
 // ---------------------------------------------------------------------------
 

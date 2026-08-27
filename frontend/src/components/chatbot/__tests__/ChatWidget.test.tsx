@@ -20,6 +20,7 @@ import {
   resetSmoothScrollForTests,
   type SmoothScrollController,
 } from "@/lib/smooth-scroll";
+import { CHATBOT_MAX_MESSAGE_LENGTH } from "@/lib/chatbot-contract";
 
 // `src` and `className` are forwarded, not dropped: which asset the header
 // avatar points at, and whether it crops with `object-cover`, are behaviours
@@ -844,5 +845,139 @@ describe("ChatWidget — the page behind the sheet stays put", () => {
     const { container } = render(<ChatWidget open onClose={vi.fn()} />);
 
     expect(container.querySelector(".overflow-y-auto")).toHaveAttribute("data-lenis-prevent");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The message limit — enforced where it can still be acted on.
+//
+// The composer had no `maxLength` at all (`maxLength === -1`), so 2500
+// characters were typed, sent, rejected by the BFF with a 400, and reported to
+// the user as "No se pudo contactar a CATA-BOT. Inténtelo de nuevo en un
+// momento." — which is false twice over: the assistant WAS reached, and the
+// advice was to retry the one thing that cannot work.
+// ---------------------------------------------------------------------------
+
+const LIMITE = CHATBOT_MAX_MESSAGE_LENGTH;
+
+function renderComposer(): { input: HTMLElement; send: HTMLElement; form: HTMLElement } {
+  const { container } = render(<ChatWidget open onClose={vi.fn()} />);
+  return {
+    input: screen.getByLabelText(/mensaje para cata-bot/i),
+    send: screen.getByRole("button", { name: /enviar mensaje/i }),
+    form: container.querySelector("form") as HTMLElement,
+  };
+}
+
+describe("ChatWidget — the message limit", () => {
+  it("says nothing while the message is nowhere near the limit", () => {
+    const { input } = renderComposer();
+    fireEvent.change(input, { target: { value: "¿Cómo veo mis pagos?" } });
+
+    // A running count under a two-word question is noise, and this panel is
+    // for two-word questions.
+    expect(screen.queryByText(/caracteres/i)).not.toBeInTheDocument();
+    expect(input).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("shows the count over the last 200 characters, before anything is wrong", () => {
+    const { input, send } = renderComposer();
+    fireEvent.change(input, { target: { value: "x".repeat(LIMITE - 200) } });
+
+    expect(screen.getByText(/1\.800 \/ 2\.000 caracteres/)).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-describedby");
+    // Near is not over: nothing is blocked yet.
+    expect(send).toBeEnabled();
+    expect(input).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("marks the field invalid and blocks the send past the limit", () => {
+    const { input, send } = renderComposer();
+    fireEvent.change(input, { target: { value: "x".repeat(2500) } });
+
+    expect(screen.getByText(/2\.500 \/ 2\.000 caracteres — acórtelo para poder enviarlo/)).toBeInTheDocument();
+    expect(send).toBeDisabled();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("never lets an over-length message leave the browser", () => {
+    const { input, form } = renderComposer();
+    fireEvent.change(input, { target: { value: "x".repeat(2500) } });
+    // Submitted through the form, not the button: the guard has to hold even
+    // when the disabled button is bypassed (Enter, a stray programmatic
+    // submit) — a disabled control is a hint, not an enforcement.
+    fireEvent.submit(form);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "El mensaje supera el límite de 2.000 caracteres. Acórtelo e inténtelo de nuevo.",
+    );
+  });
+
+  it("leaves the draft in the composer so it can be shortened, not retyped", () => {
+    const { input, form } = renderComposer();
+    fireEvent.change(input, { target: { value: "x".repeat(2500) } });
+    fireEvent.submit(form);
+
+    expect((input as HTMLInputElement).value).toHaveLength(2500);
+    // And nothing was optimistically added to the conversation.
+    expect(screen.queryByText("x".repeat(2500))).not.toBeInTheDocument();
+  });
+
+  it("sends a message that sits exactly on the limit", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ reply: "Listo." }));
+    const { input, send } = renderComposer();
+    fireEvent.change(input, { target: { value: "x".repeat(LIMITE) } });
+
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    // The off-by-one worth naming: the BFF accepts exactly this length, so the
+    // composer must not round it down to "too long".
+    expect(await screen.findByText("Listo.")).toBeInTheDocument();
+  });
+
+  it("carries no hard maxLength, so a long paste is never silently truncated", () => {
+    const { input } = renderComposer();
+
+    // A browser-enforced cap drops the tail of a paste without saying so. The
+    // user is told to shorten it instead — which is why the over-limit state
+    // has to be reachable at all.
+    expect((input as HTMLInputElement).maxLength).toBe(-1);
+  });
+
+  it("names the length problem when the BFF answers 400 with its code", async () => {
+    // Defence in depth: the client guard means this 400 should be unreachable
+    // from the UI, but the translator must still tell it from the other 400s
+    // this route can answer — that is what `code` is for.
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message: "El mensaje supera el límite de 2.000 caracteres. Acórtelo e inténtelo de nuevo.",
+          code: "chatbot_mensaje_demasiado_largo",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const { input, send } = renderComposer();
+    fireEvent.change(input, { target: { value: "hola" } });
+    fireEvent.click(send);
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(/supera el límite de 2\.000 caracteres/);
+    expect(alerta).not.toHaveTextContent(/no se pudo contactar/i);
+  });
+
+  it("still says the generic thing for a 400 that names no reason", async () => {
+    // A malformed body is a client bug, not something the reader can fix, and
+    // it must not borrow the length message just because it shares a status.
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(400));
+    const { input, send } = renderComposer();
+    fireEvent.change(input, { target: { value: "hola" } });
+    fireEvent.click(send);
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(/no se pudo contactar a cata-bot/i);
   });
 });
