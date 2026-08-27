@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { capDigits, filterNumericInput, isAllowedChar, NUMERIC_FIELD_MAX_DIGITS } from "../numeric-input";
+import {
+  AMOUNT_MAX_DECIMAL_DIGITS,
+  capDigits,
+  filterNumericInput,
+  isAllowedChar,
+  NUMERIC_FIELD_MAX_DIGITS,
+} from "../numeric-input";
 
 describe("isAllowedChar", () => {
   it("allows digits for both cedula and phone", () => {
@@ -10,6 +16,17 @@ describe("isAllowedChar", () => {
   it("rejects letters for both modes", () => {
     expect(isAllowedChar("cedula", "a")).toBe(false);
     expect(isAllowedChar("phone", "a")).toBe(false);
+  });
+
+  it("allows digits and a single decimal separator for amount", () => {
+    expect(isAllowedChar("amount", "5")).toBe(true);
+    expect(isAllowedChar("amount", ".")).toBe(true);
+  });
+
+  it("rejects letters and phone-style separators for amount", () => {
+    expect(isAllowedChar("amount", "a")).toBe(false);
+    expect(isAllowedChar("amount", "-")).toBe(false);
+    expect(isAllowedChar("amount", " ")).toBe(false);
   });
 
   it("rejects separators for cedula — identity-validation.ts never tolerates them there", () => {
@@ -30,6 +47,11 @@ describe("NUMERIC_FIELD_MAX_DIGITS", () => {
   it("caps both cedula and phone at 10 digits", () => {
     expect(NUMERIC_FIELD_MAX_DIGITS.cedula).toBe(10);
     expect(NUMERIC_FIELD_MAX_DIGITS.phone).toBe(10);
+  });
+
+  it("caps amount's integer part at 6 digits, with 2 decimal digits", () => {
+    expect(NUMERIC_FIELD_MAX_DIGITS.amount).toBe(6);
+    expect(AMOUNT_MAX_DECIMAL_DIGITS).toBe(2);
   });
 });
 
@@ -58,6 +80,26 @@ describe("capDigits", () => {
     // rejecting instead — see V01 in enroll-qa.spec.ts.
     expect(capDigits("phone", "099abc1234")).toEqual({ value: "099abc1234", limitReached: false });
   });
+
+  it("leaves an amount at or under both caps untouched", () => {
+    expect(capDigits("amount", "1234.56")).toEqual({ value: "1234.56", limitReached: false });
+  });
+
+  it("leaves a whole-number amount with no separator untouched", () => {
+    expect(capDigits("amount", "45")).toEqual({ value: "45", limitReached: false });
+  });
+
+  it("truncates an amount's integer part past 6 digits", () => {
+    expect(capDigits("amount", "1234567.89")).toEqual({ value: "123456.89", limitReached: true });
+  });
+
+  it("truncates an amount's decimal part past 2 digits", () => {
+    expect(capDigits("amount", "45.678")).toEqual({ value: "45.67", limitReached: true });
+  });
+
+  it("drops a second decimal separator", () => {
+    expect(capDigits("amount", "45.6.7")).toEqual({ value: "45.67", limitReached: true });
+  });
 });
 
 describe("filterNumericInput", () => {
@@ -78,5 +120,13 @@ describe("filterNumericInput", () => {
 
   it("reports no limit reached for a short, clean paste", () => {
     expect(filterNumericInput("cedula", "171234")).toEqual({ value: "171234", limitReached: false });
+  });
+
+  it("strips a currency symbol and letters from a pasted amount", () => {
+    expect(filterNumericInput("amount", "$45.00 USD")).toEqual({ value: "45.00", limitReached: false });
+  });
+
+  it("strips a thousands separator, keeping only the decimal point", () => {
+    expect(filterNumericInput("amount", "1,234.56")).toEqual({ value: "1234.56", limitReached: false });
   });
 });

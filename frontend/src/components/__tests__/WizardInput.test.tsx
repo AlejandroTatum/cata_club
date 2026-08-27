@@ -55,6 +55,21 @@ function renderPhone(value = "") {
   return { input: screen.getByLabelText(/teléfono/i) as HTMLInputElement, onChange };
 }
 
+function renderAmount(value = "") {
+  const onChange = vi.fn();
+  render(
+    <WizardInput
+      idPrefix="t"
+      label="Precio"
+      value={value}
+      onChange={onChange}
+      disabled={false}
+      numericMode="amount"
+    />,
+  );
+  return { input: screen.getByLabelText(/precio/i) as HTMLInputElement, onChange };
+}
+
 describe("WizardInput — numericMode blocks a typed letter (keydown)", () => {
   it("prevents the default insertion for a letter key on a cédula field", () => {
     const { input, onChange } = renderCedula();
@@ -100,6 +115,31 @@ describe("WizardInput — numericMode blocks a typed letter (keydown)", () => {
   });
 });
 
+describe("WizardInput — numericMode blocks a second decimal separator on amount (keydown)", () => {
+  it("lets a digit and the first decimal point through", () => {
+    const { input } = renderAmount("45");
+    expect(fireEvent.keyDown(input, { key: "." })).toBe(true);
+  });
+
+  it("blocks a second decimal point and warns", () => {
+    const { input } = renderAmount("45.5");
+    const notCancelled = fireEvent.keyDown(input, { key: "." });
+    expect(notCancelled).toBe(false);
+    expect(screen.getByText(/alcanzó el máximo/i)).toBeInTheDocument();
+  });
+
+  it("blocks a 3rd decimal digit past the cents cap", () => {
+    const { input } = renderAmount("45.67"); // 2 decimal digits already
+    expect(fireEvent.keyDown(input, { key: "8" })).toBe(false);
+  });
+
+  it("blocks a letter on an amount field", () => {
+    const { input, onChange } = renderAmount();
+    expect(fireEvent.keyDown(input, { key: "a" })).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
 describe("WizardInput — numericMode strips letters on paste", () => {
   function paste(input: HTMLInputElement, text: string) {
     return fireEvent.paste(input, {
@@ -124,6 +164,12 @@ describe("WizardInput — numericMode strips letters on paste", () => {
     const { input, onChange } = renderCedula();
     paste(input, "17123456789");
     expect(onChange).toHaveBeenCalledWith("1712345678");
+  });
+
+  it("strips a currency symbol from a pasted amount", () => {
+    const { input, onChange } = renderAmount();
+    paste(input, "$45.00");
+    expect(onChange).toHaveBeenCalledWith("45.00");
   });
 });
 
