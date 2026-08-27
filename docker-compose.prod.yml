@@ -28,12 +28,44 @@
 #     y el disco de 50GB del droplet se llena en silencio -- Postgres es el
 #     primer servicio en morir sin espacio (no puede escribir WAL). Ver el
 #     cálculo de presupuesto más abajo, junto a la primera declaración.
+#   - Tag de imagen EXPLÍCITO e inmutable (`IMAGE_TAG`, anclas de acá abajo):
+#     el overlay se niega a renderizar sin él, en vez de caer al `latest`
+#     móvil que la base deja como default de desarrollo.
 #
 # `SMTP_STARTTLS` se repite en los tres servicios porque cada uno resuelve
 # `environment: *backend_env` a su propia copia del mapa base ANTES de que
 # este overlay se fusione: un override puesto solo en `backend:` acá no
 # alcanza a `celery-worker`/`celery-beat`, aunque los tres compartan el mismo
 # alias YAML en `docker-compose.yml`.
+#
+# ── Imágenes de producción: tag explícito, nunca `latest` ──────────────────
+#
+# La base (`docker-compose.yml`) declara `${IMAGE_TAG:-latest}`. Ese default
+# es legítimo EN DESARROLLO: ahí `docker-compose.override.yml` agrega
+# `build:`, la imagen se construye localmente y `latest` es apenas el nombre
+# con el que queda etiquetado ese build. En producción no existe ese build --
+# `latest` es un tag MÓVIL de GHCR, así que un `pull && up -d` con el default
+# despliega lo que sea que apunte `latest` en ese instante, sin dejar ningún
+# SHA en el registro de release (`scripts/ops/record-release.sh`) y sin nada
+# a lo que hacer rollback (`scripts/ops/rollback-release.sh` recibe un tag).
+#
+# `scripts/ops/preflight-production.sh` y `scripts/deploy/deploy.sh` ya
+# rechazan `IMAGE_TAG=latest`, pero solo protegen a quien pasa POR ELLOS. Un
+# operador que corre en el host
+# `docker compose -f docker-compose.yml -f docker-compose.prod.yml pull &&
+# ... up -d` los saltea por completo y despliega el tag móvil sin que nada
+# se queje. El overlay tiene que defenderse solo: con `:?` el render de
+# producción ABORTA sin `IMAGE_TAG` en vez de resolver a `latest` en
+# silencio. La base queda intacta, así que el flujo local no cambia.
+#
+# Se sobrescribe `image:` -- no se agrega una clave nueva con el guard --
+# porque `image:` es exactamente lo que el tag decide: qué se despliega. El
+# precio es que el REPOSITORIO queda escrito en dos archivos; por eso
+# `test_el_overlay_de_produccion_no_desvia_el_repositorio_de_las_imagenes`
+# compara ambos renders y se pone en rojo si una de las dos copias deriva.
+x-imagen-backend: &imagen_backend "ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG:?Error: define IMAGE_TAG en el entorno de producción (SHA inmutable de la imagen publicada en GHCR, nunca latest)}"
+x-imagen-frontend: &imagen_frontend "ghcr.io/alejandrotatum/cata_club-frontend:${IMAGE_TAG:?Error: define IMAGE_TAG en el entorno de producción (SHA inmutable de la imagen publicada en GHCR, nunca latest)}"
+
 services:
   # Valores de arranque del presupuesto de memoria (decisión de diseño 4.6):
   # db 320m | redis 64m | backend 320m | celery-worker 320m | celery-beat
@@ -81,6 +113,7 @@ services:
         max-file: "3"
 
   backend:
+    image: *imagen_backend
     mem_limit: 320m
     environment:
       # Hardcodeado, no `${AMBIENTE:-production}`: este overlay debe forzar
@@ -106,6 +139,7 @@ services:
         max-file: "3"
 
   celery-worker:
+    image: *imagen_backend
     mem_limit: 320m
     environment:
       AMBIENTE: production
@@ -118,6 +152,7 @@ services:
         max-file: "3"
 
   celery-beat:
+    image: *imagen_backend
     mem_limit: 160m
     environment:
       AMBIENTE: production
@@ -130,6 +165,7 @@ services:
         max-file: "3"
 
   frontend:
+    image: *imagen_frontend
     mem_limit: 256m
     logging:
       driver: json-file
@@ -166,6 +202,21 @@ services:
       # del entorno del proceso Caddy.
       DOMINIO: "${DOMINIO:?Error: define DOMINIO en el entorno de producción (dominio real del frontend, para el certificado TLS)}"
       ACME_EMAIL: "${ACME_EMAIL:?Error: define ACME_EMAIL en el entorno de producción (contacto para avisos de Let's Encrypt sobre el certificado)}"
+      # Único host que los buscadores pueden indexar. Lo consume
+      # `{$DOMINIO_INDEXABLE}` en ./Caddyfile, que marca `X-Robots-Tag:
+      # noindex, nofollow` en toda petición cuyo Host no sea este.
+      #
+      # A DIFERENCIA de las dos de arriba, NO lleva `:?`. Un `:?` obligaría
+      # a que cada despliegue -- staging incluido -- complete la variable, y
+      # el error más probable en staging es completarla con el dominio DE
+      # STAGING: eso lo volvería indexable, que es justo el modo de falla
+      # que este mecanismo existe para cerrar. Con default, un staging que
+      # nunca oyó hablar de la variable queda `noindex` sin hacer nada.
+      #
+      # `ninguno.invalid` es un TLD reservado (RFC 2606): ningún host real
+      # puede coincidir, así que el default deja el sitio `noindex` en vez
+      # de indexable. Mismo valor que el default del Caddyfile, a propósito.
+      DOMINIO_INDEXABLE: "${DOMINIO_INDEXABLE:-ninguno.invalid}"
     depends_on:
       # `condition: service_started`, NO `service_healthy`: un ingress tiene
       # que ser lo último en caerse. Si el stack reinicia con el frontend

@@ -52,6 +52,14 @@ _POSTGRES_USER_PARA_RENDER = "postgres-tests"
 _POSTGRES_PASSWORD_PARA_RENDER = "postgres-password-tests"
 _POSTGRES_DB_PARA_RENDER = "postgres-tests-db"
 
+# Mismo patrón, para `IMAGE_TAG`: desde que `docker-compose.prod.yml`
+# sobrescribe las cuatro imágenes propias con `${IMAGE_TAG:?...}` (ver
+# test_el_overlay_de_produccion_exige_image_tag), CUALQUIER render de
+# producción que no fije la variable aborta -- incluidos los que no prueban
+# nada relacionado con la imagen. No es un SHA real: solo tiene que ser un
+# tag de Docker sintácticamente válido.
+_IMAGE_TAG_PARA_RENDER = "0000000000000000000000000000000000000000"
+
 
 def _ejecutar_config(
     *archivos_compose: str,
@@ -73,6 +81,7 @@ def _ejecutar_config(
         "POSTGRES_USER": _POSTGRES_USER_PARA_RENDER,
         "POSTGRES_PASSWORD": _POSTGRES_PASSWORD_PARA_RENDER,
         "POSTGRES_DB": _POSTGRES_DB_PARA_RENDER,
+        "IMAGE_TAG": _IMAGE_TAG_PARA_RENDER,
         **os.environ,
         **(entorno or {}),
     }
@@ -372,6 +381,114 @@ def test_ningun_servicio_referencia_un_registro_ajeno():
     )
 
 
+def test_el_overlay_de_produccion_exige_image_tag():
+    """`docker-compose.yml` declara `${IMAGE_TAG:-latest}`, y ese default es
+    CORRECTO en desarrollo: ahí `docker-compose.override.yml` agrega `build:`,
+    la imagen se construye local y `latest` es apenas el nombre con el que
+    queda etiquetada. En producción no existe ese build -- `latest` es un tag
+    MÓVIL de GHCR.
+
+    `scripts/ops/preflight-production.sh` y `scripts/deploy/deploy.sh` ya
+    rechazan `IMAGE_TAG=latest`, pero solo protegen a quien pasa POR ELLOS. Un
+    operador que corre a mano en el host `docker compose -f docker-compose.yml
+    -f docker-compose.prod.yml pull && ... up -d` los saltea por completo:
+    antes de este candado, ese comando desplegaba lo que en ese instante
+    apuntara `latest`, sin dejar ningún SHA en el registro de release
+    (`scripts/ops/record-release.sh`) y sin nada a lo que hacer rollback.
+
+    El overlay de producción tiene que EXIGIR la variable, igual que
+    `CORS_ORIGENES`, `DOMINIO` y `ACME_EMAIL`: la única defensa que no se
+    puede saltear es la que vive en el archivo que se está renderizando."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=("IMAGE_TAG",),
+    )
+    assert resultado.returncode != 0, (
+        "el render de producción tiene que fallar sin IMAGE_TAG -- en cambio "
+        "completó con éxito, lo que significa que sigue cayendo al tag móvil "
+        "`latest` de la base"
+    )
+    assert "IMAGE_TAG" in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona IMAGE_TAG -- no es "
+        f"accionable para quien despliega: {resultado.stderr!r}"
+    )
+
+
+def test_el_render_de_desarrollo_sigue_defaulteando_a_latest_sin_image_tag():
+    """La otra mitad de `test_el_overlay_de_produccion_exige_image_tag`, y la
+    razón por la que el guard vive en el overlay y no en la base: exigir
+    `IMAGE_TAG` en `docker-compose.yml` rompería el flujo local, donde nadie
+    exporta un SHA y `docker compose up --build` etiqueta lo que construye
+    como `latest`. Sin este candado, "endurecer producción" puede dejar el
+    desarrollo sin arrancar y la suite entera en verde."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.override.yml",
+        omitir=("IMAGE_TAG",),
+    )
+    assert resultado.returncode == 0, (
+        f"el render de desarrollo tiene que seguir funcionando sin IMAGE_TAG "
+        f"y falló:\n{resultado.stderr}"
+    )
+    config = json.loads(resultado.stdout)
+    for nombre in SERVICIOS_CON_IMAGEN_PROPIA:
+        imagen = config["services"][nombre]["image"]
+        assert imagen.endswith(":latest"), (
+            f"'{nombre}' resolvió a {imagen!r} en el render de desarrollo sin "
+            f"IMAGE_TAG: el default de la base tiene que seguir siendo "
+            f"`latest`, que es como queda etiquetado el build local"
+        )
+
+
+def test_el_tag_de_las_imagenes_de_produccion_es_el_que_exporta_el_operador():
+    """Misma lógica de centinela que
+    `test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion`:
+    que el render FALLE sin `IMAGE_TAG` no prueba que el valor exportado sea
+    el que se despliega. Un tag hardcodeado en el overlay dejaría el candado
+    de arriba en verde (la variable seguiría siendo obligatoria en alguna
+    otra clave) mientras producción despliega siempre la misma imagen, y
+    `rollback-release.sh` -- que despliega pasando otro `IMAGE_TAG` -- no
+    haría nada."""
+    centinela = "centinela-image-tag-9f3a7c"
+    config = _renderizar(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno={"IMAGE_TAG": centinela},
+    )
+    for nombre in SERVICIOS_CON_IMAGEN_PROPIA:
+        imagen = config["services"][nombre]["image"]
+        assert imagen.endswith(f":{centinela}"), (
+            f"'{nombre}' resolvió a {imagen!r}, sin el tag {centinela!r} que "
+            f"exportó el operador: el tag está hardcodeado en el compose de "
+            f"producción y `IMAGE_TAG` no decide qué se despliega"
+        )
+
+
+def test_el_overlay_de_produccion_no_desvia_el_repositorio_de_las_imagenes():
+    """El guard de `IMAGE_TAG` obligó a repetir la referencia de imagen en
+    `docker-compose.prod.yml` (un overlay de Compose no puede reescribir solo
+    el tag: `image:` es un escalar y se sobrescribe entero). Eso deja el
+    REPOSITORIO escrito en dos archivos, y nada impide que uno derive del
+    otro -- un rename hecho solo en la base dejaría producción tirando de un
+    repositorio que ya no se publica, con la suite en verde porque
+    `test_los_servicios_propios_usan_el_namespace_del_dueno_actual` solo mira
+    el prefijo del namespace, no el nombre completo.
+
+    Este candado compara ambos renders y exige que solo difieran en el tag."""
+    prod = _config_produccion()
+    desarrollo = _renderizar("docker-compose.yml", "docker-compose.override.yml")
+    for nombre in SERVICIOS_CON_IMAGEN_PROPIA:
+        repositorio_prod = prod["services"][nombre]["image"].rsplit(":", 1)[0]
+        repositorio_dev = desarrollo["services"][nombre]["image"].rsplit(":", 1)[0]
+        assert repositorio_prod == repositorio_dev, (
+            f"'{nombre}' apunta a {repositorio_prod!r} en producción y a "
+            f"{repositorio_dev!r} en desarrollo: las dos copias de la "
+            f"referencia derivaron. El overlay de producción solo puede "
+            f"cambiar el TAG, nunca el repositorio."
+        )
+
+
 def test_todos_los_servicios_de_larga_duracion_declaran_healthcheck():
     """`frontend`, `celery-worker` y `celery-beat` nunca reportaban salud:
     Compose los daba por buenos con el proceso arrancado aunque el servidor
@@ -585,8 +702,10 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     el CONTENIDO del `Caddyfile` -- un ruteo o un header equivocado dejaría
     la suite entera en verde. Esta prueba cierra esa parte del hueco (no
     valida sintaxis ni ruteo -- eso queda para `caddy validate` en CI, otro
-    cambio) leyendo el `Caddyfile` versionado y exigiendo los cuatro headers
-    del bloque `header`:
+    cambio) leyendo el `Caddyfile` versionado y exigiendo estos cuatro
+    headers del bloque `header` (el quinto, `Permissions-Policy`, lo cubre
+    `test_el_caddyfile_apaga_las_apis_de_navegador_que_la_app_no_usa`, que
+    además tiene que razonar sobre qué features usa la app):
 
     - `Strict-Transport-Security`: fuerza HTTPS en el navegador, evita que un
       atacante en la red degrade la conexión a texto plano (downgrade/SSL
@@ -611,6 +730,196 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
     assert 'Referrer-Policy "strict-origin-when-cross-origin"' in contenido, (
         "el Caddyfile no declara Referrer-Policy: strict-origin-when-cross-origin"
+    )
+
+
+# APIs de navegador que la app NO usa y que este borde público tiene que
+# negar. Verificado leyendo frontend/src, no copiado de una plantilla:
+# `navigator.*` no aparece ni una vez fuera de los tests, el mapa de la
+# landing es Leaflet centrado en la constante `CLUB_POSITION`
+# (frontend/src/app/landing/club-location.ts) y no en la ubicación del
+# visitante, y los pagos son subida de comprobante + validación manual, no
+# la Payment Request API.
+#
+# `autoplay`, `fullscreen` y `clipboard-write` quedan FUERA a propósito (ver
+# el comentario del Caddyfile): tampoco se usan hoy, pero romperlas sale
+# caro y en silencio, y la ganancia de seguridad es marginal.
+_FEATURES_QUE_EL_BORDE_PUBLICO_NIEGA = (
+    "accelerometer",
+    "bluetooth",
+    "camera",
+    "display-capture",
+    "geolocation",
+    "gyroscope",
+    "hid",
+    "magnetometer",
+    "microphone",
+    "midi",
+    "payment",
+    "screen-wake-lock",
+    "serial",
+    "usb",
+    "xr-spatial-tracking",
+)
+
+
+def test_el_caddyfile_apaga_las_apis_de_navegador_que_la_app_no_usa():
+    """Complementa
+    `test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico`.
+    Los otros cuatro headers endurecen el TRANSPORTE y el marco de la página;
+    `Permissions-Policy` es el único que le niega a la página capacidades del
+    DISPOSITIVO del visitante. Sin él, cualquier script que llegue a
+    ejecutarse en este origen -- un XSS, o una dependencia de npm
+    comprometida -- puede pedir cámara, micrófono y ubicación con el permiso
+    del usuario, en un sitio que ya maneja fichas médicas de menores.
+
+    Se exige cada feature por separado, no la cadena completa: así el fallo
+    dice exactamente cuál se cayó, y reordenar la lista o cambiarle el
+    espaciado no pone la suite en rojo por nada.
+
+    Se exige además la forma `=()` (lista de orígenes VACÍA, o sea "nadie,
+    ni siquiera este sitio"). `=(self)` o `=*` compilan igual, se leen casi
+    igual y no niegan nada."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert "Permissions-Policy" in contenido, (
+        "el Caddyfile no declara Permissions-Policy: la página puede pedir "
+        "cámara, micrófono y ubicación del visitante"
+    )
+    for feature in _FEATURES_QUE_EL_BORDE_PUBLICO_NIEGA:
+        assert f"{feature}=()" in contenido, (
+            f"el Permissions-Policy del Caddyfile no niega '{feature}' con la "
+            f"forma `{feature}=()`. La app no usa esa API (verificado sobre "
+            f"frontend/src), así que dejarla habilitada solo suma superficie "
+            f"para un script que no debería estar corriendo. Ojo: `=(self)` o "
+            f"`=*` no cuentan -- solo la lista de orígenes vacía la niega."
+        )
+
+
+# ─── Indexación por buscadores: solo el dominio de producción ──────────────
+#
+# El `Caddyfile` versionado es el que se despliega en CUALQUIER host (está
+# parametrizado por `{$DOMINIO}`). Apuntado a un staging alcanzable desde
+# internet, los buscadores indexan una copia del sitio. El mecanismo compara
+# el Host de la petición contra `DOMINIO_INDEXABLE` y responde
+# `X-Robots-Tag: noindex, nofollow` cuando no coinciden.
+#
+# Centinela reservado (TLD `.invalid`, RFC 2606) al que caen las DOS capas
+# -- el default del Caddyfile y el del compose -- cuando el operador no fija
+# la variable. Ningún host público puede ser igual a este valor: por eso el
+# default no puede terminar en "todo el sitio indexable".
+_HOST_INDEXABLE_POR_DEFECTO = "ninguno.invalid"
+
+
+def test_el_caddyfile_marca_noindex_todo_host_que_no_sea_el_indexable():
+    """Candado sobre el CABLEADO del mecanismo dentro del `Caddyfile`, que es
+    la parte que ningún render de compose puede ver: el matcher tiene que
+    existir, tiene que ser `not host` (la negación es lo que hace que la
+    regla se aplique a todo lo que NO es producción) y el header que dispara
+    tiene que ser `X-Robots-Tag: noindex, nofollow`.
+
+    Se exige también el default `.invalid` en el propio Caddyfile: es la
+    segunda capa, la que sigue en pie si alguien corre este archivo fuera de
+    `docker-compose.prod.yml` (por ejemplo `caddy validate`, o un Caddy
+    levantado a mano). Sin ese default, un `DOMINIO_INDEXABLE` ausente
+    dejaría el matcher comparando contra la cadena vacía.
+
+    No verifica que Caddy EMITA el header -- eso requiere levantar el
+    contenedor y una petición real, que esta suite no hace. Verifica que la
+    regla esté escrita, y `test_el_render_de_produccion_solo_deja_indexable_el_dominio_declarado`
+    verifica que el valor que decide llegue al contenedor."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert f"not host {{$DOMINIO_INDEXABLE:{_HOST_INDEXABLE_POR_DEFECTO}}}" in contenido, (
+        f"el Caddyfile no compara el Host contra "
+        f"`{{$DOMINIO_INDEXABLE:{_HOST_INDEXABLE_POR_DEFECTO}}}` con `not "
+        f"host`. Sin el default reservado, un DOMINIO_INDEXABLE ausente deja "
+        f"de marcar noindex -- y esa es justo la falla que este mecanismo no "
+        f"puede tener."
+    )
+    assert (
+        'header @no_es_el_dominio_indexable X-Robots-Tag "noindex, nofollow"'
+        in contenido
+    ), (
+        "el Caddyfile no aplica `X-Robots-Tag: noindex, nofollow` COLGADO del "
+        "matcher `@no_es_el_dominio_indexable`. Las dos mitades tienen que ir "
+        "juntas: el header sin el matcher deja producción entera noindex, y "
+        "el matcher sin el header no marca nada."
+    )
+
+
+@pytest.mark.parametrize(
+    "dominio_indexable,espera_noindex",
+    [
+        (None, True),
+        ("otro-dominio-cualquiera.invalid", True),
+        (_DOMINIO_PARA_RENDER, False),
+    ],
+    ids=[
+        "sin-la-variable-nadie-es-indexable",
+        "otro-host-es-staging-y-va-noindex",
+        "el-dominio-servido-es-el-indexable",
+    ],
+)
+def test_el_render_de_produccion_solo_deja_indexable_el_dominio_declarado(
+    dominio_indexable, espera_noindex
+):
+    """Los dos estados del mecanismo, más el default.
+
+    El `Caddyfile` decide con `not host {$DOMINIO_INDEXABLE}` sobre el Host
+    de la petición; como el bloque de sitio es `{$DOMINIO}`, el único Host
+    que llega es `DOMINIO`. O sea que la regla, vista desde el render, es
+    exactamente `DOMINIO_INDEXABLE != DOMINIO -> noindex`, y eso es lo que se
+    reproduce acá sobre los valores que el compose le entrega al contenedor.
+
+    El primer caso es el importante y el que motivó todo el diseño: SIN la
+    variable, el render tiene que dejar el sitio noindex. La alternativa
+    obvia -- un booleano `ES_PRODUCCION` -- falla justo al revés: el `.env`
+    de producción se copia entero a staging, el booleano viaja con él
+    diciendo `true`, y staging queda indexable en silencio. Por la misma
+    razón `DOMINIO_INDEXABLE` NO lleva `:?` en el overlay: obligar a
+    completarla en cada despliegue invita a que staging se ponga a sí mismo
+    como indexable."""
+    if dominio_indexable is None:
+        resultado = _ejecutar_config(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            omitir=("DOMINIO_INDEXABLE",),
+        )
+        assert resultado.returncode == 0, (
+            f"el render de producción tiene que seguir funcionando SIN "
+            f"DOMINIO_INDEXABLE (el default lo cubre) y falló:\n"
+            f"{resultado.stderr}"
+        )
+        config = json.loads(resultado.stdout)
+    else:
+        config = _renderizar(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            entorno={"DOMINIO_INDEXABLE": dominio_indexable},
+        )
+
+    entorno_caddy = config["services"]["caddy"]["environment"]
+    servido = entorno_caddy["DOMINIO"]
+    indexable = entorno_caddy.get("DOMINIO_INDEXABLE")
+
+    assert indexable, (
+        "el servicio `caddy` no recibe DOMINIO_INDEXABLE en el render de "
+        "producción: `{$DOMINIO_INDEXABLE}` en el Caddyfile leería el "
+        "entorno del proceso y no encontraría nada"
+    )
+    if dominio_indexable is None:
+        assert indexable == _HOST_INDEXABLE_POR_DEFECTO, (
+            f"sin DOMINIO_INDEXABLE exportado, el overlay tiene que caer al "
+            f"centinela reservado {_HOST_INDEXABLE_POR_DEFECTO!r} (mismo "
+            f"default que el Caddyfile) y resolvió a {indexable!r}"
+        )
+
+    assert (indexable != servido) is espera_noindex, (
+        f"con DOMINIO={servido!r} y DOMINIO_INDEXABLE={indexable!r} el sitio "
+        f"{'NO ' if espera_noindex else ''}quedaría marcado noindex, y se "
+        f"esperaba lo contrario. La regla es: solo el host declarado en "
+        f"DOMINIO_INDEXABLE puede ser indexado; cualquier otro -- staging, "
+        f"preview, o un despliegue que se olvidó la variable -- lleva "
+        f"`X-Robots-Tag: noindex, nofollow`."
     )
 
 

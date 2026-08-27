@@ -73,10 +73,89 @@
 		# comprobantes) viaje como referrer hacia un sitio de terceros.
 		Referrer-Policy "strict-origin-when-cross-origin"
 
+		# Apaga las APIs de navegador que la app NO usa. Si alguna vez
+		# entra un script de terceros (o un XSS) por cualquier vía, este
+		# header le niega de entrada la cámara, el micrófono y la
+		# ubicación del visitante -- en un sitio que ya maneja datos de
+		# menores, esas tres son las que importan.
+		#
+		# La lista se derivó del código, no de una plantilla copiada. Lo
+		# verificado en frontend/src:
+		#
+		#   - `navigator.*` no aparece NI UNA VEZ fuera de los tests: no
+		#     hay geolocation, getUserMedia, clipboard, share ni
+		#     serviceWorker.
+		#   - El mapa de la landing es Leaflet centrado en una CONSTANTE
+		#     (`CLUB_POSITION` en frontend/src/app/landing/club-location.ts,
+		#     derivada de un Plus Code), no en la ubicación del visitante.
+		#     No hay `map.locate()` ni control de localización. Por eso
+		#     `geolocation=()` no puede romperlo -- era el único riesgo
+		#     real de esta lista.
+		#   - "Cómo llegar" es un `<a href>` a openstreetmap.org, no una
+		#     llamada a ninguna API.
+		#   - Los pagos son subida de comprobante + validación manual
+		#     (`proofFileName`/`voucherUrl`), no la Payment Request API:
+		#     no hay Stripe, PayPal ni MercadoPago en package.json.
+		#   - Los `<input type="file">` (comprobantes, foto de perfil,
+		#     sponsors) NO llevan el atributo `capture`, y el picker del
+		#     sistema operativo no lo gobierna este header: `camera=()` no
+		#     afecta la opción "Tomar foto" del celular.
+		#
+		# Quedan DELIBERADAMENTE FUERA tres features que la app tampoco
+		# usa hoy, porque el costo de equivocarse es una función rota en
+		# silencio y la ganancia de seguridad es marginal:
+		# `autoplay` (la landing está en rediseño y un video hero es
+		# plausible), `fullscreen` y `clipboard-write` (un botón de
+		# "copiar enlace" es de lo más común que se agrega después).
+		# Agregarlas es una línea el día que se decida.
+		#
+		# `window.print()` (botón "Imprimir carnet") no se ve afectado:
+		# no existe ninguna directiva `print` en Permissions-Policy.
+		Permissions-Policy "accelerometer=(), bluetooth=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
+
 		# Content-Security-Policy: falta a propósito. Una CSP escrita a
 		# ciegas rompe Next.js (scripts inline, estilos, hidratación) y no
 		# se puede probar contra la app real en este momento. Tiene que
 		# construirse mirando lo que Next.js efectivamente inyecta y
 		# verificarse en un navegador -- no acá, no sin esa verificación.
 	}
+
+	# ── Indexación: solo el dominio de producción es indexable ────────────
+	#
+	# Este mismo archivo es el que se despliega en CUALQUIER host: está
+	# parametrizado por `{$DOMINIO}` justamente para eso. Apuntado a un
+	# staging o a una preview alcanzable desde internet, los buscadores lo
+	# recorren e indexan una copia del sitio -- con fichas médicas de
+	# menores y comprobantes de pago detrás del login, pero con las URLs,
+	# la estructura y la landing entera al aire, y compitiendo contra el
+	# dominio real por posicionamiento.
+	#
+	# La decisión es qué se compara y contra qué. NO se usa un booleano del
+	# estilo `ES_PRODUCCION`: el `.env` de producción se copia entero a
+	# staging todo el tiempo, y un booleano copiado dice `true` en el host
+	# equivocado -- el modo de falla más probable termina en "staging
+	# indexado", que es exactamente lo que hay que evitar.
+	#
+	# Se compara el HOST REAL de la petición contra `DOMINIO_INDEXABLE`, el
+	# único host que puede aparecer en un buscador. Copiar el `.env` a
+	# staging ahora funciona a favor: `DOMINIO` cambia (es el host que se
+	# sirve) y `DOMINIO_INDEXABLE` se queda con el dominio real, así que los
+	# dos dejan de coincidir y el sitio sale `noindex` solo.
+	#
+	# El default NO PUEDE FALLAR ABIERTO. `ninguno.invalid` es un TLD
+	# reservado (RFC 2606): ningún host público puede ser igual a ese valor,
+	# así que si la variable falta, viene vacía o está mal escrita, la
+	# comparación falla para TODA petición y el sitio entero queda
+	# `noindex`. Un despliegue mal configurado se cae del lado de "no me
+	# indexen"; nunca del lado de "staging indexable". El precio explícito
+	# de esa elección: si producción se olvida de exportar
+	# `DOMINIO_INDEXABLE`, producción deja de indexarse. Es visible con un
+	# `curl -I` y se revierte con una variable -- al revés no: una copia de
+	# staging ya indexada sobrevive en el buscador mucho después del
+	# arreglo.
+	#
+	# `docker-compose.prod.yml` inyecta la variable con este mismo default,
+	# para que las dos capas coincidan.
+	@no_es_el_dominio_indexable not host {$DOMINIO_INDEXABLE:ninguno.invalid}
+	header @no_es_el_dominio_indexable X-Robots-Tag "noindex, nofollow"
 }
