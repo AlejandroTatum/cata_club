@@ -15,33 +15,13 @@ correo tal cual llega, ANTES de saber si existe un Usuario con ese correo --
 así la curva de retraso de una cuenta real con contraseña incorrecta es
 indistinguible de la de una cuenta inexistente (ver el último test).
 """
-from datetime import date
-
 import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import CredencialesInvalidas
-from app.dominio.modelos import Persona, Usuario
-from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio import auth_servicio as auth_servicio_modulo
 from app.servicios_negocio.auth_servicio import AuthServicio
-
-
-def _crear_usuario(db_session, correo="ana@cataclub.test", cedula="1710034065", contrasenia="clave12345"):
-    persona = Persona(
-        nombres="Ana", apellidos="Torres", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-    )
-    db_session.add(persona)
-    db_session.flush()
-    usuario = Usuario(
-        correo=correo,
-        contrasenia=GestorAutenticacion.obtener_hash_contrasenia(contrasenia),
-        persona_id=persona.id,
-    )
-    db_session.add(usuario)
-    db_session.commit()
-    return usuario
+from tests.fabricas_auth import SleeperEspia, crear_usuario_auth as _crear_usuario
 
 
 @pytest.fixture(autouse=True)
@@ -54,20 +34,9 @@ def _limpiar_contador_intentos():
     auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN.clear()
 
 
-class _SleeperEspia:
-    """Sleeper falso: registra con qué segundos lo llamaron y nunca duerme de
-    verdad (BRIEF.md: ningún test hace un sleep real de varios segundos)."""
-
-    def __init__(self):
-        self.llamadas = []
-
-    def __call__(self, segundos):
-        self.llamadas.append(segundos)
-
-
 def test_primeros_dos_intentos_fallidos_no_retrasan(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test")
-    espia = _SleeperEspia()
+    espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
     for _ in range(2):
@@ -79,7 +48,7 @@ def test_primeros_dos_intentos_fallidos_no_retrasan(db_session):
 
 def test_tercer_intento_fallido_retrasa_un_segundo(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test")
-    espia = _SleeperEspia()
+    espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
     for _ in range(3):
@@ -91,7 +60,7 @@ def test_tercer_intento_fallido_retrasa_un_segundo(db_session):
 
 def test_retraso_duplica_y_tiene_techo_de_60_segundos(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test")
-    espia = _SleeperEspia()
+    espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
     for _ in range(10):
@@ -105,7 +74,7 @@ def test_retraso_duplica_y_tiene_techo_de_60_segundos(db_session):
 def test_contador_es_por_cuenta_no_global(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test", cedula="1710034065")
     _crear_usuario(db_session, correo="beto@cataclub.test", cedula=cedula_valida(150))
-    espia = _SleeperEspia()
+    espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
     for _ in range(3):
@@ -124,7 +93,7 @@ def test_contador_es_por_cuenta_no_global(db_session):
 
 def test_login_exitoso_resetea_el_contador(db_session):
     _crear_usuario(db_session, correo="ana@cataclub.test", contrasenia="clave-correcta")
-    espia = _SleeperEspia()
+    espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
     for _ in range(2):
@@ -146,9 +115,9 @@ def test_cuenta_inexistente_sigue_la_misma_curva_de_retraso_que_una_real(db_sess
     """Anti-enumeración: nada distingue por timing una cuenta real con
     contraseña incorrecta de una que directamente no existe."""
     _crear_usuario(db_session, correo="ana@cataclub.test")
-    espia_real = _SleeperEspia()
+    espia_real = SleeperEspia()
     servicio_real = AuthServicio(db_session, dormir=espia_real)
-    espia_fantasma = _SleeperEspia()
+    espia_fantasma = SleeperEspia()
     servicio_fantasma = AuthServicio(db_session, dormir=espia_fantasma)
 
     for _ in range(5):

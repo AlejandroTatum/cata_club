@@ -1,8 +1,7 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
@@ -20,13 +19,42 @@ from app.soporte_transversal.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
+# Issue #733: un username sin tope de longitud es lo que convertía a
+# `POST /auth/login` en un vector de denegación de servicio sin autenticar
+# -- se medió que un string de 100.006 caracteres era aceptado (401, no
+# 422) y quedaba retenido para siempre como clave de
+# `auth_servicio._INTENTOS_FALLIDOS_LOGIN`. 254 es el límite de RFC 5321
+# §4.5.3.1.3 (Path length restriction) para una ruta de correo completa
+# ("MAIL FROM"/"RCPT TO"), el mismo criterio que usa `EmailField` de Django
+# por defecto: cualquier username más largo que eso es estructuralmente
+# imposible como correo y se rechaza acá, en la capa de FORM, con un 422 --
+# ANTES de convertirse en clave del dict y sin gastar ni un ciclo de
+# `AuthServicio.login`. Esto tapa la vía más barata del DoS (strings
+# gigantes) pero no alcanza solo: ver la cota del propio mapa en
+# `auth_servicio.py` para la otra mitad (direcciones DISTINTAS de longitud
+# válida, sin límite de cantidad).
+LONGITUD_MAXIMA_USERNAME_LOGIN = 254
+
 
 @router.post("/login")
 @limiter.limit("60/minute")
-async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(obtener_sesion)):
+async def login(
+    request: Request,
+    username: str = Form(..., max_length=LONGITUD_MAXIMA_USERNAME_LOGIN),
+    password: str = Form(...),
+    db: Session = Depends(obtener_sesion),
+):
     # El user-agent alimenta SOLO el registro observacional de sesiones (ver
     # `AuthServicio._registrar_sesion`). No participa de la autenticación: un
     # cliente que no lo manda entra igual.
+    #
+    # `username`/`password` sueltos en vez de `OAuth2PasswordRequestForm`:
+    # ese DTO de FastAPI no expone un tope de longitud configurable en
+    # `username` (issue #733). Los campos `grant_type`/`scope`/`client_id`/
+    # `client_secret` que trae esa clase nunca se leían acá, así que no se
+    # pierde nada -- Swagger UI sigue pudiendo loguearse desde el botón
+    # "Authorize" (`OAuth2PasswordBearer` en `gestor_auth.py`): manda esos
+    # campos igual, FastAPI simplemente los ignora al no estar declarados.
     #
     # `run_in_threadpool`: el freno progresivo de login (TRA-4) hace un
     # `time.sleep` REAL dentro de `AuthServicio.login` cuando penaliza un
@@ -37,7 +65,7 @@ async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), d
     # threadpool de FastAPI libera el event loop durante esos segundos.
     return await run_in_threadpool(
         AuthServicio(db).login,
-        form.username, form.password, user_agent=request.headers.get("user-agent"),
+        username, password, user_agent=request.headers.get("user-agent"),
     )
 
 
