@@ -91,6 +91,27 @@ describe("DataRow — nameWrap opt-in", () => {
   });
 });
 
+describe("DataRow — the name column's floor", () => {
+  /**
+   * jsdom computes no layout, so this can only pin the declaration; the
+   * measurement that proves what it does lives in
+   * `tests/e2e/tarifas-name-column.spec.ts` (50px → 324px at 390px). Both
+   * matter: #660 and #677 were two different failures of the SAME 50px
+   * column, and each shipped with the class its page had asked for.
+   */
+  it("reserves a flex basis for the name so a tight row wraps instead of crushing it", () => {
+    render(<DataRow name="Laura Vera" meta={<DataBox>32 años</DataBox>} />);
+    const column = screen.getByText("Laura Vera").parentElement;
+    expect(column).toHaveClass("flex-1", "basis-56", "min-w-0");
+  });
+
+  it("keeps the trailing groups at their natural size — the row breaks, the controls do not shrink", () => {
+    render(<DataRow name="Laura Vera" meta={<DataBox>32 años</DataBox>} />);
+    expect(screen.getByText("32 años").parentElement).toHaveClass("flex-none");
+    expect(screen.getByRole("listitem")).toHaveClass("flex-wrap");
+  });
+});
+
 describe("DataRowList", () => {
   it("wraps rows in a list with an outer border and inner separators", () => {
     render(
