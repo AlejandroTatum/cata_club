@@ -30,7 +30,18 @@ export interface AuthSession {
 
 export type AuthErrorKind =
   | "invalid_credentials"
+  /**
+   * The BFF itself could not validate the token it had just been issued —
+   * /api/auth/login answered 401 with `error: "unauthorized"`. Server-side
+   * failure; the browser never got as far as storing anything.
+   */
   | "session_validation_failed"
+  /**
+   * Credentials were accepted and cookies were sent, but the browser did not
+   * keep them: a following same-origin request arrived with no session. See
+   * `login` for why a 200 is not, on its own, proof of a session.
+   */
+  | "session_not_persisted"
   | "timeout"
   | "backend_unavailable"
   | "config_error"
@@ -124,6 +135,18 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
  *
  * Distinguishes invalid credentials, timeout, backend-unavailable, and
  * unknown failures so the login page can show a distinct message for each.
+ *
+ * A 200 from /api/auth/login is NOT a session. The session lives entirely in
+ * the two HttpOnly cookies that response carries; the JSON body is only a
+ * profile the BFF built server-side. Whenever the browser declines to keep
+ * those cookies — cookies blocked for the site, a private-window quirk,
+ * Safari's ITP, a proxy stripping Set-Cookie, a clock skew rejecting them, or
+ * a `Secure` cookie arriving over plain http — the body still says 200 and
+ * the person is not logged in. This function therefore confirms the session
+ * actually round-trips before reporting success, by asking the same
+ * "who am I" route the rest of the app already hydrates from
+ * (`fetchSession` → GET /api/auth/session). Only cookies the browser really
+ * stored can answer it.
  */
 export async function login(email: string, password: string): Promise<LoginResult> {
   const response = await fetchWithTimeout("/api/auth/login", {
@@ -168,7 +191,24 @@ export async function login(email: string, password: string): Promise<LoginResul
   if (!isValidAuthSession(json)) {
     return { ok: false, error: "unknown" };
   }
-  return { ok: true, session: json };
+
+  // The credentials were right; now find out whether the browser kept the
+  // cookies that response set.
+  const confirmed = await fetchSession();
+  if (confirmed.kind === "authenticated") {
+    // Return the round-tripped session rather than the login body: they are
+    // the same profile, but only this one is proof that a later request will
+    // be authenticated too.
+    return { ok: true, session: confirmed.session };
+  }
+  if (confirmed.kind === "outage") {
+    // A 503 or a network failure on the confirmation says nothing about the
+    // cookies — `SessionOutcome` is explicit that an outage must never be
+    // read as "unauthenticated". Report the outage for what it is instead of
+    // blaming the browser, and instead of claiming a success we cannot see.
+    return { ok: false, error: "backend_unavailable" };
+  }
+  return { ok: false, error: "session_not_persisted" };
 }
 
 // ---------------------------------------------------------------------------

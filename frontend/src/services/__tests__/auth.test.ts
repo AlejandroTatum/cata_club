@@ -50,9 +50,20 @@ afterEach(() => {
 // login
 // ---------------------------------------------------------------------------
 
+/**
+ * A browser that keeps the cookies /api/auth/login set: the POST answers with
+ * the session, and the confirming GET /api/auth/session answers with it too.
+ * Two distinct `Response` objects because a body can only be read once.
+ */
+function mockLoginWithPersistedSession(): void {
+  vi.mocked(global.fetch)
+    .mockResolvedValueOnce(okResponse(validSession))
+    .mockResolvedValueOnce(okResponse(validSession));
+}
+
 describe("login", () => {
   it("returns ok:true with the session on success", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(validSession));
+    mockLoginWithPersistedSession();
 
     const result = await login("admin@cataclub.com", "admin123");
 
@@ -65,6 +76,54 @@ describe("login", () => {
         body: JSON.stringify({ email: "admin@cataclub.com", password: "admin123" }),
       }),
     );
+  });
+
+  /*
+   * Issue: "200 but no session".
+   *
+   * The bug these three lock down was engine-independent, and the toast it
+   * produced said "Su sesión quedó iniciada. Le llevamos a su panel." to a
+   * person who was about to be left on /login with nothing to act on. It was
+   * first seen in WebKit over plain http (a `Secure` cookie the browser
+   * refuses to keep), but the same 200-with-no-cookie happens whenever
+   * cookies are blocked for the site, a private window discards them, ITP
+   * clears them, a proxy strips Set-Cookie, or clock skew invalidates them.
+   *
+   * The load-bearing assertion is `ok: false`: a 200 from /api/auth/login is
+   * a claim about credentials, never proof of a session.
+   */
+  it("reports session_not_persisted when the login 200s but the browser kept no cookies", async () => {
+    vi.mocked(global.fetch)
+      // POST /api/auth/login — credentials fine, Set-Cookie sent.
+      .mockResolvedValueOnce(okResponse(validSession))
+      // GET /api/auth/session — arrives with no cookies at all, which the BFF
+      // answers 200 { authenticated: false } (see src/app/api/auth/session/route.ts).
+      .mockResolvedValueOnce(okResponse({ authenticated: false }));
+
+    const result = await login("admin@cataclub.com", "admin12345");
+
+    expect(result).toEqual({ ok: false, error: "session_not_persisted" });
+  });
+
+  it("confirms the session against /api/auth/session before reporting success", async () => {
+    mockLoginWithPersistedSession();
+
+    await login("admin@cataclub.com", "admin12345");
+
+    expect(global.fetch).toHaveBeenNthCalledWith(1, "/api/auth/login", expect.objectContaining({ method: "POST" }));
+    expect(global.fetch).toHaveBeenNthCalledWith(2, "/api/auth/session", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("reports the outage, not a cookie problem, when the confirming call cannot reach the server", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(okResponse(validSession))
+      .mockResolvedValueOnce(errorResponse(503, { authenticated: false, error: "backend_unavailable" }));
+
+    const result = await login("admin@cataclub.com", "admin12345");
+
+    // A 503 says nothing about the cookies, so it must not be blamed on the
+    // browser — but it is not a success either.
+    expect(result).toEqual({ ok: false, error: "backend_unavailable" });
   });
 
   it("surfaces a server misconfiguration as config_error, not backend_unavailable", async () => {
@@ -86,7 +145,7 @@ describe("login", () => {
   });
 
   it("never includes a token anywhere in the resolved session", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(validSession));
+    mockLoginWithPersistedSession();
 
     const result = await login("admin@cataclub.com", "admin123");
 

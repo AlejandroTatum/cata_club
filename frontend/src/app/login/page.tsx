@@ -84,6 +84,11 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
         message: "No se pudo validar su sesión",
         description: "Sus datos son correctos, pero la sesión no quedó activa. Intente nuevamente.",
       };
+    case "session_not_persisted":
+      return {
+        message: "Su navegador no guardó la sesión",
+        description: "Habilite las cookies para este sitio e intente nuevamente.",
+      };
     case "timeout":
       return {
         message: "El servidor tardó demasiado en responder",
@@ -144,6 +149,19 @@ function LoginPageContent(): React.ReactElement {
    * missed, and why this message must not either.
    */
   const [credentialsRejected, setCredentialsRejected] = useState(false);
+  /**
+   * The login succeeded but the browser did not keep the session cookies —
+   * `session_not_persisted`. Held on the CARD, not only in the toast, for the
+   * same reason `sessionExpired` gets a static banner: this is the one
+   * failure whose remedy is not on this screen. The person has to open their
+   * browser's settings, allow cookies for this site and come back, and a
+   * toast that fades in a few seconds cannot survive that trip.
+   *
+   * Separate from `credentialsRejected` because nothing they typed was
+   * wrong — marking the fields red would send them to re-check a correo and
+   * a contraseña the server already accepted.
+   */
+  const [sessionNotPersisted, setSessionNotPersisted] = useState(false);
   const [welcome, setWelcome] = useState<{ route: string } | null>(null);
   /**
    * #312 / hallazgo #30: tras un 401 el foco se quedaba en `<body>` — el
@@ -194,6 +212,7 @@ function LoginPageContent(): React.ReactElement {
     };
     setFieldErrors(nextFieldErrors);
     setCredentialsRejected(false);
+    setSessionNotPersisted(false);
     if (nextFieldErrors.email || nextFieldErrors.password) return;
     setSubmitting(true);
 
@@ -202,6 +221,7 @@ function LoginPageContent(): React.ReactElement {
     if (!result.ok) {
       const { message, description } = loginErrorFeedback(result.error);
       const isCredentialsError = result.error === "invalid_credentials";
+      const isCookieError = result.error === "session_not_persisted";
       toast.showError(message, {
         description,
         // The 4500-10000ms the ordinary toast clamps to reads fine for a
@@ -211,13 +231,17 @@ function LoginPageContent(): React.ReactElement {
         // the product naming the reason a login failed, so it gets the same
         // floor `TOAST_UNDO_DURATION_MS` gives an undo offer — long enough to
         // notice, read, and act, not indefinite.
-        duration: isCredentialsError ? 20000 : undefined,
+        // `session_not_persisted` shares the floor: its remedy lives in a
+        // browser settings panel, so the person needs the sentence to still
+        // be there while they go looking for it.
+        duration: isCredentialsError || isCookieError ? 20000 : undefined,
       });
-      // ONLY for `invalid_credentials`. The other five kinds — a timeout, an
-      // unreachable backend, a misconfigured server — are not the person's
-      // typing, and painting their fields red would send them to re-check
-      // something that was never wrong.
+      // ONLY for `invalid_credentials`. The other kinds — a timeout, an
+      // unreachable backend, a misconfigured server, a browser that dropped
+      // the cookies — are not the person's typing, and painting their fields
+      // red would send them to re-check something that was never wrong.
       setCredentialsRejected(isCredentialsError);
+      setSessionNotPersisted(isCookieError);
       setSubmitting(false);
       return;
     }
@@ -271,6 +295,24 @@ function LoginPageContent(): React.ReactElement {
       {sessionExpired && (
         <p role="status" className="rounded-ctl border border-line-2 bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
           {STATUS_MESSAGES[401]}
+        </p>
+      )}
+      {/* The session that never was. `role="alert"` and not `status`: unlike
+          the expired-session notice above — which explains a bounce that
+          already happened — this one answers a button the person just
+          pressed, and it is the only thing on screen telling them the login
+          did not take. It names the cause in the browser and the one setting
+          that fixes it, because there is nothing on this card they can
+          usefully change. */}
+      {sessionNotPersisted && (
+        <p
+          role="alert"
+          data-testid="session-not-persisted-error"
+          className="rounded-ctl border border-state-bad bg-canvas px-3.5 py-2.5 text-sm text-ink-2"
+        >
+          Sus datos son correctos, pero este navegador no guardó la sesión. Suele ocurrir cuando las cookies
+          están bloqueadas o la ventana es de navegación privada. Habilite las cookies para este sitio e
+          intente nuevamente.
         </p>
       )}
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
