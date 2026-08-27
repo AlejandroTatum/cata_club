@@ -73,6 +73,20 @@ export const NUMERIC_FIELD_MAX_DIGITS: Record<NumericFieldMode, number> = {
 /** How many digits an `amount` value keeps after its decimal separator — currency cents. */
 export const AMOUNT_MAX_DECIMAL_DIGITS = 2;
 
+/**
+ * One `aria-live` warning per `NumericFieldMode`, shared by every caller
+ * that surfaces `NumericInputResult.limitReached` (`WizardInput`,
+ * `MedicalRecordEditor`'s teléfono de emergencia — see
+ * `use-numeric-field-masking.ts`) — one wording, not a copy per caller.
+ * cédula and teléfono share the same 10-digit cap and wording; `amount`'s
+ * cap is two numbers (integer digits, cents), so its message names both.
+ */
+export const NUMERIC_FIELD_LIMIT_MESSAGE: Record<NumericFieldMode, string> = {
+  cedula: "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.",
+  phone: "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.",
+  amount: `Alcanzó el máximo de ${NUMERIC_FIELD_MAX_DIGITS.amount} dígitos enteros o ${AMOUNT_MAX_DECIMAL_DIGITS} decimales; no se ingresó el último carácter.`,
+};
+
 export function isAllowedChar(mode: NumericFieldMode, char: string): boolean {
   return ALLOWED_CHAR[mode].test(char);
 }

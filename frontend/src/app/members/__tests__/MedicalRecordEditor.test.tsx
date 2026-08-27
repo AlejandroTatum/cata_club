@@ -229,6 +229,72 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
 });
 
 /**
+ * Issue #667's emergency-contact parity gap: `MedicalRecordEditor`'s
+ * teléfono de emergencia field used to be a plain `<input type="text">` with
+ * no `inputMode`, no keystroke/paste filtering, and no digit cap — unlike
+ * the exact same field on the enrollment wizards (`WizardInput` with
+ * `numericMode="phone"`). It now shares `use-numeric-field-masking.ts` with
+ * `WizardInput`, so the behavior is not a second, possibly-drifting copy.
+ *
+ * `phoneRule`'s own character-class rejection (asserted above, "refuses a
+ * phone carrying letters") still has to fire from the validation layer, not
+ * from a field that already erased the evidence — the masking here rejects
+ * a typed/pasted letter at the point of entry, but the `onChange` backstop
+ * (a value set in one shot, as `fireEvent.change` does) never strips one.
+ */
+describe("MedicalRecordEditor emergency contact masking parity (#667)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActualizarFichaMedica.mockResolvedValue({});
+    mockFetchFichaMedica.mockRejectedValue(notFound());
+  });
+
+  async function fillBloodType(): Promise<void> {
+    fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
+      target: { value: "O_POSITIVO" },
+    });
+  }
+
+  it("carries the same inputMode='tel' the wizards' teléfono field has", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    expect(screen.getByLabelText("Teléfono de emergencia")).toHaveAttribute("inputMode", "tel");
+  });
+
+  it("blocks a typed letter on the emergency phone (keydown)", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    const input = screen.getByLabelText("Teléfono de emergencia");
+    const notCancelled = fireEvent.keyDown(input, { key: "a" });
+    expect(notCancelled).toBe(false);
+  });
+
+  it("strips letters from a pasted emergency phone value, keeping the separators", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    const input = screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia");
+    fireEvent.paste(input, { clipboardData: { getData: () => "099abc-123-4567" } });
+    expect(input.value).toBe("099-123-4567");
+  });
+
+  it("warns instead of silently truncating an 11th digit typed at the cap", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    const input = screen.getByLabelText("Teléfono de emergencia");
+    fireEvent.change(input, { target: { value: "1234567890" } }); // 10 digits: already at the cap
+    const notCancelled = fireEvent.keyDown(input, { key: "1" });
+    expect(notCancelled).toBe(false);
+    expect(screen.getByText(/alcanzó el máximo/i)).toBeInTheDocument();
+  });
+
+  it("caps contacto de emergencia at the same 150 characters the wizard's field uses", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    expect(screen.getByLabelText("Contacto de emergencia")).toHaveAttribute("maxLength", "150");
+  });
+});
+
+/**
  * Records written before #643 existed. No migration invents a phone number or
  * a blood type for them, so they arrive here exactly as they were stored — and
  * this editor is where a person, who actually knows the answer, completes them.

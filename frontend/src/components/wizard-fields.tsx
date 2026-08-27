@@ -4,7 +4,7 @@
  * input/textarea markup across both.
  */
 
-import type { InputHTMLAttributes, KeyboardEvent, ClipboardEvent, ReactElement, ReactNode } from "react";
+import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
 import { useState } from "react";
 import {
   User,
@@ -23,30 +23,9 @@ import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from 
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
-import {
-  AMOUNT_MAX_DECIMAL_DIGITS,
-  capDigits,
-  filterNumericInput,
-  isAllowedChar,
-  NUMERIC_FIELD_MAX_DIGITS,
-  type NumericFieldMode,
-} from "@/lib/numeric-input";
+import { NUMERIC_FIELD_LIMIT_MESSAGE, type NumericFieldMode } from "@/lib/numeric-input";
+import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 
-/**
- * `WizardInput`'s digit-cap warning, one per `NumericFieldMode` — see
- * numeric-input.ts for why the cap itself never strips a letter, only a
- * digit (or, for `amount`, a digit or a second decimal point) past the
- * limit. cédula and teléfono share the same 10-digit cap and wording;
- * `amount`'s cap is two numbers (integer digits, cents), so its message
- * names both.
- */
-const LIMIT_REACHED_MESSAGE: Record<NumericFieldMode, string> = {
-  cedula: "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.",
-  phone: "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.",
-  amount: `Alcanzó el máximo de ${NUMERIC_FIELD_MAX_DIGITS.amount} dígitos enteros o ${
-    AMOUNT_MAX_DECIMAL_DIGITS
-  } decimales; no se ingresó el último carácter.`,
-};
 
 const ACCENTED_CHARS: Record<string, string> = {
   á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n",
@@ -164,7 +143,11 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
   const messageId = `${fieldId}-message`;
   const hasError = Boolean(opts.error);
   const { numericMode } = opts;
-  const [limitReached, setLimitReached] = useState(false);
+  // See `use-numeric-field-masking.ts` — the keydown/paste/onChange
+  // filtering shared with `MedicalRecordEditor`'s teléfono de emergencia
+  // field (issue #667's emergency-contact parity gap).
+  const masking = useNumericFieldMasking(numericMode, opts.onChange);
+  const limitReached = masking.limitReached;
   // Issue #661: masked by default, exactly like `/login` and
   // `/reset-password` — this state never leaks into `opts.type` itself, so a
   // caller that passes `type="password"` keeps meaning "start masked", not
@@ -172,80 +155,6 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = opts.type === "password";
   const inputType = isPassword ? (showPassword ? "text" : "password") : (opts.type ?? "text");
-
-  /**
-   * The `onChange` backstop: applies ONLY the digit cap, never a letter
-   * filter. It runs for every value change, including one `keydown`/`paste`
-   * never see — browser autofill, IME composition, or a test harness
-   * setting `.value` directly — so the cap holds everywhere. It does not
-   * strip letters on purpose: `enroll-qa.spec.ts`'s V01 relies on a
-   * one-shot value assignment (Playwright's `.fill()`) still reaching
-   * validation with its letters intact, so the character-class error fires
-   * from the validation layer instead of a field that already erased the
-   * evidence. A typed or pasted letter never reaches this path in the first
-   * place — `handleKeyDown`/`handlePaste` reject it before `onChange` fires.
-   */
-  function handleChange(raw: string): void {
-    if (!numericMode) {
-      opts.onChange(raw);
-      return;
-    }
-    const result = capDigits(numericMode, raw);
-    setLimitReached(result.limitReached);
-    opts.onChange(result.value);
-  }
-
-  /**
-   * Simulates the value this single keystroke would produce — the same
-   * selection-aware splice `handlePaste` already does for a whole pasted
-   * chunk — then runs it through `filterNumericInput` to decide whether it
-   * fits. This subsumes the old "is this a digit, and does the count
-   * already sit at the cap" check: for cédula/teléfono it is exactly
-   * equivalent (a digit inserted while already at the cap always pushes
-   * SOME digit past it, wherever the caret sits), but it is also what makes
-   * `amount` correct — a second decimal point or a 3rd cents digit needs
-   * `capDigits`'s own separator/decimal-place bookkeeping, not a bare digit
-   * count, to know it is over a cap.
-   */
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
-    if (!numericMode) return;
-    // Modifier combos (Ctrl+V, Cmd+A…) and non-printable keys (Backspace,
-    // Tab, arrows…) are never in the way — only a single printable
-    // character can be a disallowed letter or an over-the-cap digit.
-    if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
-    if (!isAllowedChar(numericMode, e.key)) {
-      e.preventDefault();
-      return;
-    }
-    const input = e.currentTarget;
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? input.value.length;
-    const nextRaw = input.value.slice(0, start) + e.key + input.value.slice(end);
-    const result = filterNumericInput(numericMode, nextRaw);
-    if (result.limitReached) {
-      e.preventDefault();
-      setLimitReached(true);
-    }
-  }
-
-  /**
-   * Paste gets the full treatment (`filterNumericInput`: strip disallowed
-   * characters, then cap) in one pass, computed against what the field's
-   * value would become at the current cursor/selection — not just appended
-   * blindly to the end.
-   */
-  function handlePaste(e: ClipboardEvent<HTMLInputElement>): void {
-    if (!numericMode) return;
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text");
-    const input = e.currentTarget;
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? input.value.length;
-    const nextRaw = input.value.slice(0, start) + pasted + input.value.slice(end);
-    const result = filterNumericInput(numericMode, nextRaw);
-    setLimitReached(result.limitReached);
-    opts.onChange(result.value);
-  }
 
   return (
     <div className="mb-4">
@@ -267,9 +176,9 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           id={fieldId}
           type={inputType}
           value={opts.value}
-          onChange={(e) => handleChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
+          onChange={(e) => masking.onChange(e.target.value)}
+          onKeyDown={masking.onKeyDown}
+          onPaste={masking.onPaste}
           onBlur={opts.onBlur}
           placeholder={opts.placeholder}
           required={opts.required}
@@ -323,7 +232,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-warn"
         >
           <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-          {LIMIT_REACHED_MESSAGE[numericMode]}
+          {NUMERIC_FIELD_LIMIT_MESSAGE[numericMode]}
         </p>
       ) : opts.hint ? (
         <p id={messageId} className="mt-field text-xs text-ink-3">

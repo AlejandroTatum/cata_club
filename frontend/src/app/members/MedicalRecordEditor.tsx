@@ -9,6 +9,8 @@ import { Badge, Button, DataBox, ErrorState, LoadingState } from "@/components/u
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
 import { phoneRule } from "@/lib/identity-validation";
+import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
+import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 
 /**
  * The blood types this editor OFFERS (issue #643).
@@ -155,6 +157,14 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
   const [alergias, setAlergias] = useState("");
   const [contactoEmergencia, setContactoEmergencia] = useState("");
   const [telefonoEmergencia, setTelefonoEmergencia] = useState("");
+  /**
+   * Issue #667: the same keystroke/paste filtering and digit cap the
+   * enrollment wizards' teléfono field already has (`WizardInput` with
+   * `numericMode="phone"`) — this field is the emergency-contact parity gap
+   * the issue's audit missed. Shared via `use-numeric-field-masking.ts`
+   * rather than a second, hand-rolled copy of the same handlers.
+   */
+  const telefonoEmergenciaMasking = useNumericFieldMasking("phone", setTelefonoEmergencia);
   /**
    * Field-level rejections, shown only after a save was attempted.
    *
@@ -524,6 +534,10 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             type="text"
             value={contactoEmergencia}
             onChange={(e) => setContactoEmergencia(e.target.value)}
+            // 150 chars, same cap `EmergencyContactFields` (wizard-fields.tsx)
+            // uses for the identical field on the enrollment wizards —
+            // issue #667's emergency-contact parity gap.
+            maxLength={150}
             className="input-field w-full"
           />
         </div>
@@ -537,16 +551,23 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
           <input
             id={`telefono-${personaId}`}
             type="text"
+            inputMode="tel"
             value={telefonoEmergencia}
-            onChange={(e) => setTelefonoEmergencia(e.target.value)}
+            onChange={(e) => telefonoEmergenciaMasking.onChange(e.target.value)}
+            onKeyDown={telefonoEmergenciaMasking.onKeyDown}
+            onPaste={telefonoEmergenciaMasking.onPaste}
             aria-required="true"
             aria-invalid={fieldErrors.telefonoEmergencia ? true : undefined}
             aria-describedby={
-              fieldErrors.telefonoEmergencia ? `telefono-error-${personaId}` : undefined
+              fieldErrors.telefonoEmergencia
+                ? `telefono-error-${personaId}`
+                : telefonoEmergenciaMasking.limitReached
+                  ? `telefono-limit-${personaId}`
+                  : undefined
             }
             className={`input-field w-full ${fieldErrors.telefonoEmergencia ? "border-state-bad" : ""}`}
           />
-          {fieldErrors.telefonoEmergencia && (
+          {fieldErrors.telefonoEmergencia ? (
             <p
               id={`telefono-error-${personaId}`}
               className="mt-1 text-xs font-semibold text-state-bad"
@@ -554,6 +575,16 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             >
               {fieldErrors.telefonoEmergencia}
             </p>
+          ) : (
+            telefonoEmergenciaMasking.limitReached && (
+              <p
+                id={`telefono-limit-${personaId}`}
+                aria-live="polite"
+                className="mt-1 text-xs font-semibold text-state-warn"
+              >
+                {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
+              </p>
+            )
           )}
         </div>
       </div>
