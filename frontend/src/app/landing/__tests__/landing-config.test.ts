@@ -97,6 +97,20 @@ describe("buildLandingStats", (): void => {
       "Desde el 10 de octubre",
     );
   });
+
+  /**
+   * The stats band is read at a glance, well above the map, so its venue
+   * figure has to give the same landmark the address line does (#641). A band
+   * naming the neighbourhood while the copy below names the Coliseo would
+   * leave a visitor holding two references and no way to tell they are one.
+   */
+  it("locates the venue by the same landmark the address line uses", (): void => {
+    const stats = buildLandingStats(new Date(2026, 6, 25));
+
+    const venue = stats.find((stat): boolean => stat.value === "Loja");
+    expect(venue).toBeDefined();
+    expect(venue?.label).toBe("Junto al Coliseo Ciudad de Loja");
+  });
 });
 
 describe("deriveContactHours", (): void => {

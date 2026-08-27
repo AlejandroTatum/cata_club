@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-location";
 import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
@@ -150,7 +151,7 @@ describe("LandingPage", (): void => {
   it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
     render(<LandingPage />);
 
-    const arrival = screen.getByRole("img", { name: /entrada de cata club junto al coliseo ciudad de loja/i });
+    const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
     expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.png");
     expect(arrival).toHaveAttribute("width", "1600");
     expect(arrival).toHaveAttribute("height", "1200");
@@ -631,6 +632,68 @@ describe("LandingPage", (): void => {
 
     const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
     expect(directions.className).toContain("landing-button-outline");
+  });
+
+  it("points the directions link at the shared club coordinate", (): void => {
+    render(<LandingPage />);
+
+    const contact = document.querySelector(".landing-contact");
+    const directions = within(contact as HTMLElement).getByRole("link", { name: /cómo llegar/i });
+
+    expect(directions).toHaveAttribute("href", clubOpenStreetMapUrl());
+  });
+
+  /**
+   * The Coliseo is the landmark the product owner gives, and #641 resolved to
+   * the club being beside it (#647). It has to survive in the two places a
+   * visitor actually reads a direction — the address line and the arrival
+   * photo's alt text — so a sighted visitor and a screen-reader one are handed
+   * the same reference, not one each.
+   */
+  it("keeps the Coliseo as the landmark in the copy and the arrival alt", (): void => {
+    render(<LandingPage />);
+
+    const location = document.querySelector(".landing-location");
+    expect(location).not.toBeNull();
+    expect(location?.textContent ?? "").toMatch(/junto al Coliseo Ciudad de Loja/i);
+
+    const alts = Array.from((location as HTMLElement).querySelectorAll("img")).map(
+      (image): string => image.getAttribute("alt") ?? "",
+    );
+    expect(alts.length).toBeGreaterThan(0);
+    expect(alts.some((alt): boolean => /coliseo/i.test(alt))).toBe(true);
+  });
+
+  /**
+   * The street the club sits on carries no number, so the landmark is the only
+   * thing narrowing the address down — and a landmark is not an address. The
+   * Plus Code is, and it has to reach the page as text a visitor can copy into
+   * a maps app, not stay buried in the coordinate the map is centred on.
+   */
+  it("shows the club's Plus Code alongside the street address", (): void => {
+    render(<LandingPage />);
+
+    const location = document.querySelector(".landing-location");
+    expect(location?.textContent ?? "").toContain(CLUB_PLUS_CODE);
+  });
+
+  /**
+   * Orienting a visitor from the Plaza de la Independencia is not the same
+   * claim as sitting inside it. The club does not, so no phrase may put it
+   * there — in the visible copy or in an alt a screen reader announces.
+   */
+  it("never claims the club sits inside the Plaza de la Independencia", (): void => {
+    render(<LandingPage />);
+
+    const location = document.querySelector(".landing-location") as HTMLElement;
+    const alts = Array.from(location.querySelectorAll("img")).map(
+      (image): string => image.getAttribute("alt") ?? "",
+    );
+    const claims = /\b(en|dentro de|interior de|adentro de)\s+la\s+plaza\b/i;
+
+    [location.textContent ?? "", ...alts].forEach((copy): void => {
+      expect(copy).not.toMatch(claims);
+    });
   });
 
   it("promotes the championship specifics into the visible gallery caption", (): void => {

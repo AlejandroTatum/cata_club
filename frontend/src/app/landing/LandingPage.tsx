@@ -24,6 +24,7 @@ import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
+import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
 import { mapPublicSchedules } from "./schedule-data";
 
@@ -315,7 +316,12 @@ function Location(): React.ReactElement {
         </div>
         <aside className="landing-contact" data-reveal>
           <h3>Información de contacto</h3>
-          <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja</span></p>
+          {/* Street address, landmark, and Plus Code, in that order: the way a
+              visitor narrows down a place. The Coliseo stays — it is the
+              reference the product owner gives, and #641 resolved to the club
+              being beside it, not near a plaza. The Plus Code closes the last
+              gap, since the street here carries no number. */}
+          <p><MapPin aria-hidden="true" /><span>Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador — junto al Coliseo Ciudad de Loja ({CLUB_PLUS_CODE})</span></p>
           <p>
             <Phone className="landing-icon-whatsapp" aria-hidden="true" /><strong>WhatsApp</strong>
             <span className="landing-contact-numbers">
@@ -327,7 +333,7 @@ function Location(): React.ReactElement {
           <p><Facebook className="landing-icon-facebook" aria-hidden="true" /><strong>Facebook</strong><a href={contact.facebook} target="_blank" rel="noreferrer">Cata Club Loja</a></p>
           <p><Instagram className="landing-icon-instagram" aria-hidden="true" /><strong>Instagram</strong><a href={contact.instagram} target="_blank" rel="noreferrer">@cataclub_tenis_de_mesa</a></p>
           <p><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{contact.hours}</span></p>
-          <a className="landing-button landing-button-outline" href="https://www.openstreetmap.org/?mlat=-4.0056095&mlon=-79.2046238#map=18/-4.0056095/-79.2046238" target="_blank" rel="noreferrer">
+          <a className="landing-button landing-button-outline" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
             <Navigation aria-hidden="true" /> Cómo llegar
           </a>
           {/*

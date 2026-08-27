@@ -1059,4 +1059,34 @@ test.describe("Landing page", () => {
       expect(drawn.rendered).toBeGreaterThan(0);
     });
   });
+
+  /**
+   * The unit suite proves the link is built from one constant. This proves the
+   * page a visitor actually receives still carries that link intact — marker
+   * and viewport on the same point — and that the landmark and the Plus Code
+   * both survive into real rendered output, not just into jsdom.
+   */
+  test("hands out one directions link whose marker and viewport agree", async ({ page }) => {
+    await page.goto("/");
+
+    const directions = page.locator(".landing-contact a", { hasText: /cómo llegar/i });
+    const href = await directions.getAttribute("href");
+    expect(href).toBeTruthy();
+
+    const url = new URL(href as string);
+    expect(`${url.origin}${url.pathname}`).toBe("https://www.openstreetmap.org/");
+
+    const latitude = url.searchParams.get("mlat");
+    const longitude = url.searchParams.get("mlon");
+    expect(latitude).toBeTruthy();
+    expect(longitude).toBeTruthy();
+
+    const [, hashLatitude, hashLongitude] = url.hash.replace("#map=", "").split("/");
+    expect(Number(hashLatitude)).toBe(Number(latitude));
+    expect(Number(hashLongitude)).toBe(Number(longitude));
+
+    const location = page.locator(".landing-location");
+    await expect(location).toContainText(/junto al Coliseo Ciudad de Loja/i);
+    await expect(location).toContainText("XQVW+J63, 110102 Loja");
+  });
 });

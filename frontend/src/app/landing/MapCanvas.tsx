@@ -2,8 +2,7 @@
 
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
-
-const CLUB_POSITION: [number, number] = [-4.0056095, -79.2046238];
+import { CLUB_POSITION } from "./club-location";
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
