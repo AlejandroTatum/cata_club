@@ -521,11 +521,18 @@ export default function ChatWidget({
       {/* `.chat > header` — white, avatar disc, "Responde en segundos". */}
       <header className={skin.header}>
         {/*
-          `sizes="96px"`, not the 32px layout box: `sizes` is CSS pixels, so
-          asking for 32 would make Next serve a 32-pixel-wide file and a 2x or
-          3x display would upscale it into a smudge. Asking for 96 gives the
-          browser room to pick real pixels at any density; it still lays out
-          at 32.
+          Fixed `width`/`height={96}`, not `fill` + a pixel `sizes`: asking
+          for 32 (the layout box) would make Next serve a 32-pixel-wide file
+          and a 2x or 3x display would upscale it into a smudge, so 96 (3x)
+          is requested instead. That part was already right; `fill` +
+          `sizes="96px"` was not the way to ask for it — Next only narrows
+          the generated srcset when `sizes` carries a `vw` unit (see
+          `next/dist/shared/lib/get-img-props.js`'s `getWidths`), so a bare
+          `"96px"` matched no `vw` and fell back to EVERY configured
+          breakpoint: 16 widths up to 3840px for a 620×620 source, on every
+          page in the app (issue: flaky e2e crest test). Explicit
+          `width`/`height` asks for exactly the one size needed; `object-cover`
+          on the `<img>` itself still scales it down to fill the 32px box.
 
           `cata-club-logo-avatar.png`, not the raw `cata-club-logo.jpeg`: the
           source is 1080×996 (wider than tall), so `object-cover` alone
@@ -543,9 +550,9 @@ export default function ChatWidget({
           <Image
             src="/brand/cata-club-logo-avatar.png"
             alt=""
-            fill
-            sizes="96px"
-            className="object-cover"
+            width={96}
+            height={96}
+            className="h-full w-full object-cover"
           />
         </span>
         <span className="min-w-0 flex-1 leading-tight">

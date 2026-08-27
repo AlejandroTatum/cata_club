@@ -432,22 +432,28 @@ export default function HelpChatDock(): React.ReactElement {
         style={clearance.lift ? { transform: `translateY(-${clearance.lift}px)` } : undefined}
       >
         {/*
-          `sizes="128px"`, for the same reason the panel header asks for 96:
-          `sizes` is CSS pixels, so asking for the laid-out size makes Next
-          serve exactly that many real pixels and every HiDPI screen upscales
-          them. The cropped `cata-club-logo-avatar.png`, not the raw JPEG —
-          see `ChatWidget`'s own comment for why the full logo's wordmark
-          band can't just be `object-cover`'d away. Its transparent margin
-          relies on this button's own `bg-white` (`LAUNCHER_CLASSES` below)
-          showing through instead of the JPEG's light-grey square.
+          Fixed `width`/`height` (128 — 2x the largest, `lg:h-16 w-16`, 64px
+          box), not `fill` + a pixel `sizes`. `sizes` only narrows Next's
+          generated srcset when it contains a `vw` unit (see
+          `next/dist/shared/lib/get-img-props.js`'s `getWidths`); a bare
+          `"128px"` matches no `vw` and silently falls back to EVERY
+          configured breakpoint — 16 widths up to 3840px for a 620×620
+          source (issue: flaky e2e crest test). `object-cover` on the
+          `<img>` itself still scales it down to fill the 40px box at the
+          `lg:` breakpoint's smaller size, exactly like the hero paddle
+          crest below does. The cropped `cata-club-logo-avatar.png`, not the
+          raw JPEG — see `ChatWidget`'s own comment for why the full logo's
+          wordmark band can't just be `object-cover`'d away. Its transparent
+          margin relies on this button's own `bg-white` (`LAUNCHER_CLASSES`
+          below) showing through instead of the JPEG's light-grey square.
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
           <Image
             src="/brand/cata-club-logo-avatar.png"
             alt=""
-            fill
-            sizes="128px"
-            className="object-cover"
+            width={128}
+            height={128}
+            className="h-full w-full object-cover"
           />
         </span>
       </button>
