@@ -26,6 +26,7 @@ import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
+import { EDITORIAL_MEDIA_SIZES, MAP_INSET_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules } from "./schedule-data";
 
 interface SectionHeaderProps {
@@ -188,6 +189,7 @@ function MissionVision(): React.ReactElement {
               width={1200}
               height={900}
               loading="lazy"
+              sizes={EDITORIAL_MEDIA_SIZES}
             />
           </figure>
           <div className="landing-editorial-copy">
@@ -219,6 +221,7 @@ function MissionVision(): React.ReactElement {
               width={1600}
               height={1200}
               loading="lazy"
+              sizes={EDITORIAL_MEDIA_SIZES}
             />
           </figure>
         </article>
@@ -321,11 +324,12 @@ function Location(): React.ReactElement {
               Leaflet's map and controls retain their expected behavior. */}
           <figure className="landing-map-inset">
             <Image
-              src="/landing/photo-arrival.png"
+              src="/landing/photo-arrival.jpeg"
               alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
               width={1600}
               height={1200}
               loading="lazy"
+              sizes={MAP_INSET_SIZES}
             />
             <figcaption>Así se ve al llegar</figcaption>
           </figure>
