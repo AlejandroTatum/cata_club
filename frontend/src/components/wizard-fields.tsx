@@ -24,6 +24,7 @@ import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
+  AMOUNT_MAX_DECIMAL_DIGITS,
   capDigits,
   filterNumericInput,
   isAllowedChar,
@@ -31,8 +32,21 @@ import {
   type NumericFieldMode,
 } from "@/lib/numeric-input";
 
-/** `WizardInput`'s digit-cap warning — see numeric-input.ts for why the cap itself never strips a letter, only digits past the limit. */
-const LIMIT_REACHED_MESSAGE = "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.";
+/**
+ * `WizardInput`'s digit-cap warning, one per `NumericFieldMode` — see
+ * numeric-input.ts for why the cap itself never strips a letter, only a
+ * digit (or, for `amount`, a digit or a second decimal point) past the
+ * limit. cédula and teléfono share the same 10-digit cap and wording;
+ * `amount`'s cap is two numbers (integer digits, cents), so its message
+ * names both.
+ */
+const LIMIT_REACHED_MESSAGE: Record<NumericFieldMode, string> = {
+  cedula: "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.",
+  phone: "Alcanzó el máximo de 10 dígitos; no se ingresó el último carácter.",
+  amount: `Alcanzó el máximo de ${NUMERIC_FIELD_MAX_DIGITS.amount} dígitos enteros o ${
+    AMOUNT_MAX_DECIMAL_DIGITS
+  } decimales; no se ingresó el último carácter.`,
+};
 
 const ACCENTED_CHARS: Record<string, string> = {
   á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n",
@@ -181,6 +195,18 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
     opts.onChange(result.value);
   }
 
+  /**
+   * Simulates the value this single keystroke would produce — the same
+   * selection-aware splice `handlePaste` already does for a whole pasted
+   * chunk — then runs it through `filterNumericInput` to decide whether it
+   * fits. This subsumes the old "is this a digit, and does the count
+   * already sit at the cap" check: for cédula/teléfono it is exactly
+   * equivalent (a digit inserted while already at the cap always pushes
+   * SOME digit past it, wherever the caret sits), but it is also what makes
+   * `amount` correct — a second decimal point or a 3rd cents digit needs
+   * `capDigits`'s own separator/decimal-place bookkeeping, not a bare digit
+   * count, to know it is over a cap.
+   */
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>): void {
     if (!numericMode) return;
     // Modifier combos (Ctrl+V, Cmd+A…) and non-printable keys (Backspace,
@@ -191,11 +217,12 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
       e.preventDefault();
       return;
     }
-    if (!/[0-9]/.test(e.key)) return; // an allowed separator — no cap concern
     const input = e.currentTarget;
-    const replacesSelection = (input.selectionEnd ?? 0) > (input.selectionStart ?? 0);
-    if (replacesSelection) return; // replacing a selected digit never grows the count
-    if (digitCount(input.value) >= NUMERIC_FIELD_MAX_DIGITS[numericMode]) {
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const nextRaw = input.value.slice(0, start) + e.key + input.value.slice(end);
+    const result = filterNumericInput(numericMode, nextRaw);
+    if (result.limitReached) {
       e.preventDefault();
       setLimitReached(true);
     }
@@ -289,14 +316,14 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
           {opts.error}
         </p>
-      ) : limitReached ? (
+      ) : limitReached && numericMode ? (
         <p
           id={messageId}
           aria-live="polite"
           className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-warn"
         >
           <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-          {LIMIT_REACHED_MESSAGE}
+          {LIMIT_REACHED_MESSAGE[numericMode]}
         </p>
       ) : opts.hint ? (
         <p id={messageId} className="mt-field text-xs text-ink-3">

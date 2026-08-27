@@ -36,20 +36,42 @@
  * is for the `paste` handler, which receives the clipboard's raw text and
  * needs the full treatment in one pass. Typed letters are rejected by
  * `WizardInput`'s `keydown` handler before they ever reach either function.
+ *
+ * ## A third mode: `amount`
+ *
+ * Issue #667 — the price/valor fields on `/tarifas` and `/discounts` need
+ * the same keystroke-level discipline cédula/teléfono already have, but a
+ * currency amount isn't "N digits": it is an integer part, an optional
+ * single decimal separator, and up to two decimal digits (cents). `amount`
+ * reuses `NUMERIC_FIELD_MAX_DIGITS` for the INTEGER part's cap only —
+ * `AMOUNT_MAX_DECIMAL_DIGITS` is the separate cents cap, and a second `.`
+ * is dropped the same way an 11th cédula digit is: silently truncated by
+ * `capDigits`/`filterNumericInput`, surfaced by the caller's `limitReached`
+ * warning.
  */
 
-export type NumericFieldMode = "cedula" | "phone";
+export type NumericFieldMode = "cedula" | "phone" | "amount";
 
 const ALLOWED_CHAR: Record<NumericFieldMode, RegExp> = {
   cedula: /[0-9]/,
   phone: /[0-9\s\-()]/,
+  amount: /[0-9.]/,
 };
 
-/** Both fields cap at 10: a cédula IS 10 digits, and 10 is the longer of the two valid teléfono shapes (celular). */
+/**
+ * Cédula and teléfono cap at 10 (see above). `amount`'s entry is the
+ * INTEGER part's cap only — six digits is $999,999, well past any real club
+ * fee, and generous enough that a typo is still caught while a legitimate
+ * price never brushes it. See `AMOUNT_MAX_DECIMAL_DIGITS` for the cents cap.
+ */
 export const NUMERIC_FIELD_MAX_DIGITS: Record<NumericFieldMode, number> = {
   cedula: 10,
   phone: 10,
+  amount: 6,
 };
+
+/** How many digits an `amount` value keeps after its decimal separator — currency cents. */
+export const AMOUNT_MAX_DECIMAL_DIGITS = 2;
 
 export function isAllowedChar(mode: NumericFieldMode, char: string): boolean {
   return ALLOWED_CHAR[mode].test(char);
@@ -72,6 +94,7 @@ export interface NumericInputResult {
  * see the module doc comment for why.
  */
 export function capDigits(mode: NumericFieldMode, raw: string): NumericInputResult {
+  if (mode === "amount") return capAmount(raw);
   const max = NUMERIC_FIELD_MAX_DIGITS[mode];
   let digits = 0;
   let value = "";
@@ -83,6 +106,51 @@ export function capDigits(mode: NumericFieldMode, raw: string): NumericInputResu
         continue;
       }
       digits++;
+    }
+    value += char;
+  }
+  return { value, limitReached };
+}
+
+/**
+ * `capDigits`'s `amount` branch: an integer-part digit cap
+ * (`NUMERIC_FIELD_MAX_DIGITS.amount`), a decimal-part digit cap
+ * (`AMOUNT_MAX_DECIMAL_DIGITS`), and at most one decimal separator. A digit
+ * or a second `.` past its cap is dropped, mirroring `capDigits`'s own
+ * per-character drop — never a whole-value rejection, and never a letter
+ * (there are none to drop; `amount`'s `ALLOWED_CHAR` never let one through
+ * `filterNumericInput`, and the `onChange` backstop doesn't strip them
+ * either — same "never silently correct a character class" rule as cédula
+ * and teléfono).
+ */
+function capAmount(raw: string): NumericInputResult {
+  const maxIntegerDigits = NUMERIC_FIELD_MAX_DIGITS.amount;
+  let integerDigits = 0;
+  let decimalDigits = 0;
+  let seenSeparator = false;
+  let value = "";
+  let limitReached = false;
+  for (const char of raw) {
+    if (char === ".") {
+      if (seenSeparator) {
+        limitReached = true;
+        continue;
+      }
+      seenSeparator = true;
+    } else if (isDigit(char)) {
+      if (seenSeparator) {
+        if (decimalDigits >= AMOUNT_MAX_DECIMAL_DIGITS) {
+          limitReached = true;
+          continue;
+        }
+        decimalDigits++;
+      } else {
+        if (integerDigits >= maxIntegerDigits) {
+          limitReached = true;
+          continue;
+        }
+        integerDigits++;
+      }
     }
     value += char;
   }
