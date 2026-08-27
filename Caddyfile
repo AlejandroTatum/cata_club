@@ -73,6 +73,46 @@
 		# comprobantes) viaje como referrer hacia un sitio de terceros.
 		Referrer-Policy "strict-origin-when-cross-origin"
 
+		# Apaga las APIs de navegador que la app NO usa. Si alguna vez
+		# entra un script de terceros (o un XSS) por cualquier vía, este
+		# header le niega de entrada la cámara, el micrófono y la
+		# ubicación del visitante -- en un sitio que ya maneja datos de
+		# menores, esas tres son las que importan.
+		#
+		# La lista se derivó del código, no de una plantilla copiada. Lo
+		# verificado en frontend/src:
+		#
+		#   - `navigator.*` no aparece NI UNA VEZ fuera de los tests: no
+		#     hay geolocation, getUserMedia, clipboard, share ni
+		#     serviceWorker.
+		#   - El mapa de la landing es Leaflet centrado en una CONSTANTE
+		#     (`CLUB_POSITION` en frontend/src/app/landing/club-location.ts,
+		#     derivada de un Plus Code), no en la ubicación del visitante.
+		#     No hay `map.locate()` ni control de localización. Por eso
+		#     `geolocation=()` no puede romperlo -- era el único riesgo
+		#     real de esta lista.
+		#   - "Cómo llegar" es un `<a href>` a openstreetmap.org, no una
+		#     llamada a ninguna API.
+		#   - Los pagos son subida de comprobante + validación manual
+		#     (`proofFileName`/`voucherUrl`), no la Payment Request API:
+		#     no hay Stripe, PayPal ni MercadoPago en package.json.
+		#   - Los `<input type="file">` (comprobantes, foto de perfil,
+		#     sponsors) NO llevan el atributo `capture`, y el picker del
+		#     sistema operativo no lo gobierna este header: `camera=()` no
+		#     afecta la opción "Tomar foto" del celular.
+		#
+		# Quedan DELIBERADAMENTE FUERA tres features que la app tampoco
+		# usa hoy, porque el costo de equivocarse es una función rota en
+		# silencio y la ganancia de seguridad es marginal:
+		# `autoplay` (la landing está en rediseño y un video hero es
+		# plausible), `fullscreen` y `clipboard-write` (un botón de
+		# "copiar enlace" es de lo más común que se agrega después).
+		# Agregarlas es una línea el día que se decida.
+		#
+		# `window.print()` (botón "Imprimir carnet") no se ve afectado:
+		# no existe ninguna directiva `print` en Permissions-Policy.
+		Permissions-Policy "accelerometer=(), bluetooth=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
+
 		# Content-Security-Policy: falta a propósito. Una CSP escrita a
 		# ciegas rompe Next.js (scripts inline, estilos, hidratación) y no
 		# se puede probar contra la app real en este momento. Tiene que

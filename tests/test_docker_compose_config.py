@@ -702,8 +702,10 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     el CONTENIDO del `Caddyfile` -- un ruteo o un header equivocado dejaría
     la suite entera en verde. Esta prueba cierra esa parte del hueco (no
     valida sintaxis ni ruteo -- eso queda para `caddy validate` en CI, otro
-    cambio) leyendo el `Caddyfile` versionado y exigiendo los cuatro headers
-    del bloque `header`:
+    cambio) leyendo el `Caddyfile` versionado y exigiendo estos cuatro
+    headers del bloque `header` (el quinto, `Permissions-Policy`, lo cubre
+    `test_el_caddyfile_apaga_las_apis_de_navegador_que_la_app_no_usa`, que
+    además tiene que razonar sobre qué features usa la app):
 
     - `Strict-Transport-Security`: fuerza HTTPS en el navegador, evita que un
       atacante en la red degrade la conexión a texto plano (downgrade/SSL
@@ -729,6 +731,68 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     assert 'Referrer-Policy "strict-origin-when-cross-origin"' in contenido, (
         "el Caddyfile no declara Referrer-Policy: strict-origin-when-cross-origin"
     )
+
+
+# APIs de navegador que la app NO usa y que este borde público tiene que
+# negar. Verificado leyendo frontend/src, no copiado de una plantilla:
+# `navigator.*` no aparece ni una vez fuera de los tests, el mapa de la
+# landing es Leaflet centrado en la constante `CLUB_POSITION`
+# (frontend/src/app/landing/club-location.ts) y no en la ubicación del
+# visitante, y los pagos son subida de comprobante + validación manual, no
+# la Payment Request API.
+#
+# `autoplay`, `fullscreen` y `clipboard-write` quedan FUERA a propósito (ver
+# el comentario del Caddyfile): tampoco se usan hoy, pero romperlas sale
+# caro y en silencio, y la ganancia de seguridad es marginal.
+_FEATURES_QUE_EL_BORDE_PUBLICO_NIEGA = (
+    "accelerometer",
+    "bluetooth",
+    "camera",
+    "display-capture",
+    "geolocation",
+    "gyroscope",
+    "hid",
+    "magnetometer",
+    "microphone",
+    "midi",
+    "payment",
+    "screen-wake-lock",
+    "serial",
+    "usb",
+    "xr-spatial-tracking",
+)
+
+
+def test_el_caddyfile_apaga_las_apis_de_navegador_que_la_app_no_usa():
+    """Complementa
+    `test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico`.
+    Los otros cuatro headers endurecen el TRANSPORTE y el marco de la página;
+    `Permissions-Policy` es el único que le niega a la página capacidades del
+    DISPOSITIVO del visitante. Sin él, cualquier script que llegue a
+    ejecutarse en este origen -- un XSS, o una dependencia de npm
+    comprometida -- puede pedir cámara, micrófono y ubicación con el permiso
+    del usuario, en un sitio que ya maneja fichas médicas de menores.
+
+    Se exige cada feature por separado, no la cadena completa: así el fallo
+    dice exactamente cuál se cayó, y reordenar la lista o cambiarle el
+    espaciado no pone la suite en rojo por nada.
+
+    Se exige además la forma `=()` (lista de orígenes VACÍA, o sea "nadie,
+    ni siquiera este sitio"). `=(self)` o `=*` compilan igual, se leen casi
+    igual y no niegan nada."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert "Permissions-Policy" in contenido, (
+        "el Caddyfile no declara Permissions-Policy: la página puede pedir "
+        "cámara, micrófono y ubicación del visitante"
+    )
+    for feature in _FEATURES_QUE_EL_BORDE_PUBLICO_NIEGA:
+        assert f"{feature}=()" in contenido, (
+            f"el Permissions-Policy del Caddyfile no niega '{feature}' con la "
+            f"forma `{feature}=()`. La app no usa esa API (verificado sobre "
+            f"frontend/src), así que dejarla habilitada solo suma superficie "
+            f"para un script que no debería estar corriendo. Ojo: `=(self)` o "
+            f"`=*` no cuentan -- solo la lista de orígenes vacía la niega."
+        )
 
 
 # ─── Indexación por buscadores: solo el dominio de producción ──────────────
