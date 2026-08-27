@@ -27,11 +27,16 @@ load_image_tag() {
 configured_backend_image() {
   (
     cd "$STACK_DIR"
-    # Compose >= 5.5 puede emitir varias líneas para `--images backend`.
-    # `awk` toma solo la primera sin cerrar el pipe antes de tiempo
-    # (a diferencia de a first-line shortcut, que con `pipefail` revienta por SIGPIPE
-    # si el emisor escribe una segunda línea).
-    IMAGE_TAG="$IMAGE_TAG" docker compose "${COMPOSE_FILES[@]}" config --images backend | awk 'NF && !seen[$0]++ { images[++count] = $0 } END { if (count == 1) print images[1]; else exit 1 }'
+    command -v python3 >/dev/null 2>&1 || die "falta python3 para resolver la imagen backend"
+    IMAGE_TAG="$IMAGE_TAG" docker compose "${COMPOSE_FILES[@]}" config --format json | python3 -c 'import json, sys
+try:
+    services = json.load(sys.stdin).get("services")
+    image = services["backend"]["image"] if isinstance(services, dict) and isinstance(services.get("backend"), dict) else None
+    if not isinstance(image, str) or not image or "\\n" in image or "\\r" in image:
+        raise ValueError
+    print(image)
+except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+    sys.exit(1)'
   )
 }
 
