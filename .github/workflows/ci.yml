@@ -107,6 +107,14 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://usuario:password@localhost:5432/cataclub_test
         run: uv run --frozen --no-build pytest tests/ -v --cov=app --cov-report=term-missing
 
+      - name: Install age (cifrado de backups)
+        # `tests/test_backup_controls.py` verifica que el dump cifrado no
+        # contenga texto plano y que el restore haga round-trip. Sin `age` esos
+        # tests se SALTEAN, y un candado que se saltea en CI no es un candado:
+        # el agujero que cierran (padrón médico de menores en claro sobre el
+        # disco del droplet) volvería sin que el pipeline dijera nada.
+        run: sudo apt-get update && sudo apt-get install -y age
+
       - name: Root-level tests (tests/ del repo, no backend/tests/)
         # Los tests de `tests/` (raíz del repo) viven FUERA de `backend/tests/`
         # a propósito: no necesitan Postgres ni los fixtures de

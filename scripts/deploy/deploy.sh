@@ -100,6 +100,23 @@ case "$cmd" in
     do_checks
     ;;
   install-cron)
+    # El cron corre con un entorno mínimo y NO hereda el shell del operador:
+    # si el destinatario de cifrado solo existe como variable exportada en esta
+    # sesión, backup-db.sh falla a las 03:30 contra un log que nadie mira hasta
+    # que alerta la frescura a las 07:00. Se verifica ahora, con el operador
+    # todavía en la terminal, que la configuración esté donde el cron la va a
+    # encontrar de verdad.
+    BACKUP_AGE_RECIPIENTS_FILE="${BACKUP_AGE_RECIPIENTS_FILE:-/etc/cataclub/backup-recipients.txt}"
+    if ! grep -qs '[^[:space:]]' "$BACKUP_AGE_RECIPIENTS_FILE"; then
+      die "$(printf '%s\n' \
+        "no hay destinatario de cifrado en ${BACKUP_AGE_RECIPIENTS_FILE}." \
+        "       El cron no hereda variables de tu shell: el backup tiene que" \
+        "       leer la clave pública de un archivo. Crealo y repetí:" \
+        "         install -d -m 700 \$(dirname ${BACKUP_AGE_RECIPIENTS_FILE})" \
+        "         printf '%s\\n' age1... > ${BACKUP_AGE_RECIPIENTS_FILE}" \
+        "       La identidad PRIVADA no va en este host.")"
+    fi
+    command -v age >/dev/null 2>&1 || die "falta 'age' en el host (apt-get install -y age); el cron de backup no cifraría"
     log "Instalando cron de backup (03:30) y de frescura (07:00) tras confirmación explícita del operador"
     # La verificación de frescura escribe 1-2 líneas por día en el mismo log
     # del backup para no multiplicar archivos sin rotación.

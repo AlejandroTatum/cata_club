@@ -187,6 +187,54 @@ producción.
 
 ## Backup y rollback
 
+### Cifrado del backup (obligatorio antes de instalar el cron)
+
+El dump es el padrón completo de los chicos del club: nombre, cédula, fecha de
+nacimiento, tipo de sangre, alergias, condiciones médicas y contacto de
+emergencia. La aplicación protege ese dato en tránsito; un dump en claro sobre
+el disco lo devuelve entero a cualquiera que lea el filesystem del host (un
+snapshot robado del VPS, un rsync mal apuntado, un admin que se va con su SSH).
+
+Por eso `backup-db.sh` cifra con [`age`](https://github.com/FiloSottile/age) a
+un **destinatario público**: el host guarda solo la clave pública, así que
+puede escribir backups y no puede leer ninguno. Una passphrase simétrica no
+serviría — tendría que vivir en el mismo host para que el cron corra sin nadie
+mirando, y el atacante se llevaría el cifrado y la llave en el mismo viaje.
+
+Generar el par **fuera del host** (en la máquina de quien opera):
+
+```bash
+age-keygen -o identidad-backup-cataclub.txt   # imprime "Public key: age1..."
+```
+
+- La **identidad privada** (`identidad-backup-cataclub.txt`) va a un gestor de
+  contraseñas o a una caja fuerte offline, con al menos una segunda copia en
+  otro lugar. **Nunca** al droplet, nunca al repositorio, nunca a un `.env`
+  del stack: si vive en el host, el cifrado no protege de nada.
+- La **clave pública** (`age1...`) sí va al host, porque no sirve para leer:
+
+```bash
+ssh <host>
+sudo install -d -m 700 /etc/cataclub
+printf '%s\n' 'age1...' | sudo tee /etc/cataclub/backup-recipients.txt
+sudo apt-get install -y age
+```
+
+Se puede poner más de un destinatario, uno por línea: `age` cifra para todos y
+cualquiera de las identidades descifra. Vale la pena una segunda clave de
+resguardo — con una sola identidad, perderla vuelve irrecuperable **todo** el
+histórico de backups a la vez.
+
+Alternativa por entorno: `BACKUP_AGE_RECIPIENTS='age1... age1...'`. Sirve para
+una corrida manual, pero **no** para el cron, que no hereda el shell del
+operador. Por eso el camino recomendado es el archivo.
+
+`install-cron` verifica que el archivo exista y que `age` esté instalado antes
+de tocar el crontab, y `deploy` aborta si el backup pre-deploy no puede cifrar:
+sin backup recuperable no se corren migraciones, que no tienen vuelta atrás.
+
+### Crons
+
 Instalar los crons solo después de que el operador haya revisado el crontab
 que administra su host:
 
@@ -198,9 +246,47 @@ Instala dos entradas: el backup diario (03:30) y la verificación de frescura
 (`check-backup-freshness.sh`, 07:00), que alerta si el dump más reciente supera
 el RPO de 26 h. Ambas escriben en el mismo log (`BACKUP_CRON_LOG`).
 
-`backup-db.sh` escribe el dump de forma atómica y no elimina backups: cuando se
-supera `BACKUP_RETENTION`, avisa. La retención, cifrado y réplica fuera del host
-son políticas del proveedor de almacenamiento y siguen pendientes de configurar.
+`backup-db.sh` escribe el artefacto de forma atómica en
+`cataclub_<fecha>.dump.age` y no elimina backups: cuando se supera
+`BACKUP_RETENTION`, avisa. La retención y la réplica fuera del host son
+políticas del proveedor de almacenamiento y siguen pendientes de configurar; el
+cifrado ya no.
+
+En desarrollo local, sin destinatario configurado, el script **falla** y nombra
+la salida: `BACKUP_ALLOW_PLAINTEXT=1` produce un `.dump` sin cifrar, solo apto
+para datos de prueba. Ese escape se ignora y aborta en cualquier invocación
+productiva (overlay `docker-compose.prod.yml` o `AMBIENTE=production`).
+
+### Dumps en claro anteriores a este cambio
+
+Los backups que ya estaban en `/var/backups/cataclub` **siguen en texto plano**;
+cifrar de acá en adelante no los toca. Hasta que se resuelvan, el agujero sigue
+abierto. `backup-db.sh` avisa en cada corrida mientras quede alguno.
+
+Lo mínimo es conservar el más reciente ya cifrado y destruir el resto:
+
+```bash
+ssh <host>
+cd /var/backups/cataclub
+ls -1 cataclub_*.dump | tail -1        # confirmar cuál se conserva
+
+# 1) Cifrar el que se conserva, contra la clave pública ya instalada.
+age -R /etc/cataclub/backup-recipients.txt \
+    -o cataclub_<fecha>.dump.age cataclub_<fecha>.dump
+
+# 2) Probar que ese artefacto restaura ANTES de borrar el original.
+./scripts/backup/restore-check.sh /var/backups/cataclub/cataclub_<fecha>.dump.age \
+    --identity /ruta/traida/a/mano/identidad-backup-cataclub.txt
+
+# 3) Recién entonces destruir TODOS los dumps en claro.
+shred -u cataclub_*.dump
+```
+
+Un `rm` común deja los bloques recuperables; por eso `shred -u`. Sobre un disco
+con SSD o copy-on-write ni `shred` garantiza el borrado físico: si el host ya
+manejó estos dumps en claro, hay que asumir que también hay que rotar cualquier
+snapshot o backup del proveedor que los contenga, y considerar destruir el
+volumen. Verificar además si esos dumps se copiaron alguna vez a otra máquina.
 
 Un rollback de aplicación exige una confirmación visible y usa un SHA conocido:
 

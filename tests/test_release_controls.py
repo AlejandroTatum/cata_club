@@ -7,6 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Destinatario age de mentira. Acá `age` está stubeado igual que `docker` y
+# `crontab` (esta suite stubea sus fronteras a propósito): lo que se prueba en
+# este archivo es que deploy/install-cron EXIJAN cifrado configurado, no la
+# criptografía en sí. El cifrado real se verifica de punta a punta contra el
+# binario `age` en tests/test_backup_controls.py.
+DESTINATARIO_DE_PRUEBA = "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsxxxxxx"
+
 
 def run_script(script: str, *args: str, env: dict[str, str] | None = None):
     return subprocess.run(
@@ -16,6 +23,18 @@ def run_script(script: str, *args: str, env: dict[str, str] | None = None):
         capture_output=True,
         text=True,
     )
+
+
+def _stub_age(bin_dir: Path) -> None:
+    """`age` de mentira: copia stdin a la salida, respetando `-o`."""
+    stub = bin_dir / "age"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'destino=""; previo=""\n'
+        'for a in "$@"; do [ "$previo" = "-o" ] && destino="$a"; previo="$a"; done\n'
+        'if [ -n "$destino" ]; then cat > "$destino"; else cat; fi\n'
+    )
+    stub.chmod(0o755)
 
 
 def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
@@ -29,12 +48,16 @@ def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
         "exit 1\n"
     )
     (bin_dir / "crontab").chmod(0o755)
+    _stub_age(bin_dir)
+    destinatarios = tmp_path / "backup-recipients.txt"
+    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
+    entorno = {
+        "CRON_FILE": str(cron_file),
+        "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
 
-    refused = run_script(
-        "scripts/deploy/deploy.sh",
-        "install-cron",
-        env={"CRON_FILE": str(cron_file), "PATH": f"{bin_dir}:{os.environ['PATH']}"},
-    )
+    refused = run_script("scripts/deploy/deploy.sh", "install-cron", env=entorno)
 
     assert refused.returncode == 2
     assert "--confirm-install-cron" in refused.stderr
@@ -44,7 +67,7 @@ def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
         "scripts/deploy/deploy.sh",
         "install-cron",
         "--confirm-install-cron",
-        env={"CRON_FILE": str(cron_file), "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+        env=entorno,
     )
 
     assert installed.returncode == 0, installed.stderr
@@ -75,6 +98,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
+    _stub_age(bin_dir)
     env = {
         "STACK_DIR": str(stack),
         "BACKUP_DIR": str(backups),
@@ -83,6 +107,11 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "MIGRATION_COMPATIBILITY": "none",
         "DOCKER_LOG": str(docker_log),
         "DB_RUNNING": "1" if db_running else "0",
+        # El backup pre-deploy cifra: sin destinatario configurado, deploy
+        # aborta a propósito (ver test_deploy_aborta_si_el_backup_no_puede_cifrar).
+        "BACKUP_AGE_RECIPIENTS": DESTINATARIO_DE_PRUEBA,
+        # Hermético: nunca mirar el /etc real de la máquina que corre la suite.
+        "BACKUP_AGE_RECIPIENTS_FILE": str(tmp_path / "no-existe" / "recipients.txt"),
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
     return env, backups, docker_log
@@ -120,7 +149,9 @@ def test_deploy_backs_up_the_database_before_starting_new_images(tmp_path):
     result = run_script("scripts/deploy/deploy.sh", env=env)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert list(backups.glob("cataclub_*.dump"))
+    # `.dump.age`: el backup pre-deploy sale cifrado, igual que el del cron.
+    assert list(backups.glob("cataclub_*.dump.age"))
+    assert not list(backups.glob("cataclub_*.dump")), "no debe quedar un dump en claro"
     lines = docker_log.read_text().splitlines()
     dump_calls = [i for i, line in enumerate(lines) if "pg_dump" in line]
     up_calls = [i for i, line in enumerate(lines) if "up -d" in line]
@@ -218,3 +249,58 @@ def test_record_release_writes_auditable_current_record_without_credentials(tmp_
     assert (records / "abcdef1.env").exists()
     assert "PASSWORD" not in content
     assert "TOKEN" not in content
+
+
+def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):
+    """El cron no hereda el shell del operador: la clave tiene que estar en disco.
+
+    Sin esta compuerta, `install-cron` deja instalado un backup que revienta a
+    las 03:30 contra un log que nadie mira. Falla acá, con el operador todavía
+    en la terminal.
+    """
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "crontab").write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-l" ]; then [ -f "$CRON_FILE" ] && cat "$CRON_FILE"; exit 0; fi\n'
+        'if [ "${1:-}" = "-" ]; then cat > "$CRON_FILE"; exit 0; fi\n'
+        "exit 1\n"
+    )
+    (bin_dir / "crontab").chmod(0o755)
+    _stub_age(bin_dir)
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env={
+            "CRON_FILE": str(cron_file),
+            "BACKUP_AGE_RECIPIENTS_FILE": str(tmp_path / "no-existe.txt"),
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "destinatario de cifrado" in result.stderr
+    assert not cron_file.exists(), "no se debe tocar el crontab sin cifrado configurado"
+
+
+def test_deploy_aborta_si_el_backup_pre_deploy_no_puede_cifrar(tmp_path):
+    """Sin backup cifrado no se migra.
+
+    El entrypoint del backend migra en cada arranque y no hay down-migrations,
+    así que el dump pre-deploy es el único camino de vuelta. Que ese dump sea
+    ilegible para quien robe el disco es parte de que exista: degradar a texto
+    plano para no frenar un deploy cambia una caída por una filtración.
+    """
+    env, backups, docker_log = _deploy_env(tmp_path, db_running=True)
+    env["BACKUP_AGE_RECIPIENTS"] = ""
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0
+    assert "no se escribe sin cifrar" in result.stderr
+    assert list(backups.iterdir()) == []
+    # Lo que importa: nunca llegó a levantar las imágenes nuevas.
+    assert "up -d" not in docker_log.read_text()
