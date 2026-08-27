@@ -49,8 +49,14 @@ function categoryDays(schedule: LandingSchedule): string {
 
 export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): React.ReactElement {
   const [selected, setSelected] = useState(0);
-  const [marker, setMarker] = useState({ top: 0, height: 0 });
+  // top/bar describe the visible marker segment; track is the full list's
+  // height. Together they let the marker sit at a fixed size (see
+  // landing.css) and reveal itself through `clip-path`, so the transition
+  // never touches `top`/`height` — the layout-triggering properties the
+  // marker used to animate.
+  const [marker, setMarker] = useState({ top: 0, bar: 0, track: 0 });
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const range: DayRange = deriveDayRange(schedules);
   const active = schedules[selected] ?? schedules[0];
   const rows = Array.from((active?.slots ?? []).reduce((groups, slot): Map<DayGroup, string> => {
@@ -60,7 +66,8 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
 
   useEffect((): void => {
     const tab = tabRefs.current[selected];
-    if (tab) setMarker({ top: tab.offsetTop + 10, height: Math.max(0, tab.offsetHeight - 20) });
+    const list = listRef.current;
+    if (tab && list) setMarker({ top: tab.offsetTop + 10, bar: Math.max(0, tab.offsetHeight - 20), track: list.offsetHeight });
   }, [selected]);
   const select = (index: number): void => { setSelected(index); tabRefs.current[index]?.focus(); };
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -76,8 +83,8 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
   });
 
   return <div className="landing-sched">
-    <div className="landing-sched-list-wrap"><span className="landing-sched-marker" aria-hidden="true" style={{ top: marker.top, height: marker.height }} />
-      <div className="landing-sched-list" role="tablist" aria-label="Categorías" aria-orientation="vertical" onKeyDown={onKeyDown}>
+    <div className="landing-sched-list-wrap"><span className="landing-sched-marker" aria-hidden="true" style={{ "--landing-sched-marker-top": `${marker.top}px`, "--landing-sched-marker-bar": `${marker.bar}px`, "--landing-sched-marker-track": `${marker.track}px` } as React.CSSProperties} />
+      <div className="landing-sched-list" role="tablist" aria-label="Categorías" aria-orientation="vertical" ref={listRef} onKeyDown={onKeyDown}>
         {schedules.map((schedule, index): React.ReactElement => <button key={schedule.category} type="button" role="tab" id={`schedule-tab-${index}`} ref={(element): void => { tabRefs.current[index] = element; }} aria-selected={index === selected} aria-controls="schedule-panel" tabIndex={index === selected ? 0 : -1} style={{ "--landing-cat": CATEGORY_COLORS[index % CATEGORY_COLORS.length] } as React.CSSProperties} onClick={(): void => select(index)}>
           <i className="landing-cat-dot" aria-hidden="true" /><span><strong>{schedule.category}</strong>{schedule.audience ? <span>{schedule.audience}</span> : null}</span><em>{categoryTimes(schedule).map((time, timeIndex): React.ReactElement => <Fragment key={time}>{timeIndex > 0 ? <br /> : null}{time}</Fragment>)}</em>
         </button>)}
