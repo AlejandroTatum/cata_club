@@ -180,11 +180,17 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       data-testid={`student-row-${alumno.personaId}`}
                       className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
                     >
-                      <div className="min-w-0 flex-1">
-                        <span className="truncate text-sm font-semibold text-ink">
-                          {alumno.nombreCompleto}
-                        </span>
-                      </div>
+                      {/*
+                       * `truncate` es `overflow:hidden` + `nowrap`, y `overflow`
+                       * no aplica a un elemento en línea no reemplazado (issue
+                       * #664): un `<span>` suelto adentro de este `min-w-0
+                       * flex-1` no se angosta ni trunca, se derrama debajo de
+                       * los botones. Por eso las tres clases viven en el MISMO
+                       * elemento, como ya hace `AttendanceRosterRow`.
+                       */}
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                        {alumno.nombreCompleto}
+                      </span>
 
                       {/*
                        * La única acción del renglón, con el mismo alto de pulgar

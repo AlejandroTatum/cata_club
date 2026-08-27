@@ -179,6 +179,23 @@ describe("un entrenador llega a la pantalla y ve la nómina", () => {
   });
 });
 
+describe("el nombre no se superpone con las acciones del renglón (issue #664)", () => {
+  it("trunca el nombre en el mismo elemento que se angosta, no en un span suelto adentro", async () => {
+    render(<TrainerStudentsPage />);
+
+    const melany = await screen.findByTestId("student-row-7");
+    const nombre = within(melany).getByText("Melany Quimis");
+
+    // `truncate` es `overflow:hidden` + `white-space:nowrap`, y `overflow` no
+    // aplica a un elemento en línea no reemplazado (CSS Overflow Módulo 3,
+    // §2): si el nombre no es TAMBIÉN el ítem flex que se angosta, no ajusta
+    // ni trunca — se derrama por debajo de Ficha médica y Horario, que es la
+    // regresión de #546 que reporta este issue. El mismo elemento necesita
+    // `flex-1 min-w-0 truncate` juntos, como ya hace `AttendanceRosterRow`.
+    expect(nombre).toHaveClass("truncate", "flex-1", "min-w-0");
+  });
+});
+
 describe("un alumno es una persona, no una asignación", () => {
   it("junta las tres inscripciones de Melany en un solo renglón", async () => {
     render(<TrainerStudentsPage />);
