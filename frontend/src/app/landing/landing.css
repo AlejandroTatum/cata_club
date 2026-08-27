@@ -370,8 +370,21 @@
 .landing-sched-list button:hover { color: var(--landing-text); }
 .landing-sched-list button[aria-selected="true"] { color: var(--landing-text-strong); }
 .landing-sched-list button[aria-selected="true"] em { color: var(--landing-action); opacity: 1; }
-/* One marker element glided by a plain CSS transition — no motion-runtime dependency. */
-.landing-sched-marker { position: absolute; left: 0; width: 4px; border-radius: 4px; background: var(--landing-action); pointer-events: none; transition: top 260ms cubic-bezier(.22,1,.36,1), height 260ms cubic-bezier(.22,1,.36,1); }
+/* One marker element glided by a plain CSS transition — no motion-runtime
+   dependency. The box itself is fixed at the list's full track height and
+   never resizes; only the visible slice is animated, via `clip-path`, so
+   the transition never touches `top`/`height` (layout) — it stays on the
+   compositor/paint path. `translateY`+`scaleY` was tried first and
+   rejected: this marker's 4px width forces border-radius to render as
+   rounded end-caps, and a non-uniform vertical scale stretches those caps
+   into ellipses instead of preserving the 4px radius. `clip-path`'s own
+   `round` keeps the exact same corner geometry at every frame. */
+.landing-sched-marker {
+  position: absolute; top: 0; left: 0; width: 4px; height: var(--landing-sched-marker-track, 0px);
+  background: var(--landing-action); pointer-events: none;
+  clip-path: inset(var(--landing-sched-marker-top, 0px) 0 calc(var(--landing-sched-marker-track, 0px) - var(--landing-sched-marker-top, 0px) - var(--landing-sched-marker-bar, 0px)) 0 round 4px);
+  transition: clip-path 260ms cubic-bezier(.22,1,.36,1);
+}
 
 .landing-sched-panel { display: flex; flex-direction: column; gap: 26px; padding: 34px; border-radius: 18px; background: var(--landing-surface); box-shadow: 0 18px 40px -24px color-mix(in srgb, var(--landing-brand-black) 45%, transparent), inset 0 0 0 1px var(--landing-border); }
 .landing-sched-panel h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(21px, 2.2vw, 28px); letter-spacing: 1px; text-transform: uppercase; }
