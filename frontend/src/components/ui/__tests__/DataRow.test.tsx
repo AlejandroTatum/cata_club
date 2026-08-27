@@ -75,6 +75,22 @@ describe("DataRow — status and actions", () => {
   });
 });
 
+describe("DataRow — nameWrap opt-in", () => {
+  it("truncates the name by default — protects the other five pages using DataRow", () => {
+    render(<DataRow name="Membresía Mensual Categoría Competitiva Avanzada" />);
+    expect(screen.getByText("Membresía Mensual Categoría Competitiva Avanzada")).toHaveClass(
+      "truncate",
+    );
+  });
+
+  it("wraps the full name instead of truncating it when nameWrap is set", () => {
+    render(<DataRow name="Membresía Mensual Categoría Competitiva Avanzada" nameWrap />);
+    const nameEl = screen.getByText("Membresía Mensual Categoría Competitiva Avanzada");
+    expect(nameEl).not.toHaveClass("truncate");
+    expect(nameEl).toHaveClass("break-words");
+  });
+});
+
 describe("DataRowList", () => {
   it("wraps rows in a list with an outer border and inner separators", () => {
     render(
