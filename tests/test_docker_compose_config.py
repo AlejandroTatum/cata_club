@@ -52,6 +52,14 @@ _POSTGRES_USER_PARA_RENDER = "postgres-tests"
 _POSTGRES_PASSWORD_PARA_RENDER = "postgres-password-tests"
 _POSTGRES_DB_PARA_RENDER = "postgres-tests-db"
 
+# Mismo patrón, para `IMAGE_TAG`: desde que `docker-compose.prod.yml`
+# sobrescribe las cuatro imágenes propias con `${IMAGE_TAG:?...}` (ver
+# test_el_overlay_de_produccion_exige_image_tag), CUALQUIER render de
+# producción que no fije la variable aborta -- incluidos los que no prueban
+# nada relacionado con la imagen. No es un SHA real: solo tiene que ser un
+# tag de Docker sintácticamente válido.
+_IMAGE_TAG_PARA_RENDER = "0000000000000000000000000000000000000000"
+
 
 def _ejecutar_config(
     *archivos_compose: str,
@@ -73,6 +81,7 @@ def _ejecutar_config(
         "POSTGRES_USER": _POSTGRES_USER_PARA_RENDER,
         "POSTGRES_PASSWORD": _POSTGRES_PASSWORD_PARA_RENDER,
         "POSTGRES_DB": _POSTGRES_DB_PARA_RENDER,
+        "IMAGE_TAG": _IMAGE_TAG_PARA_RENDER,
         **os.environ,
         **(entorno or {}),
     }
@@ -370,6 +379,114 @@ def test_ningun_servicio_referencia_un_registro_ajeno():
         f"Estas imágenes viven en un registro/namespace ajeno tras la "
         f"migración de propiedad: {ajenas}"
     )
+
+
+def test_el_overlay_de_produccion_exige_image_tag():
+    """`docker-compose.yml` declara `${IMAGE_TAG:-latest}`, y ese default es
+    CORRECTO en desarrollo: ahí `docker-compose.override.yml` agrega `build:`,
+    la imagen se construye local y `latest` es apenas el nombre con el que
+    queda etiquetada. En producción no existe ese build -- `latest` es un tag
+    MÓVIL de GHCR.
+
+    `scripts/ops/preflight-production.sh` y `scripts/deploy/deploy.sh` ya
+    rechazan `IMAGE_TAG=latest`, pero solo protegen a quien pasa POR ELLOS. Un
+    operador que corre a mano en el host `docker compose -f docker-compose.yml
+    -f docker-compose.prod.yml pull && ... up -d` los saltea por completo:
+    antes de este candado, ese comando desplegaba lo que en ese instante
+    apuntara `latest`, sin dejar ningún SHA en el registro de release
+    (`scripts/ops/record-release.sh`) y sin nada a lo que hacer rollback.
+
+    El overlay de producción tiene que EXIGIR la variable, igual que
+    `CORS_ORIGENES`, `DOMINIO` y `ACME_EMAIL`: la única defensa que no se
+    puede saltear es la que vive en el archivo que se está renderizando."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=("IMAGE_TAG",),
+    )
+    assert resultado.returncode != 0, (
+        "el render de producción tiene que fallar sin IMAGE_TAG -- en cambio "
+        "completó con éxito, lo que significa que sigue cayendo al tag móvil "
+        "`latest` de la base"
+    )
+    assert "IMAGE_TAG" in resultado.stderr, (
+        f"el render falló, pero el mensaje no menciona IMAGE_TAG -- no es "
+        f"accionable para quien despliega: {resultado.stderr!r}"
+    )
+
+
+def test_el_render_de_desarrollo_sigue_defaulteando_a_latest_sin_image_tag():
+    """La otra mitad de `test_el_overlay_de_produccion_exige_image_tag`, y la
+    razón por la que el guard vive en el overlay y no en la base: exigir
+    `IMAGE_TAG` en `docker-compose.yml` rompería el flujo local, donde nadie
+    exporta un SHA y `docker compose up --build` etiqueta lo que construye
+    como `latest`. Sin este candado, "endurecer producción" puede dejar el
+    desarrollo sin arrancar y la suite entera en verde."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.override.yml",
+        omitir=("IMAGE_TAG",),
+    )
+    assert resultado.returncode == 0, (
+        f"el render de desarrollo tiene que seguir funcionando sin IMAGE_TAG "
+        f"y falló:\n{resultado.stderr}"
+    )
+    config = json.loads(resultado.stdout)
+    for nombre in SERVICIOS_CON_IMAGEN_PROPIA:
+        imagen = config["services"][nombre]["image"]
+        assert imagen.endswith(":latest"), (
+            f"'{nombre}' resolvió a {imagen!r} en el render de desarrollo sin "
+            f"IMAGE_TAG: el default de la base tiene que seguir siendo "
+            f"`latest`, que es como queda etiquetado el build local"
+        )
+
+
+def test_el_tag_de_las_imagenes_de_produccion_es_el_que_exporta_el_operador():
+    """Misma lógica de centinela que
+    `test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion`:
+    que el render FALLE sin `IMAGE_TAG` no prueba que el valor exportado sea
+    el que se despliega. Un tag hardcodeado en el overlay dejaría el candado
+    de arriba en verde (la variable seguiría siendo obligatoria en alguna
+    otra clave) mientras producción despliega siempre la misma imagen, y
+    `rollback-release.sh` -- que despliega pasando otro `IMAGE_TAG` -- no
+    haría nada."""
+    centinela = "centinela-image-tag-9f3a7c"
+    config = _renderizar(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno={"IMAGE_TAG": centinela},
+    )
+    for nombre in SERVICIOS_CON_IMAGEN_PROPIA:
+        imagen = config["services"][nombre]["image"]
+        assert imagen.endswith(f":{centinela}"), (
+            f"'{nombre}' resolvió a {imagen!r}, sin el tag {centinela!r} que "
+            f"exportó el operador: el tag está hardcodeado en el compose de "
+            f"producción y `IMAGE_TAG` no decide qué se despliega"
+        )
+
+
+def test_el_overlay_de_produccion_no_desvia_el_repositorio_de_las_imagenes():
+    """El guard de `IMAGE_TAG` obligó a repetir la referencia de imagen en
+    `docker-compose.prod.yml` (un overlay de Compose no puede reescribir solo
+    el tag: `image:` es un escalar y se sobrescribe entero). Eso deja el
+    REPOSITORIO escrito en dos archivos, y nada impide que uno derive del
+    otro -- un rename hecho solo en la base dejaría producción tirando de un
+    repositorio que ya no se publica, con la suite en verde porque
+    `test_los_servicios_propios_usan_el_namespace_del_dueno_actual` solo mira
+    el prefijo del namespace, no el nombre completo.
+
+    Este candado compara ambos renders y exige que solo difieran en el tag."""
+    prod = _config_produccion()
+    desarrollo = _renderizar("docker-compose.yml", "docker-compose.override.yml")
+    for nombre in SERVICIOS_CON_IMAGEN_PROPIA:
+        repositorio_prod = prod["services"][nombre]["image"].rsplit(":", 1)[0]
+        repositorio_dev = desarrollo["services"][nombre]["image"].rsplit(":", 1)[0]
+        assert repositorio_prod == repositorio_dev, (
+            f"'{nombre}' apunta a {repositorio_prod!r} en producción y a "
+            f"{repositorio_dev!r} en desarrollo: las dos copias de la "
+            f"referencia derivaron. El overlay de producción solo puede "
+            f"cambiar el TAG, nunca el repositorio."
+        )
 
 
 def test_todos_los_servicios_de_larga_duracion_declaran_healthcheck():
