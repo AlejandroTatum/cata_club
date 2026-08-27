@@ -24,7 +24,7 @@ import {
 import type { AlumnoHorario } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { toUserMessage } from "@/lib/error-message";
-import { formatMembresiaVencidaWarning } from "./groups-page-utils";
+import { formatMembresiaVencidaWarning, formatSolapeHorarioWarning } from "./groups-page-utils";
 import type { HorarioGroupRow, StudentRef } from "@/lib/groups-utils";
 
 interface UseGroupRosterArgs {
@@ -106,14 +106,20 @@ export function useGroupRoster({ allStudents, showNotification }: UseGroupRoster
         const message = "Alumno asignado correctamente al horario.";
         showNotification("success", message);
         showSuccess(message);
-        // INS-6 (decisión de negocio #4): la cuota vencida NO bloquea la
-        // asignación -- ya se hizo, arriba. Esto es solo el aviso no
-        // bloqueante, aparte del toast de éxito.
+        // Dos avisos NO BLOQUEANTES, sobre una asignación que ya ocurrió
+        // arriba: la cuota vencida (INS-6, decisión de negocio #4) y el cruce
+        // de horarios (#731, decisión del dueño 2026-08-27 — "avisar nada
+        // más"). Ninguno reemplaza al toast de éxito; van al lado.
+        const alumno = allStudents.find((s) => Number(s.id) === selectedId);
+        const nombreCompleto = alumno ? `${alumno.nombres} ${alumno.apellidos}` : "El alumno";
         if (respuesta.membresiaVencida) {
-          const alumno = allStudents.find((s) => Number(s.id) === selectedId);
-          const nombreCompleto = alumno ? `${alumno.nombres} ${alumno.apellidos}` : "El alumno";
           showWarning(formatMembresiaVencidaWarning(nombreCompleto, respuesta.diasVencida));
         }
+        // `?? []` y no `!`: una respuesta vieja en caché (o un mock de test
+        // que no lo declare) simplemente no avisa, en vez de romper el alta
+        // que ya se completó del lado del servidor.
+        const solape = formatSolapeHorarioWarning(nombreCompleto, respuesta.solapamientos ?? []);
+        if (solape) showWarning(solape);
         setSelectedId(null);
       } catch (err) {
         const message = toUserMessage(err, "Error al asignar el alumno al horario.");

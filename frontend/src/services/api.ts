@@ -2547,6 +2547,26 @@ export interface AsignarAlumnoHorarioDTO {
 }
 
 /**
+ * `SolapeHorarioDTO` on the backend — one schedule the student ALREADY had
+ * that collides with one of the schedules just assigned (issue #731).
+ *
+ * `categoriaLabel` is the human name ("Competitivo"); `categoria` is the
+ * código it is keyed by. The label travels from the backend rather than
+ * being looked up here because `categoria_horario` is editable at runtime —
+ * mirroring it client-side is the exact staleness `franja_horaria` caused
+ * (#160). `horaInicio`/`horaFin` are the OLD schedule's; the new range is
+ * the card the admin assigned from, already on screen.
+ */
+export interface SolapeHorario {
+  horarioId: number;
+  categoria: string;
+  categoriaLabel: string;
+  diaSemana: string;
+  horaInicio: string;
+  horaFin: string;
+}
+
+/**
  * `AsignacionAlumnoHorarioResponseDTO` on the backend
  * (`backend/app/presentacion/schemas/asistencia_schemas.py`) -- INS-6, decisión
  * de negocio #4 (2026-08-11): assigning a student with an overdue (VENCIDA)
@@ -2554,11 +2574,16 @@ export interface AsignarAlumnoHorarioDTO {
  * non-blocking warning instead of an error. `diasVencida` is `null` when the
  * membership isn't vencida, or when it is but no approved payment exists to
  * derive "since when" from.
+ *
+ * `solapamientos` (issue #731) rides the same way and for the same reason: a
+ * student belongs to several categorías by design, so a clash of schedules
+ * is an advisory, never a rejection. Empty when nothing collides.
  */
 export interface AsignacionAlumnoHorarioResponse {
   asignaciones: AlumnoHorario[];
   membresiaVencida: boolean;
   diasVencida: number | null;
+  solapamientos: SolapeHorario[];
 }
 
 /**

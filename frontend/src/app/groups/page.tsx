@@ -123,17 +123,13 @@ import {
   buildDiaTrack,
   DIA_ORDER,
   DIA_LABELS,
+  formatTime,
   toStripDias,
   type CategoriaCard,
   type PersonasPorHorario,
 } from "./groups-page-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { joinWithY } from "@/lib/format-utils";
-
-function formatTime(timeStr: string): string {
-  const [h, m] = timeStr.split(":");
-  return `${h}:${m}`;
-}
 
 /**
  * The días of a destructive confirmation, in whole words.

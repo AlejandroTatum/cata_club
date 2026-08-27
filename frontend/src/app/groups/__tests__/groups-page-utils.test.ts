@@ -14,8 +14,9 @@ import {
   buildDiaTrack,
   DIA_ORDER,
   formatMembresiaVencidaWarning,
+  formatSolapeHorarioWarning,
 } from "../groups-page-utils";
-import type { AlumnoHorario } from "@/services/api";
+import type { AlumnoHorario, SolapeHorario } from "@/services/api";
 import type { HorarioGroup } from "@/lib/groups-utils";
 
 function makeAlumno(personaId: number, horarioId: number): AlumnoHorario {
@@ -271,5 +272,56 @@ describe("formatMembresiaVencidaWarning", () => {
     expect(formatMembresiaVencidaWarning("Ariana Ruiz", null)).toBe(
       "Ariana Ruiz tiene la cuota vencida.",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatSolapeHorarioWarning — issue #731 non-blocking overlap warning
+// ---------------------------------------------------------------------------
+
+function makeSolape(
+  categoriaLabel: string,
+  diaSemana: string,
+  horaInicio: string,
+  horaFin: string,
+): SolapeHorario {
+  return {
+    horarioId: 1,
+    categoria: categoriaLabel.toUpperCase(),
+    categoriaLabel,
+    diaSemana,
+    horaInicio,
+    horaFin,
+  };
+}
+
+describe("formatSolapeHorarioWarning", () => {
+  it("names the categoría, the day and the time range it collides with", () => {
+    // The whole point of the warning: an admin who only reads "se superpone"
+    // has to go hunting for WHICH schedule. This sentence answers that.
+    expect(
+      formatSolapeHorarioWarning("Diego Vega", [
+        makeSolape("Competitivo", "LUNES", "18:00:00", "20:00:00"),
+      ]),
+    ).toBe(
+      "Diego Vega ya figura en Competitivo (Lunes de 18:00 a 20:00), " +
+        "que se superpone con este horario.",
+    );
+  });
+
+  it("lists every colliding schedule and agrees the verb in plural", () => {
+    expect(
+      formatSolapeHorarioWarning("Diego Vega", [
+        makeSolape("Competitivo", "LUNES", "18:00:00", "20:00:00"),
+        makeSolape("Adultos", "LUNES", "20:00:00", "21:15:00"),
+      ]),
+    ).toBe(
+      "Diego Vega ya figura en Competitivo (Lunes de 18:00 a 20:00) y " +
+        "Adultos (Lunes de 20:00 a 21:15), que se superponen con este horario.",
+    );
+  });
+
+  it("returns an empty string when nothing collides, so no toast is raised", () => {
+    expect(formatSolapeHorarioWarning("Diego Vega", [])).toBe("");
   });
 });

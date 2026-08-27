@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import time
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -24,7 +25,7 @@ from app.presentacion.schemas.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
-    UltimaListaDTO,
+    SolapeHorarioDTO, UltimaListaDTO,
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.soporte_transversal.tiempo import hoy_club
@@ -645,6 +646,74 @@ class AsistenciaServicio:
         dias_vencida = (hoy_club() - ultimo_vencimiento).days
         return True, max(dias_vencida, 0)
 
+    @staticmethod
+    def _se_solapan(inicio_a: time, fin_a: time, inicio_b: time, fin_b: time) -> bool:
+        """¿Dos rangos horarios del MISMO día se pisan? (issue #731)
+
+        Se solapan cuando cada uno arranca ANTES de que termine el otro. Las
+        dos comparaciones son ESTRICTAS a propósito: 18:00-20:00 y
+        20:00-21:15 comparten el instante 20:00 -- se tocan, no se pisan --
+        y esa es la disposición más común del club (Competitivo seguido de
+        Adultos). Con `<=` cada asignación legítima de Adultos dispararía un
+        aviso, que es exactamente el falso positivo que haría que el admin
+        deje de leer los avisos.
+        """
+        return inicio_a < fin_b and inicio_b < fin_a
+
+    def _detectar_solapamientos(
+        self,
+        nuevos: list[HorarioEntrenamiento],
+        previos: list[AlumnoHorario],
+    ) -> list[SolapeHorarioDTO]:
+        """Los horarios que el alumno YA tenía y que se pisan con alguno de
+        los que se le están asignando (issue #731).
+
+        NO bloquea: solo describe. El alumno se asigna igual -- pertenecer a
+        varias categorías es una característica del club, no un error
+        (decisión del dueño, 2026-08-27). Mismo espíritu que
+        `_info_membresia_vencida`.
+
+        Se compara día por día porque la inscripción es por categoría
+        ENTERA (todos sus días), así que un alta puede cruzarse el Lunes y
+        no el Martes. Los labels salen de un único `listar()` del catálogo
+        de categorías -- un puñado de filas, no una consulta por horario.
+        """
+        if not previos:
+            return []
+
+        labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
+        orden_dias = {dia: i for i, dia in enumerate(DiaSemana)}
+
+        vistos: set[int] = set()
+        solapes: list[SolapeHorarioDTO] = []
+        for nuevo in nuevos:
+            for previo in previos:
+                viejo = previo.horario
+                if viejo.dia_semana != nuevo.dia_semana or viejo.id in vistos:
+                    continue
+                if not self._se_solapan(
+                    viejo.hora_inicio, viejo.hora_fin,
+                    nuevo.hora_inicio, nuevo.hora_fin,
+                ):
+                    continue
+                vistos.add(viejo.id)
+                solapes.append(SolapeHorarioDTO(
+                    horario_id=viejo.id,
+                    categoria=viejo.categoria,
+                    # Si la categoria desapareciera del catálogo el aviso
+                    # sigue saliendo con el codigo crudo: perder el aviso
+                    # entero por no tener la etiqueta linda sería peor.
+                    categoria_label=labels.get(viejo.categoria, viejo.categoria),
+                    dia_semana=viejo.dia_semana,
+                    hora_inicio=viejo.hora_inicio,
+                    hora_fin=viejo.hora_fin,
+                ))
+
+        # Orden estable (día de la semana, hora de inicio) para que el aviso
+        # se lea como se lee un horario y no dependa del orden del SELECT.
+        solapes.sort(key=lambda s: (orden_dias[s.dia_semana], s.hora_inicio, s.horario_id))
+        return solapes
+
     def listar_ultimas_listas(self, limit: int = 5) -> list[UltimaListaDTO]:
         """Las últimas `limit` listas del club (horario + fecha), más
         recientes primero, sin autor -- ver §8 de
@@ -691,10 +760,11 @@ class AsistenciaServicio:
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
 
         horarios_de_la_categoria = self.repo_horario.listar(horario.categoria)
-        ya_asignados = {
-            a.horario_id
-            for a in self.repo_alumno_horario.listar_por_persona(datos.persona_id)
-        }
+        # Una sola lectura de las asignaciones previas: sus ids filtran lo que
+        # falta crear, y las filas completas (con `horario` ya cargado por el
+        # joinedload del repo) alimentan el aviso de solape del issue #731.
+        asignaciones_previas = self.repo_alumno_horario.listar_por_persona(datos.persona_id)
+        ya_asignados = {a.horario_id for a in asignaciones_previas}
         pendientes = [h for h in horarios_de_la_categoria if h.id not in ya_asignados]
         if not pendientes:
             raise OperacionInvalida(
@@ -704,6 +774,11 @@ class AsistenciaServicio:
                     f"cada horario de categoria={horario.categoria}"
                 ),
             )
+
+        # El solape se calcula ANTES de crear, contra las asignaciones que el
+        # alumno ya tenía: después del alta, `pendientes` también estaría en
+        # esa lista y cada horario nuevo se reportaría solapado consigo mismo.
+        solapamientos = self._detectar_solapamientos(pendientes, asignaciones_previas)
 
         # Devuelve los DTOs de las asignaciones recién creadas. Antes el
         # router relistaba el horario entero y tomaba `[-1]`: con el roster
@@ -720,6 +795,7 @@ class AsistenciaServicio:
             asignaciones=[self._a_detalle_dto(a) for a in nuevas],
             membresia_vencida=membresia_vencida,
             dias_vencida=dias_vencida,
+            solapamientos=solapamientos,
         )
 
     def desasignar_alumno_de_horario(

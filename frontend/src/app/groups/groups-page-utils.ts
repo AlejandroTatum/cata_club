@@ -7,7 +7,7 @@
 
 import { DIA_SEMANA_LABELS } from "@/app/attendance/attendance-utils";
 import type { HorarioGroup, HorarioGroupRow } from "@/lib/groups-utils";
-import type { AlumnoHorario } from "@/services/api";
+import type { AlumnoHorario, SolapeHorario } from "@/services/api";
 import type { DiaSemana } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -217,6 +217,43 @@ export function formatMembresiaVencidaWarning(
   }
   const unidad = diasVencida === 1 ? "día" : "días";
   return `${nombreCompleto} tiene la cuota vencida hace ${diasVencida} ${unidad}.`;
+}
+
+// ---------------------------------------------------------------------------
+// Overlapping schedules — issue #731 non-blocking warning
+// ---------------------------------------------------------------------------
+
+/** `"18:00:00"` → `"18:00"`. The backend sends `time`, the club reads hh:mm. */
+export function formatTime(timeStr: string): string {
+  const [h, m] = timeStr.split(":");
+  return `${h}:${m}`;
+}
+
+/**
+ * The advisory raised when the student just assigned already trains in a
+ * schedule that collides with the new one (issue #731).
+ *
+ * Belonging to several categorías is a real feature of this club — the owner
+ * was explicit that this must WARN and never block — so this sentence exists
+ * only to let whoever is assigning decide on the spot. That is why it names
+ * the other schedule (categoría, día, range) instead of saying "se
+ * superpone": an unnamed clash just sends the admin hunting.
+ *
+ * Empty string when nothing collides, so the caller raises no toast at all.
+ * "Figura" rather than "está asignado/a": the club's students are of both
+ * genders and the backend already words its own conflict message that way.
+ */
+export function formatSolapeHorarioWarning(
+  nombreCompleto: string,
+  solapamientos: readonly SolapeHorario[],
+): string {
+  if (solapamientos.length === 0) return "";
+  const descripciones = solapamientos.map((s) => {
+    const dia = DIA_LABELS[s.diaSemana] ?? s.diaSemana;
+    return `${s.categoriaLabel} (${dia} de ${formatTime(s.horaInicio)} a ${formatTime(s.horaFin)})`;
+  });
+  const verbo = solapamientos.length === 1 ? "se superpone" : "se superponen";
+  return `${nombreCompleto} ya figura en ${joinWithY(descripciones)}, que ${verbo} con este horario.`;
 }
 
 /**
