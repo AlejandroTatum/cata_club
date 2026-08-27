@@ -1,9 +1,11 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from datetime import date, time, datetime
 from typing import Optional
 
 from app.dominio.enums import EstadoAsistencia, DiaSemana
+from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
 from app.presentacion.schemas.base import ResponseBase
+from app.soporte_transversal.tiempo import hoy_club
 
 
 class HorarioCreateDTO(BaseModel):
@@ -118,6 +120,19 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     # el frontend nunca muestre un nombre sacado del navegador.
     registrado_por_id: Optional[int] = None
     registrado_por_nombre: Optional[str] = None
+
+    # Issue #663: computado, no persistido -- mismo criterio que
+    # `AsistenciaServicio.corregir_asistencia` (`antiguedad_dias >
+    # LIMITE_CORRECCION_ASISTENCIA_DIAS` rechaza, así que el límite exacto
+    # de 30 días todavía es `correctable=True`). El admin history/report ve
+    # esto ANTES de intentar corregir, en vez de enterarse recién con un 400
+    # de `PATCH /asistencias/{id}/corregir`. `hoy_club()` se resuelve en
+    # request-time (no al importar el módulo), igual que en el servicio.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def correctable(self) -> bool:
+        antiguedad_dias = (hoy_club() - self.fecha_entrenamiento).days
+        return antiguedad_dias <= LIMITE_CORRECCION_ASISTENCIA_DIAS
 
 
 # --- Issue #389, slice 2: corrección transaccional de una Asistencia -------

@@ -48,6 +48,12 @@ export interface BackendAsistencia {
   registradoPorId?: number | null;
   /** The taker's display name, already resolved by the backend. */
   registradoPorNombre?: string | null;
+  /** Server-computed 30-day correction window (issue #663) — see
+   *  `AttendanceRecord.correctable`'s own doc comment for why this travels
+   *  as a field instead of a client-side day-diff. Optional for the same
+   *  reason it is on `AttendanceRecord`: older fixtures/other consumers of
+   *  this shared backend shape may not set it. */
+  correctable?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +152,7 @@ export function buildAttendanceRecord(
     // justificativo instead of preserving it.
     justificativo: asistencia.justificativo ?? null,
     estadoJustificativo: asistencia.estadoJustificativo ?? null,
+    correctable: asistencia.correctable ?? false,
   };
 }
 

@@ -538,9 +538,19 @@ _HOY_CORRECCION = date(2026, 8, 15)
 
 def _congelar_hoy_asistencia(monkeypatch, hoy):
     """Fija el `hoy_club()` del servicio de asistencia para que la antigüedad
-    no dependa del reloj real del equipo que corre la suite."""
+    no dependa del reloj real del equipo que corre la suite.
+
+    Issue #663: `AsistenciaResponseDTO.correctable` hace el mismo cálculo,
+    pero en `presentacion.schemas.asistencia_schemas` -- un módulo con su
+    PROPIA referencia importada a `hoy_club` (nunca puede importar del
+    servicio, ver el comentario de `LIMITE_CORRECCION_ASISTENCIA_DIAS` en
+    `asistencia_servicio.py`). Congelar solo la del servicio dejaría a
+    `correctable` leyendo el reloj real y cualquier test que lo revise
+    quedaría a merced de la fecha en la que corre la suite."""
     import app.servicios_negocio.asistencia_servicio as asistencia_mod
+    import app.presentacion.schemas.asistencia_schemas as asistencia_schemas_mod
     monkeypatch.setattr(asistencia_mod, "hoy_club", lambda: hoy)
+    monkeypatch.setattr(asistencia_schemas_mod, "hoy_club", lambda: hoy)
 
 
 def _preparar_asistencia_para_corregir(client, fecha):
@@ -830,6 +840,61 @@ def test_admin_corrige_en_el_dia_30_permitido(client, monkeypatch):
         json={"estado": "AUSENTE", "motivo": "todavía en ventana"},
     )
     assert resp.status_code == 200, resp.text
+
+
+# --- Issue #663: la ventana de 30 días viaja en el DTO, no solo en el
+# rechazo del PATCH ------------------------------------------------------
+# El frontend necesita saber, ANTES de intentar corregir, si una fila todavía
+# admite corrección -- de lo contrario tendría que reimplementar el cálculo
+# de `LIMITE_CORRECCION_ASISTENCIA_DIAS` en TypeScript, un segundo lugar
+# donde ese número puede desalinearse del real. `AsistenciaResponseDTO`
+# expone `correctable` (computado, no persistido) para que el admin nunca
+# tenga que adivinar.
+def test_reporte_asistencia_marca_correctable_dentro_de_la_ventana(client, monkeypatch):
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+
+    resp = client.get(
+        "/api/v1/asistencias/reportes",
+        params={"persona_id": payload["persona_id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["correctable"] is True
+
+
+def test_reporte_asistencia_marca_no_correctable_fuera_de_la_ventana(client, monkeypatch):
+    """Día 31: el mismo tope que rechaza el PATCH (arriba) ya se ve en el
+    reporte, sin que el admin tenga que intentar corregir para enterarse."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=31))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+
+    resp = client.get(
+        "/api/v1/asistencias/reportes",
+        params={"persona_id": payload["persona_id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["correctable"] is False
+
+
+def test_reporte_asistencia_correctable_en_el_dia_30_permitido(client, monkeypatch):
+    """Contracara del día 31: el límite es `> 30`, no `>= 30` -- mismo
+    criterio que `test_admin_corrige_en_el_dia_30_permitido`."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=30))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+
+    resp = client.get(
+        "/api/v1/asistencias/reportes",
+        params={"persona_id": payload["persona_id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["items"][0]["correctable"] is True
 
 
 def test_corregir_asistencia_inexistente_da_404(client):

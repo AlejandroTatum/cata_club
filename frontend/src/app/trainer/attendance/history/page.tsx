@@ -72,6 +72,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getTotalPages,
   paginateRecords,
+  CORRECTION_WINDOW_CLOSED_REASON,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
@@ -110,20 +111,6 @@ const LIMITE_CORRECCION_DIAS = 30;
 function buildCorrectionHref(session: SessionSummary): string {
   return `/trainer/attendance${buildWizardQuery(session.horarioId, session.fecha, "mark-attendance")}`;
 }
-
-/**
- * El motivo del bloqueo, dicho entero (issue #373).
- *
- * Antes, pasados los 30 días, la celda quedaba vacía: el vencimiento se veía
- * exactamente igual que un error de carga, y el administrador no podía
- * distinguir "esta sesión ya no se corrige" de "algo se rompió". La regla no
- * cambió — sigue siendo la ventana de `LIMITE_CORRECCION_DIAS`, la misma que
- * el backend re-verifica en `PATCH /asistencias/{id}/corregir` (issue #389)
- * — lo que cambió es que ahora se nombra en vez de borrarse, el mismo
- * criterio que #312: un control bloqueado dice por qué.
- */
-const MOTIVO_CORRECCION_VENCIDA =
-  "La ventana de corrección de 30 días ya cerró para esta sesión.";
 
 /**
  * El ancla entre el control muerto y su motivo, una por fila.
@@ -254,7 +241,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   const renderCorrectionAction = (sessionRow: SessionSummary): React.ReactNode => {
     if (!esAdmin) return null;
     if (sessionRow.fecha >= corteCorreccion) return <Link href={buildCorrectionHref(sessionRow)} className={buttonClasses("secondary", "sm")}>Corregir</Link>;
-    return <div className="flex flex-col items-end gap-1.5"><Button variant="secondary" size="sm" disabled aria-describedby={buildReasonId(sessionRow)}>Corregir</Button><p id={buildReasonId(sessionRow)} className="max-w-[240px] text-balance text-xs text-ink-3">{MOTIVO_CORRECCION_VENCIDA}</p></div>;
+    return <div className="flex flex-col items-end gap-1.5"><Button variant="secondary" size="sm" disabled aria-describedby={buildReasonId(sessionRow)}>Corregir</Button><p id={buildReasonId(sessionRow)} className="max-w-[240px] text-balance text-xs text-ink-3">{CORRECTION_WINDOW_CLOSED_REASON}</p></div>;
   };
   const renderComposition = (sessionRow: SessionSummary): React.ReactElement => (
     <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[320px]"><SessionCompositionBar counts={sessionRow.counts} total={sessionRow.total} /><SessionCompositionCounts counts={sessionRow.counts} total={sessionRow.total} /></div>
