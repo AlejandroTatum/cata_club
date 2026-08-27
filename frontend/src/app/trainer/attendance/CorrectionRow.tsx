@@ -32,7 +32,7 @@ import { useState } from "react";
 import { Badge, Button } from "@/components/ui";
 import { getUserInitials } from "@/lib/auth-utils";
 import { formatDateTime } from "@/lib/format-utils";
-import { getAttendanceBadgeTone } from "@/app/attendance/attendance-utils";
+import { getAttendanceBadgeTone, CORRECTION_WINDOW_CLOSED_REASON } from "@/app/attendance/attendance-utils";
 import {
   ATTENDANCE_LABELS,
   UNMARKED,
@@ -70,10 +70,6 @@ interface AttendanceCorrectionRowProps {
   canCorrect: boolean;
   onCorrected: (personaId: string, patch: CorrectionPatch) => void;
 }
-
-/** Mirrors `history/page.tsx`'s own MOTIVO_CORRECCION_VENCIDA/aria-describedby
- *  idiom (issue #373): a blocked control names why, right next to it. */
-const MOTIVO_VENTANA_VENCIDA = "La ventana de corrección de 30 días ya cerró para esta sesión.";
 
 export default function AttendanceCorrectionRow({
   student,
@@ -202,7 +198,7 @@ export default function AttendanceCorrectionRow({
 
       {canCorrect && asistenciaId !== null && !withinWindow && (
         <p id={reasonId} className="text-xs text-ink-3">
-          {MOTIVO_VENTANA_VENCIDA}
+          {CORRECTION_WINDOW_CLOSED_REASON}
         </p>
       )}
 

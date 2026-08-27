@@ -64,6 +64,20 @@ export interface AttendanceRecord {
   justificativo?: string | null;
   /** Whether `justificativo` was accepted, when one exists. */
   estadoJustificativo?: boolean | null;
+  /** Whether an ADMINISTRADOR can still correct this row — the backend's
+   *  30-day window (`LIMITE_CORRECCION_ASISTENCIA_DIAS`,
+   *  `AsistenciaResponseDTO.correctable`, issue #663), computed server-side
+   *  and carried here so this screen never has to mirror that number in
+   *  TypeScript. Role is enforced separately (this page is
+   *  `ProtectedRoute allowedRoles={["admin"]}`) — this field is ONLY the
+   *  time-window half of "can correct".
+   *
+   *  Optional (not every fixture/consumer of `AttendanceRecord` sets it —
+   *  every REAL response does, since it comes off the shared
+   *  `AsistenciaResponseDTO`). `undefined` renders as "not correctable":
+   *  the same ante-la-duda-no-se-muestra default this codebase already
+   *  applies elsewhere rather than showing an action that might 400. */
+  correctable?: boolean;
 }
 
 /** Aggregate counts for today's attendance overview. */
@@ -90,6 +104,19 @@ export const DIA_SEMANA_LABELS: Record<DiaSemana, string> = {
   sab: "Sábado",
   dom: "Domingo",
 };
+
+/**
+ * Why a row past its correction window shows a disabled "Corregir" instead
+ * of nothing (issue #373's rule, quoted verbatim): a blocked control names
+ * why, right next to it. Hoisted here (issue #663) because this exact string
+ * already existed twice — `AttendanceCorrectionRow` (trainer roster) and
+ * `trainer/attendance/history/page.tsx` (session list) each declared their
+ * own copy of the same sentence. A third copy for this admin table would
+ * have made three; one shared constant means the wording can only drift by
+ * one edit missing two call sites instead of three drifting independently.
+ */
+export const CORRECTION_WINDOW_CLOSED_REASON =
+  "La ventana de corrección de 30 días ya cerró para esta sesión.";
 
 /** Human-readable labels for each attendance state, in Spanish. */
 export const ATTENDANCE_LABELS: Record<EstadoAsistencia, string> = {

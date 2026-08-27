@@ -12,6 +12,7 @@ from app.dominio.modelos import (
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
+from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -30,11 +31,14 @@ from app.soporte_transversal.tiempo import hoy_club
 
 _CODIGO_MAX_LEN = 20
 
-# Issue #262, recreado desde cero para la corrección explícita del issue
-# #389 (slice 2): el mecanismo previo (rol + este mismo tope) fue eliminado
-# del camino de `registrar_asistencia` en el slice 1. Mismo valor: el
-# criterio de negocio no cambió, solo el CAMINO por el que se corrige.
-LIMITE_CORRECCION_ASISTENCIA_DIAS = 30
+# `LIMITE_CORRECCION_ASISTENCIA_DIAS` ahora vive en `app.dominio.reglas_negocio`
+# (issue #663): `AsistenciaResponseDTO` (presentación) también necesita este
+# número para computar `correctable`, y `servicios_negocio` no puede
+# importar de `presentacion` (rompería el sentido de las capas) ni
+# `presentacion` de acá (ciclo: este módulo ya importa DTOs de
+# `presentacion.schemas.asistencia_schemas`). Importado arriba junto al
+# resto de `app.dominio`; `asistencia_servicio.LIMITE_CORRECCION_ASISTENCIA_DIAS`
+# sigue funcionando para cualquier código que ya lo referencie así.
 
 # `date.weekday()` (Python, Lunes=0..Domingo=6) -> `DiaSemana`. Usado por
 # `registrar_asistencia` para exigir que `fecha_entrenamiento` caiga

@@ -50,6 +50,7 @@ const asistencia = {
   horarioId: 1,
   registradoPorId: 7,
   registradoPorNombre: "Carlos Ruiz",
+  correctable: true,
 };
 const horario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
 
@@ -85,7 +86,7 @@ describe("GET /api/attendance/records", () => {
       {
         id: "1", fecha: "2026-07-18", horario: "Lunes 15:00 — 16:30", horarioId: 1, personaId: 3,
         estudiante: "Sofia Alumna", estado: "present", registradoPorId: 7, registradoPorNombre: "Carlos Ruiz",
-        justificativo: null, estadoJustificativo: null,
+        justificativo: null, estadoJustificativo: null, correctable: true,
       },
     ]);
   });

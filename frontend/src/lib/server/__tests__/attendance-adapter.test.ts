@@ -78,6 +78,7 @@ describe("buildAttendanceRecord", () => {
     horarioId: 1,
     registradoPorId: 7,
     registradoPorNombre: "Carlos Ruiz",
+    correctable: true,
   };
   const horario: BackendHorario = { id: 1, diaSemana: "LUNES", horaInicio: "15:00:00", horaFin: "16:30:00" };
 
@@ -94,7 +95,13 @@ describe("buildAttendanceRecord", () => {
       registradoPorNombre: "Carlos Ruiz",
       justificativo: null,
       estadoJustificativo: null,
+      correctable: true,
     });
+  });
+
+  it("defaults correctable to false when the backend omits it (issue #663)", () => {
+    const { correctable: _omitted, ...sinCorrectable } = asistencia;
+    expect(buildAttendanceRecord(sinCorrectable as BackendAsistencia, horario).correctable).toBe(false);
   });
 
   it("threads justificativo/estadoJustificativo through for the correction form (issue #389)", () => {

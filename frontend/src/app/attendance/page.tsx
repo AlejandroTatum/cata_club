@@ -25,6 +25,9 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import AttendanceFilters, { useAttendanceFilters } from "@/components/attendance/AttendanceFilters";
+import AttendanceCorrectionAction, {
+  type AttendanceCorrectionPatch,
+} from "@/app/attendance/AttendanceCorrectionAction";
 import { ArrowRight, UserCheck } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { fetchTrainingSchedules, fetchAttendanceRecords } from "@/services/api";
@@ -122,6 +125,25 @@ export default function AttendancePage(): React.ReactElement {
   const totalPages = useMemo(() => getTotalPages(records.length), [records]);
   const paginatedRecords = useMemo(() => paginateRecords(records, page), [records, page]);
 
+  // Issue #663: patches the corrected row in place, same idiom as the
+  // trainer roster's `handleRowCorrected` — a fresh `fetchAttendanceRecords`
+  // round trip is not needed to reflect what the PATCH response already
+  // confirmed.
+  const handleCorrected = useCallback((recordId: string, patch: AttendanceCorrectionPatch): void => {
+    setRecords((prev) =>
+      prev.map((record) =>
+        record.id === recordId
+          ? {
+              ...record,
+              estado: patch.estado,
+              justificativo: patch.justificativo,
+              estadoJustificativo: patch.estadoJustificativo,
+            }
+          : record,
+      ),
+    );
+  }, []);
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <AppShell
@@ -210,6 +232,14 @@ export default function AttendancePage(): React.ReactElement {
                     <TableHeaderCell>Horario</TableHeaderCell>
                     <TableHeaderCell>Estudiante</TableHeaderCell>
                     <TableHeaderCell>Estado</TableHeaderCell>
+                    {/* Issue #663: the door into correcting a row was
+                        reachable only from `/trainer/attendance`, a live
+                        roll call — not from this log, which is what an
+                        admin actually reads to find a mistake days later.
+                        Admin-only is already enforced by this page's
+                        `ProtectedRoute` above, so no second role check
+                        belongs in the column itself. */}
+                    <TableHeaderCell type="action">Acciones</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -222,6 +252,9 @@ export default function AttendancePage(): React.ReactElement {
                         <Badge tone={getAttendanceBadgeTone(record.estado)}>
                           {getAttendanceLabel(record.estado)}
                         </Badge>
+                      </TableCell>
+                      <TableCell type="action">
+                        <AttendanceCorrectionAction record={record} onCorrected={handleCorrected} />
                       </TableCell>
                     </TableRow>
                   ))}
