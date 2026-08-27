@@ -92,11 +92,26 @@ def _alumno(
     )
 
 
+# Issue #730. Este archivo prueba que un choque de identidad no divulgue CUÁL
+# campo chocó -- la ficha médica no participa de esa decisión. Se completa
+# por defecto para que las altas lleguen al detector de duplicados en vez de
+# morir antes, en la validación del DTO.
+_FICHA = dict(
+    tipo_sangre="O_POSITIVO", enfermedades=[],
+    contacto_emergencia="María Torres", telefono_emergencia="0991112233",
+)
+
+
+def _inscripcion(**kwargs) -> EnrollmentCreateDTO:
+    kwargs.setdefault("ficha_medica", dict(_FICHA))
+    return EnrollmentCreateDTO(**kwargs)
+
+
 # --- 1. Inscripción pública (POST /enrollment/, sin autenticar) -------------
 
 def test_inscripcion_cedula_de_representante_duplicada_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _inscripcion(
         representante=_representante(cedula=CEDULA_OCUPADA),
         alumno=_alumno(),
     )
@@ -107,7 +122,7 @@ def test_inscripcion_cedula_de_representante_duplicada_no_divulga(db_session):
 
 def test_inscripcion_cedula_de_alumno_duplicada_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _inscripcion(
         representante=_representante(),
         alumno=_alumno(cedula=CEDULA_OCUPADA),
     )
@@ -118,7 +133,7 @@ def test_inscripcion_cedula_de_alumno_duplicada_no_divulga(db_session):
 
 def test_inscripcion_correo_de_representante_duplicado_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _inscripcion(
         representante=_representante(correo=CORREO_OCUPADO),
         alumno=_alumno(),
     )
@@ -129,7 +144,7 @@ def test_inscripcion_correo_de_representante_duplicado_no_divulga(db_session):
 
 def test_inscripcion_correo_de_menor_duplicado_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _inscripcion(
         representante=_representante(),
         alumno=_alumno(correo=CORREO_OCUPADO, contrasenia="password8"),
     )
@@ -140,7 +155,7 @@ def test_inscripcion_correo_de_menor_duplicado_no_divulga(db_session):
 
 def test_autoinscripcion_correo_duplicado_no_divulga(db_session):
     _sembrar_persona_con_cuenta(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _inscripcion(
         alumno=_alumno(cedula=cedula_valida(451), fecha_nacimiento=date(2000, 1, 1)),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo=CORREO_OCUPADO, contrasenia="password8",
@@ -157,11 +172,11 @@ def test_cedula_y_correo_duplicados_son_indistinguibles(db_session):
 
     with pytest.raises(EntidadDuplicada) as por_cedula:
         EnrollmentServicio(db_session).enroll(
-            EnrollmentCreateDTO(representante=_representante(cedula=CEDULA_OCUPADA), alumno=_alumno())
+            _inscripcion(representante=_representante(cedula=CEDULA_OCUPADA), alumno=_alumno())
         )
     with pytest.raises(EntidadDuplicada) as por_correo:
         EnrollmentServicio(db_session).enroll(
-            EnrollmentCreateDTO(representante=_representante(correo=CORREO_OCUPADO), alumno=_alumno())
+            _inscripcion(representante=_representante(correo=CORREO_OCUPADO), alumno=_alumno())
         )
 
     assert por_cedula.value.mensaje == por_correo.value.mensaje
@@ -242,7 +257,7 @@ def test_panel_admin_conserva_el_mensaje_preciso_por_cedula(db_session):
         nombres="Nueva", apellidos="Cuenta", cedula=CEDULA_OCUPADA,
         fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
         correo="libre@example.com", contrasenia="password8",
-        tipo_cuenta="JUGADOR",
+        tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
     )
     with pytest.raises(EntidadDuplicada) as error:
         AdminCuentaServicio(db_session).crear_cuenta(datos)
@@ -256,7 +271,7 @@ def test_panel_admin_conserva_el_mensaje_preciso_por_correo(db_session):
         nombres="Nueva", apellidos="Cuenta", cedula="1798765432",
         fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
         correo=CORREO_OCUPADO, contrasenia="password8",
-        tipo_cuenta="JUGADOR",
+        tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
     )
     with pytest.raises(EntidadDuplicada) as error:
         AdminCuentaServicio(db_session).crear_cuenta(datos)

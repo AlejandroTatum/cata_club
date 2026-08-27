@@ -107,11 +107,16 @@ describe("hasCrearCuentaMedicalData", () => {
 });
 
 /**
- * Issue #643. This wizard keeps the medical record OPTIONAL as a whole —
- * `hasCrearCuentaMedicalData` is the gate, and an admin who fills nothing
- * creates no ficha at all, so no invalid row can result. What #643 tightens is
- * the other branch: once the record IS being written, it must be a complete
- * one, and `DESCONOCIDO` no longer counts as a blood type.
+ * Issue #643 tightened one branch: once the record IS being written, it must
+ * be a complete one, and `DESCONOCIDO` no longer counts as a blood type.
+ *
+ * Issue #730 closed the other branch, but only where it belongs. The record
+ * is no longer optional for the two account types that ARE students
+ * (`JUGADOR`, `MENOR`) — the backend now answers 422 to an alta without one,
+ * so a wizard that still let an admin skip the step would just fail at
+ * submit. It stays optional for `ENTRENADOR` and `REPRESENTANTE`, who never
+ * step onto the court: every case below built with `form()` is a coach, and
+ * that is why they still pass with no medical data at all.
  */
 describe("validateCrearCuentaForm — ficha médica (#643)", () => {
   const withMedical = (overrides: Partial<CrearCuentaFormData> = {}): CrearCuentaFormData =>
@@ -147,6 +152,52 @@ describe("validateCrearCuentaForm — ficha médica (#643)", () => {
 
   it("still creates no ficha, and demands nothing, when every medical field is empty", () => {
     expect(validateCrearCuentaForm(form())).toEqual([]);
+  });
+});
+
+describe("validateCrearCuentaForm — ficha médica obligatoria para alumnos (#730)", () => {
+  const alumno = (overrides: Partial<CrearCuentaFormData> = {}): CrearCuentaFormData =>
+    form({ accountType: "JUGADOR", fechaNacimiento: "1995-06-15", ...overrides });
+
+  it("rejects a JUGADOR with no medical data at all", () => {
+    expect(validateCrearCuentaForm(alumno())).toContain("El tipo de sangre es obligatorio.");
+  });
+
+  it("names the emergency contact too, not only the blood type", () => {
+    /*
+     * The gap issue #730 measured was an empty emergency contact, not an
+     * empty blood type — an admin told only about the blood type would fix
+     * half of it and submit again into the same 422.
+     */
+    expect(validateCrearCuentaForm(alumno()).join(" ")).toMatch(/contacto de emergencia/i);
+  });
+
+  it("rejects a MENOR with no medical data at all", () => {
+    const errors = validateCrearCuentaForm(
+      alumno({ accountType: "MENOR", fechaNacimiento: "2015-06-15", representanteId: 1 }),
+    );
+    expect(errors).toContain("El tipo de sangre es obligatorio.");
+  });
+
+  it("accepts a JUGADOR once the record is complete", () => {
+    expect(
+      validateCrearCuentaForm(
+        alumno({
+          tipoSangre: "O_POSITIVO",
+          contactoEmergencia: "Ana Pérez",
+          telefonoEmergencia: "0991234567",
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not demand a medical record from a REPRESENTANTE", () => {
+    /*
+     * The deliberate limit of the rule, mirroring `TIPOS_CUENTA_ALUMNO` in
+     * `admin_cuenta_schemas.py`. A representative does not train; asking them
+     * for a blood type would be the rule applied where it does not belong.
+     */
+    expect(validateCrearCuentaForm(form({ accountType: "REPRESENTANTE" }))).toEqual([]);
   });
 });
 

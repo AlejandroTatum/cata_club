@@ -133,7 +133,7 @@ def test_inicio_en_el_club_usa_el_dia_del_club(db_session, monkeypatch):
     import app.servicios_negocio.enrollment_servicio as enroll_mod
     from app.presentacion.schemas.enrollment_schemas import (
         EnrollmentAlumnoDTO, EnrollmentAntecedentesDTO, EnrollmentCreateDTO,
-        EnrollmentCredencialesDTO,
+        EnrollmentCredencialesDTO, EnrollmentFichaMedicaDTO,
     )
 
     monkeypatch.setattr(enroll_mod, "hoy_club", lambda: DIA_DEL_CLUB)
@@ -144,6 +144,12 @@ def test_inicio_en_el_club_usa_el_dia_del_club(db_session, monkeypatch):
         ),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo="lucas@example.com", contrasenia="password8",
+        ),
+        # Issue #730: obligatoria en el alta pública. Este test mide que
+        # `fecha_inicio_club` salga de `hoy_club()`, no la ficha.
+        ficha_medica=EnrollmentFichaMedicaDTO(
+            tipo_sangre="O_POSITIVO", enfermedades=[],
+            contacto_emergencia="María Torres", telefono_emergencia="0991112233",
         ),
         antecedentes=EnrollmentAntecedentesDTO(
             nivel_tecnico_alumno=NivelTecnicoAlumno.NIVEL_1,

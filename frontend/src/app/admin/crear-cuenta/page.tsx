@@ -54,6 +54,7 @@ import {
   crearCuentaFieldId,
   initialCrearCuentaFormData,
   hasCrearCuentaMedicalData,
+  requiresMedicalRecord,
   validateCrearCuentaStep,
   validateCrearCuentaForm,
   getCrearCuentaErrorMessage,
@@ -647,12 +648,18 @@ function CrearCuentaContent(): React.ReactElement {
   }
 
   function renderHealthStep(): React.ReactElement {
-    const medicalDetailsRequired = hasCrearCuentaMedicalData(formData);
+    // Issue #730: para un alumno la ficha ya no es opcional, así que los
+    // controles se marcan obligatorios desde que se abre el paso, no recién
+    // cuando el admin escribe algo. Para un entrenador o un representante
+    // sigue valiendo la regla vieja: todo o nada.
+    const alumnoRequiereFicha = requiresMedicalRecord(formData.accountType);
+    const medicalDetailsRequired = alumnoRequiereFicha || hasCrearCuentaMedicalData(formData);
     return (
       <div className="space-y-section">
         <p className="text-sm leading-relaxed text-ink-2">
-          Información médica de la persona. Si completa alguno de estos campos, el tipo de
-          sangre y el contacto de emergencia pasan a ser obligatorios.
+          {alumnoRequiereFicha
+            ? "Información médica del alumno. El tipo de sangre y el contacto de emergencia son obligatorios: son los datos que el club necesita si pasa algo en un entrenamiento."
+            : "Información médica de la persona. Si completa alguno de estos campos, el tipo de sangre y el contacto de emergencia pasan a ser obligatorios."}
         </p>
 
         {/*

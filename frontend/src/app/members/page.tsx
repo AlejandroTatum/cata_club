@@ -103,6 +103,12 @@ const FILTER_CHIPS: { flag: MemberFilterFlag; label: string }[] = [
   { flag: "all", label: "Todos" },
   { flag: "vencida", label: "Membresía vencida" },
   { flag: "pendiente", label: "Pago pendiente" },
+  // Issue #730. The stat tile above has counted this population since #362,
+  // but a count is not a worklist: an admin could read "42" and had no route
+  // from that number to the 42 rows behind it. The chip is that route — and
+  // from each row, the edit dialog's medical-record editor is where it gets
+  // fixed, so no new page was needed for either step.
+  { flag: "sin-emergencia", label: "Sin datos de emergencia" },
 ];
 
 // The per-state `PaymentStatusIcon` that used to prefix the payment badge is
