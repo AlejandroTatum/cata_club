@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
-import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS } from "./useNativeDialog";
+import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import StudentMembershipActions, { type MembresiaCallbacks } from "./StudentMembershipActions";
 import type { MemberAccount } from "./members-utils";
 
@@ -59,7 +59,7 @@ export default function PaymentsDialog({
         </button>
       </div>
 
-      <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
+      <div className={NATIVE_DIALOG_BODY_CLASS}>
         {account.estudiantes.map((student) => (
           <section key={student.id} className="rounded-ctl border border-line bg-paper p-4">
             {account.estudiantes.length > 1 && (

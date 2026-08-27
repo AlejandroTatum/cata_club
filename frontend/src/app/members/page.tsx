@@ -95,7 +95,7 @@ import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
-import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS } from "./useNativeDialog";
+import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
 import PaymentsDialog from "./PaymentsDialog";
 
@@ -622,7 +622,7 @@ function MemberEditDialog({
             {/* Scrollable body. Four groups, each declaring how it persists:
                 identity needs a button, roles and estado save themselves, and
                 each student's membership/ficha médica has its own save. */}
-            <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
+            <div className={NATIVE_DIALOG_BODY_CLASS}>
               <ModalSection title="Datos de la cuenta" saveMode="manual">
                 <AccountInfoSection account={account} />
               </ModalSection>

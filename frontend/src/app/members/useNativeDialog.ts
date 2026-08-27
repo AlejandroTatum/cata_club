@@ -36,6 +36,29 @@ export const NATIVE_DIALOG_SHELL_CLASS =
   "flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40";
 
 /**
+ * The scrolling BODY of those same three dialogs — one string for the same
+ * reason the shell above is one string. It was hand-copied verbatim into
+ * `PaymentsDialog`, `MedicalRecordDialog` and `MemberEditDialog`, which is
+ * how issue #706 was present in all three at once while only one was
+ * measured.
+ *
+ * `overscroll-contain` is that fix. Wheeling inside the body scrolls the body
+ * correctly, but once it reaches its end the gesture CHAINED to the page
+ * behind: measured on the QA build at 844x390, `window.scrollY` went 0 → 1020
+ * in Chromium and 0 → 590 in Firefox, and the issue reports 682 → 1297 in
+ * WebKit. The modal stays put, so nobody is trapped — but the page behind
+ * silently loses its position, which on a phone is disorienting on return.
+ *
+ * `contain` (not `none`): the boundary is what matters, and `none` would also
+ * kill the platform's own overscroll affordances inside the dialog for no
+ * additional benefit. `ChatWidget`'s sheet and `AttendanceRosterList` already
+ * carry the same utility, so this is the codebase's established spelling
+ * rather than a new convention.
+ */
+export const NATIVE_DIALOG_BODY_CLASS =
+  "flex-1 space-y-section overflow-y-auto overscroll-contain bg-canvas px-5 py-4";
+
+/**
  * Wires a native `<dialog>` the way every modal on the Miembros page behaves:
  * shown via `showModal()` (the browser traps Tab focus and renders the
  * `::backdrop` for us), closed on Escape, closed on a backdrop click, and
