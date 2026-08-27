@@ -516,6 +516,42 @@ const config: Config = {
         card: "14px",
         ctl: "10px",
       },
+      // The stacking bands, named. Issue #725 is what this map is for: the
+      // assistant's mobile sheet and the landing's sticky navbar were both
+      // written as bare literals — `z-40` and `z-index: 50` — in two files that
+      // never mention each other, so nothing recorded that a modal sheet is
+      // supposed to outrank page chrome. The navbar won, and on a phone it
+      // covered all 1936 pixels of the sheet's close button while the tap that
+      // should have dismissed the sheet followed the nav CTA to `/login`.
+      //
+      // A number can only be argued about against other numbers, so the bands
+      // are the argument:
+      //
+      //   `furniture` — floats that COEXIST with the page and must not cover
+      //     its chrome: the assistant launcher, the desktop corner card.
+      //   `chrome`    — sticky/fixed page furniture and the menus that hang off
+      //     it: the landing navbar, the app Header, dropdowns.
+      //   `modal`     — an overlay that OWNS the viewport. Above `chrome`,
+      //     because a surface with `aria-modal="true"` and no visible backdrop
+      //     is a trap the moment anything paints over its close control.
+      //   `toast`     — transient feedback. Deliberately above `modal`: a
+      //     confirmation the user cannot see is a confirmation that did not
+      //     happen.
+      //   `skip`      — the landing's skip link, above everything, because a
+      //     WCAG bypass block that something can cover is not a bypass block.
+      //
+      // Only `modal` is spent here so far; the other four name the literals
+      // already in the tree (`ToastContainer`'s `z-[60]`, `.landing-navbar`'s
+      // 50, `.landing-skip-link`'s 100) so the next person adding a layer reads
+      // the ladder instead of guessing one step above whatever they collided
+      // with. Migrating those call sites is not this fix.
+      zIndex: {
+        furniture: "40",
+        chrome: "50",
+        modal: "55",
+        toast: "60",
+        skip: "100",
+      },
       // Elevation. Every shadow is tinted with `coal` (19,19,22) instead of
       // pure black, so a card casts the same neutral the rest of the palette
       // is built from, and every one carries a real vertical offset — the

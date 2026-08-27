@@ -348,10 +348,30 @@ const CARD: PanelSkin = {
  * stays — it is the `@layer components` class that carries the surface — while
  * `rounded-none` and `border-0` overrule its radius and hairline from the
  * utilities layer, which sits above components in the cascade.
+ *
+ * `z-modal` and NOT the card's `z-furniture`, which is the whole of #725. The
+ * two panels shared one z-index because they are one component, but they are
+ * not one kind of thing: the card is a float that coexists with the page, and
+ * the sheet IS the page while it is up. At `z-40` the landing's sticky navbar
+ * (`z-index: 50`) painted straight through it — measured in WebKit at 390x844,
+ * 0 of the close button's 1936 pixels answered `elementFromPoint`, and the tap
+ * that should have closed the sheet followed the nav's "ENTRAR" link to
+ * `/login` with the sheet still open on top. On a phone that is a trap and not
+ * a cosmetic one: the sheet covers the viewport exactly, so there is no
+ * backdrop to tap; nothing in this component listens for a swipe; opening it
+ * pushes no history entry, so the hardware back button leaves the site rather
+ * than closing the sheet; and `HelpChatDock` withdraws the launcher to
+ * `pointer-events: none` while the panel is open, so it cannot be toggled
+ * shut. Escape works and is the only way out — which a phone does not have.
+ *
+ * The band and not a bigger number: `z-modal` sits above `chrome` and below
+ * `toast`, and `tailwind.config.ts` carries the reasoning for both edges. The
+ * corner card stays on `z-40` verbatim — `ChatWidget.test.tsx` pins that string
+ * character for character, and "desktop is untouched" is the point.
  */
 const SHEET: PanelSkin = {
   panel:
-    "fixed inset-x-0 top-[var(--chat-sheet-top,0px)] z-40 flex " +
+    "fixed inset-x-0 top-[var(--chat-sheet-top,0px)] z-modal flex " +
     "h-[var(--chat-sheet-height,100dvh)] flex-col card overflow-hidden rounded-none border-0 " +
     "text-left pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]",
   // The sheet's top edge IS the top of the screen, so the header clears the
