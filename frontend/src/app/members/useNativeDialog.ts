@@ -8,6 +8,34 @@ interface NativeDialogHandles {
 }
 
 /**
+ * The `<dialog>` shell class shared by `MedicalRecordDialog`, `PaymentsDialog`,
+ * and `MemberEditDialog` — previously hand-copied three times, which is how
+ * issue #659's mobile viewport bugs shipped identically in all three:
+ *
+ * - `100dvh` instead of `100vh`: on mobile Safari/Chrome, `vh` is measured
+ *   against the *layout* viewport, which sits under the browser's
+ *   address bar/toolbar chrome even when that chrome is visible, so a
+ *   `100vh`-based max-height allows the dialog to run under it. `dvh` tracks
+ *   the *dynamic* (currently visible) viewport instead — the same fix
+ *   `ChatWidget.tsx`'s sheet already uses for `--chat-sheet-height`.
+ * - `env(safe-area-inset-*)` on every edge: nothing previously kept the
+ *   dialog off a device notch or home-indicator strip, unlike `ChatWidget`,
+ *   which already subtracts these on all four sides.
+ * - `w-full` had no horizontal inset, so at a 320px viewport the dialog
+ *   touched both screen edges exactly; the width now reserves a 2rem gutter
+ *   on top of the safe-area insets, same idea as the height clamp.
+ *
+ * NOT a "add scrolling" fix — `MedicalRecordDialog` and `PaymentsDialog`
+ * already had `flex-1 … overflow-y-auto` bodies before this change; issue
+ * #659's "el cuerpo no ofrece scroll interno usable" premise did not hold.
+ */
+export const NATIVE_DIALOG_SHELL_CLASS =
+  "fixed inset-0 z-50 m-auto flex h-fit " +
+  "max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] " +
+  "w-[calc(100%-2rem-env(safe-area-inset-left)-env(safe-area-inset-right))] max-w-2xl " +
+  "flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40";
+
+/**
  * Wires a native `<dialog>` the way every modal on the Miembros page behaves:
  * shown via `showModal()` (the browser traps Tab focus and renders the
  * `::backdrop` for us), closed on Escape, closed on a backdrop click, and

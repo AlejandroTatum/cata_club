@@ -3215,3 +3215,118 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Issue #659's premise ("el cuerpo no ofrece scroll interno usable") does not
+ * hold: `MedicalRecordDialog` and `PaymentsDialog` already carry
+ * `flex-1 … overflow-y-auto` bodies, and all three dialogs already clamp to
+ * `max-h-[calc(100vh-2rem)] … flex-col` with `shrink-0` header/footer. The
+ * real mobile defects are viewport/safe-area ones:
+ *
+ * - `100vh` instead of `100dvh` — mobile browser chrome (address bar/toolbar)
+ *   makes a static `vh` unit taller than the actual visible viewport, so the
+ *   dialog's max-height allows it to run under the chrome. `ChatWidget.tsx`
+ *   already carries the `dvh` fix for its own sheet.
+ * - No `env(safe-area-inset-*)` anywhere in these three dialogs, unlike
+ *   `ChatWidget.tsx`, so nothing keeps the dialog off a notch or home
+ *   indicator.
+ * - `w-full` with no horizontal inset touches both screen edges at 320px.
+ * - `truncate` on the title `<h2>` in `MedicalRecordDialog` and
+ *   `PaymentsDialog` sits directly on a `justify-between` flex row with no
+ *   `min-w-0` — a flex item's `min-width` defaults to its content's intrinsic
+ *   (`white-space: nowrap`) width, so `truncate` never actually gets to
+ *   shrink; the row overflows instead, which can push the close button out
+ *   of reach. `MemberEditDialog`'s own header does not have this bug: its
+ *   `<h2>` sits inside `min-w-0` wrapper divs already (see its own comment
+ *   on the measured truncation width), so it is left untouched here.
+ *
+ * These assertions are className checks, not real layout — jsdom does not
+ * lay out `calc()`/`env()` or a native `<dialog>`'s box model, so there is no
+ * way to prove the visual fix here. What CAN be proven in jsdom is that the
+ * CSS declarations mobile Safari/Chrome need are actually present. Anything
+ * that needs real layout (does the header truly stay clear of a notch, does
+ * a long name truly stop the close button from being pushed off-screen)
+ * belongs in Playwright, not here.
+ */
+describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+    mockFetchFichaMedica.mockReset().mockResolvedValue({
+      tipoSangre: "DESCONOCIDO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+    mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+  });
+
+  function getRowButton(container: HTMLElement, name: RegExp): HTMLElement {
+    return within(container).getAllByRole("button", { name })[0];
+  }
+
+  it.each([
+    ["Ficha médica", /^ficha médica/i],
+    ["Pagos", /^pagos/i],
+    ["Editar", /^editar/i],
+  ])("sizes the %s dialog off the dynamic viewport instead of the static one", async (_label, triggerName) => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, triggerName));
+
+    const dialog = await screen.findByRole("dialog");
+
+    // `100vh` on mobile Safari/Chrome measures past the address bar/toolbar;
+    // `100dvh` tracks the browser chrome as it shows/hides.
+    expect(dialog.className).not.toContain("100vh");
+    expect(dialog.className).toContain("100dvh");
+  });
+
+  it.each([
+    ["Ficha médica", /^ficha médica/i],
+    ["Pagos", /^pagos/i],
+    ["Editar", /^editar/i],
+  ])("keeps the %s dialog clear of the notch/home-indicator safe area", async (_label, triggerName) => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, triggerName));
+
+    const dialog = await screen.findByRole("dialog");
+
+    expect(dialog.className).toContain("env(safe-area-inset-left)");
+    expect(dialog.className).toContain("env(safe-area-inset-right)");
+    expect(dialog.className).toContain("env(safe-area-inset-top)");
+    expect(dialog.className).toContain("env(safe-area-inset-bottom)");
+  });
+
+  it.each([
+    ["Ficha médica", /^ficha médica/i],
+    ["Pagos", /^pagos/i],
+  ])("lets the %s dialog title actually shrink instead of overflowing the header row", async (_label, triggerName) => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, triggerName));
+
+    const dialog = await screen.findByRole("dialog");
+    const title = within(dialog).getByRole("heading", { level: 2 });
+
+    // `truncate` alone does nothing on a flex item: without `min-w-0`, its
+    // min-width defaults to the un-wrapped text width, so the row overflows
+    // instead of ellipsizing — see the block comment above.
+    expect(title.className).toContain("truncate");
+    expect(title.className).toContain("min-w-0");
+  });
+});
