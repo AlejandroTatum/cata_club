@@ -187,6 +187,54 @@ export function addMonthsIso(isoDate: string, months: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Techo de meses de una cobertura (issue #666)
+// ---------------------------------------------------------------------------
+
+/**
+ * The real product cap on how many months a single coverage payment can buy
+ * — the same "techo defensivo, no una regla de producto" the backend already
+ * enforces with `Field(..., gt=0, le=12)` on both `PagoCreateDTO.meses` and
+ * `CoberturaBonificadaCreateDTO.meses` (`membresia_pago_schemas.py`), and the
+ * same value `student/payments/page.tsx` already clamps its month stepper to
+ * (`MESES_MAXIMO`).
+ *
+ * Issue #666 reported this as missing and its title asked to raise it to 36.
+ * It was never missing — it is 12 — and the product owner's explicit
+ * decision (see the PR that closes #666) was to leave it at 12 and instead
+ * fix the two admin forms that could still type an amount past it
+ * (`RegisterPaymentForm`, `RegularizarDeudaForm`).
+ */
+export const MAX_MESES_COBERTURA = 12;
+
+/**
+ * The exact message both admin forms show when a typed amount would cover
+ * more than `MAX_MESES_COBERTURA` months (issue #666's acceptance criteria,
+ * adjusted from the issue's own "36" to the real, owner-confirmed cap).
+ */
+export const MENSAJE_MESES_MAXIMO_EXCEDIDO =
+  `El pago no puede cubrir más de ${MAX_MESES_COBERTURA} meses. Reducí el monto ingresado.`;
+
+/**
+ * Whether an amount would buy more than `MAX_MESES_COBERTURA` months at a
+ * plan's monthly price — the guard both `RegisterPaymentForm` and
+ * `RegularizarDeudaForm` run before computing any date preview or
+ * submitting, so a typed 50,000,000 (issue #666's original report) can never
+ * reach `addMonthsIso` or the backend.
+ *
+ * Deliberately separate from `wholeMonthsFor`: that function stays unbounded
+ * (see its own docstring and tests) because it is also the socio flow's pure
+ * month-count arithmetic. `false` when the monthly price is unknown
+ * (`<= 0`) or either input is not finite — there is nothing to bound against,
+ * and the amount-is-a-whole-multiple check elsewhere already rejects those
+ * cases on its own terms.
+ */
+export function excedeMesesMaximo(amount: number, monthlyPrice: number): boolean {
+  if (!Number.isFinite(amount) || !Number.isFinite(monthlyPrice)) return false;
+  if (monthlyPrice <= 0) return false;
+  return amount > monthlyPrice * MAX_MESES_COBERTURA;
+}
+
+// ---------------------------------------------------------------------------
 // Total estimado antes de confirmar (issue #400, slice 06)
 // ---------------------------------------------------------------------------
 

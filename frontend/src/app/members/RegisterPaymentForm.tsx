@@ -22,6 +22,9 @@ import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
 import {
   addMonthsIso,
+  excedeMesesMaximo,
+  MAX_MESES_COBERTURA,
+  MENSAJE_MESES_MAXIMO_EXCEDIDO,
   voucherFileTypeError,
   wholeMonthsFor,
 } from "@/app/student/payments/payments-utils";
@@ -111,10 +114,28 @@ export default function RegisterPaymentForm({
       }
     }
 
+    /**
+     * Issue #666: validates BEFORE computing anything, not after. An amount
+     * that would buy more than `MAX_MESES_COBERTURA` months (50,000,000
+     * against a real plan, in the original report) used to sail straight
+     * into `calcEndDate`, which fed it to `addMonthsIso` and rendered a
+     * "Fin: 54109-xx-xx" preview — a real date shown for a request the
+     * backend was always going to reject. This short-circuits before that
+     * call ever runs, clearing the preview and surfacing the same message
+     * `validate()`/`handleSubmit()` would give on submit, without moving
+     * focus (this runs on every keystroke — see `errorAnnounceKey`'s own
+     * comment on why only discrete actions bump it).
+     */
     function handleMontoChange(value: string): void {
     setMonto(value);
-    if (!fechaInicio) return;
     const amount = parseFloat(value.replace(/[^0-9.]/g, "")) || 0;
+    if (amount > 0 && excedeMesesMaximo(amount, monthlyPrice)) {
+      setFechaFin("");
+      setError(MENSAJE_MESES_MAXIMO_EXCEDIDO);
+      return;
+    }
+    if (error === MENSAJE_MESES_MAXIMO_EXCEDIDO) setError(null);
+    if (!fechaInicio) return;
     setFechaFin(amount > 0 ? calcEndDate(new Date(fechaInicio + "T12:00:00"), amount) : "");
   }
 
@@ -127,7 +148,13 @@ export default function RegisterPaymentForm({
     const hoy = clubToday();
     setFechaInicio(calendarIsoDate(hoy));
     const amount = parseFloat(String(monto).replace(/[^0-9.]/g, "")) || 0;
-    setFechaFin(amount > 0 ? calcEndDate(hoy, amount) : "");
+    // Same guard as `handleMontoChange` — `monto` survives a close/reopen
+    // (only `fechaInicio`/`error`/etc. reset here), so reopening after
+    // typing an over-cap amount and hitting "Cancelar" must not resurrect
+    // the absurd preview date from before (issue #666).
+    setFechaFin(
+      amount > 0 && !excedeMesesMaximo(amount, monthlyPrice) ? calcEndDate(hoy, amount) : "",
+    );
   }
 
   /**
@@ -143,11 +170,16 @@ export default function RegisterPaymentForm({
    */
   function validate(montoNum: number): string | null {
     if (!montoNum || montoNum <= 0) return "El monto debe ser mayor a 0.";
-    if (wholeMonthsFor(montoNum, monthlyPrice) === null) {
+    const meses = wholeMonthsFor(montoNum, monthlyPrice);
+    if (meses === null) {
       return monthlyPrice > 0
         ? `El monto debe ser múltiplo de $${monthlyPrice}: registre uno o más meses completos.`
         : "No se pudo calcular a cuántos meses equivale este monto.";
     }
+    // Issue #666: re-checked here (not just in `handleMontoChange`) as the
+    // last gate before a request is built — `handleSubmit` reads `meses`
+    // straight from this same `wholeMonthsFor` call below.
+    if (meses > MAX_MESES_COBERTURA) return MENSAJE_MESES_MAXIMO_EXCEDIDO;
     if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias.";
     if (fechaInicio >= fechaFin) return "La fecha de inicio debe ser anterior a la fecha de fin.";
     if (!membresia.id) return "No se encontró la membresía.";
@@ -210,7 +242,21 @@ export default function RegisterPaymentForm({
       setVoucherFile(null);
       showSuccess("Pago registrado correctamente.");
     } catch (err) {
-      const msg = toUserMessage(err, "No se pudo registrar el pago.");
+      // Issue #666: a 422 on THIS payload (`meses`, `tipoPago`, `personaId`,
+      // `membresiaId`) can only realistically come from the backend's own
+      // defensive ceiling (`PagoCreateDTO.meses`, `gt=0, le=12`) — `validate()`
+      // above already re-derives `meses` from this same `monthlyPrice`, so
+      // the only way a request still overshoots it is a stale price between
+      // typing and submit. Pydantic's own detail for that ("...less than or
+      // equal to 12...") is English and never passes `toUserMessage`'s
+      // gate 2, so before this fix it fell through to a bare generic
+      // message. This fallback replaces that with one that actually names
+      // the limit; it never overrides a real, user-facing backend detail —
+      // `toUserMessage` only reaches for the fallback when there isn't one.
+      const status = err instanceof Error ? (err as Error & { status?: unknown }).status : null;
+      const fallback =
+        status === 422 ? MENSAJE_MESES_MAXIMO_EXCEDIDO : "No se pudo registrar el pago.";
+      const msg = toUserMessage(err, fallback);
       setError(msg);
       showError(msg);
     } finally {
@@ -259,8 +305,13 @@ export default function RegisterPaymentForm({
   // vigencia" preview below — `null` (not a whole month count, or no
   // monthlyPrice to divide by) simply hides the line instead of printing a
   // fraction, which is exactly the bug `wholeMonthsFor`'s docstring
-  // describes the old float division as having caused.
-  const previewMonths = wholeMonthsFor(Number(monto) || 0, monthlyPrice);
+  // describes the old float division as having caused. Past `MAX_MESES_COBERTURA`
+  // it hides the same way (issue #666): `handleMontoChange` already cleared
+  // `fechaFin` and set the over-cap error for this exact amount, so a
+  // "625.000 meses de vigencia" line would only contradict it.
+  const rawPreviewMonths = wholeMonthsFor(Number(monto) || 0, monthlyPrice);
+  const previewMonths =
+    rawPreviewMonths !== null && rawPreviewMonths <= MAX_MESES_COBERTURA ? rawPreviewMonths : null;
 
   return (
     <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
@@ -272,6 +323,11 @@ export default function RegisterPaymentForm({
             required
             step={monthlyPrice > 0 ? monthlyPrice : "0.01"}
             min="0"
+            // Issue #666: a semantic ceiling matching `MAX_MESES_COBERTURA` —
+            // `validate()`/`handleMontoChange()` are the real gate (a spinner
+            // `max` does not stop typed digits), but the attribute is still
+            // correct and gives assistive tech and browser UI the real bound.
+            {...(monthlyPrice > 0 ? { max: monthlyPrice * MAX_MESES_COBERTURA } : {})}
             value={monto}
             onChange={(e) => handleMontoChange(e.target.value)}
             className="mt-0.5 h-ctl w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink"

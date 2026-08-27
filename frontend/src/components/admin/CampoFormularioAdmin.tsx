@@ -29,6 +29,12 @@ interface CampoFormularioAdminProps {
    *  (`mesesComprados` is a whole number; every money field has centavos). */
   numberStep?: string;
   numberMin?: string;
+  /** Issue #666 — `RegularizarDeudaForm`'s "Monto" is the only caller that
+   *  passes this: a semantic ceiling matching the real 12-month coverage
+   *  cap (`MAX_MESES_COBERTURA`), computed from the plan's monthly price.
+   *  Same caveat as `numberMin`: a spinner `max` does not stop typed
+   *  digits, so the caller's own submit-time validation is the real gate. */
+  numberMax?: string;
   numberInputMode?: "decimal" | "numeric";
   /** Only `type="textarea"` cares — every motivo field has its own example text. */
   placeholder?: string;
@@ -47,6 +53,7 @@ export default function CampoFormularioAdmin({
   dateMax,
   numberStep = "0.01",
   numberMin = "0",
+  numberMax,
   numberInputMode = "decimal",
   placeholder,
   labelClassName = "block text-2xs text-ink-3",
@@ -69,7 +76,14 @@ export default function CampoFormularioAdmin({
       ) : (
         <input
           type={type}
-          {...(type === "number" ? { inputMode: numberInputMode, min: numberMin, step: numberStep } : {})}
+          {...(type === "number"
+            ? {
+                inputMode: numberInputMode,
+                min: numberMin,
+                step: numberStep,
+                ...(numberMax ? { max: numberMax } : {}),
+              }
+            : {})}
           {...(type === "date" && dateMax ? { max: dateMax } : {})}
           value={value}
           onChange={(e) => onChange(e.target.value)}

@@ -13,6 +13,9 @@ import {
   estimateTotal,
   formatFileSize,
   voucherFileTypeError,
+  MAX_MESES_COBERTURA,
+  MENSAJE_MESES_MAXIMO_EXCEDIDO,
+  excedeMesesMaximo,
   type PagoStatusFilter,
 } from "../payments-utils";
 import type { PagoPersona } from "@/services/api";
@@ -263,6 +266,42 @@ describe("wholeMonthsFor", () => {
 
   it("still resolves a large but safely representable multiple", () => {
     expect(wholeMonthsFor(2_500_000, 25)).toBe(100_000);
+  });
+});
+
+// Issue #666: the real product cap on a single coverage payment is (and stays)
+// 12 months — `wholeMonthsFor` above deliberately has none, because bounding
+// belongs to the two admin forms that turn a typed amount into a request
+// (`RegisterPaymentForm`, `RegularizarDeudaForm`), not to this pure month-count
+// arithmetic that the socio flow also relies on.
+describe("excedeMesesMaximo", () => {
+  it("accepts an amount that buys exactly the cap", () => {
+    expect(excedeMesesMaximo(25 * MAX_MESES_COBERTURA, 25)).toBe(false);
+  });
+
+  it("rejects an amount that buys one month past the cap", () => {
+    expect(excedeMesesMaximo(25 * (MAX_MESES_COBERTURA + 1), 25)).toBe(true);
+  });
+
+  it("rejects the amount from the original report (50,000,000 against a $80 plan)", () => {
+    expect(excedeMesesMaximo(50_000_000, 80)).toBe(true);
+  });
+
+  it("never claims an amount exceeds the cap when the monthly price is unknown", () => {
+    expect(excedeMesesMaximo(50_000_000, 0)).toBe(false);
+  });
+
+  it("treats a non-finite amount or price as not exceeding the cap", () => {
+    expect(excedeMesesMaximo(Number.NaN, 25)).toBe(false);
+    expect(excedeMesesMaximo(25, Number.NaN)).toBe(false);
+  });
+});
+
+describe("MENSAJE_MESES_MAXIMO_EXCEDIDO", () => {
+  it("names the real cap, not the 36 the original issue asked for", () => {
+    expect(MENSAJE_MESES_MAXIMO_EXCEDIDO).toBe(
+      "El pago no puede cubrir más de 12 meses. Reducí el monto ingresado.",
+    );
   });
 });
 

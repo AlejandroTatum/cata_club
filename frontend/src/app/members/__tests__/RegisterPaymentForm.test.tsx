@@ -228,3 +228,104 @@ describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inváli
     expect(screen.getByText("voucher.png")).toBeInTheDocument();
   });
 });
+
+// Issue #666: the reported "36-month" defect never involved a missing cap —
+// the real, owner-confirmed cap is (and stays) 12 months. What was actually
+// missing was a bound on THIS admin form's free-typed amount, which let
+// 50,000,000 compute a client-side preview date of the year 54109 before the
+// backend's own defensive `le=12` rejected it with a bare, generic 422.
+describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#666)", () => {
+  function open(): void {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+  }
+
+  it("caps the amount input's max at 12 months of the plan's monthly price", () => {
+    open();
+    // MEMBRESIA.monto is 25, so 12 months is 300.
+    expect(screen.getByRole("spinbutton", { name: /^Monto/ })).toHaveAttribute("max", "300");
+  });
+
+  it("never renders an absurd end date for the amount from the original report", () => {
+    open();
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
+      target: { value: "50000000" },
+    });
+
+    expect(screen.getByText("Fin:").nextSibling).toHaveTextContent("—");
+    expect(screen.queryByText(/54109/)).not.toBeInTheDocument();
+  });
+
+  it("shows the real 12-month limit, not the issue's 36, once the amount buys 13 months", () => {
+    open();
+    // 25 * 13 = 325.
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
+      target: { value: "325" },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "El pago no puede cubrir más de 12 meses. Reducí el monto ingresado.",
+    );
+    expect(screen.queryByText(/meses de vigencia/)).not.toBeInTheDocument();
+  });
+
+  it("clears the over-cap message and preview once the amount is corrected", () => {
+    open();
+    const monto = screen.getByRole("spinbutton", { name: /^Monto/ });
+    fireEvent.change(monto, { target: { value: "325" } });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    fireEvent.change(monto, { target: { value: "50" } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText(/2 meses de vigencia/)).toBeInTheDocument();
+  });
+
+  it("accepts exactly the 12-month boundary", () => {
+    open();
+    // 25 * 12 = 300.
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
+      target: { value: "300" },
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText(/12 meses de vigencia/)).toBeInTheDocument();
+    expect(screen.getByText("Fin:").nextSibling).not.toHaveTextContent("—");
+  });
+
+  it("never submits an over-cap amount even if the submit button is force-clicked", () => {
+    open();
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
+      target: { value: "50000000" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(mockRegistrarPago).not.toHaveBeenCalled();
+  });
+
+  it("does not resurrect a stale absurd preview after closing and reopening", () => {
+    open();
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
+      target: { value: "50000000" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(screen.getByText("Fin:").nextSibling).toHaveTextContent("—");
+  });
+
+  it("shows the real limit instead of a generic message when the backend still rejects a 422", async () => {
+    mockRegistrarPago.mockRejectedValue(
+      Object.assign(new Error("Input should be less than or equal to 12"), { status: 422 }),
+    );
+    open();
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El pago no puede cubrir más de 12 meses. Reducí el monto ingresado.",
+      );
+    });
+  });
+});
