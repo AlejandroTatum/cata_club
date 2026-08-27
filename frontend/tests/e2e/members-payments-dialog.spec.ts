@@ -1,13 +1,16 @@
 /**
- * The Pagos dialog's scroll containment — issue #706.
+ * The Pagos dialog's two layout contracts — issues #706 and #707.
  *
- * e2e and not jsdom because this is a question about RENDERED GEOMETRY:
- * jsdom computes no layout, so a wheel gesture there moves nothing.
- * `MembersPage.test.tsx` can assert that a class is present; only a real
- * engine can say the page behind stayed still.
+ * Both are e2e and not jsdom because both are questions about RENDERED
+ * GEOMETRY: jsdom computes no layout, so every height it reports is 0 and a
+ * wheel gesture there moves nothing. `MembersPage.test.tsx` can assert that a
+ * class is present; only a real engine can say a control is 24px tall or that
+ * the page behind stayed still.
  *
- * The runtime is fully mocked (no backend), so the numbers below are a
- * property of the CSS, not of whatever the QA database happens to hold.
+ * ONE `page.goto` covers both — CI runs this on a 4-vCPU runner and a second
+ * navigation buys nothing here, since both assertions read the same open
+ * dialog. The runtime is fully mocked (no backend), so the numbers below are
+ * a property of the CSS, not of whatever the QA database happens to hold.
  */
 import { expect, test, type Page, type Route } from "@playwright/test";
 
@@ -71,7 +74,7 @@ async function mockMembersRuntime(page: Page): Promise<void> {
   await page.route("**/api/personas/*/pagos**", (route: Route) => fulfillJson(route, { items: [], total: 0 }));
 }
 
-test("the Pagos dialog contains its own scrolling", async ({ page }) => {
+test("the Pagos dialog contains its own scrolling and keeps every control hittable", async ({ page }) => {
   // The viewport issue #706 was measured at: a phone held sideways, where the
   // members page behind the dialog is long enough to scroll.
   await page.setViewportSize({ width: 844, height: 390 });
@@ -82,6 +85,28 @@ test("the Pagos dialog contains its own scrolling", async ({ page }) => {
   await page.getByRole("button", { name: "Pagos de María González" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+
+  /*
+   * --- Issue #707: WCAG 2.2 SC 2.5.8, 24x24 ---------------------------------
+   *
+   * Every control in the dialog, measured, not a spot check of the two that
+   * were reported: "Historial de pagos" was 18.8px and "Regularizar deuda"
+   * 23px while their siblings were 26.8px, and fixing only those two would
+   * have left the same accident in place for the next control. Failure names
+   * the offenders and their heights so the report is actionable.
+   */
+  const undersized = await dialog
+    .locator("button:visible, a[href]:visible")
+    .evaluateAll((els) =>
+      els
+        .map((el) => ({
+          label: (el.getAttribute("aria-label") || el.textContent || "?").trim().replace(/\s+/g, " ").slice(0, 40),
+          height: Math.round(el.getBoundingClientRect().height * 10) / 10,
+        }))
+        .filter((c) => c.height > 0 && c.height < 24),
+    );
+
+  expect(undersized).toEqual([]);
 
   /*
    * --- Issue #706: the scroll stops at the dialog's edge ---------------------

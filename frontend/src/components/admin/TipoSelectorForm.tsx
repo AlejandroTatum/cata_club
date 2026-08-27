@@ -21,6 +21,7 @@ import { fetchTiposMembresia } from "@/services/api";
 import type { TipoMembresiaCatalogo } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface TipoSelectorFormProps {
   triggerLabel: string;
@@ -107,7 +108,7 @@ export default function TipoSelectorForm({
       <button
         type="button"
         onClick={() => void handleOpen()}
-        className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
+        className={`mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25 ${MIN_TARGET_CLASS}`}
       >
         <TriggerIcon size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         {triggerLabel}
@@ -140,7 +141,7 @@ export default function TipoSelectorForm({
           type="button"
           onClick={() => void handleSubmit()}
           disabled={!selectedTipoId || loading}
-          className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
+          className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
         >
           {loading ? (
             <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
@@ -152,7 +153,7 @@ export default function TipoSelectorForm({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
+          className={`inline-flex items-center rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper ${MIN_TARGET_CLASS}`}
         >
           Cancelar
         </button>
