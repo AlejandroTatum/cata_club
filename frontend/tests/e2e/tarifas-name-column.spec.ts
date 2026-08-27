@@ -24,7 +24,13 @@ import { E2E_BASE_URL } from "./e2e-target";
 
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
 
-/** The reproduction case, kept in the QA database under id 3. */
+/**
+ * The 53-character name that first showed the column overflowing. It is a
+ * fixture, not a database row: this spec serves `TARIFAS` below through
+ * `page.route`, so it never reads the QA database. The QA seed once carried
+ * this name under id 3 and no longer does — which is exactly why the case
+ * lives here, where a reseed cannot take it away.
+ */
 const LONG_NAME = "Mensual Competitivo Avanzado Categoria Sub-18 Federados";
 
 const TARIFAS = [
