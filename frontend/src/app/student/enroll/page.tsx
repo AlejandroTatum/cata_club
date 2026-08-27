@@ -26,6 +26,7 @@ import {
   type TarifaPublica,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
+import type { SessionOutcome } from "@/services/auth";
 import { backHrefForRole } from "@/lib/auth-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
@@ -135,6 +136,42 @@ function schoolTypeLabel(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Confirmation copy when the auto-login could not be confirmed (issue #717)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the confirmation screen says when the session round trip did not come
+ * back `authenticated`.
+ *
+ * Every sentence here opens by stating that the enrolment is REGISTERED and
+ * the account EXISTS, because at this point both are facts — the backend
+ * answered 201 and the student row is written. The only thing that failed is
+ * the session, and a message that let that read as "the enrolment failed"
+ * would push a parent to enrol the same child twice. That is the one risk
+ * this screen carries that the login screen does not, so "no repita la
+ * inscripción" is stated outright rather than implied.
+ *
+ * The two kinds are kept apart for the same reason #712 kept them apart on
+ * `/login`: a 503 says nothing about the browser's cookie jar, and telling
+ * someone to go change a cookie setting during a backend outage sends them
+ * to fix something that was never broken.
+ */
+function unconfirmedSessionNotice(kind: "unauthenticated" | "outage"): string {
+  if (kind === "outage") {
+    return (
+      "Su inscripción quedó registrada y su cuenta ya está creada, pero no pudimos confirmar el inicio " +
+      "de sesión porque el servicio no está disponible en este momento. No repita la inscripción: " +
+      "espere unos minutos e inicie sesión con su correo y su contraseña."
+    );
+  }
+  return (
+    "Su inscripción quedó registrada y su cuenta ya está creada, pero este navegador no guardó la sesión. " +
+    "Suele ocurrir cuando las cookies están bloqueadas o la ventana es de navegación privada. No repita la " +
+    "inscripción: habilite las cookies para este sitio e inicie sesión con su correo y su contraseña."
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -144,6 +181,32 @@ function EnrollWizard(): React.ReactElement {
   const [formData, setFormData] = useState<EnrollFormData>(initialFormData);
   const [submitting, setSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  /**
+   * Whether the auto-login that /api/enrollment performs actually took, as
+   * answered by the session round trip in `handleConfirm` (issue #717).
+   *
+   * `null` until an enrolment completes. The three states are the three the
+   * login screen already distinguishes since #711, for the same reasons:
+   * · `authenticated`   — the browser kept the cookies. Nothing changes.
+   * · `unauthenticated` — it did not (cookies blocked, private window,
+   *   Safari's ITP, a proxy stripping Set-Cookie, a `Secure` cookie over
+   *   plain http). The account EXISTS; only the session does not.
+   * · `outage`          — a 503 or a network failure on the confirmation,
+   *   which says nothing about the cookies and must not be blamed on the
+   *   browser. Same distinction #712 drew, and it has to survive here.
+   *
+   * The enrolment itself succeeded in all three: the 201 is already in
+   * hand when this is written. That is the one thing this screen must not
+   * get wrong — a message that reads as "it failed" would send someone to
+   * enrol their child a second time.
+   */
+  const [sessionOutcome, setSessionOutcome] = useState<SessionOutcome["kind"] | null>(null);
+  /**
+   * Deliberately `=== "authenticated"` and not `!== "unauthenticated"`: an
+   * `outage` is not a confirmation either. The screen may only claim a
+   * session it has an answer for.
+   */
+  const sessionConfirmed = sessionOutcome === "authenticated";
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
@@ -353,10 +416,19 @@ function EnrollWizard(): React.ReactElement {
         throw new Error("No se pudo completar la inscripción.");
       }
       // The backend auto-logs the new user in (HttpOnly cookies set by
-      // /api/enrollment); re-hydrate AuthContext now so "Ir a Mi Cuenta"
+      // /api/enrollment); re-hydrate AuthContext now so "Ir a mi cuenta"
       // below lands on an already-authenticated /student instead of bouncing
       // through /login — AuthProvider otherwise only hydrates once on mount.
-      await refreshSession();
+      //
+      // Issue #717: the ANSWER to that round trip is the only proof the
+      // browser kept the cookies, and this used to be thrown away. A 201
+      // from /api/enrollment carries `Set-Cookie`, but those cookies are
+      // `HttpOnly` and no code here can see whether the browser honoured
+      // it — so the confirmation announced "la sesión, iniciada" and sent
+      // people to a /student that bounced them straight back to /login.
+      // Same defect and same fix as #711 on the login screen.
+      const outcome = await refreshSession();
+      setSessionOutcome(outcome.kind);
       setSubmitting(false);
       setConfirmed(true);
       // The draft did its job — the data it held is now the server's record,
@@ -374,6 +446,7 @@ function EnrollWizard(): React.ReactElement {
     setFormData(initialFormData);
     resetToFirstStep();
     setConfirmed(false);
+    setSessionOutcome(null);
     setSubmitting(false);
     setSummaryReviewed(false);
     setFormErrors([]);
@@ -1142,6 +1215,22 @@ function EnrollWizard(): React.ReactElement {
                 </p>
               </div>
 
+              {/* The session that never was (issue #717). `role="alert"`, and
+                  on the CARD rather than in a toast, for the same reason the
+                  login screen holds its own copy of this message there: the
+                  remedy is in a browser settings panel, and a notice that
+                  fades cannot survive the trip. It sits ABOVE "Qué sigue"
+                  because it changes what the first of those steps is. */}
+              {sessionOutcome !== null && sessionOutcome !== "authenticated" && (
+                <p
+                  role="alert"
+                  data-testid="enroll-session-not-confirmed"
+                  className="rounded-ctl border border-state-bad bg-canvas px-3.5 py-2.5 text-sm text-ink-2"
+                >
+                  {unconfirmedSessionNotice(sessionOutcome)}
+                </p>
+              )}
+
               <div>
                 <p className="mb-section text-2xs font-bold uppercase text-ink-3">
                   Qué sigue
@@ -1155,7 +1244,14 @@ function EnrollWizard(): React.ReactElement {
                     screen spent seven asterisks on. */}
                 <ol className="space-y-section">
                   {[
-                    "Su cuenta ya está creada y la sesión, iniciada.",
+                    /* #717: the session half of this line is a CLAIM, and it
+                       is only true when the round trip above confirmed it.
+                       Unconfirmed, the account is still created — that half
+                       is a fact — and the next step is signing in, not
+                       enrolling again. */
+                    sessionConfirmed
+                      ? "Su cuenta ya está creada y la sesión, iniciada."
+                      : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
                     /* #348: "Mis pagos" no tiene ningún botón para el primer
                        pago -- registrarlo requiere una membresía que todavía
                        no existe, y crearla es una acción exclusiva del
@@ -1182,9 +1278,20 @@ function EnrollWizard(): React.ReactElement {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Link href="/student" className={buttonClasses("primary")}>
-                  Ir a mi cuenta
-                </Link>
+                {/* #717: `/student` is a protected route. Offering it without
+                    a confirmed session is offering a button whose only
+                    outcome is a silent bounce to /login — which is exactly
+                    what the reproduction produced. Unconfirmed, the honest
+                    destination IS /login. */}
+                {sessionConfirmed ? (
+                  <Link href="/student" className={buttonClasses("primary")}>
+                    Ir a mi cuenta
+                  </Link>
+                ) : (
+                  <Link href="/login" className={buttonClasses("primary")}>
+                    Iniciar sesión
+                  </Link>
+                )}
                 <Button variant="secondary" onClick={handleReset}>
                   Nueva inscripción
                 </Button>

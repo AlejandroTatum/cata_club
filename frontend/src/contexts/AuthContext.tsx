@@ -27,7 +27,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import type { AuthSession, LoginResult } from "@/services/auth";
+import type { AuthSession, LoginResult, SessionOutcome } from "@/services/auth";
 import { authService } from "@/services/auth";
 import { subscribeAuthFailure, discardInFlightRefresh, setCurrentMockRole } from "@/services/api";
 import { hydrateState } from "@/lib/auth-state";
@@ -59,8 +59,15 @@ export interface AuthContextValue {
    * login form itself (e.g. auto-login on /student/enroll), since
    * AuthProvider only mounts once at the root layout and otherwise keeps
    * stale (null) session state across client-side navigation.
+   *
+   * @returns The round-trip's own `SessionOutcome`, so a caller that needs
+   * to KNOW whether the cookies took can find out. Those cookies are
+   * `HttpOnly`, so a `Set-Cookie` on a 2xx is not evidence the browser kept
+   * them (issue #711 / #717): only this answer is. Returning it rather than
+   * `void` is what lets `/student/enroll` stop announcing a session it has
+   * no proof of. `outage` is NOT `unauthenticated` — see `SessionOutcome`.
    */
-  refreshSession: () => Promise<void>;
+  refreshSession: () => Promise<SessionOutcome>;
   /**
    * True when the INITIAL session check (mount hydration) hit an outage
    * (network failure or 5xx) instead of getting a real answer — see
@@ -148,20 +155,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentMockRole(session?.user.role ?? null);
   }, [session]);
 
-  const revalidate = useCallback(async () => {
-    if (loggingOutRef.current) return;
+  const revalidate = useCallback(async (): Promise<SessionOutcome> => {
+    // A logout is already under way, so there is no session to report and
+    // nothing to write into state — `unauthenticated` is the honest answer,
+    // and the one that keeps a caller from claiming a session either way.
+    if (loggingOutRef.current) return { kind: "unauthenticated" };
     const outcome = await authService.getSession();
-    if (loggingOutRef.current) return;
+    if (loggingOutRef.current) return outcome;
     // A transient outage (503 / network failure) must NOT be treated as a
     // logout — only a genuine "unauthenticated" result clears the session.
     // Issue #454: it also must not stay invisible — flag it so
     // `ConnectivityBanner` can tell the rest of the app.
     if (outcome.kind === "outage") {
       setPeriodicOutage(true);
-      return;
+      return outcome;
     }
     setPeriodicOutage(false);
     setSession(outcome.kind === "authenticated" ? outcome.session : null);
+    return outcome;
   }, []);
 
   // Hydrate session from the BFF on mount. DSH-6: an "outage" is NOT the

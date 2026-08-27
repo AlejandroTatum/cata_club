@@ -58,7 +58,8 @@ vi.mock("@/contexts/AuthContext", () => ({
     session: null,
     isAuthenticated: false,
     isLoading: false,
-    refreshSession: vi.fn(),
+    // #717: the wizard reads this outcome before claiming the auto-login took.
+    refreshSession: vi.fn().mockResolvedValue({ kind: "authenticated" }),
   }),
 }));
 
