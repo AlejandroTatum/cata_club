@@ -233,14 +233,17 @@ export class ApiClientError extends Error {
    * really said.
    */
   public readonly retryAfterSeconds: number | undefined;
+  /** The backend's structured validation location, when safely preserved by the BFF. */
+  public readonly validationLoc: string[] | undefined;
 
-  constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number) {
+  constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number, validationLoc?: string[]) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
     this.safe = safe;
     this.code = code;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.validationLoc = validationLoc;
   }
 }
 
@@ -453,24 +456,22 @@ async function request<T>(
       let message = GENERIC_FAILURE;
       let safe = false;
       let code: string | undefined;
+      let errorBody: unknown;
+      let validationLoc: string[] | undefined;
       try {
-        const errorBody: unknown = await response.json();
+        errorBody = await response.json();
         if (isApiErrorBody(errorBody)) {
-          message = errorBody.detail ?? errorBody.message ?? message;
-          // Strict `=== true` (issue #355): anything else — absent, `false`,
-          // a stray truthy non-boolean — must never mark a message safe.
+          // A structured 422 detail is intentionally not rendered; only its safe location is retained.
+          message = typeof errorBody.detail === "string" ? errorBody.detail : errorBody.message ?? message;
           safe = errorBody.mensaje_seguro === true;
-          // Only a non-empty string is a code. Anything else is "nobody said",
-          // which must stay `undefined` so callers fall back to the status.
-          if (typeof errorBody.code === "string" && errorBody.code.length > 0) {
-            code = errorBody.code;
-          }
+          if (typeof errorBody.code === "string" && errorBody.code.length > 0) code = errorBody.code;
+          validationLoc = parseValidationLoc(errorBody);
         }
       } catch {
         // ignore parse errors — use default message
       }
       const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("Retry-After"));
-      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds);
+      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc);
     }
 
     // 204 No Content never carries a body — calling response.json() on it
@@ -1121,12 +1122,20 @@ export async function fetchTarifas(): Promise<TarifaPublica[]> {
 
 function isApiErrorBody(
   value: unknown,
-): value is { message?: string; detail?: string; mensaje_seguro?: unknown; code?: unknown } {
+): value is { message?: string; detail?: string | unknown[]; mensaje_seguro?: unknown; code?: unknown; validation_loc?: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return (typeof body.message === "string" && body.message.length > 0) ||
-    (typeof body.detail === "string" && body.detail.length > 0);
+    (typeof body.detail === "string" && body.detail.length > 0) || Array.isArray(body.detail);
 }
+
+function parseValidationLoc(value: unknown): string[] | undefined {
+  if (!isApiErrorBody(value) || !Array.isArray(value.validation_loc)) return undefined;
+  return value.validation_loc.every((part): part is string => typeof part === "string")
+    ? value.validation_loc
+    : undefined;
+}
+
 
 function isEnrollmentResponse(value: unknown): value is EnrollmentResponse {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -1313,7 +1322,9 @@ export async function downloadBlob(endpoint: string, fallbackFilename: string): 
       try {
         const errorBody: unknown = await response.json();
         if (isApiErrorBody(errorBody)) {
-          message = errorBody.detail ?? errorBody.message ?? message;
+          message = typeof errorBody.detail === "string"
+            ? errorBody.detail
+            : errorBody.message ?? message;
           safe = errorBody.mensaje_seguro === true;
         }
       } catch (parseError: unknown) {

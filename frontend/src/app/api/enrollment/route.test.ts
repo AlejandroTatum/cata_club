@@ -129,6 +129,22 @@ describe("POST /api/enrollment", () => {
     expect(json.message).toMatch(/cédula/);
   });
 
+  it("preserves the first validation location from a backend 422", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({
+      detail: [{ loc: ["body", "credenciales_alumno", "correo"], msg: "value is not a valid email address" }],
+    }, 422));
+
+    const response = await POST(enrollRequest(validBody));
+    const json = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(json).toEqual(expect.objectContaining({
+      message: "No se pudo completar la inscripción.",
+      validation_loc: ["body", "credenciales_alumno", "correo"],
+    }));
+    expect(JSON.stringify(json)).not.toContain("value is not a valid email address");
+  });
+
   it("passes through a 429 rate-limit response from the backend", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Rate limit exceeded" }, 429));
 
