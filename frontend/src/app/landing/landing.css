@@ -26,6 +26,21 @@
   --landing-third-party-whatsapp: #25d366;
   --landing-third-party-facebook: #1877f2;
   --landing-third-party-instagram: #e1306c;
+  /* Trophy-wall (vitrina) tones: quiet text and neutral medal states on the
+     section's dark ground (--landing-brand-black). Distinct in both role and
+     value from --landing-text-muted-base, which is calibrated for the light
+     --landing-bg-base ground instead. The "-fill" pair is the darker shade
+     each medal's color-mix() background/border draws from; the plain token
+     is the lighter accent used for its text and year colour. */
+  --landing-vitrina-subtitle: #cfd4da;
+  --landing-vitrina-text-muted: #b9c0c8;
+  --landing-vitrina-photo-bg: #151515;
+  --landing-medal-plata: #d6dbe1;
+  --landing-medal-plata-fill: #c9ced5;
+  --landing-medal-bronce: #e0995a;
+  --landing-medal-bronce-fill: #cd7f32;
+  --landing-medal-part: #9aa2ab;
+  --landing-medal-pending: #7d848c;
 
   /* Semantic landing tokens: Option A, Deportivo Clasico. */
   --landing-background: var(--landing-bg-base);
@@ -254,24 +269,24 @@
 .landing-wins { background: var(--landing-brand-black); color: var(--landing-surface); }
 .landing-wins .landing-section-header h2 { color: var(--landing-surface); }
 .landing-wins .landing-eyebrow { color: var(--landing-highlight); }
-.landing-wins .landing-section-header p { color: #cfd4da; }
+.landing-wins .landing-section-header p { color: var(--landing-vitrina-subtitle); }
 .landing-palmares-toggle { display: flex; width: 100%; justify-content: flex-end; }
-.landing-palmares-toggle label { display: inline-flex; align-items: center; gap: 10px; color: #b9c0c8; font-size: 13px; font-weight: 700; letter-spacing: 0.4px; cursor: pointer; }
+.landing-palmares-toggle label { display: inline-flex; align-items: center; gap: 10px; color: var(--landing-vitrina-text-muted); font-size: 13px; font-weight: 700; letter-spacing: 0.4px; cursor: pointer; }
 .landing-palmares-toggle input { width: 18px; height: 18px; accent-color: var(--landing-action); cursor: pointer; }
 /* The "please fill this in" ask, shown whenever the demo toggle is off. Dark
    ground: a dashed highlight ring, the same idiom the pending rows use. */
 .landing-palmares-ask { display: flex; width: 100%; flex-direction: column; gap: 6px; padding: 20px 22px; border: 2px dashed color-mix(in srgb, var(--landing-highlight) 40%, transparent); border-radius: 14px; background: transparent; }
 .landing-palmares-ask b { color: var(--landing-highlight); font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; }
-.landing-palmares-ask span { color: #b9c0c8; font-size: 14.5px; line-height: 1.55; }
+.landing-palmares-ask span { color: var(--landing-vitrina-text-muted); font-size: 14.5px; line-height: 1.55; }
 /* The demo warning, restyled for the trophy wall's dark ground rather than the
    app-wide destructive alert (whose light red tokens were illegible on black). */
-.landing-demo-warning { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; background: color-mix(in srgb, var(--landing-surface) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 30%, transparent); color: #b9c0c8; font-size: 14px; font-weight: 600; line-height: 1.5; }
+.landing-demo-warning { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; background: color-mix(in srgb, var(--landing-surface) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 30%, transparent); color: var(--landing-vitrina-text-muted); font-size: 14px; font-weight: 600; line-height: 1.5; }
 .landing-demo-warning svg { width: 20px; height: 20px; flex: none; color: var(--landing-highlight); }
 .landing-demo-warning b { color: var(--landing-surface); font-weight: 800; }
 .landing-palmares { display: flex; width: 100%; flex-direction: column; gap: 10px; }
 .landing-palmares-row { display: grid; grid-template-columns: 210px minmax(0, 1fr) 124px; gap: 22px; align-items: center; width: 100%; padding: 11px 18px 11px 11px; border: 0; border-radius: 16px; background: color-mix(in srgb, var(--landing-surface) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 9%, transparent); transition: background-color 260ms ease, box-shadow 260ms ease; }
 .landing-palmares-row:hover { background: color-mix(in srgb, var(--landing-surface) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 34%, transparent); }
-.landing-palmares-photo { position: relative; aspect-ratio: 3 / 2; border-radius: 11px; overflow: hidden; background: #151515; }
+.landing-palmares-photo { position: relative; aspect-ratio: 3 / 2; border-radius: 11px; overflow: hidden; background: var(--landing-vitrina-photo-bg); }
 .landing-palmares-photo img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 620ms cubic-bezier(.22,1,.36,1); }
 .landing-palmares-row:hover .landing-palmares-photo img { transform: scale(1.05); }
 .landing-palmares-row.pending .landing-palmares-photo { opacity: 0.5; }
@@ -279,24 +294,24 @@
    medal's colour so a gold result reads gold before the pill does. */
 .landing-palmares-year { display: block; color: var(--landing-highlight); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(34px, 3.6vw, 52px); line-height: 0.9; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
 .landing-palmares-row:has(.landing-medal-oro) .landing-palmares-year { color: var(--landing-highlight); }
-.landing-palmares-row:has(.landing-medal-plata) .landing-palmares-year { color: #d6dbe1; }
-.landing-palmares-row:has(.landing-medal-bronce) .landing-palmares-year { color: #e0995a; }
-.landing-palmares-row:has(.landing-medal-part) .landing-palmares-year { color: #9aa2ab; }
-.landing-palmares-row.pending .landing-palmares-year { color: #7d848c; }
+.landing-palmares-row:has(.landing-medal-plata) .landing-palmares-year { color: var(--landing-medal-plata); }
+.landing-palmares-row:has(.landing-medal-bronce) .landing-palmares-year { color: var(--landing-medal-bronce); }
+.landing-palmares-row:has(.landing-medal-part) .landing-palmares-year { color: var(--landing-medal-part); }
+.landing-palmares-row.pending .landing-palmares-year { color: var(--landing-medal-pending); }
 .landing-palmares-body { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 7px; }
 .landing-palmares-body b { color: var(--landing-surface); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(15px, 1.5vw, 19px); line-height: 1.25; letter-spacing: 0.5px; text-transform: uppercase; text-wrap: balance; }
-.landing-palmares-body .landing-palmares-venue { color: #b9c0c8; font-size: 14px; line-height: 1.5; }
-.landing-palmares-row.pending .landing-palmares-body b, .landing-palmares-row.pending .landing-palmares-body .landing-palmares-venue { color: #7d848c; }
+.landing-palmares-body .landing-palmares-venue { color: var(--landing-vitrina-text-muted); font-size: 14px; line-height: 1.5; }
+.landing-palmares-row.pending .landing-palmares-body b, .landing-palmares-row.pending .landing-palmares-body .landing-palmares-venue { color: var(--landing-medal-pending); }
 .landing-medal { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 6px 14px 6px 10px; border-radius: 999px; font-family: var(--font-landing-barlow), sans-serif; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
 .landing-medal svg { width: 15px; height: 20px; flex: none; }
 /* The placement carries the metal in its own colour. Gold is the brand yellow
    already — the palette had the medal in it the whole time. */
 .landing-medal-oro { background: color-mix(in srgb, var(--landing-highlight) 16%, transparent); color: var(--landing-highlight); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 44%, transparent); }
-.landing-medal-plata { background: color-mix(in srgb, #c9ced5 14%, transparent); color: #d6dbe1; box-shadow: inset 0 0 0 1px color-mix(in srgb, #c9ced5 38%, transparent); }
-.landing-medal-bronce { background: color-mix(in srgb, #cd7f32 18%, transparent); color: #e0995a; box-shadow: inset 0 0 0 1px color-mix(in srgb, #cd7f32 46%, transparent); }
+.landing-medal-plata { background: color-mix(in srgb, var(--landing-medal-plata-fill) 14%, transparent); color: var(--landing-medal-plata); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-medal-plata-fill) 38%, transparent); }
+.landing-medal-bronce { background: color-mix(in srgb, var(--landing-medal-bronce-fill) 18%, transparent); color: var(--landing-medal-bronce); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-medal-bronce-fill) 46%, transparent); }
 /* Participación is not a medal — outlined and muted, no fill. */
-.landing-medal-part { background: transparent; color: #9aa2ab; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 20%, transparent); }
-.landing-medal-pending { background: transparent; color: #7d848c; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 20%, transparent); text-transform: none; }
+.landing-medal-part { background: transparent; color: var(--landing-medal-part); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 20%, transparent); }
+.landing-medal-pending { background: transparent; color: var(--landing-medal-pending); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 20%, transparent); text-transform: none; }
 
 .landing-motto { gap: 22px; padding: 84px 14vw; background: var(--landing-action); }
 .landing-motto .landing-halftone { mask-image: radial-gradient(circle at 4% 96%,var(--landing-brand-black),transparent 42%); }
