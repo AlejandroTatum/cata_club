@@ -467,7 +467,7 @@ describe("LandingPage", (): void => {
 
     const crest = paddle.querySelector(".landing-paddle-crest") as HTMLImageElement;
     expect(crest).not.toBeNull();
-    expect(crest.getAttribute("src")).toBe("/brand/cata-club-logo-avatar.png");
+    expect(crest.getAttribute("src")).toBe("/brand/cata-club-crest-256.png");
     // Decorative: the hero already names the club in text above it.
     expect(crest.getAttribute("alt")).toBe("");
   });
@@ -573,7 +573,7 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
     const logoImg = document.querySelector("a.landing-logo img");
     expect(logoImg).not.toBeNull();
-    expect(logoImg).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
+    expect(logoImg).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
     expect(logoImg?.getAttribute("alt")).toBe("");
   });
 
@@ -601,7 +601,7 @@ describe("LandingPage", (): void => {
     // Same crest asset the navbar already renders — no new generic icon.
     const crest = paddle.querySelector("img");
     expect(crest).not.toBeNull();
-    expect(crest).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
+    expect(crest).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
     expect(crest?.getAttribute("alt")).toBe("");
 
     // Decorative only: the club name must not be duplicated for screen

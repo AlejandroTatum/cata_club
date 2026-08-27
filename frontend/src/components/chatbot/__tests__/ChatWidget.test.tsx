@@ -206,11 +206,12 @@ describe("ChatWidget — design system", () => {
     // full `public/brand/cata-club-logo.jpeg` under plain `object-cover`
     // was tried and rejected on inspection: it's wider than tall, so the
     // browser only trims ~4% off each side and the wordmark band survives
-    // almost whole inside the circle. `cata-club-logo-avatar.png` is a
-    // deterministic (non-AI) crop of that same JPEG ending above the
-    // wordmark, with its background keyed to transparent. `object-cover`
+    // almost whole inside the circle. `cata-club-crest-256.png` is a
+    // pre-sized 256×256 derivative of a deterministic (non-AI) crop of that
+    // same JPEG ending above the wordmark, with its background keyed to
+    // transparent — served unoptimized, see issue #681. `object-cover`
     // (not `contain`) still fills the disc from that square source.
-    expect(avatar).toHaveAttribute("src", "/brand/cata-club-logo-avatar.png");
+    expect(avatar).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
     expect(avatar?.className).toContain("object-cover");
   });
 

@@ -432,27 +432,32 @@ export default function HelpChatDock(): React.ReactElement {
         style={clearance.lift ? { transform: `translateY(-${clearance.lift}px)` } : undefined}
       >
         {/*
-          Fixed `width`/`height` (128 — 2x the largest, `lg:h-16 w-16`, 64px
-          box), not `fill` + a pixel `sizes`. `sizes` only narrows Next's
-          generated srcset when it contains a `vw` unit (see
-          `next/dist/shared/lib/get-img-props.js`'s `getWidths`); a bare
-          `"128px"` matches no `vw` and silently falls back to EVERY
-          configured breakpoint — 16 widths up to 3840px for a 620×620
-          source (issue: flaky e2e crest test). `object-cover` on the
-          `<img>` itself still scales it down to fill the 40px box at the
-          `lg:` breakpoint's smaller size, exactly like the hero paddle
-          crest below does. The cropped `cata-club-logo-avatar.png`, not the
-          raw JPEG — see `ChatWidget`'s own comment for why the full logo's
-          wordmark band can't just be `object-cover`'d away. Its transparent
-          margin relies on this button's own `bg-white` (`LAUNCHER_CLASSES`
-          below) showing through instead of the JPEG's light-grey square.
+          `unoptimized`: this is `cata-club-crest-256.png`, a pre-sized
+          256×256 (23.6KB) derivative of `cata-club-logo-avatar.png` — see
+          issue #681. A real CI trace showed Next's `/_next/image` optimizer
+          can get one specific request/cache key stuck forever (`status: -1`,
+          confirmed across three separate fresh page loads on the same
+          server), and no client-side retry outran it. Serving this asset
+          unoptimized means no consumer ever asks the optimizer for it, so
+          that cache key never exists to get stuck. 256 already covers this
+          64px box (`lg:h-16 w-16`) at 4x, so there is no size left to ask
+          for — `width`/`height={128}` here are just the element's box hint
+          now, not a srcset lever; `object-cover` on the `<img>` itself still
+          scales it down to fill the 40px box at the smaller breakpoint,
+          exactly like the hero paddle crest below does. The cropped source
+          crop, not the raw JPEG — see `ChatWidget`'s own comment for why the
+          full logo's wordmark band can't just be `object-cover`'d away. Its
+          transparent margin relies on this button's own `bg-white`
+          (`LAUNCHER_CLASSES` below) showing through instead of the JPEG's
+          light-grey square.
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
           <Image
-            src="/brand/cata-club-logo-avatar.png"
+            src="/brand/cata-club-crest-256.png"
             alt=""
             width={128}
             height={128}
+            unoptimized
             className="h-full w-full object-cover"
           />
         </span>

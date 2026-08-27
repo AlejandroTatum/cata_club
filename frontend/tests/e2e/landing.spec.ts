@@ -17,14 +17,15 @@ import { test, expect } from "@playwright/test";
 test.describe("Landing page", () => {
   test("renders the navbar logo on a visibly light token-backed card", async ({ page }) => {
     await page.goto("/");
-    // The logo keeps its optimizer URL for the local PNG (normal) while the
-    // card behind it renders with real computed token styles: generous padding
-    // around the transparent crest and the light-gray surface. A transparent
-    // computed background (or 5px of padding) fails this.
+    // The logo is served unoptimized now (issue #681 — see `crest-no-optimizer.spec.ts`
+    // for why) while the card behind it still renders with real computed
+    // token styles: generous padding around the transparent crest and the
+    // light-gray surface. A transparent computed background (or 5px of
+    // padding) fails this.
     const img = page.locator("a.landing-logo img");
     await expect(img).toHaveCSS("padding", "8px");
     await expect(img).toHaveCSS("background-color", "rgb(249, 250, 251)");
-    await expect(img).toHaveAttribute("src", /\/_next\/image\?url=/);
+    await expect(img).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
   });
 
   test("stacks schedule list and panel without overflow on narrow phone widths", async ({ page }) => {
@@ -1029,7 +1030,11 @@ test.describe("Landing page", () => {
       await page.goto("/");
 
       const crest = page.locator("[data-serve-paddle] img");
-      await expect(crest).toHaveAttribute("src", /cata-club-logo-avatar/);
+      // `cata-club-crest-256.png`, not `.../_next/image?url=...`: issue #681,
+      // see the "never asks the image optimizer" lock below this test — this
+      // is the plain static asset path, unwrapped, because that lock is what
+      // keeps this asset off the one route that was ever proven to hang.
+      await expect(crest).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
 
       // `toBeVisible` only proves CSS visibility. The bytes have to have
       // arrived before `naturalWidth` means anything, or a lazy image reports 0

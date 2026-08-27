@@ -49,6 +49,26 @@ interface ValueCardProps {
  */
 const ENROLL_HREF = "/student/enroll";
 
+/**
+ * The club crest, everywhere it appears on this page (navbar, hero paddle,
+ * Motto paddle) — see issue #681. A real CI trace proved Next's built-in
+ * `/_next/image` optimizer can get one specific request/cache-key stuck
+ * forever (`status: -1`, no response, ever — confirmed across three separate
+ * fresh page loads in the same server process), which no client-side retry
+ * can outrun. The fix is not to survive that hang but to never trigger it:
+ * this asset is served `unoptimized`, so no consumer ever asks the
+ * optimizer for it, so the poisonable cache key never gets created.
+ *
+ * `cata-club-crest-256.png` is a pre-sized 256×256 derivative of the source
+ * `cata-club-logo-avatar.png` (620×620, 340KB) — see the crest test lock in
+ * `landing.spec.ts` for why 256 covers every rendered size on this page
+ * (largest is the navbar at up to 84 CSS px) at up to ~3x density. 23.6KB
+ * vs the source's 340KB: smaller than what the optimizer itself used to
+ * hand back for the sizes this page actually rendered, without asking it
+ * for anything at all.
+ */
+const CREST_SRC = "/brand/cata-club-crest-256.png";
+
 function Stars(): React.ReactElement {
   return (
     <span className="landing-stars" aria-hidden="true">
@@ -75,7 +95,7 @@ function Navbar(): React.ReactElement {
   return (
     <nav className="landing-navbar" aria-label="Navegación principal">
       <a className="landing-logo" href="#inicio" aria-label="Cata Club, inicio">
-        <Image src="/brand/cata-club-logo-avatar.png" alt="" width={84} height={84} />
+        <Image src={CREST_SRC} alt="" width={84} height={84} unoptimized />
         <span className="landing-display"><small>TENIS DE MESA</small>Cata Club</span>
       </a>
       <div className="landing-nav-links">
@@ -111,15 +131,11 @@ function Hero(): React.ReactElement {
           standing square on the face IS the impact, so the still frame states
           the same thing the animation does. */}
       <span className="landing-paddle landing-hero-serve-paddle" aria-hidden="true" data-serve-paddle>
-        {/* 84 rather than the Motto paddle's 62, though CSS sizes this to ~46px:
-            these numbers pick the srcset, not the rendered box. At 62 the crest
-            asks the optimizer for `w=64`/`w=128` — a transform of a 340KB PNG
-            that nothing else above the fold needs. At 84 it asks for the exact
-            URLs the navbar lockup is already fetching, so the hero adds no new
-            above-the-fold image work at all, and the face gets a denser source
-            into the bargain. The Motto crest stays at 62: it is below the fold,
-            loads lazily, and blocks nothing. */}
-        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={84} height={84} />
+        {/* `unoptimized`, same asset and same reason as the navbar lockup
+            above (see `CREST_SRC`) — no `/_next/image` request means no
+            optimizer work to size at all, so 84 here is just the element's
+            own box hint, not a srcset lever. */}
+        <Image className="landing-paddle-crest" src={CREST_SRC} alt="" width={84} height={84} unoptimized />
         <i />
       </span>
       {/* No brand mark here. The navbar lockup sits directly above this copy
@@ -247,7 +263,7 @@ function Motto(): React.ReactElement {
     <section className="landing-section landing-motto" aria-label="Únete al club" data-motion-section data-motto data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
       <span className="landing-paddle" data-motto-paddle aria-hidden="true">
-        <Image className="landing-paddle-crest" src="/brand/cata-club-logo-avatar.png" alt="" width={62} height={62} />
+        <Image className="landing-paddle-crest" src={CREST_SRC} alt="" width={62} height={62} unoptimized />
         <i />
       </span>
       <p className="landing-motto-lead" data-motto-copy>Cada entrenamiento es una oportunidad para superarte.</p>
