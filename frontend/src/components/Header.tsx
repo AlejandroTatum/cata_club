@@ -289,6 +289,11 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
     return null;
   }
 
+  const isPublicLegalRoute = ["/terminos", "/privacidad", "/permiso-imagen-fetm"].includes(pathname);
+  if (isPublicLegalRoute) {
+    return <InstitutionalHeader pathname={pathname} />;
+  }
+
   // Which routes own their chrome lives in `lib/shell-routes.ts` and is
   // PREFIX-based. It used to be an exact-match Set right here, so chrome
   // flipped mid-flow: `/student` had the sidebar while `/student/add-dependent`,

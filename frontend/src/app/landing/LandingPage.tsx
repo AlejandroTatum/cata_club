@@ -400,6 +400,7 @@ function Footer(): React.ReactElement {
         </div>
         <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>
         <nav aria-label="Nosotros"><h2>Nosotros</h2><a href="#nosotros">Misión y Visión</a><a href="#valores">Valores</a><a href="#galeria">Galería</a><a href="#contacto">Ubicación</a></nav>
+        <nav aria-label="Información legal"><h2>Información legal</h2><Link href="/terminos">Términos de uso</Link><Link href="/privacidad">Aviso de privacidad</Link><Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link></nav>
       </div>
       <div className="landing-footer-bottom">© {new Date().getFullYear()} Cata Club · Tenis de Mesa. Todos los derechos reservados.</div>
     </footer>
