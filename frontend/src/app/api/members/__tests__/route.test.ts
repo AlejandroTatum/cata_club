@@ -475,6 +475,45 @@ describe("GET /api/members", () => {
       expect(student.membresia.montoAdeudado).toBe(90);
     });
 
+    /*
+     * Issue #713. The route decides WHICH ids go into the bulk query, and it
+     * has to ask the same question the screen asks. An INACTIVA membership
+     * leaves this route as `estado: "vencida"`, so omitting it from the query
+     * hands the dialog a vencida whose debt was never requested — which is
+     * exactly what "Estado de deuda no disponible" was reporting.
+     */
+    const membresiaInactiva = { ...membresia, estado: "INACTIVA" };
+
+    it("includes an INACTIVA membership in the bulk debt query, because it is served as vencida", async () => {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
+        .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
+        .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
+        .mockResolvedValueOnce(jsonResponse({ items: [membresiaInactiva], total: 1, skip: 0, limit: 200 })) // /membresias/
+        .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(
+          jsonResponse([
+            { membresiaId: 77, mesesAdeudados: 0, ultimaCoberturaFin: null, montoMensual: "25.00" },
+          ]),
+        ); // /membresias/deuda/bulk
+
+      const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+      const bulkCalls = urls.filter((url) => url.includes("/membresias/deuda/bulk"));
+      // The call is made at all — before this fix it never was for INACTIVA…
+      expect(bulkCalls).toHaveLength(1);
+      expect(bulkCalls[0]).toContain("membresia_ids=77");
+
+      const student = body.accounts[0].estudiantes[0];
+      expect(student.membresia.estado).toBe("vencida");
+      // …and the answer reaches the dialog, so it stops degrading.
+      expect(student.membresia.mesesAdeudados).toBe(0);
+      expect(student.membresia.montoAdeudado).toBe(0);
+    });
+
     it("degrades gracefully (no debt fields) when the bulk debt fetch fails", async () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/

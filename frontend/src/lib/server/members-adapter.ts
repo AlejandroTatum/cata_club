@@ -52,6 +52,7 @@
 import type { EstadoMembresia } from "@/types/domain";
 import type { MemberAccount, MemberStudentSummary, PaymentStatus } from "@/app/members/members-utils";
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoPago, type BackendMembresia, type BackendTipoMembresia } from "@/lib/server/payments-adapter";
+import { readsAsVencida } from "@/lib/membership-status";
 import type { BackendPagoListItem } from "@/lib/server/payments-adapter";
 
 // ---------------------------------------------------------------------------
@@ -151,15 +152,26 @@ function buildMemberStudentSummary(
   const tipo = membresia ? tipoById.get(membresia.tipoMembresiaId) : undefined;
 
   /*
-   * Issue #326: overdue amount + months, VENCIDA memberships only. The
-   * multiplication (`mesesAdeudados * montoMensual`) is pure presentation
-   * arithmetic on two numbers the backend already computed — see the
-   * module's DeudaBulkItem doc comment; the day-15/16 debt formula itself
+   * Issue #326: overdue amount + months, for the memberships the admin reads
+   * as vencidas. The multiplication (`mesesAdeudados * montoMensual`) is pure
+   * presentation arithmetic on two numbers the backend already computed — see
+   * the module's DeudaBulkItem doc comment; the day-15/16 debt formula itself
    * never runs here. Omitted (not fabricated as zero) when the bulk lookup
    * didn't resolve this membresiaId — same degrade-gracefully convention as
    * `sinDatosEmergencia`'s ficha-médica lookup below.
+   *
+   * Issue #713: this predicate MUST stay the same one `route.ts` uses to
+   * build the bulk query, and both must be `readsAsVencida` rather than
+   * `=== "VENCIDA"` — `estado` is written out below through
+   * `MEMBERSHIP_STATUS_BY_ESTADO`, which folds INACTIVA into `"vencida"` too.
+   * Attaching on the narrow enum while EMITTING the wide bucket is what left
+   * every never-paid membership reaching the dialog as a `"vencida"` with no
+   * `mesesAdeudados`, which is precisely the "Estado de deuda no disponible"
+   * the admin was shown for a debt the backend answers.
    */
-  const deuda = membresia?.estado === "VENCIDA" ? deudaByMembresiaId.get(membresia.id) : undefined;
+  const deuda = membresia && readsAsVencida(membresia.estado)
+    ? deudaByMembresiaId.get(membresia.id)
+    : undefined;
 
   return {
     id: String(persona.id),

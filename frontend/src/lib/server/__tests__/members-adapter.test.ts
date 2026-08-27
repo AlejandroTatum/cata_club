@@ -294,6 +294,37 @@ describe("buildMemberAccounts", () => {
       expect(student?.membresia?.montoAdeudado).toBeUndefined();
     });
 
+    /*
+     * Issue #713. An INACTIVA membership is EMITTED as `estado: "vencida"`
+     * (`MEMBERSHIP_STATUS_BY_ESTADO` folds both backend estados into that one
+     * bucket), so it must be treated as a vencida HERE too. Attaching on
+     * `=== "VENCIDA"` while emitting the wider bucket is what made the Pagos
+     * dialog say "Estado de deuda no disponible" for 29 of the 45 rows it
+     * showed as vencidas on QA — every one of them a membership whose debt
+     * `GET /membresias/{id}/deuda` answers `200 {"mesesAdeudados":0}`.
+     */
+    const membresiaInactiva: BackendMembresia = { ...membresia, estado: "INACTIVA" };
+
+    it("attaches debt for an INACTIVA membership, which is emitted as vencida too", () => {
+      const accounts = buildMemberAccounts(
+        [parent, child],
+        new Map([[3, pago]]),
+        new Map([[100, membresiaInactiva]]),
+        new Map(),
+        new Map([[5, tipo]]),
+        new Set(),
+        new Map([[100, { mesesAdeudados: 0, montoMensual: 25 }]]),
+      );
+
+      const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
+      // The row reads as vencida to the screen…
+      expect(student?.membresia?.estado).toBe("vencida");
+      // …so the debt it reads must be present, and zero is a REAL answer here
+      // (never paid, no coverage yet) — not the absence that means "unknown".
+      expect(student?.membresia?.mesesAdeudados).toBe(0);
+      expect(student?.membresia?.montoAdeudado).toBe(0);
+    });
+
     it("does NOT attach debt fields for an ACTIVA membership even if present in the bulk map", () => {
       // The bulk map is keyed by membresiaId and could in principle carry a
       // stale/irrelevant entry; only a VENCIDA membership ever shows debt.

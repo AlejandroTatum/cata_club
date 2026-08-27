@@ -16,3 +16,23 @@ export const MEMBERSHIP_STATUS_BY_ESTADO: Record<BackendEstadoMembresia, Members
   VENCIDA: "vencida",
   INACTIVA: "vencida",
 };
+
+/**
+ * Whether a backend estado is one of the TWO this module folds into the
+ * single `"vencida"` bucket above (issue #713).
+ *
+ * The map is many-to-one, and that is the whole reason this predicate has to
+ * exist. Anything that PRODUCES data for a row must ask the same question the
+ * screen asks when it READS that row — and the screen only ever sees
+ * `"vencida"`, never the backend enum. Hardcoding `estado === "VENCIDA"` on
+ * the producing side silently excludes INACTIVA, so every "membership created
+ * but never paid" row reached the admin as a `"vencida"` the producer had
+ * skipped: the Pagos dialog then reported "Estado de deuda no disponible" for
+ * 29 of the 45 memberships it showed as vencidas, while
+ * `GET /membresias/{id}/deuda` answered `200 {"mesesAdeudados":0}` for every
+ * one of them. Derived from the map rather than written out as a second list,
+ * so a fourth estado cannot be added to the bucket and forgotten here.
+ */
+export function readsAsVencida(estado: BackendEstadoMembresia): boolean {
+  return MEMBERSHIP_STATUS_BY_ESTADO[estado] === "vencida";
+}
