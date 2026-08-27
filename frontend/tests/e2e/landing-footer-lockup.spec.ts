@@ -78,7 +78,15 @@ test.describe("footer lockup never requests the image optimizer (issue #710)", (
     // 176 real pixels into a 52 CSS px box: 3.4x, so the mark stays crisp on
     // every mainstream density without the optimizer resizing anything.
     expect(state.naturalWidth).toBe(176);
-    expect(state.renderedWidth / state.renderedHeight).toBeCloseTo(1, 1);
+    // 56x52, measured identical on the pre-fix tree: CSS pins the height at
+    // 52px and `width: auto` takes the ratio from the file, and the
+    // derivative keeps the source's 1080x996 shape (1.086 vs 1.084). The box
+    // does not move, which is why this needed no CSS change.
+    expect(state.renderedHeight).toBe(52);
+    expect(state.renderedWidth).toBe(56);
+    // 176 real pixels into that box is 3.1x, so the mark stays crisp on every
+    // mainstream density without the optimizer resizing anything — and denser
+    // than the 64px the optimizer was handing back at DPR 1.
     expect(state.naturalWidth / state.renderedWidth).toBeGreaterThanOrEqual(3);
   });
 });
