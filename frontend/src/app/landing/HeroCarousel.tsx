@@ -12,6 +12,34 @@ export interface HeroSlideChangeDetail {
 }
 
 /**
+ * How many slides, counted from the first, are released to the network.
+ *
+ * The inactive slides are fully transparent and fully clipped (`landing.css`
+ * writes `opacity: 0` and `clip-path: inset(0 0 0 100%)` so GSAP can wipe
+ * between them). Chromium's lazy-loader reads that as "will not be seen" and
+ * declines to fetch them at all, while WebKit and Firefox fetch them anyway —
+ * so in Chrome alone, pressing tab 02 revealed an empty frame while the photo
+ * was still being downloaded.
+ *
+ * Marking all three eager would fix Chrome by making every visitor pay for
+ * three hero photos, which is the opposite of what this carousel should cost.
+ * Instead the slides are released in the order a visitor can reach them: the
+ * first is `priority`, the second is released once the page goes idle, and
+ * the rest follow the first interaction with the carousel — by then the
+ * visitor is demonstrably browsing photos.
+ */
+const PRIORITY_SLIDE_REACH = 1;
+const IDLE_SLIDE_REACH = 2;
+
+/** Deadline for the idle release, so a permanently busy page still gets it. */
+const IDLE_RELEASE_TIMEOUT_MS = 2000;
+
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+/**
  * The hero's 01/02/03 photo tab-carousel. A plain React-state machine:
  * tabs swap slide and `aria-selected` synchronously with no GSAP, so it
  * works before the motion runtime loads and under reduced motion. The
@@ -19,9 +47,23 @@ export interface HeroSlideChangeDetail {
  */
 export default function HeroCarousel(): React.ReactElement {
   const [current, setCurrent] = useState(0);
+  const [slideReach, setSlideReach] = useState(PRIORITY_SLIDE_REACH);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const previousRef = useRef(0);
+
+  useEffect((): (() => void) => {
+    const release = (): void => {
+      setSlideReach((reach): number => Math.max(reach, IDLE_SLIDE_REACH));
+    };
+    const idleWindow = window as IdleWindow;
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(release, { timeout: IDLE_RELEASE_TIMEOUT_MS });
+      return (): void => { idleWindow.cancelIdleCallback?.(handle); };
+    }
+    const timer = window.setTimeout(release, IDLE_RELEASE_TIMEOUT_MS);
+    return (): void => { window.clearTimeout(timer); };
+  }, []);
 
   useEffect((): void => {
     const previous = previousRef.current;
@@ -35,6 +77,7 @@ export default function HeroCarousel(): React.ReactElement {
 
   const go = (index: number): void => {
     const next = ((index % HERO_PHOTOS.length) + HERO_PHOTOS.length) % HERO_PHOTOS.length;
+    setSlideReach(HERO_PHOTOS.length);
     setCurrent(next);
     tabRefs.current[next]?.focus();
   };
@@ -62,6 +105,7 @@ export default function HeroCarousel(): React.ReactElement {
             alt={photo.alt}
             fill
             priority={index === 0}
+            loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
             quality={90}
             sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
             style={{ objectPosition: photo.objectPosition }}
