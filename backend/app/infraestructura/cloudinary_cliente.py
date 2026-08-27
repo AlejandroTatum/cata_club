@@ -85,12 +85,24 @@ def _configurar_cliente() -> None:
     )
 
 
-def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
+def _subir(
+    contenido: bytes,
+    upload_kwargs: dict,
+    descripcion: str,
+    *,
+    devolver_resultado_completo: bool = False,
+) -> str | dict:
     """ÚNICO punto donde este módulo llama al SDK. Un solo intento: sin
     reintento. En la ruta de request quien reintenta es la persona (botón en
     el front); en la ruta de tarea reintenta Celery (autoretry_for + backoff,
     comprobante_tareas.py:42-45). Un tercer reintento acá multiplicaría los
     intentos contra el proveedor sin resolver nada.
+
+    `devolver_resultado_completo`: por defecto devuelve solo `secure_url`
+    (contrato histórico de PDF/voucher, que nunca usan otro campo del
+    response del SDK). `subir_foto_perfil` lo pasa en `True` porque necesita
+    además `version` (issue #662, ver su docstring) -- la validación de
+    `secure_url` ausente corre igual en ambos modos.
 
     Antes de llamar al SDK se consulta el circuit breaker
     (`_circuito_cloudinary`, degradacion-controlada slice 2): si está
@@ -154,6 +166,9 @@ def _subir(contenido: bytes, upload_kwargs: dict, descripcion: str) -> str:
         logger.warning("Subida lenta a Cloudinary (%s, %.2fs)", descripcion, elapsed)
     else:
         logger.info("Subida a Cloudinary (%s, %.2fs)", descripcion, elapsed)
+
+    if devolver_resultado_completo:
+        return resultado
     return url
 
 
@@ -277,7 +292,7 @@ def subir_foto_perfil(
     nombre_publico: str,
     content_type: str,
     persona_id: int,
-) -> str:
+) -> int:
     """
     Sube la foto de perfil self-service de una Persona (Issue: foto de
     perfil propia). Mismo criterio de validación/subida que
@@ -298,10 +313,16 @@ def subir_foto_perfil(
     misma clase de hallazgo que "voucher no enumerable".
 
     Returns:
-        URL que devuelve el SDK al subir. NO es una URL de entrega válida
-        (ver el docstring de `subir_pdf_membresia`, mismo criterio): el
-        caller debe persistir `nombre_publico` y resolver la URL de entrega
-        con `resolver_url_foto_perfil` en cada lectura autorizada.
+        El `version` (entero) que Cloudinary asigna a ESTA subida -- no la
+        URL del SDK (nunca fue una URL de entrega válida, ver el docstring
+        de `subir_pdf_membresia`). Issue #662: como `public_id` es
+        determinístico y `overwrite=True`, dos subidas para la misma persona
+        firman EXACTAMENTE la misma URL de entrega si no se distingue por
+        `version` -- el navegador sigue sirviendo la imagen cacheada de la
+        carga anterior aunque el reemplazo en Cloudinary haya funcionado. El
+        caller debe persistir `componer_valor_foto_perfil(nombre_publico,
+        version)` (no `nombre_publico` solo) y resolver la URL de entrega con
+        `resolver_url_foto_perfil` en cada lectura autorizada.
     """
     _configurar_cliente()
 
@@ -320,10 +341,26 @@ def subir_foto_perfil(
         "invalidate": True,
     }
 
-    return _subir(
+    resultado = _subir(
         contenido, upload_kwargs,
         f"foto de perfil (persona_id={persona_id}, public_id={nombre_publico})",
+        devolver_resultado_completo=True,
     )
+
+    version = resultado.get("version")
+    if not isinstance(version, int):
+        # Defensive, igual criterio que `secure_url` ausente en `_subir`:
+        # Cloudinary siempre devuelve `version` en un upload exitoso, así que
+        # su ausencia es una anomalía del vendor, no del caller.
+        raise ServicioNoDisponible(
+            _MENSAJE_SUBIDA_NO_DISPONIBLE,
+            detalle_tecnico=(
+                f"Cloudinary no retornó `version` (foto de perfil, "
+                f"public_id={nombre_publico})"
+            ),
+            seguro_mostrar=True,
+        )
+    return version
 
 
 def subir_logo_sponsor(contenido: bytes, nombre_publico: str, content_type: str) -> str:
@@ -364,6 +401,7 @@ def generar_url_firmada(
     resource_type: str,
     folder: str,
     formato: Optional[str] = None,
+    version: Optional[int] = None,
 ) -> str:
     """
     Genera una URL de entrega para un recurso `type="authenticated"`
@@ -398,6 +436,17 @@ def generar_url_firmada(
     que Cloudinary acepte) pero sin vencer -- cierra la enumeración pública,
     no la reutilización indefinida de un link ya firmado que se filtre.
     Ver docs/archive/fixes/16-voucher-no-enumerable.md para el residual documentado.
+
+    `version` (issue #662): opcional. Cloudinary embebe `version` como
+    `/v{version}/` en la URL firmada -- pasarlo hace que la URL de entrega
+    CAMBIE cuando el recurso subyacente cambia (`overwrite=True` con el mismo
+    `public_id`, como en `subir_foto_perfil`), lo que a su vez invalida el
+    cache del NAVEGADOR (distinto de `invalidate=True`, que solo purga la CDN
+    de Cloudinary y nunca tocó el cache del cliente). Sin `version`, dos
+    subidas para el mismo `public_id` firman la URL byte-idéntica y el
+    navegador sigue sirviendo la imagen vieja. `None` (default) preserva el
+    comportamiento histórico para voucher/PDF, que no tienen este problema
+    documentado como fix pendiente.
     """
     _configurar_cliente()
 
@@ -409,6 +458,8 @@ def generar_url_firmada(
     }
     if formato:
         opciones["format"] = formato
+    if version is not None:
+        opciones["version"] = version
     if settings.cloudinary_auth_token_key:
         opciones["auth_token"] = {
             "key": settings.cloudinary_auth_token_key,
@@ -425,6 +476,7 @@ def resolver_url_entrega(
     resource_type: str,
     folder: str,
     formato: Optional[str] = None,
+    version: Optional[int] = None,
 ) -> Optional[str]:
     """
     Traduce lo persistido en `Pago.voucher_url` / `ComprobantePago.archivo_url`
@@ -462,7 +514,45 @@ def resolver_url_entrega(
         return None
     return generar_url_firmada(
         valor_almacenado, resource_type=resource_type, folder=folder, formato=formato,
+        version=version,
     )
+
+
+# --- Cache-busting de la foto de perfil (issue #662) ------------------------
+# `Persona.foto_url` sigue siendo una única columna String; para no agregar
+# una migración de esquema por esto, el `version` de Cloudinary viaja
+# COMPUESTO en el mismo string que ya persistía el `public_id`
+# (`{public_id}{_SEPARADOR_VERSION}{version}`). `|` es seguro como separador
+# porque `public_id` siempre lo genera este código (`perfil_{persona_id}`,
+# nunca entrada de usuario) y una URL heredada nunca lo contiene.
+_SEPARADOR_VERSION_FOTO_PERFIL = "|"
+
+
+def componer_valor_foto_perfil(public_id: str, version: int) -> str:
+    """Arma el valor que persiste `Persona.foto_url` a partir del `public_id`
+    y el `version` que devuelve `subir_foto_perfil` en ESTA subida. Ver
+    `resolver_url_foto_perfil` para el lado que lo descompone."""
+    return f"{public_id}{_SEPARADOR_VERSION_FOTO_PERFIL}{version}"
+
+
+def _descomponer_valor_foto_perfil(valor: str) -> tuple[str, Optional[int]]:
+    """Separa `(public_id, version)` de un valor persistido en
+    `Persona.foto_url`. Dos casos devuelven `version=None` (sin romperse):
+    una URL pública heredada (issue #553, sin separador) y un `public_id`
+    persistido ANTES de este fix (issue #662, tampoco tiene separador) --
+    ambos siguen resolviendo, solo sin cache-busting hasta la próxima subida
+    real por esta app."""
+    valor = valor.strip()
+    if _SEPARADOR_VERSION_FOTO_PERFIL not in valor:
+        return valor, None
+    public_id, _, version_str = valor.rpartition(_SEPARADOR_VERSION_FOTO_PERFIL)
+    if not version_str.isdigit():
+        # Separador presente pero sin version numérica válida detrás: no
+        # debería ocurrir (solo este módulo escribe el valor compuesto), pero
+        # tratar el string entero como public_id es más seguro que reventar
+        # la serialización de un GET.
+        return valor, None
+    return public_id, int(version_str)
 
 
 def resolver_url_foto_perfil(valor_almacenado: Optional[str]) -> Optional[str]:
@@ -474,9 +564,18 @@ def resolver_url_foto_perfil(valor_almacenado: Optional[str]) -> Optional[str]:
     (`{carpeta}/{public_id}`, issue #480). Las filas heredadas (URL pública
     completa) pasan sin tocar hasta que el operador corra
     `scripts/migrar_fotos_perfil_autenticadas.py`.
+
+    Issue #662: el valor persistido puede además llevar el `version` de
+    Cloudinary compuesto (`componer_valor_foto_perfil`) -- se descompone acá
+    y se reenvía a `generar_url_firmada` para que la URL de entrega cambie en
+    cada reemplazo real, no solo en cada lectura.
     """
+    if not valor_almacenado:
+        return None
+    public_id, version = _descomponer_valor_foto_perfil(valor_almacenado)
     return resolver_url_entrega(
-        valor_almacenado,
+        public_id,
         resource_type="image",
         folder=settings.cloudinary_carpeta_fotos_perfil,
+        version=version,
     )
