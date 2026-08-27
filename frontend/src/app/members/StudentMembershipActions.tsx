@@ -83,8 +83,11 @@ export default function StudentMembershipActions({
   return (
     <>
       {/* Beneficio del club attaches to the PERSONA, not the membership
-          (issue #398) — shown in the dedicated Pagos entry point. */}
-      <BeneficioSection personaId={personaId} />
+          (issue #398) — shown in the dedicated Pagos entry point.
+          `tarifaMensual` (issue #665) is the pre-submit UX hint that mirrors
+          the backend's own assign-time gate; `undefined` when there is no
+          membership yet, same as the backend's own gate skipping then. */}
+      <BeneficioSection personaId={personaId} tarifaMensual={membresia?.monto} />
 
       {!membresia && (
         <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />

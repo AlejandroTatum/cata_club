@@ -22,14 +22,25 @@ import { DataBox, ErrorState, LoadingState } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchBeneficio, asignarBeneficio, retirarBeneficio, fetchDescuentos } from "@/services/api";
 import type { BeneficioAsignado, DescuentoCatalogo } from "@/services/api";
-import { descuentosActivos, descuentoValorLabel } from "@/app/discounts/discounts-utils";
+import { descuentosActivos, descuentoExcedeTarifa, descuentoValorLabel } from "@/app/discounts/discounts-utils";
 import { toUserMessage } from "@/lib/error-message";
+import { formatCurrency } from "@/lib/format-utils";
 
 interface BeneficioSectionProps {
   personaId: number;
+  /**
+   * The persona's current monthly tarifa (`Membresia.monto_aplicado`),
+   * when known. Pre-submit UX hint only (issue #665): mirrors the
+   * `BeneficioServicio.asignar` gate client-side so the admin sees an
+   * excessive discount rejected before submitting, not just after. The
+   * backend remains the source of truth — omitted (no membership yet, or
+   * the caller doesn't have one handy) simply skips the hint, same as the
+   * backend's own gate skips when there is no operative tarifa to compare.
+   */
+  tarifaMensual?: number;
 }
 
-export default function BeneficioSection({ personaId }: BeneficioSectionProps): React.ReactElement {
+export default function BeneficioSection({ personaId, tarifaMensual }: BeneficioSectionProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -110,6 +121,9 @@ export default function BeneficioSection({ personaId }: BeneficioSectionProps): 
   }
 
   const ofrecidos = descuentosActivos(catalogo ?? []);
+  const seleccionado = ofrecidos.find((d) => d.id === selectedDescuentoId) ?? null;
+  const excedeTarifa =
+    seleccionado !== null && tarifaMensual !== undefined && descuentoExcedeTarifa(seleccionado, tarifaMensual);
 
   return (
     <div className="mt-2.5 rounded-ctl border border-line bg-sunken p-3">
@@ -184,12 +198,18 @@ export default function BeneficioSection({ personaId }: BeneficioSectionProps): 
                   ))}
                 </select>
               )}
+              {excedeTarifa && (
+                <p className="text-xs text-state-bad">
+                  Este beneficio supera la tarifa mensual ({formatCurrency(tarifaMensual)}). Elija un
+                  descuento de menor valor.
+                </p>
+              )}
               {assignError && <p className="text-xs text-state-bad">{assignError}</p>}
               <div className="flex gap-1.5">
                 <button
                   type="button"
                   onClick={() => void handleAssign()}
-                  disabled={!selectedDescuentoId || assignLoading || catalogo === null}
+                  disabled={!selectedDescuentoId || assignLoading || catalogo === null || excedeTarifa}
                   className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
                 >
                   {assignLoading ? (

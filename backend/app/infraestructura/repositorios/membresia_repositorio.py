@@ -172,6 +172,24 @@ class MembresiaRepositorio:
         )
         return list(self.db.execute(stmt).scalars().unique().all())
 
+    def obtener_operativa_por_persona(self, persona_id: int) -> Optional[Membresia]:
+        """La membresía OPERATIVA (ACTIVA o SUSPENDIDA) de la persona, si
+        tiene una -- a lo sumo una, por el mismo índice único parcial
+        `uq_membresia_activa_por_persona` que `crear_membresia` ya respeta
+        (ver su docstring en `modelos.py`). `None` si la persona no tiene
+        ninguna: nunca se inscribió, o la única que tiene sigue INACTIVA
+        (creada, esperando su primer pago aprobado) o quedó VENCIDA
+        (issue #665, `BeneficioServicio.asignar`: sin una tarifa operativa
+        no hay contra qué medir un beneficio candidato)."""
+        stmt = (
+            select(Membresia)
+            .where(
+                Membresia.persona_id == persona_id,
+                Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.SUSPENDIDA)),
+            )
+        )
+        return self.db.execute(stmt).scalars().first()
+
     def tiene_deudas_pendientes(self, persona_id: int) -> bool:
         """True si la persona tiene deudas pendientes que impiden independizarse.
 

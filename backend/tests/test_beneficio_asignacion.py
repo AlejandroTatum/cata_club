@@ -22,11 +22,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.dominio.cedula import cedula_valida
+from app.dominio.enums import EstadoMembresia
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import AsignacionDescuento, Descuento, Persona
 from app.infraestructura.repositorios.descuento_repositorio import AsignacionDescuentoRepositorio
 from app.servicios_negocio.beneficio_servicio import BeneficioServicio
-from tests.fabricas_pagos import crear_persona_orm
+from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
 RUTA_BENEFICIO = "/api/v1/personas/{persona_id}/beneficio"
 
@@ -38,11 +39,22 @@ def _crear_beneficiario(sesion, seed: int, **kwargs) -> Persona:
 
 
 def _crear_descuento(sesion, *, nombre="Becado", porcentaje=Decimal("50.00"),
-                      activo=True) -> Descuento:
-    descuento = Descuento(nombre=nombre, porcentaje=porcentaje, activo=activo)
+                      monto=None, activo=True) -> Descuento:
+    if monto is not None:
+        porcentaje = None
+    descuento = Descuento(nombre=nombre, porcentaje=porcentaje, monto=monto, activo=activo)
     sesion.add(descuento)
     sesion.flush()
     return descuento
+
+
+def _dar_membresia_operativa(sesion, persona: Persona, *, monto_aplicado: Decimal,
+                              estado: EstadoMembresia = EstadoMembresia.ACTIVA) -> None:
+    """Le da a `persona` la membresía OPERATIVA (ACTIVA o SUSPENDIDA) contra
+    la que el nuevo gate de `BeneficioServicio.asignar` (issue #665) mide un
+    beneficio candidato."""
+    tipo = crear_tipo_membresia_orm(sesion, precio=monto_aplicado)
+    crear_membresia_orm(sesion, persona, tipo, estado, monto_aplicado=monto_aplicado)
 
 
 # --- 1. Asignar y leer --------------------------------------------------------
@@ -178,6 +190,98 @@ def test_desactivar_el_catalogo_despues_de_asignar_no_retira_la_asignacion(clien
     assert cuerpo is not None
     assert cuerpo["retiradoEn"] is None
     assert cuerpo["descuento"]["id"] == descuento.id
+
+
+# --- 4b. Issue #665: un beneficio no puede superar la tarifa mensual ---------
+# Solo se puede medir contra una tarifa real: la membresía OPERATIVA (ACTIVA o
+# SUSPENDIDA) de la persona, la única garantizada única por
+# `uq_membresia_activa_por_persona`. Sin ninguna operativa (nunca se
+# inscribió, o la única que tiene sigue INACTIVA esperando su primer pago) no
+# hay nada contra qué medir -- el gate se omite ahí a propósito y el chequeo
+# de `PagoServicio._congelar_beneficio_activo` sigue siendo la red de
+# seguridad para ese caso (ver `test_beneficio_en_pago.py`).
+
+def test_asignar_beneficio_de_monto_mayor_a_la_tarifa_operativa_es_rechazado(client, db_session):
+    beneficiario = _crear_beneficiario(db_session, 710)
+    _dar_membresia_operativa(db_session, beneficiario, monto_aplicado=Decimal("80.00"))
+    descuento = _crear_descuento(db_session, nombre="Convenio excesivo", monto=Decimal("50000.00"))
+    db_session.commit()
+
+    resp = client.post(
+        RUTA_BENEFICIO.format(persona_id=beneficiario.id),
+        json={"descuento_id": descuento.id},
+    )
+    assert resp.status_code == 400, resp.text
+    detalle = resp.json()["detail"]
+    assert "80" in detalle
+    assert "50000" in detalle
+
+
+def test_asignar_beneficio_de_monto_igual_a_la_tarifa_operativa_es_permitido(client, db_session):
+    """"Mayor que" es estricto: un beneficio que iguala el 100% de la tarifa
+    (una beca completa) sigue siendo válido."""
+    beneficiario = _crear_beneficiario(db_session, 711)
+    _dar_membresia_operativa(db_session, beneficiario, monto_aplicado=Decimal("80.00"))
+    descuento = _crear_descuento(db_session, nombre="Beca completa", monto=Decimal("80.00"))
+    db_session.commit()
+
+    resp = client.post(
+        RUTA_BENEFICIO.format(persona_id=beneficiario.id),
+        json={"descuento_id": descuento.id},
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_asignar_beneficio_porcentual_nunca_supera_la_tarifa(client, db_session):
+    """Un porcentaje está acotado a <= 100 en el propio catálogo
+    (`DescuentoCreateDTO.porcentaje`, `le=100`), así que su valor NUNCA puede
+    superar la tarifa contra la que se calcula -- este gate nunca lo
+    rechaza, sin importar cuán chica sea la tarifa."""
+    beneficiario = _crear_beneficiario(db_session, 712)
+    _dar_membresia_operativa(db_session, beneficiario, monto_aplicado=Decimal("5.00"))
+    descuento = _crear_descuento(db_session, nombre="Beca total", porcentaje=Decimal("100.00"))
+    db_session.commit()
+
+    resp = client.post(
+        RUTA_BENEFICIO.format(persona_id=beneficiario.id),
+        json={"descuento_id": descuento.id},
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_asignar_beneficio_excesivo_con_membresia_suspendida_tambien_se_rechaza(client, db_session):
+    """SUSPENDIDA cuenta como OPERATIVA, mismo criterio que
+    `uq_membresia_activa_por_persona` (ver `modelos.py`): sigue siendo la
+    tarifa vigente de la persona aunque esté pausada."""
+    beneficiario = _crear_beneficiario(db_session, 713)
+    _dar_membresia_operativa(
+        db_session, beneficiario, monto_aplicado=Decimal("80.00"),
+        estado=EstadoMembresia.SUSPENDIDA,
+    )
+    descuento = _crear_descuento(db_session, nombre="Convenio excesivo", monto=Decimal("50000.00"))
+    db_session.commit()
+
+    resp = client.post(
+        RUTA_BENEFICIO.format(persona_id=beneficiario.id),
+        json={"descuento_id": descuento.id},
+    )
+    assert resp.status_code == 400, resp.text
+
+
+def test_asignar_beneficio_excesivo_sin_membresia_operativa_no_se_valida(client, db_session):
+    """Narrowing deliberado (issue #665): sin membresía operativa no hay
+    tarifa contra la que medir el beneficio -- ni porque la persona nunca se
+    inscribió, ni porque la única que tiene sigue INACTIVA. Este caso queda
+    cubierto en el pago (`test_beneficio_en_pago.py`), no acá."""
+    beneficiario = _crear_beneficiario(db_session, 714)
+    descuento = _crear_descuento(db_session, nombre="Convenio excesivo", monto=Decimal("50000.00"))
+    db_session.commit()
+
+    resp = client.post(
+        RUTA_BENEFICIO.format(persona_id=beneficiario.id),
+        json={"descuento_id": descuento.id},
+    )
+    assert resp.status_code == 201, resp.text
 
 
 # --- 5. Retirar sin beneficio activo: 404, no 500 -----------------------------

@@ -26,3 +26,23 @@ export function descuentoValorLabel(descuento: DescuentoCatalogo): string {
   }
   return formatCurrency(descuento.monto);
 }
+
+/**
+ * Client-side mirror of the backend gate in `BeneficioServicio.asignar`
+ * (`beneficio_servicio.py`, issue #665): whether this discount, applied
+ * against `tarifaMensual`, would exceed it. Strict `>` — a discount that
+ * equals 100% of the tarifa (a full scholarship) is valid.
+ *
+ * A percentage discount can never trip this: the catalog schema caps
+ * `porcentaje` at 100 (`DescuentoCreateDTO.porcentaje`, `le=100`), so its
+ * computed value is always `<= tarifaMensual`. Only a fixed `monto` can
+ * exceed it. This is a pre-submit UX hint only — the backend remains the
+ * source of truth and re-validates on assign.
+ */
+export function descuentoExcedeTarifa(descuento: DescuentoCatalogo, tarifaMensual: number): boolean {
+  const valor =
+    descuento.porcentaje !== null
+      ? (tarifaMensual * Number(descuento.porcentaje)) / 100
+      : Number(descuento.monto);
+  return valor > tarifaMensual;
+}
