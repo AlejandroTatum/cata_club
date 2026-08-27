@@ -1,5 +1,7 @@
 """API de patrocinadores: lectura pública y administración exclusiva del club."""
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
@@ -26,10 +28,23 @@ async def crear_sponsor(
     archivo: UploadFile = File(...),
     db: Session = Depends(obtener_sesion),
 ):
+    # `SponsorCreateDTO` no puede declararse como "form model" de FastAPI
+    # (`Annotated[SponsorCreateDTO, Form()]`): al convivir con `archivo:
+    # UploadFile = File(...)` como parámetro hermano, FastAPI deja de
+    # aplanar los campos del modelo sobre el multipart y exige un campo
+    # anidado `datos` en su lugar, rompiendo el contrato actual (`nombre` +
+    # `archivo` sueltos). Por eso se sigue construyendo el DTO a mano, pero
+    # capturando el `ValidationError` de pydantic y re-lanzándolo como
+    # `RequestValidationError` -- la excepción que `main.py` ya sabe
+    # traducir a un 422 con el mensaje en castellano del `field_validator`,
+    # en vez de dejarlo escalar sin manejar a un 500 (nombre en blanco o
+    # solo espacios).
+    try:
+        datos = SponsorCreateDTO(nombre=nombre)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
     contenido = await archivo.read()
-    return SponsorServicio(db).crear(
-        SponsorCreateDTO(nombre=nombre), contenido, archivo.content_type,
-    )
+    return SponsorServicio(db).crear(datos, contenido, archivo.content_type)
 
 
 @router.delete(
