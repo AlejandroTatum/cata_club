@@ -93,7 +93,10 @@ async function createAccountAndConfirm(accountType: "Jugador" | "Entrenador" = "
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
   fireEvent.change(screen.getByLabelText(/correo electrónico/i), { target: { value: "mateo@example.com" } });
-  fireEvent.change(screen.getByLabelText(/contraseña/i), { target: { value: "password8" } });
+  // Anchored, not a bare `/contraseña/i`: issue #661's reveal toggle button
+  // carries an `aria-label` ("Mostrar contraseña") that also contains the
+  // word, and would otherwise tie for the same query.
+  fireEvent.change(screen.getByLabelText(/^contraseña/i), { target: { value: "password8" } });
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
   fireEvent.click(screen.getByRole("checkbox"));

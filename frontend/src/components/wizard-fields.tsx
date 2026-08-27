@@ -6,7 +6,18 @@
 
 import type { InputHTMLAttributes, KeyboardEvent, ClipboardEvent, ReactElement, ReactNode } from "react";
 import { useState } from "react";
-import { User, Calendar, Hash, Phone, UserPlus, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  User,
+  Calendar,
+  Hash,
+  Phone,
+  UserPlus,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
@@ -89,6 +100,12 @@ interface WizardInputProps {
   onChange: (v: string) => void;
   disabled: boolean;
   placeholder?: string;
+  /**
+   * `type="password"` grows its own reveal toggle — issue #661. Callers pass
+   * nothing extra for that; the same `aria-label` wording as `/login` and
+   * `/reset-password` ("Mostrar contraseña"/"Ocultar contraseña") ships for
+   * free, and any other `type` renders exactly as before.
+   */
   type?: string;
   required?: boolean;
   icon?: ReactNode;
@@ -134,6 +151,13 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
   const hasError = Boolean(opts.error);
   const { numericMode } = opts;
   const [limitReached, setLimitReached] = useState(false);
+  // Issue #661: masked by default, exactly like `/login` and
+  // `/reset-password` — this state never leaks into `opts.type` itself, so a
+  // caller that passes `type="password"` keeps meaning "start masked", not
+  // "always masked".
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = opts.type === "password";
+  const inputType = isPassword ? (showPassword ? "text" : "password") : (opts.type ?? "text");
 
   /**
    * The `onChange` backstop: applies ONLY the digit cap, never a letter
@@ -214,7 +238,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
         )}
         <input
           id={fieldId}
-          type={opts.type ?? "text"}
+          type={inputType}
           value={opts.value}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -238,10 +262,27 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
              translucent red composites to 1.27–1.96:1, which the system already
              retired once as decoration rather than an indicator. The border
              alone is the state, and the shared focus ring marks focus. */
-          className={`input-field ${opts.icon ? "pl-10" : ""} ${
+          className={`input-field ${opts.icon ? "pl-10" : ""} ${isPassword ? "pr-10" : ""} ${
             hasError ? "border-state-bad" : ""
           }`}
         />
+        {/* Same 24x24 recipe as `/login`'s toggle (WCAG 2.2 SC 2.5.8): the
+            icon rides its own step, the padded button around it is what
+            clears the target size. */}
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-ink-3 transition-colors hover:text-ink"
+            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {showPassword ? (
+              <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            ) : (
+              <Eye size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+          </button>
+        )}
       </div>
       {hasError ? (
         <p id={messageId} className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad">

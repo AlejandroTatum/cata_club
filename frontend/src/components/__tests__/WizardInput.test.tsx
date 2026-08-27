@@ -182,3 +182,103 @@ describe("WizardInput — plain fields are unaffected by numericMode's absence",
     expect(onChange).toHaveBeenCalledWith("Ana");
   });
 });
+
+/**
+ * Issue #661: the credentials step of every wizard (`crear-cuenta`,
+ * `add-dependent`, `enroll`) masks its password field with no way to
+ * temporarily reveal it. The toggle lifts the pattern already shipped and
+ * tested on `/login` and `/reset-password` verbatim — same `aria-label`
+ * wording, same real `<button type="button">`, same masked-by-default
+ * start — rather than inventing a second one. It is keyed off
+ * `type="password"`: every real caller already passes that, so no caller
+ * needs a new prop, and a plain text field never grows a toggle it never
+ * asked for.
+ */
+describe("WizardInput — password reveal toggle (issue #661)", () => {
+  function renderPassword(value = "") {
+    const onChange = vi.fn();
+    render(
+      <WizardInput
+        idPrefix="t"
+        label="Contraseña"
+        value={value}
+        onChange={onChange}
+        disabled={false}
+        type="password"
+        // Every real caller (crear-cuenta, add-dependent, enroll) marks its
+        // password field required — `required` keeps the accessible name
+        // exactly "Contraseña" (the asterisk span is `aria-hidden`), rather
+        // than growing the "(opcional)" marker the optional-field style adds.
+        required
+      />,
+    );
+    return {
+      // Anchored to the start: the label's own text is "Contraseña *", and a
+      // bare `/contraseña/i` would also match the toggle button's own
+      // `aria-label` ("Mostrar/Ocultar contraseña"), which contains the same
+      // word but never starts with it.
+      input: screen.getByLabelText(/^contraseña/i) as HTMLInputElement,
+      onChange,
+    };
+  }
+
+  it("masks the field by default", () => {
+    const { input } = renderPassword("secreto8");
+    expect(input).toHaveAttribute("type", "password");
+  });
+
+  it("exposes a real, focusable button with a dynamic aria-label", () => {
+    renderPassword();
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+    expect(toggle.tagName).toBe("BUTTON");
+    expect(toggle).toHaveAttribute("type", "button");
+  });
+
+  it("flips the input's type and the button's label when clicked", () => {
+    const { input } = renderPassword("secreto8");
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+
+    fireEvent.click(toggle);
+
+    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Ocultar contraseña" })).toBe(toggle);
+  });
+
+  it("re-masks on a second click", () => {
+    const { input } = renderPassword("secreto8");
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+
+    expect(input).toHaveAttribute("type", "password");
+  });
+
+  it("keeps the value and caret position across the toggle — no onChange fires and no value is lost", () => {
+    const { input, onChange } = renderPassword("secreto8");
+    input.setSelectionRange(3, 3);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input.value).toBe("secreto8");
+    expect(input.selectionStart).toBe(3);
+    expect(input.selectionEnd).toBe(3);
+  });
+
+  it("keeps the input before the toggle button in the DOM, preserving Tab order", () => {
+    renderPassword();
+    const input = screen.getByLabelText(/^contraseña/i);
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+    // The button must come after the input in source order for a plain Tab
+    // to reach it next — DOCUMENT_POSITION_FOLLOWING = 4.
+    expect(input.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("never grows a toggle on a non-password field", () => {
+    render(
+      <WizardInput idPrefix="t" label="Nombres" value="" onChange={vi.fn()} disabled={false} />,
+    );
+    expect(screen.queryByRole("button", { name: /contraseña/i })).not.toBeInTheDocument();
+  });
+});
