@@ -57,7 +57,30 @@ export default function DataRow({
 
   return (
     <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-field px-4 py-3", className)}>
-      <div className="min-w-0 flex-1">
+      {/*
+       * `basis-56` (14rem) is what makes this row's `flex-wrap` do anything.
+       *
+       * With `flex-1` alone the name's flex-basis is 0, so its hypothetical
+       * size never contributes to the line-breaking decision: the meta,
+       * status and action groups — all `flex-none`, all sized to their
+       * content — claim the row first and the name absorbs every pixel of
+       * the squeeze. Measured on `/tarifas` at 390px, that left the name a
+       * 50px column: the seeded "Mensual Infantil" wrapped onto two lines
+       * and a long tariff name broke mid-syllable across nine (issue #660,
+       * and #677's `break-words` only changed HOW the 50px column failed).
+       * `/members` measured the same 52px at that width.
+       *
+       * A floor on the basis makes the break happen where it belongs. Below
+       * it the line no longer fits, so the meta group drops to the next line
+       * (which `flex-wrap` + `gap-y-field` were already there to handle) and
+       * the name gets the full row. Above it nothing changes at all — the
+       * name still grows into whatever space is left, exactly as before.
+       *
+       * The floor goes on the NAME rather than letting the meta group shrink
+       * because shrinking it compresses the chips and the "Editar precio"
+       * button — trading an unreadable name for an unreliable touch target.
+       */}
+      <div className="min-w-0 flex-1 basis-56">
         <p
           className={cn(
             "text-sm font-semibold text-ink",
