@@ -321,7 +321,7 @@ function Location(): React.ReactElement {
               Leaflet's map and controls retain their expected behavior. */}
           <figure className="landing-map-inset">
             <Image
-              src="/landing/photo-arrival.png"
+              src="/landing/photo-arrival.jpeg"
               alt="Entrada de Cata Club junto al Coliseo Ciudad de Loja"
               width={1600}
               height={1200}

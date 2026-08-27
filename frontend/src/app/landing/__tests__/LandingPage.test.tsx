@@ -152,7 +152,7 @@ describe("LandingPage", (): void => {
     render(<LandingPage />);
 
     const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
-    expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.png");
+    expect(arrival).toHaveAttribute("src", "/landing/photo-arrival.jpeg");
     expect(arrival).toHaveAttribute("width", "1600");
     expect(arrival).toHaveAttribute("height", "1200");
     expect(arrival).toHaveAttribute("loading", "lazy");
