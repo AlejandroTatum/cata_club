@@ -45,8 +45,10 @@ export interface AuthContextValue {
   isLoading: boolean;
   /**
    * Attempt login with email + password via the BFF's /api/auth/login route.
-   * @returns A discriminated result — `{ ok: true, session }` on success,
-   * `{ ok: false, error }` on failure (see AuthErrorKind for distinct cases).
+   * @returns A discriminated result — `{ ok: true, session }` once the
+   * service has CONFIRMED the session round-trips (see `login` in
+   * src/services/auth.ts: a 200 alone is not a session), `{ ok: false, error }`
+   * on failure (see AuthErrorKind for distinct cases).
    */
   login: (email: string, password: string) => Promise<LoginResult>;
   /** Clear the current session (server cookies first, then local state). */
