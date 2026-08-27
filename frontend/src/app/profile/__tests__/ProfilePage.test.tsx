@@ -164,6 +164,7 @@ beforeEach(() => {
   mockSolicitarRecuperacion.mockReset();
   mockFetchStudentPortal.mockReset();
   mockSubirFotoPerfil.mockReset();
+  ADMIN_SESSION.refreshSession.mockReset();
   mockUseAuth.mockReset();
   // Default so the student/representante branch's supplementary
   // fetchMiPerfil() call (fetched only to read `fotoUrl` for the hero
@@ -1108,6 +1109,57 @@ describe("ProfilePage — profile photo upload (staff branch, own hero avatar)",
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo actualizar la foto de perfil.");
   });
 
+  // --- Issue #662 ------------------------------------------------------------
+  // `POST /auth/me/foto` is always self-service (the caller's OWN photo).
+  // AppShell's sidebar avatar reads `session.user.fotoUrl` from AuthContext —
+  // a state slice completely separate from the local `perfil` this page owns
+  // — so it stayed on the previous photo after a successful upload unless the
+  // session gets explicitly refreshed. This never reruns on upload FAILURE:
+  // the previous photo is still the correct one to show.
+  it("refreshes the session after a successful upload so AppShell's avatar picks up the new photo", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    mockSubirFotoPerfil.mockResolvedValueOnce({
+      ...PERFIL_ADMIN,
+      fotoUrl: "https://res.cloudinary.com/test/image/upload/perfil-ana.jpg",
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const input = screen.getByTestId("foto-perfil-input");
+    const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [archivo] } });
+
+    await waitFor(() => {
+      expect(ADMIN_SESSION.refreshSession).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does NOT refresh the session when the upload fails", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+    mockSubirFotoPerfil.mockRejectedValueOnce(new Error("No se pudo actualizar la foto de perfil."));
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+
+    const input = screen.getByTestId("foto-perfil-input");
+    const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [archivo] } });
+
+    await screen.findByRole("alert");
+    expect(ADMIN_SESSION.refreshSession).not.toHaveBeenCalled();
+  });
+
 });
 
 describe("ProfilePage — profile photo upload (student/representante branch, own hero avatar)", () => {
@@ -1224,6 +1276,49 @@ describe("ProfilePage — profile photo upload (student/representante branch, ow
         "src",
         "https://res.cloudinary.com/test/image/upload/perfil-rosa.jpg",
       );
+    });
+  });
+
+  // Issue #662 — see the equivalent test in the staff branch describe block
+  // above for the full rationale.
+  it("refreshes the session after a successful upload for a representante session", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("representante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: {
+        personaId: "1",
+        nombres: "Rosa",
+        apellidos: "Representante",
+        fechaNacimiento: "1985-03-01",
+        recentSessions: [],
+      },
+      representados: [],
+      membershipPlans: [],
+      memberships: [],
+    });
+    mockSubirFotoPerfil.mockResolvedValueOnce({
+      correo: "rosa@cataclub.com",
+      personaId: 1,
+      nombres: "Rosa",
+      apellidos: "Representante",
+      roles: ["ESTUDIANTE"],
+      telefono: "",
+      fechaCreacion: "2024-01-01T00:00:00",
+      fotoUrl: "https://res.cloudinary.com/test/image/upload/perfil-rosa.jpg",
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findAllByText("Rosa Representante");
+
+    const input = screen.getByTestId("foto-perfil-input");
+    const archivo = new File(["contenido"], "foto.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [archivo] } });
+
+    await waitFor(() => {
+      expect(ADMIN_SESSION.refreshSession).toHaveBeenCalledTimes(1);
     });
   });
 
