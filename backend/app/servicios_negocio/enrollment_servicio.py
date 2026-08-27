@@ -18,7 +18,6 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
      `rollback()` de TODO lo escrito en el intento.
   4. Emitir tokens JWT para auto-login del representante (o del alumno adulto).
 """
-import logging
 import hashlib
 import uuid
 from datetime import datetime, timezone
@@ -26,8 +25,8 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, AntecedentesClub, Notificacion
-from app.dominio.enums import TipoRol, TipoNotificacion
+from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, AntecedentesClub
+from app.dominio.enums import TipoRol
 from app.soporte_transversal.tiempo import hoy_club
 from app.dominio.excepciones import EntidadDuplicada, ErrorDominio, OperacionInvalida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
@@ -48,8 +47,6 @@ from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_noti
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,
 )
-
-logger = logging.getLogger("cataclub.servicios.enrollment")
 
 
 # --- Idempotencia de la autoinscripción (enrollment-idempotency) -------------
@@ -318,7 +315,13 @@ class EnrollmentServicio:
             self.db.rollback()
             raise
 
-        self._solicitar_despacho_notificaciones()
+        # La entrega NO ocurre acá: las filas del outbox ya quedaron
+        # commiteadas arriba y el beat `despachar-inscripcion-notificaciones`
+        # (cada minuto) las reclama y entrega. Mismo trato que
+        # `AuthServicio.solicitar_recuperacion`, que también registra el evento
+        # y devuelve sin despachar nada. Ver issue #703: este endpoint es
+        # PÚBLICO y sin auth, y drenar el outbox acá le hacía pagar a un
+        # visitante la entrega de TODAS las notificaciones pendientes del club.
         respuesta = self._emitir_tokens(usuario)
         # El intento queda COMPLETADA con la persona de la cuenta que recibió
         # los tokens (la misma que devuelve la respuesta): un replay con la
@@ -432,13 +435,13 @@ class EnrollmentServicio:
         }
 
     def _notificar_nueva_inscripcion(self, alumno: Persona) -> None:
-        """Notifica a todos los administradores sobre una nueva inscripción.
+        """Encola en el outbox un aviso por cada administrador.
 
-        La inscripción en sí YA está commiteada cuando esto corre (es el
-        último paso de los dos call sites que lo invocan), así que un
-        fallo al avisar a UN administrador se loguea y no interrumpe el
-        aviso a los demás ni tira la respuesta del endpoint público de
-        autoinscripción."""
+        Solo ESCRIBE las filas: se commitean junto con la inscripción (misma
+        transacción), y de ahí en adelante son del worker. Esa durabilidad es
+        la garantía del PR #633 -- si el worker está caído en el momento de la
+        inscripción, la fila sigue PENDIENTE y el beat la entrega cuando
+        vuelva."""
         repo_outbox = EnrollmentNotificacionOutboxRepositorio(self.db)
         rol_admin = self.repo_rol.obtener_por_tipo(TipoRol.ADMINISTRADOR)
         if not rol_admin:
@@ -451,29 +454,3 @@ class EnrollmentServicio:
                 alumno.id,
                 f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
             )
-
-    def _solicitar_despacho_notificaciones(self) -> None:
-        """Entrega lo pendiente de inmediato; el beat reintenta lo que falle."""
-        repo = EnrollmentNotificacionOutboxRepositorio(self.db)
-        while True:
-            event = repo.claim_pending()
-            if not event:
-                self.db.commit()
-                return
-            try:
-                self.db.add(Notificacion(
-                    tipo=TipoNotificacion.NUEVA_INSCRIPCION,
-                    mensaje=event.mensaje,
-                    persona_id=event.admin_persona_id,
-                    entidad_relacionada_id=event.alumno_persona_id,
-                    enrollment_outbox_id=event.id,
-                ))
-                repo.mark_sent(event)
-                self.db.commit()
-            except Exception as error:
-                self.db.rollback()
-                event = self.db.get(type(event), event.id)
-                if event:
-                    repo.requeue(event, error)
-                    self.db.commit()
-                logger.exception("No se pudo entregar la notificación de inscripción")
