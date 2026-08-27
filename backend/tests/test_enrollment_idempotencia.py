@@ -25,17 +25,24 @@ def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Issue #730: el alta pública exige ficha médica. Estos tests miden la
+# idempotencia (misma clave -> mismos tokens, sin filas nuevas), no la ficha,
+# así que la traen completa igual que la trae el wizard real. Un alta que
+# muriera en la validación del DTO nunca llegaría al registro de
+# idempotencia, que es lo único que este archivo observa. Además entra en la
+# HUELLA del payload, así que las dos formas -- DTO y cuerpo JSON -- tienen
+# que decir exactamente lo mismo o `_cuerpo` dejaría de ser el equivalente
+# por HTTP de `_payload`.
+_FICHA = {
+    "tipo_sangre": "O_POSITIVO",
+    "enfermedades": [],
+    "contacto_emergencia": "María Torres",
+    "telefono_emergencia": "0991112233",
+}
+
+
 def _payload(cedula: str, correo: str) -> EnrollmentCreateDTO:
-    return EnrollmentCreateDTO(
-        alumno={
-            "nombres": "Ana",
-            "apellidos": "Torres",
-            "cedula": cedula,
-            "fecha_nacimiento": "1990-05-20",
-            "telefono": "0991234567",
-        },
-        credenciales_alumno={"correo": correo, "contrasenia": "password8"},
-    )
+    return EnrollmentCreateDTO(**_cuerpo(cedula, correo))
 
 
 def _cuerpo(cedula: str, correo: str) -> dict:
@@ -48,6 +55,7 @@ def _cuerpo(cedula: str, correo: str) -> dict:
             "telefono": "0991234567",
         },
         "credenciales_alumno": {"correo": correo, "contrasenia": "password8"},
+        "ficha_medica": dict(_FICHA),
     }
 
 

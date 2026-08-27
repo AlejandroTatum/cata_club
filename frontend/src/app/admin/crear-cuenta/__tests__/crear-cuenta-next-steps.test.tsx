@@ -89,7 +89,22 @@ async function createAccountAndConfirm(accountType: "Jugador" | "Entrenador" = "
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
-  // Health step: every field optional, nothing to fill.
+  // Health step. Issue #730: for a Jugador (a student) the medical record is
+  // now required, so the walk has to fill it — leaving it blank would stop
+  // the wizard here and this test would fail on the health step instead of
+  // reaching the confirmation screen it actually measures. For an Entrenador
+  // it stays optional, which is why the fill is conditional and not
+  // unconditional: doing it for everyone would hide a regression in exactly
+  // the boundary #730 drew.
+  if (accountType === "Jugador") {
+    fireEvent.change(screen.getByLabelText(/Tipo de sangre/), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/Nombre del contacto de emergencia/), {
+      target: { value: "Ana Perez" },
+    });
+    fireEvent.change(screen.getByLabelText(/Teléfono de emergencia/), {
+      target: { value: "0991112233" },
+    });
+  }
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
   fireEvent.change(screen.getByLabelText(/correo electrónico/i), { target: { value: "mateo@example.com" } });

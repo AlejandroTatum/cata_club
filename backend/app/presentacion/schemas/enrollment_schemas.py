@@ -56,9 +56,13 @@ class EnrollmentCredencialesDTO(BaseModel):
 class EnrollmentFichaMedicaDTO(BaseModel):
     """Ficha médica del alumno.
 
-    El bloque entero sigue siendo opcional dentro del alta (`ficha_medica:
-    Optional[...]`): un alta puede no traer ficha. Lo que ya no puede es traer
-    una a medias — si viene, viene completa.
+    Issue #730 cerró la última puerta: el bloque entero era opcional dentro
+    del alta, así que un cuerpo que omitía `ficha_medica` creaba un alumno
+    plenamente funcional sin tipo de sangre y sin contacto de emergencia.
+    Hoy `EnrollmentCreateDTO` lo exige (ver `_ficha_medica_obligatoria` más
+    abajo) y `AdminCrearCuentaDTO` lo exige para los tipos de cuenta que son
+    alumnos. Este DTO no cambió por eso: sigue describiendo qué es una ficha
+    completa; lo que cambió es quién puede venir sin ninguna.
 
     Issue #643: `tipo_sangre` tenía default `DESCONOCIDO`, así que un alta que
     nunca eligió tipo de sangre quedaba grabada como si hubiera elegido «no lo
@@ -79,6 +83,18 @@ class EnrollmentFichaMedicaDTO(BaseModel):
     alergias: Optional[str] = Field(default=None, max_length=255)
     contacto_emergencia: str = Field(..., min_length=1, max_length=150)
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
+
+
+# Issue #730. Un solo texto para los dos caminos que crean alumnos
+# (`EnrollmentCreateDTO` acá y `AdminCrearCuentaDTO` en
+# admin_cuenta_schemas.py, que ya importa de este módulo). Nombra los dos
+# datos que el club necesita de verdad -- tipo de sangre y contacto de
+# emergencia -- porque "falta la ficha médica" a secas no le dice a nadie qué
+# tiene que ir a buscar.
+MENSAJE_FICHA_MEDICA_OBLIGATORIA = (
+    "Debe completar la ficha médica del alumno: el tipo de sangre y el "
+    "contacto de emergencia son obligatorios."
+)
 
 
 class EnrollmentAntecedentesDTO(BaseModel):
@@ -104,6 +120,14 @@ class EnrollmentCreateDTO(BaseModel):
     no tiene a quién emitirle tokens, y antes de este validador pasaba
     toda la validación y moría recién al serializar la respuesta, DESPUÉS
     de persistir la Persona (issue #275).
+
+    `ficha_medica` queda tipada `Optional` a propósito, aunque
+    `_ficha_medica_obligatoria` la exija (issue #730): tiparla obligatoria
+    haría que Pydantic responda `"Field required"`, y
+    `main.py::_validation_exception_handler` publica `errores[0]["msg"]` tal
+    cual al cliente. Ese texto en inglés lo leería un representante en el
+    navegador. El validador de modelo es el mismo recurso que ya usa
+    `_representante_o_credenciales` acá al lado, y por el mismo motivo.
     """
     representante: Optional[EnrollmentRepresentanteDTO] = None
     alumno: EnrollmentAlumnoDTO
@@ -119,6 +143,16 @@ class EnrollmentCreateDTO(BaseModel):
                 "datos del representante legal: debe completarse al menos "
                 "uno de los dos."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _ficha_medica_obligatoria(self) -> "EnrollmentCreateDTO":
+        """Issue #730. Este endpoint sólo tiene una salida: un alumno. No
+        acuña representantes ni entrenadores, así que acá la exigencia no
+        tiene excepciones (a diferencia de `AdminCrearCuentaDTO`, que sí
+        acuña los tres y por eso mira el `tipo_cuenta`)."""
+        if self.ficha_medica is None:
+            raise ValueError(MENSAJE_FICHA_MEDICA_OBLIGATORIA)
         return self
 
 

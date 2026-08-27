@@ -37,6 +37,17 @@ def _base_payload(**overrides) -> dict:
         "telefono": "0991234567",
         "correo": "carlos@test.com",
         "contrasenia": "clave12345",
+        # Issue #730: el tipo por defecto de este helper es JUGADOR, que es un
+        # alumno, y desde el issue un alumno no se da de alta sin ficha
+        # médica. Los tests que sobreescriben `tipo_cuenta` a ENTRENADOR o
+        # REPRESENTANTE la mandan igual y eso está bien: para ellos sigue
+        # siendo opcional, no prohibida.
+        "ficha_medica": {
+            "tipo_sangre": "O_POSITIVO",
+            "enfermedades": [],
+            "contacto_emergencia": "María Torres",
+            "telefono_emergencia": "0991112233",
+        },
     }
     data.update(overrides)
     return data

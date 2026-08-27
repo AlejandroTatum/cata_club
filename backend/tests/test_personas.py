@@ -565,6 +565,16 @@ def test_buscar_rechaza_cuenta_autoinscripta(client_sin_token):
             "credenciales_alumno": {
                 "correo": "intruso560@example.com", "contrasenia": "password8",
             },
+            # Issue #730: el alta pública exige ficha médica. Va completa a
+            # propósito -- este test necesita que el alta SALGA BIEN para
+            # obtener el token ALUMNO que después intenta enumerar el club.
+            # Sin ella el alta daría 422 y el test se volvería verde sin
+            # haber probado nunca la guardia que custodia.
+            "ficha_medica": {
+                "tipo_sangre": "O_POSITIVO", "enfermedades": [],
+                "contacto_emergencia": "María Torres",
+                "telefono_emergencia": "0991112233",
+            },
         },
     )
     assert alta.status_code == 201

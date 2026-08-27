@@ -146,6 +146,7 @@ def _inscribir(db_session, secuencia: int = 730):
         EnrollmentAlumnoDTO,
         EnrollmentCreateDTO,
         EnrollmentCredencialesDTO,
+        EnrollmentFichaMedicaDTO,
     )
     from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 
@@ -156,6 +157,12 @@ def _inscribir(db_session, secuencia: int = 730):
         ),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo=f"visitante{secuencia}@example.com", contrasenia="password8",
+        ),
+        # Issue #730: obligatoria en el alta pública. Este archivo mide la
+        # entrega de la notificación al admin, no la ficha.
+        ficha_medica=EnrollmentFichaMedicaDTO(
+            tipo_sangre="O_POSITIVO", enfermedades=[],
+            contacto_emergencia="María Torres", telefono_emergencia="0991112233",
         ),
     ))
 

@@ -36,6 +36,23 @@ export type AccountType = "JUGADOR" | "REPRESENTANTE" | "MENOR" | "ENTRENADOR";
 /** Account types the backend requires to be of age. */
 export const ADULT_ACCOUNT_TYPES: readonly AccountType[] = ["JUGADOR", "REPRESENTANTE", "ENTRENADOR"];
 
+/**
+ * Account types that create a STUDENT, and therefore require a medical record
+ * (issue #730).
+ *
+ * Mirrors `TIPOS_CUENTA_ALUMNO` in `backend/app/presentacion/schemas/
+ * admin_cuenta_schemas.py`, which is where the rule is actually enforced —
+ * this copy exists so the wizard can say so before submitting, not so it can
+ * decide. A coach or a representative never steps onto the court: demanding a
+ * blood type from them would be the rule applied where it does not belong.
+ */
+export const STUDENT_ACCOUNT_TYPES: readonly AccountType[] = ["JUGADOR", "MENOR"];
+
+/** Does this account type create a student, whose medical record is required? */
+export function requiresMedicalRecord(accountType: AccountType | ""): boolean {
+  return STUDENT_ACCOUNT_TYPES.includes(accountType as AccountType);
+}
+
 /** Wizard step identifiers. */
 export type CrearCuentaStep = "type" | "personal" | "health" | "credentials" | "summary";
 
@@ -280,7 +297,10 @@ function validateCredentials(data: CrearCuentaFormData): string[] {
 
 function validateMedical(data: CrearCuentaFormData): string[] {
   const errors: string[] = [];
-  if (!hasCrearCuentaMedicalData(data)) return errors;
+  // Issue #730: for a student, an empty step is no longer "nothing to
+  // validate" — it is the omission the backend now answers 422 to. Only a
+  // non-student may still leave the whole block blank.
+  if (!hasCrearCuentaMedicalData(data) && !requiresMedicalRecord(data.accountType)) return errors;
   if (!BLOOD_TYPE_OPTIONS.includes(data.tipoSangre as typeof BLOOD_TYPE_OPTIONS[number])) {
     errors.push("El tipo de sangre es obligatorio.");
   }

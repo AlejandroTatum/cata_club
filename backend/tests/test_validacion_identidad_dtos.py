@@ -187,6 +187,14 @@ class TestAdminCrearCuentaDTO:
             cedula=CEDULA_VALIDA, fecha_nacimiento=FECHA_NACIMIENTO_ADULTO,
             telefono=TELEFONO_VALIDO, correo="ana@example.com",
             contrasenia="unaClave123",
+            # Issue #730: `tipo_cuenta="JUGADOR"` es un alumno y ya no se da
+            # de alta sin ficha médica. Esta clase mide cédula y teléfono, no
+            # la ficha.
+            ficha_medica=dict(
+                tipo_sangre="O_POSITIVO", enfermedades=[],
+                contacto_emergencia="María Torres",
+                telefono_emergencia=TELEFONO_VALIDO,
+            ),
         )
         datos.update(overrides)
         return datos

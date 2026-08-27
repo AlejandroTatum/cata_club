@@ -39,8 +39,36 @@ def _alumno_dto(cedula: str = cedula_valida(251), fecha_nacimiento: date = date(
     )
 
 
+def _ficha_dto() -> EnrollmentFichaMedicaDTO:
+    return EnrollmentFichaMedicaDTO(
+        tipo_sangre=TipoSangre.O_POSITIVO, enfermedades=[],
+        contacto_emergencia="María Torres", telefono_emergencia="0991112233",
+    )
+
+
+def _enrollment_dto(**kwargs) -> EnrollmentCreateDTO:
+    """Alta con ficha médica por defecto (issue #730).
+
+    Todos los tests de este archivo miran otra cosa -- roles que sobreviven
+    al `commit`, atomicidad, notificaciones, edades. Desde #730 la ficha
+    médica es obligatoria en el alta pública, así que sin este default cada
+    uno moriría en la validación del DTO antes de llegar a lo que mide, y el
+    archivo se volvería un test de la ficha médica por accidente.
+
+    Importa sobre todo en los dos `pytest.raises(ValidationError)` de abajo:
+    ahí la ausencia de ficha los dejaría VERDES por el motivo equivocado --
+    seguirían pasando, pero acusando a la ficha en vez de al validador
+    `representante`/`credenciales` que dicen custodiar.
+
+    Que la ficha ahora sea obligatoria se prueba en
+    `test_ficha_medica_obligatoria.py`, que es donde se puede ver fallar.
+    """
+    kwargs.setdefault("ficha_medica", _ficha_dto())
+    return EnrollmentCreateDTO(**kwargs)
+
+
 def test_inscripcion_representante_persiste_roles_mas_alla_del_flush(db_session):
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -61,7 +89,7 @@ def test_inscripcion_representante_persiste_roles_mas_alla_del_flush(db_session)
 
 
 def test_autoinscripcion_jugador_persiste_rol_mas_alla_del_flush(db_session):
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         alumno=_alumno_dto(cedula="1798765432", fecha_nacimiento=date(2000, 1, 1)),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo="jugador@example.com", contrasenia="password8",
@@ -81,7 +109,7 @@ def test_autoinscripcion_jugador_persiste_rol_mas_alla_del_flush(db_session):
 def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
     """Cuando el representante provee credencialesMenor, se crea también
     un Usuario + ALUMNO para el menor con esas credenciales."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -112,7 +140,7 @@ def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
 
 def test_inscripcion_menor_sin_credenciales_no_crea_usuario_menor(db_session):
     """Sin credencialesMenor, solo se crea cuenta del representante."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -143,7 +171,7 @@ def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
     db_session.add(usuario)
     db_session.commit()
 
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -170,7 +198,7 @@ def test_alumno_menor_sin_representante_rechazado():
     o `credenciales_alumno`, y el rechazo ocurre antes de tocar la base."""
     from pydantic import ValidationError
     with pytest.raises(ValidationError, match="representante"):
-        EnrollmentCreateDTO(
+        _enrollment_dto(
             alumno=_alumno_dto(),
         )
 
@@ -179,7 +207,7 @@ def test_menor_con_credenciales_sin_representante_rechazado(db_session):
     """Defensa que queda en el servicio: un menor con `credenciales_alumno`
     (el camino de adulto) pero sin representante sigue rechazado — los
     menores requieren representante legal."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         alumno=_alumno_dto(),  # 15 años
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo="menor@example.com", contrasenia="password8",
@@ -192,7 +220,7 @@ def test_menor_con_credenciales_sin_representante_rechazado(db_session):
 
 def test_alumno_menor_de_5_anos_rechazado(db_session):
     """Alumnos menores de 5 años no son admitidos."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -209,7 +237,7 @@ def test_alumno_menor_de_5_anos_rechazado(db_session):
 
 
 def test_alumno_cedula_duplicada_rechazada(db_session):
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -231,7 +259,7 @@ def test_representante_cedula_duplicada_rechazada(db_session):
     db_session.add(persona)
     db_session.commit()
 
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -246,7 +274,7 @@ def test_representante_cedula_duplicada_rechazada(db_session):
 
 def test_representante_menor_de_edad_rechazado(db_session):
     """El representante debe ser mayor de 18 años."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Menor Rep", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(2012, 5, 20), telefono="0991234567",
@@ -267,7 +295,7 @@ def test_representante_edad_maxima_rechazada(db_session):
     NaN fuera de un rango arbitrario y toda comparación con NaN es `false`.
     Este es el mismo defecto de origen, del lado del servidor: sin este
     techo, el 400 nunca llega y el registro se completa igual."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Muy Longevo", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1800, 1, 1), telefono="0991234567",
@@ -295,7 +323,7 @@ def test_representante_correo_duplicado_rechazado(db_session):
     db_session.add(usuario)
     db_session.commit()
 
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -379,7 +407,7 @@ def test_inscripcion_con_representante_notifica_a_los_administradores(db_session
     """La autoinscripción debe dejar una notificación NUEVA_INSCRIPCION para
     cada administrador. Exige que el label exista en el enum de PostgreSQL."""
     admin_id = _crear_administrador(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -415,7 +443,7 @@ def test_inscripcion_con_representante_notifica_a_los_administradores(db_session
 def test_autoinscripcion_adulto_notifica_a_los_administradores(db_session, monkeypatch):
     """Segundo camino de `enroll()`: adulto con credenciales propias."""
     admin_id = _crear_administrador(db_session)
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         alumno=_alumno_dto(cedula="1798765432", fecha_nacimiento=date(2000, 1, 1)),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo="jugador@example.com", contrasenia="password8",
@@ -439,7 +467,7 @@ def test_inscripcion_sin_credenciales_rechazada_en_dto():
     la respuesta, DESPUÉS de persistir la Persona."""
     from pydantic import ValidationError
     with pytest.raises(ValidationError, match="credenciales"):
-        EnrollmentCreateDTO(
+        _enrollment_dto(
             alumno=_alumno_dto(cedula=cedula_valida(254), fecha_nacimiento=date(2000, 1, 1)),
         )
 
@@ -468,7 +496,7 @@ def test_inscripcion_menor_correo_duplicado_no_deja_representante_huerfano(db_se
     db_session.add(usuario)
     db_session.commit()
 
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -505,7 +533,7 @@ def test_autoinscripcion_adulto_correo_duplicado_no_deja_alumno_huerfano(db_sess
     db_session.add(usuario)
     db_session.commit()
 
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         alumno=_alumno_dto(cedula="1798765432", fecha_nacimiento=date(2000, 1, 1)),
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo="jugador-ocupado@example.com", contrasenia="password8",
@@ -523,7 +551,7 @@ def test_alumno_cedula_duplicada_no_deja_representante_huerfano(db_session):
     issue): la cédula del alumno se validaba DESPUÉS de crear la Persona del
     representante, dejando un representante huérfano ante una cédula de
     alumno duplicada."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
@@ -543,7 +571,7 @@ def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
     ficha médica + antecedentes quedan TODOS escritos. Sin este test, un fix
     de atomicidad que rompiera el camino feliz (p. ej. olvidar el `commit()`
     final) pasaría desapercibido."""
-    datos = EnrollmentCreateDTO(
+    datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
