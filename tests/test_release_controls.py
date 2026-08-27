@@ -91,7 +91,8 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
         'case " $* " in\n'
-        '  *" --images backend "*) echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi ;;\n'
+            '  *" --format json "*) printf "%s\\n" "{\\\"services\\\":{\\\"backend\\\":{\\\"image\\\":\\\"registry.example/cata-backend:${IMAGE_TAG}\\\"}}}" ;;\n'
+            '  *" --images backend "*) if [ "${REALISTIC_COMPOSE_OUTPUT:-0}" = "1" ]; then printf "%s\\n" "postgres:16" "redis:7" "registry.example/cata-backend:${IMAGE_TAG}"; else echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi; fi ;;\n'
         '  *" manifest inspect "*) [ "$3" = "registry.example/cata-backend:${IMAGE_TAG}" ] || exit 1 ;;\n'
         '  *" --status running "*) if [ "${DB_RUNNING:-0}" = "1" ]; then echo db; fi ;;\n'
         "esac\n"
@@ -140,6 +141,17 @@ def test_deploy_resolves_single_backend_image_when_compose_emits_multiple_lines(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Desplegando imágenes con SHA abcdef1" in result.stdout
+
+
+def test_deploy_inspects_only_backend_when_compose_emits_dependency_images(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["REALISTIC_COMPOSE_OUTPUT"] = "1"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    manifest_calls = [line for line in docker_log.read_text().splitlines() if "manifest inspect" in line]
+    assert manifest_calls == ["manifest inspect registry.example/cata-backend:abcdef1"]
 
 
 def test_deploy_backs_up_the_database_before_starting_new_images(tmp_path):
