@@ -479,7 +479,7 @@ describe("LandingPage", (): void => {
 
     expect(html).toContain("data-serve-paddle");
     expect(html).toContain("data-serve-ball");
-        expect(html).toContain("data-frame-ball");
+    expect(html).toContain("data-frame-ball");
     expect(html).toContain("landing-paddle-crest");
     expect(motionMount).not.toHaveBeenCalled();
   });
@@ -706,9 +706,9 @@ describe("LandingPage", (): void => {
     // fact, so an unscoped query would match more than one element.
     const gallery = document.querySelector(".landing-gallery") as HTMLElement;
     expect(gallery.querySelectorAll("figcaption")).toHaveLength(0);
-        GALLERY_PHOTOS.forEach((photo): void => {
-          expect(gallery).not.toHaveTextContent(photo.caption);
-        });
+    GALLERY_PHOTOS.forEach((photo): void => {
+      expect(gallery).not.toHaveTextContent(photo.caption);
+    });
   });
 
   it("renders every configured photo as a carousel slide", (): void => {
