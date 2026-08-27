@@ -54,6 +54,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { X, Send, AlertTriangle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { holdSmoothScroll } from "@/lib/smooth-scroll";
 import { consultarChatbot, ApiClientError, type ChatbotTurno } from "@/services/api";
 import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
 import { getQuickReplies, TALK_TO_CLUB_LABEL } from "./chat-quick-replies";
@@ -246,17 +247,29 @@ function useSheetGeometry(active: boolean): SheetGeometry | null {
 /**
  * Stop the page scrolling behind the sheet — and only behind the sheet.
  *
- * The previous value is restored rather than cleared, so this composes with
- * anything else that had already locked the body (a modal that opened the
- * assistant from inside itself, for one).
+ * TWO locks, because `overflow: hidden` only stops one of the two ways this
+ * page can scroll. It stops the USER. It does not stop a SCRIPT, and the
+ * landing page mounts Lenis, which cancels the wheel event and then scrolls
+ * the document itself: with the sheet open at 390x844, one wheel gesture took
+ * the page from `scrollY 0` to `886` behind it. So the smooth-scroll engine is
+ * held too, through `src/lib/smooth-scroll.ts` — Lenis's own documented
+ * `stop()`, not a CSS workaround, and a no-op on every surface that has no
+ * Lenis (the app pages, `/login`).
+ *
+ * The body's previous value is restored rather than cleared, so this composes
+ * with anything else that had already locked it (a modal that opened the
+ * assistant from inside itself, for one), and the hold is released the same
+ * way — including when the panel unmounts while still open.
  */
-function useBodyScrollLock(locked: boolean): void {
+function usePageScrollLock(locked: boolean): void {
   useEffect((): undefined | (() => void) => {
     if (!locked) return undefined;
     const { body } = document;
     const previous = body.style.overflow;
     body.style.overflow = "hidden";
+    const releaseSmoothScroll = holdSmoothScroll();
     return (): void => {
+      releaseSmoothScroll();
       body.style.overflow = previous;
     };
   }, [locked]);
@@ -393,7 +406,7 @@ export default function ChatWidget({
   const isSheet = useSheetPresentation();
   const skin = isSheet ? SHEET : CARD;
   const sheet = useSheetGeometry(open && isSheet);
-  useBodyScrollLock(open && isSheet);
+  usePageScrollLock(open && isSheet);
 
   // Opening moves focus into the panel. Without it the panel appears but the
   // caret stays on whatever trigger was clicked — which, now that the trigger
@@ -571,8 +584,18 @@ export default function ChatWidget({
       </header>
 
       {/* `.chat .msgs` */}
+      {/*
+        `data-lenis-prevent` is the other half of the scroll lock, and it is
+        Lenis's own opt-out: while the engine is held (see `usePageScrollLock`)
+        it swallows every wheel gesture, INCLUDING the ones aimed at this list
+        — which on a sheet that covers the screen is most of them. The
+        attribute tells Lenis to keep its hands off anything inside here, so
+        the history scrolls natively while the page behind stays put. On a
+        surface with no Lenis it means nothing at all.
+      */}
       <div
         ref={listRef}
+        data-lenis-prevent
         className={skin.history}
       >
         {mensajes.length === 0 && (

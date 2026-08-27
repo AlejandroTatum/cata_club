@@ -15,6 +15,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within, cleanup, act } from "@testing-library/react";
 import ChatWidget, { SHEET_MEDIA_QUERY } from "@/components/chatbot/ChatWidget";
 import { getQuickReplies } from "@/components/chatbot/chat-quick-replies";
+import {
+  registerSmoothScroll,
+  resetSmoothScrollForTests,
+  type SmoothScrollController,
+} from "@/lib/smooth-scroll";
 
 // `src` and `className` are forwarded, not dropped: which asset the header
 // avatar points at, and whether it crops with `object-cover`, are behaviours
@@ -750,5 +755,94 @@ describe("ChatWidget — focus trapped in the sheet (#644)", () => {
     // is what it has always done.
     expect(fireEvent.keyDown(send, { key: "Tab" })).toBe(true);
     expect(fireEvent.keyDown(send, { key: "Tab", shiftKey: true })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The scroll lock, and the half of it `overflow: hidden` could never do.
+//
+// Measured on the landing page at 390x844 with the sheet open: one wheel
+// gesture took `window.scrollY` from 0 to 886 BEHIND the sheet. The body lock
+// was applied and was working — it stops the user. It does not stop a script,
+// and the landing mounts Lenis, which cancels the wheel event and scrolls the
+// document itself. Under `prefers-reduced-motion: reduce` Lenis never mounts
+// and the identical gesture moved nothing, which is what pinned the cause to
+// the smooth-scroll engine rather than to the lock.
+// ---------------------------------------------------------------------------
+
+/** A stand-in for Lenis, with the contract `smooth-scroll.ts` consumes. */
+function fakeEngine(): SmoothScrollController & { stops: number; starts: number } {
+  return {
+    stops: 0,
+    starts: 0,
+    isStopped: false,
+    stop(): void {
+      this.stops += 1;
+      (this as { isStopped: boolean }).isStopped = true;
+    },
+    start(): void {
+      this.starts += 1;
+      (this as { isStopped: boolean }).isStopped = false;
+    },
+  };
+}
+
+describe("ChatWidget — the page behind the sheet stays put", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.style.overflow = "";
+    resetSmoothScrollForTests();
+  });
+
+  it("holds the page's smooth scroll while the sheet is open, and hands it back", () => {
+    installViewport(390, 844);
+    const engine = fakeEngine();
+    registerSmoothScroll(engine);
+
+    const { rerender } = render(<ChatWidget open onClose={vi.fn()} />);
+    expect(engine.isStopped).toBe(true);
+
+    rerender(<ChatWidget open={false} onClose={vi.fn()} />);
+    expect(engine.isStopped).toBe(false);
+    expect(engine.starts).toBe(1);
+  });
+
+  it("hands the page back when the panel unmounts while still open", () => {
+    // Navigating away with the sheet up: the component never re-renders
+    // closed, it simply stops existing. A lock released only on the close
+    // transition would leave the landing frozen for the rest of the session.
+    installViewport(390, 844);
+    const engine = fakeEngine();
+    registerSmoothScroll(engine);
+
+    const { unmount } = render(<ChatWidget open onClose={vi.fn()} />);
+    expect(engine.isStopped).toBe(true);
+
+    unmount();
+    expect(engine.isStopped).toBe(false);
+  });
+
+  it("never touches the smooth scroll for the corner card", () => {
+    // The card covers 340px of a desktop page; freezing the rest of it would
+    // be a regression, not a fix — same reasoning as the body lock's own
+    // desktop exemption.
+    installViewport(1440, 900);
+    const engine = fakeEngine();
+    registerSmoothScroll(engine);
+
+    render(<ChatWidget open onClose={vi.fn()} />);
+
+    expect(engine.stops).toBe(0);
+    expect(engine.isStopped).toBe(false);
+  });
+
+  it("keeps the history's own scrolling out of the engine's hands", () => {
+    // A held Lenis cancels every wheel gesture it sees, including the ones
+    // aimed at the message list — which, on a sheet that covers the screen, is
+    // most of them. `data-lenis-prevent` is Lenis's own opt-out.
+    installViewport(390, 844);
+    const { container } = render(<ChatWidget open onClose={vi.fn()} />);
+
+    expect(container.querySelector(".overflow-y-auto")).toHaveAttribute("data-lenis-prevent");
   });
 });
