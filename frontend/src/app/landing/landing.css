@@ -41,6 +41,12 @@
   --landing-medal-bronce-fill: #cd7f32;
   --landing-medal-part: #9aa2ab;
   --landing-medal-pending: #7d848c;
+  /* Warm light grey for the stats band (issue #691): the palette's existing
+     near-white (--landing-bg-base: #f9fafb) is blue-tinted (hue ~210deg),
+     the opposite of what the section needs to read as a distinct, warm
+     surface next to ENTRENAMIENTOS' plain white. This is a new, genuinely
+     warm value (hue ~37deg) rather than a reuse of that cool token. */
+  --landing-stats-bg: #f1eee9;
 
   /* Semantic landing tokens: Option A, Deportivo Clasico. */
   --landing-background: var(--landing-bg-base);
@@ -176,8 +182,15 @@
 .landing-hero .landing-hero-serve-paddle { position: absolute; right: var(--landing-serve-x); bottom: var(--landing-serve-y); z-index: 11; width: var(--landing-serve-face); height: var(--landing-serve-face); pointer-events: none; will-change: transform; }
 .landing-hero .landing-hero-serve-paddle i { right: calc(var(--landing-serve-face) * -0.16); bottom: calc(var(--landing-serve-face) * -0.11); width: calc(var(--landing-serve-face) * 0.5); height: calc(var(--landing-serve-face) * 0.18); }
 
-.landing-stats { position: relative; display: flex; padding: 48px 8.33vw; overflow: hidden; background: var(--landing-surface); }
-.landing-stats::before, .landing-section:not(.landing-motto)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
+/* Warm band, distinct from ENTRENAMIENTOS' white surface below it (issue
+   #691), closed off with a hairline so the boundary reads on every screen
+   even where the background step alone is too subtle to notice. */
+.landing-stats { position: relative; display: flex; padding: 48px 8.33vw; overflow: hidden; border-bottom: 1px solid var(--landing-border); background: var(--landing-stats-bg); }
+/* Same grid, lower contrast: the warm ground under it already sits closer to
+   the ink than plain white, so the line opacity drops to keep the grid as
+   quiet here as it is everywhere else. */
+.landing-stats::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 1.4%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 1.4%, transparent) 0 1px,transparent 1px 22px); }
+.landing-section:not(.landing-motto)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
 .landing-stat { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 .landing-stat strong, .landing-section-header h2 { color: var(--landing-text-strong); }
 .landing-stat strong { font-size: 48px; }
