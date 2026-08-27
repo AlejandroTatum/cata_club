@@ -779,7 +779,7 @@ type ProfileLayoutProps =
 
 function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
-  const { logout } = useAuth();
+  const { logout, refreshSession } = useAuth();
 
   // ---- Staff-only inline edit state. Always declared (hooks can't be
   // conditional) — simply unused on the student branch. ----
@@ -834,6 +834,13 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       } else {
         props.onPerfilUpdated(updated);
       }
+      // `/auth/me/foto` is always self-service (the caller's OWN photo), so
+      // the session avatar in AppShell's sidebar — rendered on this very
+      // page, from `session.user.fotoUrl` in AuthContext, NOT from the local
+      // `perfil` state updated above — must be refreshed too. Without this,
+      // it kept showing the previous photo until the next periodic
+      // revalidation or a full page reload (issue #662).
+      await refreshSession();
       showSuccess("Foto de perfil actualizada correctamente.");
     } catch (error: unknown) {
       const message = toErrorMessage(error, "No se pudo actualizar la foto de perfil.");
