@@ -26,6 +26,7 @@ import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
+import { EDITORIAL_MEDIA_SIZES, MAP_INSET_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules } from "./schedule-data";
 
 interface SectionHeaderProps {
@@ -188,6 +189,7 @@ function MissionVision(): React.ReactElement {
               width={1200}
               height={900}
               loading="lazy"
+              sizes={EDITORIAL_MEDIA_SIZES}
             />
           </figure>
           <div className="landing-editorial-copy">
@@ -219,6 +221,7 @@ function MissionVision(): React.ReactElement {
               width={1600}
               height={1200}
               loading="lazy"
+              sizes={EDITORIAL_MEDIA_SIZES}
             />
           </figure>
         </article>
@@ -326,6 +329,7 @@ function Location(): React.ReactElement {
               width={1600}
               height={1200}
               loading="lazy"
+              sizes={MAP_INSET_SIZES}
             />
             <figcaption>Así se ve al llegar</figcaption>
           </figure>
