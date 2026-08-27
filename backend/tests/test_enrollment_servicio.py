@@ -6,7 +6,10 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import (
     NivelTecnicoAlumno, TipoManoDominante, TipoNotificacion, TipoRol, TipoSangre,
 )
-from app.dominio.modelos import AntecedentesClub, FichaMedica, Notificacion, Persona, Usuario
+from app.dominio.modelos import (
+    AntecedentesClub, EnrollmentNotificacionOutbox, FichaMedica, Notificacion,
+    Persona, Usuario,
+)
 from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentAntecedentesDTO,
@@ -354,7 +357,25 @@ def _crear_administrador(db_session, correo: str = "admin@cataclub.test") -> int
     return persona.id
 
 
-def test_inscripcion_con_representante_notifica_a_los_administradores(db_session):
+def _correr_worker(db_session, monkeypatch) -> None:
+    """Corre la cadena real beat -> worker contra la sesión de prueba.
+
+    La inscripción solo deja la fila PENDIENTE en el outbox (issue #703): la
+    `Notificacion` -- y con ella el INSERT que exige el label del enum en
+    PostgreSQL -- la materializa el worker. Para que estas pruebas sigan
+    cubriendo ese INSERT hay que llegar hasta acá."""
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tareas
+
+    monkeypatch.setattr(tareas, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(
+        tareas.entregar_inscripcion_notificacion,
+        "delay",
+        tareas.entregar_inscripcion_notificacion,
+    )
+    tareas.despachar_inscripcion_notificaciones()
+
+
+def test_inscripcion_con_representante_notifica_a_los_administradores(db_session, monkeypatch):
     """La autoinscripción debe dejar una notificación NUEVA_INSCRIPCION para
     cada administrador. Exige que el label exista en el enum de PostgreSQL."""
     admin_id = _crear_administrador(db_session)
@@ -370,6 +391,17 @@ def test_inscripcion_con_representante_notifica_a_los_administradores(db_session
     resultado = EnrollmentServicio(db_session).enroll(datos)
 
     assert resultado["access_token"]
+    # La inscripción deja el evento durable, no la notificación entregada.
+    pendientes = (
+        db_session.query(EnrollmentNotificacionOutbox)
+        .filter(EnrollmentNotificacionOutbox.admin_persona_id == admin_id)
+        .all()
+    )
+    assert len(pendientes) == 1
+    assert pendientes[0].status == "PENDIENTE"
+
+    _correr_worker(db_session, monkeypatch)
+
     notificaciones = (
         db_session.query(Notificacion)
         .filter(Notificacion.persona_id == admin_id)
@@ -380,7 +412,7 @@ def test_inscripcion_con_representante_notifica_a_los_administradores(db_session
     assert "Lucas Martinez" in notificaciones[0].mensaje
 
 
-def test_autoinscripcion_adulto_notifica_a_los_administradores(db_session):
+def test_autoinscripcion_adulto_notifica_a_los_administradores(db_session, monkeypatch):
     """Segundo camino de `enroll()`: adulto con credenciales propias."""
     admin_id = _crear_administrador(db_session)
     datos = EnrollmentCreateDTO(
@@ -391,6 +423,7 @@ def test_autoinscripcion_adulto_notifica_a_los_administradores(db_session):
     )
 
     EnrollmentServicio(db_session).enroll(datos)
+    _correr_worker(db_session, monkeypatch)
 
     tipos = [
         n.tipo for n in db_session.query(Notificacion)
