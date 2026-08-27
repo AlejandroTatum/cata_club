@@ -9,6 +9,7 @@ Cubre:
   - rechaza si el solicitante no es dueño ni admin -> 403.
 """
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -135,8 +136,16 @@ def test_subir_voucher_pdf_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
     body = resp.json()
     assert body["voucherFormato"] == "application/pdf"
     assert body["voucherUrl"] != _FAKE_URL_PDF
-    assert "/authenticated/" in body["voucherUrl"]
-    assert body["voucherUrl"].endswith(".pdf")
+    # Mismo candado que el voucher en JPEG (arriba), sobre la forma que
+    # corresponde al PDF: un PDF NO se entrega por la CDN -- esta cuenta la
+    # deniega con un 401 -- sino por el endpoint de descarga de la API, donde
+    # `authenticated` viaja como parámetro y no como segmento de la ruta (ver
+    # `_url_descarga_api` en `cloudinary_cliente.py`).
+    parametros = parse_qs(urlparse(body["voucherUrl"]).query)
+    assert "res.cloudinary.com" not in body["voucherUrl"]
+    assert parametros["type"] == ["authenticated"]
+    assert parametros["public_id"][0].endswith(".pdf")
+    assert "voucher-pago-" in parametros["public_id"][0]
 
 
 def test_subir_voucher_tras_fallo_de_cloudinary_permite_reintentar(client, db_session):

@@ -15,7 +15,9 @@ uploader` -- solo con las credenciales de prueba que fija el autouse
 import inspect
 import logging
 import re
+import time
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from urllib3.util import Timeout
@@ -27,6 +29,14 @@ from app.soporte_transversal.resiliencia import (
     CIRCUITO_CLOUDINARY_UMBRAL_FALLOS,
     CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS,
 )
+
+
+def _parametros(url: str) -> dict[str, str]:
+    """Query string de una URL de entrega, decodificado. El endpoint de
+    descarga de la API lleva el `public_id` como parámetro url-encodeado
+    (`cataclub%2Fcomprobantes%2F...`), así que buscarlo como substring de la
+    URL cruda no encuentra nada aunque esté."""
+    return {clave: valores[0] for clave, valores in parse_qs(urlparse(url).query).items()}
 
 
 def _subir_pdf(**overrides):
@@ -382,15 +392,24 @@ def test_url_firmada_no_es_igual_a_una_url_publica_de_upload():
     assert "/upload/" not in url
 
 
-def test_url_firmada_de_pdf_fuerza_formato_y_resource_type_raw():
+def test_url_firmada_de_pdf_pide_el_recurso_raw_authenticated_con_su_extension():
+    """Un PDF se entrega por el endpoint de descarga de la API, no por la CDN
+    (ver `_url_descarga_api`), pero sigue pidiendo el MISMO recurso: `raw`,
+    `type=authenticated`, y el `public_id` con la extensión `.pdf` con la que
+    Cloudinary lo indexó al subirlo con `format="pdf"`."""
     url = cc.generar_url_firmada(
         "comprobante-00000005",
         resource_type="raw",
         folder=settings.cloudinary_carpeta_comprobantes,
         formato="pdf",
     )
-    assert "/raw/authenticated/" in url
-    assert url.endswith(".pdf") or ".pdf?" in url
+
+    parametros = _parametros(url)
+    assert url.startswith(
+        f"https://api.cloudinary.com/v1_1/{settings.cloudinary_cloud_name}/raw/download"
+    )
+    assert parametros["type"] == "authenticated"
+    assert parametros["public_id"].endswith(".pdf")
 
 
 def test_url_firmada_sin_clave_de_token_queda_firmada_pero_sin_vencer(monkeypatch):
@@ -534,6 +553,9 @@ def test_url_firmada_antepone_la_carpeta_de_subida():
 
 
 def test_url_firmada_de_comprobante_antepone_su_propia_carpeta():
+    """Mismo candado del issue #480 para el PDF: la carpeta viaja igual, solo
+    que ahora dentro del parámetro `public_id` del endpoint de descarga (por
+    eso se lee decodificado y no como substring de la URL cruda)."""
     url = cc.generar_url_firmada(
         "comprobante-00000004",
         resource_type="raw",
@@ -541,7 +563,9 @@ def test_url_firmada_de_comprobante_antepone_su_propia_carpeta():
         formato="pdf",
     )
 
-    assert f"{settings.cloudinary_carpeta_comprobantes}/comprobante-00000004" in url
+    assert _parametros(url)["public_id"] == (
+        f"{settings.cloudinary_carpeta_comprobantes}/comprobante-00000004.pdf"
+    )
 
 
 def test_resolver_url_entrega_de_un_public_id_antepone_la_carpeta():
@@ -564,6 +588,151 @@ def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_antepone_carpeta():
     )
 
     assert resultado == url_heredada
+
+
+# --- 12b. Entrega de PDF: NUNCA por la CDN ---------------------------------
+# La cuenta deniega la entrega de todo PDF por `res.cloudinary.com`: la URL
+# firmada respondía `401` con `x-cld-error: deny or ACL failure` y
+# `content-length: 0`, y el backend nunca se enteraba porque firmar no toca la
+# red. Estos tests son candados de FORMA, no de entrega -- lo que realmente
+# descarga el PDF de la cuenta real es
+# `backend/scripts/verificar_entrega_pdf.py` (`make qa-pdf-delivery-check`),
+# el único chequeo que sí hace el GET. Misma clase de punto ciego que el
+# issue #480, ahora con un chequeo que lo cubre.
+
+def test_url_firmada_de_pdf_no_sale_por_la_cdn():
+    """Candado central del fix: la URL de entrega de un PDF NO puede apuntar a
+    `res.cloudinary.com`. Si alguien devuelve el PDF a `cloudinary_url`, el
+    socio vuelve a recibir un 401 en blanco y este test se rompe antes."""
+    url = cc.generar_url_firmada(
+        "comprobante-00000005",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
+    )
+
+    assert "res.cloudinary.com" not in url
+    assert url.startswith("https://api.cloudinary.com/v1_1/")
+    assert "/raw/download?" in url
+
+
+def test_url_firmada_de_imagen_sigue_saliendo_por_la_cdn():
+    """La contracara: la imagen (voucher JPEG/PNG y foto de perfil) SÍ se
+    entrega por CDN -- se comprobó que responde 200 con la misma firma. El fix
+    del PDF no debe arrastrarla al endpoint de descarga, que no transforma ni
+    cachea por `version` (issue #662)."""
+    url = cc.generar_url_firmada(
+        "voucher-pago-00000012",
+        resource_type="image",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert url.startswith("https://res.cloudinary.com/")
+    assert "/image/authenticated/" in url
+
+
+def test_url_firmada_de_pdf_vence_con_la_vigencia_de_resiliencia():
+    """A diferencia de la CDN (que sin `cloudinary_auth_token_key` firmaba un
+    link sin vencimiento), el endpoint de descarga CHEQUEA `expires_at` del
+    lado del servidor. El vencimiento sale de la constante de política, no de
+    un literal."""
+    antes = int(time.time())
+
+    parametros = _parametros(cc.generar_url_firmada(
+        "comprobante-00000005",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
+    ))
+
+    despues = int(time.time())
+    vencimiento = int(parametros["expires_at"])
+    assert antes + CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS <= vencimiento
+    assert vencimiento <= despues + CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS
+
+
+def test_url_firmada_de_pdf_no_expone_el_api_secret():
+    """El endpoint de descarga lleva la `api_key` en el query string (así lo
+    diseñó Cloudinary: es un identificador público). El `api_secret`, que es
+    lo que permite firmar, NO puede aparecer nunca."""
+    url = cc.generar_url_firmada(
+        "comprobante-00000005",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
+    )
+
+    assert settings.cloudinary_api_secret
+    assert settings.cloudinary_api_secret not in url
+    assert _parametros(url)["signature"]
+
+
+def test_url_firmada_de_pdf_cambia_en_cada_lectura(monkeypatch):
+    """Un voucher en PDF se sube con `overwrite=True` bajo el mismo
+    `public_id`: si la URL fuera byte-idéntica entre lecturas, el navegador
+    seguiría mostrando el PDF viejo tras una corrección (misma clase de fallo
+    que el issue #662 en la foto de perfil). El reloj se inyecta reemplazando
+    `cc.time` -- parchear `time.time` global lo cambiaría también para el SDK,
+    que lo usa para su propio `timestamp`."""
+    class _Reloj:
+        def __init__(self, valor):
+            self.valor = valor
+
+        def time(self):
+            return self.valor
+
+    def url_de_pdf():
+        return cc.generar_url_firmada(
+            "voucher-pago-00000012",
+            resource_type="raw",
+            folder=settings.cloudinary_carpeta_vouchers,
+            formato="pdf",
+        )
+
+    reloj = _Reloj(1_700_000_000.0)
+    monkeypatch.setattr(cc, "time", reloj)
+    primera = url_de_pdf()
+    reloj.valor += 1.0
+    segunda = url_de_pdf()
+
+    assert primera != segunda
+    assert int(_parametros(segunda)["expires_at"]) - int(_parametros(primera)["expires_at"]) == 1
+
+
+def test_url_firmada_de_pdf_no_hace_red_ni_consulta_el_circuito():
+    """Mismo contrato que la rama de imagen: firmar el link de descarga es
+    HMAC local, no una llamada al proveedor. Debe seguir funcionando con el
+    circuito ABIERTO -- si no, un Cloudinary caído dejaría de entregar PDFs ya
+    subidos."""
+    for _ in range(CIRCUITO_CLOUDINARY_UMBRAL_FALLOS):
+        cc._circuito_cloudinary.registrar_fallo()
+    assert cc._circuito_cloudinary.estado == "abierto"
+
+    with _parchear_upload() as mock_upload:
+        url = cc.generar_url_firmada(
+            "comprobante-00000005",
+            resource_type="raw",
+            folder=settings.cloudinary_carpeta_comprobantes,
+            formato="pdf",
+        )
+
+        assert url
+        assert mock_upload.call_count == 0
+
+
+def test_resolver_url_entrega_de_un_pdf_usa_el_endpoint_de_descarga():
+    """El camino real que recorren `_url_entrega_comprobante` y
+    `_url_entrega_voucher` (membresia_pago_servicio.py) para un PDF."""
+    resultado = cc.resolver_url_entrega(
+        "comprobante-00000004",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
+    )
+
+    assert resultado is not None
+    assert "res.cloudinary.com" not in resultado
+    assert _parametros(resultado)["public_id"].endswith("/comprobante-00000004.pdf")
 
 
 # --- 13. `resolver_url_foto_perfil` (issue #553, Problema 2) ----------------
