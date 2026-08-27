@@ -15,6 +15,11 @@
 import { NextResponse } from "next/server";
 import { forwardedForFrom, getBackendApiUrl } from "@/lib/server/auth";
 import { passthroughBackendError } from "@/lib/server/backend-client";
+import {
+  CHATBOT_MAX_MESSAGE_LENGTH,
+  CHATBOT_MESSAGE_TOO_LONG_CODE,
+  CHATBOT_MESSAGE_TOO_LONG_TEXT,
+} from "@/lib/chatbot-contract";
 
 /**
  * LLM completions can run longer than typical CRUD calls — see module
@@ -24,7 +29,6 @@ import { passthroughBackendError } from "@/lib/server/backend-client";
  * means redoing that arithmetic too.
  */
 const CHATBOT_TIMEOUT_MS = 30_000;
-const CHATBOT_MAX_MESSAGE_LENGTH = 2_000;
 
 interface ChatbotRequestBody {
   mensaje: string;
@@ -35,14 +39,17 @@ interface BackendChatbotResponse {
   respuesta: string;
 }
 
+/**
+ * Shape only. The LENGTH is checked separately, below, because the two
+ * rejections are not the same rejection: "this is not a chat message" is a
+ * client bug, "this message is 2500 characters" is something the person typing
+ * can fix — and a client that only sees `400` cannot tell them apart, so it
+ * used to report both as a failure to reach the assistant.
+ */
 function isChatbotRequestBody(value: unknown): value is ChatbotRequestBody {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  if (
-    typeof v.mensaje !== "string" ||
-    v.mensaje.trim().length === 0 ||
-    v.mensaje.length > CHATBOT_MAX_MESSAGE_LENGTH
-  ) return false;
+  if (typeof v.mensaje !== "string" || v.mensaje.trim().length === 0) return false;
   if (v.historial === undefined) return true;
   if (!Array.isArray(v.historial)) return false;
   return v.historial.every(
@@ -68,6 +75,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (!isChatbotRequestBody(body)) {
     return NextResponse.json({ message: "El mensaje del chat es inválido o está vacío." }, { status: 400 });
+  }
+
+  // Named, not just numbered: `code` is what lets the composer answer "your
+  // message is too long" instead of "we could not reach the assistant".
+  if (body.mensaje.length > CHATBOT_MAX_MESSAGE_LENGTH) {
+    return NextResponse.json(
+      { message: CHATBOT_MESSAGE_TOO_LONG_TEXT, code: CHATBOT_MESSAGE_TOO_LONG_CODE },
+      { status: 400 },
+    );
   }
 
   const controller = new AbortController();

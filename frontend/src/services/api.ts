@@ -212,12 +212,24 @@ export class ApiClientError extends Error {
    * to have marked anything at all.
    */
   public readonly safe: boolean;
+  /**
+   * The failure's machine-readable name, when the responder gave one (`code`
+   * in the response body). A status is a class of failure, not a reason: one
+   * route can answer `400` for a malformed body, an empty message and a
+   * message that is simply too long, and a client that only sees the number
+   * has to guess which — which is how "your message is 2500 characters" came
+   * to be reported to the user as "we could not reach the assistant".
+   * `undefined` whenever nobody said, so a caller must fall back to the status
+   * rather than assume.
+   */
+  public readonly code: string | undefined;
 
-  constructor(message: string, status: number, safe = false) {
+  constructor(message: string, status: number, safe = false, code?: string) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
     this.safe = safe;
+    this.code = code;
   }
 }
 
@@ -416,6 +428,7 @@ async function request<T>(
       // as-is; the status itself is on the error for anyone who needs it.
       let message = GENERIC_FAILURE;
       let safe = false;
+      let code: string | undefined;
       try {
         const errorBody: unknown = await response.json();
         if (isApiErrorBody(errorBody)) {
@@ -423,11 +436,16 @@ async function request<T>(
           // Strict `=== true` (issue #355): anything else — absent, `false`,
           // a stray truthy non-boolean — must never mark a message safe.
           safe = errorBody.mensaje_seguro === true;
+          // Only a non-empty string is a code. Anything else is "nobody said",
+          // which must stay `undefined` so callers fall back to the status.
+          if (typeof errorBody.code === "string" && errorBody.code.length > 0) {
+            code = errorBody.code;
+          }
         }
       } catch {
         // ignore parse errors — use default message
       }
-      throw new ApiClientError(message, response.status, safe);
+      throw new ApiClientError(message, response.status, safe, code);
     }
 
     // 204 No Content never carries a body — calling response.json() on it
@@ -1078,7 +1096,7 @@ export async function fetchTarifas(): Promise<TarifaPublica[]> {
 
 function isApiErrorBody(
   value: unknown,
-): value is { message?: string; detail?: string; mensaje_seguro?: unknown } {
+): value is { message?: string; detail?: string; mensaje_seguro?: unknown; code?: unknown } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const body = value as Record<string, unknown>;
   return (typeof body.message === "string" && body.message.length > 0) ||

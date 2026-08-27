@@ -52,6 +52,31 @@ describe("POST /api/chatbot", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  /*
+   * A status is a class of failure, not a reason. This route answers 400 for a
+   * body that is not JSON, for a message that is empty or the wrong shape, AND
+   * for a message that is simply too long — and the client used to see only
+   * the number, so it reported all three as a failure to reach the assistant
+   * ("No se pudo contactar a CATA-BOT"). The name is what tells them apart.
+   */
+  it("names the over-length rejection so the client can report it honestly", async () => {
+    const response = await POST(postRequest({ mensaje: "x".repeat(2001) }));
+
+    expect(await response.json()).toEqual({
+      message: "El mensaje supera el límite de 2.000 caracteres. Acórtelo e inténtelo de nuevo.",
+      code: "chatbot_mensaje_demasiado_largo",
+    });
+  });
+
+  it("leaves the other 400s unnamed, so nothing borrows the length message", async () => {
+    const response = await POST(postRequest({ mensaje: "   " }));
+    const body = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBeUndefined();
+    expect(body.message).toBe("El mensaje del chat es inválido o está vacío.");
+  });
+
   it("accepts a message at the bounded input size", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ respuesta: "En Mi Cuenta." }));
 

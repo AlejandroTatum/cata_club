@@ -10,6 +10,7 @@ import type { HeroSlideChangeDetail } from "./HeroCarousel";
 import { rallyCanPin, rallyFlowAnchorsPx, rallyHitIndex } from "./landing-rally";
 import type { RallyValueBox } from "./landing-rally";
 import { buildServeTimeline } from "./landing-serve";
+import { registerSmoothScroll } from "@/lib/smooth-scroll";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
@@ -385,10 +386,20 @@ export default function LandingMotion(): null {
     gsap.registerPlugin(ScrollTrigger, MotionPathPlugin, DrawSVGPlugin, SplitText);
     const media = gsap.matchMedia();
     let lenis: Lenis | null = null;
+    /*
+     * Published so an overlay mounted somewhere else entirely — the CATA-BOT
+     * sheet lives in the root layout, not on this page — can hold the page
+     * still while it is open. Nothing else can: Lenis scrolls the document
+     * programmatically, so `overflow: hidden` on the body does not reach it,
+     * and the global Lenis writes on `window` is a version object, not this
+     * instance. See `src/lib/smooth-scroll.ts`.
+     */
+    let unregisterSmoothScroll: (() => void) | undefined;
     const updateLenis = (time: number): void => lenis?.raf(time * 1000);
 
     media.add("(prefers-reduced-motion: no-preference)", (): (() => void) => {
       lenis = new Lenis({ duration: 0.85, smoothWheel: true });
+      unregisterSmoothScroll = registerSmoothScroll(lenis);
       lenis.on("scroll", ScrollTrigger.update);
       gsap.ticker.add(updateLenis);
       gsap.ticker.lagSmoothing(0);
@@ -472,6 +483,8 @@ export default function LandingMotion(): null {
       });
 
       return (): void => {
+        unregisterSmoothScroll?.();
+        unregisterSmoothScroll = undefined;
         teardownCarousel?.();
         teardownHeroCarousel?.();
         teardownTicker?.();
@@ -490,6 +503,8 @@ export default function LandingMotion(): null {
 
     return (): void => {
       media.revert();
+      unregisterSmoothScroll?.();
+      unregisterSmoothScroll = undefined;
       gsap.ticker.remove(updateLenis);
       lenis?.destroy();
       ScrollTrigger.getAll().forEach((trigger): void => trigger.kill());
