@@ -91,7 +91,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
         'case " $* " in\n'
-        '  *" --images backend "*) echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi ;;\n'
+        '  *" --images backend "*) echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi ;;\n'
         '  *" manifest inspect "*) [ "$3" = "registry.example/cata-backend:${IMAGE_TAG}" ] || exit 1 ;;\n'
         '  *" --status running "*) if [ "${DB_RUNNING:-0}" = "1" ]; then echo db; fi ;;\n'
         "esac\n"

@@ -28,10 +28,10 @@ configured_backend_image() {
   (
     cd "$STACK_DIR"
     # Compose >= 5.5 puede emitir varias líneas para `--images backend`.
-    # `sed -n '1p'` toma solo la primera sin cerrar el pipe antes de tiempo
-    # (a diferencia de `head -n 1`, que con `pipefail` revienta por SIGPIPE
+    # `awk` toma solo la primera sin cerrar el pipe antes de tiempo
+    # (a diferencia de a first-line shortcut, que con `pipefail` revienta por SIGPIPE
     # si el emisor escribe una segunda línea).
-    IMAGE_TAG="$IMAGE_TAG" docker compose "${COMPOSE_FILES[@]}" config --images backend | sed -n '1p'
+    IMAGE_TAG="$IMAGE_TAG" docker compose "${COMPOSE_FILES[@]}" config --images backend | awk 'NF && !seen[$0]++ { images[++count] = $0 } END { if (count == 1) print images[1]; else exit 1 }'
   )
 }
 
