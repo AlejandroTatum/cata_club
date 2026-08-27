@@ -152,17 +152,30 @@ export async function backendFetchAuthed(
 export async function passthroughBackendError(response: Response, fallback: string): Promise<NextResponse> {
   let message = fallback;
   let mensajeSeguro = false;
+  let validationLoc: string[] | undefined;
   try {
     const body: unknown = await response.json();
     if (typeof body === "object" && body !== null) {
       const b = body as Record<string, unknown>;
       message = (typeof b.message === "string" && b.message) || (typeof b.detail === "string" && b.detail) || fallback;
       mensajeSeguro = b.mensaje_seguro === true;
+      if (response.status === 422 && Array.isArray(b.detail)) {
+        const first = b.detail[0];
+        if (typeof first === "object" && first !== null && Array.isArray((first as Record<string, unknown>).loc)) {
+          const loc = (first as Record<string, unknown>).loc as unknown[];
+          const stringLoc = loc.filter((part): part is string => typeof part === "string");
+          if (stringLoc.length === loc.length) validationLoc = stringLoc;
+        }
+      }
     }
   } catch {
     // ignore parse errors — use fallback
   }
-  return NextResponse.json({ message, mensaje_seguro: mensajeSeguro }, { status: response.status });
+  return NextResponse.json({
+    message,
+    mensaje_seguro: mensajeSeguro,
+    ...(validationLoc ? { validation_loc: validationLoc } : {}),
+  }, { status: response.status });
 }
 
 /**

@@ -7,8 +7,8 @@ import { buildEnrollmentRequest, getEnrollmentErrorMessage, initialFormData, typ
  * The exact shape a failing call reaches the wizard as — every failure route in
  * `services/api.ts` throws `ApiClientError(message, status)`.
  */
-function apiError(message: string, status: number): ApiClientError {
-  return new ApiClientError(message, status);
+function apiError(message: string, status: number, validationLoc?: string[]): ApiClientError {
+  return new ApiClientError(message, status, false, undefined, undefined, validationLoc);
 }
 
 function form(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
@@ -60,8 +60,18 @@ describe("getEnrollmentErrorMessage", () => {
       .toBe("Ya existe una persona con la cedula 1712345678");
   });
 
-  it("falls back to generic message for 400 without message", () => {
-    expect(getEnrollmentErrorMessage(apiError("", 400)))
+  it("names the email field for an identifiable backend 422", () => {
+    const error = apiError("No se pudo completar la inscripción.", 422, ["body", "credenciales_alumno", "correo"]);
+    expect(getEnrollmentErrorMessage(error)).toBe("Revise el correo electrónico e intente nuevamente.");
+  });
+
+  it("names the representative email field for an identifiable backend 422", () => {
+    const error = apiError("No se pudo completar la inscripción.", 422, ["body", "representante", "correo"]);
+    expect(getEnrollmentErrorMessage(error)).toBe("Revise el correo electrónico del representante e intente nuevamente.");
+  });
+
+  it("falls back to generic message for an unidentifiable 422", () => {
+    expect(getEnrollmentErrorMessage(apiError("", 422)))
       .toBe("No se pudo validar la inscripción. Revise sus datos e intente nuevamente.");
   });
 

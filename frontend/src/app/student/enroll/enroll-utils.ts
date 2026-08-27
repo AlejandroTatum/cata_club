@@ -220,12 +220,25 @@ export function isDemoQuickFillEnabled(
  * reconciling them. The translator is that reconciliation.
  */
 export function getEnrollmentErrorMessage(error: unknown): string {
+  const field = enrollmentValidationField(error);
+  if (field === "correo") return "Revise el correo electrónico e intente nuevamente.";
+  if (field === "correoRepresentante") return "Revise el correo electrónico del representante e intente nuevamente.";
   // The old helper carried two fallbacks — "revise sus datos" for 400/422 and
   // "intente más tarde" for everything else. The translator answers everything
   // else from the status now, so the one remaining fallback is the one for the
   // case it cannot answer: a 400/422 whose detail was not fit to show. Telling
   // that user to wait would be the wrong advice; their form is what is wrong.
   return toUserMessage(error, "No se pudo validar la inscripción. Revise sus datos e intente nuevamente.");
+}
+
+function enrollmentValidationField(error: unknown): EnrollField | undefined {
+  if (!error || typeof error !== "object" || !("status" in error) || error.status !== 422) return undefined;
+  const loc = "validationLoc" in error ? error.validationLoc : undefined;
+  if (!Array.isArray(loc) || !loc.every((part): part is string => typeof part === "string")) return undefined;
+  const path = loc.join(".");
+  if (path === "body.credenciales_alumno.correo" || path === "body.alumno.correo") return "correo";
+  if (path === "body.representante.correo") return "correoRepresentante";
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
