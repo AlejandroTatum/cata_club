@@ -202,6 +202,21 @@ services:
       # del entorno del proceso Caddy.
       DOMINIO: "${DOMINIO:?Error: define DOMINIO en el entorno de producción (dominio real del frontend, para el certificado TLS)}"
       ACME_EMAIL: "${ACME_EMAIL:?Error: define ACME_EMAIL en el entorno de producción (contacto para avisos de Let's Encrypt sobre el certificado)}"
+      # Único host que los buscadores pueden indexar. Lo consume
+      # `{$DOMINIO_INDEXABLE}` en ./Caddyfile, que marca `X-Robots-Tag:
+      # noindex, nofollow` en toda petición cuyo Host no sea este.
+      #
+      # A DIFERENCIA de las dos de arriba, NO lleva `:?`. Un `:?` obligaría
+      # a que cada despliegue -- staging incluido -- complete la variable, y
+      # el error más probable en staging es completarla con el dominio DE
+      # STAGING: eso lo volvería indexable, que es justo el modo de falla
+      # que este mecanismo existe para cerrar. Con default, un staging que
+      # nunca oyó hablar de la variable queda `noindex` sin hacer nada.
+      #
+      # `ninguno.invalid` es un TLD reservado (RFC 2606): ningún host real
+      # puede coincidir, así que el default deja el sitio `noindex` en vez
+      # de indexable. Mismo valor que el default del Caddyfile, a propósito.
+      DOMINIO_INDEXABLE: "${DOMINIO_INDEXABLE:-ninguno.invalid}"
     depends_on:
       # `condition: service_started`, NO `service_healthy`: un ingress tiene
       # que ser lo último en caerse. Si el stack reinicia con el frontend

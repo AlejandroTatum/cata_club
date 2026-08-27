@@ -79,4 +79,43 @@
 		# construirse mirando lo que Next.js efectivamente inyecta y
 		# verificarse en un navegador -- no acá, no sin esa verificación.
 	}
+
+	# ── Indexación: solo el dominio de producción es indexable ────────────
+	#
+	# Este mismo archivo es el que se despliega en CUALQUIER host: está
+	# parametrizado por `{$DOMINIO}` justamente para eso. Apuntado a un
+	# staging o a una preview alcanzable desde internet, los buscadores lo
+	# recorren e indexan una copia del sitio -- con fichas médicas de
+	# menores y comprobantes de pago detrás del login, pero con las URLs,
+	# la estructura y la landing entera al aire, y compitiendo contra el
+	# dominio real por posicionamiento.
+	#
+	# La decisión es qué se compara y contra qué. NO se usa un booleano del
+	# estilo `ES_PRODUCCION`: el `.env` de producción se copia entero a
+	# staging todo el tiempo, y un booleano copiado dice `true` en el host
+	# equivocado -- el modo de falla más probable termina en "staging
+	# indexado", que es exactamente lo que hay que evitar.
+	#
+	# Se compara el HOST REAL de la petición contra `DOMINIO_INDEXABLE`, el
+	# único host que puede aparecer en un buscador. Copiar el `.env` a
+	# staging ahora funciona a favor: `DOMINIO` cambia (es el host que se
+	# sirve) y `DOMINIO_INDEXABLE` se queda con el dominio real, así que los
+	# dos dejan de coincidir y el sitio sale `noindex` solo.
+	#
+	# El default NO PUEDE FALLAR ABIERTO. `ninguno.invalid` es un TLD
+	# reservado (RFC 2606): ningún host público puede ser igual a ese valor,
+	# así que si la variable falta, viene vacía o está mal escrita, la
+	# comparación falla para TODA petición y el sitio entero queda
+	# `noindex`. Un despliegue mal configurado se cae del lado de "no me
+	# indexen"; nunca del lado de "staging indexable". El precio explícito
+	# de esa elección: si producción se olvida de exportar
+	# `DOMINIO_INDEXABLE`, producción deja de indexarse. Es visible con un
+	# `curl -I` y se revierte con una variable -- al revés no: una copia de
+	# staging ya indexada sobrevive en el buscador mucho después del
+	# arreglo.
+	#
+	# `docker-compose.prod.yml` inyecta la variable con este mismo default,
+	# para que las dos capas coincidan.
+	@no_es_el_dominio_indexable not host {$DOMINIO_INDEXABLE:ninguno.invalid}
+	header @no_es_el_dominio_indexable X-Robots-Tag "noindex, nofollow"
 }

@@ -731,6 +731,134 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
 
 
+# ─── Indexación por buscadores: solo el dominio de producción ──────────────
+#
+# El `Caddyfile` versionado es el que se despliega en CUALQUIER host (está
+# parametrizado por `{$DOMINIO}`). Apuntado a un staging alcanzable desde
+# internet, los buscadores indexan una copia del sitio. El mecanismo compara
+# el Host de la petición contra `DOMINIO_INDEXABLE` y responde
+# `X-Robots-Tag: noindex, nofollow` cuando no coinciden.
+#
+# Centinela reservado (TLD `.invalid`, RFC 2606) al que caen las DOS capas
+# -- el default del Caddyfile y el del compose -- cuando el operador no fija
+# la variable. Ningún host público puede ser igual a este valor: por eso el
+# default no puede terminar en "todo el sitio indexable".
+_HOST_INDEXABLE_POR_DEFECTO = "ninguno.invalid"
+
+
+def test_el_caddyfile_marca_noindex_todo_host_que_no_sea_el_indexable():
+    """Candado sobre el CABLEADO del mecanismo dentro del `Caddyfile`, que es
+    la parte que ningún render de compose puede ver: el matcher tiene que
+    existir, tiene que ser `not host` (la negación es lo que hace que la
+    regla se aplique a todo lo que NO es producción) y el header que dispara
+    tiene que ser `X-Robots-Tag: noindex, nofollow`.
+
+    Se exige también el default `.invalid` en el propio Caddyfile: es la
+    segunda capa, la que sigue en pie si alguien corre este archivo fuera de
+    `docker-compose.prod.yml` (por ejemplo `caddy validate`, o un Caddy
+    levantado a mano). Sin ese default, un `DOMINIO_INDEXABLE` ausente
+    dejaría el matcher comparando contra la cadena vacía.
+
+    No verifica que Caddy EMITA el header -- eso requiere levantar el
+    contenedor y una petición real, que esta suite no hace. Verifica que la
+    regla esté escrita, y `test_el_render_de_produccion_solo_deja_indexable_el_dominio_declarado`
+    verifica que el valor que decide llegue al contenedor."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert f"not host {{$DOMINIO_INDEXABLE:{_HOST_INDEXABLE_POR_DEFECTO}}}" in contenido, (
+        f"el Caddyfile no compara el Host contra "
+        f"`{{$DOMINIO_INDEXABLE:{_HOST_INDEXABLE_POR_DEFECTO}}}` con `not "
+        f"host`. Sin el default reservado, un DOMINIO_INDEXABLE ausente deja "
+        f"de marcar noindex -- y esa es justo la falla que este mecanismo no "
+        f"puede tener."
+    )
+    assert (
+        'header @no_es_el_dominio_indexable X-Robots-Tag "noindex, nofollow"'
+        in contenido
+    ), (
+        "el Caddyfile no aplica `X-Robots-Tag: noindex, nofollow` COLGADO del "
+        "matcher `@no_es_el_dominio_indexable`. Las dos mitades tienen que ir "
+        "juntas: el header sin el matcher deja producción entera noindex, y "
+        "el matcher sin el header no marca nada."
+    )
+
+
+@pytest.mark.parametrize(
+    "dominio_indexable,espera_noindex",
+    [
+        (None, True),
+        ("otro-dominio-cualquiera.invalid", True),
+        (_DOMINIO_PARA_RENDER, False),
+    ],
+    ids=[
+        "sin-la-variable-nadie-es-indexable",
+        "otro-host-es-staging-y-va-noindex",
+        "el-dominio-servido-es-el-indexable",
+    ],
+)
+def test_el_render_de_produccion_solo_deja_indexable_el_dominio_declarado(
+    dominio_indexable, espera_noindex
+):
+    """Los dos estados del mecanismo, más el default.
+
+    El `Caddyfile` decide con `not host {$DOMINIO_INDEXABLE}` sobre el Host
+    de la petición; como el bloque de sitio es `{$DOMINIO}`, el único Host
+    que llega es `DOMINIO`. O sea que la regla, vista desde el render, es
+    exactamente `DOMINIO_INDEXABLE != DOMINIO -> noindex`, y eso es lo que se
+    reproduce acá sobre los valores que el compose le entrega al contenedor.
+
+    El primer caso es el importante y el que motivó todo el diseño: SIN la
+    variable, el render tiene que dejar el sitio noindex. La alternativa
+    obvia -- un booleano `ES_PRODUCCION` -- falla justo al revés: el `.env`
+    de producción se copia entero a staging, el booleano viaja con él
+    diciendo `true`, y staging queda indexable en silencio. Por la misma
+    razón `DOMINIO_INDEXABLE` NO lleva `:?` en el overlay: obligar a
+    completarla en cada despliegue invita a que staging se ponga a sí mismo
+    como indexable."""
+    if dominio_indexable is None:
+        resultado = _ejecutar_config(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            omitir=("DOMINIO_INDEXABLE",),
+        )
+        assert resultado.returncode == 0, (
+            f"el render de producción tiene que seguir funcionando SIN "
+            f"DOMINIO_INDEXABLE (el default lo cubre) y falló:\n"
+            f"{resultado.stderr}"
+        )
+        config = json.loads(resultado.stdout)
+    else:
+        config = _renderizar(
+            "docker-compose.yml",
+            "docker-compose.prod.yml",
+            entorno={"DOMINIO_INDEXABLE": dominio_indexable},
+        )
+
+    entorno_caddy = config["services"]["caddy"]["environment"]
+    servido = entorno_caddy["DOMINIO"]
+    indexable = entorno_caddy.get("DOMINIO_INDEXABLE")
+
+    assert indexable, (
+        "el servicio `caddy` no recibe DOMINIO_INDEXABLE en el render de "
+        "producción: `{$DOMINIO_INDEXABLE}` en el Caddyfile leería el "
+        "entorno del proceso y no encontraría nada"
+    )
+    if dominio_indexable is None:
+        assert indexable == _HOST_INDEXABLE_POR_DEFECTO, (
+            f"sin DOMINIO_INDEXABLE exportado, el overlay tiene que caer al "
+            f"centinela reservado {_HOST_INDEXABLE_POR_DEFECTO!r} (mismo "
+            f"default que el Caddyfile) y resolvió a {indexable!r}"
+        )
+
+    assert (indexable != servido) is espera_noindex, (
+        f"con DOMINIO={servido!r} y DOMINIO_INDEXABLE={indexable!r} el sitio "
+        f"{'NO ' if espera_noindex else ''}quedaría marcado noindex, y se "
+        f"esperaba lo contrario. La regla es: solo el host declarado en "
+        f"DOMINIO_INDEXABLE puede ser indexado; cualquier otro -- staging, "
+        f"preview, o un despliegue que se olvidó la variable -- lleva "
+        f"`X-Robots-Tag: noindex, nofollow`."
+    )
+
+
 def test_caddyfile_reemplaza_x_forwarded_for_por_el_peer_real():
     """issue #235, mitad 2 (ingress). Verificado con curl contra un upstream
     real detrás de Caddy 2.8: SIN esta directiva, `reverse_proxy` YA
