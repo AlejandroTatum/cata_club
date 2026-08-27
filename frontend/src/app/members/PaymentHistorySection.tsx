@@ -14,6 +14,7 @@ import {
   sortPagosByDate,
   TIPO_PAGO_LABEL,
 } from "@/app/student/payments/payments-utils";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface PaymentHistorySectionProps {
   personaId: number;
@@ -81,7 +82,7 @@ export default function PaymentHistorySection({
         onClick={toggle}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex w-full items-center justify-between gap-2 text-left text-xs font-semibold text-ink"
+        className={`flex w-full items-center justify-between gap-2 text-left text-xs font-semibold text-ink ${MIN_TARGET_CLASS}`}
       >
         <span className="inline-flex items-center gap-1.5">
           <History size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />

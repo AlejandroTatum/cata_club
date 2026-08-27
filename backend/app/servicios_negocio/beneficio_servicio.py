@@ -142,6 +142,7 @@ class BeneficioServicio:
             persona_id=asignacion.persona_id,
             descuento=DescuentoResponseDTO.model_validate(descuento),
             asignado_por_persona_id=asignacion.asignado_por_persona_id,
+            asignado_por_nombre=asignacion.asignado_por_nombre,
             asignado_en=asignacion.asignado_en,
             retirado_por_persona_id=asignacion.retirado_por_persona_id,
             retirado_en=asignacion.retirado_en,

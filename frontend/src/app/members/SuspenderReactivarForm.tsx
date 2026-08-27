@@ -20,6 +20,7 @@ import { suspenderMembresia, reactivarMembresia } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
 import type { EstadoMembresia } from "@/types/domain";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface SuspenderReactivarFormProps {
   membresiaId: number;
@@ -92,7 +93,7 @@ export default function SuspenderReactivarForm({
       <button
         type="button"
         onClick={open ? () => setOpen(false) : handleOpen}
-        className="inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20"
+        className={`inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20 ${MIN_TARGET_CLASS}`}
       >
         <Icon size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         {triggerLabel}
@@ -123,7 +124,7 @@ export default function SuspenderReactivarForm({
             <button
               type="submit"
               disabled={loading || !motivo.trim()}
-              className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-2xs tracking-flat font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50"
+              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-2xs tracking-flat font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
             >
               {loading ? (
                 <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />

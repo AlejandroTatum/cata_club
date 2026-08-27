@@ -25,6 +25,7 @@ import type { BeneficioAsignado, DescuentoCatalogo } from "@/services/api";
 import { descuentosActivos, descuentoExcedeTarifa, descuentoValorLabel } from "@/app/discounts/discounts-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface BeneficioSectionProps {
   personaId: number;
@@ -149,15 +150,16 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
             </span>
           </div>
           {/* Who granted it — the whole point of an auditable assignment
-              (issue #398). The backend exposes only the assigning admin's
-              persona id, not their name (`AsignacionDescuentoResponseDTO`
-              carries `asignado_por_persona_id`, no nested persona). */}
-          <p className="text-2xs text-ink-3">Asignado por persona #{beneficio.asignadoPorPersonaId}</p>
+              (issue #398). Issue #714: the backend now resolves the admin's
+              NAME (`asignado_por_nombre`), the same way every other actor
+              reference in the app already did; this used to print the raw
+              persona id as "Asignado por persona #1". */}
+          <p className="text-2xs text-ink-3">Asignado por {beneficio.asignadoPorNombre}</p>
           <button
             type="button"
             onClick={() => setPendingRetiro(true)}
             disabled={retiroLoading}
-            className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper disabled:opacity-50"
+            className={`inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper disabled:opacity-50 ${MIN_TARGET_CLASS}`}
           >
             {retiroLoading ? <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" /> : null}
             Retirar beneficio
@@ -172,7 +174,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
             <button
               type="button"
               onClick={openAssign}
-              className="inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
+              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25 ${MIN_TARGET_CLASS}`}
             >
               <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
               Asignar beneficio
@@ -210,7 +212,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
                   type="button"
                   onClick={() => void handleAssign()}
                   disabled={!selectedDescuentoId || assignLoading || catalogo === null || excedeTarifa}
-                  className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
+                  className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
                 >
                   {assignLoading ? (
                     <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
@@ -222,7 +224,7 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
                 <button
                   type="button"
                   onClick={() => setAssignOpen(false)}
-                  className="rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper"
+                  className={`inline-flex items-center rounded-lg border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-paper ${MIN_TARGET_CLASS}`}
                 >
                   Cancelar
                 </button>

@@ -62,6 +62,23 @@ export default function StudentMembershipActions({
   const membresia = student.membresia;
   const debtKnown = membresia?.mesesAdeudados !== undefined;
   const hasDebt = debtKnown && (membresia?.mesesAdeudados ?? 0) > 0;
+  /*
+   * Issue #713: this is the BULK LOOKUP FAILED state, and nothing else.
+   *
+   * It used to be reached by ordinary, healthy data as well. `estado` here is
+   * the frontend bucket, and `MEMBERSHIP_STATUS_BY_ESTADO` folds two backend
+   * estados into it (VENCIDA and INACTIVA), but the BFF only ever fetched and
+   * attached debt for VENCIDA — so every never-paid membership arrived as a
+   * `"vencida"` with `mesesAdeudados` undefined and landed here permanently,
+   * "self-healing" only when an approved payment flipped it to ACTIVA. On the
+   * QA data that was 29 of the 45 rows shown as vencidas, every one of which
+   * `GET /membresias/{id}/deuda` answers `200 {"mesesAdeudados":0}`.
+   *
+   * The guard was the defect, not this copy: `readsAsVencida` now decides
+   * both the fetch (`api/members/route.ts`) and the attach
+   * (`members-adapter.ts`), so reaching this line means the bulk call really
+   * did fail and the message is true when it is shown.
+   */
   const debtUnavailable = membresia?.estado === "vencida" && !debtKnown;
   const regularizeDebt = membresia && (
     <RegularizarDeudaForm

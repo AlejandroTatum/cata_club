@@ -897,9 +897,34 @@ class AsignacionDescuento(Base):
     asignado_por_persona_id: Mapped[int] = mapped_column(
         ForeignKey("persona.id"), nullable=False
     )
+    asignado_por: Mapped["Persona"] = relationship(
+        foreign_keys=[asignado_por_persona_id]
+    )
     asignado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_ahora_utc
     )
+
+    @property
+    def asignado_por_nombre(self) -> str:
+        """Nombre del admin que concedió el beneficio, expuesto como
+        `asignado_por_nombre` en `AsignacionDescuentoResponseDTO` (issue
+        #714). Mismo criterio que `Asistencia.registrado_por_nombre` y
+        `CorreccionAsistencia.corregido_por_nombre`: el nombre de un actor se
+        resuelve ACÁ, nunca en el frontend, que si no termina pintando el id
+        crudo -- el panel "Beneficio del club" mostraba literalmente
+        "Asignado por persona #1".
+
+        No es `Optional`, a diferencia de `registrado_por_nombre`: esta FK es
+        NOT NULL (ver el comentario de la columna), así que la relación
+        siempre resuelve. Mismo par que `corregido_por_nombre`, el hermano no
+        nullable del patrón.
+
+        Se resuelve por lazy load: los dos únicos consumidores
+        (`BeneficioServicio.a_response_dto` y
+        `PagoServicio._a_cobertura_response_dto`) convierten UNA fila cada
+        uno, así que no hay listado donde esto pudiera degenerar en un N+1.
+        """
+        return f"{self.asignado_por.nombres} {self.asignado_por.apellidos}".strip()
 
     # Nullable: NULL es "todavía vigente". Ver el docstring de la clase para
     # por qué esto reemplaza a un booleano `activo` separado.

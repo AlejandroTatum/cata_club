@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { readsAsVencida } from "@/lib/membership-status";
 import {
   buildMemberAccounts,
   resolveMembresiaParaPersona,
@@ -137,9 +138,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   /*
-   * Issue #326: overdue amount + months for VENCIDA memberships, one bulk
-   * `?membresia_ids=1&membresia_ids=2` call — same shape as the ficha-médica
-   * lookup right above. `membresiaIdsVencidas` is derived through
+   * Issue #326: overdue amount + months for the memberships the admin reads
+   * as vencidas, one bulk `?membresia_ids=1&membresia_ids=2` call — same
+   * shape as the ficha-médica lookup right above.
+   *
+   * Issue #713: "reads as vencida" is `readsAsVencida`, not `=== "VENCIDA"`.
+   * `MEMBERSHIP_STATUS_BY_ESTADO` folds INACTIVA into the same `"vencida"`
+   * the screen sees, so gating this fetch on the backend enum alone skipped
+   * every never-paid membership — and `StudentMembershipActions`, which can
+   * only see `"vencida"`, then rendered "Estado de deuda no disponible" for
+   * a debt the backend was answering. The set is still derived through
    * `resolveMembresiaParaPersona`, the SAME resolution `buildMemberAccounts`
    * uses per row, so this only ever queries ids that are actually about to
    * be displayed (never every historical VENCIDA row a persona has
@@ -159,7 +167,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       membresiaById,
       membresiaByPersona,
     );
-    if (membresia?.estado === "VENCIDA") membresiaIdsVencidas.add(membresia.id);
+    if (membresia && readsAsVencida(membresia.estado)) membresiaIdsVencidas.add(membresia.id);
   }
 
   const deudaByMembresiaId = new Map<number, DeudaBulkItem>();

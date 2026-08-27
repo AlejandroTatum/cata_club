@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
-import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS } from "./useNativeDialog";
+import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordEditor from "./MedicalRecordEditor";
 import type { MemberAccount } from "./members-utils";
 
@@ -61,7 +61,7 @@ export default function MedicalRecordDialog({
         </button>
       </div>
 
-      <div className="flex-1 space-y-section overflow-y-auto bg-canvas px-5 py-4">
+      <div className={NATIVE_DIALOG_BODY_CLASS}>
         {/* Additive, explicit status (user-approved wording): the fact that no
             emergency record exists yet is announced here, never as hidden text
             on the table trigger. The form below stays fully available. */}

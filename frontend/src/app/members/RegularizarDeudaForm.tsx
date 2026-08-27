@@ -32,6 +32,7 @@ import {
   MAX_MESES_COBERTURA,
   MENSAJE_MESES_MAXIMO_EXCEDIDO,
 } from "@/app/student/payments/payments-utils";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface RegularizarDeudaFormProps {
   /** Backend membership id (the one the admin BFF aggregates, not the display label). */
@@ -198,7 +199,7 @@ export default function RegularizarDeudaForm({
       <button
         type="button"
         onClick={open ? handleClose : handleOpen}
-        className="inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20"
+        className={`inline-flex items-center gap-1 rounded-lg bg-ink/10 px-2.5 py-1 text-2xs tracking-flat font-semibold text-ink transition-colors hover:bg-ink/20 ${MIN_TARGET_CLASS}`}
       >
         <Wallet size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
         Regularizar deuda
@@ -303,7 +304,7 @@ export default function RegularizarDeudaForm({
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-2xs tracking-flat font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50"
+              className={`inline-flex items-center gap-1 rounded-lg bg-cata-red px-2.5 py-1 text-2xs tracking-flat font-semibold text-white transition-colors hover:bg-cata-red/90 disabled:opacity-50 ${MIN_TARGET_CLASS}`}
             >
               {loading ? (
                 <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
