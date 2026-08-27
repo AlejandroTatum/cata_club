@@ -1,6 +1,7 @@
 "use client";
 
 import BeneficioSection from "./BeneficioSection";
+import PaymentHistorySection from "./PaymentHistorySection";
 import CreateMembershipForm from "./CreateMembershipForm";
 import RegisterPaymentForm from "./RegisterPaymentForm";
 import RegularizarDeudaForm from "./RegularizarDeudaForm";
@@ -88,6 +89,11 @@ export default function StudentMembershipActions({
           the backend's own assign-time gate; `undefined` when there is no
           membership yet, same as the backend's own gate skipping then. */}
       <BeneficioSection personaId={personaId} tarifaMensual={membresia?.monto} />
+
+      {/* Issue #615: the row's "Último pago" only ever shows the most recent
+          payment — this is the FULL history, any status, reusing the same
+          tokens `student/payments/page.tsx` already established. */}
+      <PaymentHistorySection personaId={personaId} />
 
       {!membresia && (
         <CreateMembershipForm personaId={personaId} onCreated={onMembershipCreated} />
