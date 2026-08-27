@@ -60,6 +60,19 @@ def _ejecutar_config(
     omitir: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess:
     args = ["docker", "compose"]
+    # `docker compose` autocarga un `.env` de la RAÍZ del proyecto (`cwd`)
+    # de forma INDEPENDIENTE del `env=` que le pasamos a `subprocess.run` más
+    # abajo: controlar ese entorno explícito no alcanza para suprimirlo. Sin
+    # esta bandera, una variable que `omitir` saca de `entorno_final` puede
+    # volver a aparecer -- leída del `.env` real del disco -- justo cuando
+    # las pruebas de "exige X" (POSTGRES_*, CORS_ORIGENES, DOMINIO,
+    # ACME_EMAIL) intentan demostrar que el render FALLA sin ella. El
+    # resultado dependía de quién corriera la suite: en CI (sin `.env`)
+    # pasaba, en cualquier clon con un `.env` real de desarrollo podía dar
+    # falso verde. `--env-file` apunta a una ruta que nunca existe como
+    # `.env` (`os.devnull`, no un `/dev/null` hardcodeado) para que el
+    # render dependa SOLO del entorno que construye esta función.
+    args += ["--env-file", os.devnull]
     for perfil in perfiles:
         args += ["--profile", perfil]
     for archivo in archivos_compose:
