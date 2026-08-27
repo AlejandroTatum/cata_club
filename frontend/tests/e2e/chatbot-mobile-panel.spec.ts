@@ -307,6 +307,125 @@ test("Tab inside the sheet never reaches the page behind it", async ({ page }) =
   expect(new Set(visited)).toEqual(new Set(["inside"]));
 });
 
+/**
+ * #725 — the sheet's close control, on the one page that has a sticky navbar.
+ *
+ * ## Why this test is hosted on `/` and every test above is not
+ *
+ * That difference IS the bug. Every case above proves the sheet on `/login`,
+ * which is an `auth` shell: nothing there is `position: sticky`, so nothing
+ * ever competed with the sheet for the top of the screen and the whole suite
+ * stayed green while the control was completely dead on the landing. A modal's
+ * geometry measured only where nothing can cover it is geometry measured in the
+ * one place the question cannot come up.
+ *
+ * ## Why `elementFromPoint` over the whole button and not `toBeVisible()`
+ *
+ * `toBeVisible()` was already true with the defect live — the sheet painted, the
+ * button was in the tab order and had its 44px box. What it did not have was a
+ * single pixel that answered a tap: measured in WebKit at 390x844 against
+ * `main` @ 149c5c9, the landing navbar (`z-index: 50`, and 179px tall once its
+ * links wrap onto a phone) covered all 1936 pixels of a `z-40` sheet's close
+ * button. So this sweeps every pixel of the control rather than probing its
+ * centre — a fix that uncovered only the middle would be a fix that leaves the
+ * edges dead, and `launcher-occlusion.spec.ts` states the house rule this
+ * borrows: no out-of-flow element may own the point a click lands on.
+ *
+ * ## Why the tap is asserted separately from the hit test
+ *
+ * Hit-testing and dispatch can disagree, and the failure mode here was not
+ * "nothing happens" — the tap landed on the navbar's "ENTRAR" CTA and NAVIGATED
+ * the visitor to `/login` with the sheet still open on top. The URL assertion
+ * is what would catch that specific regression coming back; a `toHaveCount(0)`
+ * on its own would not distinguish "closed" from "navigated away".
+ *
+ * ## Why this has to be a browser test at all
+ *
+ * There is no Escape key on a phone, and the sheet offers nothing else: it
+ * covers the viewport exactly so there is no backdrop, the component listens
+ * for no swipe, opening it pushes no history entry so hardware back leaves the
+ * site, and the launcher is `pointer-events: none` while it is up. The close
+ * button is the only exit, which is why "is it reachable" is worth a lock.
+ *
+ * One `goto`, two viewports: the landing is the heaviest page in the app and CI
+ * runs four workers on four vCPU, so the second case resizes rather than
+ * reloading.
+ */
+test.describe("the assistant sheet on the landing", () => {
+  test.use({ hasTouch: true });
+
+  test("its close control is tappable, and the navbar does not own the tap", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const report: unknown[] = [];
+
+    for (const phone of [
+      { width: 390, height: 844, label: "390x844 portrait" },
+      { width: 844, height: 390, label: "844x390 landscape" },
+    ]) {
+      await page.setViewportSize({ width: phone.width, height: phone.height });
+      await openPanel(page);
+
+      const close = page.getByRole("button", { name: CLOSE });
+      const box = await close.boundingBox();
+      if (!box) throw new Error(`no box for the close control at ${phone.label}`);
+
+      // Every pixel of the control, asked of the browser's own hit test.
+      const occlusion = await page.evaluate(() => {
+        const button = document.querySelector(
+          'div[role="dialog"][aria-label*="CATA-BOT"] button[aria-label*="Cerrar"]',
+        ) as HTMLElement;
+        const rect = button.getBoundingClientRect();
+        let live = 0;
+        const blockers = new Set<string>();
+        for (let y = Math.ceil(rect.top); y < rect.bottom; y += 1) {
+          for (let x = Math.ceil(rect.left); x < rect.right; x += 1) {
+            const hit = document.elementFromPoint(x, y);
+            if (hit === button || button.contains(hit)) {
+              live += 1;
+            } else if (hit && !hit.contains(button)) {
+              // An ANCESTOR answering is not occlusion — the button's own
+              // `<header>` wins the fringe pixels where the 44px box lands on a
+              // fraction, and a parent cannot paint over its own child. Only
+              // something outside the button's own line of descent is a cover.
+              const owner = hit.closest("a,button,nav") ?? hit;
+              blockers.add(
+                owner.tagName.toLowerCase() +
+                  (owner.className ? `.${String(owner.className).split(" ")[0]}` : ""),
+              );
+            }
+          }
+        }
+        return {
+          live,
+          total: Math.round(rect.width) * Math.round(rect.height),
+          blockers: [...blockers],
+        };
+      });
+
+      report.push({ phone: phone.label, ...occlusion });
+
+      // The control is a 44px target and essentially all of it must answer.
+      // Not `> 0`: a fix that clears only the centre leaves the edges dead.
+      expect(occlusion.blockers, `covered at ${phone.label}`).toEqual([]);
+      expect(occlusion.live / occlusion.total).toBeGreaterThan(0.95);
+
+      // And a real tap dismisses it, without going anywhere.
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page.locator(PANEL)).toHaveCount(0);
+      expect(new URL(page.url()).pathname, `navigated away at ${phone.label}`).toBe("/");
+    }
+
+    await testInfo.attach("close-control-occlusion", {
+      body: JSON.stringify(report, null, 2),
+      contentType: "application/json",
+    });
+  });
+});
+
 test("the desktop panel is the same corner card it has always been", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/login");
