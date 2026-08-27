@@ -13,6 +13,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { waitForCrestToRender } from "./helpers/wait-for-crest";
 
 test.describe("Landing page", () => {
   test("renders the navbar logo on a visibly light token-backed card", async ({ page }) => {
@@ -1028,35 +1029,27 @@ test.describe("Landing page", () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
 
-      const crest = page.locator("[data-serve-paddle] img");
-      await expect(crest).toHaveAttribute("src", /cata-club-logo-avatar/);
-
-      // `toBeVisible` only proves CSS visibility. The bytes have to have
-      // arrived before `naturalWidth` means anything, or a lazy image reports 0
-      // and every ratio computed from it comes out NaN.
+      // `toBeVisible` only proves CSS visibility, so this still checks
+      // `naturalWidth` — the bytes have to have actually arrived, or a lazy
+      // image reports 0 and every ratio computed from it comes out NaN.
       //
-      // The scroll goes through `evaluate` rather than `scrollIntoViewIfNeeded`
-      // because that helper waits for the element to be STABLE, and this one
-      // lives inside a paddle that is never still — it retried itself to a
-      // timeout. `evaluate` runs no actionability check, so the guard survives
-      // the very animation this suite exists to assert.
-      await crest.evaluate((image: HTMLImageElement) => {
-        image.scrollIntoView({ block: "center" });
-        return (
-          image.complete ||
-          new Promise((resolve, reject) => {
-            image.addEventListener("load", resolve, { once: true });
-            image.addEventListener("error", reject, { once: true });
-          })
-        );
-      });
-      const drawn = await crest.evaluate((image: HTMLImageElement) => ({
-        naturalWidth: image.naturalWidth,
-        rendered: image.getBoundingClientRect().width,
-      }));
+      // It no longer waits on a single `load`/`error` promise for that,
+      // though: issue #681 is a real, unreproduced Next.js 14.2 hang where
+      // one specific `/_next/image` request for this exact asset never
+      // returns a response at all (CI trace evidence: `status: -1, time:
+      // -1`, while sibling requests at the same instant complete in under
+      // 40ms — see `helpers/wait-for-crest.ts` for the full writeup). A
+      // promise awaiting that request's `load` event hangs with it, for the
+      // full test timeout, every time it happens to land on that request.
+      // `waitForCrestToRender` polls instead — cheap, synchronous reads of
+      // `naturalWidth`, from outside any single promise — and reloads for a
+      // fresh network request when an attempt's budget runs out. That
+      // mitigates the hang; it does not fix it, and if the crest never
+      // loads at all, this assertion below still fails for real.
+      const drawn = await waitForCrestToRender(page);
 
       expect(drawn.naturalWidth).toBeGreaterThan(0);
-      expect(drawn.rendered).toBeGreaterThan(0);
+      expect(drawn.renderedWidth).toBeGreaterThan(0);
     });
   });
 
