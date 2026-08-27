@@ -5,7 +5,7 @@
        install install-backend install-frontend \
        docker-up docker-down docker-build \
        migrate migrate-create db-reset seed seed-bulk clean \
-       qa-up qa-down qa-seed qa-reset qa-live qa-logs
+       qa-up qa-down qa-seed qa-reset qa-live qa-logs qa-pdf-delivery-check
 
 # ─── Default ────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -248,6 +248,17 @@ qa-logs: ## Ver los logs del entorno de QA
 # chatbot externo es una configuración válida.
 qa-chatbot-check: ## Verificar la config del proveedor del chatbot en QA (no imprime el secreto)
 	$(QA_ENV) $(QA_COMPOSE) exec backend uv run python scripts/verificar_chatbot.py
+
+# Único chequeo del repo que DESCARGA de verdad una URL de entrega de
+# Cloudinary. Los tests de `cloudinary_cliente.py` firman localmente y nunca
+# hacen el GET, y ese punto ciego dejó pasar dos fallos de entrega con firma
+# válida: el `folder` faltante en el `public_id` (issue #480, 404) y la cuenta
+# que deniega todo PDF por CDN (401, `deny or ACL failure`). Corre dentro del
+# backend de QA porque ahí viven las credenciales; sube un PDF desechable, lo
+# descarga y lo borra. Sin `--exigir`: no tener Cloudinary configurado es una
+# configuración válida en desarrollo.
+qa-pdf-delivery-check: ## Descargar de verdad un PDF de Cloudinary y verificar que llega
+	$(QA_ENV) $(QA_COMPOSE) exec backend uv run python scripts/verificar_entrega_pdf.py
 
 # ─── Clean ──────────────────────────────────────────────────────────────────
 clean: clean-backend clean-frontend ## Clean caches from both projects

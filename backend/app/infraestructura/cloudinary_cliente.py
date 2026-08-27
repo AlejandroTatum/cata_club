@@ -7,7 +7,9 @@ código dependa de una interfaz propia (no del SDK directo). Esto facilita tests
 
 Recurso PDF en Cloudinary:
     Cloudinary trata los PDF como `resource_type="raw"` (los `image` son para
-    formatos raster/vector procesables). Por eso el upload usa raw.
+    formatos raster/vector procesables). Por eso el upload usa raw. La ENTREGA
+    de un PDF, en cambio, no puede salir por la CDN de esta cuenta: ver
+    `_url_descarga_api` y el porqué medido que documenta.
 """
 from __future__ import annotations
 
@@ -395,6 +397,70 @@ def eliminar_logo_sponsor(nombre_publico: str) -> None:
         ) from exc
 
 
+# --- Entrega de PDF: endpoint de descarga de la API, no la CDN -------------
+def _url_descarga_api(id_completo: str, formato: Optional[str]) -> str:
+    """
+    URL de entrega para un PDF `type="authenticated"`, firmada contra el
+    endpoint de descarga de la API (`api.cloudinary.com/v1_1/<cloud>/raw/
+    download`) en vez de la CDN (`res.cloudinary.com`).
+
+    Por qué NO la CDN: esta cuenta deniega la entrega de CUALQUIER PDF por
+    CDN. Una URL firmada de `raw/authenticated` responde `401` con
+    `x-cld-error: deny or ACL failure` y `content-length: 0` -- y responden
+    exactamente lo mismo un `raw/upload` PÚBLICO y un `image/authenticated`
+    con `.pdf`, mientras que una imagen (PNG/JPEG) firmada por esta MISMA
+    función responde `200` con sus bytes. O sea: no es la firma, ni la ACL
+    del recurso, ni la carpeta (issue #480) -- es la entrega de PDF por CDN,
+    apagada a nivel de cuenta (Console > Settings > Security), que este
+    código no puede encender. Por eso el fix elige un camino que funciona con
+    la cuenta como está hoy, en vez de esperar un cambio de consola.
+
+    El endpoint de descarga sirve el MISMO recurso `type="authenticated"` sin
+    pasar por esa restricción: `200`, `content-type: application/pdf` y los
+    bytes reales. No manda `Content-Disposition` (se sigue previsualizando
+    inline en el `<iframe>` de la pantalla de pagos, igual que antes) ni
+    `X-Frame-Options`, y responde `Access-Control-Allow-Origin: *`.
+
+    Dos diferencias con `cloudinary_url`, las dos a favor:
+
+      - el vencimiento (`expires_at`) lo CHEQUEA Cloudinary del lado del
+        servidor (`401 Stale request`), así que el PDF vence a los
+        `CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS` SIN depender de
+        `cloudinary_auth_token_key` -- la función de cuenta que
+        `generar_url_firmada` documenta como no activable desde acá. El
+        residual "link firmado que no vence nunca" queda cerrado para PDF.
+      - `timestamp`/`expires_at` cambian en cada llamada, así que dos
+        lecturas del mismo `public_id` nunca firman la URL byte-idéntica: un
+        voucher corregido (`overwrite=True` en `subir_voucher_pago`) no puede
+        quedar servido desde el cache del navegador.
+
+    `formato`: el `public_id` de un recurso `raw` INCLUYE la extensión --
+    Cloudinary lo indexa como `{folder}/{public_id}.pdf` porque
+    `subir_pdf_membresia`/`subir_voucher_pago` suben con `format="pdf"`.
+    Pedirlo sin la extensión devuelve `404 Resource not found` (misma clase
+    de trampa que el `folder` del issue #480: firma válida, recurso que
+    Cloudinary nunca tuvo bajo ese nombre exacto). La extensión va en el
+    `public_id` y el parámetro `format` va vacío; mandarla en los dos lados
+    también resuelve, pero duplica la misma intención en la firma.
+
+    Igual que `cloudinary_url`, NO hace red: `private_download_url` firma
+    localmente con las credenciales ya cargadas. La `api_key` viaja en el
+    query string, que es como Cloudinary diseñó este endpoint -- es un
+    identificador público (el mismo que llevan los widgets de subida sin
+    firmar), no la credencial: sin `api_secret` nadie puede recalcular la
+    `signature`, y una firma alterada responde `401 Invalid Signature`.
+    """
+    if formato:
+        id_completo = f"{id_completo}.{formato}"
+    return cloudinary.utils.private_download_url(
+        id_completo,
+        "",
+        resource_type="raw",
+        type="authenticated",
+        expires_at=int(time.time()) + CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS,
+    )
+
+
 # --- URL de entrega firmada (hallazgo de privacidad "voucher no enumerable") -
 def generar_url_firmada(
     public_id: str,
@@ -427,6 +493,13 @@ def generar_url_firmada(
     vencida (o eternamente vigente, ver abajo) esperando en la BD en vez de
     reflejar el momento real en que alguien autorizado la pidió.
 
+    `resource_type="raw"` (el PDF: comprobante oficial y voucher en PDF) NO
+    sale por la CDN: se entrega por el endpoint de descarga de la API, ver
+    `_url_descarga_api` -- la cuenta deniega todo PDF servido por
+    `res.cloudinary.com`, con firma válida y todo. Todo lo que sigue en este
+    docstring describe la rama de imagen (voucher JPEG/PNG y foto de perfil),
+    que la CDN sí entrega.
+
     Vencimiento real (`duration`, vía `auth_token`) SOLO si
     `settings.cloudinary_auth_token_key` está configurada -- token-based
     authentication es una función que hay que habilitar en la cuenta de
@@ -450,6 +523,15 @@ def generar_url_firmada(
     """
     _configurar_cliente()
 
+    id_completo = f"{folder}/{public_id}"
+
+    if resource_type == "raw":
+        # `raw` es, en esta app, exactamente el camino del PDF (comprobante
+        # oficial y voucher subido en PDF); la CDN no lo entrega. Ver
+        # `_url_descarga_api`. `version` no aplica a este endpoint y los
+        # callers de PDF nunca lo pasan: la URL ya cambia en cada llamada.
+        return _url_descarga_api(id_completo, formato)
+
     opciones: dict = {
         "type": "authenticated",
         "resource_type": resource_type,
@@ -466,7 +548,6 @@ def generar_url_firmada(
             "duration": CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS,
         }
 
-    id_completo = f"{folder}/{public_id}"
     url, _opciones_restantes = cloudinary.utils.cloudinary_url(id_completo, **opciones)
     return url
 
