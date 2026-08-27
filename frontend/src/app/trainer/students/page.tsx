@@ -105,6 +105,28 @@ export default function TrainerStudentsPage(): React.ReactElement {
   );
 
   /**
+   * Cuál de los dos vacíos aplica, si aplica alguno — nunca ambos: un padrón
+   * vacío ya explica por qué no hay resultados, así que la búsqueda ni se
+   * evalúa. Statement independiente en vez de ternario anidado en el JSX
+   * (S3358): la decisión se toma acá arriba, una sola vez, y el render de
+   * abajo solo pregunta "¿hay estado vacío o no?".
+   */
+  let estadoVacio: { icon: React.ReactElement; title: string; description: string } | null = null;
+  if (nomina.length === 0) {
+    estadoVacio = {
+      icon: <BookUser size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />,
+      title: "Todavía no hay alumnos inscriptos",
+      description: "Cuando la administración asigne alumnos a un horario, van a aparecer acá.",
+    };
+  } else if (encontrados.length === 0) {
+    estadoVacio = {
+      icon: <SearchX size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />,
+      title: "Ningún alumno coincide con la búsqueda",
+      description: `No hay nadie en el padrón que se llame «${busqueda.trim()}». Pruebe con el apellido o con menos letras.`,
+    };
+  }
+
+  /**
    * Escribir en el buscador vuelve a la página 1.
    *
    * Sin esto, filtrar desde la página 4 deja al entrenador mirando una lista
@@ -157,19 +179,12 @@ export default function TrainerStudentsPage(): React.ReactElement {
 
         {!cargando && !fallo && (
           <div className="card overflow-hidden">
-            {nomina.length === 0 ? (
+            {estadoVacio ? (
               <EmptyState
                 surface="inset"
-                icon={<BookUser size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                title="Todavía no hay alumnos inscriptos"
-                description="Cuando la administración asigne alumnos a un horario, van a aparecer acá."
-              />
-            ) : encontrados.length === 0 ? (
-              <EmptyState
-                surface="inset"
-                icon={<SearchX size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                title="Ningún alumno coincide con la búsqueda"
-                description={`No hay nadie en el padrón que se llame «${busqueda.trim()}». Pruebe con el apellido o con menos letras.`}
+                icon={estadoVacio.icon}
+                title={estadoVacio.title}
+                description={estadoVacio.description}
               />
             ) : (
               <>
