@@ -27,6 +27,11 @@ import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import CampoFormularioAdmin from "@/components/admin/CampoFormularioAdmin";
+import {
+  excedeMesesMaximo,
+  MAX_MESES_COBERTURA,
+  MENSAJE_MESES_MAXIMO_EXCEDIDO,
+} from "@/app/student/payments/payments-utils";
 
 interface RegularizarDeudaFormProps {
   /** Backend membership id (the one the admin BFF aggregates, not the display label). */
@@ -67,6 +72,13 @@ export default function RegularizarDeudaForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [regularized, setRegularized] = useState(false);
+  // Issue #666: the bound for the "Monto" field below. `montoMensual` is
+  // usually a real, known plan price; the rare case it is not (`<= 0`) is
+  // exactly the `if (montoMensual <= 0)` branch `loadDeuda` already had —
+  // this mirrors it so the 12-month cap can still be computed once the
+  // fetched debt names the plan's real price.
+  const [montoMensualDeuda, setMontoMensualDeuda] = useState<number>(0);
+  const precioParaLimite = montoMensual > 0 ? montoMensual : montoMensualDeuda;
 
   const loadDeuda = useCallback(async (): Promise<void> => {
     setDeudaError(false);
@@ -76,6 +88,7 @@ export default function RegularizarDeudaForm({
       setUltimaCoberturaFin(deuda.ultimaCoberturaFin);
       if (montoMensual <= 0) {
         setMonto(deuda.montoMensual > 0 ? String(deuda.montoMensual) : "");
+        setMontoMensualDeuda(deuda.montoMensual > 0 ? deuda.montoMensual : 0);
       }
     } catch {
       // The tool still works without the number (the backend is the authority);
@@ -122,13 +135,49 @@ export default function RegularizarDeudaForm({
     );
   }
 
+  /**
+   * Issue #666: this form's "Monto" is the second unbounded free-amount
+   * input the issue names. It never computes a date from `monto` (unlike
+   * `RegisterPaymentForm`, `fechaInicio`/`fechaFin` here are typed
+   * independently), but the amount itself must still respect the real
+   * 12-month cap.
+   *
+   * This used to be entirely native-`required`-driven with no JS-side
+   * validation at all — adding `max` to the "Monto" `<input>` below changed
+   * that: an HTML5 `<form>` blocks its own `submit` event when a control
+   * violates a constraint like `max` (unlike `RegisterPaymentForm`, which
+   * has no `<form>` at all and submits via a plain button's `onClick`), so
+   * `handleSubmit` would simply never run and the admin would see nothing
+   * but a native, unstyled, English browser tooltip in a Spanish product.
+   * The form now opts out of native constraint validation (`noValidate`
+   * below) and this replaces it in full — including the `required` checks
+   * native validation used to own — so every rejection still gets the
+   * product's own Spanish message.
+   */
+  function validate(montoNum: number): string | null {
+    if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias.";
+    if (!motivo.trim()) return "Debe indicar el motivo de la regularización.";
+    if (!montoNum || montoNum <= 0) return "El monto debe ser mayor a 0.";
+    if (excedeMesesMaximo(montoNum, precioParaLimite)) return MENSAJE_MESES_MAXIMO_EXCEDIDO;
+    return null;
+  }
+
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     setError(null);
+
+    const montoNum = Number(monto) || 0;
+    const invalid = validate(montoNum);
+    if (invalid) {
+      setError(invalid);
+      showError(invalid);
+      return;
+    }
+
     setLoading(true);
     try {
       await regularizarDeuda(membresiaId, {
-        monto: Number(monto) || 0,
+        monto: montoNum,
         fechaInicio,
         fechaFin,
         motivo: motivo.trim(),
@@ -158,6 +207,12 @@ export default function RegularizarDeudaForm({
       {open && (
         <form
           onSubmit={handleSubmit}
+          // Issue #666 — see `validate()`'s own comment: `noValidate` hands
+          // every check (including the `required` fields this used to rely
+          // on the browser for) to `validate()`, so the "Monto" field's
+          // `max` (below) can never silently swallow the `submit` event
+          // before the product's own Spanish message gets a chance to run.
+          noValidate
           className="mt-2 rounded-lg border border-line bg-surface p-3"
           aria-label="Regularizar deuda"
         >
@@ -218,6 +273,12 @@ export default function RegularizarDeudaForm({
             value={monto}
             onChange={setMonto}
             labelClassName="mt-2 block text-2xs text-ink-3"
+            // Issue #666: caps at MAX_MESES_COBERTURA months of the known
+            // monthly price — omitted (no attribute) when the price is not
+            // yet known, same as every other price-derived hint in this form.
+            {...(precioParaLimite > 0
+              ? { numberMax: String(precioParaLimite * MAX_MESES_COBERTURA) }
+              : {})}
             required
           />
           {montoMensual > 0 && (
