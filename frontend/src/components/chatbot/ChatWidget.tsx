@@ -521,26 +521,26 @@ export default function ChatWidget({
       {/* `.chat > header` — white, avatar disc, "Responde en segundos". */}
       <header className={skin.header}>
         {/*
-          Fixed `width`/`height={96}`, not `fill` + a pixel `sizes`: asking
-          for 32 (the layout box) would make Next serve a 32-pixel-wide file
-          and a 2x or 3x display would upscale it into a smudge, so 96 (3x)
-          is requested instead. That part was already right; `fill` +
-          `sizes="96px"` was not the way to ask for it — Next only narrows
-          the generated srcset when `sizes` carries a `vw` unit (see
-          `next/dist/shared/lib/get-img-props.js`'s `getWidths`), so a bare
-          `"96px"` matched no `vw` and fell back to EVERY configured
-          breakpoint: 16 widths up to 3840px for a 620×620 source, on every
-          page in the app (issue: flaky e2e crest test). Explicit
-          `width`/`height` asks for exactly the one size needed; `object-cover`
-          on the `<img>` itself still scales it down to fill the 32px box.
+          `unoptimized`: this is `cata-club-crest-256.png`, a pre-sized
+          256×256 (23.6KB) derivative of `cata-club-logo-avatar.png` — see
+          issue #681. A real CI trace showed Next's `/_next/image` optimizer
+          can get one specific request/cache key stuck forever (`status: -1`,
+          confirmed across three separate fresh page loads on the same
+          server), and no client-side retry outran it. Serving this asset
+          unoptimized means no consumer ever asks the optimizer for it, so
+          that cache key never exists to get stuck. 256 already covers this
+          32px box at well beyond 3x, so there is no size left to ask for —
+          `width`/`height={96}` here are just the element's box hint now, not
+          a srcset lever; `object-cover` on the `<img>` itself still scales
+          it down to fill the 32px box.
 
-          `cata-club-logo-avatar.png`, not the raw `cata-club-logo.jpeg`: the
+          `cata-club-crest-256.png`, not the raw `cata-club-logo.jpeg`: the
           source is 1080×996 (wider than tall), so `object-cover` alone
           scales it by height and barely trims the sides — the "CATA CLUB /
           TENIS DE MESA" wordmark below the wreath survives almost whole
-          inside the circle and stays legible-but-wrong at 32px. The PNG is a
-          620×620 crop of the same source, cut above the wordmark band, with
-          the JPEG's light-grey background chroma-keyed to transparent —
+          inside the circle and stays legible-but-wrong at 32px. The crest PNG
+          is a 620×620 crop of the same source, cut above the wordmark band,
+          with the JPEG's light-grey background chroma-keyed to transparent —
           `object-cover` is still correct here (a square source into a square
           box needs no cropping, just scaling), and the transparent margin
           around the wreath's oval lets this header's own `bg-white` show
@@ -548,10 +548,11 @@ export default function ChatWidget({
         */}
         <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-full">
           <Image
-            src="/brand/cata-club-logo-avatar.png"
+            src="/brand/cata-club-crest-256.png"
             alt=""
             width={96}
             height={96}
+            unoptimized
             className="h-full w-full object-cover"
           />
         </span>

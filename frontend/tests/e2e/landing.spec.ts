@@ -13,19 +13,19 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { waitForCrestToRender } from "./helpers/wait-for-crest";
 
 test.describe("Landing page", () => {
   test("renders the navbar logo on a visibly light token-backed card", async ({ page }) => {
     await page.goto("/");
-    // The logo keeps its optimizer URL for the local PNG (normal) while the
-    // card behind it renders with real computed token styles: generous padding
-    // around the transparent crest and the light-gray surface. A transparent
-    // computed background (or 5px of padding) fails this.
+    // The logo is served unoptimized now (issue #681 — see `crest-no-optimizer.spec.ts`
+    // for why) while the card behind it still renders with real computed
+    // token styles: generous padding around the transparent crest and the
+    // light-gray surface. A transparent computed background (or 5px of
+    // padding) fails this.
     const img = page.locator("a.landing-logo img");
     await expect(img).toHaveCSS("padding", "8px");
     await expect(img).toHaveCSS("background-color", "rgb(249, 250, 251)");
-    await expect(img).toHaveAttribute("src", /\/_next\/image\?url=/);
+    await expect(img).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
   });
 
   test("stacks schedule list and panel without overflow on narrow phone widths", async ({ page }) => {
@@ -1029,27 +1029,39 @@ test.describe("Landing page", () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
 
-      // `toBeVisible` only proves CSS visibility, so this still checks
-      // `naturalWidth` — the bytes have to have actually arrived, or a lazy
-      // image reports 0 and every ratio computed from it comes out NaN.
+      const crest = page.locator("[data-serve-paddle] img");
+      // `cata-club-crest-256.png`, not `.../_next/image?url=...`: issue #681,
+      // see the "never asks the image optimizer" lock below this test — this
+      // is the plain static asset path, unwrapped, because that lock is what
+      // keeps this asset off the one route that was ever proven to hang.
+      await expect(crest).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
+
+      // `toBeVisible` only proves CSS visibility. The bytes have to have
+      // arrived before `naturalWidth` means anything, or a lazy image reports 0
+      // and every ratio computed from it comes out NaN.
       //
-      // It no longer waits on a single `load`/`error` promise for that,
-      // though: issue #681 is a real, unreproduced Next.js 14.2 hang where
-      // one specific `/_next/image` request for this exact asset never
-      // returns a response at all (CI trace evidence: `status: -1, time:
-      // -1`, while sibling requests at the same instant complete in under
-      // 40ms — see `helpers/wait-for-crest.ts` for the full writeup). A
-      // promise awaiting that request's `load` event hangs with it, for the
-      // full test timeout, every time it happens to land on that request.
-      // `waitForCrestToRender` polls instead — cheap, synchronous reads of
-      // `naturalWidth`, from outside any single promise — and reloads for a
-      // fresh network request when an attempt's budget runs out. That
-      // mitigates the hang; it does not fix it, and if the crest never
-      // loads at all, this assertion below still fails for real.
-      const drawn = await waitForCrestToRender(page);
+      // The scroll goes through `evaluate` rather than `scrollIntoViewIfNeeded`
+      // because that helper waits for the element to be STABLE, and this one
+      // lives inside a paddle that is never still — it retried itself to a
+      // timeout. `evaluate` runs no actionability check, so the guard survives
+      // the very animation this suite exists to assert.
+      await crest.evaluate((image: HTMLImageElement) => {
+        image.scrollIntoView({ block: "center" });
+        return (
+          image.complete ||
+          new Promise((resolve, reject) => {
+            image.addEventListener("load", resolve, { once: true });
+            image.addEventListener("error", reject, { once: true });
+          })
+        );
+      });
+      const drawn = await crest.evaluate((image: HTMLImageElement) => ({
+        naturalWidth: image.naturalWidth,
+        rendered: image.getBoundingClientRect().width,
+      }));
 
       expect(drawn.naturalWidth).toBeGreaterThan(0);
-      expect(drawn.renderedWidth).toBeGreaterThan(0);
+      expect(drawn.rendered).toBeGreaterThan(0);
     });
   });
 
