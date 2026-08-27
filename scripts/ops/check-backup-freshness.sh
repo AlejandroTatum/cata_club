@@ -28,7 +28,13 @@ case "$MAX_AGE_HOURS" in
   ''|*[!0-9]*) echo "ERROR: el umbral debe ser un número entero de horas" >&2; exit 2 ;;
 esac
 
-newest="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'cataclub_*.dump' -printf '%T@ %p\n' 2>/dev/null \
+# Cuenta las DOS formas del artefacto: `cataclub_*.dump.age` es el backup
+# cifrado que produce backup-db.sh, y `cataclub_*.dump` son los dumps en claro
+# anteriores al cifrado. Mirar solo el glob viejo dejaria este chequeo
+# alertando "no hay ningun dump" todas las noches con el backup andando —
+# monitoreo apagado por un cambio de nombre, que es la peor forma de apagarlo.
+newest="$(find "$BACKUP_DIR" -maxdepth 1 -type f \
+  \( -name 'cataclub_*.dump' -o -name 'cataclub_*.dump.age' \) -printf '%T@ %p\n' 2>/dev/null \
   | sort -rn | head -1 | cut -d' ' -f2- || true)"
 if [ -z "$newest" ]; then
   if [ "$TOLERATE_MISSING" = "1" ]; then

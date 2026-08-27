@@ -23,10 +23,16 @@ canal de alerta.
    readiness, con destinatarios y escalación definidos por el club.
 2. Ejecutar `check-backup-freshness.sh` desde el scheduler elegido y probar una
    alerta por backup ausente/viejo.
-3. Replicar los dumps cifrados a almacenamiento fuera del host y fijar allí la
+3. Replicar los dumps a almacenamiento fuera del host y fijar allí la
    retención/lifecycle. El backup local no protege ante la pérdida total del
-   host.
+   host. Ya salen cifrados de `backup-db.sh` (`age`, destinatario público), así
+   que se pueden replicar sin exponer el padrón; el destino igual necesita sus
+   propios controles de acceso.
 4. Probar restore en un entorno desechable antes de declarar recuperabilidad.
+   Con artefactos cifrados hace falta la identidad privada:
+   `restore-check.sh <dump>.dump.age --identity <archivo>`. Probarlo **también**
+   verifica que la identidad guardada sea la correcta y siga siendo legible —
+   una clave que nadie ejercitó es una clave que no se sabe si existe.
 
 No instalar un monitor dentro del mismo host como sustituto del control externo:
 una caída completa lo silenciaría junto con la aplicación.

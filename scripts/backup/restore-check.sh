@@ -7,7 +7,17 @@
 # Esto es lo que desbloquea la fila "Backup y restore de Postgres" de
 # production-readiness.md: mecanismo verificado, no teoria.
 #
-# Uso: restore-check.sh <dump-file> [--expect-revision <alembic_revision>]
+# Uso: restore-check.sh <dump-file|dump-file.age>
+#        [--expect-revision <alembic_revision>] [--identity <archivo-age>]
+#
+# Acepta tanto un dump en claro (.dump) como el artefacto cifrado que produce
+# backup-db.sh (.dump.age). Para el cifrado hace falta la IDENTIDAD age
+# privada, que NO vive en el host de backup: se trae al momento de restaurar.
+# Se puede pasar con --identity o por BACKUP_AGE_IDENTITY.
+#
+# El descifrado va a un directorio temporal privado (umask 077, mktemp -d) que
+# el trap destruye al salir, pase lo que pase. La copia en claro existe solo
+# mientras dura la verificacion y nunca se escribe al lado del backup.
 #
 # Validaciones (todas imprimen evidencia; fallan con exit != 0):
 #   1. El dump se restaura sin errores.
@@ -15,18 +25,22 @@
 #      coincide con la revision esperada.
 #   3. Las tablas criticas existen y sus conteos se imprimen.
 #
-# Dependencias: docker (cliente) en el host donde se ejecuta.
+# Dependencias: docker (cliente) y, para artefactos .age, `age`.
 
 set -euo pipefail
+umask 077
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 
-DUMP_FILE="${1:?uso: restore-check.sh <dump-file> [--expect-revision <rev>]}"
+DUMP_FILE="${1:?uso: restore-check.sh <dump-file> [--expect-revision <rev>] [--identity <archivo>]}"
 shift
 EXPECT_REVISION=""
+AGE_IDENTITY="${BACKUP_AGE_IDENTITY:-}"
+AGE_BIN="${BACKUP_AGE_BIN:-age}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --expect-revision) EXPECT_REVISION="${2:?falta revision}"; shift 2 ;;
+    --identity) AGE_IDENTITY="${2:?falta el archivo de identidad}"; shift 2 ;;
     *) log "Argumento desconocido: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,11 +55,42 @@ RDB="cataclub_restore"
 RPORT="55432"
 DUMP_MOUNT="/dump"
 
+TRABAJO=""
 cleanup() {
   log "Destruyendo entorno desechable (${NAME})"
   docker rm -f "${NAME}" >/dev/null 2>&1 || true
+  # El descifrado transitorio no puede sobrevivir a esta corrida.
+  [ -n "${TRABAJO}" ] && rm -rf "${TRABAJO}"
+  return 0
 }
 trap cleanup EXIT
+
+# Descifrado del artefacto .age ANTES de levantar nada: si falta la identidad
+# conviene enterarse ahora y no despues de arrancar un Postgres.
+case "${DUMP_FILE}" in
+  *.age)
+    command -v "${AGE_BIN}" >/dev/null 2>&1 || {
+      log "Falta 'age' (${AGE_BIN}) para descifrar ${DUMP_FILE}" >&2
+      log "Instalalo: apt-get install -y age" >&2
+      exit 2
+    }
+    if ! { [ -n "${AGE_IDENTITY}" ] && [ -r "${AGE_IDENTITY}" ]; }; then
+      log "El dump esta cifrado y falta la identidad age para leerlo." >&2
+      log "Pasala con --identity <archivo> o BACKUP_AGE_IDENTITY=<archivo>." >&2
+      log "Es la clave PRIVADA: no vive en el host de backup, se trae al restaurar." >&2
+      exit 2
+    fi
+    TRABAJO="$(mktemp -d)"
+    chmod 700 "${TRABAJO}"
+    CLARO="${TRABAJO}/$(basename "${DUMP_FILE%.age}")"
+    log "Descifrando ${DUMP_FILE} en un directorio temporal privado"
+    "${AGE_BIN}" -d -i "${AGE_IDENTITY}" -o "${CLARO}" "${DUMP_FILE}" || {
+      log "No se pudo descifrar el dump (identidad incorrecta o artefacto corrupto)" >&2
+      exit 1
+    }
+    DUMP_FILE="${CLARO}"
+    ;;
+esac
 
 # Un contenedor colgado de una corrida previa no debe frenar la verificacion.
 docker rm -f "${NAME}" >/dev/null 2>&1 || true
