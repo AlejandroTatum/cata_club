@@ -128,6 +128,10 @@ const mockRegistrarPago = vi.fn();
 const mockSubirVoucherPago = vi.fn().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
 const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
 const mockFetchBeneficio = vi.fn().mockResolvedValue(null);
+// Issue #615's PaymentHistorySection is collapsed and fetches lazily on
+// open, so this default resolved value is never even reached by the tests
+// below — it only exists so the mocked module always exposes the function.
+const mockFetchPagosDePersona = vi.fn().mockResolvedValue([]);
 const mockAsignarBeneficio = vi.fn();
 const mockRetirarBeneficio = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
@@ -174,6 +178,7 @@ vi.mock("@/services/api", () => {
     subirVoucherPago: (pagoId: number, archivo: File) => mockSubirVoucherPago(pagoId, archivo),
     fetchDescuentos: () => mockFetchDescuentos(),
     fetchBeneficio: (personaId: number) => mockFetchBeneficio(personaId),
+    fetchPagosDePersona: (personaId: string) => mockFetchPagosDePersona(personaId),
     asignarBeneficio: (personaId: number, descuentoId: number) => mockAsignarBeneficio(personaId, descuentoId),
     retirarBeneficio: (personaId: number) => mockRetirarBeneficio(personaId),
     fetchNotificaciones: () => mockFetchNotificaciones(),
