@@ -1136,6 +1136,78 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     ).toBeInTheDocument();
   });
 
+  it("shows a non-blocking overlap warning naming the colliding schedule (#731)", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
+    mockAsignarAlumnoAHorario.mockResolvedValue({
+      asignaciones: [],
+      membresiaVencida: false,
+      diasVencida: null,
+      solapamientos: [
+        {
+          horarioId: 16,
+          categoria: "COMPETITIVO",
+          categoriaLabel: "Competitivo",
+          diaSemana: "LUNES",
+          horaInicio: "18:00:00",
+          horaFin: "20:00:00",
+        },
+      ],
+    });
+    render(
+      <ToastProvider>
+        <GroupsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await waitForHorarios();
+
+    const [multiDiaCard] = cards();
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
+
+    await selectDiego();
+    fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
+
+    // Belonging to several categorías is a real feature of this club, so the
+    // assignment SUCCEEDS -- the overlap rides alongside as an advisory, the
+    // same surface INS-6's overdue-fee warning uses. It never blocks.
+    expect((await screen.findAllByText(/asignado correctamente/i)).length).toBeGreaterThan(0);
+    expect(
+      await screen.findByText(
+        "Diego Vega ya figura en Competitivo (Lunes de 18:00 a 20:00), que se superpone con este horario.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("stays silent when nothing overlaps, so a normal assignment is not nagged (#731)", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
+    mockAsignarAlumnoAHorario.mockResolvedValue({
+      asignaciones: [],
+      membresiaVencida: false,
+      diasVencida: null,
+      solapamientos: [],
+    });
+    render(
+      <ToastProvider>
+        <GroupsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await waitForHorarios();
+
+    const [multiDiaCard] = cards();
+    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
+    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
+
+    await selectDiego();
+    fireEvent.click(screen.getByRole("button", { name: /^asignar$/i }));
+
+    expect((await screen.findAllByText(/asignado correctamente/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/se superpone/i)).not.toBeInTheDocument();
+  });
+
   it("shows a real error when the assign call fails (e.g. already enrolled in the whole categoria)", async () => {
     mockFetchMembers.mockResolvedValue({ accounts: [ASSIGNABLE_ACCOUNT] });
     mockAsignarAlumnoAHorario.mockRejectedValue(new ApiClientError("Diego Vega ya figura en esa categoría.", 400));

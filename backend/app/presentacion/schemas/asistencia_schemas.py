@@ -224,6 +224,28 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     fecha_asignacion: datetime
 
 
+class SolapeHorarioDTO(ResponseBase, BaseModel):
+    """Un horario que el alumno YA tenía y que se pisa con uno de los que se
+    le acaban de asignar (issue #731).
+
+    Lleva `categoria_label` -- no solo el `codigo` -- porque este DTO existe
+    para NOMBRAR el horario en conflicto: un aviso que solo dijera "se
+    superpone" obliga al admin a ir a buscar con cuál. El label sale de
+    `categoria_horario`, la misma tabla que ya alimenta los mensajes de
+    error de `crear_horario`, así que no es una etiqueta nueva que el
+    frontend tenga que mantener espejada.
+
+    `hora_inicio`/`hora_fin` son las del horario VIEJO. El rango nuevo no
+    viaja acá: es el de la categoría que el admin acaba de elegir, que ya
+    tiene a la vista en la tarjeta desde la que asignó."""
+    horario_id: int
+    categoria: str
+    categoria_label: str
+    dia_semana: DiaSemana
+    hora_inicio: time
+    hora_fin: time
+
+
 class AsignacionAlumnoHorarioResponseDTO(ResponseBase, BaseModel):
     """Respuesta de `POST /asignar-alumno`.
 
@@ -235,7 +257,15 @@ class AsignacionAlumnoHorarioResponseDTO(ResponseBase, BaseModel):
     roster), y sumarle ahí una consulta de membresía por fila sería un N+1
     en endpoints que este fix no toca. El dato es plano (booleano + días) a
     propósito: la oración en castellano ("Ariana tiene la cuota vencida
-    hace 14 días") la arma el frontend, que ya conoce el nombre del alumno."""
+    hace 14 días") la arma el frontend, que ya conoce el nombre del alumno.
+
+    Issue #731 suma `solapamientos` con el MISMO criterio: un alumno puede
+    pertenecer a varias categorías a la vez (decisión del dueño, 2026-08-27:
+    "una persona sí puede pertenecer a varios horarios, pero sí, lo correcto
+    es avisar nada más"), así que un cruce de horarios tampoco bloquea --
+    viaja como aviso al lado de las asignaciones ya creadas. Vacía cuando no
+    hay ningún cruce."""
     asignaciones: list[AlumnoHorarioDetalleDTO]
     membresia_vencida: bool
     dias_vencida: Optional[int] = None
+    solapamientos: list[SolapeHorarioDTO] = Field(default_factory=list)
