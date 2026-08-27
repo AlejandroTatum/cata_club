@@ -36,6 +36,12 @@ class AsignacionDescuentoResponseDTO(ResponseBase, BaseModel):
     persona_id: int
     descuento: DescuentoResponseDTO
     asignado_por_persona_id: int
+    # Issue #714: el nombre ya resuelto de quien concedió el beneficio. El id
+    # se conserva (es la referencia estable que un cliente podría necesitar);
+    # lo que faltaba era algo MOSTRABLE, y sin esto el panel imprimía
+    # "Asignado por persona #1". Mismo par id + nombre que
+    # `AsistenciaResponseDTO.registrado_por_id`/`registrado_por_nombre`.
+    asignado_por_nombre: str
     asignado_en: datetime
     retirado_por_persona_id: Optional[int] = None
     retirado_en: Optional[datetime] = None

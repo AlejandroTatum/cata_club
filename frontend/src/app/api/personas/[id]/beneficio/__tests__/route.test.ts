@@ -67,6 +67,7 @@ const beneficioResponse = {
   personaId: 5,
   descuento: { id: 2, nombre: "Beca deportiva", porcentaje: "50.00", monto: null, activo: true },
   asignadoPorPersonaId: 1,
+  asignadoPorNombre: "Admin Dev",
   asignadoEn: "2026-08-01T00:00:00Z",
   retiradoPorPersonaId: null,
   retiradoEn: null,

@@ -2048,6 +2048,12 @@ export interface BeneficioAsignado {
   personaId: number;
   descuento: DescuentoCatalogo;
   asignadoPorPersonaId: number;
+  /**
+   * The assigning admin's name, resolved backend-side (issue #714) the same
+   * way `registradoPorNombre`/`corregidoPorNombre` already are. The screen
+   * used to have only the id and printed it — "Asignado por persona #1".
+   */
+  asignadoPorNombre: string;
   asignadoEn: string;
   retiradoPorPersonaId: number | null;
   retiradoEn: string | null;

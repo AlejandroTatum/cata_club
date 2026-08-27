@@ -85,6 +85,30 @@ def test_asignar_beneficio_y_leerlo_por_get(client, db_session):
     assert leido["descuento"]["id"] == descuento.id
 
 
+def test_asignacion_expone_el_nombre_del_admin_no_solo_su_id(db_session):
+    """Issue #714: el panel "Beneficio del club" mostraba `Asignado por
+    persona #1` porque el DTO solo llevaba el id crudo. Toda otra referencia a
+    un actor en la app resuelve a un nombre (`registrado_por_nombre`,
+    `corregido_por_nombre`); esta era la excepción.
+
+    Se ejercita `a_response_dto` y no el endpoint a propósito: es EL punto
+    donde una `AsignacionDescuento` ORM se vuelve respuesta HTTP (ver su
+    docstring), y así el admin puede ser una persona con nombre propio en vez
+    del `persona_id=1` fijo que el token de `client` impone."""
+    admin = _crear_beneficiario(db_session, 798, nombres="Admin", apellidos="Dev")
+    beneficiario = _crear_beneficiario(db_session, 799)
+    descuento = _crear_descuento(db_session)
+    db_session.commit()
+
+    servicio = BeneficioServicio(db_session)
+    asignacion = servicio.asignar(beneficiario.id, descuento.id, admin.id)
+    dto = servicio.a_response_dto(asignacion)
+
+    # El id sigue estando (referencia estable), pero ya no es lo único.
+    assert dto.asignado_por_persona_id == admin.id
+    assert dto.asignado_por_nombre == "Admin Dev"
+
+
 def test_get_sin_beneficio_devuelve_vacio(client, db_session):
     beneficiario = _crear_beneficiario(db_session, 702)
     db_session.commit()

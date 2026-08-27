@@ -149,10 +149,11 @@ export default function BeneficioSection({ personaId, tarifaMensual }: Beneficio
             </span>
           </div>
           {/* Who granted it — the whole point of an auditable assignment
-              (issue #398). The backend exposes only the assigning admin's
-              persona id, not their name (`AsignacionDescuentoResponseDTO`
-              carries `asignado_por_persona_id`, no nested persona). */}
-          <p className="text-2xs text-ink-3">Asignado por persona #{beneficio.asignadoPorPersonaId}</p>
+              (issue #398). Issue #714: the backend now resolves the admin's
+              NAME (`asignado_por_nombre`), the same way every other actor
+              reference in the app already did; this used to print the raw
+              persona id as "Asignado por persona #1". */}
+          <p className="text-2xs text-ink-3">Asignado por {beneficio.asignadoPorNombre}</p>
           <button
             type="button"
             onClick={() => setPendingRetiro(true)}

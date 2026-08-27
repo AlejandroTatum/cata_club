@@ -1496,6 +1496,7 @@ describe("MembersPage — Beneficio del club", () => {
     personaId: 10,
     descuento: { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
     asignadoPorPersonaId: 3,
+    asignadoPorNombre: "Admin Dev",
     asignadoEn: "2026-08-01T10:00:00Z",
     retiradoPorPersonaId: null,
     retiradoEn: null,
@@ -1518,8 +1519,16 @@ describe("MembersPage — Beneficio del club", () => {
 
     expect(await within(dialog).findByText("Media beca")).toBeInTheDocument();
     expect(within(dialog).getByText("50%")).toBeInTheDocument();
-    // The whole point of an auditable assignment: who granted it.
-    expect(within(dialog).getByText(/asignado por persona #3/i)).toBeInTheDocument();
+    /*
+     * The whole point of an auditable assignment: who granted it. Issue #714
+     * — by NAME. This assertion used to read `asignado por persona #3`, which
+     * is the raw `asignadoPorPersonaId` printed at the admin; every other
+     * actor reference in the app (`registradoPorNombre`, `corregidoPorNombre`)
+     * already resolved to a name, and this panel was the exception.
+     */
+    expect(within(dialog).getByText(/asignado por admin dev/i)).toBeInTheDocument();
+    // …and the database id is not shown anywhere in its place.
+    expect(within(dialog).queryByText(/persona #\d/i)).not.toBeInTheDocument();
   });
 
   it('shows "Sin beneficio" when the persona has none', async () => {
