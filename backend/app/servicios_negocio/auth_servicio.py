@@ -1,5 +1,6 @@
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -28,12 +29,103 @@ _log = logging.getLogger(__name__)
 # `login`). Vive en un dict a nivel de módulo -- simplificación aceptada para
 # el alcance de este proyecto, mismo criterio que la ausencia de blacklist
 # Redis ya documentada en `refrescar_sesion`: no sobrevive un reinicio del
-# proceso ni se comparte entre réplicas. En producción multi-instancia se
-# movería a Redis con TTL (el TTL además limpiaría solo los intentos de
-# cuentas inexistentes, que acá quedan en memoria indefinidamente).
-_INTENTOS_FALLIDOS_LOGIN: dict[str, int] = {}
+# proceso ni se comparte entre réplicas. En producción multi-instancia cada
+# worker mantendría su propia cota (ver `_registrar_intento_fallido`), no un
+# contador compartido -- eso ya diluye la PRECISIÓN del freno entre workers
+# (issue conocido, mismo motivo que la ausencia de blacklist Redis), pero no
+# reabre el DoS de memoria de acá: la cota por worker es independiente del
+# número de workers, así que N workers acotados siguen sumando una cantidad
+# de memoria trivial. En producción multi-instancia esto se movería a Redis
+# con TTL, que además compartiría el conteo entre workers.
+#
+# Issue #733: hasta acá, `_INTENTOS_FALLIDOS_LOGIN` no tenía TTL ni cota de
+# tamaño, y la clave era el input CRUDO del atacante (sin tope de longitud
+# en `auth_router.py`). Un correo nunca visto antes solo se borra con un
+# login EXITOSO en esa clave exacta -- que nunca pasa para un string al
+# azar -- así que cada intento fallido con un correo/username DISTINTO
+# quedaba retenido para siempre: un vector de denegación de servicio SIN
+# autenticar (medido: ~115 KB retenidos por request con un username de
+# 100.006 caracteres, suficiente para tumbar por OOM los 320m del backend en
+# producción en menos de media hora desde una sola IP). Dos mitades:
+#   1. `auth_router.py` acota la longitud del username en la capa de FORM
+#      (422 antes de convertirse en clave) -- eso tapa la vía más barata
+#      (strings gigantes) pero NO alcanza sola: un atacante puede seguir
+#      acuñando direcciones DISTINTAS de longitud válida sin límite.
+#   2. El propio mapa se acota acá con `_MAX_ENTRADAS_INTENTOS_LOGIN` (tope
+#      duro, desalojo LRU) + `_TTL_INTENTOS_LOGIN_SEGUNDOS` (TTL deslizante,
+#      se renueva en cada intento fallido sobre esa clave). Quitar cualquiera
+#      de las dos reabre el OOM: solo el TTL no alcanza contra un ráfaga que
+#      llena el mapa en segundos (el TTL no tiene tiempo de expirar nada), y
+#      solo el tope de tamaño sin refresco por uso desalojaría al azar,
+#      pudiendo tirar la cuenta real bajo ataque.
+#
+# Por qué el TTL es DESLIZANTE (se toca en cada fallo, no fijo desde la
+# creación): un ataque dirigido de verdad contra UNA cuenta sigue tocando esa
+# clave en cada intento -- incluso escalado al techo de 60s entre intentos,
+# eso son come mucho ~60s de silencio entre toques, muy por debajo de los 15
+# minutos de TTL -- así que la cuenta atacada nunca se resetea mientras el
+# ataque siga activo. Solo se resetea una clave que quedó IDLE 15 minutos:
+# o basura del atacante que dejó de insistir en ese string puntual, o un
+# usuario real que tipeó mal y recién vuelve -- en ambos casos, perder el
+# contador es deseable, no una debilidad.
+#
+# Por qué el desalojo por tamaño es LRU (no FIFO ni al azar): con
+# `move_to_end` en cada toque, la clave MENOS recientemente usada es siempre
+# la primera en desalojarse. Una cuenta bajo ataque activo se sigue tocando
+# en cada intento propio, así que queda siempre al final de la cola y
+# sobrevive cualquier relleno de basura MIENTRAS el atacante no meta más de
+# `_MAX_ENTRADAS_INTENTOS_LOGIN` claves distintas ENTRE dos intentos
+# consecutivos contra esa cuenta -- con el tope elegido (50.000) eso exige
+# una ráfaga mucho más cara y visible que el ataque que esto tapa, y sigue
+# acotada en memoria (50.000 entradas de longitud acotada son unos pocos MB,
+# lejos de los 320m del contenedor). Ver
+# `tests/test_auth_login_dos_no_autenticado.py` para los tres escenarios
+# (mapa acotado, cuenta real sobrevive relleno, freno no regresiona).
+_INTENTOS_FALLIDOS_LOGIN: "OrderedDict[str, tuple[int, float]]" = OrderedDict()
+_MAX_ENTRADAS_INTENTOS_LOGIN = 50_000
+_TTL_INTENTOS_LOGIN_SEGUNDOS = 15 * 60
 _UMBRAL_RETRASO_INTENTOS = 3
 _TECHO_RETRASO_SEGUNDOS = 60
+
+
+def _purgar_entradas_expiradas(ahora: float) -> None:
+    """Desaloja del FRENTE de `_INTENTOS_FALLIDOS_LOGIN` -- el frente es
+    siempre lo menos recientemente tocado, ver `_registrar_intento_fallido`
+    -- toda clave IDLE por más de `_TTL_INTENTOS_LOGIN_SEGUNDOS`. Se corta en
+    el primer no-expirado: como el orden es por último toque, ninguna
+    entrada más atrás puede estar expirada si esta no lo está."""
+    while _INTENTOS_FALLIDOS_LOGIN:
+        clave_mas_vieja, (_, ultimo_toque) = next(iter(_INTENTOS_FALLIDOS_LOGIN.items()))
+        if ahora - ultimo_toque < _TTL_INTENTOS_LOGIN_SEGUNDOS:
+            break
+        _INTENTOS_FALLIDOS_LOGIN.pop(clave_mas_vieja)
+
+
+def _acotar_tamano_mapa() -> None:
+    """Red de seguridad ante una ráfaga de amplitud (muchas claves distintas
+    en segundos): el TTL solo no alcanza porque no le da tiempo a expirar
+    nada. Desaloja SIEMPRE por el frente (menos recientemente tocado, LRU),
+    nunca al azar -- ver el docstring de arriba para por qué eso protege a
+    una cuenta bajo ataque activo."""
+    while len(_INTENTOS_FALLIDOS_LOGIN) > _MAX_ENTRADAS_INTENTOS_LOGIN:
+        _INTENTOS_FALLIDOS_LOGIN.popitem(last=False)
+
+
+def _registrar_intento_fallido(clave: str) -> int:
+    """Incrementa el contador de `clave`, la marca como la más recientemente
+    tocada (mueve al FINAL) y purga el mapa (TTL + tope de tamaño) antes de
+    devolver el nuevo total. Separado de `AuthServicio._penalizar_intento_
+    fallido` para poder probarlo directo, sin DB ni sleep (ver
+    `tests/test_auth_login_dos_no_autenticado.py::
+    test_mapa_de_intentos_fallidos_no_crece_sin_limite`)."""
+    ahora = time.monotonic()
+    intentos_previos, _ = _INTENTOS_FALLIDOS_LOGIN.get(clave, (0, ahora))
+    intentos = intentos_previos + 1
+    _INTENTOS_FALLIDOS_LOGIN[clave] = (intentos, ahora)
+    _INTENTOS_FALLIDOS_LOGIN.move_to_end(clave)
+    _purgar_entradas_expiradas(ahora)
+    _acotar_tamano_mapa()
+    return intentos
 
 # Cuántas sesiones devuelve `listar_sesiones`. La tarjeta del perfil responde
 # "¿desde dónde entré últimamente?", no "dame la bitácora completa". Es un
@@ -157,8 +249,7 @@ class AuthServicio:
         return usuario
 
     def _penalizar_intento_fallido(self, clave: str) -> None:
-        intentos = _INTENTOS_FALLIDOS_LOGIN.get(clave, 0) + 1
-        _INTENTOS_FALLIDOS_LOGIN[clave] = intentos
+        intentos = _registrar_intento_fallido(clave)
         retraso = _calcular_retraso_login(intentos)
         if retraso:
             self._dormir(retraso)
