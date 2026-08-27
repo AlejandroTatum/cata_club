@@ -250,14 +250,23 @@ async def listar_instituciones(
 
 # --- Búsqueda (autocomplete) ------------------------------------------------
 # Rate-limited (D6-d): devuelve una lista de personas (DTO liviano, sin
-# cédula/teléfono, pero igual nombres+foto). Cualquier rol autenticado la
-# alcanza, no solo admin -- tier de autoservicio de confianza, 30/min: cubre
-# ráfagas normales de tipeo en el autocomplete sin dejar de acotar un
-# scraping del roster completo por búsquedas incrementales.
+# cédula/teléfono, pero igual nombres+foto de cada persona activa).
+#
+# SEGURIDAD -- SOLO STAFF (ADMINISTRADOR o ENTRENADOR). Antes lo alcanzaba
+# "cualquier rol autenticado" bajo la excepción que documentan los hermanos de
+# más abajo: `fetchPersonaNameMap` (BFF del entrenador) dependía de esta
+# búsqueda para resolver nombres en "revisar listas". El issue #358 resolvió
+# el nombre en origen (`AsistenciaResponseDTO.persona_nombre_completo`) y
+# ELIMINÓ ese consumidor, así que la excepción caducó. Sin ella, un token de
+# ALUMNO -- incluido el que acuña la autoinscripción pública sin verificación
+# (`POST /enrollment/`) -- podía enumerar el club entero con `q` comodín
+# (`nombres+apellidos` de cada menor), correlacionable con la franja horaria y
+# el mapa que la landing publica. Mismo criterio operativo que sus consumidores
+# reales (`/reports` admin, `/trainer/attendance/history` entrenador): staff.
 @router.get(
     "/buscar",
     response_model=List[PersonaBusquedaDTO],
-    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR", "ENTRENADOR"]))],
 )
 @limiter.limit("30/minute")
 async def buscar_personas(

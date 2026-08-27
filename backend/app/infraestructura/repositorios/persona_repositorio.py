@@ -1,8 +1,20 @@
 from typing import Optional, List
-from sqlalchemy import and_, func, literal, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
+
+# Mismo mapeo de acentos que el `func.translate` de más abajo, pero en
+# Python: como el patrón LIKE ahora lo arma `.contains(autoescape=True)` (que
+# NO pasa el término por `translate`/`lower` de la columna), el término se
+# normaliza acá para que "Anahí" siga encontrando a "Anahí" y "Muño" a
+# "Muñoz". Se conserva la ñ, igual que en SQL.
+_ACENTOS_A_LLANOS = str.maketrans("áéíóúü", "aeiouu")
+
+
+def _normalizar_termino(palabra: str) -> str:
+    """Refleja el `lower(translate(...))` que se aplica a la columna."""
+    return palabra.translate(_ACENTOS_A_LLANOS).lower()
 
 
 class PersonaRepositorio:
@@ -129,15 +141,24 @@ class PersonaRepositorio:
             def normalizador(expresion):
                 return func.lower(func.translate(expresion, "áéíóúü", "aeiouu"))
 
+            # SEGURIDAD: el término entra a un patrón LIKE, así que `%` y `_`
+            # se tratan como LITERALES y no como comodines. `contains(...,
+            # autoescape=True)` es el mecanismo de SQLAlchemy para eso: escapa
+            # `%`, `_` y el propio carácter de escape, y emite `... LIKE ...
+            # ESCAPE ...`. Antes se concatenaba `%<palabra>%` sin escapar: un
+            # `q="%%"` calzaba con TODA la tabla y `min_length=2` era
+            # decorativo, con lo que cualquier término comodín enumeraba el
+            # roster entero (nombres de menores incluidos). Ahora `q="%%"`
+            # sólo encuentra a quien literalmente tenga "%%" en el nombre.
             stmt = stmt.where(
                 and_(
                     *[
                         or_(
-                            normalizador(Persona.nombres).like(
-                                func.concat("%", normalizador(literal(palabra)), "%")
+                            normalizador(Persona.nombres).contains(
+                                _normalizar_termino(palabra), autoescape=True
                             ),
-                            normalizador(Persona.apellidos).like(
-                                func.concat("%", normalizador(literal(palabra)), "%")
+                            normalizador(Persona.apellidos).contains(
+                                _normalizar_termino(palabra), autoescape=True
                             ),
                         )
                         for palabra in palabras

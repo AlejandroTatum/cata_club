@@ -535,6 +535,90 @@ def test_buscar_es_insensible_a_acentos_y_preserva_la_ene(client):
     assert resp.json() == []
 
 
+# --- Búsqueda: candados de seguridad ----------------------------------------
+# El autocomplete devuelve nombres+foto de CADA persona activa (menores
+# incluidos) y filtra por rol. Dos defectos lo convertían en un scraper del
+# roster para cualquiera: (1) sólo exigía un token válido -- cualquier rol,
+# incluido el que acuña la autoinscripción pública sin verificar -- y (2) el
+# patrón LIKE no escapaba `%`/`_`, así que `q="%%"` calzaba con todo el club.
+# Estos tests fijan ambos: sólo staff entra, y los comodines son literales.
+def test_buscar_rechaza_token_de_alumno(client_sin_permisos):
+    """Un ALUMNO autenticado NO puede buscar: 403, no 200 con el roster."""
+    resp = client_sin_permisos.get("/api/v1/personas/buscar", params={"q": "Torres"})
+
+    assert resp.status_code == 403
+
+
+def test_buscar_rechaza_cuenta_autoinscripta(client_sin_token):
+    """El ataque real: la autoinscripción pública (`POST /enrollment/`, sin
+    auth ni verificación) acuña un token ALUMNO; ese token NO debe poder
+    enumerar el club. Se usa `client_sin_token` para que corra el
+    `decodificar_token` real sobre el JWT emitido, no el override de rol."""
+    alta = client_sin_token.post(
+        "/api/v1/enrollment/",
+        json={
+            "alumno": {
+                "nombres": "Intruso", "apellidos": "Anonimo",
+                "cedula": cedula_valida(560), "fecha_nacimiento": "1995-04-11",
+                "telefono": "0991234567",
+            },
+            "credenciales_alumno": {
+                "correo": "intruso560@example.com", "contrasenia": "password8",
+            },
+        },
+    )
+    assert alta.status_code == 201
+    token = alta.json()["access_token"]
+    assert token
+
+    resp = client_sin_token.get(
+        "/api/v1/personas/buscar",
+        params={"q": "Torres"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 403
+
+
+def test_buscar_trata_los_comodines_like_como_literales(client):
+    """`%` y `_` en `q` son caracteres literales, no comodines: `q="%%"` no
+    puede devolver a todo el club, y `q="Emili_"` no calza con "Emilio"."""
+    _crear_personas_buscables(client, cantidad=5)  # 5 "Torres" activos
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(561))
+
+    todo_comodin = client.get("/api/v1/personas/buscar", params={"q": "%%"})
+    assert todo_comodin.status_code == 200
+    assert todo_comodin.json() == []  # nadie se llama literalmente "%%"
+
+    guion_bajo = client.get("/api/v1/personas/buscar", params={"q": "Emili_"})
+    assert guion_bajo.status_code == 200
+    assert guion_bajo.json() == []  # el "_" es literal: no es un comodín
+
+    # La búsqueda legítima sigue encontrando (el candado es preciso, no un veto):
+    literal_ok = client.get("/api/v1/personas/buscar", params={"q": "Emilio"})
+    assert literal_ok.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in literal_ok.json())
+
+
+def test_buscar_permite_al_entrenador_busqueda_parcial(client_entrenador, client):
+    """El staff sigue entrando: un ENTRENADOR (sin ADMINISTRADOR) busca por
+    nombre parcial y obtiene resultados -- es el consumidor real de
+    `/trainer/attendance/history`. Misma convención que en `test_asistencias`:
+    pedir `client_entrenador` antes que `client`, sembrar con `client` (admin)
+    y reponer el token de entrenador justo antes de la llamada a probar."""
+    _crear_persona_buscable(client, "Emilio", "Zambrano", cedula_valida(562))
+
+    from main import app
+    app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "entrenador@cataclub.test", "persona_id": 1, "roles": ["ENTRENADOR"],
+    }
+
+    resp = client_entrenador.get("/api/v1/personas/buscar", params={"q": "Emil"})
+
+    assert resp.status_code == 200
+    assert any(p["apellidos"] == "Zambrano" for p in resp.json())
+
+
 # --- `GET /personas/`: paginación acotada -----------------------------------
 # Era el único de los cuatro endpoints paginados declarado con defaults planos
 # de Python (`skip: int = 0, limit: int = 50`), sin `Query(...)`: aceptaba
