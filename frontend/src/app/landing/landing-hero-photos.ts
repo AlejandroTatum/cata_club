@@ -17,24 +17,24 @@ export interface HeroPhoto {
  */
 export const HERO_PHOTOS: HeroPhoto[] = [
   {
-    src: "/landing/photo-coach-athlete.jpeg",
-    alt: "Entrenador y alumna de Cata Club en un torneo",
-    caption: "En la mesa",
-    tabDescription: "entrenador y alumna",
-    objectPosition: "50% 22%",
-  },
-  {
-    src: "/landing/photo-podium-home.jpeg",
-    alt: "Seis deportistas de Cata Club festejando con medallas en el podio de un torneo",
-    caption: "Celebrando el podio",
-    tabDescription: "celebrando en el podio",
-    objectPosition: "50% 18%",
-  },
-  {
-    src: "/landing/photo-community.jpeg",
-    alt: "Grupo numeroso de deportistas, entrenadores y familias de Cata Club celebrando",
+    src: "/landing/hero-community.jpg",
+    alt: "Deportistas, entrenadores y familias de Cata Club reunidos",
     caption: "La comunidad",
-    tabDescription: "la comunidad",
+    tabDescription: "la comunidad del club",
+    objectPosition: "50% 50%",
+  },
+  {
+    src: "/landing/hero-competition.jpg",
+    alt: "Dos estudiantes de Cata Club posando",
+    caption: "Dos estudiantes del club",
+    tabDescription: "estudiantes del club posando",
+    objectPosition: "50% 42%",
+  },
+  {
+    src: "/landing/hero-training.jpg",
+    alt: "Deportistas de Cata Club entrenando tenis de mesa en el club",
+    caption: "En entrenamiento",
+    tabDescription: "entrenando en el club",
     objectPosition: "50% 50%",
   },
 ];

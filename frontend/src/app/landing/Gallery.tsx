@@ -25,7 +25,6 @@ export default function Gallery(): React.ReactElement {
                 sizes={slideSizes(photo)}
                 draggable={false}
               />
-              <figcaption>{photo.caption}</figcaption>
             </figure>
           ))}
         </div>

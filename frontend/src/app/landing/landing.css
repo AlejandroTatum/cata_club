@@ -158,8 +158,8 @@
 .landing-hero-slide[data-active="true"] { clip-path: inset(0% 0% 0% 0%); opacity: 1; }
 /* The crossing ball inside the screen during a tab switch; GSAP animates it in. */
 .landing-hero-frameball { position: absolute; left: 0; top: 0; z-index: 5; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--landing-ball); box-shadow: 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 55%, transparent), inset -4px -5px 0 color-mix(in srgb, var(--landing-brand-black) 14%, transparent); opacity: 0; pointer-events: none; }
-.landing-hero-screen-bar { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 17px; background: linear-gradient(to top, color-mix(in srgb, var(--landing-brand-black) 90%, transparent), transparent); }
-.landing-hero-screen-cap { display: flex; align-items: center; gap: 10px; color: var(--landing-on-action); font-size: 12.5px; font-weight: 800; letter-spacing: 2.2px; text-transform: uppercase; }
+.landing-hero-screen-bar { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: flex-end; padding: 8px 10px; }
+
 .landing-hero-screen-dots { display: flex; gap: 6px; }
 /* @touch-target Matches the 44px floor every other tappable control here uses. */
 .landing-hero-screen-dots button { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); font-family: var(--font-landing-barlow), sans-serif; font-size: 12.5px; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
@@ -359,7 +359,7 @@
 .landing-slide { position: relative; height: var(--landing-slide-height); flex: none; margin: 0; overflow: hidden; border-radius: 16px; background: var(--landing-brand-black); scroll-snap-align: center; }
 .landing-slide img { display: block; width: auto; height: 100%; object-fit: cover; }
 .landing-slide::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 72%, transparent) 0%, transparent 42%); }
-.landing-slide figcaption { position: absolute; z-index: 2; right: 18px; bottom: 18px; left: 18px; color: var(--landing-on-action); font-size: 14px; font-weight: 600; line-height: 1.4; }
+
 /* Tells the eye the strip continues past the viewport edge. */
 .landing-carousel-wrap::before, .landing-carousel-wrap::after { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; width: var(--landing-gutter); pointer-events: none; }
 .landing-carousel-wrap::before { left: 0; background: linear-gradient(90deg, var(--landing-background), transparent); }

@@ -23,7 +23,7 @@ describe("landing gallery photos", (): void => {
 
   it("serves every photo from the landing asset directory", (): void => {
     GALLERY_PHOTOS.forEach((photo): void => {
-      expect(photo.src).toMatch(/^\/landing\/[\w-]+\.jpeg$/);
+      expect(photo.src).toMatch(/^\/landing\/[\w-]+\.jpg$/);
     });
   });
 
@@ -40,17 +40,12 @@ describe("landing gallery photos", (): void => {
   });
 
   /**
-   * Every regression this file guards is the same one: `sizes` states a WIDTH,
-   * and the browser picks a file from it before any stylesheet has applied. If
-   * the stated width is smaller than the rendered one — because the numbers
-   * drifted from the CSS, or because the box is a different shape than the
-   * photo and `object-fit: cover` binds on height instead — it downloads a file
-   * too small and scales it up. That is invisible in review and obvious on a
-   * phone. One landing photo shipped upscaled 2.23x this way.
+   * The carousel preserves each source aspect ratio, so portrait and landscape
+   * assets are valid and must not be normalized to one intrinsic height.
    */
-  it("exports every photo at one uniform height so width alone drives the layout", (): void => {
+  it("allows mixed source heights for the carousel aspect-ratio layout", (): void => {
     const heights = new Set(GALLERY_PHOTOS.map((photo): number => photo.height));
-    expect(heights.size).toBe(1);
+    expect(heights.size).toBeGreaterThan(1);
   });
 
   it("carries enough pixels for the tallest rendered slide at 2x", (): void => {
@@ -94,9 +89,10 @@ describe("landing gallery photos", (): void => {
     }));
   });
 
-  it("keeps the championship specifics on the photo that shows them", (): void => {
-    const championship = GALLERY_PHOTOS.find((photo): boolean => /Sudamericano/i.test(photo.caption));
-    expect(championship).toBeDefined();
-    expect(championship?.caption).toMatch(/Asunción/);
+  it("keeps descriptive accessibility text when visible captions are omitted", (): void => {
+    GALLERY_PHOTOS.forEach((photo): void => {
+      expect(photo.alt.trim().length).toBeGreaterThan(20);
+      expect(photo.alt).not.toBe(photo.caption);
+    });
   });
 });
