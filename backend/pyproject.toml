@@ -30,7 +30,7 @@ dependencies = [
     "urllib3>=2.0.0",
     # --- Rate limiting ---
     "slowapi>=0.1.9",
-    # --- Chatbot de FAQ (DeepSeek vía gateway OpenAI-compatible OpenCode Zen) ---
+    # --- Chatbot de FAQ (MiMo vía gateway OpenAI-compatible OpenCode Zen) ---
     "openai>=1.50.0",
 ]
 

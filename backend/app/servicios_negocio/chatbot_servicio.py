@@ -6,17 +6,15 @@ preguntas frecuentes se embebe directo en el system prompt (constante
 `_FAQ_CONTENIDO` de este módulo) porque no hay volumen de contenido que
 justifique algo más sofisticado. No toca la base de datos.
 
-Proveedor: DeepSeek servido a través del gateway OpenAI-compatible
+Proveedor: MiMo servido a través del gateway OpenAI-compatible
 "OpenCode Zen" (https://opencode.ai/zen/v1). Se usa el paquete `openai`
 apuntado a ese `base_url` — es el cliente idiomático para cualquier gateway
 OpenAI-compatible (retries y excepciones tipadas gratis), en vez de
 reimplementar la llamada HTTP a mano.
 
-MODELO_CHATBOT = "deepseek-v4-flash-free" (tier gratuito) es TEMPORAL, solo
-para la demo — la suscripción paga "OpenCode Go" (modelo `deepseek-v4-flash`
-contra el endpoint propio https://opencode.ai/zen/go/v1) está sin crédito
-disponible. Cuando se resuelva el billing de Go, volver a `deepseek-v4-flash`
-+ `https://opencode.ai/zen/go/v1`.
+El chatbot usa el modelo gratuito vigente de OpenCode Zen; el ID se mantiene
+sin prefijo porque es la convención de la API de la aplicación. La configuración
+sigue apuntando al gateway OpenCode Zen (`https://opencode.ai/zen/v1`).
 """
 import re
 import unicodedata
@@ -27,7 +25,7 @@ import openai
 from app.soporte_transversal.configuracion import settings
 
 OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1"
-MODELO_CHATBOT = "deepseek-v4-flash-free"
+MODELO_CHATBOT = "mimo-v2.5-free"
 # El tier gratuito consume tokens en "razonamiento" interno de forma poco
 # predecible -- se vio vaciar un presupuesto de 1024 sin dejar nada para la
 # respuesta visible (finish_reason="length", reasoning_tokens=1024). 4096 le

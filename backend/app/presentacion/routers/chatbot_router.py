@@ -3,7 +3,7 @@ Router del chatbot de FAQ (asistente de navegación de la app).
 
 Endpoint público (sin auth): no expone datos personales ni sensibles, es un
 helper estático de FAQ. Rate-limited porque cada llamada tiene costo (gateway
-OpenCode Go / DeepSeek).
+OpenCode Zen / MiMo).
 """
 from fastapi import APIRouter, Request
 

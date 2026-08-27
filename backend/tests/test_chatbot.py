@@ -93,6 +93,30 @@ def test_consultar_responde_200_con_respuesta(client, monkeypatch):
     assert data["respuesta"] == "Podés ver tus pagos en Mi Cuenta."
 
 
+def test_consultar_envia_modelo_y_gateway_vigentes(client, monkeypatch):
+    capturado = {}
+
+    class _Completions:
+        def create(self, **kwargs):
+            capturado["request"] = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="OK"))]
+            )
+
+    class _Cliente:
+        def __init__(self, **kwargs):
+            capturado["cliente"] = kwargs
+            self.chat = SimpleNamespace(completions=_Completions())
+
+    monkeypatch.setattr(chatbot_servicio_mod.openai, "OpenAI", _Cliente)
+
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+
+    assert resp.status_code == 200, resp.text
+    assert capturado["cliente"]["base_url"] == "https://opencode.ai/zen/v1"
+    assert capturado["request"]["model"] == "mimo-v2.5-free"
+
+
 def test_consultar_con_historial_responde_200(client, monkeypatch):
     _mockear_cliente_openai(monkeypatch, texto="Sí, claro.")
 
