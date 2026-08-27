@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
-import { useNativeDialog } from "./useNativeDialog";
+import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS } from "./useNativeDialog";
 import MedicalRecordEditor from "./MedicalRecordEditor";
 import type { MemberAccount } from "./members-utils";
 
@@ -37,12 +37,16 @@ export default function MedicalRecordDialog({
       aria-modal="true"
       aria-labelledby={titleId}
       onCancel={(event) => event.preventDefault()}
-      className="fixed inset-0 z-50 m-auto flex h-fit max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40"
+      className={NATIVE_DIALOG_SHELL_CLASS}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
         <h2
           id={titleId}
-          className="truncate font-display text-lg uppercase leading-tight tracking-flat text-ink"
+          // `min-w-0` is load-bearing: without it, this flex item's
+          // min-width defaults to its un-wrapped text width, so `truncate`
+          // never gets a chance to shrink it and the header row overflows
+          // instead (issue #659) — see `NATIVE_DIALOG_SHELL_CLASS`'s comment.
+          className="min-w-0 truncate font-display text-lg uppercase leading-tight tracking-flat text-ink"
         >
           Ficha médica — {account.nombres} {account.apellidos}
         </h2>

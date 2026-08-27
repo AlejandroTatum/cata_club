@@ -95,7 +95,7 @@ import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
-import { useNativeDialog } from "./useNativeDialog";
+import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
 import PaymentsDialog from "./PaymentsDialog";
 
@@ -548,7 +548,7 @@ function MemberEditDialog({
             aria-modal="true"
             aria-labelledby={`edit-member-title-${account.id}`}
             onCancel={(event) => event.preventDefault()}
-            className="fixed inset-0 z-50 m-auto flex h-fit max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40"
+            className={NATIVE_DIALOG_SHELL_CLASS}
           >
             {/* Header — avatar, name, phone, status badge, close. Sits on
                 `sunken` rather than flush `paper`: the body below is `canvas`,
