@@ -85,6 +85,10 @@ async function mockCorrectionRuntime(page: Page): Promise<CorrectionRuntime> {
   await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
   );
+  // AppShell's admin-only pending-payments badge calls this on every screen.
+  // Unmocked, it escaped to the real BFF, got a 401, and the app's global
+  // session handling redirected to /login mid-navigation.
+  await page.route("**/api/dashboard", (route: Route) => fulfillJson(route, {}));
   await page.route("**/api/attendance/schedules", (route: Route) => fulfillJson(route, [
     { id: HORARIO_ID, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00" },
   ]));

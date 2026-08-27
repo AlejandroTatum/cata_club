@@ -35,14 +35,31 @@ async function fulfillJson(route: Route, body: unknown): Promise<void> {
 
 async function mockMembersRuntime(page: Page, accounts = [ACCOUNT], personasCapped = false): Promise<void> {
   await page.context().addCookies([{ name: "access_token", value: MOCK_ACCESS_TOKEN, url: BASE_URL }]);
+  // A catch-all first: the shell asks for more than this screen does, and an
+  // unanswered call reaches the real BFF, fails, and logs the session out.
+  // Concretely: AppShell's pending-payments badge calls `GET /api/dashboard`
+  // on every admin page, /members included, whether or not this test cares.
+  await page.route("**/api/**", (route: Route) =>
+    route.request().method() === "GET" ? fulfillJson(route, []) : fulfillJson(route, {}),
+  );
   await page.route("**/api/auth/session", (route: Route) => fulfillJson(route, {
     user: { id: "1", name: "Admin Demo", email: "admin@example.test", role: "admin", representanteId: null },
     roles: ["ADMINISTRADOR"],
     loggedInAt: "2026-07-21T00:00:00.000Z",
   }));
   await page.route("**/api/members", (route: Route) => fulfillJson(route, { accounts, personasCapped }));
+  // The catch-all above answers every GET with `[]`, but the bell (issue #281)
+  // reads `data.items` — an array breaks it. Last-registered wins, so this
+  // specific route overrides the catch-all.
   await page.route("**/api/ranking/notificaciones/mias", (route: Route) =>
     fulfillJson(route, { items: [], total: 0, skip: 0, limit: 20 }),
+  );
+  // Opening the account's Editar dialog mounts useAccountRolesAndStatus,
+  // which reads `current.roles` from this call — the catch-all's bare `[]`
+  // has no such property, leaving `roles` `undefined` and crashing the first
+  // `roles.includes(...)` the dialog's render reaches.
+  await page.route("**/api/personas/*/roles", (route: Route) =>
+    fulfillJson(route, { roles: [], activo: true }),
   );
 }
 

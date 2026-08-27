@@ -311,9 +311,22 @@ async function mockGroups(page: Page, n: number): Promise<void> {
   await mockSession(page, "admin");
   await page.route("**/api/groups/horarios", (r) => fulfillJson(r, SCHEDULES));
   await page.route("**/api/groups/horarios/*/alumnos*", (r) => fulfillJson(r, alumnos(n)));
+  // `fetchRosterDeTodosLosHorarios()` calls `/groups/horarios/alumnos` — no id
+  // segment, so it does NOT match the per-horario glob above (`*` never
+  // matches an empty segment). Unmocked, this escaped to the real BFF, got a
+  // 401, and the app's global session handling redirected to /login before
+  // the grid this test measures ever drew.
+  await page.route("**/api/groups/horarios/alumnos", (r) => fulfillJson(r, []));
   await page.route("**/api/members", (r) =>
     fulfillJson(r, { accounts: [], personasCapped: false }),
   );
+  // `loadData` also fetches the categoria catalog (`cargarCategorias`)
+  // alongside horarios/members. Its own failure is swallowed locally
+  // (`.catch(() => {})`), but an unmocked call still reaches the real BFF
+  // first and its 401 trips the app's global session handling — racily,
+  // since nothing here waits on it, which is why this showed up as a flake
+  // rather than a deterministic failure.
+  await page.route("**/api/attendance/categories", (r) => fulfillJson(r, []));
   await page.goto("/groups");
 }
 
