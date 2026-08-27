@@ -44,7 +44,11 @@ vi.mock("@/contexts/AuthContext", () => ({
     session: mockAuthRole ? { user: { role: mockAuthRole } } : null,
     isAuthenticated: mockIsAuthenticated,
     isLoading: mockAuthLoading,
-    refreshSession: vi.fn(),
+    // #717: `refreshSession` answers with the session round trip's own
+    // `SessionOutcome` — the wizard now reads it to decide whether it may
+    // claim the auto-login took. These tests are the happy path, so the
+    // browser kept the cookies.
+    refreshSession: vi.fn().mockResolvedValue({ kind: "authenticated" }),
   }),
 }));
 
