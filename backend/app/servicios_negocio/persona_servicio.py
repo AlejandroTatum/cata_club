@@ -345,19 +345,26 @@ class PersonaServicio:
         if len(contenido) > AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
             raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
 
-        from app.infraestructura.cloudinary_cliente import subir_foto_perfil
+        from app.infraestructura.cloudinary_cliente import (
+            componer_valor_foto_perfil,
+            subir_foto_perfil,
+        )
 
         public_id = f"perfil_{persona.id}"
         # Issue #553 (Problema 2): se persiste el `public_id`, nunca la URL que
         # devuelve el SDK (`type="authenticated"`); la URL firmada se resuelve al
         # serializar la respuesta (`PersonaResponseDTO`, mismo patrón voucher).
-        subir_foto_perfil(
+        # Issue #662: se compone además el `version` de ESTA subida -- mismo
+        # criterio que `AuthServicio.actualizar_foto_perfil`, ver su comentario.
+        version = subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             persona_id=persona.id,
         )
-        return self.repo.actualizar(persona, {"foto_url": public_id})
+        return self.repo.actualizar(
+            persona, {"foto_url": componer_valor_foto_perfil(public_id, version)},
+        )
 
 
     # --- Baja lógica (reemplaza el borrado duro) --------------------------

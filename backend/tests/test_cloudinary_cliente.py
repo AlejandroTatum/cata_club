@@ -68,11 +68,16 @@ def _parchear_upload():
 @pytest.mark.parametrize("nombre, invocar", FUNCIONES)
 def test_cada_funcion_pasa_un_timeout_urllib3_explicito(nombre, invocar):
     with _parchear_upload() as mock_upload:
-        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso", "version": 123}
 
-        url = invocar()
+        resultado = invocar()
 
-        assert url == "https://cdn.test/recurso"
+        # `subir_foto_perfil` devuelve `version` (issue #662), no la URL del
+        # SDK -- las otras 2 siguen devolviendo `secure_url` tal cual.
+        if nombre == "subir_foto_perfil":
+            assert resultado == 123
+        else:
+            assert resultado == "https://cdn.test/recurso"
         _, kwargs = mock_upload.call_args
         timeout = kwargs["timeout"]
         assert isinstance(timeout, Timeout)
@@ -343,7 +348,7 @@ def test_umbral_cloudinary_referencia_la_constante_no_un_literal():
 )
 def test_voucher_y_comprobante_se_suben_como_type_authenticated(nombre, invocar):
     with _parchear_upload() as mock_upload:
-        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso", "version": 123}
 
         invocar()
 
@@ -597,3 +602,70 @@ def test_resolver_url_foto_perfil_sin_credenciales_de_firma_devuelve_none(monkey
     monkeypatch.setattr(settings, "cloudinary_api_secret", "")
 
     assert cc.resolver_url_foto_perfil("perfil_7") is None
+
+
+# --- 14. Issue #662: cache-busting de la foto de perfil por `version` -------
+# `public_id` es determinístico (`perfil_{persona_id}`) y el upload usa
+# `overwrite=True`: sin distinguir por `version`, dos subidas para la misma
+# persona firman la URL de entrega byte-idéntica y el navegador sigue
+# sirviendo la imagen cacheada de la carga anterior tras un reemplazo real.
+
+def test_subir_foto_perfil_devuelve_el_version_del_vendor_no_la_url():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso", "version": 1690000042}
+
+        resultado = _subir_foto()
+
+        assert resultado == 1690000042
+
+
+def test_subir_foto_perfil_sin_version_del_vendor_se_traduce_a_servicio_no_disponible():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}  # sin "version"
+
+        with pytest.raises(ServicioNoDisponible):
+            _subir_foto()
+
+
+def test_componer_valor_foto_perfil_combina_public_id_y_version():
+    assert cc.componer_valor_foto_perfil("perfil_7", 1690000042) == "perfil_7|1690000042"
+
+
+def test_resolver_url_foto_perfil_de_un_valor_compuesto_incluye_el_version_en_la_url():
+    valor = cc.componer_valor_foto_perfil("perfil_7", 1690000042)
+
+    resultado = cc.resolver_url_foto_perfil(valor)
+
+    assert resultado is not None
+    assert "/v1690000042/" in resultado
+    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7" in resultado
+
+
+def test_resolver_url_foto_perfil_de_dos_versiones_distintas_da_urls_distintas():
+    """El candado central del fix: dos subidas (dos `version` distintos) para
+    el mismo `public_id` deben resolver a URLs de entrega DISTINTAS."""
+    valor_v1 = cc.componer_valor_foto_perfil("perfil_7", 1690000001)
+    valor_v2 = cc.componer_valor_foto_perfil("perfil_7", 1690000002)
+
+    url_v1 = cc.resolver_url_foto_perfil(valor_v1)
+    url_v2 = cc.resolver_url_foto_perfil(valor_v2)
+
+    assert url_v1 != url_v2
+
+
+def test_resolver_url_foto_perfil_de_un_public_id_persistido_antes_del_fix_sigue_resolviendo():
+    """Filas persistidas ENTRE issue #553 y issue #662 guardaron solo el
+    `public_id`, sin `version` (esta app no lo tenía disponible todavía). No
+    deben romperse: el SDK sigue firmando (con su propio default de
+    `version=1`, no un `version` real de Cloudinary) hasta la próxima subida
+    real, que sí compone el valor nuevo con el `version` real."""
+    resultado_v1 = cc.resolver_url_foto_perfil("perfil_7")
+    resultado_v2 = cc.resolver_url_foto_perfil("perfil_7")
+
+    assert resultado_v1 is not None
+    assert "/v1/" in resultado_v1
+    # Sin `version` explícito, el SDK usa el mismo default en cada llamada:
+    # dos lecturas de la MISMA fila legacy siguen dando la MISMA URL -- ese
+    # es justamente el residual documentado (no cache-busting), no algo que
+    # este fix prometa resolver para filas que no persisten `version`.
+    assert resultado_v1 == resultado_v2

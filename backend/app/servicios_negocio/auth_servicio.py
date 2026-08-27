@@ -279,21 +279,31 @@ class AuthServicio:
         if len(contenido) > self.TAMANO_MAXIMO_FOTO_PERFIL_BYTES:
             raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
 
-        from app.infraestructura.cloudinary_cliente import subir_foto_perfil
+        from app.infraestructura.cloudinary_cliente import (
+            componer_valor_foto_perfil,
+            subir_foto_perfil,
+        )
 
         public_id = f"perfil_{usuario.persona_id}"
         # Issue #553 (Problema 2): la URL que devuelve el SDK al subir NO es una
         # URL de entrega válida (`type="authenticated"`). Se persiste el
         # `public_id` y la URL firmada se resuelve al serializar la respuesta
         # (`ActualizarFotoPerfilResponseDTO`, mismo patrón que el voucher).
-        subir_foto_perfil(
+        # Issue #662: `public_id` es determinístico y el upload sobrescribe en
+        # el mismo lugar -- sin el `version` de ESTA subida compuesto en el
+        # valor persistido, la URL de entrega firmada queda byte-idéntica
+        # tras reemplazar la foto y el navegador sigue sirviendo la cacheada.
+        version = subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             persona_id=usuario.persona_id,
         )
 
-        self.repo_persona.actualizar(usuario.persona, {"foto_url": public_id})
+        self.repo_persona.actualizar(
+            usuario.persona,
+            {"foto_url": componer_valor_foto_perfil(public_id, version)},
+        )
         self.db.commit()
         self.db.refresh(usuario)
 
