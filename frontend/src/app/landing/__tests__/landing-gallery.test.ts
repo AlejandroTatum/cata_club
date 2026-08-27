@@ -40,6 +40,15 @@ describe("landing gallery photos", (): void => {
   });
 
   /**
+   * Two slides sharing one alt string leaves a screen-reader user unable to tell
+   * them apart: the carousel announces the same photograph twice.
+   */
+  it("describes every photo with its own alt text", (): void => {
+    const descriptions = GALLERY_PHOTOS.map((photo): string => photo.alt);
+    expect(new Set(descriptions).size).toBe(descriptions.length);
+  });
+
+  /**
    * The carousel preserves each source aspect ratio, so portrait and landscape
    * assets are valid and must not be normalized to one intrinsic height.
    */

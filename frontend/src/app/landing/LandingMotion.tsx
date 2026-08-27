@@ -114,7 +114,6 @@ function enhanceHeroCarousel(frame: HTMLElement): () => void {
   let timeline: gsap.core.Timeline | null = null;
   let busy = false;
   const ball = frame.querySelector<HTMLElement>("[data-frame-ball]");
-  const caption = frame.querySelector<HTMLElement>("[data-hero-caption]");
   const screen = frame.querySelector<HTMLElement>(".landing-hero-screen");
 
   // Remove only the properties this layer writes; HeroCarousel owns objectPosition.
@@ -179,10 +178,6 @@ function enhanceHeroCarousel(frame: HTMLElement): () => void {
         },
       }, 0)
       .to(ball, { opacity: 0, duration: 0.22, ease: "power1.in" }, 0.68);
-
-    if (caption) {
-      gsap.fromTo(caption, { y: 8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out", delay: 0.35 });
-    }
   };
 
   frame.addEventListener("landing:hero-slide-change", onSlideChange);

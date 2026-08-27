@@ -33,7 +33,7 @@ export const GALLERY_PHOTOS: GalleryPhoto[] = [
     src: "/landing/gallery-04-training.jpg",
     width: 1600,
     height: 1200,
-    alt: "Deportistas de Cata Club reunidos junto a varias mesas de tenis de mesa",
+    alt: "Deportistas de Cata Club entrenando en dos mesas numeradas mientras otros esperan su turno junto a las canastas de pelotas",
     caption: "La sala se llena",
   },
   {
@@ -54,7 +54,7 @@ export const GALLERY_PHOTOS: GalleryPhoto[] = [
     src: "/landing/gallery-03-play.jpg",
     width: 1600,
     height: 1200,
-    alt: "Deportistas de Cata Club reunidos junto a varias mesas de tenis de mesa",
+    alt: "Entrenador de Cata Club dando indicaciones a un grupo de deportistas reunidos alrededor de una mesa vacía",
     caption: "El equipo, reunido",
   },
   {
