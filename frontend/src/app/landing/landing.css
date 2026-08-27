@@ -181,6 +181,15 @@
    numbers rewritten as ratios of the face, so they hold at every hero size. */
 .landing-hero .landing-hero-serve-paddle { position: absolute; right: var(--landing-serve-x); bottom: var(--landing-serve-y); z-index: 11; width: var(--landing-serve-face); height: var(--landing-serve-face); pointer-events: none; will-change: transform; }
 .landing-hero .landing-hero-serve-paddle i { right: calc(var(--landing-serve-face) * -0.16); bottom: calc(var(--landing-serve-face) * -0.11); width: calc(var(--landing-serve-face) * 0.5); height: calc(var(--landing-serve-face) * 0.18); }
+/* The hero paddle drops the 13px dot `.landing-paddle::after` draws, because
+   here there is already a real ball: `[data-serve-ball]` is the one the serve
+   animation moves, and the two together read as two balls rather than one
+   shot. Scoped, not deleted — on the Motto paddle that dot is the only ball
+   there is, and paddle-plus-ball is the sport's own icon. Two classes deep
+   for the same reason as the rule above, which is also what makes this beat
+   `.landing-paddle::after` without `!important`: (0,2,1) over (0,1,1), so
+   source order does not come into it. */
+.landing-hero .landing-hero-serve-paddle::after { content: none; }
 
 /* Warm band, distinct from ENTRENAMIENTOS' white surface below it (issue
    #691), closed off with a hairline so the boundary reads on every screen
