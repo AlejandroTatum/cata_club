@@ -149,6 +149,8 @@ import { Loader2, Save, X, Camera, ArrowRight, Lock, Monitor, LogOut } from "luc
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
+import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
+import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -787,6 +789,14 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const [telefono, setTelefono] = useState(props.kind === "staff" ? props.perfil.telefono : "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /**
+   * Issue #667: the same keystroke/paste filtering and digit cap the
+   * enrollment wizards' teléfono field already has (`WizardInput` with
+   * `numericMode="phone"`) and `MedicalRecordEditor`'s teléfono de
+   * emergencia now has — this field carried `type="tel" inputMode="tel"`
+   * but no mask, the phone-field parity gap the issue's audit missed.
+   */
+  const telefonoMasking = useNumericFieldMasking("phone", setTelefono);
 
   const [requestingPassword, setRequestingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -856,6 +866,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     setTelefono(props.perfil.telefono);
     setSaveError(null);
     setEditing(true);
+    telefonoMasking.reset();
   }
 
   function cancelEditing(): void {
@@ -863,6 +874,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     setTelefono(props.perfil.telefono);
     setSaveError(null);
     setEditing(false);
+    telefonoMasking.reset();
   }
 
   async function handleSave(): Promise<void> {
@@ -1116,16 +1128,25 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             <DetailRow label="Correo de cuenta">{correoDisplay}</DetailRow>
             <DetailRow label="Teléfono">
               {props.kind === "staff" && editing ? (
-                <input
-                  id="perfil-telefono"
-                  type="tel"
-                  inputMode="tel"
-                  aria-label="Teléfono"
-                  value={telefono}
-                  onChange={(e) => setTelefono(e.target.value)}
-                  disabled={saving}
-                  className="input-field max-w-xs"
-                />
+                <div>
+                  <input
+                    id="perfil-telefono"
+                    type="tel"
+                    inputMode="tel"
+                    aria-label="Teléfono"
+                    value={telefono}
+                    onChange={(e) => telefonoMasking.onChange(e.target.value)}
+                    onKeyDown={telefonoMasking.onKeyDown}
+                    onPaste={telefonoMasking.onPaste}
+                    disabled={saving}
+                    className="input-field max-w-xs"
+                  />
+                  {telefonoMasking.limitReached && (
+                    <p aria-live="polite" className="mt-1 text-xs font-semibold text-state-warn">
+                      {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <DataBox>{telefonoDisplay || "—"}</DataBox>
               )}

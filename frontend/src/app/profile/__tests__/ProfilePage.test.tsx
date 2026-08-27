@@ -887,6 +887,70 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     expect(screen.getByText("099111222")).toBeInTheDocument();
     expect(screen.queryByText("099999000")).not.toBeInTheDocument();
   });
+});
+
+/**
+ * Issue #667's phone-field parity gap: `/profile`'s staff teléfono field had
+ * `type="tel" inputMode="tel"` but no mask — unlike the exact same field on
+ * the enrollment wizards (`WizardInput` with `numericMode="phone"`) and now
+ * `MedicalRecordEditor`'s teléfono de emergencia. Shares
+ * `use-numeric-field-masking.ts` rather than a third, hand-rolled copy.
+ */
+describe("ProfilePage — teléfono masking parity (#667)", () => {
+  it("blocks a typed letter on the teléfono field (keydown)", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+
+    const input = screen.getByLabelText(/teléfono/i);
+    expect(fireEvent.keyDown(input, { key: "a" })).toBe(false);
+  });
+
+  it("strips letters from a pasted teléfono value, keeping separators", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+
+    const input = screen.getByLabelText<HTMLInputElement>(/teléfono/i);
+    input.setSelectionRange(0, input.value.length);
+    fireEvent.paste(input, { clipboardData: { getData: () => "099abc-123-4567" } });
+
+    expect(input.value).toBe("099-123-4567");
+  });
+
+  it("warns instead of silently truncating an 11th digit typed at the cap", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("admin"));
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await waitForStaffProfile();
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+
+    const input = screen.getByLabelText(/teléfono/i);
+    fireEvent.change(input, { target: { value: "1234567890" } }); // 10 digits: already at the cap
+    const notCancelled = fireEvent.keyDown(input, { key: "1" });
+
+    expect(notCancelled).toBe(false);
+    expect(await screen.findByText(/alcanzó el máximo/i)).toBeInTheDocument();
+  });
 
   it("does not offer an edit trigger for the student/representante branch", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
