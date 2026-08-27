@@ -381,7 +381,21 @@ function Footer(): React.ReactElement {
       <span className="landing-halftone" aria-hidden="true" />
       <div className="landing-footer-top">
         <div className="landing-footer-brand">
-          <div><span><Image src="/landing/cata-club-logo.jpeg" alt="" width={58} height={58} /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b></div>
+          {/* `unoptimized`, same reason as `CREST_SRC` above — see issue #710.
+              PR #692 took the five crest consumers off `/_next/image` to keep
+              issue #681's poisonable cache key from ever being created, but
+              the footer lockup is a different asset and was missed: it still
+              asked for `w=64`/`w=128` of the 1080x996 source. Both returned
+              200 when measured, so this was exposure rather than an observed
+              hang — and exposure to a bug whose blast radius is the whole Node
+              process is not worth carrying for a 52px mark.
+              `cata-club-logo-176.jpeg` is a pre-sized 176x162 derivative
+              (7.6KB): CSS renders this at 52 CSS px, so 176 covers it at 3.4x
+              density, more headroom proportionally than the crest's 256 gives
+              its own largest consumer. `width`/`height` stay at 58 so the
+              element's aspect ratio — and therefore the rendered box — is
+              exactly what it was before. */}
+          <div><span><Image src="/brand/cata-club-logo-176.jpeg" alt="" width={58} height={58} unoptimized /></span><b className="landing-display"><small>TENIS DE MESA</small>Cata Club</b></div>
           <p>Formando campeones de tenis de mesa en Loja desde 2013.</p><Stars />
         </div>
         <nav aria-label="Servicios"><h2>Servicios</h2><a href="#horarios">Horarios y categorías</a><Link href={ENROLL_HREF}>Inscripciones</Link><a href="#contacto">Contacto</a></nav>

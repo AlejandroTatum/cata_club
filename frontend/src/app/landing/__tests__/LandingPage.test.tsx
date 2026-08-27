@@ -900,6 +900,34 @@ describe("LandingPage", (): void => {
   });
 
   /**
+   * Lock — issue #710. PR #692 took the five crest consumers off
+   * `/_next/image` so issue #681's poisonable, process-lifetime cache key
+   * could never be created; the footer lockup uses a different asset and was
+   * missed, still resolving to
+   * `/_next/image?url=%2Flanding%2Fcata-club-logo.jpeg&w=64|128&q=75`.
+   *
+   * This checks the asset and the box only. It deliberately does NOT try to
+   * assert the absence of an `/_next/image` URL: under vitest, `next/image`
+   * renders the plain path whether or not `unoptimized` is set, so such an
+   * assertion could never go red and would be a lock that proves nothing.
+   * The optimizer request itself is asserted where it actually happens,
+   * against a real server, in `tests/e2e/landing-footer-lockup.spec.ts`.
+   */
+  it("serves the footer lockup off the image optimizer, pre-sized", (): void => {
+    render(<LandingPage />);
+
+    const lockup = document.querySelector(".landing-footer-brand img");
+    expect(lockup).not.toBeNull();
+    expect(lockup).toHaveAttribute("src", "/brand/cata-club-logo-176.jpeg");
+    // The club is already named in the `<b>` beside it.
+    expect(lockup?.getAttribute("alt")).toBe("");
+    // The rendered box must not move: CSS pins the height at 52px and takes
+    // the width from these attributes, not from the file's own dimensions.
+    expect(lockup).toHaveAttribute("width", "58");
+    expect(lockup).toHaveAttribute("height", "58");
+  });
+
+  /**
    * Regression: the trust band read "0 — Años formando deportistas". The server
    * rendered the real 12, then the count-up seeded itself at 0 and overwrote
    * `textContent`, so a ScrollTrigger that never fired left 0 on screen. No
