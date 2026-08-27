@@ -155,7 +155,6 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/auth/me/sesiones"),                                # (b) - propio via `sub`, nunca un id de path
     ("GET", "/membresias/tipos"),                                # (a)
     ("GET", "/membresias/{membresia_id}"),                       # (b)
-    ("GET", "/personas/buscar"),                                 # (a) - autocomplete, no PII sensible expuesta en el DTO
     ("GET", "/personas/{persona_id}"),                           # (b)
     ("GET", "/personas/{persona_id}/antecedentes-club"),         # (b)
     # Issue #400 (slice 06): relajado de ADMINISTRADOR-only (issue #398) a
@@ -250,6 +249,12 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/membresias/pagos/reportes"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/membresias/pagos/reportes/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/"): frozenset({"ADMINISTRADOR"}),
+    # Autocomplete operativo: expone nombres+foto de cada persona activa y
+    # filtra por rol. Restringido a staff (antes lo alcanzaba cualquier token,
+    # incluido el de la autoinscripción pública) -- ver el comentario del
+    # endpoint en `personas_router.py`. ENTRENADOR porque lo consume
+    # `/trainer/attendance/history`.
+    ("GET", "/personas/buscar"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
