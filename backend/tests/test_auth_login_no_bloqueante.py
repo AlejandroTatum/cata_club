@@ -19,28 +19,9 @@ mientras se mide otro request en el hilo principal, prueba lo segundo.
 """
 import threading
 import time
-from datetime import date
 
-from app.dominio.modelos import Persona, Usuario
-from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio import auth_servicio as auth_servicio_modulo
-
-
-def _crear_usuario(db_session, correo="ana@cataclub.test", cedula="1710034065", contrasenia="clave12345"):
-    persona = Persona(
-        nombres="Ana", apellidos="Torres", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-    )
-    db_session.add(persona)
-    db_session.flush()
-    usuario = Usuario(
-        correo=correo,
-        contrasenia=GestorAutenticacion.obtener_hash_contrasenia(contrasenia),
-        persona_id=persona.id,
-    )
-    db_session.add(usuario)
-    db_session.commit()
-    return usuario
+from tests.fabricas_auth import crear_usuario_auth as _crear_usuario
 
 
 def _limpiar_contador_intentos():

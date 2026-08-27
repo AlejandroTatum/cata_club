@@ -21,43 +21,33 @@ Dos mitades independientes:
      `_TTL_INTENTOS_LOGIN_SEGUNDOS` en auth_servicio.py): aun con claves de
      longitud acotada, un atacante puede acuñar direcciones distintas sin
      límite, así que el mapa necesita desalojo propio.
-"""
-from datetime import date
 
+No repite acá la curva de retraso completa contra una cuenta real -- ya
+existe, sin cambios, en `test_auth_freno_login.py::
+test_retraso_duplica_y_tiene_techo_de_60_segundos`, y sigue en verde después
+de este fix: eso YA prueba la no-regresión. Lo que sí es específico de esta
+suite (`test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas`
+más abajo) es que esa misma cuenta sobrevive un relleno de basura antes de
+llegar a su 3er fallo -- el escenario que el desalojo por tamaño podría
+romper si estuviera mal elegido.
+"""
 import pytest
 
 from app.dominio.excepciones import CredencialesInvalidas
-from app.dominio.modelos import Persona, Usuario
-from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio import auth_servicio as auth_servicio_modulo
 from app.servicios_negocio.auth_servicio import AuthServicio
+from tests.fabricas_auth import SleeperEspia, crear_usuario_auth
 
 
-def _crear_usuario(db_session, correo="ana@cataclub.test", cedula="1710034065", contrasenia="clave12345"):
-    persona = Persona(
-        nombres="Ana", apellidos="Torres", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-    )
-    db_session.add(persona)
-    db_session.flush()
-    usuario = Usuario(
-        correo=correo,
-        contrasenia=GestorAutenticacion.obtener_hash_contrasenia(contrasenia),
-        persona_id=persona.id,
-    )
-    db_session.add(usuario)
-    db_session.commit()
-    return usuario
-
-
-class _SleeperEspia:
-    """Mismo espía que `test_auth_freno_login.py`: nunca duerme de verdad."""
-
-    def __init__(self):
-        self.llamadas = []
-
-    def __call__(self, segundos):
-        self.llamadas.append(segundos)
+def _rellenar_mapa_con_claves_distintas(cantidad: int, prefijo: str) -> None:
+    """Ataque de amplitud: registra `cantidad` intentos fallidos contra
+    `cantidad` claves DISTINTAS (sin DB, sin HTTP -- llama directo al helper
+    de registro). Compartido por los dos tests de la cota de tamaño: uno
+    prueba el tope global, el otro que ese desalojo no se lleva puesta a una
+    cuenta bajo ataque real -- cada uno agrega su propia aserción distinta
+    después de llamar a esto, así que no se pierde qué prueba qué."""
+    for i in range(cantidad):
+        auth_servicio_modulo._registrar_intento_fallido(f"{prefijo}{i}@ejemplo.test")
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +78,7 @@ def test_username_demasiado_largo_se_rechaza_sin_crear_entrada(client):
 def test_username_en_el_limite_no_se_rechaza_por_longitud(client, db_session):
     """Un correo de longitud real (dentro de RFC 5321) no debe verse afectado
     por el tope -- sigue respondiendo 401 (credenciales inválidas), no 422."""
-    _crear_usuario(db_session, correo="ana@cataclub.test", contrasenia="clave-correcta")
+    crear_usuario_auth(db_session, correo="ana@cataclub.test", contrasenia="clave-correcta")
 
     respuesta = client.post(
         "/api/v1/auth/login",
@@ -107,10 +97,8 @@ def test_mapa_de_intentos_fallidos_no_crece_sin_limite():
     producción (`_MAX_ENTRADAS_INTENTOS_LOGIN`) sin que el test se vuelva
     lento."""
     limite = auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN
-    total_intentos = limite + 500
 
-    for i in range(total_intentos):
-        auth_servicio_modulo._registrar_intento_fallido(f"atacante{i}@ejemplo.test")
+    _rellenar_mapa_con_claves_distintas(limite + 500, prefijo="atacante")
 
     assert len(auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN) <= limite
 
@@ -121,8 +109,8 @@ def test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas(db_sessi
     relleno de basura, la clave de `ana` -- tocada en cada uno de sus propios
     intentos -- debe sobrevivir el relleno (LRU: lo último tocado es lo
     último en desalojarse)."""
-    _crear_usuario(db_session, correo="ana@cataclub.test")
-    espia = _SleeperEspia()
+    crear_usuario_auth(db_session, correo="ana@cataclub.test")
+    espia = SleeperEspia()
     servicio = AuthServicio(db_session, dormir=espia)
 
     with pytest.raises(CredencialesInvalidas):
@@ -133,9 +121,9 @@ def test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas(db_sessi
     # Relleno: bastante menos que el límite, tocando `ana` de nuevo al final
     # -- simula al atacante intercalando basura mientras sigue insistiendo
     # sobre la cuenta real.
-    relleno = auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN // 4
-    for i in range(relleno):
-        auth_servicio_modulo._registrar_intento_fallido(f"relleno{i}@ejemplo.test")
+    _rellenar_mapa_con_claves_distintas(
+        auth_servicio_modulo._MAX_ENTRADAS_INTENTOS_LOGIN // 4, prefijo="relleno",
+    )
 
     # 3er fallo real sobre ana: si su entrada sobrevivió, dispara el freno de
     # 1s (intentos 3..N ya vistos en test_auth_freno_login.py).
@@ -143,22 +131,3 @@ def test_cuenta_atacada_no_es_desalojada_por_relleno_de_entradas_falsas(db_sessi
         servicio.login("ana@cataclub.test", "mal")
 
     assert espia.llamadas == [1]
-
-
-# --- No regresión: el freno exponencial sigue funcionando sobre una cuenta real
-
-def test_retraso_exponencial_sigue_funcionando_para_cuenta_real(db_session):
-    """Misma curva que `test_auth_freno_login.py::
-    test_retraso_duplica_y_tiene_techo_de_60_segundos` -- se repite acá para
-    dejar registrado, en el mismo archivo que prueba la cota nueva, que
-    acotar el mapa no debilitó el freno progresivo contra un ataque
-    dirigido a una sola cuenta real."""
-    _crear_usuario(db_session, correo="ana@cataclub.test")
-    espia = _SleeperEspia()
-    servicio = AuthServicio(db_session, dormir=espia)
-
-    for _ in range(10):
-        with pytest.raises(CredencialesInvalidas):
-            servicio.login("ana@cataclub.test", "mal")
-
-    assert espia.llamadas == [1, 2, 4, 8, 16, 32, 60, 60]
