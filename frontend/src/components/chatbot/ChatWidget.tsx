@@ -106,6 +106,10 @@ let proximoId = 0;
  * failures read as random: a rate limit, a timeout and an unreachable gateway
  * all came out as "no se pudo contactar". Each case now says what the user can
  * actually do — wait, retry, or come back later.
+ *
+ * 429 is NOT handled here (issue #708): see `mensajeLimiteConsultas` below —
+ * it needs the actual wait from `Retry-After`, which this function's plain
+ * `string` return can't carry, and it drives the composer lock/countdown too.
  */
 function mensajeDeError(error: unknown): string {
   // The named reason first, and only then the status. A `400` from this route
@@ -120,8 +124,6 @@ function mensajeDeError(error: unknown): string {
   }
   const status = error instanceof ApiClientError ? error.status : null;
   switch (status) {
-    case 429:
-      return `Está preguntando muy seguido. Espere unos segundos y vuelva a intentarlo.`;
     case 504:
       return `${BOT_NAME} tardó demasiado en responder. Vuelva a intentarlo.`;
     case 503:
@@ -131,9 +133,50 @@ function mensajeDeError(error: unknown): string {
   }
 }
 
+/**
+ * How long to lock the composer when a 429 carries no `Retry-After` at all
+ * (the backend's own handler only skips it if computing it itself throws —
+ * see `_manejador_limite_excedido`'s last `except`, `backend/main.py` — so
+ * this is a defensive floor, not the expected case). Matches the burst
+ * window's own size ("4/10second", `LIMITE_CONSULTAS` in
+ * `chatbot_router.py`): whatever the real remaining time was, it was at
+ * most this.
+ */
+const RATE_LIMIT_FALLBACK_SECONDS = 10;
+
+/** "1 segundo" vs "2 segundos" — the counter beside the composer does the same singular/plural split. */
+function formatearSegundos(segundos: number): string {
+  return segundos === 1 ? "1 segundo" : `${segundos} segundos`;
+}
+
+/**
+ * What a visitor reads after tripping the burst limit (issue #708, `LIMITE_
+ * CONSULTAS` in `chatbot_router.py` — deliberately left unchanged, see that
+ * issue: it is real protection once a paid provider is configured, and this
+ * fix is only about what the 429 SAYS).
+ *
+ * Before this, every failure funneled through `mensajeDeError` and 429 was
+ * indistinguishable in spirit from a dead backend: "no está disponible" —
+ * which stopped being true the moment the no-provider fallback (#635)
+ * started answering in ~6ms, because then five ordinary questions typed at
+ * human speed could trip the limit on their own. This says what actually
+ * happened (several questions arrived close together, not a bot that is
+ * down) and the REAL wait, taken from `Retry-After` — never a constant,
+ * because the one number that could be wrong is exactly the one nobody
+ * should guess at. Deliberately not scolding: someone asking five quick
+ * questions is an interested visitor, not someone to reprimand.
+ */
+function mensajeLimiteConsultas(segundosRestantes: number): string {
+  return `Hizo varias consultas seguidas. Espere ${formatearSegundos(segundosRestantes)} y vuelva a intentarlo.`;
+}
+
 /** `.bub` — 12px radius, 86% max width, with the tail corner squared off. */
 const BUBBLE_BASE =
   "max-w-[86%] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm";
+
+/** The one failure-alert box style — shared by the generic error and the 429 lock so they read as the same kind of thing. */
+const ALERT_CLASS =
+  "flex items-start gap-2 rounded-ctl border border-state-bad/25 bg-state-bad-bg px-3 py-2.5 text-xs text-state-bad";
 
 /**
  * When the panel is a sheet rather than the corner card.
@@ -447,6 +490,13 @@ export default function ChatWidget({
   const [borrador, setBorrador] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `rateLimitedUntil` (epoch ms) and `segundosRestantes` together drive the
+  // 429 lock (issue #708). They are deliberately separate from `error`: a
+  // 429 needs the composer disabled AND a countdown that ticks — a plain
+  // string can't do either, and reusing `error` for it would have left the
+  // input looking editable while every keystroke was still going nowhere.
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
+  const [segundosRestantes, setSegundosRestantes] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -474,6 +524,22 @@ export default function ChatWidget({
     }
   }, [open, mensajes, enviando]);
 
+  // Ticks the 429 countdown down to zero, then lifts the lock itself — the
+  // composer re-enables on its own the moment the real wait is over, with no
+  // action needed from the visitor. `segundosRestantes` is seeded directly
+  // where the lock is first set (see `enviarTexto`'s catch block), so the
+  // very first render already shows the right number instead of a stale one
+  // this effect hasn't had a chance to correct yet.
+  useEffect((): undefined | (() => void) => {
+    if (rateLimitedUntil === null) return undefined;
+    const id = setInterval((): void => {
+      const restantes = Math.max(0, Math.ceil((rateLimitedUntil - Date.now()) / 1000));
+      setSegundosRestantes(restantes);
+      if (restantes <= 0) setRateLimitedUntil(null);
+    }, 1000);
+    return (): void => clearInterval(id);
+  }, [rateLimitedUntil]);
+
   // Seed the composer when the host opens the panel with something to say.
   // Only on the open transition, so it never overwrites what the user is
   // typing, and never re-appears after they clear it.
@@ -484,7 +550,10 @@ export default function ChatWidget({
 
   async function enviarTexto(texto: string): Promise<void> {
     const limpio = texto.trim();
-    if (!limpio || enviando) return;
+    // `rateLimitedUntil !== null` guards Enter/quick-reply too, in case some
+    // future entry point forgets to check `disabled` itself — belt-and-
+    // braces against submitting into a window already known to answer 429.
+    if (!limpio || enviando || rateLimitedUntil !== null) return;
 
     // The limit is enforced HERE, not only by the BFF. An over-length message
     // used to make the round trip, come back 400, and be reported as a
@@ -509,7 +578,18 @@ export default function ChatWidget({
       const { reply } = await consultarChatbot(limpio, historial);
       setMensajes((prev) => [...prev, { id: proximoId++, rol: "asistente", texto: reply }]);
     } catch (err: unknown) {
-      setError(mensajeDeError(err));
+      // 429 gets its own path (issue #708): the wait comes from the
+      // backend's real `Retry-After` when it sent one, and the fallback
+      // below only covers the one case that omits it (see
+      // `RATE_LIMIT_FALLBACK_SECONDS`'s own comment) — never a guess dressed
+      // up as the real number.
+      if (err instanceof ApiClientError && err.status === 429) {
+        const espera = err.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS;
+        setSegundosRestantes(espera);
+        setRateLimitedUntil(Date.now() + espera * 1000);
+      } else {
+        setError(mensajeDeError(err));
+      }
     } finally {
       setEnviando(false);
     }
@@ -719,14 +799,23 @@ export default function ChatWidget({
           </span>
         )}
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-ctl border border-state-bad/25 bg-state-bad-bg px-3 py-2.5 text-xs text-state-bad"
-          >
+        {/*
+          The 429 lock (issue #708) takes priority over `error`: while it's
+          active this IS the failure the visitor needs to see, and it ticks
+          — `error` is a static string set once and can't.
+        */}
+        {rateLimitedUntil !== null ? (
+          <div role="alert" className={ALERT_CLASS}>
             <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-px shrink-0" aria-hidden="true" />
-            <span>{error}</span>
+            <span>{mensajeLimiteConsultas(segundosRestantes)}</span>
           </div>
+        ) : (
+          error && (
+            <div role="alert" className={ALERT_CLASS}>
+              <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-px shrink-0" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )
         )}
       </div>
 
@@ -736,7 +825,7 @@ export default function ChatWidget({
           <button
             key={prompt}
             type="button"
-            disabled={enviando}
+            disabled={enviando || rateLimitedUntil !== null}
             onClick={(): void => void enviarTexto(prompt)}
             className={QUICK_REPLY}
           >
@@ -797,13 +886,13 @@ export default function ChatWidget({
           aria-label={`Mensaje para ${BOT_NAME}`}
           aria-invalid={excedido || undefined}
           aria-describedby={mostrarContador ? contadorId : undefined}
-          disabled={enviando}
+          disabled={enviando || rateLimitedUntil !== null}
           enterKeyHint="send"
           className={skin.input}
         />
         <button
           type="submit"
-          disabled={enviando || largo === 0 || excedido}
+          disabled={enviando || largo === 0 || excedido || rateLimitedUntil !== null}
           aria-label="Enviar mensaje"
           /* `outline-ball` used to draw this ring. #FFD600 is 1.42:1 on the
              panel's white footer — a focus indicator that fails 2.4.11 by a

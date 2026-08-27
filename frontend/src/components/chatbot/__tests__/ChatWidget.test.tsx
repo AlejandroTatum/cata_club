@@ -45,10 +45,10 @@ function okResponse(body: unknown): Response {
   });
 }
 
-function errorResponse(status: number): Response {
+function errorResponse(status: number, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify({ message: "error" }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
   });
 }
 
@@ -184,6 +184,81 @@ describe("ChatWidget — error copy per failure class", () => {
     const alerta = await screen.findByRole("alert");
     expect(alerta).toHaveClass("bg-state-bad-bg");
     expect(alerta).toHaveClass("text-state-bad");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The 429 tells the truth, not just a status (issue #708).
+//
+// Measured against the QA stack in degraded mode: five ordinary questions
+// typed at human speed (1.2s apart) trip the burst limit
+// ("4/10second;120/hour", chatbot_router.py) on the fifth, and — before this
+// — the panel said CATA-BOT was unavailable, which is not what happened. The
+// LIMIT is deliberately unchanged (it is real protection once a paid
+// provider is configured); what changes is that the visitor is told several
+// questions arrived close together and given the REAL wait from the
+// backend's own `Retry-After` header, not a constant. The composer is locked
+// for that same wait — a text field that looks live but silently drops
+// whatever is typed into it would be its own small lie.
+// ---------------------------------------------------------------------------
+
+describe("ChatWidget — the 429 tells the truth (issue #708)", () => {
+  async function dispararLimite(retryAfterSeconds?: number): Promise<void> {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(429, retryAfterSeconds !== undefined ? { "Retry-After": String(retryAfterSeconds) } : {}),
+    );
+    render(<ChatWidget open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/mensaje para cata-bot/i), { target: { value: "hola" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));
+    await screen.findByRole("alert");
+  }
+
+  it("shows the real wait from Retry-After, not a hardcoded number", async () => {
+    await dispararLimite(27);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/27 segundos/);
+  });
+
+  it("never tells the visitor the assistant is unavailable for a 429", async () => {
+    await dispararLimite(27);
+
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/no está disponible/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/no se pudo contactar/i);
+  });
+
+  it("locks the composer for the duration of the wait", async () => {
+    await dispararLimite(27);
+
+    expect(screen.getByLabelText(/mensaje para cata-bot/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /enviar mensaje/i })).toBeDisabled();
+  });
+
+  it("does NOT lock the composer on a connectivity failure (5xx) — only the 429 does", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(503));
+    render(<ChatWidget open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/mensaje para cata-bot/i), { target: { value: "hola" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));
+    await screen.findByRole("alert");
+
+    expect(screen.getByLabelText(/mensaje para cata-bot/i)).not.toBeDisabled();
+  });
+
+  it("falls back to a sane default wait when the backend sent no Retry-After", async () => {
+    await dispararLimite(undefined);
+
+    // Whatever the fallback is, it must be a real, stated number — not the
+    // vague "unos segundos" the old copy used to hide behind.
+    expect(screen.getByRole("alert")).toHaveTextContent(/\d+ segundos?/);
+  });
+
+  it("re-enables the composer once the real wait elapses", async () => {
+    await dispararLimite(1);
+    expect(screen.getByLabelText(/mensaje para cata-bot/i)).toBeDisabled();
+
+    await waitFor(
+      () => expect(screen.getByLabelText(/mensaje para cata-bot/i)).not.toBeDisabled(),
+      { timeout: 3000 },
+    );
   });
 });
 

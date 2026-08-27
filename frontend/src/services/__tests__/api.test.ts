@@ -98,10 +98,11 @@ function makePaymentValidation(
 function errorResponse(
   status: number,
   body: Record<string, unknown> = {},
+  extraHeaders: Record<string, string> = {},
 ): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
   });
 }
 
@@ -292,6 +293,55 @@ describe("ApiClientError.code", () => {
     } catch (error) {
       expect((error as ApiClientError).code).toBeUndefined();
       expect((error as ApiClientError).status).toBe(400);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ApiClientError.retryAfterSeconds (issue #708) — the burst limit's REAL wait
+//
+// The 429 the chatbot's BFF route forwards carries `Retry-After` (seconds,
+// set by the backend's own handler — see `_manejador_limite_excedido` in
+// backend/main.py). Before this, the client threw away the header and the
+// widget could only say "wait a few seconds", a constant that had nothing to
+// do with how long the window actually had left.
+// ---------------------------------------------------------------------------
+
+describe("ApiClientError.retryAfterSeconds", () => {
+  it("carries the wait from Retry-After on a 429", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(429, { message: "Demasiadas solicitudes." }, { "Retry-After": "27" }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).retryAfterSeconds).toBe(27);
+    }
+  });
+
+  it("stays undefined when Retry-After is absent, so callers fall back deliberately", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(errorResponse(429, { message: "Demasiadas solicitudes." }));
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).retryAfterSeconds).toBeUndefined();
+    }
+  });
+
+  it("stays undefined when Retry-After is not a number", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      errorResponse(429, { message: "Demasiadas solicitudes." }, { "Retry-After": "not-a-number" }),
+    );
+
+    try {
+      await fetchPaymentValidations();
+      expect.fail("Expected an error");
+    } catch (error) {
+      expect((error as ApiClientError).retryAfterSeconds).toBeUndefined();
     }
   });
 });

@@ -108,4 +108,33 @@ describe("POST /api/chatbot", () => {
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ message: detail, mensaje_seguro: false });
   });
+
+  /*
+   * Issue #708: the burst limit's 429 carries `Retry-After` (set by the
+   * backend's own handler, see `_manejador_limite_excedido` in
+   * `backend/main.py`) so the visitor can be told the REAL wait instead of a
+   * constant. `passthroughBackendError` only relays the JSON body — the
+   * header itself has to be forwarded here or the client never sees it.
+   */
+  it("forwards Retry-After on a 429 so the client can show the real wait (issue #708)", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Demasiadas solicitudes. Espere un momento e intente nuevamente." }), {
+        status: 429,
+        headers: { "Content-Type": "application/json", "Retry-After": "27" },
+      }),
+    );
+
+    const response = await POST(postRequest());
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("27");
+  });
+
+  it("does not invent a Retry-After header when the backend sent none", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "El asistente no está disponible en este momento." }, 503));
+
+    const response = await POST(postRequest());
+
+    expect(response.headers.get("Retry-After")).toBeNull();
+  });
 });

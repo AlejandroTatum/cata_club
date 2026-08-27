@@ -110,7 +110,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   if (!response.ok) {
-    return passthroughBackendError(response, "No se pudo contactar al asistente.");
+    const proxied = await passthroughBackendError(response, "No se pudo contactar al asistente.");
+    // `passthroughBackendError` only relays the JSON body — the burst
+    // limit's 429 also carries `Retry-After` (seconds, set by the backend's
+    // own handler; see `_manejador_limite_excedido` in `backend/main.py`),
+    // and that header has to be forwarded here or the client can only ever
+    // tell the visitor to "wait a moment" instead of the real wait (issue
+    // #708). Absent on every other status this route can answer, so this is
+    // a no-op there.
+    const retryAfter = response.headers.get("Retry-After");
+    if (retryAfter) proxied.headers.set("Retry-After", retryAfter);
+    return proxied;
   }
 
   let json: unknown;

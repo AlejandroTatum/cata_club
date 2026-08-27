@@ -223,14 +223,38 @@ export class ApiClientError extends Error {
    * rather than assume.
    */
   public readonly code: string | undefined;
+  /**
+   * Seconds to wait before retrying, when the responder sent `Retry-After`
+   * (issue #708 — the chatbot's burst limit is the one caller that sends it
+   * today; see `_manejador_limite_excedido` in `backend/main.py`, which
+   * computes it from the limiter's own window rather than a guess). `undefined`
+   * whenever the header is absent or not a plain non-negative number, so a
+   * caller falls back deliberately instead of showing a wait that was never
+   * really said.
+   */
+  public readonly retryAfterSeconds: number | undefined;
 
-  constructor(message: string, status: number, safe = false, code?: string) {
+  constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
     this.safe = safe;
     this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+/**
+ * `Retry-After` as this app's own backend ever sends it: a plain integer
+ * count of seconds (see `_manejador_limite_excedido`, `backend/main.py`) —
+ * never the HTTP-date form the header also allows. Anything else (absent,
+ * non-numeric, negative) stays `undefined` rather than feeding a bad number
+ * to a caller that would otherwise display it as-is.
+ */
+function parseRetryAfterSeconds(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }
 
 /**
@@ -445,7 +469,8 @@ async function request<T>(
       } catch {
         // ignore parse errors — use default message
       }
-      throw new ApiClientError(message, response.status, safe, code);
+      const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("Retry-After"));
+      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds);
     }
 
     // 204 No Content never carries a body — calling response.json() on it
