@@ -18,15 +18,17 @@ dominio que ya daría el pre-check -- nunca un `IntegrityError` crudo hasta
 el cliente.
 """
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
-from app.dominio.modelos import AsignacionDescuento
+from app.dominio.modelos import AsignacionDescuento, Descuento
 from app.infraestructura.repositorios.descuento_repositorio import (
     AsignacionDescuentoRepositorio, DescuentoRepositorio,
 )
+from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.presentacion.schemas.beneficio_schemas import AsignacionDescuentoResponseDTO
 from app.presentacion.schemas.descuento_schemas import DescuentoResponseDTO
@@ -43,6 +45,18 @@ class BeneficioServicio:
         self.repo = AsignacionDescuentoRepositorio(db)
         self.repo_descuento = DescuentoRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
+        self.repo_membresia = MembresiaRepositorio(db)
+
+    @staticmethod
+    def _valor_potencial(descuento: Descuento, tarifa: Decimal) -> Decimal:
+        """Cuánto valdría este descuento contra una tarifa mensual dada --
+        misma fórmula que `PagoServicio._congelar_beneficio_activo` usa
+        contra el monto base real de un pago (ver su docstring), pero sin
+        ningún efecto de negocio: esto es una proyección para decidir si
+        CONCEDER el beneficio (issue #665), no una aplicación congelada."""
+        if descuento.porcentaje is not None:
+            return (tarifa * descuento.porcentaje / Decimal("100")).quantize(Decimal("0.01"))
+        return descuento.monto
 
     def obtener_activo(self, persona_id: int) -> AsignacionDescuento | None:
         """`None` es una respuesta VÁLIDA (persona sin beneficio vigente),
@@ -70,6 +84,25 @@ class BeneficioServicio:
 
         if self.repo.obtener_activa_por_persona(persona_id) is not None:
             raise OperacionInvalida(MENSAJE_BENEFICIO_ACTIVO_DUPLICADO)
+
+        # Issue #665: un beneficio no puede superar la tarifa mensual de la
+        # persona. Solo se puede medir contra una tarifa REAL, y la única
+        # garantizada única por persona es la membresía OPERATIVA (ACTIVA o
+        # SUSPENDIDA, `uq_membresia_activa_por_persona` en modelos.py) --
+        # sin eso no hay nada contra qué comparar (persona sin membresía, o
+        # con una todavía INACTIVA esperando su primer pago), y el gate se
+        # omite ahí a propósito: el chequeo de `PagoServicio.
+        # _congelar_beneficio_activo` (`valor > monto_base`) sigue siendo la
+        # red de seguridad para ese caso, igual que antes de este fix.
+        membresia_operativa = self.repo_membresia.obtener_operativa_por_persona(persona_id)
+        if membresia_operativa is not None:
+            valor = self._valor_potencial(descuento, membresia_operativa.monto_aplicado)
+            if valor > membresia_operativa.monto_aplicado:
+                raise OperacionInvalida(
+                    f"El beneficio '{descuento.nombre}' (${valor}) supera la "
+                    f"tarifa mensual de la persona (${membresia_operativa.monto_aplicado}). "
+                    "Asigne un descuento de menor valor o edítelo antes de concederlo."
+                )
 
         asignacion = AsignacionDescuento(
             persona_id=persona_id,

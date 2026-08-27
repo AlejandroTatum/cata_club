@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import type { DescuentoCatalogo } from "@/services/api";
 import {
   descuentosActivos,
+  descuentoExcedeTarifa,
   descuentoValorLabel,
 } from "../discounts-utils";
 
@@ -44,5 +45,33 @@ describe("descuentoValorLabel", () => {
     const label = descuentoValorLabel(makeDescuento({ porcentaje: null, monto: "10.00" }));
     expect(label).toContain("10");
     expect(label).toMatch(/\$/);
+  });
+});
+
+/**
+ * Client-side mirror of the backend gate in `BeneficioServicio.asignar`
+ * (issue #665): a fixed-amount discount can exceed the tarifa, a percentage
+ * one never can (it is capped at 100 in the catalog schema), so this must
+ * agree with that asymmetry.
+ */
+describe("descuentoExcedeTarifa", () => {
+  it("flags a fixed amount above the monthly tarifa", () => {
+    const descuento = makeDescuento({ porcentaje: null, monto: "50000.00" });
+    expect(descuentoExcedeTarifa(descuento, 80)).toBe(true);
+  });
+
+  it("does not flag a fixed amount equal to the tarifa (100% is allowed)", () => {
+    const descuento = makeDescuento({ porcentaje: null, monto: "80.00" });
+    expect(descuentoExcedeTarifa(descuento, 80)).toBe(false);
+  });
+
+  it("does not flag a fixed amount below the tarifa", () => {
+    const descuento = makeDescuento({ porcentaje: null, monto: "15.00" });
+    expect(descuentoExcedeTarifa(descuento, 80)).toBe(false);
+  });
+
+  it("never flags a percentage discount, even 100% against a tiny tarifa", () => {
+    const descuento = makeDescuento({ porcentaje: "100", monto: null });
+    expect(descuentoExcedeTarifa(descuento, 5)).toBe(false);
   });
 });

@@ -32,7 +32,7 @@ sigue acá es lo GENUINAMENTE nuevo de resolverlo server-side:
 from decimal import Decimal
 
 from app.dominio.enums import EstadoMembresia
-from app.dominio.modelos import Pago
+from app.dominio.modelos import AsignacionDescuento, Pago
 from app.seguridad.gestor_auth import GestorAutenticacion
 from tests.fabricas_pagos import (
     asignar_beneficio_api,
@@ -45,6 +45,7 @@ from tests.fabricas_pagos import (
 )
 
 RUTA_DESCUENTOS = "/api/v1/descuentos/"
+RUTA_BENEFICIO = "/api/v1/personas/{persona_id}/beneficio"
 
 
 def _crear_descuento_api(client, nombre="Beca", *, porcentaje=None, monto=None):
@@ -300,6 +301,35 @@ def test_beneficio_de_monto_fijo_excesivo_sigue_topeado_al_100_por_ciento(client
     descuento = _crear_descuento_api(client, "Convenio excesivo", monto="999.00")
     asignacion = asignar_beneficio_api(client, persona["id"], descuento["id"])
     assert asignacion.status_code == 201, asignacion.text
+
+    respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
+    assert respuesta.status_code == 400, respuesta.text
+    assert "100" in respuesta.json()["detail"]
+    assert db_session.query(Pago).count() == 0
+
+
+def test_asignacion_previa_al_gate_de_asignar_no_rompe_lectura_ni_pago(client, db_session):
+    """Issue #665: `BeneficioServicio.asignar` ahora rechaza un beneficio
+    mayor a la tarifa OPERATIVA de la persona, pero una fila que ya existía
+    ANTES de ese gate (sembrada acá directo por SQLAlchemy, sin pasar por el
+    servicio -- simula datos de una versión anterior del código) debe seguir
+    resolviendo sin romperse: `_congelar_beneficio_activo` deliberadamente
+    NO reintroduce esa validación (ver su docstring), así que la lectura del
+    beneficio no cambia un bit y el pago sigue rechazándose con el MISMO
+    error de siempre (issue #11, el tope del 100%), nunca uno nuevo ni un
+    crash."""
+    persona, membresia = escenario_membresia_sin_pago_api(client)
+    descuento = _crear_descuento_api(client, "Convenio heredado", monto="999.00")
+    asignacion = AsignacionDescuento(
+        persona_id=persona["id"], descuento_id=descuento["id"],
+        asignado_por_persona_id=1,
+    )
+    db_session.add(asignacion)
+    db_session.commit()
+
+    lectura = client.get(RUTA_BENEFICIO.format(persona_id=persona["id"]))
+    assert lectura.status_code == 200, lectura.text
+    assert lectura.json()["descuento"]["id"] == descuento["id"]
 
     respuesta = registrar_pago_api(client, persona["id"], membresia["id"])
     assert respuesta.status_code == 400, respuesta.text

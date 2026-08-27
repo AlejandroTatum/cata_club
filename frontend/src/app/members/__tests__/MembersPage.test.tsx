@@ -1631,6 +1631,109 @@ describe("MembersPage — Beneficio del club", () => {
       await within(dialog).findByText("La persona ya tiene un beneficio vigente"),
     ).toBeInTheDocument();
   });
+
+  // --- Issue #665: un beneficio no puede superar la tarifa mensual ---------
+
+  /**
+   * The real `OperacionInvalida` text `BeneficioServicio.asignar` raises
+   * (`beneficio_servicio.py`) for this exact scenario — proves the message
+   * survives `toUserMessage`'s two gates (400 is an INPUT_STATUS, plain
+   * Spanish, no snake_case/braces/English vocabulary, under 200 chars) and
+   * renders verbatim, not just that the status code is 400.
+   */
+  const MENSAJE_BACKEND_BENEFICIO_EXCESIVO =
+    "El beneficio 'Convenio excesivo' ($50000.00) supera la tarifa mensual " +
+    "de la persona ($80.00). Asigne un descuento de menor valor o edítelo " +
+    "antes de concederlo.";
+
+  it("renders the real backend rejection message verbatim when assigning exceeds the tarifa", async () => {
+    const { ApiClientError } = await import("@/services/api");
+    mockFetchBeneficio.mockResolvedValue(null);
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Convenio excesivo", porcentaje: null, monto: "50000.00", activo: true },
+    ]);
+    mockAsignarBeneficio.mockRejectedValue(
+      new ApiClientError(MENSAJE_BACKEND_BENEFICIO_EXCESIVO, 400),
+    );
+    const dialog = await openEditModal();
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /asignar beneficio/i }));
+    const select = await within(dialog).findByRole("combobox");
+    fireEvent.change(select, { target: { value: "1" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^asignar$/i }));
+
+    expect(
+      await within(dialog).findByText(MENSAJE_BACKEND_BENEFICIO_EXCESIVO),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Pre-submit UX hint (AC: "deshabilitar el submit primario mientras el
+   * dato sea inválido"): `StudentMembershipActions` passes the student's
+   * current monthly tarifa (`membresia.monto`) down, and `BeneficioSection`
+   * mirrors the backend's own comparison client-side. This is a hint, not
+   * the source of truth — the backend re-validates on submit regardless.
+   */
+  async function openEditModalConTarifa(monto: number): Promise<HTMLElement> {
+    const cuentaConMembresia: MemberAccount = {
+      ...ACCOUNT,
+      estudiantes: [
+        {
+          ...ACCOUNT.estudiantes[0],
+          membresia: {
+            tipo: "Mensual",
+            estado: "activa",
+            fechaInicio: "2026-08-01",
+            fechaFin: "2026-08-31",
+            monto,
+            id: 42,
+          },
+        },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    fireEvent.click(within(row).getByRole("button", { name: /^pagos/i }));
+    return screen.getByRole("dialog");
+  }
+
+  it("disables Asignar and shows an actionable currency message for a discount above the tarifa", async () => {
+    mockFetchBeneficio.mockResolvedValue(null);
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Convenio excesivo", porcentaje: null, monto: "50000.00", activo: true },
+    ]);
+    const dialog = await openEditModalConTarifa(80);
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /asignar beneficio/i }));
+    const select = await within(dialog).findByRole("combobox");
+    fireEvent.change(select, { target: { value: "1" } });
+
+    expect(within(dialog).getByRole("button", { name: /^asignar$/i })).toBeDisabled();
+    expect(within(dialog).getByText(/supera la tarifa mensual/i)).toBeInTheDocument();
+    // Actionable in local currency, not a bare number.
+    expect(within(dialog).getByText(/\$\s?80/)).toBeInTheDocument();
+    expect(mockAsignarBeneficio).not.toHaveBeenCalled();
+  });
+
+  it("keeps Asignar enabled for a discount within the tarifa", async () => {
+    mockFetchBeneficio.mockResolvedValue(null);
+    mockFetchDescuentos.mockResolvedValue([
+      { id: 1, nombre: "Media beca", porcentaje: "50", monto: null, activo: true },
+    ]);
+    const dialog = await openEditModalConTarifa(80);
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: /asignar beneficio/i }));
+    const select = await within(dialog).findByRole("combobox");
+    fireEvent.change(select, { target: { value: "1" } });
+
+    expect(within(dialog).getByRole("button", { name: /^asignar$/i })).not.toBeDisabled();
+    expect(within(dialog).queryByText(/supera la tarifa mensual/i)).not.toBeInTheDocument();
+  });
 });
 
 describe("MembersPage — capped results help", () => {
