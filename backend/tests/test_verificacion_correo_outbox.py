@@ -18,10 +18,7 @@ o no la cuenta, y esté o no ya verificada. Si difiriera, el formulario de
 reenvío sería un buscador de direcciones registradas -- el mismo oráculo que
 `MENSAJE_IDENTIDAD_DUPLICADA` y la recuperación de contraseña ya evitan.
 """
-import logging
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from email import message_from_string
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,6 +45,7 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.soporte_transversal.configuracion import settings
+from tests import arnes_outbox as arnes
 from tests.fabricas_auth import crear_usuario_auth
 
 from datetime import date
@@ -57,75 +55,29 @@ ASUNTO_VERIFICACION = "Verificación de correo - Cata Club"
 
 
 # ─── Arnés ──────────────────────────────────────────────────────────────────
+# El andamiaje (sesión inyectada, Celery eager, SMTP falso, lectura del MIME)
+# vive en `tests/arnes_outbox.py`, compartido con las demás colas. Acá quedan
+# solo las fixtures que lo atan a ESTE módulo de tareas y a ESTE logger.
 @pytest.fixture()
 def sesion_inyectada(db_session, monkeypatch):
-    """Las tareas abren su propia sesión, que no vería nada de lo que este
-    test escribió dentro de su transacción externa."""
-
-    @contextmanager
-    def _factory():
+    with arnes.sesion_inyectada_en(verificacion_correo_tareas, db_session, monkeypatch):
         yield db_session
-
-    monkeypatch.setattr(verificacion_correo_tareas, "SessionLocal", _factory)
-    return db_session
 
 
 @pytest.fixture()
 def celery_sincrono(monkeypatch):
-    """Modo eager REAL de Celery: la publicación y el despacho siguen pasando
-    por su maquinaria en vez de parchear `.delay`."""
-    monkeypatch.setattr(
-        verificacion_correo_tareas.celery_app.conf, "task_always_eager", True
-    )
-    monkeypatch.setattr(
-        verificacion_correo_tareas.celery_app.conf, "task_eager_propagates", True
-    )
-
-
-@pytest.fixture()
-def logs_de_verificacion():
-    """`caplog` no ve estos registros: Celery reconfigura el logging del
-    proceso al invocar `Task.__call__`."""
-    registros: list[logging.LogRecord] = []
-
-    class _Coleccionista(logging.Handler):
-        def emit(self, record):
-            registros.append(record)
-
-    handler = _Coleccionista(level=logging.WARNING)
-    logger = logging.getLogger("cataclub.tareas.verificacion_correo")
-    nivel_previo = logger.level
-    logger.addHandler(handler)
-    logger.setLevel(logging.WARNING)
-    try:
-        yield registros
-    finally:
-        logger.removeHandler(handler)
-        logger.setLevel(nivel_previo)
+    arnes.celery_en_proceso(verificacion_correo_tareas, monkeypatch)
 
 
 @pytest.fixture()
 def smtp_configurado(monkeypatch):
-    monkeypatch.setattr(settings, "smtp_host", "smtp.test")
-    monkeypatch.setattr(settings, "smtp_port", 587)
-    monkeypatch.setattr(settings, "smtp_user", "")
-    monkeypatch.setattr(settings, "smtp_starttls", False)
+    arnes.configurar_smtp(monkeypatch)
 
 
-def _mensaje_enviado(smtp_cls):
-    servidor = smtp_cls.return_value.__enter__.return_value
-    assert servidor.sendmail.call_count == 1, (
-        f"se esperaba exactamente un sendmail, hubo {servidor.sendmail.call_count}"
-    )
-    remitente, destinatario, crudo = servidor.sendmail.call_args.args
-    return remitente, destinatario, message_from_string(crudo)
-
-
-def _texto_plano(mensaje):
-    for parte in mensaje.walk():
-        if parte.get_content_type() == "text/plain":
-            return parte.get_payload(decode=True).decode("utf-8")
-    raise AssertionError("el mensaje no tiene una parte text/plain")
+@pytest.fixture()
+def logs_de_verificacion():
+    with arnes.logs_recogidos("cataclub.tareas.verificacion_correo") as registros:
+        yield registros
 
 
 def _inscribir(db_session, correo="sofia@example.com", semilla=800) -> Usuario:
@@ -329,9 +281,9 @@ def test_una_fila_pendiente_termina_en_un_correo_con_el_enlace(
     ) as smtp_cls:
         assert despachar_verificaciones_pendientes() == {"reclamadas": 1}
 
-    _, destinatario, mensaje = _mensaje_enviado(smtp_cls)
+    _, destinatario, mensaje = arnes.mensaje_enviado(smtp_cls)
     assert destinatario == cuenta.correo
-    cuerpo = _texto_plano(mensaje)
+    cuerpo = arnes.texto_plano(mensaje)
     assert "https://club.test/verificar-correo?token=" in cuerpo
 
     db_session.expire_all()
@@ -353,8 +305,8 @@ def test_el_token_del_correo_verifica_de_verdad_la_cuenta(
     ) as smtp_cls:
         despachar_verificaciones_pendientes()
 
-    _, _, mensaje = _mensaje_enviado(smtp_cls)
-    token = _texto_plano(mensaje).split("verificar-correo?token=")[1].split()[0]
+    _, _, mensaje = arnes.mensaje_enviado(smtp_cls)
+    token = arnes.texto_plano(mensaje).split("verificar-correo?token=")[1].split()[0]
 
     assert client_sin_token.post(
         "/api/v1/auth/verificar-correo", json={"token": token}
@@ -381,7 +333,7 @@ def test_una_fila_de_una_cuenta_ya_verificada_no_envia_nada(
     ) as smtp_cls:
         despachar_verificaciones_pendientes()
 
-    assert smtp_cls.return_value.__enter__.return_value.sendmail.call_count == 0
+    assert arnes.sendmail_de(smtp_cls).call_count == 0
     db_session.expire_all()
     assert db_session.query(VerificacionCorreoOutbox).one().status == "ENVIADO"
 

@@ -219,6 +219,54 @@ export async function publicCatalogGet(
   return NextResponse.json(json, { status: 200 });
 }
 
+/**
+ * Read a JSON body and pull out a set of required non-empty string fields.
+ *
+ * Returns `[fields, null]` on success, or `[null, NextResponse]` carrying the
+ * 400 the caller should return as-is.
+ *
+ * Exists so the anonymous auth routes don't each re-implement the same
+ * parse-then-type-guard preamble. Those routes take one or two flat string
+ * fields and reject anything else before spending a backend round-trip, which
+ * is a shape worth stating once — written out per route it was the single
+ * largest block of copied code in the verification feature.
+ *
+ * Deliberately NOT a general validator: it checks presence and non-emptiness
+ * only. Anything with real rules (an address's syntax, a password's length)
+ * stays in its own route, where the rule is visible next to the endpoint it
+ * guards.
+ */
+export async function readRequiredStringFields<Field extends string>(
+  request: NextRequest,
+  fields: readonly Field[],
+  missingMessage: string,
+): Promise<readonly [Record<Field, string>, null] | readonly [null, NextResponse]> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    const invalidJson = NextResponse.json(
+      { error: "invalid_request", message: "El cuerpo de la solicitud no es JSON válido." },
+      { status: 400 },
+    );
+    return [null, invalidJson] as const;
+  }
+
+  const parsed = (typeof body === "object" && body !== null ? body : {}) as Record<Field, unknown>;
+  const out = {} as Record<Field, string>;
+  for (const field of fields) {
+    const value = parsed[field];
+    if (typeof value !== "string" || value.length === 0) {
+      return [
+        null,
+        NextResponse.json({ error: "invalid_request", message: missingMessage }, { status: 400 }),
+      ] as const;
+    }
+    out[field] = value;
+  }
+  return [out, null] as const;
+}
+
 interface AnonymousAuthPostOptions {
   /** Body forwarded to the backend, JSON-serialized. */
   payload: unknown;

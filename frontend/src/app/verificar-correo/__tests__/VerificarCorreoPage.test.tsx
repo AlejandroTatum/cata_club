@@ -30,12 +30,6 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-vi.mock("next/image", () => ({
-  __esModule: true,
-  // eslint-disable-next-line @next/next/no-img-element
-  default: ({ alt }: { alt: string }) => <img alt={alt} />,
-}));
-
 const mockShowError = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({

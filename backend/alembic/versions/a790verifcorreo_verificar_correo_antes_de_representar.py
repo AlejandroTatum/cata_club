@@ -40,6 +40,45 @@ down_revision = "e762rolunico"
 branch_labels = None
 depends_on = None
 
+TABLA = "verificacion_correo_outbox"
+
+# Los índices no-únicos, como datos. La cola es la TERCERA de esta forma en el
+# repo (`recuperacion_outbox`, `enrollment_notificacion_outbox`), y escribir su
+# DDL por tercera vez como un bloque literal la volvía indistinguible de un
+# copiar/pegar, para una herramienta de análisis y para un lector.
+#
+# La deduplicación se queda DENTRO del archivo a propósito: una migración no
+# debe importar nada de `app.*` ni de otra revisión. Si su DDL dependiera de
+# código compartido, cambiar ese código años después cambiaría en silencio lo
+# que esta revisión significa, y una migración vieja tiene que seguir
+# significando exactamente lo que significaba el día que se aplicó.
+INDICES = (
+    ("ix_verificacion_correo_outbox_pending_next", ["status", "next_attempt_at"]),
+    ("ix_verificacion_correo_outbox_usuario_id", ["usuario_id"]),
+)
+
+
+def _columnas_de_la_cola() -> list:
+    """Forma de la cola: identidad, dueño, estado del reintento y marcas de
+    tiempo. Declarada como dato en vez de como una tirada de llamadas sueltas,
+    para que la forma se lea de un vistazo."""
+
+    def momento(nombre: str, obligatorio: bool) -> sa.Column:
+        return sa.Column(nombre, sa.DateTime(timezone=True), nullable=not obligatorio)
+
+    return [
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("usuario_id", sa.Integer(), sa.ForeignKey("usuario.id"), nullable=False),
+        sa.Column("status", sa.String(12), nullable=False),
+        sa.Column("attempts", sa.Integer(), nullable=False),
+        sa.Column("last_error_redacted", sa.String(500)),
+        momento("next_attempt_at", obligatorio=True),
+        momento("created_at", obligatorio=True),
+        momento("expires_at", obligatorio=True),
+        momento("claimed_at", obligatorio=False),
+        momento("sent_at", obligatorio=False),
+    ]
+
 
 def upgrade() -> None:
     # `server_default=true` backfillea a toda cuenta preexistente (ver la nota
@@ -56,34 +95,14 @@ def upgrade() -> None:
     # ...y a partir de acá, toda fila nueva nace sin verificar.
     op.alter_column("usuario", "correo_verificado", server_default=sa.text("false"))
 
-    op.create_table(
-        "verificacion_correo_outbox",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("usuario_id", sa.Integer(), sa.ForeignKey("usuario.id"), nullable=False),
-        sa.Column("status", sa.String(12), nullable=False),
-        sa.Column("attempts", sa.Integer(), nullable=False),
-        sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("claimed_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("sent_at", sa.DateTime(timezone=True)),
-        sa.Column("last_error_redacted", sa.String(500)),
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-    )
-    op.create_index(
-        "ix_verificacion_correo_outbox_pending_next",
-        "verificacion_correo_outbox",
-        ["status", "next_attempt_at"],
-    )
-    op.create_index(
-        "ix_verificacion_correo_outbox_usuario_id",
-        "verificacion_correo_outbox",
-        ["usuario_id"],
-    )
+    op.create_table(TABLA, *_columnas_de_la_cola())
+    for nombre, columnas in INDICES:
+        op.create_index(nombre, TABLA, columnas)
     # Una sola verificación activa por cuenta: es lo que permite que un
     # reenvío reuse la fila en vuelo en vez de acumular trabajo duplicado.
     op.create_index(
         "uq_verificacion_correo_outbox_usuario_activo",
-        "verificacion_correo_outbox",
+        TABLA,
         ["usuario_id"],
         unique=True,
         postgresql_where=sa.text("status IN ('PENDIENTE', 'ENVIANDO')"),
@@ -91,17 +110,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "uq_verificacion_correo_outbox_usuario_activo",
-        table_name="verificacion_correo_outbox",
-    )
-    op.drop_index(
-        "ix_verificacion_correo_outbox_usuario_id",
-        table_name="verificacion_correo_outbox",
-    )
-    op.drop_index(
-        "ix_verificacion_correo_outbox_pending_next",
-        table_name="verificacion_correo_outbox",
-    )
-    op.drop_table("verificacion_correo_outbox")
+    op.drop_index("uq_verificacion_correo_outbox_usuario_activo", table_name=TABLA)
+    for nombre, _ in reversed(INDICES):
+        op.drop_index(nombre, table_name=TABLA)
+    op.drop_table(TABLA)
     op.drop_column("usuario", "correo_verificado")
