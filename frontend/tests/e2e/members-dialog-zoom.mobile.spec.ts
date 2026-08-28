@@ -31,8 +31,16 @@
  * runs on a 4-vCPU runner. Everything after the navigation is a click or a
  * viewport change, and the 320px clipping check reuses the same loaded page
  * rather than paying for a second one.
+ *
+ * That budget is also why issue #778 lands here instead of in a file of its
+ * own. The "Método" radiogroup clips "Efectivo" on a narrow phone, and the form
+ * it lives in is the same one this test already has open two clicks in — a
+ * second spec would pay for a second navigation to reach a screen already on
+ * screen. It is a separate defect, not a regression of the floor above: the
+ * floor targets `input`/`select`/`textarea` and explicitly excludes
+ * `[type="radio"]`, so those labels were the size they are before it and after.
  */
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 import { E2E_BASE_URL } from "./e2e-target";
 
@@ -97,6 +105,46 @@ async function mockMembersRuntime(page: Page): Promise<void> {
   );
 }
 
+/** One element whose own content does not fit inside its own box. */
+interface Clipped {
+  readonly el: string;
+  readonly boxPx: number;
+  readonly contentPx: number;
+  readonly overflowPx: number;
+}
+
+/**
+ * Every descendant of `scope` whose content is wider than the box drawn for it.
+ *
+ * `scrollWidth - clientWidth` is the same pair the issue reports (135px of box
+ * against 192px of content), and it answers for both shapes the defect takes: a
+ * box that clips loses the text outright, and a box that does not clip spills
+ * it over its own border until an ancestor `overflow-hidden` cuts it there
+ * instead. Neither is readable, so neither is excused.
+ *
+ * An element that genuinely scrolls sideways is skipped — its content is
+ * reachable by construction, which is the whole difference between a carousel
+ * and a truncation.
+ */
+async function clippedInside(scope: Locator): Promise<Clipped[]> {
+  return scope.evaluate((root) => {
+    const out: Clipped[] = [];
+    for (const el of [root, ...Array.from(root.querySelectorAll("*"))]) {
+      const style = getComputedStyle(el);
+      if (style.overflowX === "auto" || style.overflowX === "scroll") continue;
+      const overflowPx = el.scrollWidth - el.clientWidth;
+      if (overflowPx <= 1) continue;
+      out.push({
+        el: `${el.tagName.toLowerCase()}${el.getAttribute("role") ? `[${el.getAttribute("role")}]` : ""} "${(el.textContent ?? "").trim().slice(0, 40)}"`,
+        boxPx: el.clientWidth,
+        contentPx: el.scrollWidth,
+        overflowPx,
+      });
+    }
+    return out;
+  });
+}
+
 test("no field in the Pagos dialog is small enough to make a phone zoom", async ({ page }) => {
   await mockMembersRuntime(page);
   await page.goto("/members");
@@ -140,15 +188,41 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
   expect(measured).toBeGreaterThan(1);
 
   /*
-   * The third defect in the same issue: the row's three actions.
+   * Issue #778, on the form the clicks above already opened.
+   *
+   * "Método" is a two-option radiogroup pinned into one half of a `grid-cols-2`
+   * row, and at 412px that half is 135px wide while the two labels need 192px —
+   * so "Efectivo" is cut. A misread method is the difference between recording
+   * cash and recording a transfer, and undoing that costs the audited
+   * correction flow.
+   *
+   * The scan is the whole form and not just the radiogroup on purpose: the same
+   * fixed two-column row also holds the amount field and the date preview, and
+   * the action pair below it, so a fix that widened one group by squeezing a
+   * neighbour would still be caught here.
+   */
+  const registerForm = dialog
+    .locator("div.bg-sunken")
+    .filter({ has: page.getByRole("radiogroup", { name: "Método de pago" }) });
+  await expect(registerForm).toBeVisible();
+
+  expect(await clippedInside(registerForm)).toEqual([]);
+
+  /*
+   * The third defect in the earlier issue: the row's three actions.
    *
    * At 320px the group needs more line than the card has, and `card
    * overflow-hidden` on the page clips whatever does not fit WITHOUT a
    * scrollbar — "Editar" stops existing. jsdom can assert `flex-wrap` is
    * written; only a layout engine can say the button is inside the card.
+   *
+   * 320px is also the narrowest width the payment form has to survive, so it is
+   * measured again here before the dialog closes.
    */
-  await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 320, height: 800 });
+  expect(await clippedInside(registerForm)).toEqual([]);
+
+  await page.keyboard.press("Escape");
 
   const editar = page.getByRole("button", { name: "Editar María González" }).first();
   await expect(editar).toBeVisible();

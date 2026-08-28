@@ -67,7 +67,10 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
     fireEvent.click(opener);
 
     expect(screen.getByRole("spinbutton")).toHaveClass("h-ctl", "text-sm", "px-3");
-    expect(screen.getByRole("radiogroup", { name: "Método de pago" })).toHaveClass("h-ctl", "text-sm", "px-3");
+    // `min-h-ctl` and not `h-ctl` since #778: still the same 40px next to the
+    // Monto field, but as a floor, so the group can grow when its two options
+    // wrap on a narrow phone instead of clipping the second one.
+    expect(screen.getByRole("radiogroup", { name: "Método de pago" })).toHaveClass("min-h-ctl", "text-sm", "px-3");
 
     const voucher = screen.getByRole("button", { name: "Seleccionar archivo" });
     expect(voucher).toHaveClass("h-ctl", "text-sm", "px-4");
