@@ -54,6 +54,17 @@ export function useModalFocusTrap({
 }: ModalFocusTrapOptions): void {
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
+  // `onClose` is read through a ref so an unstable identity — every call site
+  // passes an inline arrow — cannot appear in the effect's own dependency
+  // array. Without this, a parent re-render (e.g. typing into a controlled
+  // field inside the panel) would tear the effect down and back up, which
+  // moves focus to the trigger and then to the panel's first focusable,
+  // stealing focus from whatever the user was actually using.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -69,7 +80,7 @@ export function useModalFocusTrap({
 
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -105,5 +116,8 @@ export function useModalFocusTrap({
       document.removeEventListener("keydown", handleKeyDown);
       triggerElementRef.current?.focus();
     };
-  }, [open, onClose, panelRef, initialFocusRef]);
+    // `panelRef` and `initialFocusRef` come from `useRef` at every call site,
+    // so they are stable and cause no re-runs; `onClose` is deliberately
+    // absent — see `onCloseRef` above.
+  }, [open, panelRef, initialFocusRef]);
 }

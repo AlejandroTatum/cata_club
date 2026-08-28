@@ -13,7 +13,7 @@
  * jsdom moves no focus on a Tab keydown, so every assertion below only holds if
  * the hook calls `preventDefault()` and moves the focus itself.
  */
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { useModalFocusTrap } from "@/lib/focus-trap";
@@ -178,5 +178,53 @@ describe("useModalFocusTrap handles opening, Escape and closing", () => {
 
     rerender(<Harness open={false} onClose={vi.fn()} />);
     expect(disparador).toHaveFocus();
+  });
+});
+
+/**
+ * `onCancel={() => setOpen(false)}` in the real dialogs is a fresh function on
+ * every parent render — the hook must not treat that as a reason to tear down
+ * and rebuild its keydown listener. `panelRef`/`initialFocusRef` come from
+ * `useRef` at every real call site, so they are stable; `onClose` is the only
+ * dep that changes shape from render to render, which is why it alone is what
+ * this harness exercises.
+ */
+function HarnessConOnCloseInestable(): React.ReactElement {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [motivo, setMotivo] = useState("");
+
+  useModalFocusTrap({
+    open: true,
+    // Same shape as `onCancel={() => setOpen(false)}` in the real dialogs: a
+    // new identity every render, never memoized.
+    onClose: () => undefined,
+    panelRef,
+  });
+
+  return (
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Panel">
+      <button type="button">Presente</button>
+      <textarea
+        aria-label="Motivo"
+        value={motivo}
+        onChange={(event) => setMotivo(event.target.value)}
+      />
+    </div>
+  );
+}
+
+describe("useModalFocusTrap keeps focus put across an unstable onClose", () => {
+  it("does not send focus back to the panel's first control while the user types", () => {
+    render(<HarnessConOnCloseInestable />);
+    const motivo = screen.getByLabelText("Motivo");
+
+    motivo.focus();
+    expect(motivo).toHaveFocus();
+
+    fireEvent.change(motivo, { target: { value: "a" } });
+    fireEvent.change(motivo, { target: { value: "au" } });
+    fireEvent.change(motivo, { target: { value: "aus" } });
+
+    expect(motivo).toHaveFocus();
   });
 });
