@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { SITE_NAV_SECTIONS } from "@/lib/site-navigation";
 
-const SECTION_IDS = ["inicio", "horarios", "valores", "logros", "galeria", "contacto"];
+/**
+ * Read from the navbar's own definition, never re-listed here: a spy watching a
+ * different set of sections than the bar it highlights is a silent failure —
+ * the link is drawn, it just never lights up.
+ */
+const SECTION_IDS = SITE_NAV_SECTIONS.map((section): string => section.id);
 
 /**
  * Highlights the navbar anchor that matches the section currently in view.
