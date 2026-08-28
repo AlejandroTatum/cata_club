@@ -42,6 +42,34 @@ export function mapSponsor(payload: PublicSponsorPayload): SponsorItem | null {
   return { id: payload.id, name, logoSrc };
 }
 
+/**
+ * Widest viewport one marquee copy pre-fills with real logos. Past it the
+ * `min-width: 100vw` in landing.css still keeps the loop continuous — it just
+ * parks the leftover width at the seam instead of between the logos.
+ */
+const MAX_VIEWPORT_PX = 3840;
+
+/**
+ * Widest a tile plus its gap can get: `.landing-sponsors-item` is
+ * clamp(300px, 30vw, 416px) and the gap is 18px (landing.css). Narrower
+ * viewports shrink the tile, but they shrink the viewport faster, so this is
+ * the worst case for "how many tiles does it take to cross the screen".
+ */
+const MAX_TILE_SPAN_PX = 416 + 18;
+
+/** Tiles one copy needs to outrun the widest viewport on its own. */
+const TILES_PER_COPY = Math.ceil(MAX_VIEWPORT_PX / MAX_TILE_SPAN_PX);
+
+/**
+ * How many times one copy repeats the roster. The count falls as sponsors are
+ * added — one sponsor repeats nine times, nine sponsors repeat once — so the
+ * strip is always about as long as the screen it has to cover, never longer
+ * because the club signed more sponsors.
+ */
+export function repetitionsFor(sponsors: number): number {
+  return sponsors > 0 ? Math.ceil(TILES_PER_COPY / sponsors) : 1;
+}
+
 type SponsorsState =
   | { kind: "loading" }
   | { kind: "ready"; sponsors: SponsorItem[] }
@@ -89,15 +117,24 @@ export default function Sponsors(): React.ReactElement {
     accessibleStatus = "Cargando patrocinadores…";
   }
 
+  // One copy is the roster repeated until it spans the screen. Only the first
+  // pass is exposed: the rest are decoration, and the duplicate copy is already
+  // hidden wholesale by its container, so the roster is announced once.
   const renderCopy = (duplicate: boolean): React.ReactElement[] => state.kind === "ready"
-    ? state.sponsors.map((sponsor): React.ReactElement => (
-        <span className="landing-sponsors-item" key={`${sponsor.id}-${duplicate ? "duplicate" : "primary"}`}>
-          <span className="landing-sponsor">
-            {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as AppShell's avatar / /profile's IdentityPanel) */}
-            <img src={sponsor.logoSrc} alt={sponsor.name} width={312} height={120} />
+    ? Array.from({ length: repetitionsFor(state.sponsors.length) }, (_, pass): React.ReactElement[] =>
+        state.sponsors.map((sponsor): React.ReactElement => (
+          <span
+            className="landing-sponsors-item"
+            key={`${sponsor.id}-${duplicate ? "duplicate" : "primary"}-${pass}`}
+            aria-hidden={pass > 0 || undefined}
+          >
+            <span className="landing-sponsor">
+              {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset (same pattern as AppShell's avatar / /profile's IdentityPanel) */}
+              <img src={sponsor.logoSrc} alt={sponsor.name} width={312} height={120} />
+            </span>
           </span>
-        </span>
-      ))
+        ))
+      ).flat()
     : [];
 
   return (

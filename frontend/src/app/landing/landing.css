@@ -466,8 +466,14 @@
 .landing-sponsors-track { display: flex; width: max-content; animation: landing-sponsors-marquee 28s linear infinite; will-change: transform; }
 .landing-sponsors-track:hover, .landing-sponsors-track:focus-within { animation-play-state: paused; }
 /* Every copy spans at least the viewport, so the following identical copy is
-   already under the viewport when the first reaches its repeat boundary. */
-.landing-sponsors-copy { --landing-sponsor-gap: 18px; display: flex; width: max-content; min-width: 100vw; box-sizing: border-box; flex: none; justify-content: space-between; gap: var(--landing-sponsor-gap); padding-right: var(--landing-sponsor-gap); }
+   already under the viewport when the first reaches its repeat boundary. The
+   copy earns that width with real logos: Sponsors.tsx repeats the roster inside
+   each copy until it outruns a 4K viewport on its own, so the minimum is
+   normally already met and the gap between logos stays exactly
+   --landing-sponsor-gap whether there is one sponsor or twenty. Distributing
+   the difference instead (justify-content: space-between) put ~327px of air
+   between three logos on a 1920px screen — issue #765. */
+.landing-sponsors-copy { --landing-sponsor-gap: 18px; display: flex; width: max-content; min-width: 100vw; box-sizing: border-box; flex: none; gap: var(--landing-sponsor-gap); padding-right: var(--landing-sponsor-gap); }
 .landing-sponsors-item { display: block; width: clamp(300px, 30vw, 416px); flex: none; }
 .landing-sponsor { display: flex; width: 100%; height: 168px; align-items: center; justify-content: center; border-radius: 16px; background: var(--landing-background); box-shadow: inset 0 0 0 1px var(--landing-border); }
 /* Full colour, never grayscale or dimmed: sponsors pay to be seen in their

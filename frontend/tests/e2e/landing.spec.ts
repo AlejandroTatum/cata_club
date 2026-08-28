@@ -82,7 +82,26 @@ test.describe("Landing page", () => {
       })
     );
     await page.goto("/");
-    await expect(page.locator(".landing-sponsors-item")).toHaveCount(4);
+    // Two copies, each repeating the two records five times: with two sponsors
+    // that is what it takes for one copy to outrun a 4K viewport on real logos
+    // instead of on stretched gaps (issue #765, Sponsors.tsx#repetitionsFor).
+    await expect(page.locator(".landing-sponsors-item")).toHaveCount(20);
+    // The gap jsdom cannot measure: every space between logos is the same, and
+    // it is the token's, not whatever `min-width: 100vw` had left over.
+    const spacing = await page.locator(".landing-sponsors-copy").first().evaluate((copy) => {
+      const boxes = [...copy.querySelectorAll(".landing-sponsors-item")].map((item) => item.getBoundingClientRect());
+      return {
+        gaps: boxes.slice(1).map((box, index) => Math.round(box.left - boxes[index].right)),
+        declaredGap: Math.round(parseFloat(getComputedStyle(copy).columnGap)),
+        copyWidth: copy.getBoundingClientRect().width,
+        viewportWidth: document.documentElement.clientWidth,
+      };
+    });
+    expect(new Set(spacing.gaps).size).toBe(1);
+    expect(spacing.gaps[0]).toBe(spacing.declaredGap);
+    // And the copy still spans the viewport, so the loop has nothing to recycle
+    // into — the guarantee `min-width: 100vw` exists for.
+    expect(spacing.copyWidth).toBeGreaterThanOrEqual(spacing.viewportWidth);
         // Canonical public term and full brand colour: the strip no longer greys
         // or dims logos, and there is no dead href-hover restore.
         await expect(page.locator(".landing-sponsors-head")).toHaveText("Patrocinadores");
