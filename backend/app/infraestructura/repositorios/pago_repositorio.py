@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import date
 from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -6,16 +6,31 @@ from sqlalchemy.orm import Session, joinedload
 from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada, CorreccionPago
 from app.dominio.enums import EstadoPago
 from app.soporte_transversal.bloqueo_fila import obtener_con_bloqueo_y_timeout
+from app.soporte_transversal.tiempo import rango_de_dias_club
 
 
 def _rango_fecha_registro(fecha_inicio: Optional[date], fecha_fin: Optional[date]):
     """Convierte fechas (inclusive, sin hora) a límites datetime tz-aware para
-    filtrar `Pago.fecha_registro`. Mismo criterio que
-    `personas_router.reporte_nuevos_por_periodo` (00:00:00 / 23:59:59.999999
-    UTC), para que el comportamiento sea consistente entre reportes."""
-    inicio = datetime.combine(fecha_inicio, time.min, tzinfo=timezone.utc) if fecha_inicio else None
-    fin = datetime.combine(fecha_fin, time.max, tzinfo=timezone.utc) if fecha_fin else None
-    return inicio, fin
+    filtrar `Pago.fecha_registro`.
+
+    Las fechas llegan del reporte de `/reports`, que las arma con el día del
+    CLUB (`clubToday`, zona `America/Guayaquil`, ver `frontend/src/lib/
+    club-date.ts`), mientras que `Pago.fecha_registro` guarda un INSTANTE en
+    UTC. La traducción de un día del club a los instantes que lo delimitan la
+    hace `soporte_transversal.tiempo`, que es donde vive la zona del club --
+    acá no se elige zona horaria.
+
+    Issue #761: armar los límites con `tzinfo=timezone.utc` recortaba las
+    últimas CINCO horas de cada día del club. Un pago registrado a las 19:30
+    hora del club se guarda como 00:30 UTC del día siguiente, un instante
+    mayor que el tope `fecha_fin 23:59:59.999999 UTC`, y se caía de TODOS los
+    presets a la vez -- también de "Histórico completo", que tampoco es una
+    consulta sin límites: su `fecha_fin` es igualmente "hoy".
+
+    `personas_router.reporte_nuevos_por_periodo` tenía el mismo defecto (la
+    otra pestaña de `/reports`, mismo `buildReportDateRange` del lado del
+    cliente) y se arregla con esta misma función."""
+    return rango_de_dias_club(fecha_inicio, fecha_fin)
 
 
 class PagoRepositorio:

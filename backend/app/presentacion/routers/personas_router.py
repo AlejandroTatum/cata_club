@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, status, Qu
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
-from datetime import date, datetime, time, timezone
+from datetime import date
 
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.rate_limit import limiter
-from app.soporte_transversal.tiempo import hoy_club
+from app.soporte_transversal.tiempo import hoy_club, rango_de_dias_club
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
@@ -146,8 +146,14 @@ async def reporte_nuevos_por_periodo(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
         )
-    inicio = datetime.combine(fecha_inicio, time.min, tzinfo=timezone.utc)
-    fin = datetime.combine(fecha_fin, time.max, tzinfo=timezone.utc)
+    # Días del CLUB, no días UTC (issue #761). `fecha_inicio`/`fecha_fin`
+    # llegan de `/reports`, que las arma con `clubToday`, mientras que
+    # `Persona.fecha_registro` guarda un INSTANTE en UTC. Construir los
+    # límites acá con `tzinfo=timezone.utc` recortaba las últimas cinco horas
+    # de cada día del club: alguien registrado a las 19:30 hora local se
+    # guarda como 00:30 UTC del día siguiente y no salía en NINGÚN preset,
+    # tampoco en "Histórico completo" (cuyo `fecha_fin` también es "hoy").
+    inicio, fin = rango_de_dias_club(fecha_inicio, fecha_fin)
     return PersonaServicio(db).reporte_nuevos_por_periodo(inicio, fin)
 
 
@@ -181,8 +187,10 @@ async def reporte_nuevos_por_periodo_pdf(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="La fecha de inicio debe ser anterior a la fecha de fin.",
         )
-    inicio = datetime.combine(fecha_inicio, time.min, tzinfo=timezone.utc)
-    fin = datetime.combine(fecha_fin, time.max, tzinfo=timezone.utc)
+    # Días del CLUB: mismo criterio que el endpoint JSON hermano de arriba
+    # (issue #761). Este endpoint arma su propio rango en vez de reusar aquel,
+    # así que el defecto podía sobrevivir acá aunque allá estuviera corregido.
+    inicio, fin = rango_de_dias_club(fecha_inicio, fecha_fin)
     personas = PersonaServicio(db).reporte_nuevos_por_periodo(inicio, fin)
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
