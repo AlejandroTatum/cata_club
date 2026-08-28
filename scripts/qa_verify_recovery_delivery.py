@@ -2,6 +2,17 @@
 
 This smoke deliberately has no configurable URLs: it may only call the QA stack
 bound to loopback, never an operator's SMTP provider or another HTTP host.
+
+`--paso` splits the smoke in two because QA does not run `celery-beat` (see
+`QA_SERVICIOS` in the Makefile and `test_qa_up_incluye_worker_y_excluye_beat`).
+Since issue #14-A moved recovery behind a durable outbox, the request only
+inserts a `PENDIENTE` row and the dispatch is 100% beat-driven, so this smoke
+could no longer pass in QA on its own: it was written (#530) when the request
+published the Celery task itself. Rather than run beat in QA just for this,
+`make qa-up` requests delivery, publishes `despachar_recuperaciones_pendientes`
+exactly as beat would, and then waits. The seam under test is unchanged --
+outbox row -> worker -> SMTP -> Mailpit -- and the beat dependency stops being
+invisible (issue #764).
 """
 
 from __future__ import annotations
@@ -80,18 +91,37 @@ def wait_for_recovery_message(
         sleep(poll_interval_seconds)
 
 
+PASOS = ("completo", "solicitar", "esperar")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verifica recuperación de contraseña contra el Mailpit local de QA."
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--paso",
+        choices=PASOS,
+        default="completo",
+        help=(
+            "'solicitar' pide el enlace y termina; 'esperar' solo espera a "
+            "Mailpit. Entre los dos hay que despachar el outbox, que en QA no "
+            "hace nadie porque no corre celery-beat. 'completo' (default) hace "
+            "los dos y solo sirve donde beat sí tickea."
+        ),
+    )
+    args = parser.parse_args(argv)
     try:
-        request_recovery()
-        wait_for_recovery_message(fetch_messages)
+        if args.paso in ("completo", "solicitar"):
+            request_recovery()
+        if args.paso in ("completo", "esperar"):
+            wait_for_recovery_message(fetch_messages)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    print(f"Mailpit recibió el correo de recuperación para {QA_RECIPIENT}.")
+    if args.paso == "solicitar":
+        print(f"Recuperación solicitada para {QA_RECIPIENT}; falta despachar el outbox.")
+    else:
+        print(f"Mailpit recibió el correo de recuperación para {QA_RECIPIENT}.")
     return 0
 
 

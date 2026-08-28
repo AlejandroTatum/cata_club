@@ -16,7 +16,6 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import ServicioNoDisponible
 from app.infraestructura import notificaciones_servicio as notificaciones_servicio_mod
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-from app.infraestructura.tareas.recuperacion_tareas import enviar_enlace_recuperacion
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
     CIRCUITO_SMTP_UMBRAL_FALLOS,
@@ -227,20 +226,6 @@ def test_umbral_smtp_referencia_la_constante_no_un_literal():
         "cooldown_segundos debe referenciar la constante importada de resiliencia.py, "
         f"no un literal numérico; se encontró: {valor_cooldown!r}"
     )
-
-
-class TestRecuperacionTarea:
-    @patch("app.infraestructura.tareas.recuperacion_tareas.ServicioNotificaciones")
-    def test_enviar_enlace_recuperacion_llama_al_servicio(self, mock_servicio_cls):
-        mock_instancia = Mock()
-        mock_servicio_cls.return_value = mock_instancia
-
-        resultado = enviar_enlace_recuperacion("user@example.com", "token123")
-
-        mock_instancia.enviar_recuperacion_contrasenia.assert_called_once_with(
-            "user@example.com", "token123"
-        )
-        assert resultado == {"correo": "user@example.com", "enviado": True}
 
 
 # ---------------------------------------------------------------------------

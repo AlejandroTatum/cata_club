@@ -612,6 +612,24 @@ class AuthServicio:
                         expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
                     )
                 )
+            elif evento.status == "PENDIENTE":
+                # El dedupe reusa la fila activa -- el índice parcial único
+                # `uq_recuperacion_outbox_usuario_activo` lo exige -- pero
+                # reusarla SIN adelantarla convertía "Enviar otro enlace" en un
+                # 200 que no hace nada: tras un fallo de envío el backoff empuja
+                # `next_attempt_at` hasta 16 minutos adelante y el despachador no
+                # vuelve a mirar la fila hasta entonces (issue #764).
+                #
+                # El backoff existe para no castigar al proveedor SMTP por un
+                # fallo NUESTRO; una petición explícita del usuario es
+                # información nueva y vale reintentar ya. `min` porque esto solo
+                # puede adelantar, nunca posponer, y no se tocan los `attempts`
+                # gastados: el tope de MAX_ATTEMPTS sigue acotando cuántas veces
+                # se intenta en total. Una fila `ENVIANDO` no se toca: está
+                # reclamada por un worker y su lease manda.
+                evento.next_attempt_at = min(
+                    evento.next_attempt_at, datetime.now(timezone.utc)
+                )
             try:
                 self.db.commit()
             except Exception:

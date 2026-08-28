@@ -170,7 +170,13 @@ _CAMPOS_PRODUCCION_CRITICOS: dict[str, str] = {
 _RAZON_SMTP_SIN_AUTENTICACION = (
     "hay relays de producción legítimos SIN autenticación (Postfix local); "
     "exigirlo sería un falso positivo, misma asimetría deliberada que la del "
-    "host SMTP (ver el docstring de `_problemas_de_smtp`)"
+    "host SMTP (ver el docstring de `_problemas_de_smtp`). El issue #764 "
+    "revisó esta exclusión y la sostiene: una credencial vacía sigue siendo "
+    "una configuración válida, así que el arranque no la puede juzgar. Lo que "
+    "SÍ se cerró es el agujero contiguo -- que nadie comprobara que las tres "
+    "SMTP_* llegan interpoladas a los tres servicios Python de producción -- "
+    "en `tests/test_docker_compose_config.py`, y que un envío fallido muriera "
+    "sin dejar rastro, en `recuperacion_tareas.py`"
 )
 
 # Campos deliberadamente FUERA del fail-fast. La razón es obligatoria y se

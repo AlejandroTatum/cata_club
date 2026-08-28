@@ -201,7 +201,16 @@ qa-up: ## Levantar el entorno de QA desde cero: build + base sembrada + frontend
 	@echo "Verificando el SHA servido contra origin/main (issue #350)..."
 	python3 scripts/qa_verify_build_sha.py
 	@echo "Verificando recuperación de contraseña entregada solo a Mailpit..."
-	python3 scripts/qa_verify_recovery_delivery.py
+# Tres pasos, no uno, porque QA no levanta `celery-beat` (ver QA_SERVICIOS) y
+# desde el outbox durable el despacho es 100% dirigido por beat: el request
+# solo deja la fila en PENDIENTE. Este smoke se escribió (#530) cuando el
+# request publicaba la tarea él mismo, así que la migración al outbox lo dejó
+# fallando por timeout con la fila sin reclamar -- el mismo silencio que el
+# issue #764. Publicar el despachador acá es exactamente lo que hace beat en
+# producción, y deja esa dependencia a la vista en vez de dentro del script.
+	python3 scripts/qa_verify_recovery_delivery.py --paso solicitar
+	$(QA_ENV) $(QA_COMPOSE) exec -T celery-worker uv run celery -A app.infraestructura.tareas.celery_app call app.infraestructura.tareas.recuperacion_tareas.despachar_recuperaciones_pendientes
+	python3 scripts/qa_verify_recovery_delivery.py --paso esperar
 	@echo ""
 	@echo "  Frontend:  http://localhost:3000"
 	@echo "  Backend:   http://localhost:8000/docs"

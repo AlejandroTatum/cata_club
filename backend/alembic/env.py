@@ -31,8 +31,20 @@ config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
+#
+# `disable_existing_loggers=False` NO es cosmético: el default de `fileConfig`
+# es `True`, o sea que apaga (`Logger.disabled = True`) TODO logger ya creado
+# que `alembic.ini` no nombre -- y `alembic.ini` solo nombra `root`,
+# `sqlalchemy` y `alembic`. En producción da igual, porque `entrypoint.sh`
+# corre `alembic upgrade head` en un proceso aparte del de uvicorn. En la
+# suite del backend NO: las migraciones corren dentro del mismo proceso de
+# pytest, así que todo logger `cataclub.*` creado al importar los módulos
+# durante la recolección quedaba mudo para el resto de la sesión. Eso volvía
+# incomprobable cualquier registro de la aplicación -- entre ellos los de
+# `cataclub.tareas.recuperacion`, que son la única señal de que una
+# recuperación de contraseña murió en AGOTADO (issue #764).
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # MetaData del ORM -> autogenerate compara contra este target.
 target_metadata = Base.metadata

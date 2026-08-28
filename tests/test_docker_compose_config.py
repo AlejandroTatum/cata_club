@@ -155,6 +155,24 @@ _VARIABLES_CRITICAS_DE_PRODUCCION: dict[str, tuple[str, ...]] = {
     "JWT_SECRET_KEY": ("JWT_SECRET_KEY",),
     "CORS_ORIGENES": ("CORS_ORIGENES",),
     "SMTP_HOST": ("SMTP_HOST",),
+    # Las tres credenciales del remitente (issue #764). `Settings` las excluye
+    # a propósito de su fail-fast de arranque y esa exclusión sigue vigente:
+    # hay relays de producción legítimos SIN autenticación, así que exigir un
+    # `SMTP_USER` no vacío sería un falso positivo, y una dirección `SMTP_FROM`
+    # equivocada solo la puede rechazar el proveedor, nunca el arranque.
+    #
+    # Pero este bloque no comprueba eso. Comprueba la propiedad ORTOGONAL que
+    # ya se documentó para `OPENCODE_API_KEY`: que la variable sea de verdad
+    # interpolada y no un literal escrito en el compose. Son la ÚNICA vía por
+    # la que las credenciales del correo llegan al backend, al worker y a
+    # beat; si alguna quedara fija en el archivo, el operador no tendría cómo
+    # suministrarla y TODO el correo transaccional -- incluidos los enlaces de
+    # recuperación de contraseña -- fallaría en silencio, porque
+    # `ServicioNotificaciones` solo llama a `login()` cuando `SMTP_USER` no
+    # está vacío y el proveedor recién rechaza el mensaje después.
+    "SMTP_USER": ("SMTP_USER",),
+    "SMTP_PASSWORD": ("SMTP_PASSWORD",),
+    "SMTP_FROM": ("SMTP_FROM",),
     "FRONTEND_URL": ("FRONTEND_URL",),
     "DATABASE_URL": ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"),
     "CLOUDINARY_CLOUD_NAME": ("CLOUDINARY_CLOUD_NAME",),

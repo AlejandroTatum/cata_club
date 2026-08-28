@@ -76,3 +76,39 @@ def test_main_dispara_la_recuperacion_y_solo_consulta_las_urls_locales():
         assert smoke.main([]) == 0
 
     request_recovery.assert_called_once_with()
+
+
+# --- `--paso`: QA no corre celery-beat, así que el despacho va en el medio ---
+def test_paso_solicitar_no_espera_a_mailpit():
+    """Entre `solicitar` y `esperar` el Makefile publica el despachador; si
+    este paso esperara igual, `make qa-up` volvería a fallar por timeout con
+    la fila todavía en PENDIENTE."""
+    with (
+        patch.object(smoke, "request_recovery") as request_recovery,
+        patch.object(smoke, "wait_for_recovery_message") as wait,
+    ):
+        assert smoke.main(["--paso", "solicitar"]) == 0
+
+    request_recovery.assert_called_once_with()
+    wait.assert_not_called()
+
+
+def test_paso_esperar_no_vuelve_a_solicitar():
+    """Volver a pedir el enlace acá reusaría la fila activa por el dedupe y no
+    probaría nada nuevo."""
+    with (
+        patch.object(smoke, "request_recovery") as request_recovery,
+        patch.object(smoke, "wait_for_recovery_message", return_value={"Subject": "ok"}) as wait,
+    ):
+        assert smoke.main(["--paso", "esperar"]) == 0
+
+    request_recovery.assert_not_called()
+    wait.assert_called_once()
+
+
+def test_paso_esperar_falla_si_mailpit_no_recibe_nada():
+    with (
+        patch.object(smoke, "request_recovery"),
+        patch.object(smoke, "wait_for_recovery_message", side_effect=RuntimeError("sin correo")),
+    ):
+        assert smoke.main(["--paso", "esperar"]) == 1
