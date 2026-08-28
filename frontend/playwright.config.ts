@@ -89,8 +89,31 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       /* Los `*.live.spec.ts` necesitan el backend real del entorno de QA
          (`make qa-up`). Excluirlos acá mantiene la suite por defecto
-         ejecutable en cualquier checkout, sin Docker y sin base sembrada. */
-      testIgnore: /\.live\.spec\.ts$/,
+         ejecutable en cualquier checkout, sin Docker y sin base sembrada.
+         Los `*.mobile.spec.ts` se excluyen por lo contrario: corren en el
+         proyecto de abajo, y correrlos acá los volvería a lo que ya eran. */
+      testIgnore: /\.(live|mobile)\.spec\.ts$/,
+    },
+    /*
+     * Un teléfono de verdad — issue #767.
+     *
+     * Hasta acá el único e2e de `/members` corría a 390×844 pero bajo
+     * `devices["Desktop Chrome"]`: `isMobile: false`, `hasTouch: false` y, lo
+     * que importaba, `pointer: fine`. Una ventana de escritorio angosta no es
+     * un teléfono, y el auto-zoom que motivó el issue solo existe donde el
+     * puntero es grueso — así que la suite no podía ver el defecto ni con el
+     * viewport correcto.
+     *
+     * `Pixel 7` trae `isMobile: true`, `hasTouch: true` y `deviceScaleFactor`
+     * reales. Un solo proyecto y un solo spec: el presupuesto de e2e en un
+     * runner de 4 vCPU es el límite, y lo que este proyecto prueba —que la
+     * media query dispara y que el CSS le gana a la clase del call site— se
+     * prueba una vez o no se prueba.
+     */
+    {
+      name: "mobile-chromium",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /\.mobile\.spec\.ts$/,
     },
     ...(LIVE_ENABLED
       ? [

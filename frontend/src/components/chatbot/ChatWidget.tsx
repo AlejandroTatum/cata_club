@@ -55,6 +55,7 @@ import Image from "next/image";
 import { X, Send, AlertTriangle } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { holdSmoothScroll } from "@/lib/smooth-scroll";
+import { useVisualViewportGeometry } from "@/lib/useVisualViewport";
 import {
   CHATBOT_MAX_MESSAGE_LENGTH,
   CHATBOT_MAX_MESSAGE_LENGTH_LABEL,
@@ -254,65 +255,15 @@ function matchesSheet(): boolean {
   return window.matchMedia(SHEET_MEDIA_QUERY).matches;
 }
 
-interface SheetGeometry {
-  /** Where the visible area starts inside the layout viewport. */
-  top: number;
-  /** How tall the visible area is right now. */
-  height: number;
-  /** How much of the layout viewport the virtual keyboard is eating. */
-  keyboardInset: number;
-}
-
-/**
- * The sheet's box, measured from `visualViewport` rather than assumed.
- *
- * `100vh` — and `100%`, and `inset-0` — are the LAYOUT viewport, which on a
- * phone browser is deliberately not what the user can see: it stays tall behind
- * a collapsed URL bar, and it does not move at all when the virtual keyboard
- * opens. A sheet sized to it puts its own composer under the keys, which is the
- * exact complaint in #644. `100dvh` fixes the URL bar and still says nothing
- * about the keyboard.
- *
- * `visualViewport` is the only surface that answers both questions, so the two
- * numbers it gives — `offsetTop` and `height` — become the sheet's `top` and
- * `height`, republished as CSS variables so the `sm:` breakpoint can still
- * override them (an inline style cannot carry a media query, a variable it
- * reads can be left unread).
+/*
+ * The sheet's box used to be measured by a private `useSheetGeometry` here.
+ * It moved to `lib/useVisualViewport.ts` for issue #767, unchanged — that file
+ * carries the reasoning about why `visualViewport` is the only surface that
+ * answers both the URL-bar and the keyboard question. Its living here, private,
+ * WAS the second half of #767: `visualViewport` appeared in exactly one file in
+ * the repository, so the three `/members` dialogs inherited none of it and sat
+ * at full height with the keyboard covering half the screen.
  */
-function useSheetGeometry(active: boolean): SheetGeometry | null {
-  const [geometry, setGeometry] = useState<SheetGeometry | null>(null);
-
-  useEffect((): undefined | (() => void) => {
-    if (!active) {
-      setGeometry(null);
-      return undefined;
-    }
-    const viewport = window.visualViewport;
-    if (!viewport) return undefined;
-
-    function measure(): void {
-      const visible = viewport as VisualViewport;
-      const top = Math.max(0, visible.offsetTop);
-      setGeometry({
-        top,
-        height: visible.height,
-        // What is left of the layout viewport once the visible area and the
-        // offset above it are accounted for: on a phone that is the keyboard.
-        keyboardInset: Math.max(0, window.innerHeight - visible.height - top),
-      });
-    }
-
-    measure();
-    viewport.addEventListener("resize", measure);
-    viewport.addEventListener("scroll", measure);
-    return (): void => {
-      viewport.removeEventListener("resize", measure);
-      viewport.removeEventListener("scroll", measure);
-    };
-  }, [active]);
-
-  return geometry;
-}
 
 /**
  * Stop the page scrolling behind the sheet — and only behind the sheet.
@@ -503,7 +454,7 @@ export default function ChatWidget({
   const contadorId = useId();
   const isSheet = useSheetPresentation();
   const skin = isSheet ? SHEET : CARD;
-  const sheet = useSheetGeometry(open && isSheet);
+  const sheet = useVisualViewportGeometry(open && isSheet);
   usePageScrollLock(open && isSheet);
 
   // Opening moves focus into the panel. Without it the panel appears but the

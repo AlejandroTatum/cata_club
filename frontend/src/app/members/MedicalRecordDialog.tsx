@@ -28,7 +28,7 @@ export default function MedicalRecordDialog({
   account,
   onClose,
 }: MedicalRecordDialogProps): React.ReactElement {
-  const { dialogRef, closeButtonRef } = useNativeDialog(onClose);
+  const { dialogRef, closeButtonRef, shellStyle } = useNativeDialog(onClose);
   const titleId = `medical-record-title-${account.id}`;
 
   return createPortal(
@@ -38,6 +38,7 @@ export default function MedicalRecordDialog({
       aria-labelledby={titleId}
       onCancel={(event) => event.preventDefault()}
       className={NATIVE_DIALOG_SHELL_CLASS}
+      style={shellStyle}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
         <h2

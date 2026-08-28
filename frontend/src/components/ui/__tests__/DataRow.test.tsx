@@ -73,6 +73,33 @@ describe("DataRow — status and actions", () => {
     render(<DataRow name="Laura Vera" />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  it("lets a crowded action group wrap instead of being clipped (issue #767)", () => {
+    // Measured on `/members` at 360px: the shell's `px-4` leaves 328, the card
+    // border 326 and this row's own `px-4` 294px of line, and the three row
+    // triggers need ~286. It fits by 8px. At 320px — or at 360px with the OS
+    // text size above 100% — it does not, and `flex-none` + `whitespace-nowrap`
+    // meant the group overflowed WHOLE: `card overflow-hidden` on the page then
+    // clipped "Editar" with no scrollbar and no way to reach it.
+    render(
+      <DataRow
+        name="Laura Vera"
+        actions={
+          <>
+            <button type="button">Ficha médica</button>
+            <button type="button">Pagos</button>
+            <button type="button">Editar</button>
+          </>
+        }
+      />,
+    );
+    const group = screen.getByRole("button", { name: "Editar" }).parentElement as HTMLElement;
+
+    expect(group.className).toContain("flex-wrap");
+    // `flex-none` has to go with it. A box that cannot give up width is sized
+    // to its content, so it overflows the line before its children ever wrap.
+    expect(group.className).not.toContain("flex-none");
+  });
 });
 
 describe("DataRow — nameWrap opt-in", () => {
