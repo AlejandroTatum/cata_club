@@ -358,3 +358,133 @@ def test_main_agrega_las_personas_nuevas_a_una_bd_ya_sembrada_con_los_datos_viej
         assert verificacion.execute(
             select(Usuario).where(Usuario.correo == adulto["correo"])
         ).scalar_one() is not None
+
+
+# ---------------------------------------------------------------------------
+# Issue #790: el seed no puede nacer sin verificar
+# ---------------------------------------------------------------------------
+
+def test_todas_las_cuentas_sembradas_nacen_con_el_correo_verificado():
+    """`correo_verificado` tiene `server_default="false"` a propósito: un
+    INSERT crudo debe caer del lado no verificado. El seed NO es ese caso.
+
+    En un volumen ya existente el defecto es invisible -- la migración
+    `a790verifcorreo` dejó en `true` a todas las filas anteriores. En un
+    volumen NUEVO la migración corre primero y el seed después, así que cada
+    cuenta sembrada quedaba sin verificar; en particular los representantes,
+    que entonces no pueden vincular ni a sus propios hijos. En QA, donde
+    `celery-beat` está excluido, la salida "solicite un nuevo enlace" tampoco
+    hace nada.
+
+    Este motor en memoria reproduce el volumen fresco: `create_all()` aplica
+    el mismo default del esquema que la migración deja instalado.
+    """
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        cuentas = list(verificacion.execute(select(Usuario)).scalars().all())
+
+        assert cuentas, "el seed no creó ninguna cuenta"
+        sin_verificar = sorted(u.correo for u in cuentas if not u.correo_verificado)
+        assert sin_verificar == [], f"cuentas sembradas sin verificar: {sin_verificar}"
+
+
+def test_los_representantes_sembrados_pueden_vincular_a_sus_hijos():
+    """La consecuencia concreta, dicha con los nombres que se usan a mano en
+    QA: `laura@cataclub.com` y `carlos@cataclub.com` son las dos cuentas con
+    las que se prueba el flujo de vinculación. Si nacen sin verificar, ese
+    flujo responde 403 antes de empezar."""
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    correos = [rep["representante"]["correo"] for rep in modulo.REPRESENTANTES]
+    with SessionLocal() as verificacion:
+        for correo in correos:
+            cuenta = verificacion.execute(
+                select(Usuario).where(Usuario.correo == correo)
+            ).scalar_one()
+            assert cuenta.correo_verificado is True, correo
+
+
+# ---------------------------------------------------------------------------
+# Administrador extra opcional (repositorio público)
+# ---------------------------------------------------------------------------
+
+def test_sin_la_variable_de_entorno_el_seed_crea_un_solo_administrador(monkeypatch):
+    """El default es exactamente lo de hoy: `admin@cataclub.com` y nadie más.
+
+    Esa dirección es un contrato, no un detalle: dos specs E2E
+    (`content-measure.spec.ts`, `trainer-attendance-correction.spec.ts`)
+    inician sesión con ella literal contra el stack de QA. Por eso el
+    override AGREGA una cuenta en vez de reemplazarla."""
+    monkeypatch.delenv("SEED_ADMIN_EXTRA_CORREO", raising=False)
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        admins = _correos_administradores(verificacion)
+        assert admins == [modulo.ADMIN_CORREO]
+
+
+def test_la_variable_de_entorno_agrega_un_administrador_sin_tocar_el_de_siempre(monkeypatch):
+    """El dueño entra con su propia dirección en QA local sin escribirla en
+    este repositorio público -- y `admin@cataclub.com` sigue existiendo, con
+    su contraseña de siempre, así que los specs E2E no se enteran."""
+    monkeypatch.setenv("SEED_ADMIN_EXTRA_CORREO", "duenio@example.com")
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        assert _correos_administradores(verificacion) == [
+            modulo.ADMIN_CORREO, "duenio@example.com",
+        ]
+        extra = verificacion.execute(
+            select(Usuario).where(Usuario.correo == "duenio@example.com")
+        ).scalar_one()
+        assert extra.correo_verificado is True
+
+
+def test_la_variable_en_blanco_no_agrega_nada(monkeypatch):
+    """Una variable definida pero vacía es el caso de un `.env` con la línea
+    presente y sin valor; tratarla como "hay override" crearía una cuenta con
+    correo vacío."""
+    monkeypatch.setenv("SEED_ADMIN_EXTRA_CORREO", "   ")
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        assert _correos_administradores(verificacion) == [modulo.ADMIN_CORREO]
+
+
+def test_la_variable_apuntando_al_admin_de_siempre_no_duplica_la_cuenta(monkeypatch):
+    """Idempotencia: apuntar el override a la dirección que el seed ya crea
+    no puede reventar por unicidad ni dejar dos filas."""
+    monkeypatch.setenv("SEED_ADMIN_EXTRA_CORREO", "admin@cataclub.com")
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        assert _correos_administradores(verificacion) == [modulo.ADMIN_CORREO]
+
+
+def _correos_administradores(sesion) -> list[str]:
+    """Correos de las cuentas con rol ADMINISTRADOR, en orden de creación."""
+    cuentas = list(sesion.execute(select(Usuario).order_by(Usuario.id)).scalars().all())
+    return [
+        u.correo for u in cuentas
+        if any(r.tipo_rol == TipoRol.ADMINISTRADOR for r in u.roles)
+    ]

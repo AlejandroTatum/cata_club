@@ -212,6 +212,9 @@ def _crear_persona_y_usuario(
         contrasenia=GestorAutenticacion.obtener_hash_contrasenia(CONTRASENIA_COMPARTIDA),
         persona_id=persona.id,
         roles=[rol_alumno],
+        # Cuenta creada por el club, no autoinscripta: el razonamiento completo
+        # está en el docstring de `seed_dev_base.py` (issue #790).
+        correo_verificado=True,
     )
     db.add(usuario)
     db.flush()
@@ -257,6 +260,11 @@ def _crear_representante(
         persona_id=persona.id,
         # Issue #762: un solo rol activo por cuenta.
         roles=[rol_representante],
+        # Verificada por la misma razón que el resto del seed: la crea el
+        # club. Sin esto, un representante sembrado no puede vincular a nadie
+        # -- que es justamente el flujo que el dataset grande existe para
+        # poder probar. Ver el docstring de `seed_dev_base.py`.
+        correo_verificado=True,
     )
     db.add(usuario)
     db.flush()

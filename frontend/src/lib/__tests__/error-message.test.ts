@@ -100,6 +100,52 @@ describe("toUserMessage — the status gate", () => {
     expect(toUserMessage(apiErrorConSeguro("   ", 503, true), FALLBACK)).toBe(SERVER_FAILURE_TEXT);
   });
 
+  it("shows the backend's own text on a 403 marked safe (issue #790)", () => {
+    // `_exigir_correo_verificado_del_representante` raises the ONE 403 in
+    // this backend written for the person reading it: it describes the
+    // caller's OWN account, names no one else, and is the only thing that
+    // tells a real guardian the link is waiting in their inbox. The canned
+    // "No tiene permisos" answered ahead of it and turned an actionable
+    // refusal into a dead end.
+    const detail =
+      "Para vincular a un representado primero debe verificar su correo. " +
+      "Revise su bandeja de entrada o solicite un nuevo enlace de verificación.";
+
+    expect(toUserMessage(apiErrorConSeguro(detail, 403, true), FALLBACK)).toBe(detail);
+  });
+
+  it("keeps the canned answer for a 403 that was NOT marked safe", () => {
+    // The default, and the whole reason 403 is not an oracle: an
+    // authorization message names what exists and who may touch it, so it
+    // takes an explicit `seguro_mostrar=True` at the raise site to escape.
+    const detail = "La persona 41 pertenece a otro representante";
+
+    expect(toUserMessage(apiErrorConSeguro(detail, 403, false), FALLBACK)).toBe(
+      STATUS_MESSAGES[403],
+    );
+    expect(toUserMessage(apiError(detail, 403), FALLBACK)).toBe(STATUS_MESSAGES[403]);
+  });
+
+  it("keeps the canned answer for a 403 marked safe whose text fails gate 2 (fail closed)", () => {
+    // Same discipline as the 5xx marker: the flag is never enough on its own.
+    expect(
+      toUserMessage(apiErrorConSeguro("representante_id=41 no habilitado", 403, true), FALLBACK),
+    ).toBe(STATUS_MESSAGES[403]);
+    expect(toUserMessage(apiErrorConSeguro("   ", 403, true), FALLBACK)).toBe(STATUS_MESSAGES[403]);
+  });
+
+  it("does not extend the marker to the other canned statuses", () => {
+    // 401 and 429 are fully determined by their status — a backend sentence
+    // cannot say more than "su sesión expiró" or "espere un momento", and
+    // widening the hole for them would buy nothing for the risk.
+    expect(toUserMessage(apiErrorConSeguro("Su token venció hace 3 minutos.", 401, true), FALLBACK)).toBe(
+      STATUS_MESSAGES[401],
+    );
+    expect(toUserMessage(apiErrorConSeguro("Intente de nuevo en 42 segundos.", 429, true), FALLBACK)).toBe(
+      STATUS_MESSAGES[429],
+    );
+  });
+
   it("answers auth and rate limits from the status alone", () => {
     expect(toUserMessage(apiError("Not authenticated", 401), FALLBACK)).toBe(
       "Su sesión expiró. Vuelva a iniciar sesión.",
