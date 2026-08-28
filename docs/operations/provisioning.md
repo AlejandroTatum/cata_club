@@ -202,6 +202,27 @@ export MIGRATION_APPROVAL_FILE=/ruta/aprobacion.env
 ./scripts/deploy/deploy.sh
 ```
 
+### Preflight SMTP antes de recrear servicios
+
+Antes de descargar imágenes o recrear servicios, el preflight resuelve y abre
+una conexión TCP al `SMTP_HOST:SMTP_PORT` configurado y, cuando
+`SMTP_STARTTLS=true`, completa el handshake STARTTLS SMTP. No autentica ni
+envía correo: solo comprueba que el endpoint sea alcanzable. El timeout está
+acotado (`SMTP_PREFLIGHT_TIMEOUT_SECONDS`, 10 segundos por defecto), los
+diagnósticos no imprimen variables SMTP ni credenciales y cualquier fallo
+bloquea el deploy antes de las migraciones.
+
+DigitalOcean bloquea las conexiones SMTP salientes en los puertos 25, 465 y
+587 en Droplets nuevos para reducir abuso y spam; consultar su
+[explicación oficial](https://docs.digitalocean.com/support/why-is-smtp-blocked/).
+Resend ofrece el puerto alternativo 2587 para SMTP con STARTTLS; ver su
+[documentación oficial de SMTP](https://resend.com/docs/send-with-smtp).
+Por eso `.env.production.example` recomienda `SMTP_PORT=2587` con
+`SMTP_STARTTLS=true` para Resend en DigitalOcean. Es una recomendación de
+proveedor/host, no una constante del script: otros proveedores pueden exigir
+otro puerto, TLS implícito o una política distinta; configure y pruebe sus
+valores reales.
+
 `none` y `backward-compatible` no requieren este archivo. El rollback automático solo se
 habilita si la release actual quedó registrada como `none` o
 `backward-compatible`; nunca ejecuta `alembic downgrade`. Para una clase manual,

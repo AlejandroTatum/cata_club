@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -35,6 +36,148 @@ def _stub_age(bin_dir: Path) -> None:
         'if [ -n "$destino" ]; then cat > "$destino"; else cat; fi\n'
     )
     stub.chmod(0o755)
+
+
+def _smtp_preflight_env(
+    tmp_path: Path,
+    *,
+    host: str = "smtp.example.test",
+    port: str = "2587",
+    mode: str = "success",
+) -> dict[str, str]:
+    stack = tmp_path / "stack"
+    stack.mkdir(parents=True)
+    (stack / ".env").write_text(
+        f"IMAGE_TAG=abcdef1\nSMTP_HOST={host}\nSMTP_PORT={port}\nSMTP_STARTTLS=true\n"
+    )
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        "exit 0\n"
+    )
+    (bin_dir / "docker").chmod(0o755)
+    (bin_dir / "getent").write_text(
+        "#!/usr/bin/env bash\n"
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = dns-failure ] && exit 2\n'
+        "exit 0\n"
+    )
+    (bin_dir / "getent").chmod(0o755)
+    (bin_dir / "timeout").write_text(
+        "#!/usr/bin/env bash\n"
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-timeout ] && [ "${2:-}" = bash ] && exit 124\n'
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-failure ] && [ "${2:-}" = bash ] && exit 1\n'
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-refused ] && [ "${2:-}" = bash ] && exit 1\n'
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = starttls-failure ] && [ "${2:-}" = openssl ] && exit 1\n'
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = elapsed-bound ] && exec /usr/bin/timeout "$@"\n'
+        "exit 0\n"
+    )
+    (bin_dir / "timeout").chmod(0o755)
+    (bin_dir / "openssl").write_text(
+        "#!/usr/bin/env bash\n"
+        '[ "${SMTP_PREFLIGHT_MODE:-}" = elapsed-bound ] && sleep 5\n'
+        "exit 0\n"
+    )
+    (bin_dir / "openssl").chmod(0o755)
+    return {
+        "STACK_DIR": str(stack),
+        "BACKUP_DIR": str(backup),
+        "IMAGE_TAG": "abcdef1",
+        "MIGRATION_COMPATIBILITY": "backward-compatible",
+        "SMTP_PREFLIGHT_MODE": mode,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+
+
+def test_preflight_smtp_starttls_succeeds_without_authentication(tmp_path):
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SMTP preflight OK" in result.stdout
+
+
+def test_preflight_smtp_dns_failure_is_fail_closed(tmp_path):
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path, mode="dns-failure"),
+    )
+
+    assert result.returncode != 0
+    assert "DNS" in result.stderr
+
+
+def test_preflight_smtp_connect_timeout_is_bounded_and_fail_closed(tmp_path):
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path, mode="connect-timeout"),
+    )
+
+    assert result.returncode != 0
+    assert "conexión" in result.stderr.lower() or "timeout" in result.stderr.lower()
+
+
+def test_preflight_smtp_rejects_invalid_port_and_host_without_network_access(tmp_path):
+    invalid_port = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path / "invalid-port", port="65536"),
+    )
+    invalid_host = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path / "invalid-host", host="smtp;cat-secret"),
+    )
+
+    assert invalid_port.returncode != 0
+    assert "smtp_port" in invalid_port.stderr.lower()
+    assert invalid_host.returncode != 0
+    assert "host" in invalid_host.stderr.lower()
+
+
+def test_preflight_smtp_refused_connection_is_fail_closed(tmp_path):
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path, mode="connect-refused"),
+    )
+
+    assert result.returncode != 0
+    assert "conexión" in result.stderr.lower()
+
+
+def test_preflight_smtp_starttls_failure_is_fail_closed(tmp_path):
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_smtp_preflight_env(tmp_path, mode="starttls-failure"),
+    )
+
+    assert result.returncode != 0
+    assert "starttls" in result.stderr.lower()
+
+
+def test_preflight_smtp_timeout_bounds_elapsed_time(tmp_path):
+    env = _smtp_preflight_env(tmp_path, mode="elapsed-bound")
+    env["SMTP_PREFLIGHT_TIMEOUT_SECONDS"] = "1"
+    started = time.monotonic()
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+    elapsed = time.monotonic() - started
+
+    assert result.returncode != 0
+    assert elapsed < 3
+
+
+def test_preflight_smtp_diagnostics_never_leak_credentials(tmp_path):
+    env = _smtp_preflight_env(tmp_path, mode="connect-failure")
+    env["SMTP_PASSWORD"] = "super-secret-password"
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "super-secret-password" not in output
 
 
 def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
@@ -80,7 +223,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
     """Deploy fixture: stack, backups, releases and a docker stub that logs argv."""
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n")
     backups = tmp_path / "backups"
     backups.mkdir()
     records = tmp_path / "releases"
@@ -105,6 +248,10 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
     )
     (bin_dir / "docker").chmod(0o755)
     _stub_age(bin_dir)
+    for tool in ("getent", "timeout", "openssl"):
+        stub = bin_dir / tool
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        stub.chmod(0o755)
     env = {
         "STACK_DIR": str(stack),
         "BACKUP_DIR": str(backups),
@@ -183,7 +330,7 @@ def test_preflight_requires_explicitly_safe_migration_attestation(tmp_path):
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n")
 
     result = run_script(
         "scripts/ops/preflight-production.sh",
@@ -222,7 +369,7 @@ def _manual_review_env(tmp_path: Path, approval: Path | None = None) -> dict[str
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
@@ -231,6 +378,10 @@ def _manual_review_env(tmp_path: Path, approval: Path | None = None) -> dict[str
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
+    for tool in ("getent", "timeout", "openssl"):
+        stub = bin_dir / tool
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        stub.chmod(0o755)
     env = {
         "STACK_DIR": str(stack),
         "BACKUP_DIR": str(backup),
@@ -288,7 +439,7 @@ def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
@@ -297,6 +448,10 @@ def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
+    for tool in ("getent", "timeout", "openssl"):
+        stub = bin_dir / tool
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        stub.chmod(0o755)
 
     result = run_script(
         "scripts/ops/preflight-production.sh",
