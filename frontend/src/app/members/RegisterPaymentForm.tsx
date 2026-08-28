@@ -20,6 +20,7 @@ import { registrarPago } from "@/services/api";
 import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import {
   addMonthsIso,
   excedeMesesMaximo,
@@ -315,7 +316,13 @@ export default function RegisterPaymentForm({
 
   return (
     <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
-      <div className="grid grid-cols-2 gap-2">
+      {/* Issue #778: one column until `sm`, two from there up. Half of a phone
+          is 135px at 412px and 87px at 320px, and "Transferencia" plus
+          "Efectivo" need 192px however they are arranged — so on a phone the
+          two fields take turns instead of splitting a line neither of them
+          fits in. The system's answer to a group that does not fit is less
+          per line, never a cut word (DESIGN.md, "la regla de las palabras"). */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 <label className="text-sm font-semibold text-ink-2">
               Monto <span aria-hidden="true" className="text-state-bad">*</span>
           <input
@@ -336,12 +343,21 @@ export default function RegisterPaymentForm({
         </label>
         <div className="text-sm font-semibold text-ink-2">
           Método
+          {/* `min-h-ctl` and not `h-ctl`: at 320px even a full-width group is
+              6px short of the two options, so the second one drops to its own
+              line and the box has to grow with it. A fixed height would keep
+              the border where it was and clip the wrapped line instead. At
+              every width where both fit, `min-h-ctl` still resolves to the
+              same 40px the Monto field beside it uses. */}
           <div
             role="radiogroup"
             aria-label="Método de pago"
-            className="mt-0.5 flex h-ctl w-full items-center rounded-lg border border-line bg-paper px-3 text-sm text-ink"
+            className="mt-0.5 flex min-h-ctl w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-paper px-3 py-1.5 text-sm text-ink"
           >
-            <label className="mr-3 inline-flex items-center gap-1.5">
+            {/* The 24px of SC 2.5.8 (`lib/target-size.ts`). These labels sat at
+                ~20px — the height of their own text — because the 40px came
+                from the box around them, and wrapping takes that away. */}
+            <label className={`inline-flex items-center gap-1.5 ${MIN_TARGET_CLASS}`}>
               <input
                 type="radio"
                 name="tipoPago"
@@ -351,7 +367,7 @@ export default function RegisterPaymentForm({
               />
               Transferencia
             </label>
-            <label className="inline-flex items-center gap-1.5">
+            <label className={`inline-flex items-center gap-1.5 ${MIN_TARGET_CLASS}`}>
               <input
                 type="radio"
                 name="tipoPago"
@@ -439,7 +455,11 @@ export default function RegisterPaymentForm({
         </p>
       )}
 
-      <div className="flex gap-1.5">
+      {/* The second group in this form that did not fit (issue #778): 202px of
+          buttons in 186px of line at 320px, which cut "Cancelar" — the one
+          control that undoes the whole form. Wrapping puts it on its own line
+          instead of half off the card. */}
+      <div className="flex flex-wrap gap-1.5">
         <button
           type="button"
           onClick={() => void handleSubmit()}
