@@ -18,7 +18,39 @@ case "$IMAGE_TAG" in
 esac
 case "$MIGRATION_COMPATIBILITY" in
   none|backward-compatible) ;;
-  manual-review-required) die "MIGRATION_COMPATIBILITY=manual-review-required: revisar y aprobar un plan manual; este control no despliega" ;;
+  manual-review-required)
+        APPROVAL_FILE="${MIGRATION_APPROVAL_FILE:-}"
+        [ -n "$APPROVAL_FILE" ] || die "MIGRATION_APPROVAL_FILE es obligatorio para manual-review-required"
+        [ -r "$APPROVAL_FILE" ] || die "no se puede leer la aprobación de migración: $APPROVAL_FILE"
+        case "$(grep -Ev '^[A-Z_][A-Z_0-9]*=[^=[:cntrl:]]+$' "$APPROVAL_FILE" | grep -v '^$' || true)" in
+          '') ;;
+          *) die "artefacto de aprobación inválido; solo admite líneas KEY=VALUE" ;;
+        esac
+        approval_value() {
+          local key="$1" value count
+          count="$(grep -c "^${key}=" "$APPROVAL_FILE" || true)"
+          [ "$count" -eq 1 ] || die "la aprobación debe contener exactamente una línea ${key}"
+          value="$(sed -n "s/^${key}=//p" "$APPROVAL_FILE")"
+          [ -n "$value" ] || die "la aprobación no puede dejar vacío ${key}"
+          printf '%s' "$value"
+        }
+        [ "$(approval_value IMAGE_TAG)" = "$IMAGE_TAG" ] || die "la aprobación no corresponde a IMAGE_TAG=${IMAGE_TAG}"
+        [ "$(approval_value MIGRATION_RANGE)" = "c556legal01->e762rolunico->a790verifcorreo" ] || die "la aprobación no corresponde al rango de migración esperado"
+        [ "$(approval_value CURRENT_REVISION)" = "c556legal01" ] || die "la aprobación no corresponde a la revisión desplegada c556legal01"
+        [ "$(approval_value PENDING_MIGRATIONS)" = "e762rolunico,a790verifcorreo" ] || die "la aprobación no corresponde a las dos migraciones pendientes"
+        [ "$(approval_value RESTORE_CHECK)" = "passed" ] || die "la aprobación requiere RESTORE_CHECK=passed"
+        [ "$(approval_value MAINTENANCE_WINDOW)" = "planned" ] || die "la aprobación requiere MAINTENANCE_WINDOW=planned"
+        approval_value APPROVED_BY >/dev/null
+        approval_value APPROVED_AT >/dev/null
+        EXPIRES_AT="$(approval_value EXPIRES_AT)"
+        case "$EXPIRES_AT" in
+          ????-??-??T??:??:??Z) ;;
+          *) die "EXPIRES_AT debe usar UTC ISO-8601 (YYYY-MM-DDTHH:MM:SSZ)" ;;
+        esac
+        now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        [ "$EXPIRES_AT" \> "$now_utc" ] || die "la aprobación de migración está expirada"
+        log "Aprobación manual válida para ${IMAGE_TAG} y el rango de migración declarado"
+        ;;
   *) die "MIGRATION_COMPATIBILITY debe declarar none, backward-compatible o manual-review-required" ;;
 esac
 command -v docker >/dev/null 2>&1 || die "docker no está disponible"

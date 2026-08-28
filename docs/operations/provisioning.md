@@ -179,7 +179,30 @@ persona que revisa la migración debe clasificarla explícitamente:
 - `manual-review-required`: cambio contractivo, datos transformados, downgrade
   necesario o cualquier duda.
 
-El preflight rechaza `manual-review-required`. El rollback automático solo se
+Para `manual-review-required`, el preflight exige un artefacto de aprobación explícito, fuera del repositorio y sin secretos. Se entrega mediante `MIGRATION_APPROVAL_FILE=/ruta/aprobacion.env` y se lee como datos, nunca como código shell. Debe contener exactamente estos valores ligados al release:
+
+```text
+IMAGE_TAG=<sha-de-imagen>
+MIGRATION_RANGE=c556legal01->e762rolunico->a790verifcorreo
+CURRENT_REVISION=c556legal01
+PENDING_MIGRATIONS=e762rolunico,a790verifcorreo
+RESTORE_CHECK=passed
+MAINTENANCE_WINDOW=planned
+APPROVED_BY=<identificador-del-revisor>
+APPROVED_AT=<YYYY-MM-DDTHH:MM:SSZ>
+EXPIRES_AT=<YYYY-MM-DDTHH:MM:SSZ>
+```
+
+El preflight rechaza el archivo ausente, ilegible, mal formado, expirado o con cualquier valor distinto del `IMAGE_TAG`, la revisión actual o las dos migraciones pendientes. El comando de aprobación y despliegue es:
+
+```bash
+export IMAGE_TAG=<sha-de-imagen>
+export MIGRATION_COMPATIBILITY=manual-review-required
+export MIGRATION_APPROVAL_FILE=/ruta/aprobacion.env
+./scripts/deploy/deploy.sh
+```
+
+`none` y `backward-compatible` no requieren este archivo. El rollback automático solo se
 habilita si la release actual quedó registrada como `none` o
 `backward-compatible`; nunca ejecuta `alembic downgrade`. Para una clase manual,
 preparar y aprobar un plan de restauración/migración específico antes de tocar
