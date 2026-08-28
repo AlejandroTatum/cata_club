@@ -4,7 +4,7 @@ Servicio de creación de cuentas por el Administrador.
 Orquesta la creación de Persona + Usuario + Rol en un solo request
 transaccional. Soporta cuatro tipos de cuenta:
   - JUGADOR: adulto que juega (rol ALUMNO)
-  - REPRESENTANTE: adulto que representa a un menor (rol REPRESENTANTE + ALUMNO)
+  - REPRESENTANTE: adulto que representa a un menor (rol REPRESENTANTE)
   - MENOR: dependiente de un representante existente (rol ALUMNO)
   - ENTRENADOR: adulto que dicta los entrenamientos (rol ENTRENADOR)
 
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
 from app.dominio.enums import TipoRol
 from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
+from app.dominio.rol_unico import exigir_rol_unico
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
@@ -38,11 +39,20 @@ TIPOS_CUENTA_ADULTA = {
     "ENTRENADOR": "entrenadores",
 }
 
-# Roles otorgados por tipo de cuenta. ENTRENADOR no recibe ALUMNO: dicta los
-# entrenamientos, no se matricula.
+# Rol otorgado por tipo de cuenta. Exactamente UNO por tipo (issue #762):
+# hasta este issue "REPRESENTANTE" entregaba REPRESENTANTE **y** ALUMNO, o
+# sea que el alta administrativa fabricaba una cuenta multirol de fábrica y
+# ninguno de los otros tres caminos de alta podía verlo.
+#
+# Un representante que además entrena no pierde nada que el sistema le diera:
+# la representación se autoriza por el VÍNCULO de datos
+# (`persona.representante_id`, ver `PoliticaAcceso.puede_acceder`), no por el
+# rol; el rol REPRESENTANTE solo habilita "agregar/vincular dependiente".
+# Si además necesita matricularse, es un cambio de rol explícito, no un
+# arrastre automático.
 ROLES_POR_TIPO_CUENTA = {
     "JUGADOR": (TipoRol.ALUMNO,),
-    "REPRESENTANTE": (TipoRol.REPRESENTANTE, TipoRol.ALUMNO),
+    "REPRESENTANTE": (TipoRol.REPRESENTANTE,),
     "MENOR": (TipoRol.ALUMNO,),
     "ENTRENADOR": (TipoRol.ENTRENADOR,),
 }
@@ -80,9 +90,11 @@ class AdminCuentaServicio:
             # Auditoría 2026-08-10: esta rama solo validaba el piso, así que
             # una fecha de nacimiento de 1700 (326 años) pasaba sin aviso. No
             # hay una cota de "adulto" propia -- se reutiliza
-            # `EDAD_MAXIMA_ALUMNO` (74), el único techo que el sistema define,
-            # y JUGADOR/REPRESENTANTE ya reciben el rol ALUMNO
-            # (`ROLES_POR_TIPO_CUENTA`) así que no es una cota prestada.
+            # `EDAD_MAXIMA_ALUMNO` (74), el único techo que el sistema
+            # define para una persona. Desde el issue #762 REPRESENTANTE ya
+            # no arrastra ALUMNO, así que el techo dejó de derivarse del rol
+            # y pasó a ser lo que siempre fue en los hechos: la única cota
+            # de edad que el sistema conoce.
             if edad < EDAD_MAYORIA_EDAD or edad > EDAD_MAXIMA_ALUMNO:
                 raise OperacionInvalida(
                     f"Los {TIPOS_CUENTA_ADULTA[datos.tipo_cuenta]} deben ser "
@@ -167,8 +179,13 @@ class AdminCuentaServicio:
         return self._emitir_tokens(usuario)
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
-        """Asigna un rol al usuario si aún no lo tiene (idempotente)."""
-        if any(r.tipo_rol == tipo_rol for r in usuario.roles):
+        """Asigna un rol al usuario si aún no lo tiene (idempotente).
+
+        La regla de "un solo rol activo" (issue #762) la decide
+        `exigir_rol_unico`, compartida con los otros tres caminos de alta:
+        antes cada uno tenía esta misma comparación copiada y solo miraba el
+        duplicado del MISMO rol."""
+        if not exigir_rol_unico(usuario, tipo_rol):
             return
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)

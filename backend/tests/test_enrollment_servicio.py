@@ -107,7 +107,10 @@ def test_inscripcion_registra_los_cuatro_documentos_y_el_representado(db_session
     assert all(registro.version_documento and registro.texto_aceptado for registro in consentimientos)
 
 
-def test_inscripcion_representante_persiste_roles_mas_alla_del_flush(db_session):
+def test_inscripcion_representante_persiste_su_rol_mas_alla_del_flush(db_session):
+    """Issue #762: la inscripción de un menor otorgaba REPRESENTANTE **y**
+    ALUMNO a la cuenta del representante, en dos llamadas seguidas. Ese era
+    el camino por el que el alta pública fabricaba cuentas multirol."""
     datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
@@ -125,7 +128,7 @@ def test_inscripcion_representante_persiste_roles_mas_alla_del_flush(db_session)
 
     usuario = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
-    assert roles == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+    assert roles == {TipoRol.REPRESENTANTE}
 
 
 def test_autoinscripcion_jugador_persiste_rol_mas_alla_del_flush(db_session):
@@ -166,7 +169,7 @@ def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
     # Representante tiene su cuenta
     usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
     roles_rep = {r.tipo_rol for r in usuario_rep.roles}
-    assert roles_rep == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+    assert roles_rep == {TipoRol.REPRESENTANTE}
 
     # Menor tiene su propia cuenta
     usuario_menor = db_session.query(Usuario).filter(Usuario.correo == "lucas@example.com").one()
@@ -647,7 +650,7 @@ def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
     assert alumno.representante_id == rep.id
 
     usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia-completa@example.com").one()
-    assert {r.tipo_rol for r in usuario_rep.roles} == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+    assert {r.tipo_rol for r in usuario_rep.roles} == {TipoRol.REPRESENTANTE}
 
     usuario_alumno = db_session.query(Usuario).filter(Usuario.correo == "lucas-completa@example.com").one()
     assert {r.tipo_rol for r in usuario_alumno.roles} == {TipoRol.ALUMNO}

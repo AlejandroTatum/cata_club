@@ -380,16 +380,17 @@ def main() -> None:
                 # /unauthorized). Rellenar los roles que falten hace que
                 # reejecutar el seed repare esas cuentas, sin duplicar los que
                 # ya estén.
-                faltantes = [
-                    rol for rol in (rol_representante, rol_alumno)
-                    if rol.tipo_rol not in {r.tipo_rol for r in existing_rep_user.roles}
-                ]
-                if faltantes:
-                    existing_rep_user.roles.extend(faltantes)
-                    nombres_faltantes = ", ".join(rol.tipo_rol.value for rol in faltantes)
+                # Issue #762: el backfill repone UN rol, no dos. Antes
+                # reponía REPRESENTANTE + ALUMNO, que desde la invariante
+                # `trg_usuario_rol_unico_por_usuario` es directamente un
+                # error de base: la segunda fila la rechaza Postgres. Sigue
+                # reparando el caso que motivó este bloque (cuenta con
+                # `roles = []` que aterriza en /unauthorized).
+                if not existing_rep_user.roles:
+                    existing_rep_user.roles.append(rol_representante)
                     print(
                         f"[seed] Representante {rep['correo']} ya existe — "
-                        f"roles faltantes asignados: {nombres_faltantes}."
+                        f"rol REPRESENTANTE asignado."
                     )
                 else:
                     print(f"[seed] Representante {rep['correo']} ya existe — saltando.")
@@ -409,7 +410,8 @@ def main() -> None:
                     correo=rep["correo"],
                     contrasenia=GestorAutenticacion.obtener_hash_contrasenia("alumno123"),
                     persona_id=rep_persona.id,
-                    roles=[rol_representante, rol_alumno],
+                    # Issue #762: un solo rol activo por cuenta.
+                    roles=[rol_representante],
                 )
                 db.add(rep_usuario)
                 representantes_creados += 1

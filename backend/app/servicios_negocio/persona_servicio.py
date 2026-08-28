@@ -8,6 +8,7 @@ from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Not
 from app.dominio.enums import TipoRol, TipoNotificacion
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VINCULACION_NO_DISPONIBLE
+from app.dominio.rol_unico import exigir_rol_unico
 from app.soporte_transversal.tiempo import hoy_club
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -291,8 +292,10 @@ class PersonaServicio:
             )
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
-        """Asigna un rol al usuario si aún no lo tiene (idempotente)."""
-        if any(r.tipo_rol == tipo_rol for r in usuario.roles):
+        """Asigna un rol al usuario si aún no lo tiene (idempotente).
+
+        Regla de un solo rol activo compartida (issue #762)."""
+        if not exigir_rol_unico(usuario, tipo_rol):
             return
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
@@ -417,7 +420,20 @@ class PersonaServicio:
         4. No debe tener deudas pendientes (membresías sin pago o pagos
            pendientes de validación).
 
-        Resultado: representante_id = None, se asigna rol REPRESENTANTE."""
+        Resultado: representante_id = None. El rol NO cambia.
+
+        Issue #762: acá se asignaba además el rol REPRESENTANTE. Como quien
+        se independiza es siempre un ex-menor con rol ALUMNO, esa línea era
+        una fábrica garantizada de cuentas ALUMNO+REPRESENTANTE -- el único
+        camino de los cinco que producía el segundo rol en el 100% de los
+        casos. Se quita, y no se reemplaza por un rechazo, porque lo que
+        independiza a la persona es cortar el VÍNCULO (`representante_id =
+        None`), no el rol: la autorización de representación se resuelve por
+        ese vínculo (`PoliticaAcceso.puede_acceder`), y el rol REPRESENTANTE
+        solo habilita "agregar/vincular dependiente", que un recién
+        independizado no tiene. Si más adelante llega a representar a
+        alguien, el rol se le asigna como una decisión explícita desde el
+        panel de administración."""
         persona = self.obtener_persona(persona_id)
 
         if not persona.representante_id:
@@ -444,7 +460,6 @@ class PersonaServicio:
 
         persona.representante_id = None
         self.repo.actualizar(persona, {"representante_id": None})
-        self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
 
         return persona
 

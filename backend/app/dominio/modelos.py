@@ -183,6 +183,46 @@ class Usuario(Base):
         self.version_sesion += 1
 
 
+class RolMultipleDetectado(Base):
+    """Cuentas que YA tenían más de un rol cuando llegó la invariante del
+    issue #762, y qué se decidió después sobre cada una.
+
+    Por qué una tabla y no solo una línea de log: la migración
+    `e762rolunico` detecta el legado pero tiene prohibido corregirlo -- la
+    decisión de qué rol conservar es del dueño del club, no del deploy. Esa
+    decisión llega DESPUÉS, en otro momento y por otra vía
+    (`scripts/remediar_rol_multiple.py`), y para entonces el log del
+    contenedor que corrió la migración ya no existe. Un registro en la
+    misma base sobrevive al deploy, se consulta con un `SELECT` y no
+    depende de que alguien haya guardado la salida.
+
+    No hay FK a `usuario` a propósito: es un asiento de auditoría, y debe
+    seguir siendo legible aunque la cuenta que describe se haya dado de
+    baja después.
+
+    `rol_conservado` y `remediado_en` empiezan en NULL y los completa la
+    remediación. Esa transición es el rastro que un reemplazo implícito no
+    dejaría: quedan asentados el rol elegido y el momento en que se eligió.
+    """
+
+    __tablename__ = "rol_multiple_detectado"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(Integer)
+    # Valores de `TipoRol` separados por coma, en orden de `rol.id`. Texto
+    # plano y no una relación: describe un estado histórico que la propia
+    # remediación va a deshacer, así que no debe seguir vivo.
+    roles_detectados: Mapped[str] = mapped_column(String(200))
+    cantidad_roles: Mapped[int] = mapped_column(Integer)
+    detectado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"),
+    )
+    rol_conservado: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    remediado_en: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+
 class ConsentimientoLegal(Base):
     """Snapshot inmutable de una aceptación legal por documento y versión."""
 

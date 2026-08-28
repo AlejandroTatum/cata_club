@@ -255,7 +255,8 @@ def _crear_representante(
         correo=correo,
         contrasenia=GestorAutenticacion.obtener_hash_contrasenia(CONTRASENIA_COMPARTIDA),
         persona_id=persona.id,
-        roles=[rol_representante, rol_alumno],
+        # Issue #762: un solo rol activo por cuenta.
+        roles=[rol_representante],
     )
     db.add(usuario)
     db.flush()

@@ -4,6 +4,7 @@ from app.dominio.modelos import Usuario
 from app.dominio.enums import TipoRol
 from app.dominio.etiquetas import rol_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.rol_unico import exigir_rol_unico
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
@@ -56,6 +57,11 @@ class RolServicio:
                 f"Esta persona ya tiene el rol de {rol_en_castellano(tipo_rol)}.",
                 detalle_tecnico=f"tipo_rol={tipo_rol.value} ya asignado",
             )
+        # Issue #762. El duplicado del MISMO rol se contesta arriba porque
+        # dice otra cosa ("ya lo tiene") y esa frase es la que el modal de
+        # roles usa para reconciliar su checkbox; acá cae solo el rol
+        # DISTINTO, que es el que se rechaza en vez de reemplazar.
+        exigir_rol_unico(usuario, tipo_rol)
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
         self.db.commit()
@@ -148,11 +154,27 @@ class RolServicio:
         usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
         if not usuario:
             return None
-        if any(r.tipo_rol == TipoRol.ALUMNO for r in usuario.roles):
+        # Issue #762: "mejor esfuerzo" nunca quiso decir "y si ya tiene otro
+        # rol, se lo sumo igual". Este era el camino más silencioso de los
+        # cuatro -- matricular a un entrenador le agregaba ALUMNO sin que
+        # nadie lo pidiera ni lo viera.
+        if not exigir_rol_unico(usuario, TipoRol.ALUMNO):
             return None
         rol_alumno = self.repo_rol.obtener_o_crear(TipoRol.ALUMNO)
         usuario.roles.append(rol_alumno)
         self.db.commit()
+
+    def exigir_que_pueda_ser_alumno(self, persona_id: int) -> None:
+        """La mitad de `asignar_alumno_si_corresponde` que NO muta, para que
+        `MembresiaServicio.crear_membresia` pueda rechazar ANTES de escribir.
+
+        Sin esto el rechazo llegaría al final del método, con la membresía ya
+        comiteada: la persona quedaría matriculada y el request devolvería un
+        error, que es el peor de los dos mundos."""
+        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
+        if usuario is None:
+            return
+        exigir_rol_unico(usuario, TipoRol.ALUMNO)
 
     # --- E01-RF013: activar/desactivar cuenta sin borrar datos -------------
     def cambiar_estado_cuenta(self, persona_id: int, activo: bool) -> Usuario:

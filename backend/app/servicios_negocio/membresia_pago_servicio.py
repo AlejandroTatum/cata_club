@@ -238,6 +238,13 @@ class MembresiaServicio:
             for m in existentes
         ):
             raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA)
+        # Issue #762: matricular otorga ALUMNO, y una cuenta tiene un solo
+        # rol activo. Se valida ACÁ, antes de escribir la membresía, y no
+        # abajo junto a la asignación perezosa: al final del método la
+        # membresía ya estaría comiteada, así que el rechazo dejaría a la
+        # persona matriculada y con un error en pantalla.
+        from app.servicios_negocio.rol_servicio import RolServicio
+        RolServicio(self.db).exigir_que_pueda_ser_alumno(datos.persona_id)
         # Estado y fecha_activacion NO vienen del payload (B-12): una membresía
         # nace INACTIVA y se ACTIVA al aprobarse su primer pago. La
         # fecha_activacion intermedia es necesaria porque la columna es NOT
