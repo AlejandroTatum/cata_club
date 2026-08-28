@@ -28,6 +28,7 @@ function request(medical: Partial<EnrollmentRequest["fichaMedica"]> = {}): Enrol
       telefono: "0991234567",
     },
     credencialesAlumno: { correo: "ana@example.com", contrasenia: "password8" },
+    aceptaConsentimientos: true,
     fichaMedica: {
       tipoSangre: BLOOD_TYPES.O_POSITIVO,
       condicionesSalud: "",

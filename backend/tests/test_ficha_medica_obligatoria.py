@@ -58,6 +58,7 @@ def _cuerpo_enrollment(secuencia: int, **overrides) -> dict:
             "contrasenia": "password8",
         },
         "ficha_medica": _ficha(),
+        "acepta_consentimientos": True,
     }
     cuerpo.update(overrides)
     return cuerpo

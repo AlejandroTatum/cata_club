@@ -575,6 +575,7 @@ def test_buscar_rechaza_cuenta_autoinscripta(client_sin_token):
                 "contacto_emergencia": "María Torres",
                 "telefono_emergencia": "0991112233",
             },
+            "acepta_consentimientos": True,
         },
     )
     assert alta.status_code == 201

@@ -26,6 +26,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, AntecedentesClub
+from app.servicios_negocio.consentimiento_legal_servicio import (
+    ConsentimientoLegalServicio, DOCUMENTOS_LEGALES, VERSION_LEGAL_VIGENTE,
+    TEXTOS_LEGALES_VIGENTES,
+)
 from app.dominio.enums import TipoRol
 from app.soporte_transversal.tiempo import hoy_club
 from app.dominio.excepciones import EntidadDuplicada, ErrorDominio, OperacionInvalida
@@ -130,6 +134,9 @@ class EnrollmentServicio:
                 return resultado
 
         # === Fase 1: validar TODO antes de escribir una sola fila =========
+        if datos.acepta_consentimientos is not True:
+            raise OperacionInvalida("Debe aceptar los consentimientos legales para continuar.")
+
         edad = _calcular_edad(datos.alumno.fecha_nacimiento)
         if edad < EDAD_MINIMA_ALUMNO or edad > EDAD_MAXIMA_ALUMNO:
             raise OperacionInvalida(
@@ -290,6 +297,14 @@ class EnrollmentServicio:
                 self.db.rollback()
                 return None
 
+            ConsentimientoLegalServicio(self.db).registrar_aceptacion_grupal(
+                cuenta_id=usuario.id,
+                documentos=DOCUMENTOS_LEGALES,
+                version=VERSION_LEGAL_VIGENTE,
+                texto_por_documento=TEXTOS_LEGALES_VIGENTES,
+                representado_persona_id=alumno.id if datos.representante else None,
+                commit=False,
+            )
             self._notificar_nueva_inscripcion(alumno)
             self.db.commit()
         except IntegrityError as error:

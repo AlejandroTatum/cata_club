@@ -99,6 +99,8 @@ export interface EnrollmentRequest {
    *  a Usuario with rol ALUMNO is also created for the student. */
   credencialesMenor?: EnrollmentCredentials;
   representante?: EnrollmentRepresentative;
+  /** Explicit affirmative action for the grouped legal consent. */
+  aceptaConsentimientos?: boolean;
 }
 
 export interface EnrollmentResponse {

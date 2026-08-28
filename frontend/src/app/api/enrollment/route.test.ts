@@ -20,6 +20,7 @@ const validBody = {
   alumno: { nombres: "Ana", apellidos: "Pérez", cedula: "1712345678", fechaNacimiento: "2000-01-15", telefono: "0991234567" },
   credencialesAlumno: { correo: "ana@example.com", contrasenia: "password8" },
   fichaMedica: { tipoSangre: BLOOD_TYPES.O_POSITIVO, condicionesSalud: "", alergias: "", contactoEmergencia: "María", telefonoEmergencia: "0997654321" },
+  aceptaConsentimientos: true,
 };
 
 const tokenBody = { access_token: "a", refresh_token: "r", token_type: "bearer", persona_id: 5 };
@@ -70,6 +71,34 @@ describe("POST /api/enrollment", () => {
     expect(new Headers((init as RequestInit).headers).get("x-forwarded-for")).toBe("198.51.100.5");
   });
 
+  it("forwards only affirmative consent and strips client legal metadata", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    await POST(enrollRequest({
+      ...validBody,
+      aceptaConsentimientos: true,
+      legalVersion: "tampered",
+      legalText: "tampered",
+      legalDocuments: ["tampered"],
+    }));
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const forwarded = JSON.parse(String((init as RequestInit).body));
+    expect(forwarded.acepta_consentimientos).toBe(true);
+    expect(forwarded).not.toHaveProperty("legalVersion");
+    expect(forwarded).not.toHaveProperty("legalText");
+    expect(forwarded).not.toHaveProperty("legalDocuments");
+    expect(forwarded).not.toHaveProperty("version_documento");
+    expect(forwarded).not.toHaveProperty("texto_aceptado");
+    expect(forwarded).not.toHaveProperty("documentos");
+  });
+
+  it("rejects a request without affirmative grouped consent", async () => {
+    const response = await POST(enrollRequest({ ...validBody, aceptaConsentimientos: false }));
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("never returns a token in the JSON body", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ ...tokenBody, access_token: "super-secret-a", refresh_token: "super-secret-r" }));
 
@@ -107,6 +136,7 @@ describe("POST /api/enrollment", () => {
           alumno: { nombres: "Ana", apellidos: "Pérez", cedula: "1712345678", fecha_nacimiento: "2000-01-15", telefono: "0991234567" },
           credenciales_alumno: { correo: "ana@example.com", contrasenia: "password8" },
           ficha_medica: { tipo_sangre: "O_POSITIVO", enfermedades: [], contacto_emergencia: "María", telefono_emergencia: "0997654321" },
+          acepta_consentimientos: true,
         }),
       }),
     );

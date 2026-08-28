@@ -153,6 +153,7 @@ function clearAttemptKey(response: NextResponse): NextResponse {
 function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
   if (!isRecord(value) || !isStudent(value.alumno) || !isMedicalRecord(value.fichaMedica)) return false;
   if (value.credencialesMenor !== undefined && !isCredentials(value.credencialesMenor)) return false;
+  if (value.aceptaConsentimientos !== true) return false;
   const hasStudentCredentials = isCredentials(value.credencialesAlumno);
   const hasRepresentative = isRepresentative(value.representante);
   return (hasStudentCredentials && value.representante === undefined) ||

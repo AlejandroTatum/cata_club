@@ -134,6 +134,9 @@ class EnrollmentCreateDTO(BaseModel):
     credenciales_alumno: Optional[EnrollmentCredencialesDTO] = None
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
     antecedentes: Optional[EnrollmentAntecedentesDTO] = None
+    # Solo se acepta una acción afirmativa; el servidor determina documentos,
+    # versiones, texto y timestamp, nunca el cliente.
+    acepta_consentimientos: bool = False
 
     @model_validator(mode="after")
     def _representante_o_credenciales(self) -> "EnrollmentCreateDTO":
