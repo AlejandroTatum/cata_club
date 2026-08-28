@@ -1,0 +1,155 @@
+# Redeploy de staging
+
+> **No es producción.** Este procedimiento usa datos reales de staging y exige el
+> mismo cuidado de secretos y PII que producción. No lo ejecutes contra otro host.
+
+- URL pública: <https://staging.cataclub.com/>
+- Health: <https://staging.cataclub.com/api/health>
+- Operador/host: `deploy@104.248.115.57`
+- Checkout remoto: `/opt/cata-club`
+
+## Flujo manual, siempre con SHA
+
+1. En una máquina segura, parte de un checkout limpio. Verifica el commit objetivo
+   y CI de `origin/main`; no uses `latest` ni copies un SHA mutable de esta página:
+
+   ```bash
+   git fetch origin main
+   export IMAGE_TAG="$(git rev-parse origin/main)"
+   git show -s --format='%H %s' "$IMAGE_TAG"
+   gh run list --workflow ci.yml --branch main --commit "$IMAGE_TAG" --limit 1 \
+     --json status,conclusion,headSha
+   ```
+
+   Continúa solo si `headSha` coincide exactamente y `conclusion` es `success`.
+   Confirma los dos manifiestos exactos publicados por CI:
+
+   ```bash
+   docker manifest inspect "ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG}"
+   docker manifest inspect "ghcr.io/alejandrotatum/cata_club-frontend:${IMAGE_TAG}"
+   ```
+
+2. El host debe tener Docker + Compose, el checkout en `/opt/cata-club` en el
+   SHA aprobado, `.env` local no versionado y `CORS_ORIGENES`/`DOMINIO` de staging.
+   Detente si el checkout está sucio, falta `.env`, el SHA no coincide o Compose
+   no puede renderizarse. Nunca pegues secretos en comandos, issues o este archivo.
+
+3. Antes de migrar, confirma que existe un backup cifrado reciente y que ya pasó
+   el restore-check en un entorno desechable. La identidad privada permanece en
+   la máquina del operador, por ejemplo `~/.config/cataclub/backup-age-identity.txt`;
+   **nunca la copies al servidor**. Ejemplo del check ya verificado:
+
+   ```bash
+   ./scripts/backup/restore-check.sh /ruta/al/backup.dump.age \
+     --expect-revision a790verifcorreo \
+     --identity ~/.config/cataclub/backup-age-identity.txt
+   ```
+
+4. Clasifica la migración antes de tocar el host: `none`,
+   `backward-compatible` o `manual-review-required`. Para esta redeploy, el
+   rango probado fue `c556legal01->e762rolunico->a790verifcorreo`; la revisión
+   terminó en `a790verifcorreo`. Si es manual, crea fuera del repositorio el
+   artefacto exacto exigido por [provisioning.md](provisioning.md), con estos
+   campos y valores ligados al SHA:
+
+   ```text
+   IMAGE_TAG=<sha-de-imagen>
+   MIGRATION_RANGE=c556legal01->e762rolunico->a790verifcorreo
+   CURRENT_REVISION=c556legal01
+   PENDING_MIGRATIONS=e762rolunico,a790verifcorreo
+   RESTORE_CHECK=passed
+   MAINTENANCE_WINDOW=planned
+   APPROVED_BY=<identificador-del-revisor>
+   APPROVED_AT=<YYYY-MM-DDTHH:MM:SSZ>
+   EXPIRES_AT=<YYYY-MM-DDTHH:MM:SSZ>
+   ```
+
+   No inventes campos ni ejecutes shell desde él. Usa exactamente:
+
+   ```bash
+   export MIGRATION_COMPATIBILITY=manual-review-required
+   export MIGRATION_APPROVAL_FILE=/ruta/aprobacion.env
+   ```
+
+   `provisioning.md` es la fuente de verdad de formato y validaciones. `none` o
+   `backward-compatible` no requieren aprobación; ante cualquier duda, detente.
+
+5. Precheck de roles: antes y después de `e762rolunico`, revisa las cuentas que
+   la migración registre como multirol. Cero duplicados es condición de salida.
+   La **única** remediación autorizada es el script, primero en seco y solo con
+   decisión explícita del dueño del club:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend \
+     uv run python scripts/remediar_rol_multiple.py --usuario-id <id> --keep-role <ROL>
+   # repetir con --aplicar únicamente tras revisar la salida
+   ```
+
+## Ejecución en el host
+
+```bash
+ssh deploy@104.248.115.57
+cd /opt/cata-club
+export IMAGE_TAG=<SHA-verificado>
+export MIGRATION_COMPATIBILITY=<none|backward-compatible|manual-review-required>
+# Para manual-review-required, exporta también MIGRATION_APPROVAL_FILE.
+./scripts/ops/preflight-production.sh
+./scripts/deploy/deploy.sh
+```
+
+`deploy.sh` toma el backup pre-deploy cifrado, repite preflight, valida el
+manifiesto, hace `pull`, recrea los siete servicios, prueba health/readiness,
+backup y registra el release. No saltes los scripts con un `compose pull/up` manual.
+En primer aprovisionamiento tolera la ausencia de dump; después exige frescura
+(RPO por defecto: 26 h).
+
+## Postchecks y Beat
+
+```bash
+curl --fail --silent https://staging.cataclub.com/api/health
+curl --fail --silent https://staging.cataclub.com/ >/dev/null
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps -a
+docker compose -f docker-compose.yml -f docker-compose.prod.yml config --images
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend uv run alembic current
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T db sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select version_num from alembic_version"'
+cat /var/lib/cata-club/releases/current.env
+./scripts/ops/check-backup-freshness.sh --max-age-hours 26
+```
+
+Los siete servicios deben estar `healthy`; confirma además worker con `inspect
+ping`, Beat con su healthcheck/mtime y logs recientes sin errores:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T celery-worker \
+  uv run celery -A app.infraestructura.tareas.celery_app inspect ping
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --since=10m celery-beat celery-worker
+# Solo con una fila de prueba aprobada: fuerza un dispatch y confirma su consumo.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T celery-worker \
+  uv run celery -A app.infraestructura.tareas.celery_app call \
+  app.infraestructura.tareas.verificacion_correo_tareas.despachar_verificaciones_pendientes
+```
+
+Verifica el dispatch de una tarea controlada y su consumo en worker según la
+ventana aprobada; no dispares correos reales accidentalmente. El despliegue
+probado dejó Beat operativo, dispatch correcto, cero duplicados y restore OK.
+
+## Fallos, rollback y datos
+
+- Si falla SHA, TLS, imagen, migración, release, backup, schema, health, Beat o
+  dispatch: **detente**, conserva logs y no repitas a ciegas.
+- No existe `alembic downgrade`. Un rollback solo revierte imágenes a un SHA
+  registrado y compatible, con aprobación explícita:
+  `./scripts/ops/rollback-release.sh <sha-anterior> --confirm-rollback`;
+  prepara también el plan de restore. Una release manual no admite rollback
+  automático.
+- Nunca muestres contraseñas, tokens, `.env`, dumps ni PII; el backup contiene
+  datos médicos y de menores. La identidad age privada solo se trae al restore.
+- Los dumps `cataclub_*.dump` antiguos pueden estar en texto plano: siguen siendo
+  una exposición aunque los nuevos sean `.dump.age`. Sigue el procedimiento de
+  cifrado, restore y eliminación segura de [provisioning.md](provisioning.md).
+
+## Última verificación
+
+- SHA: `76fe1ecaf802877fb13f8b6fff59acd8d9703ab4`
+- Evidencia: 7 servicios saludables, Alembic `a790verifcorreo`, restore local OK,
+  cero duplicados y Beat/dispatch OK. Fecha: 2026-08-30.

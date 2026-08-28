@@ -32,6 +32,7 @@ repo aparte: **[`cata_club-docs`](https://github.com/AlejandroTatum/cata_club-do
 | Por qué una pantalla usa ese color o esa letra | [`DESIGN.md`](DESIGN.md) |
 | Qué se le prometió al club y por cuánto | [`product/`](https://github.com/AlejandroTatum/cata_club-docs/tree/main/product) |
 | Poner el sistema en producción | [`operations/deployment.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/operations/deployment.md) |
+| Redeploy manual de staging | [`docs/operations/staging-redeploy.md`](docs/operations/staging-redeploy.md) |
 | Qué falta antes de lanzar | [`operations/production-readiness.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/operations/production-readiness.md) |
 | Qué significa cada variable de entorno | [`reference/configuration.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/reference/configuration.md) |
 | Quién aprueba qué | [`reference/ownership.md`](https://github.com/AlejandroTatum/cata_club-docs/blob/main/reference/ownership.md) |
@@ -272,9 +273,11 @@ de despliegue, rollback y backup vive en
 
 Los controles ejecutables provider-neutral están en este checkout:
 [`docs/operations/provisioning.md`](docs/operations/provisioning.md) documenta
-preflight, releases y rollback guardado; [`docs/operations/monitoring.md`](docs/operations/monitoring.md)
-deja explícito que la réplica off-host y el monitoreo externo requieren una
-configuración posterior del proveedor.
+preflight, releases y rollback guardado; [`docs/operations/staging-redeploy.md`](docs/operations/staging-redeploy.md)
+contiene el runbook ejecutable para redeploy manual de staging; y
+[`docs/operations/monitoring.md`](docs/operations/monitoring.md) deja explícito
+que la réplica off-host y el monitoreo externo requieren una configuración
+posterior del proveedor.
 
 ## Documentación
 
