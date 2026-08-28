@@ -5,11 +5,14 @@ personas por etiquetas fue removido upstream (#131) junto con
 `prioridad_municipal`/`porcentaje_beca`, así que su export PDF nunca llegó
 a existir en `main`."""
 
+from datetime import date, datetime, timezone
+
 import pytest
 from reportlab.lib import colors
 from reportlab.platypus import Paragraph
 
 from app.dominio.cedula import cedula_valida
+from app.dominio.modelos import Pago, Persona
 from app.infraestructura import generador_pdf
 from app.infraestructura.generador_pdf import generar_reporte_pdf
 from app.presentacion.routers.asistencias_router import _COLUMNAS_ASISTENCIA_PDF
@@ -78,6 +81,53 @@ def _crear_pago(client, cedula, estado_pago=None, monto="35.00"):
             json=payload,
         )
     return pago
+
+
+# --- Los rangos de los reportes son DÍAS DEL CLUB, no días UTC (#761) -------
+#
+# Los usa el reporte de pagos y el de alumnos nuevos por período: las dos
+# pestañas de `/reports` arman su rango con el MISMO `buildReportDateRange`,
+# que lo expresa en días del CLUB (`clubToday`, zona `America/Guayaquil`, ver
+# `frontend/src/lib/club-date.ts`). Las dos columnas filtradas
+# (`Pago.fecha_registro`, `Persona.fecha_registro`) guardan, en cambio, un
+# INSTANTE en UTC (`timestamptz`, `default=_ahora_utc`).
+#
+# Armar el tope como `fecha_fin 23:59:59.999999 UTC` recortaba las últimas
+# CINCO horas de cada día del club: lo registrado a las 19:30 hora del club se
+# guarda como 00:30 UTC del día siguiente, un instante MAYOR que ese tope.
+# Desaparecía de todos los presets a la vez -- incluido "Histórico completo",
+# que tampoco es una consulta sin límites: su `fecha_fin` también es "hoy".
+
+# Día del club sobre el que se consulta. Un rango de un solo día
+# (`fecha_inicio == fecha_fin`) es exactamente lo que pide el preset "Hoy".
+DIA_DEL_CLUB_DEL_REPORTE = date(2026, 7, 15)
+
+# 19:30 del día del club de arriba, expresado como el instante UTC que la
+# base efectivamente guarda: el club está en UTC-5, así que son las 00:30 del
+# día SIGUIENTE en UTC.
+REGISTRO_AL_ANOCHECER_UTC = datetime(2026, 7, 16, 0, 30, tzinfo=timezone.utc)
+
+# 19:30 del día del club ANTERIOR (00:30 UTC del día del club consultado).
+# Fija el otro borde: el piso del rango también es del club, así que esto NO
+# pertenece al día consultado aunque su fecha UTC coincida.
+REGISTRO_DE_LA_VISPERA_UTC = datetime(2026, 7, 15, 0, 30, tzinfo=timezone.utc)
+
+# Piso de "Histórico completo": la fecha de fundación del club
+# (`FOUNDING_DATE` en `frontend/src/app/landing/landing-config.ts`), que es
+# lo que `FOUNDING_DATE_ISO` manda como `fecha_inicio` de ese preset.
+FUNDACION_DEL_CLUB = date(2013, 10, 10)
+
+
+def _fijar_fecha_registro(db_session, modelo, registro_id: int, instante: datetime) -> None:
+    """Fija `fecha_registro` a un instante elegido por el test.
+
+    Ningún endpoint permite elegirlo (`default=_ahora_utc`), y derivarlo del
+    reloj real haría que la prueba pasara o fallara según la hora a la que se
+    corra. Se escribe por la sesión del test, que es la MISMA que usa el
+    `client` (ver `db_session`/`client` en `conftest.py`)."""
+    fila = db_session.get(modelo, registro_id)
+    fila.fecha_registro = instante
+    db_session.commit()
 
 
 def test_reporte_asistencia_requiere_admin_o_entrenador(client_sin_permisos):
@@ -179,17 +229,85 @@ def test_reporte_alumnos_nuevos_por_periodo_requiere_admin(client_sin_permisos):
     assert resp.status_code == 403
 
 
-def test_reporte_alumnos_nuevos_por_periodo_acepta_un_solo_dia(client):
-    """El preset "Hoy" pide `fecha_inicio == fecha_fin`: un rango de un solo
-    día es una consulta legítima, no un rango invertido."""
+# Rango en días del club para "Nuevos miembros por período" (issue #761): el
+# mismo defecto que el reporte de pagos, en la otra pestaña de `/reports`. Ver
+# el bloque de constantes arriba para el porqué.
+#
+# Estas pruebas reemplazan a `test_reporte_alumnos_nuevos_por_periodo_acepta_
+# un_solo_dia`, que derivaba la fecha de la consulta del propio
+# `persona["fechaRegistro"][:10]` -- el día UTC del dato que verificaba. Era
+# verde por construcción: le preguntaba al dato qué afirmar. La aceptación de
+# un rango de un solo día sigue cubierta: el caso "Hoy" de acá ES
+# `fecha_inicio == fecha_fin`.
+
+def test_reporte_personas_incluye_lo_registrado_al_final_del_dia_del_club(client, db_session):
+    """Una persona registrada a las 19:30 hora del club sale ese MISMO día del
+    club, tanto en el preset "Hoy" como en "Histórico completo"."""
     persona = _crear_persona(client, cedula_valida(553))
-    hoy = persona["fechaRegistro"][:10]
+    _fijar_fecha_registro(db_session, Persona, persona["id"], REGISTRO_AL_ANOCHECER_UTC)
+    dia = DIA_DEL_CLUB_DEL_REPORTE.isoformat()
+
+    hoy = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo",
+        params={"fecha_inicio": dia, "fecha_fin": dia},
+    )
+    assert hoy.status_code == 200, hoy.text
+    assert any(p["id"] == persona["id"] for p in hoy.json())
+
+    historico = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo",
+        params={"fecha_inicio": FUNDACION_DEL_CLUB.isoformat(), "fecha_fin": dia},
+    )
+    assert historico.status_code == 200, historico.text
+    assert any(p["id"] == persona["id"] for p in historico.json())
+
+
+def test_reporte_personas_excluye_lo_registrado_la_vispera_del_dia_del_club(client, db_session):
+    """El otro borde del mismo rango: una persona de las 19:30 del día del
+    club ANTERIOR no pertenece al día consultado, aunque su fecha UTC (00:30
+    del día siguiente) sí coincida."""
+    persona = _crear_persona(client, cedula_valida(565))
+    _fijar_fecha_registro(db_session, Persona, persona["id"], REGISTRO_DE_LA_VISPERA_UTC)
+    dia = DIA_DEL_CLUB_DEL_REPORTE.isoformat()
+
     resp = client.get(
         "/api/v1/personas/reportes/nuevos-por-periodo",
-        params={"fecha_inicio": hoy, "fecha_fin": hoy},
+        params={"fecha_inicio": dia, "fecha_fin": dia},
     )
-    assert resp.status_code == 200
-    assert any(p["id"] == persona["id"] for p in resp.json())
+    assert resp.status_code == 200, resp.text
+    assert not any(p["id"] == persona["id"] for p in resp.json())
+
+
+def test_reporte_personas_pdf_incluye_lo_registrado_al_final_del_dia_del_club(
+    client, db_session, monkeypatch,
+):
+    """El PDF arma su propio rango (`reporte_nuevos_por_periodo_pdf` no
+    reutiliza el endpoint JSON, cada uno construye sus límites), así que el
+    defecto podía sobrevivir en uno de los dos. Se espían las filas que llegan
+    a `generar_reporte_pdf`: los bytes del PDF no son legibles como texto y
+    afirmar solo `200` no distingue un reporte completo de uno vacío."""
+    import app.presentacion.routers.personas_router as router_mod
+
+    cedula = cedula_valida(566)
+    persona = _crear_persona(client, cedula)
+    _fijar_fecha_registro(db_session, Persona, persona["id"], REGISTRO_AL_ANOCHECER_UTC)
+    dia = DIA_DEL_CLUB_DEL_REPORTE.isoformat()
+
+    filas_generadas = []
+
+    def _generar_espia(*args, filas, **kwargs):
+        filas_generadas.extend(filas)
+        return generar_reporte_pdf(*args, filas=filas, **kwargs)
+
+    monkeypatch.setattr(router_mod, "generar_reporte_pdf", _generar_espia)
+
+    resp = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo/pdf",
+        params={"fecha_inicio": dia, "fecha_fin": dia},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert any(cedula in fila for fila in filas_generadas)
 
 
 # --- Phase 1: generar_reporte_pdf (unit) ------------------------------------
@@ -448,17 +566,54 @@ def test_reporte_pagos_422_fechas_invertidas(client):
     assert resp.status_code == 422
 
 
-def test_reporte_pagos_acepta_un_solo_dia(client):
-    """El preset "Hoy" pide `fecha_inicio == fecha_fin`: un rango de un solo
-    día es una consulta legítima, no un rango invertido."""
+# Rango en días del club para el reporte de pagos (issue #761): ver el bloque
+# de constantes junto a `_fijar_fecha_registro`, arriba, para el porqué.
+#
+# Estas pruebas reemplazan a `test_reporte_pagos_acepta_un_solo_dia`, que
+# derivaba la fecha de la consulta del propio `pago["fechaRegistro"][:10]` --
+# el día UTC del dato que estaba verificando. Era verde por construcción: le
+# preguntaba al dato qué afirmar, así que no podía ver una divergencia entre
+# el día del club y UTC. La aceptación de un rango de un solo día sigue
+# cubierta: el caso "Hoy" de acá ES `fecha_inicio == fecha_fin`.
+
+def test_reporte_pagos_incluye_lo_registrado_al_final_del_dia_del_club(client, db_session):
+    """Un pago registrado a las 19:30 hora del club sale ese MISMO día del
+    club, tanto en el preset "Hoy" (rango de un solo día) como en "Histórico
+    completo"."""
     pago = _crear_pago(client, cedula_valida(558))
-    hoy = pago["fechaRegistro"][:10]
+    _fijar_fecha_registro(db_session, Pago, pago["id"], REGISTRO_AL_ANOCHECER_UTC)
+    dia = DIA_DEL_CLUB_DEL_REPORTE.isoformat()
+
+    hoy = client.get(
+        "/api/v1/membresias/pagos/reportes",
+        params={"fecha_inicio": dia, "fecha_fin": dia},
+    )
+    assert hoy.status_code == 200, hoy.text
+    assert any(p["id"] == pago["id"] for p in hoy.json())
+
+    historico = client.get(
+        "/api/v1/membresias/pagos/reportes",
+        params={"fecha_inicio": FUNDACION_DEL_CLUB.isoformat(), "fecha_fin": dia},
+    )
+    assert historico.status_code == 200, historico.text
+    assert any(p["id"] == pago["id"] for p in historico.json())
+
+
+def test_reporte_pagos_excluye_lo_registrado_la_vispera_del_dia_del_club(client, db_session):
+    """El otro borde del mismo rango: un pago de las 19:30 del día del club
+    ANTERIOR no pertenece al día consultado, aunque su fecha UTC (00:30 del
+    día siguiente) sí coincida. Sin esta prueba, un piso armado en UTC
+    seguiría pareciendo correcto."""
+    pago = _crear_pago(client, cedula_valida(564))
+    _fijar_fecha_registro(db_session, Pago, pago["id"], REGISTRO_DE_LA_VISPERA_UTC)
+    dia = DIA_DEL_CLUB_DEL_REPORTE.isoformat()
+
     resp = client.get(
         "/api/v1/membresias/pagos/reportes",
-        params={"fecha_inicio": hoy, "fecha_fin": hoy},
+        params={"fecha_inicio": dia, "fecha_fin": dia},
     )
-    assert resp.status_code == 200
-    assert any(p["id"] == pago["id"] for p in resp.json())
+    assert resp.status_code == 200, resp.text
+    assert not any(p["id"] == pago["id"] for p in resp.json())
 
 
 def test_reporte_pagos_pdf_sin_token_da_401(client_sin_token):

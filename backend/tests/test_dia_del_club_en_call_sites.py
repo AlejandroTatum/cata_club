@@ -207,6 +207,77 @@ def test_nombre_de_reporte_pdf_usa_el_dia_del_club(
     )
 
 
+# --- Rango de fechas de los reportes ----------------------------------------
+# Razonamiento (issue #761): las fechas del rango las manda `/reports`, que
+# las arma con el día del CLUB (`clubToday`, el mismo `buildReportDateRange`
+# para las dos pestañas). `Pago.fecha_registro` y `Persona.fecha_registro`,
+# en cambio, guardan un INSTANTE en UTC, así que en algún punto hay que
+# traducir día -> instante. Hacerlo en UTC recortaba las últimas cinco horas
+# de cada día del club (lo registrado a las 19:30 se guarda como 00:30 UTC del
+# día siguiente) y desaparecía de TODOS los presets a la vez.
+#
+# Estos sitios no llaman a `hoy_club()` -- el día no lo elige el servidor, lo
+# manda el cliente -- así que lo que se audita es la traducción: que el rango
+# salga de `rango_de_dias_club` y no de un `datetime.combine(...,
+# tzinfo=timezone.utc)` escrito a mano otra vez. Misma mecánica que el resto
+# del archivo: se parchea el nombre importado en el módulo; si volviera a
+# construir los límites inline, el parche no tendría efecto.
+#
+# Los cuatro call sites están acá a propósito. El reporte de pagos y el de
+# personas se arreglaron con seis meses de distancia entre el síntoma y el
+# diagnóstico porque nadie tenía una lista de quién hace esta traducción; y
+# cada reporte tiene DOS endpoints (JSON y PDF) que arman su rango por
+# separado, así que corregir uno no dice nada del otro.
+
+@pytest.mark.parametrize(
+    "modulo, ruta, rangos_esperados",
+    [
+        # El reporte de pagos lo pide dos veces por request: `listar()` para
+        # las filas y `contar()` para el total (ver `PagoServicio.listar_pagos`).
+        (
+            "app.infraestructura.repositorios.pago_repositorio",
+            "/api/v1/membresias/pagos/reportes",
+            2,
+        ),
+        (
+            "app.infraestructura.repositorios.pago_repositorio",
+            "/api/v1/membresias/pagos/reportes/pdf",
+            2,
+        ),
+        (
+            "app.presentacion.routers.personas_router",
+            "/api/v1/personas/reportes/nuevos-por-periodo",
+            1,
+        ),
+        (
+            "app.presentacion.routers.personas_router",
+            "/api/v1/personas/reportes/nuevos-por-periodo/pdf",
+            1,
+        ),
+    ],
+)
+def test_rango_de_reporte_usa_los_dias_del_club(
+    client, monkeypatch, modulo, ruta, rangos_esperados
+):
+    import importlib
+
+    modulo_bajo_auditoria = importlib.import_module(modulo)
+    original = modulo_bajo_auditoria.rango_de_dias_club
+    pedidos = []
+
+    def _espia(fecha_inicio, fecha_fin):
+        pedidos.append((fecha_inicio, fecha_fin))
+        return original(fecha_inicio, fecha_fin)
+
+    monkeypatch.setattr(modulo_bajo_auditoria, "rango_de_dias_club", _espia)
+
+    dia = DIA_DEL_CLUB.isoformat()
+    respuesta = client.get(f"{ruta}?fecha_inicio={dia}&fecha_fin={dia}")
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert pedidos == [(DIA_DEL_CLUB, DIA_DEL_CLUB)] * rangos_esperados
+
+
 # --- Sello de tiempo impreso en los PDF -------------------------------------
 # Razonamiento: es una hora que un humano lee en papel ("Generado el ..."). Un
 # comprobante emitido a las 19:30 del lunes no puede decir martes 00:30.
