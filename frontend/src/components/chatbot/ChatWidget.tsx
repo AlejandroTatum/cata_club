@@ -100,8 +100,16 @@ let proximoId = 0;
 
 /**
  * One message per failure class, keyed by the status the BFF forwards from the
- * backend (see src/app/api/chatbot/route.ts and the backend's
- * chatbot_servicio.py, which maps each provider failure to its own status).
+ * backend (see src/app/api/chatbot/route.ts).
+ *
+ * These statuses come from the BFF and from the backend's own request
+ * handling — NOT from the chatbot provider. `chatbot_servicio.py` no longer
+ * maps a provider failure to its own status: since issue #766 (and in fact
+ * before it) every provider failure degrades to the local FAQ and returns 200
+ * with a "El asistente externo no está disponible en este momento." prefix, so
+ * none of the cases below can ever be reached by a provider outage. The
+ * provider failure is visible to the operator in the `cataclub.chatbot` log,
+ * not to the user.
  *
  * This used to be a single string for every rejection, which is why the
  * failures read as random: a rate limit, a timeout and an unreachable gateway

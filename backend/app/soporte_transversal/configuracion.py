@@ -222,12 +222,29 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
         "tests/test_docker_compose_config.py"
     ),
     "opencode_api_key": (
-        "el chatbot de FAQ es una función OPCIONAL: ChatbotServicio "
-        "(chatbot_servicio.py:147) ya acota los fallos upstream a "
-        "429/502/504 en tiempo de request, y docker-compose.yml:110 pasa "
-        "${OPENCODE_API_KEY:-}, o sea que vacío es una configuración "
+        "el chatbot de FAQ es una función OPCIONAL: ante cualquier falla del "
+        "proveedor ChatbotServicio degrada a su FAQ local y responde 200 (el "
+        "status upstream NO se traslada al cliente), y docker-compose.yml "
+        "pasa ${OPENCODE_API_KEY:-}, o sea que vacío es una configuración "
         "esperada. Exigirlo negaría el arranque de TODO el backend por una "
-        "función que el club puede no habilitar"
+        "función que el club puede no habilitar. Que la degradación sea "
+        "silenciosa para el usuario no la vuelve invisible para el operador: "
+        "toda falla deja un log en 'cataclub.chatbot' (issue #766)"
+    ),
+    "opencode_base_url": (
+        "coordenada pública del gateway con default correcto "
+        "(https://opencode.ai/zen/v1); es configurable para poder mudar de "
+        "gateway sin desplegar código, no porque cada despliegue deba fijarla"
+    ),
+    "chatbot_modelo": (
+        "id del modelo con default vigente; es configurable porque un modelo "
+        "gratuito se retira sin aviso (issue #766), y vacío solo degrada el "
+        "chatbot opcional a su FAQ local, nunca el arranque del backend"
+    ),
+    "chatbot_modelos_respaldo_raw": (
+        "CSV OPCIONAL de ids alternativos ante un 404 model_not_found; vacío "
+        "es válido y solo significa que no hay a dónde caer, que es "
+        "exactamente el comportamiento anterior al issue #766"
     ),
     "reset_hosts_permitidos_raw": (
         "solo lo consume scripts/reset_dev_db.py, que nunca corre en "
@@ -491,6 +508,25 @@ class Settings(BaseSettings):
 
     # --- Chatbot de FAQ (gateway OpenCode Zen, OpenAI-compatible) ---
     opencode_api_key: str = ""
+    # Gateway y modelo son CONFIGURACIÓN, no código (issue #766): estaban
+    # hardcodeados en `chatbot_servicio.py` y un modelo del tier gratuito se
+    # retira sin aviso -- el commit 22a0189 tuvo que cambiar
+    # `deepseek-v4-flash-free` por `mimo-v2.5-free` por eso mismo. Con el id
+    # dentro del código, una retirada deja el chatbot degradado a su FAQ local
+    # hasta que alguien despliegue una imagen nueva. Los defaults son los
+    # valores que ya corrían, así que ningún despliegue existente cambia.
+    opencode_base_url: str = "https://opencode.ai/zen/v1"
+    chatbot_modelo: str = "mimo-v2.5-free"
+    # CSV de ids a intentar EN ORDEN si el principal responde 404
+    # `model_not_found`. El default es el modelo que este repositorio corrió
+    # contra este mismo gateway hasta el commit 22a0189: es el único id
+    # alternativo del que hay evidencia en la historia del proyecto. NO está
+    # verificado como vivo hoy -- si tampoco existe, el intento extra cuesta un
+    # round trip (un 404 no consume timeout) y el usuario recibe el mismo
+    # respaldo local que recibiría sin la lista.
+    chatbot_modelos_respaldo_raw: str = Field(
+        default="deepseek-v4-flash-free", alias="CHATBOT_MODELOS_RESPALDO"
+    )
 
     # --- Logging (ver configuracion_logging.py) ---
     # Nivel del logger RAÍZ del proceso. INFO por defecto: es el nivel al que
@@ -555,6 +591,20 @@ class Settings(BaseSettings):
         """Lista de hosts permitidos para `scripts/reset_dev_db.py`, parseada
         desde CSV (ver `reset_hosts_permitidos_raw`)."""
         return [h.strip() for h in self.reset_hosts_permitidos_raw.split(",") if h.strip()]
+
+    @property
+    def chatbot_modelos(self) -> list[str]:
+        """Cadena de ids a intentar, en orden, empezando por el principal. Sin
+        vacíos ni repetidos: el CSV lo escribe un operador a mano en el `.env`
+        y una coma de más o el id principal repetido costarían una llamada al
+        gateway que ya se sabe que no aporta nada."""
+        candidatos = [self.chatbot_modelo, *self.chatbot_modelos_respaldo_raw.split(",")]
+        modelos: list[str] = []
+        for candidato in candidatos:
+            modelo = candidato.strip()
+            if modelo and modelo not in modelos:
+                modelos.append(modelo)
+        return modelos
 
     @model_validator(mode="after")
     def _exigir_config_de_produccion(self) -> "Settings":

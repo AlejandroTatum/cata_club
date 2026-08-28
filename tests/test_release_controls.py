@@ -93,6 +93,11 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         'case " $* " in\n'
             '  *" --format json "*) printf "%s\\n" "{\\\"services\\\":{\\\"backend\\\":{\\\"image\\\":\\\"registry.example/cata-backend:${IMAGE_TAG}\\\"}}}" ;;\n'
             '  *" --images backend "*) if [ "${REALISTIC_COMPOSE_OUTPUT:-0}" = "1" ]; then printf "%s\\n" "postgres:16" "redis:7" "registry.example/cata-backend:${IMAGE_TAG}"; else echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi; fi ;;\n'
+        # El smoke check del chatbot corre DENTRO del contenedor backend
+        # (issue #766). `CHATBOT_CHECK_EXIT` reproduce sus tres códigos de
+        # salida reales: 0 configurada/ausente, 1 incompleta, 2 ausente con
+        # --exigir.
+        '  *verificar_chatbot.py*) exit "${CHATBOT_CHECK_EXIT:-0}" ;;\n'
         '  *" manifest inspect "*) [ "$3" = "registry.example/cata-backend:${IMAGE_TAG}" ] || exit 1 ;;\n'
         '  *" --status running "*) if [ "${DB_RUNNING:-0}" = "1" ]; then echo db; fi ;;\n'
         "esac\n"
@@ -316,3 +321,104 @@ def test_deploy_aborta_si_el_backup_pre_deploy_no_puede_cifrar(tmp_path):
     assert list(backups.iterdir()) == []
     # Lo que importa: nunca llegó a levantar las imágenes nuevas.
     assert "up -d" not in docker_log.read_text()
+
+
+# ─── Smoke check del chatbot como paso del deploy (issue #766) ──────────────
+# Una clave con los `<>` del placeholder pegados tumbó el chatbot en staging y
+# costó una hora de SSH encontrarla. `scripts/verificar_chatbot.py` YA detecta
+# ese caso exacto (`diagnostico_chatbot._motivo_de_incompleta`); lo que faltaba
+# era que algo lo corriera solo. Tiene que correr DENTRO del contenedor recién
+# creado: el entorno se fija al crearlo, así que mirar el `.env` desde el host
+# no prueba que el valor haya llegado al proceso.
+
+
+def test_deploy_verifica_la_config_del_chatbot_despues_de_recrear_los_contenedores(
+    tmp_path,
+):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = docker_log.read_text().splitlines()
+    check_calls = [i for i, line in enumerate(lines) if "verificar_chatbot.py" in line]
+    up_calls = [i for i, line in enumerate(lines) if "up -d" in line]
+    assert check_calls, (
+        "el deploy no corre scripts/verificar_chatbot.py; nada obliga a "
+        "revisar la clave del proveedor después de editar el .env"
+    )
+    assert up_calls and up_calls[0] < check_calls[0], (
+        "el smoke check tiene que correr DESPUÉS de up -d: el entorno del "
+        "contenedor se fija al crearlo, y un contenedor viejo todavía tiene "
+        "la clave anterior"
+    )
+
+
+def test_una_clave_de_chatbot_rota_aborta_el_deploy_y_no_registra_el_release(tmp_path):
+    """Salida 1 = INCOMPLETA. Es SIEMPRE un error del operador, nunca una
+    decisión: comillas, espacios o el `<placeholder>` sin reemplazar. El
+    release no puede quedar registrado como bueno con esa configuración."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CHATBOT_CHECK_EXIT"] = "1"
+    records = Path(env["RELEASE_RECORD_DIR"])
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "chatbot" in (result.stdout + result.stderr).lower()
+    assert not records.exists(), "se registró el release pese al chequeo fallido"
+
+
+def test_una_clave_de_chatbot_ausente_no_aborta_el_deploy(tmp_path):
+    """Salida 0 también cubre AUSENTE sin `--exigir`: un club que no habilitó
+    el asistente externo es un despliegue legítimo (`opencode_api_key` está
+    fuera del fail-fast de `Settings` justamente por eso). Abortar ahí negaría
+    el deploy de TODA la app por una función opcional."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CHATBOT_CHECK_EXIT"] = "0"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_el_deploy_no_exige_la_clave_salvo_que_el_operador_lo_declare(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+
+    run_script("scripts/deploy/deploy.sh", env=env)
+
+    linea = next(
+        line
+        for line in docker_log.read_text().splitlines()
+        if "verificar_chatbot.py" in line
+    )
+    assert "--exigir" not in linea, (
+        "sin CHATBOT_REQUERIDO, la ausencia de clave es una configuración "
+        "válida y el deploy no puede tratarla como un fallo"
+    )
+
+
+def test_chatbot_requerido_convierte_la_ausencia_de_clave_en_un_fallo(tmp_path):
+    """El despliegue que SÍ habilitó el asistente declara `CHATBOT_REQUERIDO=1`
+    y recupera exactamente el `--exigir` que pide el issue #766."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+    env["CHATBOT_REQUERIDO"] = "1"
+
+    run_script("scripts/deploy/deploy.sh", env=env)
+
+    linea = next(
+        line
+        for line in docker_log.read_text().splitlines()
+        if "verificar_chatbot.py" in line
+    )
+    assert "--exigir" in linea
+
+
+def test_una_clave_ausente_con_chatbot_requerido_aborta_el_deploy(tmp_path):
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CHATBOT_REQUERIDO"] = "1"
+    env["CHATBOT_CHECK_EXIT"] = "2"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
