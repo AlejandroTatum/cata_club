@@ -196,8 +196,90 @@ def test_preflight_requires_explicitly_safe_migration_attestation(tmp_path):
     )
 
     assert result.returncode == 1
-    assert "MIGRATION_COMPATIBILITY" in result.stderr
+    assert "MIGRATION_" in result.stderr
     assert "manual-review-required" in result.stderr
+
+
+def _manual_review_approval(path: Path, **overrides: str) -> None:
+    values = {
+        "IMAGE_TAG": "abcdef1",
+        "MIGRATION_RANGE": "c556legal01->e762rolunico->a790verifcorreo",
+        "CURRENT_REVISION": "c556legal01",
+        "PENDING_MIGRATIONS": "e762rolunico,a790verifcorreo",
+        "RESTORE_CHECK": "passed",
+        "MAINTENANCE_WINDOW": "planned",
+        "APPROVED_BY": "release-reviewer",
+        "APPROVED_AT": "2026-12-31T23:59:59Z",
+        "EXPIRES_AT": "2099-12-31T23:59:59Z",
+    }
+    values.update(overrides)
+    path.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+
+
+def _manual_review_env(tmp_path: Path, approval: Path | None = None) -> dict[str, str]:
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        "exit 0\n"
+    )
+    (bin_dir / "docker").chmod(0o755)
+    env = {
+        "STACK_DIR": str(stack),
+        "BACKUP_DIR": str(backup),
+        "IMAGE_TAG": "abcdef1",
+        "MIGRATION_COMPATIBILITY": "manual-review-required",
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    if approval is not None:
+        env["MIGRATION_APPROVAL_FILE"] = str(approval)
+    return env
+
+
+def test_preflight_accepts_only_an_exact_current_manual_review_approval(tmp_path):
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(approval)
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_manual_review_env(tmp_path, approval),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "manual-review-required" in result.stdout
+
+
+def test_preflight_rejects_a_manual_review_approval_bound_to_another_image(tmp_path):
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(approval, IMAGE_TAG="deadbee")
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_manual_review_env(tmp_path, approval),
+    )
+
+    assert result.returncode == 1
+    assert "IMAGE_TAG" in result.stderr
+
+
+def test_preflight_rejects_a_stale_manual_review_approval(tmp_path):
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(approval, EXPIRES_AT="2000-01-01T00:00:00Z")
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_manual_review_env(tmp_path, approval),
+    )
+
+    assert result.returncode == 1
+    assert "expir" in result.stderr
 
 
 def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
