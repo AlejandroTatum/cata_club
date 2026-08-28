@@ -43,6 +43,25 @@ def _sembrar_usuario(arnes: ArnesMigracion) -> None:
     )
 
 
+def test_arnes_ejercita_triggers_de_inmutabilidad_y_downgrade(arnes_migracion):
+    arnes_migracion.preparar("a15b7c9d3e21")
+    arnes_migracion.migrar("c556legal01")
+    assert arnes_migracion.consultar(
+        "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal "
+        "AND tgname IN ('trg_consentimiento_legal_inmutable', "
+        "'trg_revocacion_consentimiento_legal_inmutable') ORDER BY tgname"
+    ) == [
+        ("trg_consentimiento_legal_inmutable",),
+        ("trg_revocacion_consentimiento_legal_inmutable",),
+    ]
+    arnes_migracion.revertir("a15b7c9d3e21")
+    assert arnes_migracion.consultar(
+        "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal "
+        "AND tgname IN ('trg_consentimiento_legal_inmutable', "
+        "'trg_revocacion_consentimiento_legal_inmutable')"
+    ) == []
+
+
 def test_arnes_deja_la_base_en_la_revision_pedida(arnes_migracion):
     arnes_migracion.preparar(REVISION_ANTERIOR)
 
