@@ -268,10 +268,25 @@ class PersonaServicio:
         haría esperar de más por algo que no hizo mal. Además, resolver
         primero significaría consultar la cédula buscada antes de saber si
         quien pregunta puede preguntar.
+
+        `seguro_mostrar=True` es lo que hace que el mensaje LLEGUE. El
+        traductor del frontend (`lib/error-message.ts`) contesta con su texto
+        enlatado -- "No tiene permisos para realizar esta acción." -- ante
+        cualquier 403 que no venga marcado, y ese default es correcto: un
+        mensaje de autorización normalmente nombra qué existe y quién puede
+        tocarlo. Este NO: habla exclusivamente del estado de la cuenta de
+        quien pregunta, que ya lo conoce -- `GET /auth/me` se lo devuelve en
+        `correo_verificado`, y `auth_schemas.py` explica por qué. Sin la
+        marca, escribir un mensaje accionable no sirve de nada: el
+        representante real ve el enlatado y nunca se entera de que lo único
+        que le falta es abrir un correo. La marca es de ESTE mensaje, no del
+        403: cualquier otro rechazo de autorización sigue saliendo sin ella y
+        el frontend lo sigue reemplazando (ver el caso negativo en
+        `tests/test_verificacion_correo_representante.py`).
         """
         cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
         if cuenta is not None and not cuenta.correo_verificado:
-            raise PermisosInsuficientes(MENSAJE_CORREO_SIN_VERIFICAR)
+            raise PermisosInsuficientes(MENSAJE_CORREO_SIN_VERIFICAR, seguro_mostrar=True)
 
     def _resolver_representado_elegible(self, representante_id: int, cedula: str) -> Persona:
         """Devuelve la Persona elegible para ser vinculada, o levanta

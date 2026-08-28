@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.dominio.modelos import AlumnoHorario, Asistencia, Base
+from app.dominio.modelos import AlumnoHorario, Asistencia, Base, Usuario
 from tests._categoria_seed import sembrar_categorias
 
 SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_bulk.py"
@@ -134,4 +134,29 @@ def test_main_no_inventa_justificativo_ni_estado_justificativo():
     assert not con_justificativo_inventado, (
         f"{len(con_justificativo_inventado)} de {len(asistencias)} asistencias con "
         "justificativo/estado_justificativo inventado por el seed"
+    )
+
+
+def test_todas_las_cuentas_del_bulk_nacen_con_el_correo_verificado():
+    """Gemelo del test homónimo de `test_seed_dev_base.py` (issue #790).
+
+    El bulk crea alumnos y representantes por lotes; sobre un volumen fresco
+    los dejaba a todos sin verificar, y un representante sin verificar no
+    puede vincular a nadie -- que es justo lo que el dataset grande existe
+    para poder probar."""
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
+
+    modulo_base.main()
+    modulo_bulk.main()
+
+    with SessionLocal() as verificacion:
+        cuentas = list(verificacion.execute(select(Usuario)).scalars().all())
+
+    assert cuentas, "el seed no creó ninguna cuenta"
+    sin_verificar = sorted(u.correo for u in cuentas if not u.correo_verificado)
+    assert sin_verificar == [], (
+        f"{len(sin_verificar)} de {len(cuentas)} cuentas sembradas sin verificar: "
+        f"{sin_verificar[:5]}"
     )

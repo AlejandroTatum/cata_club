@@ -327,3 +327,51 @@ def test_el_rechazo_dice_que_hacer_y_no_gasta_el_freno_de_intentos(db_session):
     assert str(excepcion.value) == MENSAJE_CORREO_SIN_VERIFICAR
     assert dormilon.llamadas == []
     assert persona_servicio_modulo._INTENTOS_FALLIDOS_VINCULACION == {}
+
+
+def test_el_403_viaja_marcado_como_seguro_de_mostrar(client_sin_token, db_session):
+    """Escribir un mensaje accionable no sirve si el frontend lo tira.
+
+    El traductor del frontend (`lib/error-message.ts`) responde con su texto
+    enlatado --"No tiene permisos para realizar esta acción."-- ante CUALQUIER
+    403, y con razón: un mensaje de autorización suele nombrar qué existe y
+    quién puede tocarlo. La única llave que abre esa puerta es la misma que
+    ya abre la de los 5xx (issue #355): `seguro_mostrar`, que este raise site
+    tiene que declarar explícitamente.
+
+    Se mide sobre la RESPUESTA HTTP y no sobre la excepción: `mensaje_seguro`
+    lo agrega el manejador global de `main.py`, así que un `seguro_mostrar`
+    que no llegue al cuerpo deja el mensaje igual de invisible que antes.
+    """
+    ajena = _menor_de_otra_familia(db_session)
+    tokens = _autoinscribir(client_sin_token)
+
+    respuesta = client_sin_token.post(
+        f"/api/v1/personas/{tokens['persona_id']}/vincular-representado",
+        json={"cedula": ajena.cedula}, headers=_cabecera(tokens),
+    )
+
+    assert respuesta.status_code == 403
+    cuerpo = respuesta.json()
+    assert cuerpo["detail"] == MENSAJE_CORREO_SIN_VERIFICAR
+    assert cuerpo["mensaje_seguro"] is True
+
+
+def test_el_403_de_la_regla_de_elegibilidad_sigue_sin_marcar(client_sin_token, db_session):
+    """Caso negativo del test de arriba: la llave es de ESTE mensaje, no del
+    código 403. Cualquier otro rechazo de autorización tiene que seguir
+    llegando sin marca, para que el frontend lo reemplace por su enlatado.
+
+    Si este test se vuelve rojo, el 403 dejó de ser fail-closed y se
+    convirtió en un oráculo general."""
+    tokens = _autoinscribir(client_sin_token)
+    ajena = _menor_de_otra_familia(db_session)
+
+    # Una cuenta ajena: el chequeo de propiedad del router rechaza antes de
+    # llegar siquiera a la regla de correo verificado.
+    respuesta = client_sin_token.get(
+        f"/api/v1/personas/{ajena.id}", headers=_cabecera(tokens),
+    )
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["mensaje_seguro"] is False

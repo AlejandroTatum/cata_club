@@ -23,6 +23,32 @@ Login credentials:
 
 For a larger dataset, run the bulk seed manually:
     docker compose exec backend uv run python scripts/seed_dev_bulk.py
+
+Optional, never committed: exporting `SEED_ADMIN_EXTRA_CORREO=<dirección>`
+ADDS a second administrator with that address (see the constant below). It
+does not replace `admin@cataclub.com`, on purpose.
+
+--- Por qué todas estas cuentas nacen con `correo_verificado=True` ---
+
+No es un descuido ni un atajo, así que no hay que "arreglarlo" al revés.
+
+`Usuario.correo_verificado` es `False` por defecto y lleva
+`server_default="false"` como compuerta de seguridad: un INSERT que saltee el
+ORM debe caer del lado no verificado. El eslabón que el issue #790 cierra es
+la AUTOINSCRIPCIÓN PÚBLICA, donde nadie sabe quién está del otro lado.
+
+Estas cuentas no vienen de ahí: las crea el club, igual que las de
+`POST /personas/admin/cuentas`, que el mismo #790 ya decidió que nacen
+verificadas (ver `admin_cuenta_servicio.py`, con el razonamiento completo).
+Dejarlas sin verificar no protege nada y rompe el entorno: sobre un volumen
+NUEVO la migración `a790verifcorreo` corre antes que el seed, así que no las
+alcanza el backfill, y los representantes sembrados (`laura@cataclub.com`,
+`carlos@cataclub.com`) no pueden vincular ni a sus propios hijos. En QA,
+donde `celery-beat` está excluido, la salida "solicite un nuevo enlace"
+tampoco llega nunca. Sobre un volumen ya existente el defecto es invisible,
+que es por lo que sobrevivió al #790.
+
+Lo fija `tests/test_seed_dev_base.py::test_todas_las_cuentas_sembradas_nacen_con_el_correo_verificado`.
 """
 
 import os
@@ -69,6 +95,29 @@ ADMIN_CONTRASENIA = "admin12345"
 TRAINER_CEDULA = cedula_valida(2)
 TRAINER_CORREO = "entrenador@cataclub.com"
 TRAINER_CONTRASENIA = "trainer12345"
+
+# Administrador EXTRA opcional, para entrar a QA local con una dirección
+# propia sin escribirla en este repositorio, que es público.
+#
+# Agrega una cuenta; NO reemplaza `ADMIN_CORREO`. La diferencia no es de
+# estilo: `admin@cataclub.com` es un contrato con dos specs E2E que inician
+# sesión con ese literal contra el stack de QA
+# (`frontend/tests/e2e/content-measure.spec.ts` y
+# `trainer-attendance-correction.spec.ts`). Un override que sustituyera la
+# dirección los rompería en cuanto alguien exportara la variable, y el
+# síntoma -- login fallido en QA -- no señalaría al seed. Sumando una
+# cuenta, el peor caso de la variable es un administrador de más.
+#
+# Sin definir (el default) el seed hace exactamente lo de siempre. Comparte
+# `ADMIN_CONTRASENIA`: la variable existe para no publicar una DIRECCIÓN, y
+# la contraseña de los seeds ya está publicada en este archivo.
+SEED_ADMIN_EXTRA_CEDULA = cedula_valida(7)
+
+
+def admin_extra_correo() -> str:
+    """Dirección del administrador extra, o cadena vacía si no se pidió."""
+    return os.environ.get("SEED_ADMIN_EXTRA_CORREO", "").strip()
+
 
 # Horarios: 5 categorías fijas de negocio; días permitidos varían por
 # categoría -- Competitivo corre Lun-Sáb, las otras 4 solo Lun-Vie. 4
@@ -265,10 +314,43 @@ def main() -> None:
                 contrasenia=GestorAutenticacion.obtener_hash_contrasenia(ADMIN_CONTRASENIA),
                 persona_id=admin_persona.id,
                 roles=[rol_admin],
+                correo_verificado=True,
             )
             db.add(admin_usuario)
             db.flush()
             print(f"[seed] Admin creado: {ADMIN_CORREO} / {ADMIN_CONTRASENIA}")
+
+        # ==================================================================
+        # 1b. Admin extra (opcional, ver SEED_ADMIN_EXTRA_CORREO arriba)
+        # ==================================================================
+        correo_extra = admin_extra_correo()
+        if correo_extra and correo_extra != ADMIN_CORREO:
+            if db.query(Usuario).filter(Usuario.correo == correo_extra).first():
+                print(f"[seed] Admin extra {correo_extra} ya existe — saltando.")
+            else:
+                extra_persona, _ = _obtener_o_crear(
+                    db, Persona, Persona.cedula == SEED_ADMIN_EXTRA_CEDULA,
+                    {
+                        "nombres": "Admin",
+                        "apellidos": "Extra",
+                        "cedula": SEED_ADMIN_EXTRA_CEDULA,
+                        "fecha_nacimiento": date(1990, 1, 1),
+                        "telefono": "0999999997",
+                    },
+                )
+                rol_admin, _ = _obtener_o_crear(
+                    db, Rol, Rol.tipo_rol == TipoRol.ADMINISTRADOR,
+                    {"tipo_rol": TipoRol.ADMINISTRADOR, "descripcion": "Administrador"},
+                )
+                db.add(Usuario(
+                    correo=correo_extra,
+                    contrasenia=GestorAutenticacion.obtener_hash_contrasenia(ADMIN_CONTRASENIA),
+                    persona_id=extra_persona.id,
+                    roles=[rol_admin],
+                    correo_verificado=True,
+                ))
+                db.flush()
+                print(f"[seed] Admin extra creado: {correo_extra} / {ADMIN_CONTRASENIA}")
 
         # ==================================================================
         # 2. Entrenador
@@ -298,6 +380,7 @@ def main() -> None:
                 contrasenia=GestorAutenticacion.obtener_hash_contrasenia(TRAINER_CONTRASENIA),
                 persona_id=trainer_persona.id,
                 roles=[rol_entrenador],
+                correo_verificado=True,
             )
             db.add(trainer_usuario)
             db.flush()
@@ -412,6 +495,7 @@ def main() -> None:
                     persona_id=rep_persona.id,
                     # Issue #762: un solo rol activo por cuenta.
                     roles=[rol_representante],
+                    correo_verificado=True,
                 )
                 db.add(rep_usuario)
                 representantes_creados += 1
@@ -442,6 +526,7 @@ def main() -> None:
                     contrasenia=GestorAutenticacion.obtener_hash_contrasenia("alumno123"),
                     persona_id=hijo_persona.id,
                     roles=[rol_alumno],
+                    correo_verificado=True,
                 )
                 db.add(hijo_usuario)
 
@@ -498,6 +583,7 @@ def main() -> None:
                 contrasenia=GestorAutenticacion.obtener_hash_contrasenia(alu["contrasenia"]),
                 persona_id=alu_persona.id,
                 roles=[rol_alumno],
+                correo_verificado=True,
             )
             db.add(alu_usuario)
 

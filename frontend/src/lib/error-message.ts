@@ -45,6 +45,8 @@
  *      where the server knows something the frontend does not. A `5xx` detail
  *      describes the server's failure; every status in `STATUS_MESSAGES` is
  *      fully determined by the status itself and the frontend says it better.
+ *      The two exceptions below are both opened by an explicit backend
+ *      marker, never by the status — and they still have to clear gate 2.
  *   2. **The text must not name the implementation.** See `isUserFacingText`.
  *
  * ## What this deliberately does NOT do
@@ -75,6 +77,14 @@
  * marked text still fails gate 2, gets exactly what it always got —
  * `SERVER_FAILURE`. Marking a message safe is a backend decision this module
  * only trusts after gate 2 agrees, never on the marker alone.
+ *
+ * ## The 403 exception (issue #790)
+ *
+ * The same marker, the same two gates, cut into one canned status instead of
+ * a class of them — see `MARKED_SAFE_STATUSES` for why 403 and why not 401
+ * or 429. It exists because #790 wrote the first 403 in this product that was
+ * addressed to the person reading it rather than to whoever holds the
+ * permission, and the canned line answered ahead of it.
  */
 
 import { landingConfig, toWhatsAppLink } from "@/app/landing/landing-config";
@@ -202,6 +212,42 @@ export const STATUS_MESSAGES: Readonly<Record<number, string>> = {
 };
 
 /**
+ * The statuses in `STATUS_MESSAGES` whose canned line the backend may
+ * override, and only by marking THAT message safe — the same `safeOf` key
+ * that cut the 5xx hole (issue #355), used here for the same reason and with
+ * the same two gates.
+ *
+ * ## Why `403` is on this list
+ *
+ * Issue #790 gave this backend its first 403 written for the person reading
+ * it: `_exigir_correo_verificado_del_representante` refuses to link a minor
+ * until the account proves control of its own address, and says so —
+ * "revise su bandeja de entrada o solicite un nuevo enlace". The canned line
+ * answered ahead of it and turned the one actionable refusal on that screen
+ * into a dead end: a real guardian saw "no tiene permisos" and had nothing to
+ * do about it.
+ *
+ * ## Why this does not make 403 an oracle
+ *
+ * The marker is the backend's, it is keyword-only, and it is `False` unless a
+ * raise site opts in (`ErrorDominio.seguro_mostrar`). Every other 403 in the
+ * product — the ownership checks, the role guards,
+ * `MENSAJE_VINCULACION_NO_DISPONIBLE`'s siblings — is unmarked and still gets
+ * the canned line, byte for byte. And gate 2 still runs: a marked message
+ * that names an implementation detail is discarded exactly as a marked 5xx is.
+ * So the only thing that changed is that ONE hand-authored sentence, about
+ * the caller's own account, can now be read.
+ *
+ * ## Why the other two are NOT on this list
+ *
+ * `401` and `429` are fully determined by their status: no backend sentence
+ * can say more than "su sesión expiró" or "espere un momento", so widening
+ * the hole for them would buy nothing against the risk. Adding a status here
+ * is a security decision and needs its own reason, not a symmetry argument.
+ */
+const MARKED_SAFE_STATUSES: readonly number[] = [403];
+
+/**
  * Any 5xx that was not marked safe (the default, see the module header's
  * "5xx exception"). There is nothing left to suggest — trying again does not
  * fix a fault the member cannot see — so this points at a person instead of
@@ -322,7 +368,20 @@ export function toUserMessage(error: unknown, fallback: string): string {
   }
 
   const canned = STATUS_MESSAGES[status];
-  if (canned) return canned;
+  if (canned) {
+    // The second hole in gate 1, and the narrowest one — see
+    // `MARKED_SAFE_STATUSES`. Both halves are required, same as the 5xx
+    // branch above: a marker with no gate-2-passing text is exactly as
+    // untrusted as no marker at all. No `GENERIC_FAILURE` identity check is
+    // needed here, for the same reason the 5xx branch does not have one —
+    // that placeholder is only ever set when the body failed `isApiErrorBody`,
+    // and a body that was never read cannot have marked anything safe.
+    if (MARKED_SAFE_STATUSES.includes(status) && safeOf(error)) {
+      const detail = (error as Error).message.trim();
+      if (isUserFacingText(detail)) return detail;
+    }
+    return canned;
+  }
 
   if (INPUT_STATUSES.includes(status)) {
     const detail = (error as Error).message.trim();
