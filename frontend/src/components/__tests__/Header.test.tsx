@@ -9,6 +9,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, fireEvent } from "@testing-library/react";
 import Header, { NAV_ICON_MAP } from "@/components/Header";
 import type { UserRole } from "@/types/domain";
@@ -227,6 +229,148 @@ describe("Header", (): void => {
     expect(screen.getAllByRole("link", { name: /Inicio/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Iniciar sesi\u00f3n/i }).length).toBeGreaterThan(0);
   });
+
+  // --- Public legal routes (issue #782) ---
+  //
+  // `/terminos`, `/privacidad` and `/permiso-imagen-fetm` are the pages a user
+  // opens FROM INSIDE the product — accepting a consent, re-reading what they
+  // signed — so the header there has to answer the session question the same
+  // way the rest of the product does. The legal branch used to be taken before
+  // any auth check, so it always drew the anonymous bar: an administrator with
+  // a live session was told to "Iniciar sesión", and clicking it landed him on
+  // a login screen he did not need.
+
+  const LEGAL_ROUTES = ["/terminos", "/privacidad", "/permiso-imagen-fetm"];
+
+  it.each(LEGAL_ROUTES)("offers Iniciar sesión on %s to an anonymous visitor", (route): void => {
+    mockPathname.mockReturnValue(route);
+
+    render(<Header />);
+
+    expect(screen.getByRole("link", { name: /Iniciar sesión/i })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(screen.queryByRole("button", { name: /Menú de cuenta/i })).not.toBeInTheDocument();
+  });
+
+  it.each(LEGAL_ROUTES)("offers the account, not a login link, on %s with a live session", (route): void => {
+    mockPathname.mockReturnValue(route);
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+
+    render(<Header />);
+
+    expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Menú de cuenta/i })).toBeInTheDocument();
+    expect(screen.getByText("Admin Cata Club")).toBeInTheDocument();
+  });
+
+  // The document's own navigation belongs to the PAGE, not to the visitor: a
+  // signed-in reader of the terms must still be able to reach the club's
+  // sections from here, and the six links are locked by
+  // `site-navigation-parity.test.tsx`.
+  it("keeps the institutional sections on a legal route for a signed-in user", (): void => {
+    mockPathname.mockReturnValue("/terminos");
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+
+    render(<Header />);
+
+    expect(screen.getByRole("link", { name: "Horarios" })).toHaveAttribute("href", "/#horarios");
+    expect(screen.getByRole("link", { name: "Contacto" })).toBeInTheDocument();
+  });
+
+  it("opens Perfil and Cerrar Sesión from the account menu on a legal route", (): void => {
+    mockPathname.mockReturnValue("/privacidad");
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
+
+    expect(screen.getByRole("link", { name: /Perfil/i })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("button", { name: /Cerrar Sesión/i })).toBeInTheDocument();
+  });
+
+  // Hydration. The session lives behind an HttpOnly cookie that only the BFF
+  // can read, so the server-rendered markup — which is also the first client
+  // render — cannot know the answer. Committing to either one there is a
+  // guaranteed flash for half the users; the slot stays neutral until the
+  // answer arrives, and only then names it.
+  it("commits to neither session answer on a legal route until hydration resolves", (): void => {
+    mockPathname.mockReturnValue("/terminos");
+    mockUseAuth.mockReturnValue(createLoadingAuth());
+
+    const { rerender } = render(<Header />);
+
+    expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Menú de cuenta/i })).not.toBeInTheDocument();
+    // The part that depends on no session is already drawn, so the bar does
+    // not arrive in two pieces either.
+    expect(screen.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
+
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+    rerender(<Header />);
+
+    expect(screen.getByRole("button", { name: /Menú de cuenta/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
+  });
+
+  it("resolves to the login link on a legal route when the visitor is anonymous", (): void => {
+    mockPathname.mockReturnValue("/terminos");
+    mockUseAuth.mockReturnValue(createLoadingAuth());
+
+    const { rerender } = render(<Header />);
+
+    expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
+
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+    rerender(<Header />);
+
+    expect(screen.getByRole("link", { name: /Iniciar sesión/i })).toBeInTheDocument();
+  });
+
+  it("replaces the legal mobile menu's login item with the account items", (): void => {
+    mockPathname.mockReturnValue("/permiso-imagen-fetm");
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("representante", "Carlos Martinez"));
+
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+
+    expect(screen.queryByRole("link", { name: /Iniciar sesión/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Perfil/i })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("button", { name: /Cerrar Sesión/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Carlos Martinez").length).toBeGreaterThan(0);
+  });
+
+  it("calls logout from the legal mobile menu", (): void => {
+    const mockLogout = vi.fn();
+    mockPathname.mockReturnValue("/terminos");
+    mockUseAuth.mockReturnValue(
+      createAuthenticatedAuth("admin", "Admin", { logout: mockLogout }),
+    );
+
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Abrir menú/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Cerrar Sesión/i }));
+
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+  });
+
+  // The other half of issue #782: fixing the legal routes must not push the
+  // institutional bar one route further, into the shell that draws its own.
+  it.each(["/dashboard", "/student", "/trainer/attendance"])(
+    "draws nothing at all on the %s app-shell route for a signed-in user",
+    (route): void => {
+      mockPathname.mockReturnValue(route);
+      mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+
+      const { container } = render(<Header />);
+
+      expect(container).toBeEmptyDOMElement();
+    },
+  );
 
   // --- Unauthenticated ---
 
@@ -591,5 +735,27 @@ describe("NAV_ICON_MAP", (): void => {
 
     const withoutIcon = [...hrefs].filter((href) => !(href in NAV_ICON_MAP));
     expect(withoutIcon).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chrome separation.
+//
+// `AppShell` draws the authenticated shell and borrows exactly ONE thing from
+// this module: the icon map. It has never imported the component, and the
+// render assertions above only prove that today's routes behave — a future
+// `<Header />` mounted inside the shell would put the institutional bar on top
+// of the sidebar's own. The import is the thing that would have to change
+// first, so that is what this locks (issue #782, criterion 3).
+// ---------------------------------------------------------------------------
+
+describe("AppShell chrome separation", (): void => {
+  it("imports only the icon map from Header, never the component", (): void => {
+    const source = readFileSync(join(__dirname, "..", "shell", "AppShell.tsx"), "utf8");
+
+    const imports = [...source.matchAll(/import\s+([^;]*?)\s+from\s+"@\/components\/Header"/g)];
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0][1]).toBe("{ NAV_ICON_MAP }");
   });
 });
