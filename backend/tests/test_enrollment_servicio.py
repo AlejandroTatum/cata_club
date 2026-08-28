@@ -7,7 +7,8 @@ from app.dominio.enums import (
     NivelTecnicoAlumno, TipoManoDominante, TipoNotificacion, TipoRol, TipoSangre,
 )
 from app.dominio.modelos import (
-    AntecedentesClub, EnrollmentNotificacionOutbox, FichaMedica, Notificacion,
+    AntecedentesClub, ConsentimientoLegal, EnrollmentNotificacionOutbox,
+    FichaMedica, Notificacion,
     Persona, Usuario,
 )
 from app.presentacion.schemas.enrollment_schemas import (
@@ -19,6 +20,7 @@ from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentRepresentanteDTO,
 )
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
+from app.dominio.excepciones import OperacionInvalida
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 
 
@@ -64,7 +66,45 @@ def _enrollment_dto(**kwargs) -> EnrollmentCreateDTO:
     `test_ficha_medica_obligatoria.py`, que es donde se puede ver fallar.
     """
     kwargs.setdefault("ficha_medica", _ficha_dto())
+    kwargs.setdefault("acepta_consentimientos", True)
     return EnrollmentCreateDTO(**kwargs)
+
+
+def test_inscripcion_rechaza_aceptacion_legal_ausente(db_session):
+    datos = _enrollment_dto(
+        alumno=_alumno_dto(cedula="1798765432", fecha_nacimiento=date(2000, 1, 1)),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="jugador@example.com", contrasenia="password8",
+        ),
+        acepta_consentimientos=False,
+    )
+
+    with pytest.raises(OperacionInvalida, match="consentimientos legales"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert db_session.query(Persona).count() == 0
+    assert db_session.query(ConsentimientoLegal).count() == 0
+
+
+def test_inscripcion_registra_los_cuatro_documentos_y_el_representado(db_session):
+    datos = _enrollment_dto(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(), acepta_consentimientos=True,
+    )
+    EnrollmentServicio(db_session).enroll(datos)
+
+    cuenta = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).one()
+    consentimientos = db_session.query(ConsentimientoLegal).filter_by(cuenta_id=cuenta.id).all()
+    assert {registro.documento for registro in consentimientos} == {
+        "TERMINOS", "PRIVACIDAD", "DATOS_MEDICOS", "FETM",
+    }
+    assert all(registro.representado_persona_id == alumno.id for registro in consentimientos)
+    assert all(registro.version_documento and registro.texto_aceptado for registro in consentimientos)
 
 
 def test_inscripcion_representante_persiste_roles_mas_alla_del_flush(db_session):

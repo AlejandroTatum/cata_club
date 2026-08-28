@@ -411,7 +411,7 @@ function EnrollWizard(): React.ReactElement {
     }
     setSubmitting(true);
     try {
-      const response = await enrollStudent(buildEnrollmentRequest(formData));
+      const response = await enrollStudent(buildEnrollmentRequest(formData, summaryReviewed));
       if (!response.enrolled) {
         throw new Error("No se pudo completar la inscripción.");
       }
@@ -1133,7 +1133,12 @@ function EnrollWizard(): React.ReactElement {
               product explaining its own defensive design to the person using
               it. The sentence above already says what to do and what it means;
               D11c's rule is that no help repeats the thing it explains. */}
-          <span>Revisé el resumen y confirmo que la información está correcta.</span>
+          <span>
+                Acepto los <Link href="/terminos" className="underline">Términos de uso</Link>, el {" "}
+                <Link href="/privacidad" className="underline">Aviso de privacidad</Link>, el tratamiento
+                de datos médicos y la difusión pública de imagen conforme al {" "}
+                <Link href="/permiso-imagen-fetm" className="underline">Permiso de imagen FETM</Link>.
+              </span>
         </label>
       </div>
     );

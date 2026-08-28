@@ -546,9 +546,20 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     render(<EnrollPage />);
     reachSummaryStep();
 
+    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
     const confirmButton = screen.getByRole("button", { name: /confirmar inscripción/i });
     expect(confirmButton).toBeDisabled();
     expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+  });
+
+  it("links each grouped legal document to its public page", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    expect(screen.getByRole("link", { name: /términos de uso/i })).toHaveAttribute("href", "/terminos");
+    expect(screen.getByRole("link", { name: /aviso de privacidad/i })).toHaveAttribute("href", "/privacidad");
+    expect(screen.getByRole("link", { name: /permiso de imagen fetm/i })).toHaveAttribute("href", "/permiso-imagen-fetm");
   });
 
   it("enables 'Confirmar inscripción' and drops the reason once the checkbox is checked", () => {

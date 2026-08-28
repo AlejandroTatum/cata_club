@@ -248,7 +248,7 @@ function enrollmentValidationField(error: unknown): EnrollField | undefined {
 /**
  * Build an empty FichaMedica from the health fields of EnrollFormData.
  */
-export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest {
+export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimientos = false): EnrollmentRequest {
   const alumno = {
     nombres: data.nombres.trim(), apellidos: data.apellidos.trim(), cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento, telefono: data.telefono.trim(),
@@ -261,10 +261,10 @@ export function buildEnrollmentRequest(data: EnrollFormData): EnrollmentRequest 
     ...(data.observaciones.trim() ? { observaciones: data.observaciones.trim() } : {}),
   };
   if (data.enrollmentType === ENROLLMENT_TYPES.SELF) {
-    return { alumno, fichaMedica, credencialesAlumno: { correo: data.correo.trim(), contrasenia: data.contrasenia } };
+    return { alumno, fichaMedica, aceptaConsentimientos, credencialesAlumno: { correo: data.correo.trim(), contrasenia: data.contrasenia } };
   }
   const result: EnrollmentRequest = {
-    alumno, fichaMedica,
+    alumno, fichaMedica, aceptaConsentimientos,
     representante: {
       nombres: data.nombreRepresentante.trim(), apellidos: data.apellidosRepresentante.trim(),
       cedula: data.cedulaRepresentante.trim(), fechaNacimiento: data.fechaNacimientoRepresentante,

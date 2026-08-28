@@ -164,6 +164,7 @@ def _inscribir(db_session, secuencia: int = 730):
             tipo_sangre="O_POSITIVO", enfermedades=[],
             contacto_emergencia="María Torres", telefono_emergencia="0991112233",
         ),
+        acepta_consentimientos=True,
     ))
 
 

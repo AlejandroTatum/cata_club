@@ -154,6 +154,7 @@ def test_inicio_en_el_club_usa_el_dia_del_club(db_session, monkeypatch):
         antecedentes=EnrollmentAntecedentesDTO(
             nivel_tecnico_alumno=NivelTecnicoAlumno.NIVEL_1,
         ),
+        acepta_consentimientos=True,
     )
 
     enroll_mod.EnrollmentServicio(db_session).enroll(datos)

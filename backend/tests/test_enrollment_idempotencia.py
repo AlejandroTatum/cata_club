@@ -56,6 +56,7 @@ def _cuerpo(cedula: str, correo: str) -> dict:
         },
         "credenciales_alumno": {"correo": correo, "contrasenia": "password8"},
         "ficha_medica": dict(_FICHA),
+        "acepta_consentimientos": True,
     }
 
 

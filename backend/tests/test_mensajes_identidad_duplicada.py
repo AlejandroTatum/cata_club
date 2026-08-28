@@ -104,6 +104,7 @@ _FICHA = dict(
 
 def _inscripcion(**kwargs) -> EnrollmentCreateDTO:
     kwargs.setdefault("ficha_medica", dict(_FICHA))
+    kwargs.setdefault("acepta_consentimientos", True)
     return EnrollmentCreateDTO(**kwargs)
 
 

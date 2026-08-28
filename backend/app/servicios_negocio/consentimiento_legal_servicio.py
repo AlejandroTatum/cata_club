@@ -7,7 +7,14 @@ from app.infraestructura.repositorios.consentimiento_legal_repositorio import (
     ConsentimientoLegalRepositorio,
 )
 
-DOCUMENTOS_LEGALES = frozenset(("TERMINOS", "PRIVACIDAD", "DATOS_MEDICOS", "FETM"))
+DOCUMENTOS_LEGALES = ("TERMINOS", "PRIVACIDAD", "DATOS_MEDICOS", "FETM")
+VERSION_LEGAL_VIGENTE = "1.0"
+TEXTOS_LEGALES_VIGENTES = {
+    "TERMINOS": "Términos de uso vigentes de Cata Club.",
+    "PRIVACIDAD": "Aviso de privacidad vigente de Cata Club.",
+    "DATOS_MEDICOS": "Consentimiento para el tratamiento de datos médicos y de emergencia.",
+    "FETM": "Permiso público de difusión de imagen conforme al documento FETM.",
+}
 
 
 class ConsentimientoLegalServicio:
@@ -25,6 +32,7 @@ class ConsentimientoLegalServicio:
         version: str,
         texto_por_documento: Mapping[str, str],
         representado_persona_id: Optional[int] = None,
+        commit: bool = True,
     ) -> list[ConsentimientoLegal]:
         documentos = tuple(documentos)
         if not documentos or any(documento not in DOCUMENTOS_LEGALES for documento in documentos):
@@ -49,7 +57,8 @@ class ConsentimientoLegalServicio:
                 version_documento=version,
                 texto_aceptado=texto_por_documento[documento],
             )))
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return registros
 
     def revocar(self, consentimiento_id: int, *, cuenta_id: int, motivo: str) -> RevocacionConsentimientoLegal:

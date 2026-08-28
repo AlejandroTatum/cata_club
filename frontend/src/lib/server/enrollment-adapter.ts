@@ -55,6 +55,7 @@ export interface BackendEnrollmentCreateDTO {
   representante?: BackendEnrollmentRepresentante;
   credenciales_alumno?: BackendEnrollmentCredenciales;
   ficha_medica: BackendEnrollmentFichaMedica;
+  acepta_consentimientos: boolean;
   // `antecedentes` is intentionally omitted: EnrollFormData has no
   // nivel_tecnico_alumno/mano_dominante/fecha_inicio_club fields — the
   // backend's own docstring says the trainer assigns these after enrollment.
@@ -125,6 +126,7 @@ export function buildEnrollmentCreateDTO(data: EnrollmentRequest): BackendEnroll
         }
       : {}),
     ficha_medica: buildFichaMedica(data.fichaMedica),
+    acepta_consentimientos: data.aceptaConsentimientos === true,
   };
 }
 
