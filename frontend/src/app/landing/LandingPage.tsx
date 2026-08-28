@@ -28,6 +28,7 @@ import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
 import { EDITORIAL_MEDIA_SIZES, MAP_INSET_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules } from "./schedule-data";
+import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
 interface SectionHeaderProps {
   eyebrow: string;
@@ -99,13 +100,21 @@ function Navbar(): React.ReactElement {
         <Image src={CREST_SRC} alt="" width={84} height={84} unoptimized />
         <span className="landing-display"><small>TENIS DE MESA</small>Cata Club</span>
       </a>
+      {/* The same list `components/Header.tsx` draws on every other page, from
+          the same definition — see `lib/site-navigation.ts` for why the href is
+          built here and not stored there. The first entry ships active because
+          the page opens on it; `NavScrollSpy` takes over after hydration. */}
       <div className="landing-nav-links">
-        <a className="active" href="#inicio" aria-current="page">Inicio</a>
-        <a href="#horarios">Horarios</a>
-        <a href="#valores">Valores</a>
-        <a href="#logros">Logros</a>
-        <a href="#galeria">Galería</a>
-        <a href="#contacto">Contacto</a>
+        {SITE_NAV_SECTIONS.map((section, index): React.ReactElement => (
+          <a
+            key={section.id}
+            className={index === 0 ? "active" : undefined}
+            href={landingSectionHref(section)}
+            aria-current={index === 0 ? "page" : undefined}
+          >
+            {section.label}
+          </a>
+        ))}
       </div>
       {/* Deliberately quiet: existing members already know where to log in, so
           this must not compete with the hero's registration CTA. */}

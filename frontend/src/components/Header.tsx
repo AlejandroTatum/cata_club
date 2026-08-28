@@ -49,6 +49,7 @@ import {
 } from "@/lib/auth-utils";
 import { isMinor } from "@/app/student/student-utils";
 import { hidesTopHeader } from "@/lib/shell-routes";
+import { SITE_NAV_SECTIONS, siteSectionHref } from "@/lib/site-navigation";
 import { useDismissablePopup } from "@/lib/useDismissablePopup";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import NotificationBell from "@/components/NotificationBell";
@@ -149,25 +150,33 @@ function useNavLinks(): NavLink[] {
   }, [isAuthenticated, session]);
 }
 
-const INSTITUTIONAL_LINKS = [
-  { href: "#inicio", label: "Inicio" },
-  { href: "#proposito", label: "Nosotros" },
-  { href: "#valores", label: "Formación" },
-  { href: "#inicio", label: "Competencias" },
-  { href: "#inicio", label: "Galería" },
-  { href: "#inicio", label: "Contacto" },
-];
+/**
+ * The public site's menu, from the definition the landing's own navbar reads —
+ * see `lib/site-navigation.ts`. This list used to be a second literal right
+ * here, and it had drifted: `#proposito` named an id no page has, and
+ * Competencias, Galería and Contacto all pointed back at `#inicio`, so four of
+ * six links went nowhere or somewhere else (issue #771).
+ *
+ * `siteSectionHref` and not the landing's bare fragment: this header is drawn
+ * on `/terminos`, `/privacidad` and `/permiso-imagen-fetm`, and a bare
+ * `#horarios` there names a section of the LEGAL page, which has none — the
+ * click would do nothing. `/#horarios` navigates to the landing and then to the
+ * section.
+ */
+const INSTITUTIONAL_LINKS = SITE_NAV_SECTIONS.map((section): { href: string; label: string } => ({
+  href: siteSectionHref(section),
+  label: section.label,
+}));
 
-interface InstitutionalHeaderProps {
-  pathname: string;
-}
-
-function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.ReactElement {
+function InstitutionalHeader(): React.ReactElement {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-cata-dark/95 backdrop-blur-md">
-      <nav className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12">
+      <nav
+        aria-label="Navegación principal"
+        className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12"
+      >
         {/* Brand — real logo as identity anchor */}
         <Link href="/" className="flex items-center gap-3">
           <div className="relative h-10 w-10 overflow-hidden rounded-lg">
@@ -191,21 +200,21 @@ function InstitutionalHeader({ pathname }: InstitutionalHeaderProps): React.Reac
         </Link>
 
         {/* Desktop nav — institutional links centered */}
+        {/* No `aria-current` here: every one of these links leads OFF this page,
+            to a section of the landing, so none of them is the current one. The
+            comparison that used to sit here weighed `pathname` against `#inicio`
+            and could not be true on any route. */}
         <ul className="hidden items-center gap-1 md:flex">
-          {INSTITUTIONAL_LINKS.map((link) => {
-            const isActive = pathname === link.href;
-            return (
-              <li key={link.label}>
-                <Link
-                  href={link.href}
-                  aria-current={isActive ? "page" : undefined}
-                  className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
-                >
-                  {link.label}
-                </Link>
-              </li>
-            );
-          })}
+          {INSTITUTIONAL_LINKS.map((link): React.ReactElement => (
+            <li key={link.label}>
+              <Link
+                href={link.href}
+                className="rounded-xl px-3.5 py-2 text-sm font-semibold text-white/65 transition-all duration-200 hover:text-white"
+              >
+                {link.label}
+              </Link>
+            </li>
+          ))}
         </ul>
 
         {/* Login button */}
@@ -291,7 +300,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
 
   const isPublicLegalRoute = ["/terminos", "/privacidad", "/permiso-imagen-fetm"].includes(pathname);
   if (isPublicLegalRoute) {
-    return <InstitutionalHeader pathname={pathname} />;
+    return <InstitutionalHeader />;
   }
 
   // Which routes own their chrome lives in `lib/shell-routes.ts` and is
@@ -304,7 +313,7 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
 
   // Landing page gets the institutional header
   if (pathname === "/") {
-    return <InstitutionalHeader pathname={pathname} />;
+    return <InstitutionalHeader />;
   }
 
   // FOUC prevention: show minimal skeleton during session hydration

@@ -197,10 +197,15 @@ describe("Header", (): void => {
     expect(screen.getByText("Cata Club")).toBeInTheDocument();
     expect(screen.getByText("Tenis de Mesa")).toBeInTheDocument();
 
-    // Institutional navigation
-    expect(screen.getByRole("link", { name: /Inicio/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Nosotros/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Formaci\u00f3n/i })).toBeInTheDocument();
+    // Institutional navigation \u2014 the landing's own sections, since issue #771.
+    // "Nosotros" and "Formaci\u00f3n" used to be asserted here: they belonged to a
+    // second, drifted menu whose links pointed at `#proposito` (an id no page
+    // has) and back at `#inicio`. The full list, its order and the href form
+    // are locked in `site-navigation-parity.test.tsx`; this only checks that
+    // the institutional bar is the one being drawn.
+    expect(screen.getByRole("link", { name: "Inicio" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Logros" })).toBeInTheDocument();
 
     // Login button for unauthenticated users
     expect(
