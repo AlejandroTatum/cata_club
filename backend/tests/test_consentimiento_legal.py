@@ -1,7 +1,15 @@
 from datetime import datetime, timezone
 
 import pytest
-from app.dominio.modelos import ConsentimientoLegal, Persona, Usuario
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
+from app.dominio.modelos import (
+    ConsentimientoLegal,
+    Persona,
+    RevocacionConsentimientoLegal,
+    Usuario,
+)
 from app.servicios_negocio.consentimiento_legal_servicio import ConsentimientoLegalServicio
 
 
@@ -78,6 +86,46 @@ def test_aceptacion_es_inmutable_y_revocacion_conserva_historia(db_session):
     assert revocacion.consentimiento_id == registro.id
     assert db_session.query(ConsentimientoLegal).count() == 1
     assert servicio.esta_vigente(registro.id) is False
+
+
+def test_timestamps_los_asigna_postgres_y_auditoria_rechaza_mutaciones_directas_y_bulk(
+    db_session,
+):
+    cuenta = crear_cuenta(db_session)
+    servicio = ConsentimientoLegalServicio(db_session)
+    registro = servicio.registrar_aceptacion_grupal(
+        cuenta_id=cuenta.id, documentos=["FETM"], version="1.0",
+        texto_por_documento={"FETM": "texto aprobado"},
+    )[0]
+    revocacion = servicio.revocar(
+        registro.id, cuenta_id=cuenta.id, motivo="solicitud del titular",
+    )
+
+    assert (ConsentimientoLegal.__table__.c.aceptado_en.default,
+            RevocacionConsentimientoLegal.__table__.c.revocado_en.default) == (None, None)
+    assert registro.aceptado_en is not None and revocacion.revocado_en is not None
+    assert registro.aceptado_en.tzinfo is not None and revocacion.revocado_en.tzinfo is not None
+
+    for statement, row_id in (
+        (text("UPDATE consentimiento_legal SET texto_aceptado = 'alterado' WHERE id = :id"), registro.id),
+        (text("DELETE FROM consentimiento_legal WHERE id = :id"), registro.id),
+        (text("UPDATE revocacion_consentimiento_legal SET motivo = 'alterado' WHERE id = :id"), revocacion.id),
+        (text("DELETE FROM revocacion_consentimiento_legal WHERE id = :id"), revocacion.id),
+    ):
+        with pytest.raises(DBAPIError, match="inmutable"):
+            db_session.execute(statement, {"id": row_id})
+        db_session.rollback()
+
+    with pytest.raises(DBAPIError, match="inmutable"):
+        db_session.query(ConsentimientoLegal).filter_by(id=registro.id).update(
+            {"texto_aceptado": "bulk alterado"}, synchronize_session=False,
+        )
+    db_session.rollback()
+    with pytest.raises(DBAPIError, match="inmutable"):
+        db_session.query(RevocacionConsentimientoLegal).filter_by(id=revocacion.id).delete(
+            synchronize_session=False,
+        )
+    db_session.rollback()
 
 
 def test_documento_y_version_son_requeridos_y_unicos(db_session):
