@@ -83,7 +83,53 @@ try: urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=5)
 except urllib.error.HTTPError as error: raise SystemExit(0 if error.code == 404 else error.code)
 else: raise SystemExit('/docs responde en producción')"
   "$SCRIPT_DIR/../ops/check-backup-freshness.sh" --max-age-hours "${BACKUP_MAX_AGE_HOURS:-26}"
+  check_chatbot_config
   log "Validaciones OK"
+}
+
+# Smoke check de la clave del proveedor del chatbot (issue #766). No imprime el
+# secreto ni contacta la red: solo comprueba que llegó al proceso y que puede
+# ser una credencial.
+#
+# Corre ACÁ, dentro de `do_checks` y por lo tanto DESPUÉS de `up -d`, y no en el
+# preflight: el entorno de un contenedor se fija al crearlo, así que antes de
+# recrearlos el backend todavía tiene la clave vieja y el chequeo mediría el
+# despliegue anterior. Es el mismo motivo por el que el runbook manda a recrear
+# y no a reiniciar.
+#
+# Qué aborta y qué no:
+#   1 INCOMPLETA -> aborta. Comillas, espacios o el `<placeholder>` sin
+#     reemplazar: SIEMPRE un error del operador, nunca una decisión. Es
+#     exactamente el fallo que costó una hora de SSH. Abortar acá no revierte
+#     nada (las imágenes ya están arriba), pero deja el deploy en rojo y
+#     `record-release.sh` sin correr, o sea que el release NO queda anotado
+#     como bueno con una configuración que se sabe rota.
+#   0 CONFIGURADA/AUSENTE -> sigue. Un club que no habilitó el asistente es un
+#     despliegue legítimo: `opencode_api_key` está fuera del fail-fast de
+#     `Settings` a propósito, y negar el deploy de TODA la app por una función
+#     opcional contradiría esa decisión.
+#   2 AUSENTE con --exigir -> aborta, pero solo si el operador declaró
+#     `CHATBOT_REQUERIDO=1`. Ese flag es la forma de decir "este despliegue SÍ
+#     habilitó el chatbot", que es justo la distinción para la que existe
+#     `--exigir`.
+check_chatbot_config() {
+  # `exigir` arranca vacío y solo se llena con el flag: un `&& asignación` sin
+  # `if` devolvería 1 cuando la condición es falsa y `set -e` tumbaría el
+  # deploy entero por no haber pedido `--exigir`.
+  local exigir=""
+  if [ "${CHATBOT_REQUERIDO:-0}" = "1" ]; then
+    exigir="--exigir"
+  fi
+  log "Validación: configuración del proveedor del chatbot (no imprime el secreto)"
+  if ! docker compose "${COMPOSE_FILES[@]}" exec -T backend \
+      uv run python scripts/verificar_chatbot.py ${exigir:+"$exigir"}; then
+    die "$(printf '%s\n' \
+      "la configuración del chatbot no pasó el smoke check." \
+      "       Corregí OPENCODE_API_KEY en ${STACK_DIR}/.env y RECREÁ los" \
+      "       contenedores (un restart conserva el entorno viejo):" \
+      "         docker compose ${COMPOSE_FILES[*]} up -d backend celery-worker celery-beat" \
+      "       Las imágenes nuevas YA están corriendo; el release no quedó registrado.")"
+  fi
 }
 
 case "$cmd" in

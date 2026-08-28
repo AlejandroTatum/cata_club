@@ -99,6 +99,15 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       # --- Chatbot de FAQ (gateway OpenCode) ---
       OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      # Gateway y modelo son configuración, no código (issue #766): un modelo
+      # del tier gratuito se retira sin aviso y hasta ahora cambiarlo exigía
+      # desplegar una imagen nueva. Los defaults son los valores que ya
+      # corrían, así que un despliegue existente no cambia de comportamiento.
+      # `CHATBOT_MODELOS_RESPALDO` es un CSV de ids a intentar EN ORDEN, y solo
+      # cuando el anterior devuelve 404 model_not_found.
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-https://opencode.ai/zen/v1}
+      CHATBOT_MODELO: ${CHATBOT_MODELO:-mimo-v2.5-free}
+      CHATBOT_MODELOS_RESPALDO: ${CHATBOT_MODELOS_RESPALDO:-deepseek-v4-flash-free}
     healthcheck:
       # PR-09 (sdd/production-readiness): antes apuntaba a /docs. En
       # producción /docs se deshabilita (PR-10), así que el healthcheck no

@@ -167,6 +167,15 @@ _VARIABLES_CRITICAS_DE_PRODUCCION: dict[str, tuple[str, ...]] = {
     # hardcodeada, el operador no tendría forma de suministrarla y
     # `scripts/verificar_chatbot.py` reportaría `ausente` para siempre.
     "OPENCODE_API_KEY": ("OPENCODE_API_KEY",),
+    # Mismo motivo que `OPENCODE_API_KEY`, ahora para el gateway y el id del
+    # modelo (issue #766): estaban HARDCODEADOS en `chatbot_servicio.py`, así
+    # que retirar un modelo gratuito -- que pasa sin aviso -- obligaba a
+    # desplegar código. Si vuelven a quedar fijos en el compose, el operador no
+    # tendría cómo cambiarlos y el chatbot quedaría degradado a su FAQ local
+    # hasta el próximo release.
+    "OPENCODE_BASE_URL": ("OPENCODE_BASE_URL",),
+    "CHATBOT_MODELO": ("CHATBOT_MODELO",),
+    "CHATBOT_MODELOS_RESPALDO": ("CHATBOT_MODELOS_RESPALDO",),
 }
 
 # Un centinela por variable exportable por el operador, único para que una
