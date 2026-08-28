@@ -21,7 +21,7 @@ import { Accordion, BackLink, Button } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
 import { openHelpChat } from "@/components/chatbot/help-chat-store";
-import { FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
+import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
 
 /**
  * The audience color system #203 asks for — one hue per "who this section is
@@ -67,6 +67,25 @@ const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg:
 function sectionSlug(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
+
+/**
+ * Where the club is and how to reach it, in the order someone narrows a place
+ * down: the street, the landmark it sits beside, then the Plus Code that
+ * closes the gap a street with no number leaves. The same order the landing's
+ * contact card uses.
+ *
+ * One row per canonical field rather than one composed sentence: each value is
+ * its own fact, so the divergence guard can tell WHICH one drifted from the
+ * assistant's rather than reporting a whole paragraph as different.
+ */
+const CLUB_DETAILS: ReadonlyArray<{ label: string; values: string[] }> = [
+  { label: "Dirección", values: [CLUB_PROFILE.address] },
+  { label: "Referencia", values: [CLUB_PROFILE.landmark] },
+  { label: "Plus Code", values: [CLUB_PROFILE.plusCode] },
+  { label: "WhatsApp", values: CLUB_PROFILE.whatsapp },
+  { label: "Facebook", values: [CLUB_PROFILE.facebook] },
+  { label: "Instagram", values: [CLUB_PROFILE.instagram] },
+];
 
 export default function AyudaPage(): React.ReactElement {
   const { session } = useAuth();
@@ -192,6 +211,73 @@ export default function AyudaPage(): React.ReactElement {
           );
         })}
       </div>
+
+      {/*
+       * The club itself, last of the answers and first of the ways out: a
+       * reader who got here without finding their question still gets the
+       * address and the phone number before being handed the escape hatch
+       * below.
+       *
+       * This block is also the page's half of issue #768. The assistant is
+       * given these same facts — it used to refuse "¿dónde queda?" while the
+       * landing had been answering it for months — and the two are reconciled
+       * by `__tests__/knowledge-parity.test.tsx`, which reads every
+       * `club-fact` off this DOM and looks for it in the prompt the model is
+       * actually sent.
+       */}
+      <section aria-labelledby="club-heading" className="card p-page">
+        <h2
+          id="club-heading"
+          className="mb-1 font-display text-lg uppercase leading-tight tracking-flat text-ink"
+        >
+          El club
+        </h2>
+        <p className="mb-4 text-xs text-ink-2" data-testid="club-fact">
+          {CLUB_PROFILE.summary}
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <h3 className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">Misión</h3>
+            <p className="text-xs leading-prose text-ink-2" data-testid="club-fact">
+              {CLUB_PROFILE.mission}
+            </p>
+          </div>
+          <div>
+            <h3 className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">Visión</h3>
+            <p className="text-xs leading-prose text-ink-2" data-testid="club-fact">
+              {CLUB_PROFILE.vision}
+            </p>
+          </div>
+        </div>
+
+        <h3 className="mb-1 mt-4 text-2xs font-bold uppercase text-ink-3-strong">Valores</h3>
+        <ul className="flex flex-col gap-1">
+          {CLUB_PROFILE.values.map((value) => (
+            <li key={value.name} className="text-xs leading-prose text-ink-2" data-testid="club-fact">
+              <strong className="font-bold text-ink">{value.name}</strong>
+              {`: ${value.description}`}
+            </li>
+          ))}
+        </ul>
+
+        <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-field sm:grid-cols-2">
+          {CLUB_DETAILS.map((detail) => (
+            <div key={detail.label}>
+              <dt className="text-2xs font-bold uppercase text-ink-3-strong">{detail.label}</dt>
+              {detail.values.map((value) => (
+                <dd key={value} className="text-xs text-ink-2" data-testid="club-fact">
+                  {value}
+                </dd>
+              ))}
+            </div>
+          ))}
+        </dl>
+
+        <p className="mt-4 text-2xs text-ink-3" data-testid="club-fact">
+          {CLUB_PROFILE.contactNote}
+        </p>
+      </section>
 
       {/*
        * The escape hatch, at the bottom rather than the top: someone who

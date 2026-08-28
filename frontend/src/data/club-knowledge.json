@@ -1,0 +1,180 @@
+{
+  "club": {
+    "nombre": "Cata Club",
+    "resumen": "Cata Club es un club de tenis de mesa de Loja, Ecuador, que forma deportistas desde 2013.",
+    "mision": "Promover el tenis de mesa mediante formación deportiva de calidad. Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.",
+    "vision": "Ser un club líder y referente provincial y nacional. Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.",
+    "valores": [
+      {
+        "nombre": "Respeto",
+        "descripcion": "Honramos a rivales, compañeros y entrenadores en cada encuentro."
+      },
+      {
+        "nombre": "Disciplina",
+        "descripcion": "El progreso nace de la constancia y el entrenamiento diario."
+      },
+      {
+        "nombre": "Esfuerzo",
+        "descripcion": "Cada punto se gana con entrega y dedicación total."
+      },
+      {
+        "nombre": "Compañerismo",
+        "descripcion": "Crecemos como una familia, celebrando juntos cada logro."
+      }
+    ]
+  },
+  "ubicacion": {
+    "direccion": "Av. Manuel Agustín Aguirre, Barrio Perpetuo Socorro, Loja, Ecuador",
+    "referencia": "Junto al Coliseo Ciudad de Loja",
+    "plus_code": "XQVW+J63, 110102 Loja"
+  },
+  "contacto": {
+    "whatsapp": [
+      "0994219619",
+      "0990288152"
+    ],
+    "facebook": "Cata Club Loja",
+    "instagram": "@cataclub_tenis_de_mesa",
+    "nota": "Para inscripciones y consulta de cupo, lo más rápido es escribir por WhatsApp."
+  },
+  "horarios": [
+    {
+      "categoria": "Formativo",
+      "edades": "5 a 10 años",
+      "dias": "Lunes a viernes",
+      "horas": "15:00 a 16:00"
+    },
+    {
+      "categoria": "Infantil",
+      "edades": "8 a 12 años",
+      "dias": "Lunes a viernes",
+      "horas": "16:00 a 17:00"
+    },
+    {
+      "categoria": "Juvenil",
+      "edades": "Mayores de 12 años",
+      "dias": "Lunes a viernes",
+      "horas": "17:00 a 18:00"
+    },
+    {
+      "categoria": "Competitivo",
+      "edades": "Selección",
+      "dias": "Lunes a sábado",
+      "horas": "18:00 a 20:00"
+    },
+    {
+      "categoria": "Adultos",
+      "edades": "Mayores de 18 años",
+      "dias": "Lunes a viernes",
+      "horas": "20:00 a 21:15"
+    }
+  ],
+  "faq": [
+    {
+      "titulo": "Para empezar",
+      "entradas": [
+        {
+          "pregunta": "¿Cómo inicio sesión?",
+          "respuesta": "Con su correo y su contraseña, en la pantalla de inicio de sesión. Si olvidó la contraseña, desde esa misma pantalla puede pedir un enlace de recuperación por correo."
+        },
+        {
+          "pregunta": "¿Cuáles son los horarios?",
+          "respuesta": "Cada categoría entrena en días y horas fijos, iguales durante toda la temporada. En Horarios de entrenamiento está cada categoría con su franja de días y hora; el horario de un alumno en particular figura además en su carnet, en Mi Cuenta."
+        },
+        {
+          "pregunta": "¿Cuánto cuesta la mensualidad?",
+          "respuesta": "El valor de cada plan lo define el club y puede cambiar de temporada, así que aquí no figura ninguna cifra. En Mi Cuenta cada familia ve el valor de su propio plan y el estado de sus pagos; para conocer los valores vigentes, escriba por WhatsApp o consulte con un administrador del club."
+        },
+        {
+          "pregunta": "¿Por qué mi pantalla no se parece a la de otra persona del club?",
+          "respuesta": "Cada quien ve solo lo suyo. Un administrador ve la gestión completa del club; un entrenador ve lo operativo del día a día; una familia ve Mi Cuenta, con su propia información y nada más."
+        }
+      ]
+    },
+    {
+      "titulo": "Si es estudiante o representante",
+      "entradas": [
+        {
+          "pregunta": "¿Dónde veo si mi pago fue aprobado?",
+          "respuesta": "En Mi Cuenta. Ahí aparece el estado de cada pago y el de la membresía. Si un pago fue rechazado, verá el motivo y podrá subir un comprobante nuevo."
+        },
+        {
+          "pregunta": "¿Dónde veo la asistencia?",
+          "respuesta": "También en Mi Cuenta. Cada registro muestra el día y el horario de esa clase, así que ahí mismo puede ver a qué hora entrena."
+        },
+        {
+          "pregunta": "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
+          "respuesta": "Depende de quién es el titular. Un representante puede hacerlo por cada hijo o dependiente a su cargo, y un socio mayor de edad que gestiona su propia cuenta, por la suya: en Mi Cuenta, bajo Ficha médica, se ven y se corrigen las alergias, enfermedades, tipo de sangre y contacto de emergencia. La ficha de un menor con cuenta propia no la corrige el menor: la corrige su representante o un administrador del club."
+        },
+        {
+          "pregunta": "Represento a más de un hijo. ¿Cómo cambio entre ellos?",
+          "respuesta": "Con el selector de estudiante que aparece arriba en Mi Cuenta. Lo que elija se mantiene mientras navega entre pantallas."
+        }
+      ]
+    },
+    {
+      "titulo": "Si es entrenador",
+      "entradas": [
+        {
+          "pregunta": "¿Cómo tomo asistencia?",
+          "respuesta": "Desde Asistencia. Elige el horario, pasa lista y confirma. Todos empiezan en Presente para que una sesión completa no cueste ni un toque, y el contador de sin revisar le dice a cuántos todavía nadie miró."
+        },
+        {
+          "pregunta": "Me equivoqué al marcar. ¿Puedo deshacerlo?",
+          "respuesta": "Sí. El botón Deshacer de la barra inferior revierte la última marca, y también la acción de marcar a todos los restantes como presentes."
+        },
+        {
+          "pregunta": "¿Dónde veo lo que ya cargué?",
+          "respuesta": "En Historial Asistencia, con las listas registradas por sesión."
+        }
+      ]
+    },
+    {
+      "titulo": "Si es administrador",
+      "entradas": [
+        {
+          "pregunta": "¿Cómo valido un pago?",
+          "respuesta": "Desde Membresías y Pagos. Antes de aprobar tiene que confirmar lo que revisó; las preguntas cambian según el pago: un comprobante se revisa como comprobante, y un pago en efectivo recibido en persona no le pide certificar un comprobante que no existe."
+        },
+        {
+          "pregunta": "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
+          "respuesta": "Sí, uno por uno. La cola de Membresías y Pagos revisa y decide cada solicitud por separado, con su propia lista de verificación: no hay una acción para aprobar varias a la vez."
+        },
+        {
+          "pregunta": "Aprobé un pago por error. ¿Puedo revertirlo?",
+          "respuesta": "Durante unos segundos, sí: la decisión queda retenida y Deshacer la cancela antes de que salga. Pasado ese momento, el pago ya quedó registrado."
+        },
+        {
+          "pregunta": "¿Quién define los horarios?",
+          "respuesta": "El administrador, desde Horarios. Cada categoría tiene su franja de días y hora; no hay entrenadores asignados a un horario, la clase la da el entrenador disponible."
+        },
+        {
+          "pregunta": "¿Dónde genero los reportes del club?",
+          "respuesta": "Desde Reportes. Esa sección arma los reportes de gestión del club a partir de lo que ya está registrado."
+        }
+      ]
+    }
+  ],
+  "atajos": {
+    "admin": [
+      "¿Cómo valido un pago?",
+      "¿Quién define los horarios?"
+    ],
+    "trainer": [
+      "¿Cómo tomo asistencia?",
+      "¿Dónde veo lo que ya cargué?"
+    ],
+    "representante": [
+      "¿Dónde veo si mi pago fue aprobado?",
+      "¿Dónde veo la asistencia?"
+    ],
+    "estudiante": [
+      "¿Dónde veo si mi pago fue aprobado?",
+      "¿Dónde veo la asistencia?"
+    ],
+    "unsupported": [
+      "¿Cómo inicio sesión?",
+      "¿Cuáles son los horarios?"
+    ]
+  }
+}

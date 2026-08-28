@@ -1,38 +1,23 @@
 /**
- * The help page and the assistant must not disagree about the club.
+ * Content locks for the help page's copy.
  *
- * `_FAQ_CONTENIDO` in `backend/app/servicios_negocio/chatbot_servicio.py` is
- * the authority — the same text the assistant is grounded in — and there is no
- * endpoint that serves it, so the page holds a copy. This is what keeps the
- * copy honest about the part that would actually hurt: the training times a
- * family plans their week around. A page that says 15:00 while the assistant
- * says 16:00 is worse than a page that says nothing.
+ * This file used to also carry the drift check against the assistant, by
+ * parsing `_FAQ_CONTENIDO` out of `chatbot_servicio.py`. There is no such
+ * constant any more: the club's knowledge has one definition, and the drift
+ * check moved to `knowledge-parity.test.tsx`, which compares this page's
+ * RENDERED DOM against the exact bytes of the system prompt — strictly more
+ * than parsing a Python literal ever proved.
+ *
+ * What stays here is the other half: the specific things this copy is not
+ * allowed to say again. Each one is a sentence that shipped, was wrong, and
+ * was corrected — a shared definition does not stop the copy from being
+ * rewritten into the same mistake.
  */
 
 import { describe, it, expect } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { FAQ_SCHEDULES, FAQ_SECTIONS } from "../faq-content";
-
-const BACKEND_FAQ = join(
-  __dirname,
-  "..",
-  "..",
-  "..",
-  "..",
-  "..",
-  "backend",
-  "app",
-  "servicios_negocio",
-  "chatbot_servicio.py",
-);
+import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "../faq-content";
 
 describe("FAQ_SCHEDULES", () => {
-  it("can see the backend's FAQ at all", () => {
-    // If this fails the path moved, and every assertion below is vacuous.
-    expect(existsSync(BACKEND_FAQ)).toBe(true);
-  });
-
   it("lists every category the club actually trains", () => {
     expect(FAQ_SCHEDULES.map((s) => s.category)).toEqual([
       "Formativo",
@@ -43,19 +28,35 @@ describe("FAQ_SCHEDULES", () => {
     ]);
   });
 
-  it("states the same times the assistant states", () => {
-    const backend = readFileSync(BACKEND_FAQ, "utf8");
-
+  it("says who each category is for, on what days, at what time", () => {
     for (const schedule of FAQ_SCHEDULES) {
-      // The backend writes each row as "Categoría (edades): Días, de HH:MM a
-      // HH:MM." — the times are what must match; the prose around them is
-      // free to be worded differently on a page than in a chat answer.
-      const line = backend
-        .split("\n")
-        .find((candidate) => candidate.trim().startsWith(`- ${schedule.category} (`));
+      expect(schedule.ages.trim().length, schedule.category).toBeGreaterThan(0);
+      expect(schedule.days.trim().length, schedule.category).toBeGreaterThan(0);
+      expect(schedule.hours, schedule.category).toMatch(/\d{2}:\d{2} a \d{2}:\d{2}/);
+    }
+  });
+});
 
-      expect(line, `no schedule line for ${schedule.category}`).toBeDefined();
-      expect(line, `${schedule.category} hours drifted`).toContain(schedule.hours);
+describe("CLUB_PROFILE", () => {
+  it("quotes no price, because the club's plans are not written down here", () => {
+    // Plans are priced in the database (`tipo_membresia`) and change between
+    // seasons. A figure typed into shared knowledge is a figure the assistant
+    // would state with total confidence long after it stopped being true.
+    const everything = [
+      CLUB_PROFILE.summary,
+      CLUB_PROFILE.mission,
+      CLUB_PROFILE.vision,
+      CLUB_PROFILE.contactNote,
+      ...FAQ_SECTIONS.flatMap((s) => s.entries.map((e) => e.answer)),
+    ].join(" ");
+
+    expect(everything).not.toMatch(/\$\s?\d|USD\s?\d|\d+\s?(dólares|d[oó]lares)/i);
+  });
+
+  it("keeps the two ways to reach a person the landing already publishes", () => {
+    expect(CLUB_PROFILE.whatsapp.length).toBeGreaterThan(0);
+    for (const number of CLUB_PROFILE.whatsapp) {
+      expect(number).toMatch(/^09\d{8}$/);
     }
   });
 });

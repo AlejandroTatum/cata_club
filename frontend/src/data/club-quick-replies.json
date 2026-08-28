@@ -1,0 +1,22 @@
+{
+  "admin": [
+    "¿Cómo valido un pago?",
+    "¿Quién define los horarios?"
+  ],
+  "trainer": [
+    "¿Cómo tomo asistencia?",
+    "¿Dónde veo lo que ya cargué?"
+  ],
+  "representante": [
+    "¿Dónde veo si mi pago fue aprobado?",
+    "¿Dónde veo la asistencia?"
+  ],
+  "estudiante": [
+    "¿Dónde veo si mi pago fue aprobado?",
+    "¿Dónde veo la asistencia?"
+  ],
+  "unsupported": [
+    "¿Cómo inicio sesión?",
+    "¿Cuáles son los horarios?"
+  ]
+}
