@@ -1118,6 +1118,19 @@ function EnrollWizard(): React.ReactElement {
               setSummaryReviewed(e.target.checked);
               setFormErrors([]);
             }}
+            /* #763: the rule was enforced and never declared — the audit read
+               `semanticRequired=false`, so the browser and every assistive
+               technology were told this box was optional while the wizard
+               refused to submit without it. `required` is the same attribute
+               the "Tipo de sangre" select already carries, and on a native
+               checkbox it is what maps to the accessibility tree's required
+               state; no `aria-required` on top, which would only restate it.
+               It does not become a second voice either: "Confirmar
+               inscripción" is `disabled` while this is unchecked, so the form
+               is never submitted in the invalid state and the browser's own
+               bubble has no moment to fire. The message people read is still
+               `submitBlockedReason`, and the block is still `handleConfirm`. */
+            required
             /* `focus:ring-ball` was inert twice over: it names a colour with
                no ring width, and `@tailwindcss/forms` (which is what would
                give a checkbox a ring at all) is not installed. Focus is marked

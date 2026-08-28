@@ -524,24 +524,24 @@ describe("EnrollPage — la salida del asistente", () => {
 // ("Para continuar, revise: ..."). Hallazgo #9 — la casilla que lo destraba
 // medía 16x16px, bajo el mínimo de 24x24 de WCAG 2.2 SC 2.5.8.
 // ---------------------------------------------------------------------------
+function reachSummaryStep(): void {
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+  fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+  fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+  fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+  fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+  fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+  fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+  fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+  fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+}
+
 describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () => {
-  function reachSummaryStep(): void {
-    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
-    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
-    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
-    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-
-    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
-    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
-    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-  }
-
   it("names why 'Confirmar inscripción' is disabled, the same pattern steps 2-4 already use", () => {
     render(<EnrollPage />);
     reachSummaryStep();
@@ -587,6 +587,77 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     expect(checkbox.className).toMatch(/\bw-6\b/);
     expect(checkbox.className).not.toMatch(/\bh-4\b/);
     expect(checkbox.className).not.toMatch(/\bw-4\b/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #763 — the grouped legal consent already blocks the enrolment through the
+// business rule, but it declared nothing to the browser or to assistive
+// technology: the audit read `semanticRequired=false` on the deployed build.
+// The native attribute is the missing half of the signal, and it has to arrive
+// WITHOUT loosening the rule that actually stops the submit.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () => {
+  it("starts unchecked — the consent is never granted on the visitor's behalf", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  });
+
+  it("declares the grouped consent required to the browser and to assistive technology", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const checkbox = screen.getByRole("checkbox");
+    // The native attribute is what maps to the accessibility tree's "required"
+    // state, so `toBeRequired` and the attribute are one assertion in two
+    // registers: the semantics, and the markup that has to carry them.
+    expect(checkbox).toBeRequired();
+    expect(checkbox).toHaveAttribute("required");
+  });
+
+  it("keeps exactly the three legal documents, each one reachable and named", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const consent = screen.getByRole("checkbox").closest("label") as HTMLLabelElement;
+    const links = within(consent).getAllByRole("link");
+
+    expect(links).toHaveLength(3);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/terminos",
+      "/privacidad",
+      "/permiso-imagen-fetm",
+    ]);
+    links.forEach((link) => expect(link).toHaveAccessibleName());
+  });
+
+  it("still blocks the submit through the business rule, not through the browser's bubble", () => {
+    vi.mocked(enrollStudent).mockClear();
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const form = screen.getByRole("checkbox").closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    expect(enrollStudent).not.toHaveBeenCalled();
+    expect(screen.getByText(/revise y confirme el resumen antes de finalizar/i)).toBeInTheDocument();
+  });
+
+  it("is never granted by the fill-everything shortcut — consent is the one field nothing else can answer", () => {
+    render(<EnrollPage />);
+
+    // The demo panel fills every field of a self enrollment in one click. It
+    // is the only code path in the wizard that writes the whole form on the
+    // visitor's behalf, so it is where an auto-acceptance would come from.
+    fireEvent.click(screen.getByRole("button", { name: "Jugador" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeDisabled();
   });
 });
 
