@@ -26,7 +26,7 @@ export default function PaymentsDialog({
   onClose,
   ...membresiaCallbacks
 }: PaymentsDialogProps): React.ReactElement {
-  const { dialogRef, closeButtonRef } = useNativeDialog(onClose);
+  const { dialogRef, closeButtonRef, shellStyle } = useNativeDialog(onClose);
   const titleId = `payments-dialog-title-${account.id}`;
 
   return createPortal(
@@ -36,6 +36,7 @@ export default function PaymentsDialog({
       aria-labelledby={titleId}
       onCancel={(event) => event.preventDefault()}
       className={NATIVE_DIALOG_SHELL_CLASS}
+      style={shellStyle}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
         <h2

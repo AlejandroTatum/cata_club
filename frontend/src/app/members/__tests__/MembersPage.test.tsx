@@ -3447,3 +3447,165 @@ describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
     expect(title.className).toContain("min-w-0");
   });
 });
+
+/**
+ * ---------------------------------------------------------------------------
+ * The dialog reads the viewport the user can SEE — issue #767
+ * ---------------------------------------------------------------------------
+ *
+ * `100dvh` fixed the browser chrome (#659) and says nothing about the software
+ * keyboard: `dvh` is still the LAYOUT viewport, and the layout viewport does
+ * not shrink when the keys come up. So the dialog stays centred at ~590px tall
+ * while the keyboard covers half the screen, and the user is left dragging its
+ * body one line at a time.
+ *
+ * `visualViewport` is the only surface that answers both questions, and
+ * `ChatWidget.tsx` has been reading it since #644 — for one sheet, in one file,
+ * which is the whole gap. `useVisualViewportGeometry` is that code lifted out
+ * of `ChatWidget` unchanged so these three dialogs get the same treatment
+ * instead of a second mechanism that drifts from it.
+ *
+ * These are className and custom-property assertions, for exactly the reason
+ * the #659 block above gives: jsdom lays out no `calc()`, no `env()` and no
+ * native `<dialog>`. What CAN be proven here is that the component subscribes
+ * to the right events and publishes the numbers a phone would produce.
+ * `tests/e2e/members-dialog-zoom.mobile.spec.ts` measures the drawn box.
+ */
+describe("MembersPage — the dialog follows the visual viewport (issue #767)", () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset().mockResolvedValue({ accounts: [ACCOUNT] });
+    mockFetchFichaMedica.mockReset().mockResolvedValue({
+      tipoSangre: "DESCONOCIDO",
+      enfermedades: [],
+      alergias: null,
+      contactoEmergencia: null,
+      telefonoEmergencia: null,
+    });
+    mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
+    mockObtenerRolesDePersona.mockReset().mockResolvedValue({ roles: [], activo: true });
+  });
+
+  function getRowButton(container: HTMLElement, name: RegExp): HTMLElement {
+    return within(container).getAllByRole("button", { name })[0];
+  }
+
+  /**
+   * A phone with the keyboard open: a 844px layout viewport, 400px of it
+   * visible, the rest eaten by the keys. The same shape `ChatWidget.test.tsx`
+   * drives, so both use sites are exercised against the same fake device.
+   */
+  function installVisualViewport(
+    { height, offsetTop = 0, innerHeight = 844 }: { height: number; offsetTop?: number; innerHeight?: number },
+  ): { listeners: Set<string>; removed: Set<string> } {
+    const listeners = new Set<string>();
+    const removed = new Set<string>();
+    vi.stubGlobal("visualViewport", {
+      width: 390,
+      height,
+      offsetTop,
+      addEventListener: (type: string): void => void listeners.add(type),
+      removeEventListener: (type: string): void => void removed.add(type),
+    });
+    vi.stubGlobal("innerHeight", innerHeight);
+    return { listeners, removed };
+  }
+
+  const TRIGGERS: readonly (readonly [string, RegExp])[] = [
+    ["Ficha médica", /^ficha médica/i],
+    ["Pagos", /^pagos/i],
+    ["Editar", /^editar/i],
+  ];
+
+  it.each(TRIGGERS)(
+    "subscribes the %s dialog to the visual viewport, and unsubscribes on close",
+    async (_label, triggerName) => {
+      const { listeners, removed } = installVisualViewport({ height: 400 });
+      const { unmount } = render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const row = await findAccountRow();
+      fireEvent.click(getRowButton(row, triggerName));
+      await screen.findByRole("dialog");
+
+      // BOTH events. `resize` alone misses a pinch-pan, which is the case that
+      // leaves a `position: fixed` dialog anchored off the visible area.
+      expect([...listeners].sort()).toEqual(["resize", "scroll"]);
+
+      unmount();
+      expect([...removed].sort()).toEqual(["resize", "scroll"]);
+      vi.unstubAllGlobals();
+    },
+  );
+
+  it.each(TRIGGERS)(
+    "publishes what the %s dialog can actually see as custom properties",
+    async (_label, triggerName) => {
+      // 844px of layout, 400px visible, 24px of it scrolled above: the keyboard
+      // is the 420px left over, and that is what the dialog must sit above.
+      installVisualViewport({ height: 400, offsetTop: 24, innerHeight: 844 });
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const row = await findAccountRow();
+      fireEvent.click(getRowButton(row, triggerName));
+
+      const dialog = await screen.findByRole("dialog");
+
+      expect(dialog.style.getPropertyValue("--dialog-viewport-top")).toBe("24px");
+      expect(dialog.style.getPropertyValue("--dialog-viewport-height")).toBe("400px");
+      expect(dialog.style.getPropertyValue("--dialog-keyboard-inset")).toBe("420px");
+      vi.unstubAllGlobals();
+    },
+  );
+
+  it.each(TRIGGERS)(
+    "sizes and seats the %s dialog off those properties, falling back to the old box",
+    async (_label, triggerName) => {
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const row = await findAccountRow();
+      fireEvent.click(getRowButton(row, triggerName));
+
+      const dialog = await screen.findByRole("dialog");
+
+      // The clamp is measured against the visible height…
+      expect(dialog.className).toContain("var(--dialog-viewport-height,100dvh)");
+      // …and the box the dialog centres in stops where the keyboard starts.
+      expect(dialog.className).toContain("var(--dialog-keyboard-inset,0px)");
+      expect(dialog.className).toContain("var(--dialog-viewport-top,0px)");
+      // Every fallback is the pre-#767 value, so a browser with no
+      // `visualViewport` — and this very assertion's own jsdom — renders the
+      // dialog exactly as `inset-0` did.
+      expect(dialog.className).toContain("100dvh");
+      expect(dialog.className).not.toContain("100vh-");
+    },
+  );
+
+  it("never lets the row's three actions be clipped out of reach", async () => {
+    // At 320px, or at 360px with the OS text size above 100%, the group of
+    // three needs more line than the card has. `flex-none` with no `flex-wrap`
+    // made that overflow, and `card overflow-hidden` on the page clipped it
+    // with no scrollbar: "Editar" simply stopped existing.
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const card = await findAccountCard();
+    const editar = within(card).getAllByRole("button", { name: /^editar/i })[0];
+    const group = editar.parentElement as HTMLElement;
+
+    expect(group.className).toContain("flex-wrap");
+    // …and the group must be allowed to give up width, or wrapping inside it
+    // never happens: a `flex-none` box is sized to its content and overflows
+    // the line whole.
+    expect(group.className).not.toContain("flex-none");
+  });
+});

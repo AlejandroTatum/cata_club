@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type CSSProperties, type RefObject } from "react";
+
+import { useVisualViewportGeometry } from "@/lib/useVisualViewport";
 
 interface NativeDialogHandles {
   dialogRef: RefObject<HTMLDialogElement>;
   closeButtonRef: RefObject<HTMLButtonElement>;
+  /**
+   * The measured visual viewport, as the custom properties
+   * `NATIVE_DIALOG_SHELL_CLASS` reads. `undefined` until there is something to
+   * say — which is also what a browser with no `visualViewport` gives, and is
+   * why every property below has a fallback that is the pre-#767 value.
+   */
+  shellStyle: CSSProperties | undefined;
 }
 
 /**
@@ -28,10 +37,36 @@ interface NativeDialogHandles {
  * NOT a "add scrolling" fix — `MedicalRecordDialog` and `PaymentsDialog`
  * already had `flex-1 … overflow-y-auto` bodies before this change; issue
  * #659's "el cuerpo no ofrece scroll interno usable" premise did not hold.
+ *
+ * ## Issue #767: `dvh` is still not what the user can see
+ *
+ * `100dvh` answers the URL bar and says NOTHING about the software keyboard —
+ * `dvh` is a layout-viewport unit, and the layout viewport does not shrink when
+ * the keys come up. So the dialog kept centring itself in ~590px while half the
+ * screen was keyboard, and the only scrollable thing left on the visible strip
+ * was its own body. That is why the report reads "one line at a time".
+ *
+ * The three custom properties below are the visible box, published by
+ * `useNativeDialog` from `useVisualViewportGeometry` — the same measurement
+ * `ChatWidget`'s sheet has used since #644, now shared rather than copied. The
+ * dialog centres between `top` and the keyboard instead of between 0 and the
+ * bottom of a viewport it cannot see.
+ *
+ * Every fallback is the value this class carried before #767, so a browser with
+ * no `visualViewport` — and jsdom, and the server render — draws exactly the
+ * old box: `top: 0`, `bottom: 0`, `100dvh`. Nothing here is a second layout to
+ * maintain; it is the same one with the numbers made honest when they exist.
+ *
+ * `env(safe-area-inset-bottom)` is still subtracted while the keyboard is open,
+ * which over-reserves by the home indicator the keyboard is already covering.
+ * That direction is the safe one — a slightly shorter dialog, never one under
+ * the keys — and it costs a handful of pixels in a state that lasts as long as
+ * someone is typing.
  */
 export const NATIVE_DIALOG_SHELL_CLASS =
-  "fixed inset-0 z-50 m-auto flex h-fit " +
-  "max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] " +
+  "fixed inset-x-0 top-[var(--dialog-viewport-top,0px)] " +
+  "bottom-[var(--dialog-keyboard-inset,0px)] z-50 m-auto flex h-fit " +
+  "max-h-[calc(var(--dialog-viewport-height,100dvh)-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] " +
   "w-[calc(100%-2rem-env(safe-area-inset-left)-env(safe-area-inset-right))] max-w-2xl " +
   "flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40";
 
@@ -73,6 +108,9 @@ export const NATIVE_DIALOG_BODY_CLASS =
 export function useNativeDialog(onClose: () => void): NativeDialogHandles {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // Always measuring: this hook only runs while a dialog is mounted, and these
+  // dialogs are mounted only while open. There is no closed state to gate.
+  const viewport = useVisualViewportGeometry(true);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -99,5 +137,16 @@ export function useNativeDialog(onClose: () => void): NativeDialogHandles {
     };
   }, [onClose]);
 
-  return { dialogRef, closeButtonRef };
+  return {
+    dialogRef,
+    closeButtonRef,
+    shellStyle:
+      viewport === null
+        ? undefined
+        : ({
+            "--dialog-viewport-top": `${viewport.top}px`,
+            "--dialog-viewport-height": `${viewport.height}px`,
+            "--dialog-keyboard-inset": `${viewport.keyboardInset}px`,
+          } as CSSProperties),
+  };
 }

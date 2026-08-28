@@ -344,6 +344,53 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * #767 — the size below which a phone zooms into a field and never zooms back.
+ *
+ * Mobile Safari and Chrome magnify the whole page whenever a focused form
+ * control computes under 16px. The page does not return: the visual viewport
+ * becomes a fraction of the layout viewport, a dialog measured in `dvh` keeps
+ * its full height behind it, and what is left on screen is one line the user
+ * drags through. That is the reported symptom on `/members` — the box was
+ * never small, the window onto it was.
+ *
+ * `maximum-scale=1` in the viewport meta would also stop it, by taking
+ * pinch-zoom away from everyone (WCAG 1.4.4). So the FIELD carries the floor,
+ * which is the same conclusion `ChatWidget.tsx` reached for its composer in
+ * #644 — with one difference: it fixed one field, and this is every field.
+ * Measured before writing this: of the 74 text-entry controls in `src/`, all
+ * 40 that declared a size declared one under the threshold. There is no
+ * "just the dialogs" version of this defect.
+ *
+ * `text-lg`, not `text-base`. 15px is still under 16 and would look like a
+ * fix while changing nothing; 20px is the first step on the ramp at or above
+ * the threshold, and a literal `text-[16px]` is what
+ * `arbitrary-style-values.test.ts` exists to refuse. Named step, read from the
+ * ramp — so `field-font-size-usage.test.ts` fails if the ramp ever moves under
+ * it.
+ *
+ * `pointer: coarse` and not `max-width`. The zoom is a property of the DEVICE,
+ * not of the window: an iPad at 1024px zooms, a desktop window dragged to
+ * 375px does not. The pointer query asks the question the platform actually
+ * answers, so a narrow desktop keeps its dense forms and a wide tablet still
+ * gets the floor. Desktop density is untouched by construction, which is why
+ * the ramp itself is not moved.
+ *
+ * The selector is written to WIN, deliberately — the same argument the focus
+ * ring above makes at 0,3,0. Every exclusion is also true (none of those types
+ * accepts typed text, so none of them triggers the zoom), and together they
+ * put this at 0,5,1: above the heaviest thing any call site writes, which is
+ * the two classes of `.input-field.text-xs` on the Beneficio select. A floor a
+ * `className` can quietly outrank is not a floor.
+ * ------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+      [type="range"]
+    ):not([type="color"]) {
+    @apply text-lg;
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * DSH-5 — a keyboard-focused control could land behind the fixed mobile tab
  * bar, fully hidden by an opaque layer (WCAG 2.4.11).
  *

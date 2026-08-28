@@ -544,7 +544,7 @@ function MemberEditDialog({
   // ConfirmDialog.tsx's older role="dialog" div convention). Escape/backdrop/
   // focus-restore wiring lives in `useNativeDialog` (issue #505) — shared with
   // the two new direct entry points, `MedicalRecordDialog` and `PaymentsDialog`.
-  const { dialogRef, closeButtonRef } = useNativeDialog(onClose);
+  const { dialogRef, closeButtonRef, shellStyle } = useNativeDialog(onClose);
 
   return (
     <>
@@ -555,6 +555,7 @@ function MemberEditDialog({
             aria-labelledby={`edit-member-title-${account.id}`}
             onCancel={(event) => event.preventDefault()}
             className={NATIVE_DIALOG_SHELL_CLASS}
+            style={shellStyle}
           >
             {/* Header — avatar, name, phone, status badge, close. Sits on
                 `sunken` rather than flush `paper`: the body below is `canvas`,

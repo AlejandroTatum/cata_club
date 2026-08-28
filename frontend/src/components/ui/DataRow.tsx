@@ -61,10 +61,11 @@ export default function DataRow({
        * `basis-56` (14rem) is what makes this row's `flex-wrap` do anything.
        *
        * With `flex-1` alone the name's flex-basis is 0, so its hypothetical
-       * size never contributes to the line-breaking decision: the meta,
-       * status and action groups — all `flex-none`, all sized to their
-       * content — claim the row first and the name absorbs every pixel of
-       * the squeeze. Measured on `/tarifas` at 390px, that left the name a
+       * size never contributes to the line-breaking decision: the meta and
+       * status groups — `flex-none`, sized to their content — claim the row
+       * first and the name absorbs every pixel of the squeeze. (The action
+       * group stopped being `flex-none` in #767; see its own comment below.)
+       * Measured on `/tarifas` at 390px, that left the name a
        * 50px column: the seeded "Mensual Infantil" wrapped onto two lines
        * and a long tariff name broke mid-syllable across nine (issue #660,
        * and #677's `break-words` only changed HOW the 50px column failed).
@@ -99,7 +100,28 @@ export default function DataRow({
       ) : null}
 
       {status ? <div className="flex-none">{status}</div> : null}
-      {actions ? <div className="flex flex-none items-center gap-2">{actions}</div> : null}
+      {/*
+       * `flex-wrap`, and NOT `flex-none` — issue #767.
+       *
+       * Measured on `/members` at 360px: `AppShell`'s `px-4` leaves 328, the
+       * card border 326, and this row's own `px-4` 294px of usable line. The
+       * three row triggers ("Ficha médica", "Pagos", "Editar") need ~286. It
+       * fit by eight pixels.
+       *
+       * At 320px, or at 360px with the OS text size above 100%, it does not,
+       * and both halves of the old declaration made that unrecoverable:
+       * `flex-none` sizes this box to its content so it overflows the line
+       * whole rather than letting its children move down, and `Button`'s
+       * `whitespace-nowrap` stops each one shrinking. `card overflow-hidden`
+       * on the page behind then clipped the result with no scrollbar —
+       * "Editar" was simply not reachable.
+       *
+       * `justify-end` keeps the group against the row's trailing edge on the
+       * line it wraps onto, which is where it sits when it does not wrap.
+       */}
+      {actions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
+      ) : null}
     </li>
   );
 }
