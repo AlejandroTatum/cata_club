@@ -363,9 +363,9 @@ def prosa_con_enum(codigo: str, ruta_relativa: str) -> list[str]:
     Mira SOLO argumentos de llamada, y eso es la regla, no una comodidad: un
     literal que se pasa a una función es un fragmento en tránsito, que es el
     mecanismo del que hay que defenderse. Una constante de módulo o una
-    docstring no viajan a ningún mensaje -- por eso el prompt del chatbot
-    (`_FAQ_CONTENIDO`, que dice "la gestiona el ADMINISTRADOR") no es asunto
-    de esta guarda, y de hecho no es un mensaje de error de nadie.
+    docstring no viajan a ningún mensaje -- por eso el conocimiento del chatbot
+    (hoy `conocimiento_club.json`, que habla de "el administrador") no es
+    asunto de esta guarda, y de hecho no es un mensaje de error de nadie.
     """
     arbol = ast.parse(codigo)
     hallazgos: list[str] = []

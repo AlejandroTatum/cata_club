@@ -1,10 +1,18 @@
 """
 Servicio del chatbot de FAQ (asistente de navegación de la app).
 
-MVP intencionalmente simple: no hay RAG ni vector store. El contenido de las
-preguntas frecuentes se embebe directo en el system prompt (constante
-`_FAQ_CONTENIDO` de este módulo) porque no hay volumen de contenido que
-justifique algo más sofisticado. No toca la base de datos.
+MVP intencionalmente simple: no hay RAG ni vector store. El conocimiento del
+club se embebe entero en el system prompt, serializado desde
+`conocimiento_club.json` (ver `conocimiento_club.py`), porque no hay volumen de
+contenido que justifique algo más sofisticado: el corpus legítimo completo
+—FAQ, horarios, ubicación, contacto— entra en unos 2.500 tokens, y montar
+pgvector, una tabla de embeddings y una llamada de embedding por consulta
+costaría más que mandarlo todo. No toca la base de datos.
+
+Ese archivo es además la ÚNICA copia del conocimiento (issue #768): la página
+`/ayuda` renderiza la misma definición para humanos, y un guardián de
+divergencia compara el DOM que ve una familia contra los bytes exactos de este
+prompt.
 
 Proveedor: MiMo servido a través del gateway OpenAI-compatible
 "OpenCode Zen" (https://opencode.ai/zen/v1). Se usa el paquete `openai`
@@ -34,6 +42,7 @@ from typing import List, Optional
 
 import openai
 
+from app.servicios_negocio import conocimiento_club
 from app.soporte_transversal.configuracion import settings
 
 logger = logging.getLogger("cataclub.chatbot")
@@ -178,77 +187,66 @@ def _registrar_falla(error: Exception, modelo: str) -> None:
         _detalle_seguro(error),
     )
 
-# --- Contenido de las FAQ, embebido directo en el system prompt -------------
-# Nota: a propósito NO se listan rutas/URLs (/trainer/attendance, /groups, etc.)
-# — solo nombres de sección tal como aparecen en el menú — porque el chatbot
-# tiene instrucción explícita de no mencionar rutas técnicas en sus respuestas.
-_FAQ_CONTENIDO = """
-Generales:
-- Para iniciar sesión, el usuario ingresa su correo y contraseña en la pantalla de login. Si olvidó la
-  contraseña, existe recuperación de contraseña vía correo electrónico desde la misma pantalla de login.
-- Cada rol ve una parte distinta de la app: el administrador tiene acceso completo a la gestión del club
-  (miembros, grupos, pagos, asistencia, reportes); el entrenador ve lo operativo del día a día
-  (tomar asistencia, historial de asistencia); el
-  representante/estudiante ve únicamente "Mi Cuenta", con su propia información.
-- Los horarios de las clases (día y hora) los define y gestiona el administrador desde "Horarios".
-  No hay entrenadores asignados a horarios: cada clase la da el entrenador disponible.
+# --- Conocimiento del club, serializado de su archivo canónico ---------------
+# Ya no vive acá una copia propia (issue #768). `conocimiento_club.json` es la
+# única definición y la página `/ayuda` renderiza esa misma definición para
+# humanos, así que un horario o un precio no se pueden cambiar en un lado y
+# quedar viejos en el otro.
+#
+# Nota que sobrevive al cambio: a propósito NO se listan rutas/URLs
+# (/trainer/attendance, /groups, etc.) — solo nombres de sección tal como
+# aparecen en el menú — porque el chatbot tiene instrucción explícita de no
+# mencionar rutas técnicas en sus respuestas.
+CONOCIMIENTO = conocimiento_club.CONOCIMIENTO
 
-Horarios de clases por categoría (días y horas fijos del club):
-- Formativo (5 a 10 años): Lunes a Viernes, de 15:00 a 16:00.
-- Infantil (8 a 12 años): Lunes a Viernes, de 16:00 a 17:00.
-- Juvenil (mayores de 12 años): Lunes a Viernes, de 17:00 a 18:00.
-- Competitivo (Selección): Lunes a Sábado, de 18:00 a 20:00.
-- Adultos (mayores de 18 años): Lunes a Viernes, de 20:00 a 21:15.
+# Índice pregunta -> respuesta para el respaldo local. La ubicación y el
+# contacto no son una entrada del FAQ, así que entran con una clave propia:
+# también salen del archivo canónico, redactadas por `conocimiento_club`.
+_CLAVE_CONTACTO = "¿Dónde queda el club y cómo lo contacto?"
+_RESPUESTAS_CANONICAS = {
+    **conocimiento_club.respuestas_por_pregunta(CONOCIMIENTO),
+    _CLAVE_CONTACTO: conocimiento_club.respuesta_de_contacto(CONOCIMIENTO),
+}
 
-Representante/Estudiante (sección "Mi Cuenta"):
-- Puede ver el estado de sus pagos y de su membresía desde "Mi Cuenta".
-- Puede consultar su propio historial de asistencia desde "Mi Cuenta"; cada registro muestra el día y
-  horario de esa clase, así que ahí también se ve el horario de sus entrenamientos.
-- La ficha médica (alergias, enfermedades, tipo de sangre, contacto de emergencia) se ve y se
-  corrige desde "Mi Cuenta". La de un hijo o dependiente, su REPRESENTANTE; la propia, un socio
-  MAYOR DE EDAD que gestiona su propia cuenta. El ADMINISTRADOR puede corregir cualquiera. La
-  ficha de un menor no la edita el menor: la corrige su representante o un administrador.
+# El prompt completo (instrucciones + conocimiento) se arma en
+# `conocimiento_club`, que NO importa `settings`: así el script que regenera la
+# instantánea del prompt puede armarlo sin un `.env` configurado, que es
+# justamente la condición en la que alguien edita el conocimiento del club.
+SYSTEM_PROMPT = conocimiento_club.SYSTEM_PROMPT
 
-Entrenador:
-- Toma la asistencia de cualquier grupo desde la sección "Asistencia".
-- Puede ver el historial de asistencias registradas desde "Historial Asistencia".
+# --- Tamaño del prompt, medido y anotado (issue #768, criterio 4) ------------
+# De dónde se parte, para que el próximo que lo agrande sepa qué está
+# agrandando. Antes de unificar el conocimiento el prompt eran 4.121 caracteres
+# ≈ 1.030 tokens, de los cuales 2.135 caracteres (≈ 533 tokens) eran el bloque
+# de FAQ escrito a mano; el resto son las instrucciones de comportamiento.
+# Después de incorporar el FAQ completo de la web, la ubicación, el contacto y
+# lo que el club dice de sí mismo: 7.432 caracteres ≈ 1.858 tokens. El corpus
+# legítimo entero, entonces, cuesta menos del doble de lo que ya se enviaba.
+#
+# La estimación es caracteres/4, el mismo método con el que se midió el prompt
+# viejo — sirve para comparar dos mediciones hechas igual, no para presupuestar
+# contra el proveedor. Contar tokens de verdad exigiría un tokenizador del
+# modelo, que no es una dependencia que valga la pena para vigilar un techo.
+PROMPT_SISTEMA_CARACTERES = len(SYSTEM_PROMPT)
+PROMPT_SISTEMA_TOKENS_APROX = PROMPT_SISTEMA_CARACTERES // 4
 
-Administrador:
-- Gestiona horarios y grupos (día y hora) desde "Horarios".
-- Registra pagos y membresías desde "Membresías y Pagos".
-- Genera reportes desde "Reportes".
-""".strip()
+# El mismo número, escrito a mano. Es redundante a propósito: la suite exige
+# que coincida con el calculado, así que agrandar el conocimiento obliga a
+# tocar esta línea y el crecimiento aparece en el diff en vez de pasar
+# inadvertido.
+PROMPT_SISTEMA_TOKENS_MEDIDOS = 1_858
 
-_INSTRUCCIONES = """
-Eres el asistente virtual de "Cata Club", una app de gestión de un club deportivo (asistencias,
-membresías y pagos, fichas médicas, horarios y grupos). Tu única función es ayudar a los
-usuarios a entender CÓMO USAR la app, basándote exclusivamente en la información de FAQ que se te da a
-continuación.
-
-Reglas:
-1. Responde solo preguntas sobre cómo usar la app, apoyándote en el contenido de FAQ provisto. Si la
-   pregunta no está cubierta por esa información, di que no cuentas con esa información y sugiere
-   contactar a un administrador del club — nunca inventes funcionalidades que no aparecen ahí.
-2. Sé muy conciso. Si la respuesta es una sola idea, usa 1 a 3 oraciones cortas. Si implica varios
-   elementos (ej. varios horarios, varios pasos), estructúrala como una lista: una línea por elemento,
-   cada línea empezando con "• " (viñeta simple), sin meter todo en un párrafo corrido. Nunca un muro
-   de texto en un solo bloque.
-3. NUNCA menciones rutas, URLs ni nombres técnicos de páginas (nada de "/trainer/attendance",
-   "/groups", etc.). Refiérete siempre a las secciones por su nombre visible en el menú, tal como
-   aparecen en la FAQ (ej. "Mi Cuenta", "Horarios"), como lo haría una persona explicándole
-   a otra dónde hacer clic.
-4. Usa español neutro de Ecuador: trata al usuario de "usted" (nunca "tú" ni "vos", ni conjugaciones
-   de voseo como "podés" o "tenés"), con un tono cordial y profesional, sin modismos de otros países
-   (nada de "che", "boludo", "vale", "tío", etc.).
-5. Responde siempre en el mismo idioma en el que escribe el usuario; si no puedes determinarlo, responde
-   en español.
-6. Texto plano únicamente: nunca uses sintaxis markdown (nada de **negrita**, _cursiva_ ni backticks).
-   Las viñetas "• " sí están permitidas y se muestran bien (ver regla 2) — no son markdown, es el
-   único formato de lista que soporta el chat. El nombre de una sección puede ir entre comillas
-   normales si hace falta destacarlo.
-""".strip()
-
-SYSTEM_PROMPT = f"{_INSTRUCCIONES}\n\n--- FAQ de Cata Club ---\n{_FAQ_CONTENIDO}"
+# Techo deliberado, no un límite del proveedor. Superarlo no rompe nada por sí
+# solo; lo que hace es obligar a una decisión explícita en vez de dejar que el
+# prompt crezca de a poco. El corpus legítimo completo del club está muy por
+# debajo, así que llegar acá significa que entró algo que habría que revisar.
+#
+# Lo que este techo NO protege: `MAX_TOKENS_RESPUESTA`. En la API
+# OpenAI-compatible `max_tokens` acota los tokens GENERADOS, no la suma con la
+# entrada, así que un prompt más largo no le come presupuesto a la respuesta.
+# Lo que sí crece con el prompt es la latencia de prefill y el consumo de
+# contexto, y contra eso juega el presupuesto de tiempo de más arriba.
+TECHO_PROMPT_SISTEMA_TOKENS = 2_400
 
 _ROLES_VALIDOS = {"usuario": "user", "asistente": "assistant"}
 
@@ -310,23 +308,44 @@ class ChatbotServicio:
 
     @staticmethod
     def _respuesta_local(mensaje: str) -> str:
-        """Responde desde la FAQ embebida si el proveedor no está disponible."""
+        """Responde desde el conocimiento canónico si el proveedor no atiende.
+
+        Esta tabla enruta términos a una PREGUNTA del FAQ; la respuesta se
+        busca en `conocimiento_club.json` y nunca se escribe acá. Antes cada
+        una de estas ramas tenía su propio texto a mano — una cuarta copia del
+        mismo conocimiento, que además ya se había quedado corta: con el
+        proveedor caído el bot no sabía nada que no estuviera en esas seis
+        líneas.
+
+        El orden importa: la primera regla que matchea gana, así que las más
+        específicas van primero (una pregunta sobre varios representados
+        también menciona "hijo", pero no es una pregunta sobre pagos)."""
         normalizado = unicodedata.normalize("NFD", mensaje.lower())
         normalizado = "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
         normalizado = re.sub(r"[^a-z0-9 ]", " ", normalizado)
         normalizado = re.sub(r"\s+", " ", normalizado).strip()
-        respuestas = (
-            (("contrasena", "clave", "login", "iniciar sesion"), "Para iniciar sesión, ingrese su correo y contraseña en la pantalla de login. Si olvidó la contraseña, use la recuperación de contraseña vía correo electrónico desde esa pantalla."),
-            (("pago", "membresia"), "Puede ver el estado de sus pagos y de su membresía desde Mi Cuenta. El administrador registra pagos y membresías desde Membresías y Pagos."),
-            (("asistencia", "entrenamiento"), "Puede consultar su propio historial de asistencia desde Mi Cuenta. Cada registro muestra el día y horario de esa clase."),
-            (("ficha medica", "alergia", "tipo de sangre", "emergencia"), "La ficha médica se ve y se corrige desde Mi Cuenta; la de un hijo o dependiente la corrige su representante o un administrador."),
-            (("horario", "clase", "formativo", "infantil", "juvenil", "competitivo", "adulto"), "Los horarios de las clases los define y gestiona el administrador desde Horarios."),
-            (("report",), "El administrador genera reportes desde Reportes."),
+        rutas = (
+            (("hijo", "dependiente", "representado"), "Represento a más de un hijo. ¿Cómo cambio entre ellos?"),
+            (("ficha medica", "alergia", "tipo de sangre", "emergencia"), "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?"),
+            (("whatsapp", "telefono", "numero", "contacto", "direccion", "ubicacion", "donde queda", "como llego"), _CLAVE_CONTACTO),
+            (("cuesta", "precio", "mensualidad", "cuota", "tarifa"), "¿Cuánto cuesta la mensualidad?"),
+            (("pago", "membresia", "comprobante"), "¿Dónde veo si mi pago fue aprobado?"),
+            # Después de "pago": "aprobé un pago por error, ¿puedo revertirlo?"
+            # es una pregunta sobre pagos, no sobre la barra de asistencia.
+            (("equivoque", "deshacer", "revertir", "marque mal"), "Me equivoqué al marcar. ¿Puedo deshacerlo?"),
+            (("asistencia", "entrenamiento", "entreno"), "¿Dónde veo la asistencia?"),
+            (("horario", "clase", "formativo", "infantil", "juvenil", "competitivo", "adulto"), "¿Cuáles son los horarios?"),
+            (("report",), "¿Dónde genero los reportes del club?"),
+            # "sesion" es ambiguo (una sesión de entrenamiento también lo dice),
+            # así que esta regla va última: para ese caso ya matcheó
+            # "entrenamiento" más arriba.
+            (("contrasena", "clave", "login", "sesion"), "¿Cómo inicio sesión?"),
         )
-        for terminos, respuesta in respuestas:
+        aviso = "El asistente externo no está disponible en este momento. "
+        for terminos, pregunta in rutas:
             if any(termino in normalizado for termino in terminos):
-                return "El asistente externo no está disponible en este momento. " + respuesta
-        return "El asistente externo no está disponible en este momento. No cuento con esa información; contacte a un administrador del club."
+                return aviso + _RESPUESTAS_CANONICAS[pregunta]
+        return aviso + "No cuento con esa información; contacte a un administrador del club."
 
     @staticmethod
     def _limpiar_markdown(texto: str) -> str:

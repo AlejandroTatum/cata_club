@@ -123,6 +123,20 @@ docker-down: ## Stop all Docker Compose services
 docker-build: ## Build Docker images
 	docker compose build
 
+# ─── Conocimiento del club ──────────────────────────────────────────────────
+# `backend/app/servicios_negocio/conocimiento_club.json` es la única definición
+# del conocimiento del club (issue #768). Los dos consumidores no pueden leerla
+# directamente porque los contextos de build de Docker son `./backend` y
+# `./frontend` por separado, así que hay dos artefactos derivados: el espejo que
+# renderiza `/ayuda` y la instantánea del prompt contra la que el frontend
+# compara su DOM. Este target los regenera; la suite del backend falla si
+# quedaron viejos, apuntando acá.
+sync-knowledge: ## Regenerate the derived club-knowledge artifacts (mirror + prompt snapshot)
+	cd backend && uv run python scripts/sincronizar_conocimiento.py
+
+check-knowledge: ## Check the derived club-knowledge artifacts are up to date (no writes)
+	cd backend && uv run python scripts/sincronizar_conocimiento.py --verificar
+
 # ─── Database ───────────────────────────────────────────────────────────────
 migrate: ## Run Alembic migrations
 	cd backend && uv run alembic upgrade head

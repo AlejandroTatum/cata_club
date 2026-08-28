@@ -1,29 +1,37 @@
 /**
- * The club's FAQ, as browsable content.
+ * The club's knowledge, typed for the help page.
  *
- * ## Why this exists rather than only the assistant
+ * ## Why this file no longer holds any copy
  *
- * P10 was capped at 8 for one reason: the only way to get an answer was to
- * think of a question and type it. That works when you know what you are
- * looking for and fails completely when you do not — a family who has never
- * used the app cannot ask "¿a qué hora entrena mi hijo?" if they do not yet
- * know the club sorts by category. Browsing answers a different question from
- * searching, and the product only had searching.
+ * It used to hold its own transcription of the FAQ, beside a second one in the
+ * assistant's `_FAQ_CONTENIDO` and a third in the chat's quick replies. Three
+ * copies nobody synchronised: change a schedule or a price and you had to
+ * remember all three, and touching one left the assistant contradicting this
+ * page — answering the old value, confidently, with nothing turning red.
  *
- * ## Why the content is duplicated here, and what stops it drifting
+ * There is a single definition now:
+ * `backend/app/servicios_negocio/conocimiento_club.json`. This module is a
+ * typed projection of it and nothing else — the strings live in the JSON, and
+ * the interfaces below are what makes `tsc` reject a JSON whose shape drifted
+ * (`resolveJsonModule` infers the literal type of the file's contents, so the
+ * assignments at the bottom are real compile-time checks, not casts).
  *
- * The authority is `_FAQ_CONTENIDO` in
- * `backend/app/servicios_negocio/chatbot_servicio.py` — the same text the
- * assistant is grounded in. There is no endpoint that serves it (the chatbot
- * contract returns a single answer string and nothing else), so the choice was
- * a backend change or a copy.
+ * ## Why the import points at a mirror inside `src/`
  *
- * A copy, with the drift made testable: `faq-content.test.ts` reads the Python
- * file and asserts every training time below still matches it. Those are the
- * facts a family plans their week around, and they are the ones that would
- * hurt if the two ever disagreed. The rest is guidance about how the app
- * works, which changes with the app and is covered by review.
+ * Docker builds this app from the `./frontend` context alone
+ * (`docker-compose.override.yml`, and the two image jobs in CI), so a file
+ * outside this tree — including the canonical one in `backend/` — cannot be
+ * imported at build time. `src/data/club-knowledge.json` is a byte-for-byte
+ * copy written by `backend/scripts/sincronizar_conocimiento.py`.
+ *
+ * Two guards keep that copy honest, neither of which relies on anyone
+ * remembering: the backend suite compares the two files byte for byte, and
+ * `__tests__/knowledge-parity.test.tsx` compares this page's rendered DOM
+ * against the exact bytes of the assistant's system prompt — a stale mirror
+ * renders stale content and fails there too.
  */
+
+import knowledge from "@/data/club-knowledge.json";
 
 export interface FaqSchedule {
   /** The category, as the club names it. */
@@ -33,18 +41,6 @@ export interface FaqSchedule {
   days: string;
   hours: string;
 }
-
-/**
- * Fixed club training times. Kept in the same order the FAQ lists them —
- * youngest first — because that is the order a parent scans.
- */
-export const FAQ_SCHEDULES: FaqSchedule[] = [
-  { category: "Formativo", ages: "5 a 10 años", days: "Lunes a viernes", hours: "15:00 a 16:00" },
-  { category: "Infantil", ages: "8 a 12 años", days: "Lunes a viernes", hours: "16:00 a 17:00" },
-  { category: "Juvenil", ages: "Mayores de 12 años", days: "Lunes a viernes", hours: "17:00 a 18:00" },
-  { category: "Competitivo", ages: "Selección", days: "Lunes a sábado", hours: "18:00 a 20:00" },
-  { category: "Adultos", ages: "Mayores de 18 años", days: "Lunes a viernes", hours: "20:00 a 21:15" },
-];
 
 export interface FaqEntry {
   question: string;
@@ -57,89 +53,68 @@ export interface FaqSection {
   entries: FaqEntry[];
 }
 
-export const FAQ_SECTIONS: FaqSection[] = [
-  {
-    title: "Para empezar",
-    entries: [
-      {
-        question: "¿Cómo inicio sesión?",
-        answer:
-          "Con su correo y su contraseña, en la pantalla de inicio de sesión. Si olvidó la contraseña, desde esa misma pantalla puede pedir un enlace de recuperación por correo.",
-      },
-      {
-        question: "¿Por qué mi pantalla no se parece a la de otra persona del club?",
-        answer:
-          "Cada quien ve solo lo suyo. Un administrador ve la gestión completa del club; un entrenador ve lo operativo del día a día; una familia ve Mi Cuenta, con su propia información y nada más.",
-      },
-    ],
-  },
-  {
-    title: "Si es estudiante o representante",
-    entries: [
-      {
-        question: "¿Dónde veo si mi pago fue aprobado?",
-        answer:
-          "En Mi Cuenta. Ahí aparece el estado de cada pago y el de la membresía. Si un pago fue rechazado, verá el motivo y podrá subir un comprobante nuevo.",
-      },
-      {
-        question: "¿Dónde veo la asistencia?",
-        answer:
-          "También en Mi Cuenta. Cada registro muestra el día y el horario de esa clase, así que ahí mismo puede ver a qué hora entrena.",
-      },
-      {
-        question: "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
-        answer:
-          "Depende de quién es el titular. Un representante puede hacerlo por cada hijo o dependiente a su cargo, y un socio mayor de edad que gestiona su propia cuenta, por la suya: en Mi Cuenta, bajo Ficha médica, se ven y se corrigen las alergias, enfermedades, tipo de sangre y contacto de emergencia. La ficha de un menor con cuenta propia no la corrige el menor: la corrige su representante o un administrador del club.",
-      },
-      {
-        question: "Represento a más de un hijo. ¿Cómo cambio entre ellos?",
-        answer:
-          "Con el selector de estudiante que aparece arriba en Mi Cuenta. Lo que elija se mantiene mientras navega entre pantallas.",
-      },
-    ],
-  },
-  {
-    title: "Si es entrenador",
-    entries: [
-      {
-        question: "¿Cómo tomo asistencia?",
-        answer:
-          "Desde Asistencia. Elige el horario, pasa lista y confirma. Todos empiezan en Presente para que una sesión completa no cueste ni un toque, y el contador de sin revisar le dice a cuántos todavía nadie miró.",
-      },
-      {
-        question: "Me equivoqué al marcar. ¿Puedo deshacerlo?",
-        answer:
-          "Sí. El botón Deshacer de la barra inferior revierte la última marca, y también la acción de marcar a todos los restantes como presentes.",
-      },
-      {
-        question: "¿Dónde veo lo que ya cargué?",
-        answer: "En Historial Asistencia, con las listas registradas por sesión.",
-      },
-    ],
-  },
-  {
-    title: "Si es administrador",
-    entries: [
-      {
-        question: "¿Cómo valido un pago?",
-        answer:
-          "Desde Membresías y Pagos. Antes de aprobar tiene que confirmar lo que revisó; las preguntas cambian según el pago: un comprobante se revisa como comprobante, y un pago en efectivo recibido en persona no le pide certificar un comprobante que no existe.",
-      },
-      {
-        question: "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
-        answer:
-          "Sí, uno por uno. La cola de Membresías y Pagos revisa y decide cada solicitud por separado, con su propia lista de verificación: no hay una acción para aprobar varias a la vez.",
-      },
-      {
-        question: "Aprobé un pago por error. ¿Puedo revertirlo?",
-        answer:
-          "Durante unos segundos, sí: la decisión queda retenida y Deshacer la cancela antes de que salga. Pasado ese momento, el pago ya quedó registrado.",
-      },
-      {
-        question: "¿Quién define los horarios?",
-        answer:
-          "El administrador, desde Horarios. Cada categoría tiene su franja de días y hora; la clase la da el entrenador disponible.",
-      },
-    ],
-  },
-];
+/** A club value: what it is called, and what the club means by it. */
+export interface ClubValue {
+  name: string;
+  description: string;
+}
+
+/**
+ * What the club says about itself, where it is, and how to reach it.
+ *
+ * The help page states these for a reader; the assistant is given the same
+ * ones, so it can answer "¿dónde queda?" and "¿a qué número escribo?" — two
+ * questions it used to refuse while the landing had been answering them for
+ * months.
+ */
+export interface ClubProfile {
+  summary: string;
+  mission: string;
+  vision: string;
+  values: ClubValue[];
+  address: string;
+  landmark: string;
+  plusCode: string;
+  whatsapp: string[];
+  facebook: string;
+  instagram: string;
+  contactNote: string;
+}
+
+/**
+ * Fixed club training times. Kept in the same order the canonical file lists
+ * them — youngest first — because that is the order a parent scans.
+ */
+export const FAQ_SCHEDULES: FaqSchedule[] = knowledge.horarios.map(
+  (schedule): FaqSchedule => ({
+    category: schedule.categoria,
+    ages: schedule.edades,
+    days: schedule.dias,
+    hours: schedule.horas,
+  }),
+);
+
+export const FAQ_SECTIONS: FaqSection[] = knowledge.faq.map(
+  (section): FaqSection => ({
+    title: section.titulo,
+    entries: section.entradas.map(
+      (entry): FaqEntry => ({ question: entry.pregunta, answer: entry.respuesta }),
+    ),
+  }),
+);
+
+export const CLUB_PROFILE: ClubProfile = {
+  summary: knowledge.club.resumen,
+  mission: knowledge.club.mision,
+  vision: knowledge.club.vision,
+  values: knowledge.club.valores.map(
+    (value): ClubValue => ({ name: value.nombre, description: value.descripcion }),
+  ),
+  address: knowledge.ubicacion.direccion,
+  landmark: knowledge.ubicacion.referencia,
+  plusCode: knowledge.ubicacion.plus_code,
+  whatsapp: knowledge.contacto.whatsapp,
+  facebook: knowledge.contacto.facebook,
+  instagram: knowledge.contacto.instagram,
+  contactNote: knowledge.contacto.nota,
+};
