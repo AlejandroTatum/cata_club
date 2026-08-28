@@ -277,6 +277,48 @@ operador. Por eso el camino recomendado es el archivo.
 de tocar el crontab, y `deploy` aborta si el backup pre-deploy no puede cifrar:
 sin backup recuperable no se corren migraciones, que no tienen vuelta atrás.
 
+### URL del heartbeat (obligatoria antes de instalar el cron)
+
+El monitor externo del backup es un *dead-man's-switch*: UptimeRobot alerta
+cuando el ping **deja de llegar** (ver `docs/operations/monitoring.md`). Esa es
+la propiedad que lo hace útil — cubre el backup vencido, el cron desinstalado,
+el disco lleno y el host apagado, ninguno de los cuales puede avisar por sí
+mismo.
+
+La URL del heartbeat lleva su token en el path, así que **es una credencial**:
+quien la lea puede pingear a mano y dejar la alarma en verde para siempre con el
+backup muerto. Por eso no va al crontab (que `crontab -l` lista sin
+privilegios), no va al `.env` del stack y no la imprime ningún script.
+`notify-heartbeat.sh` la lee de un archivo del sistema:
+
+```bash
+ssh <host>
+sudo install -d -m 700 /etc/cataclub
+printf '%s\n' 'https://heartbeat.uptimerobot.com/m...' | sudo tee /etc/cataclub/heartbeat-url.txt
+sudo chmod 640 /etc/cataclub/heartbeat-url.txt
+```
+
+- Ruta por defecto: `/etc/cataclub/heartbeat-url.txt`, el mismo directorio `700`
+  de root donde ya vive `backup-recipients.txt`. Se puede mover con
+  `HEARTBEAT_URL_FILE`, pero el default es el que documenta este archivo.
+- Permisos `640` y dueño root: el cron corre como el usuario del deploy, que
+  necesita leerla; nadie más en el host tiene por qué poder.
+- Debe empezar con `https://`. El script rechaza cualquier otra cosa: sobre
+  `http` el token viaja en claro y lo lee cualquiera en el camino.
+
+**No copiar este archivo a otro entorno.** Es el error más caro de esta pieza y
+es silencioso en la dirección peligrosa: un staging con la URL de producción
+pingea el heartbeat de producción todos los días, así que producción se ve verde
+aunque su propio backup lleve semanas muerto. La alarma no se rompe — se
+silencia, y nada lo delata. Cada entorno que quiera heartbeat necesita su propio
+monitor en UptimeRobot y su propia URL; un entorno que no lo quiera simplemente
+no instala el cron.
+
+`install-cron` verifica que el archivo exista y tenga contenido antes de tocar
+el crontab, y **aborta** si falta: instalar el cron sin el ping dejaría un
+crontab que se ve correcto y una protección que no existe, sin nada que lo
+diga.
+
 ### Crons
 
 Instalar los crons solo después de que el operador haya revisado el crontab
@@ -287,8 +329,23 @@ que administra su host:
 ```
 
 Instala dos entradas: el backup diario (03:30) y la verificación de frescura
-(`check-backup-freshness.sh`, 07:00), que alerta si el dump más reciente supera
-el RPO de 26 h. Ambas escriben en el mismo log (`BACKUP_CRON_LOG`).
+(`check-backup-freshness.sh --max-age-hours 26`, 07:00), que alerta si el dump
+más reciente supera el RPO. La de las 07:00 encadena `notify-heartbeat.sh` con
+`&&`, así que el ping sale **solo** si el chequeo salió 0: sin dump (exit 1) o
+con el dump vencido (exit 2) el ping falta y el monitor externo alerta. Ambas
+entradas escriben en el mismo log (`BACKUP_CRON_LOG`).
+
+Ese log tiene que existir y ser escribible por el usuario que corre el cron. La
+redirección `>> $BACKUP_CRON_LOG` se evalúa **antes** que el comando, así que un
+log que no se puede abrir no degrada el monitoreo: lo apaga entero, backup y
+alarma a la vez, y sin `MAILTO` ni MTA en el host nadie se entera. `/var/log` es
+`drwxrwxr-x root:syslog` y el usuario del deploy no está en `syslog`, así que
+por defecto **no puede crearlo**. `install-cron` lo verifica y aborta con el
+comando exacto:
+
+```bash
+sudo install -o $(id -un) -g $(id -gn) -m 640 /dev/null /var/log/cataclub-backup.log
+```
 
 `backup-db.sh` escribe el artefacto de forma atómica en
 `cataclub_<fecha>.dump.age` y no elimina backups: cuando se supera

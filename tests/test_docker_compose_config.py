@@ -773,6 +773,66 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
 
 
+# `handle` que enruta al backend, con su matcher. `handle` (y no un
+# `reverse_proxy` suelto con matcher) porque los bloques `handle` son
+# MUTUAMENTE EXCLUYENTES y se evalúan en el orden escrito: lo que no cae en el
+# primero cae en el catch-all del frontend, sin solapamiento posible.
+_RUTA_DEL_BACKEND_EN_CADDY = re.compile(
+    r"handle\s+(?P<matcher>[^\s{]+)\s*\{[^{}]*reverse_proxy\s+backend:8000[^{}]*\}"
+)
+
+
+def test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness():
+    """El monitor externo necesita `/health/ready` público; NADA MÁS del backend.
+
+    El backend nunca se expuso a internet: lo consume el frontend por la red
+    interna de Docker. Abrirle una ruta al ingress es abrir una puerta, así que
+    tiene que ser del ancho exacto de lo que se necesita.
+
+    Un prefijo (`/health*`, o peor, `/`) alcanzaría también a `/docs` y a
+    `/diagnostico/circuitos`, que exige rol ADMINISTRADOR y existe fuera de
+    `/health` justamente para que nadie la confunda con una sonda anónima (ver
+    el comentario largo en backend/main.py, arriba de esa ruta). `/health` a
+    secas tampoco va: es la sonda de liveness del orquestador y no aporta nada
+    a un monitor externo que ya sabe si el sitio contesta.
+
+    El candado no enumera rutas prohibidas -- esa lista siempre queda corta.
+    Exige que el backend tenga UN solo upstream en todo el archivo y que su
+    matcher sea el path EXACTO `/health/ready`: cualquier ruta nueva hacia el
+    backend, o un `*` agregado al matcher, pone esta prueba en rojo.
+
+    Verificado contra `caddy:2.8-alpine` real, no solo leído: `/health/ready`
+    llega al backend, mientras que `/health`, `/docs`, `/diagnostico/circuitos`,
+    `/health/ready/` y `/health/readyX` caen todos en el frontend.
+    """
+    contenido = (RAIZ / "Caddyfile").read_text()
+
+    upstreams = re.findall(r"reverse_proxy\s+backend:\d+", contenido)
+    assert upstreams == ["reverse_proxy backend:8000"], (
+        "el Caddyfile debe declarar exactamente UN upstream hacia el backend "
+        f"(y en el puerto 8000); encontrados: {upstreams!r}"
+    )
+
+    ruta = _RUTA_DEL_BACKEND_EN_CADDY.search(contenido)
+    assert ruta is not None, (
+        "el upstream del backend no cuelga de un bloque `handle <matcher>`: sin "
+        "matcher exclusivo no hay forma de acotar qué llega al backend"
+    )
+    assert ruta.group("matcher") == "/health/ready", (
+        "el backend solo puede recibir el path EXACTO /health/ready; el matcher "
+        f"declarado es {ruta.group('matcher')!r} (un comodín o un prefijo "
+        "expondría /docs y /diagnostico/circuitos)"
+    )
+
+    catch_all = contenido.find("reverse_proxy frontend:3000")
+    assert catch_all != -1, "el Caddyfile ya no enruta al frontend"
+    assert ruta.start() < catch_all, (
+        "la ruta de readiness tiene que ir ANTES del catch-all del frontend: "
+        "detrás, el catch-all se la come y el monitor externo recibe un 404 de "
+        "Next.js que se parece a un sitio sano"
+    )
+
+
 # APIs de navegador que la app NO usa y que este borde público tiene que
 # negar. Verificado leyendo frontend/src, no copiado de una plantilla:
 # `navigator.*` no aparece ni una vez fuera de los tests, el mapa de la

@@ -355,14 +355,65 @@ case "$cmd" in
         "       Creá el archivo a nombre del usuario que corre el cron y repetí:" \
         "         sudo install -o \$(id -un) -g \$(id -gn) -m 640 /dev/null ${BACKUP_CRON_LOG}")"
     fi
-    log "Instalando cron de backup (03:30) y de frescura (07:00) tras confirmación explícita del operador"
+    # El heartbeat es la mitad que mira DESDE AFUERA: el monitor externo alerta
+    # cuando el ping deja de llegar, así que cubre lo que ningún control local
+    # puede cubrir -- que el host entero se haya caído, cron incluido.
+    #
+    # Sin el archivo se ABORTA, no se instala el cron sin el ping. Instalar
+    # igual con un aviso sería degradar la protección en silencio: el crontab
+    # quedaría con sus dos líneas de siempre, `crontab -l` se vería impecable, y
+    # el aviso se lo lleva el scroll de la terminal. Meses después nadie sabe
+    # que el dead-man's-switch nunca se cableó y no hay nada que lo delate --
+    # que es exactamente la clase de falla muda que este cambio vino a cerrar.
+    # Abortar, en cambio, no cuesta nada: `install-cron` reescribe el crontab
+    # entero en cada corrida, así que el estado tras el aborto es el de antes y
+    # el operador está mirando el comando que lo arregla. Mismo criterio que la
+    # compuerta del destinatario de cifrado, unas líneas más arriba.
+    HEARTBEAT_URL_FILE="${HEARTBEAT_URL_FILE:-/etc/cataclub/heartbeat-url.txt}"
+    if ! grep -qs '[^[:space:]]' "$HEARTBEAT_URL_FILE"; then
+      die "$(printf '%s\n' \
+        "no hay URL de heartbeat en ${HEARTBEAT_URL_FILE}." \
+        "       El monitor externo alerta cuando el ping DEJA de llegar: es lo" \
+        "       único que avisa si se cae el host entero y el cron con él." \
+        "       Creá el archivo (la URL NO va en el crontab, que cualquiera" \
+        "       lista con 'crontab -l') y repetí:" \
+        "         sudo install -d -m 700 \$(dirname ${HEARTBEAT_URL_FILE})" \
+        "         printf '%s\\n' 'https://...' | sudo tee ${HEARTBEAT_URL_FILE}" \
+        "         sudo chmod 640 ${HEARTBEAT_URL_FILE}" \
+        "       Ver docs/operations/provisioning.md.")"
+    fi
+    # Mismo criterio que la compuerta de `age`: la dependencia del cron se
+    # verifica acá y no cuando el cron corra. Sin `curl`, `install-cron`
+    # reportaría éxito y el ping recién fallaría a las 07:00 del día siguiente,
+    # dejando el monitor externo en alerta por una herramienta ausente y no por
+    # un backup vencido -- la alarma correcta por el motivo equivocado.
+    command -v curl >/dev/null 2>&1 || die "falta 'curl' en el host (apt-get install -y curl); el heartbeat no podría pingear"
+    log "Instalando cron de backup (03:30) y de frescura + heartbeat (07:00) tras confirmación explícita del operador"
     # La verificación de frescura escribe 1-2 líneas por día en el mismo log
     # del backup para no multiplicar archivos sin rotación.
+    #
+    # El heartbeat cuelga de un `&&`, nunca de un `;`: se pingea SOLO si el
+    # chequeo salió 0. `check-backup-freshness.sh` sale 1 sin ningún dump y 2
+    # con un dump vencido, y en los dos casos el ping tiene que FALTAR -- la
+    # ausencia del ping es lo que dispara la alarma. Un `;` pondría el monitor
+    # en verde justo cuando hay que alertar, que es peor que no monitorear:
+    # daría una garantía falsa. El `cd` también está encadenado con `&&`, así
+    # que un STACK_DIR que ya no existe tampoco pingea.
+    #
+    # `--max-age-hours` explícito, en paridad con `do_checks` y con
+    # preflight-production.sh: el umbral del RPO se declara en un solo lugar del
+    # repo y no queda a merced del default interno del script.
+    #
+    # La URL del heartbeat NO aparece acá: `notify-heartbeat.sh` la lee de un
+    # archivo de root. `crontab -l` no pide privilegios, y quien lea esa URL
+    # puede pingear a mano y dejar la alarma en verde con el backup muerto.
     (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' || true
      printf '30 3 * * * cd %s && ./scripts/backup/backup-db.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
-     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
+     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
+       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
     ) | crontab -
     crontab -l | grep 'backup-db.sh' >/dev/null || die "el cron de backup no quedó instalado"
     crontab -l | grep 'check-backup-freshness.sh' >/dev/null || die "el cron de frescura no quedó instalado"
+    crontab -l | grep 'notify-heartbeat.sh' >/dev/null || die "el cron no quedó con el ping de heartbeat"
     ;;
 esac

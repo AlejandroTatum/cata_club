@@ -12,10 +12,15 @@
 #
 #   - Ingress con TLS automático (servicio `caddy`, más abajo): es el ÚNICO
 #     servicio con puertos publicados (80/443) en todo el stack de
-#     producción -- el backend nunca se expone a internet, lo consume el
+#     producción -- el backend no publica ningún puerto, lo consume el
 #     frontend por la red interna de Docker (decisión de arquitectura ya
 #     verificada). Ver tests/test_docker_compose_config.py:
 #     test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443.
+#     La ÚNICA ruta del backend alcanzable desde internet es la sonda
+#     `/health/ready`, que el `Caddyfile` proxya con un matcher de path
+#     exacto para el monitor externo (ver docs/operations/monitoring.md y
+#     test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness); pasa
+#     igual por este ingress, no por un puerto publicado.
 #     La configuración del proxy vive versionada en `./Caddyfile` (montada
 #     de solo lectura), no en `command:` -- así se puede diffear y validar
 #     (`caddy validate`) sin levantar el stack.
