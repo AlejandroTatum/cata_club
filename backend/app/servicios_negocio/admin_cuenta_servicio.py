@@ -155,6 +155,15 @@ class AdminCuentaServicio:
             correo=datos.correo,
             contrasenia=hash_pw,
             persona_id=persona.id,
+            # Issue #790: nace verificada. Este endpoint exige ya una sesión
+            # de ADMINISTRADOR, así que no es el eslabón que ese issue cierra
+            # -- ese es la autoinscripción PÚBLICA. Dejarla sin verificar no
+            # protegería nada y rompería el mostrador: el administrador que da
+            # de alta a un padre parado frente a él quedaría sin poder
+            # vincularle a su hijo hasta que llegue un correo. Que el club
+            # identifique a alguien en persona es una comprobación más fuerte
+            # que una ida y vuelta por correo, no una más débil.
+            correo_verificado=True,
         )
         self.repo_usuario.crear(usuario)
 

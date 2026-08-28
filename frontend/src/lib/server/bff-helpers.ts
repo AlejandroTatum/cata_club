@@ -219,6 +219,109 @@ export async function publicCatalogGet(
   return NextResponse.json(json, { status: 200 });
 }
 
+interface AnonymousAuthPostOptions {
+  /** Body forwarded to the backend, JSON-serialized. */
+  payload: unknown;
+  forwardedFor: string | undefined;
+  /**
+   * When set, a backend 400/401 is relayed as a 400 carrying the backend's own
+   * message, falling back to this text. Routes that carry a one-shot link
+   * token (reset, verify) use it; routes that only take an email address
+   * (request-recovery, resend-verification) leave it unset, because for them a
+   * 400/401 is a genuine backend fault, not a dead link.
+   */
+  invalidLinkMessage?: string;
+}
+
+/**
+ * Shared POST algorithm for the anonymous auth routes that carry an email
+ * address or a one-shot link token (issue #790): `recuperar-contrasenia`,
+ * `restablecer-contrasenia`, `verificar-correo/reenviar` and
+ * `verificar-correo`.
+ *
+ * All four are public by design — the link token IS the credential, not a
+ * session cookie — and all four run the same sequence: `backendFetch` with the
+ * forwarded client IP, 503 when the backend is unreachable, 429 relayed as
+ * "too many attempts", 502 for any other backend error, and the backend's own
+ * JSON passed straight through on success.
+ *
+ * Extracted rather than copied a third and fourth time: the first two routes
+ * were already a near-literal duplicate of each other, and mirroring that pair
+ * for the verification flow would have doubled it again.
+ *
+ * The success body is passed through verbatim on purpose. Two of these
+ * endpoints answer with a deliberately constant anti-enumeration message, and
+ * a handler that reinterpreted the response could turn "the same answer either
+ * way" back into an oracle.
+ */
+export async function anonymousAuthPost(
+  backendPath: string,
+  options: AnonymousAuthPostOptions,
+): Promise<NextResponse> {
+  const { payload, forwardedFor, invalidLinkMessage } = options;
+
+  const result = await backendFetch(
+    backendPath,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    { forwardedFor },
+  );
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error.code, message: result.error.message }, { status: 503 });
+  }
+
+  const response = result.data;
+  if (response.status === 429) {
+    return NextResponse.json(
+      { error: "rate_limited", message: "Demasiados intentos. Espere un momento antes de volver a intentarlo." },
+      { status: 429 },
+    );
+  }
+
+  if (invalidLinkMessage && (response.status === 400 || response.status === 401)) {
+    const data = await parseJsonResponse(response);
+    const body = (typeof data === "object" && data !== null ? data : {}) as {
+      detail?: string;
+      message?: string;
+    };
+    return NextResponse.json(
+      { error: "invalid_credentials", message: body.detail ?? body.message ?? invalidLinkMessage },
+      { status: 400 },
+    );
+  }
+
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: "backend_unavailable", message: `El servidor respondió con un error (${response.status}).` },
+      { status: 502 },
+    );
+  }
+
+  // A 204 carries no body. The shared client (`src/services/api.ts`'s
+  // `request()`) always calls `response.json()` on a 2xx, which throws on an
+  // empty body — so answer with a small JSON object instead of relaying the
+  // 204 (same convention as /api/auth/refresh's `{ success: true }`).
+  if (response.status === 204) {
+    return NextResponse.json({ success: true }, { status: 200 });
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    return NextResponse.json(
+      { error: "invalid_response", message: "Respuesta del servidor inválida." },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(json, { status: 200 });
+}
+
 interface PatchCatalogResourceOptions<Field extends string> {
   /** Raw `[id]` route param — validated as digits-only before anything else runs. */
   id: string;

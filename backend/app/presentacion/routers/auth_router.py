@@ -9,6 +9,8 @@ from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.presentacion.schemas.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO,
+    SolicitarVerificacionCorreoDTO, SolicitarVerificacionCorreoResponseDTO,
+    ConfirmarVerificacionCorreoDTO,
     ActualizarPerfilPropioDTO, ActualizarPerfilPropioResponseDTO, ActualizarFotoPerfilResponseDTO,
     SesionResponseDTO,
 )
@@ -100,6 +102,7 @@ async def obtener_perfil(
         "fecha_creacion": usuario.fecha_creacion,
         "foto_url": usuario.persona.foto_url,
         "fecha_nacimiento": usuario.persona.fecha_nacimiento,
+        "correo_verificado": usuario.correo_verificado,
     }
 
 
@@ -229,3 +232,35 @@ async def solicitar_recuperacion(request: Request, datos: SolicitarRecuperacionD
 @limiter.limit("20/minute")
 async def restablecer_contrasenia(request: Request, datos: RestablecerContraseniaDTO, db: Session = Depends(obtener_sesion)):
     AuthServicio(db).restablecer_contrasenia(datos.token, datos.nueva_contrasenia)
+
+
+# --- Issue #790: verificación de la dirección de correo ----------------------
+# Públicos por el mismo motivo que la recuperación de contraseña: quien tiene
+# que verificar su correo puede haber cerrado la sesión, haberla dejado vencer
+# o estar abriendo el enlace desde otro dispositivo. Exigir token acá
+# convertiría "no me llegó el correo" en un callejón sin salida.
+#
+# Ninguno de los dos revela si una dirección está registrada: el reenvío
+# responde SIEMPRE `MENSAJE_VERIFICACION_ENVIADA` y la confirmación responde
+# siempre lo mismo ante cualquier enlace que no sirva (ver `AuthServicio`).
+# Mismo tier de rate limit que sus gemelos de recuperación.
+@router.post(
+    "/verificar-correo/reenviar", response_model=SolicitarVerificacionCorreoResponseDTO
+)
+@limiter.limit("10/minute")
+async def reenviar_verificacion_correo(
+    request: Request,
+    datos: SolicitarVerificacionCorreoDTO,
+    db: Session = Depends(obtener_sesion),
+):
+    return AuthServicio(db).solicitar_verificacion_correo(datos.correo)
+
+
+@router.post("/verificar-correo", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
+async def verificar_correo(
+    request: Request,
+    datos: ConfirmarVerificacionCorreoDTO,
+    db: Session = Depends(obtener_sesion),
+):
+    AuthServicio(db).confirmar_verificacion_correo(datos.token)

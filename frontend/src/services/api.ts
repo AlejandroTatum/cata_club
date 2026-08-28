@@ -1453,6 +1453,27 @@ export async function restablecerContrasenia(
   });
 }
 
+/** Confirm an email address using the token from the link (issue #790). */
+export async function verificarCorreo(token: string): Promise<void> {
+  await request<void>(apiEndpoint('/auth/verificar-correo'), {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+/**
+ * Ask for a fresh verification link (POST /auth/verificar-correo/reenviar).
+ * Like `solicitarRecuperacion`, the backend answers the same way whether the
+ * address is registered or not, and whether or not it is already verified —
+ * callers must show that message as-is and never branch on it.
+ */
+export async function reenviarVerificacionCorreo(correo: string): Promise<{ mensaje: string }> {
+  return request<{ mensaje: string }>(apiEndpoint('/auth/verificar-correo/reenviar'), {
+    method: 'POST',
+    body: JSON.stringify({ correo }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Types & API Methods — Memberships, Roles & Medical Record (Grupo B)
 // ---------------------------------------------------------------------------

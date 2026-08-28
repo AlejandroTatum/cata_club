@@ -53,6 +53,12 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # ficha_medica_router.py::_es_titular_mayor_de_edad para la mitad
     # backend de la misma decisión.
     fecha_nacimiento: date
+    # Issue #790: el estado real de la cuenta, para que la interfaz pueda
+    # decirlo antes de que el usuario choque contra el rechazo. Un frontend
+    # que no puede leer este dato solo tiene dos opciones, y las dos mienten:
+    # callarse (y dejar que el representante descubra el requisito recién al
+    # intentar agregar a un hijo) o suponer.
+    correo_verificado: bool = True
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
@@ -131,6 +137,19 @@ class SolicitarRecuperacionDTO(BaseModel):
 
 class SolicitarRecuperacionResponseDTO(ResponseBase, BaseModel):
     mensaje: str
+
+
+# --- Issue #790: verificación de la dirección de correo ---------------------
+class SolicitarVerificacionCorreoDTO(BaseModel):
+    correo: EmailStr
+
+
+class SolicitarVerificacionCorreoResponseDTO(ResponseBase, BaseModel):
+    mensaje: str
+
+
+class ConfirmarVerificacionCorreoDTO(BaseModel):
+    token: str
 
 
 class RestablecerContraseniaDTO(BaseModel):

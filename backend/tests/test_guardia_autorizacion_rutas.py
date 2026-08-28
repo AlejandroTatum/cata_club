@@ -121,6 +121,13 @@ RUTAS_PUBLICAS = {
     ("POST", "/auth/recuperar-contrasenia"),
     ("POST", "/auth/refresh"),
     ("POST", "/auth/restablecer-contrasenia"),
+    # Issue #790: mismo criterio que los dos de recuperación. Quien tiene que
+    # verificar su correo puede haber cerrado la sesión o estar abriendo el
+    # enlace desde otro dispositivo; exigir token acá convertiría "no me llegó
+    # el correo" en un callejón sin salida. Ninguno revela si una dirección
+    # está registrada (ver `test_verificacion_correo_outbox.py`).
+    ("POST", "/auth/verificar-correo"),
+    ("POST", "/auth/verificar-correo/reenviar"),
     ("POST", "/chatbot/consultar"),
     ("POST", "/enrollment/"),
 }

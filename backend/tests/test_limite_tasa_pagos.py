@@ -75,6 +75,14 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         "invalidar_sesiones": "5/minute",
         "solicitar_recuperacion": "10/minute",
         "restablecer_contrasenia": "20/minute",
+        # Issue #790: mismos tiers que sus gemelos de recuperación, y por el
+        # mismo motivo. El reenvío (10/minute) dispara un correo por llamada,
+        # así que es el que hay que frenar más; la confirmación (20/minute)
+        # solo valida un token que el visitante ya tiene en la mano, y apretarla
+        # castigaría a quien vuelve a tocar el enlace porque no vio la primera
+        # respuesta.
+        "reenviar_verificacion_correo": "10/minute",
+        "verificar_correo": "20/minute",
     },
     enrollment_router: {
         "autoinscribir": "10/minute",

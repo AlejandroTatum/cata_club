@@ -8,12 +8,16 @@ from typing import Callable
 import jwt
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import RecuperacionOutbox, Sesion, Usuario
+from app.dominio.modelos import (
+    RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
+)
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
     ServicioNoDisponible,
 )
-from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
+from app.dominio.mensajes import (
+    MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VERIFICACION_ENVIADA,
+)
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.presentacion.schemas.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
@@ -285,6 +289,13 @@ class AuthServicio:
             correo=datos.correo,
             contrasenia=hash_contrasenia,
             persona_id=persona.id,
+            # Issue #790: nace verificada, mismo criterio que
+            # `AdminCuentaServicio.crear_cuenta`. Este endpoint dejó de ser
+            # público hace tiempo (exige ADMINISTRADOR, ver `auth_router.py`),
+            # así que no es la vía que ese issue cierra, y dejarla sin
+            # verificar solo trabaría al administrador que está dando de alta
+            # a alguien que tiene enfrente.
+            correo_verificado=True,
         )
         nuevo_usuario = self.repo.crear(nuevo_usuario)
         return self._emitir_par_tokens(nuevo_usuario)
@@ -665,4 +676,80 @@ class AuthServicio:
         # cuenta está comprometida: un access/refresh token robado no debe
         # sobrevivir al reset.
         usuario.revocar_sesiones()
+        self.db.commit()
+
+    # --- Issue #790: verificación de la dirección de correo ------------------
+    def solicitar_verificacion_correo(self, correo: str) -> dict:
+        """Registra la solicitud localmente; el worker enviará el enlace.
+
+        Copia deliberada de la forma de `solicitar_recuperacion`, incluida su
+        disciplina anti-enumeración: TODO el trabajo vive dentro del `if`, y
+        una dirección desconocida cae directo al mismo `return`. Una cuenta ya
+        verificada tampoco encola nada -- sería trabajo inútil -- pero
+        responde exactamente igual, porque la respuesta no puede delatar en
+        qué estado está una cuenta que sí existe.
+        """
+        usuario = self.repo.obtener_por_correo(correo)
+        if usuario and not usuario.correo_verificado:
+            evento = (
+                self.db.query(VerificacionCorreoOutbox)
+                .filter(
+                    VerificacionCorreoOutbox.usuario_id == usuario.id,
+                    VerificacionCorreoOutbox.status.in_(("PENDIENTE", "ENVIANDO")),
+                )
+                .first()
+            )
+            if evento is None:
+                self.db.add(
+                    VerificacionCorreoOutbox(
+                        usuario_id=usuario.id,
+                        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+                    )
+                )
+            elif evento.status == "PENDIENTE":
+                # El índice parcial único obliga a reusar la fila activa;
+                # reusarla sin adelantar `next_attempt_at` convertiría
+                # "reenviar" en un 200 que no hace nada mientras el backoff
+                # empuja el reintento hasta 16 minutos adelante (issue #764).
+                # `min` porque esto solo puede adelantar, nunca posponer, y no
+                # se tocan los `attempts` gastados. Una fila `ENVIANDO` no se
+                # toca: está reclamada por un worker y su lease manda.
+                evento.next_attempt_at = min(
+                    evento.next_attempt_at, datetime.now(timezone.utc)
+                )
+            try:
+                self.db.commit()
+            except Exception:
+                self.db.rollback()
+                _log.exception("No se pudo registrar la verificación de correo")
+                raise ServicioNoDisponible(
+                    "No se pudo procesar la solicitud. Intente nuevamente más tarde"
+                )
+        return {"mensaje": MENSAJE_VERIFICACION_ENVIADA}
+
+    def confirmar_verificacion_correo(self, token: str) -> None:
+        """Marca la dirección como probada.
+
+        Idempotente a propósito: reabrir el enlace es lo que hace cualquiera
+        que no está seguro de haber hecho clic, y responder distinto la segunda
+        vez convertiría el endpoint en un oráculo de qué direcciones ya se
+        verificaron. Todos los caminos de fallo comparten el MISMO mensaje,
+        igual que `restablecer_contrasenia`: un token corrupto, uno de una
+        cuenta inexistente y uno de una cuenta suspendida son indistinguibles
+        desde afuera.
+        """
+        payload = GestorAutenticacion.decodificar_token_verificacion_correo(token)
+        usuario = self.repo.obtener_por_correo(payload["sub"])
+        if not usuario:
+            raise CredencialesInvalidas("El enlace de verificación es inválido o expiró")
+
+        # Mismos estados que bloquean el login: una cuenta suspendida (o cuya
+        # persona fue dada de baja del club) no debe poder ganar capacidades.
+        if not usuario.activo or not usuario.persona.activo:
+            raise CredencialesInvalidas("El enlace de verificación es inválido o expiró")
+
+        if usuario.correo_verificado:
+            return
+
+        usuario.correo_verificado = True
         self.db.commit()
