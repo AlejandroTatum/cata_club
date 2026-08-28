@@ -209,7 +209,7 @@ class ConsentimientoLegal(Base):
     )
     texto_aceptado: Mapped[str] = mapped_column(String(10000), nullable=False)
     aceptado_en: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_ahora_utc, server_default=func.now(), nullable=False,
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
     cuenta_id: Mapped[int] = mapped_column(
         ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False,
@@ -239,7 +239,7 @@ class RevocacionConsentimientoLegal(Base):
         ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False,
     )
     revocado_en: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_ahora_utc, server_default=func.now(), nullable=False,
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
     motivo: Mapped[str] = mapped_column(String(500), nullable=False)
 

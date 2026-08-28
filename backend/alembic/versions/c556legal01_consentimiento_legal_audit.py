@@ -62,7 +62,33 @@ def upgrade() -> None:
     )
 
 
+    op.execute(sa.text("""
+        CREATE FUNCTION impedir_mutacion_auditoria_legal()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+            RAISE EXCEPTION 'la auditoria legal es inmutable';
+        END;
+        $$;
+    """))
+    for tabla, trigger in (
+        ("consentimiento_legal", "trg_consentimiento_legal_inmutable"),
+        ("revocacion_consentimiento_legal", "trg_revocacion_consentimiento_legal_inmutable"),
+    ):
+        op.execute(sa.text(
+            f"CREATE TRIGGER {trigger} BEFORE UPDATE OR DELETE ON {tabla} "
+            "FOR EACH ROW EXECUTE FUNCTION impedir_mutacion_auditoria_legal()"
+        ))
+
+
 def downgrade() -> None:
+    for tabla, trigger in (
+        ("consentimiento_legal", "trg_consentimiento_legal_inmutable"),
+        ("revocacion_consentimiento_legal", "trg_revocacion_consentimiento_legal_inmutable"),
+    ):
+        op.execute(sa.text(f"DROP TRIGGER {trigger} ON {tabla}"))
+    op.execute(sa.text("DROP FUNCTION impedir_mutacion_auditoria_legal()"))
     op.drop_index("ix_revocacion_consentimiento_legal_cuenta_id", table_name="revocacion_consentimiento_legal")
     op.drop_table("revocacion_consentimiento_legal")
     op.drop_index("ix_consentimiento_legal_representado_persona_id", table_name="consentimiento_legal")
