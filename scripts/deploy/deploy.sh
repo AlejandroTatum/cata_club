@@ -327,6 +327,34 @@ case "$cmd" in
         "       La identidad PRIVADA no va en este host.")"
     fi
     command -v age >/dev/null 2>&1 || die "falta 'age' en el host (apt-get install -y age); el cron de backup no cifraría"
+    # Las DOS entradas del cron redirigen su salida a `$BACKUP_CRON_LOG`. Una
+    # redirección que falla aborta el comando ANTES de ejecutarlo, así que un
+    # log inescribible no degrada el monitoreo: lo apaga entero. Se caen juntos
+    # el backup de las 03:30 y la verificación de frescura de las 07:00, que es
+    # justamente lo único que avisaría del backup muerto -- y sin MAILTO ni MTA
+    # en el host, las dos mueren sin dejar rastro mientras `install-cron`
+    # reporta éxito.
+    #
+    # Pasó en el host real: `/var/log` es `drwxrwxr-x root:syslog` y el usuario
+    # que corre el deploy no está en `syslog`, así que no podía crear el
+    # archivo. Se verifica ACÁ, con el operador todavía en la terminal, por el
+    # mismo motivo que el destinatario de cifrado de arriba.
+    #
+    # El `2>/dev/null` va ANTES del `>>`: las redirecciones se aplican de
+    # izquierda a derecha, y el aviso que emite el propio shell cuando una
+    # redirección falla sale por el stderr vigente en ese momento. Al revés, ese
+    # aviso crudo se filtraría a la terminal por delante del mensaje explicado.
+    if ! { [ -f "$BACKUP_CRON_LOG" ] && [ -w "$BACKUP_CRON_LOG" ]; } \
+       && ! : 2>/dev/null >> "$BACKUP_CRON_LOG"; then
+      die "$(printf '%s\n' \
+        "el cron no puede escribir su propio log: ${BACKUP_CRON_LOG}." \
+        "       La redirección '>> ${BACKUP_CRON_LOG}' falla antes de ejecutar el" \
+        "       comando, así que se caerían las DOS entradas a la vez: el backup" \
+        "       de las 03:30 y la alarma de frescura de las 07:00, que es lo único" \
+        "       que avisaría del backup muerto. Sin MAILTO ni MTA, en silencio." \
+        "       Creá el archivo a nombre del usuario que corre el cron y repetí:" \
+        "         sudo install -o \$(id -un) -g \$(id -gn) -m 640 /dev/null ${BACKUP_CRON_LOG}")"
+    fi
     log "Instalando cron de backup (03:30) y de frescura (07:00) tras confirmación explícita del operador"
     # La verificación de frescura escribe 1-2 líneas por día en el mismo log
     # del backup para no multiplicar archivos sin rotación.
