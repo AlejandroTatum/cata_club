@@ -24,11 +24,11 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AddDependentPage from "@/app/student/add-dependent/page";
-import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
-import { ApiClientError, crearRepresentado, fetchStudentPortal, vincularRepresentado } from "@/services/api";
+import { installAddDependentHarness } from "./add-dependent-harness";
+import { ApiClientError, crearRepresentado, vincularRepresentado } from "@/services/api";
 import { addDependentFieldId, type AddDependentField } from "@/app/student/add-dependent/add-dependent-utils";
 import { MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
 
@@ -37,52 +37,23 @@ const MENSAJE_CORREO_SIN_VERIFICAR =
   "Para vincular a un representado primero debe verificar su correo. " +
   "Revise su bandeja de entrada o solicite un nuevo enlace de verificación.";
 
-vi.mock("@/components/ProtectedRoute", () => ({
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+// The seven-mock preamble this wizard needs before it will mount lives in
+// `add-dependent-harness`; see that module for why the bodies are there and
+// the `vi.mock` calls are here.
+// `vi.hoisted` so the binding exists before the hoisted `vi.mock` factories run.
+const harness = vi.hoisted(() => () => import("./add-dependent-harness"));
 
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/student/add-dependent",
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useSearchParams: () => useTestSearchParams(),
-}));
+vi.mock("@/components/ProtectedRoute", async () => (await harness()).protectedRouteDouble());
+vi.mock("next/navigation", async () => (await harness()).navigationDouble());
+vi.mock("next/link", async () => (await harness()).nextLinkDouble());
+vi.mock("next/image", async () => (await harness()).nextImageDouble());
+vi.mock("@/contexts/AuthContext", async () => (await harness()).authContextDouble());
+vi.mock("@/contexts/ToastContext", async () => (await harness()).toastContextDouble());
 
-vi.mock("next/link", () => ({
-  __esModule: true,
-  default: ({
-    children,
-    href,
-    ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children: React.ReactNode; href: string }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
-
-vi.mock("next/image", () => ({
-  __esModule: true,
-  // eslint-disable-next-line @next/next/no-img-element
-  default: ({ alt }: { alt: string }) => <img alt={alt} />,
-}));
-
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({
-    session: {
-      user: { id: "9", name: "Mishell", email: "m@cataclub.com", role: "representante" },
-      roles: ["REPRESENTANTE"],
-    },
-    isAuthenticated: true,
-    isLoading: false,
-    logout: vi.fn(),
-    refreshSession: vi.fn(),
-  }),
-}));
-
-vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showError: vi.fn(), showSuccess: vi.fn() }),
-}));
-
+// `@/services/api` stays here, and keeps `importOriginal`, because this suite
+// builds `ApiClientError` instances: a hand-rolled double could invent a
+// `safe` field the shipped error does not carry, which is the other way a
+// green test has lied in this repo.
 vi.mock("@/services/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/api")>();
   return {
@@ -94,26 +65,9 @@ vi.mock("@/services/api", async (importOriginal) => {
   };
 });
 
-beforeEach(() => {
-  vi.mocked(fetchStudentPortal).mockResolvedValue({
-    self: {
-      personaId: "9",
-      nombres: "Mishell",
-      apellidos: "Rivadeneira",
-      fechaNacimiento: "1990-01-01",
-      recentSessions: [],
-      membership: null,
-      representante: null,
-      representanteId: null,
-    },
-    representados: [],
-    membershipPlans: [],
-  });
-  resetTestHistory("/student/add-dependent");
-});
+installAddDependentHarness();
 
 afterEach(() => {
-  cleanup();
   vi.clearAllMocks();
 });
 
