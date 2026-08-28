@@ -616,6 +616,31 @@ const config: Config = {
       },
       maxWidth: {
         "8xl": "88rem",
+        /**
+         * The reading measure: the widest a column of continuous prose may get
+         * before the eye loses the start of the next line on the way back.
+         *
+         * It is written in `ch` and not in `rem` on purpose. `ch` is the advance
+         * of the "0" glyph in the element's OWN font, so the column tracks the
+         * type set inside it: the same token gives a 15px `base` paragraph and a
+         * 20px one the same number of characters per line, which is what the
+         * measure is actually about. A `rem` width would freeze the pixels and
+         * let the character count drift with every size step.
+         *
+         * 62 rather than a round 65: `ch` is not a character. Barlow's "0" is
+         * appreciably wider than its average lowercase letter, so a column of
+         * N `ch` fits noticeably MORE than N characters of running Spanish
+         * text. 62ch lands around 70 characters per line — inside the 45–75
+         * band this exists to hold, and near the middle of the 65–75 the craft
+         * floor asks for, with room for the estimate to be off in either
+         * direction. `max-w-prose` (Tailwind's stock 65ch) was the first
+         * candidate and was measured out: it puts the same paragraph at roughly
+         * 75–78 characters, i.e. at or just past the ceiling.
+         *
+         * Only continuous prose needs it. A table, a form or a dashboard is
+         * scanned rather than read and has no measure to hold.
+         */
+        measure: "62ch",
       },
     },
   },
