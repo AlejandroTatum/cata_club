@@ -89,6 +89,14 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
         message: "Su navegador no guardó la sesión",
         description: "Habilite las cookies para este sitio e intente nuevamente.",
       };
+    // Issue #762. Names the account, not the typing: the password was right.
+    // The way out is a person at the club, not a retry — nothing about this
+    // changes by trying again.
+    case "role_conflict":
+      return {
+        message: "Su cuenta tiene más de un rol activo",
+        description: "No podemos saber con cuál entrar. Comuníquese con el club para que le dejen uno solo.",
+      };
     case "timeout":
       return {
         message: "El servidor tardó demasiado en responder",
@@ -222,6 +230,10 @@ function LoginPageContent(): React.ReactElement {
       const { message, description } = loginErrorFeedback(result.error);
       const isCredentialsError = result.error === "invalid_credentials";
       const isCookieError = result.error === "session_not_persisted";
+      // Issue #762: the remedy is a conversation with the club, so the
+      // sentence has to still be there while the person reaches for a phone —
+      // the same reason `session_not_persisted` shares the floor below.
+      const isRoleConflict = result.error === "role_conflict";
       toast.showError(message, {
         description,
         // The 4500-10000ms the ordinary toast clamps to reads fine for a
@@ -234,7 +246,7 @@ function LoginPageContent(): React.ReactElement {
         // `session_not_persisted` shares the floor: its remedy lives in a
         // browser settings panel, so the person needs the sentence to still
         // be there while they go looking for it.
-        duration: isCredentialsError || isCookieError ? 20000 : undefined,
+        duration: isCredentialsError || isCookieError || isRoleConflict ? 20000 : undefined,
       });
       // ONLY for `invalid_credentials`. The other kinds — a timeout, an
       // unreachable backend, a misconfigured server, a browser that dropped

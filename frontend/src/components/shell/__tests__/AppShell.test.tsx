@@ -1139,12 +1139,26 @@ describe("AppShell — command palette selection is announced", (): void => {
 });
 
 // ---------------------------------------------------------------------------
-// More than one role — D12d.
+// More than one role — D12d, and what issue #762 left of it.
 //
 // The rail is the UNION of the person's sections, one titled group per role,
-// and there is no selector: a selector would turn her roles into modes. The
-// session still collapses to a single `user.role` for guards and redirects
-// (`pickPrimaryRole`, untouched) — what changes here is only what gets drawn.
+// and there is no selector: a selector would turn her roles into modes.
+//
+// Read these for what they now are: unit coverage of `getNavGroupsForRoles`'s
+// grouping, driven through a session built by hand. They are no longer a
+// description of anything a person can log into. Exactly one active role per
+// account is a database invariant since #785, and `resolveSessionRole`
+// (src/lib/server/auth.ts) refuses to build a session out of more than one, so
+// `session.roles` reaches this component carrying at most one recognized role
+// and the rail is always exactly one group. The rótulos, the `role="group"`
+// wrappers and `getAreaLabel`'s two-area case are all unreachable through the
+// product as it stands.
+//
+// They are kept rather than deleted because D12d is an approved design
+// decision about the SHAPE of the rail, and unwinding it is a design change
+// with its own brief — not a consequence this fix gets to draw on its own. The
+// parity between what the rail offers and what each route admits is asserted
+// for every role a session CAN carry in nav-guard-parity.test.tsx.
 // ---------------------------------------------------------------------------
 
 describe("AppShell — the rail of a person with several roles", (): void => {
@@ -1278,27 +1292,44 @@ describe("AppShell — the rail of a person with several roles", (): void => {
     expect(within(groups[1]).getByRole("link", { name: "Pagos" })).toBeInTheDocument();
   });
 
-  // The tab bar is a fixed four slots — three destinations plus "Más" — and it
-  // is admin-only. It is deliberately NOT re-picked per role combination: see
-  // the comment on `MOBILE_TABS`. What must hold is that it never becomes the
-  // only way out, so everything the tab bar leaves behind stays in the drawer.
-  it("leaves every section of a multi-role admin reachable from the drawer", (): void => {
-    mockUseAuth.mockReturnValue(
-      createMultiRoleAuth(["ADMINISTRADOR", "ENTRENADOR"], "admin", "Ana Admin"),
-    );
+  /*
+   * The tab bar is a fixed four slots — three destinations plus "Más" — and it
+   * is admin-only. It is deliberately NOT re-picked per role: see the comment
+   * on `MOBILE_TABS`. What must hold is that it never becomes the only way
+   * out, so everything the tab bar leaves behind stays in the drawer.
+   *
+   * That property is unchanged. What changed is the session it is asserted on.
+   *
+   * It used to be an `["ADMINISTRADOR","ENTRENADOR"]` account, and the row it
+   * reached for was "Mi día" — a `/trainer` row whose own guard is
+   * `allowedRoles={["trainer"]}` (`trainer/page.tsx`), so the shell offered it
+   * and the destination refused it. The test named a drawer property and
+   * pinned the defect of issue #762 on its way past. Exactly one active role
+   * per account is a database invariant since #785 and the BFF now refuses to
+   * build a session out of anything else, so that account no longer has a
+   * session for this test to render — and the property never needed one.
+   *
+   * Asserted as a set relation rather than one sampled row: an admin section
+   * added to the rail tomorrow is covered without editing this test, which is
+   * how "everything it leaves behind" stops being three hardcoded hrefs.
+   */
+  it("leaves every section the tab bar cannot fit reachable from the drawer", (): void => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Ana Admin"));
 
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
     const tabBar = within(screen.getByRole("navigation", { name: /móvil/i }));
-    expect(tabBar.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
-      "/dashboard",
-      "/members",
-      "/payments",
-    ]);
+    const tabHrefs = tabBar.getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(tabHrefs).toEqual(["/dashboard", "/members", "/payments"]);
     expect(tabBar.getByRole("button", { name: "Más secciones" })).toBeInTheDocument();
-    // "Más" opens this same rail, and the trainer section it does not fit is in it.
-    expect(rail().getByRole("link", { name: "Mi día" })).toBeInTheDocument();
-    expect(rail().getByText("Administrar")).toBeInTheDocument();
+
+    // "Más" opens this same rail.
+    const railHrefs = rail().getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(railHrefs).toEqual(expect.arrayContaining(tabHrefs));
+    // And the rail is strictly bigger, or the tab bar would be leaving nothing
+    // behind and this test would hold for a shell with no drawer at all.
+    expect(railHrefs.length).toBeGreaterThan(tabHrefs.length);
+    expect(rail().getByRole("link", { name: "Reportes" })).toBeInTheDocument();
   });
 
   it("highlights the current row whichever group it belongs to", (): void => {

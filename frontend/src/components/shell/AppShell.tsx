@@ -232,9 +232,9 @@ const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
  *
  * What has to hold instead is that the bar is never the ONLY way out, and it
  * is not: the fourth slot is "Más", which opens the same drawer, which draws
- * the whole grouped rail. Nothing a multi-role account holds became
- * unreachable — it is one tap further away, exactly as it already was for
- * "/groups" or "/reports". `AppShell.test.tsx` locks that.
+ * the whole rail. Nothing an admin holds became unreachable — the six
+ * destinations the three slots leave behind are one tap further away, exactly
+ * as "/groups" and "/reports" already were. `AppShell.test.tsx` locks that.
  */
 const MOBILE_TABS: { href: string; label: string }[] = [
   { href: "/dashboard", label: "Panel" },
@@ -394,26 +394,33 @@ export default function AppShell({
   // the shell only triggers it and reports its state.
   const chatOpen = useHelpChatOpen();
 
-  // The COLLAPSED role — still what the tab bar, the badge poll, the area
-  // label and the user card gate on. `pickPrimaryRole` decides it server-side
-  // and this change does not touch it: guards, redirects and permissions are
-  // behavior, and D12d is about the shape of the rail only.
+  // The account's role — what the tab bar, the badge poll, the area label and
+  // the user card gate on, and the same value every route guard reads. It used
+  // to be a COLLAPSE: one winner picked by precedence out of however many roles
+  // the account held, while the rail below was drawn from the whole array, so
+  // the shell offered rows the destinations then refused. Issue #762 removed
+  // the guess — `resolveSessionRole` builds no session for an account holding
+  // more than one role — so this value and `heldRoles` below are now two
+  // readings of the same single grant.
   const role = session?.user.role ?? null;
   // See the equivalent comment in Header.tsx's `useNavLinks` — only an
   // "estudiante" session carries `fechaNacimiento`.
   //
-  // Which means the age gate can only fire when "estudiante" is ALSO the
-  // primary role. A trainer who plays and is an adult gets no Ficha médica
-  // row, because his session carries no birth date to check — the same row he
-  // did not have before this change either. Widening that needs the session to
-  // carry the date for every account, which is behavior, and is issue #269.
+  // That used to be a hole: "estudiante" had to survive the collapse for the
+  // gate to fire at all, so an ALUMNO who was also an administrator carried no
+  // birth date and the Ficha médica row was withheld from him silently, on a
+  // check that never ran. With one role per account there is no collapse to
+  // survive — an "estudiante" session is an ALUMNO account and carries the
+  // date. What remains outside this gate is a person whose role is not
+  // estudiante wanting their own ficha, which needs the session to carry the
+  // date for every account: behavior, and issue #269.
   const studentIsAdult =
     session?.user.role === "estudiante" ? !isMinor(session.user.fechaNacimiento) : false;
   /**
    * The rail: every section this PERSON holds, grouped and titled. Read off
-   * `session.roles` — the whole backend role array, which the BFF has always
-   * put on the session (`buildSession`) — and not off the one collapsed role
-   * above, which is what left a trainer who also plays without his own fees.
+   * `session.roles` — the backend role array the BFF puts on the session
+   * (`buildSession`) — which carries at most one recognized role since #762,
+   * so this and `role` above can no longer disagree about the same account.
    *
    * `/` is dropped here rather than in `getNavGroupsForRoles`: the brand link
    * at the top of this sidebar already goes home, so a row for it would be the

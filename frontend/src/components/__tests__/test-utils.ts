@@ -124,15 +124,21 @@ export function createAuthenticatedAuth(
 }
 
 /**
- * Build an AuthContextValue for an account that holds SEVERAL backend roles —
- * a representante who also plays (18 of them exist), a trainer who also plays.
+ * Build an AuthContextValue for an account that holds SEVERAL backend roles.
  *
- * `primary` is stated rather than derived on purpose. The collapse lives in
- * `pickPrimaryRole` (src/lib/server/auth.ts), which is server-only and which
- * this change does not touch; a fixture that re-implemented its precedence
- * would be a second copy of a rule with one owner. Stating it also keeps the
- * two halves of the session visible side by side: `user.role` is what guards
- * and redirects still gate on, `roles` is what the rail draws.
+ * ⚠️ This fixture builds a session the product can no longer produce. Exactly
+ * one active role per account is a database invariant since #785, and
+ * `resolveSessionRole` (src/lib/server/auth.ts) refuses to build a session out
+ * of more than one, so nothing that reaches a real component carries two.
+ *
+ * It is kept for the `getNavGroupsForRoles` grouping tests, which exercise a
+ * pure function over an input a caller can still hand it. Do NOT reach for it
+ * to describe how the product behaves for a person: it cannot, and pinning the
+ * union against a route guard that reads one role is exactly the defect issue
+ * #762 closed. `createAuthenticatedAuth` above builds the sessions that exist.
+ *
+ * `primary` is stated rather than derived because there is no rule left to
+ * derive it from — the precedence list that used to answer it is gone.
  */
 export function createMultiRoleAuth(
   backendRoles: readonly BackendTipoRol[],

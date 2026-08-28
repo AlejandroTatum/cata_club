@@ -158,11 +158,15 @@ describe("getBackendRoleLabel", () => {
 //
 // The rail is the UNION of the sections a person holds, drawn as one group per
 // role with a heading of its own — D12d of `docs/ux/rediseno-visual-2026-08.md`.
-// What these assertions guard, past the wording of each row, is that the union
-// is never re-collapsed into a single "primary" role: the backend has always
-// authorised against the whole role array
-// (`backend/app/seguridad/gestor_permisos.py`), and 18 accounts already hold
-// ALUMNO and REPRESENTANTE at the same time.
+//
+// Since issue #762 no session reaches this function with more than one role:
+// exactly one active role per account is a database invariant (#785) and the
+// BFF refuses to build a session out of anything else. So the multi-role cases
+// below test the function's contract, not the product's behaviour — a caller
+// can still pass two roles, and what it does with them should stay defined and
+// deduplicated rather than becoming whatever falls out. What the PRODUCT
+// offers, per role, is checked against each route's own guard in
+// src/components/shell/__tests__/nav-guard-parity.test.tsx.
 // ---------------------------------------------------------------------------
 
 /** Every href the ROLE groups offer, in render order. The public rows are excluded. */

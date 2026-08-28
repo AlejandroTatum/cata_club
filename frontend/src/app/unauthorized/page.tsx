@@ -3,8 +3,12 @@
  *
  * Reached by an AUTHENTICATED user whose backend `roles` (ADMINISTRADOR,
  * ENTRENADOR, REPRESENTANTE, ALUMNO) are empty or entirely unrecognized —
- * see `mapBackendRoleToUserRole` in src/lib/server/auth.ts, which maps that
+ * see `resolveSessionRole` in src/lib/server/auth.ts, which maps that
  * case to the `"unsupported"` UserRole instead of silently falling back.
+ *
+ * NOT the screen for an account that holds more than one role. That one gets
+ * no session at all (issue #762) and never reaches a protected page — it is
+ * turned away at /login, which says so.
  *
  * Gated the same way every other role-restricted page is gated — via
  * ProtectedRoute with allowedRoles={["unsupported"]} — rather than a special

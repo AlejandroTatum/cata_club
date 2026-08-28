@@ -21,16 +21,23 @@
  * with a `role` field (`ADMINISTRADOR`, `ENTRENADOR`, `REPRESENTANTE`,
  * `ALUMNO`) and a self-referencing `representante_id` (a Persona pointing to
  * the adult who manages them — e.g. a parent). All four backend roles map
- * to a frontend `UserRole` (see `mapBackendRoleToUserRole` in
+ * to a frontend `UserRole` (see `resolveSessionRole` in
  * src/lib/server/auth.ts): `ADMINISTRADOR` -> `"admin"`, `ENTRENADOR` ->
  * `"trainer"`, `REPRESENTANTE` -> `"representante"`, `ALUMNO` ->
  * `"estudiante"`.
  *
+ * Exactly ONE of them per account, which is what makes that mapping an
+ * identity rather than a choice: a second active role is refused by the
+ * database (#785's `trg_usuario_rol_unico_por_usuario`) and by
+ * `resolveSessionRole`, which builds no session at all for an account that
+ * still holds two (issue #762).
+ *
  * A representante is an authenticated backend role (REPRESENTANTE): a parent
- * who enrolls a minor receives both REPRESENTANTE and ALUMNO roles at
- * enrollment time, authenticates with their own credentials, and can view
- * their children's data. Role precedence picks REPRESENTANTE over ALUMNO
- * for the primary UI role (see `pickPrimaryRole`).
+ * who enrolls a minor authenticates with their own credentials and can view
+ * their children's data. That parent used to receive REPRESENTANTE **and**
+ * ALUMNO at enrolment time, which is one of the paths #785 closed —
+ * representation is authorised by the `representante_id` link above, not by
+ * holding a second role.
  *
  * `"unsupported"` is the explicit landing state for an authenticated user
  * whose backend `roles` array is empty or contains only strings this

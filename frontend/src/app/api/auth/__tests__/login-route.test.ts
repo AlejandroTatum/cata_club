@@ -153,4 +153,39 @@ describe("POST /api/auth/login", () => {
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)).toBeUndefined();
     expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
   });
+
+  // -------------------------------------------------------------------------
+  // Issue #762 — a multi-role account has no session to issue.
+  //
+  // The credentials are right and the backend answered; what fails is the
+  // account, so this is neither a 401 (the password was fine) nor a 500 (the
+  // deployment is fine). 409 is the same answer the database gives the same
+  // invariant since #785, which raises SQLSTATE 23505 and surfaces as a 409.
+  // -------------------------------------------------------------------------
+
+  it("returns 409 for an account that still holds more than one role", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ access_token: "a", refresh_token: "r", token_type: "bearer" }))
+      .mockResolvedValueOnce(jsonResponse({ ...meBody, roles: ["ADMINISTRADOR", "ENTRENADOR"] }));
+
+    const response = await POST(loginRequest({ email: "admin@cataclub.com", password: "admin123" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.error).toBe("role_conflict");
+    // The message names the problem and the way out, and names no role: the
+    // point is that the frontend did not pick one.
+    expect(json.message).toMatch(/rol/i);
+  });
+
+  it("sets no cookies for a multi-role account, so no half-session survives", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ access_token: "a", refresh_token: "r", token_type: "bearer" }))
+      .mockResolvedValueOnce(jsonResponse({ ...meBody, roles: ["ENTRENADOR", "ALUMNO"] }));
+
+    const response = await POST(loginRequest({ email: "admin@cataclub.com", password: "admin123" }));
+
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)).toBeUndefined();
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)).toBeUndefined();
+  });
 });

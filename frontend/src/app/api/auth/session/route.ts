@@ -84,8 +84,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return response;
   }
 
-  const session = buildSession(meResult.data);
-  const response = NextResponse.json(session, { status: 200 });
+  const built = buildSession(meResult.data);
+  if (!built.ok) {
+    // Issue #762: the account still holds more than one active role, so there
+    // is no session to hydrate. Reported as unauthenticated with the cookies
+    // cleared — not as a 503, which would be read as a blip worth retrying,
+    // and not as a session with a role guessed for it.
+    //
+    // Nobody is reading a message here; this route answers a background
+    // hydration call. Clearing the cookies is what routes the person to
+    // /login, which is where POST /api/auth/login says the reason out loud.
+    const refusal = NextResponse.json(
+      { authenticated: false, error: "role_conflict" },
+      { status: 401 },
+    );
+    clearAuthCookies(refusal);
+    return refusal;
+  }
+
+  const response = NextResponse.json(built.session, { status: 200 });
   if (refreshedAccessToken) {
     setAuthCookies(response, { accessToken: refreshedAccessToken });
   }

@@ -68,10 +68,11 @@ export interface NavGroup {
  * come first and the section that is his own comes last, which is also where
  * the rail already keeps everything personal — the user card sits at its foot.
  *
- * This deliberately does NOT reuse `ROLE_PRECEDENCE` (src/lib/server/auth.ts),
- * which orders representante above trainer: that list answers "which single
- * role does the session collapse to", a question this file no longer asks.
- * Nor does it reuse `IdentityCell`'s `ROLE_ORDER`, which runs the other way
+ * This order is the rail's own. There used to be a `ROLE_PRECEDENCE` in
+ * src/lib/server/auth.ts ordering representante above trainer, and it is gone
+ * (issue #762): it answered "which single role does the session collapse to",
+ * a question nobody asks now that an account holds exactly one.
+ * Nor does this reuse `IdentityCell`'s `ROLE_ORDER`, which runs the other way
  * round on purpose — it NAMES a person, from what they are on the field to
  * what they are in the system, and the first line of a name is the one that
  * gets read.
@@ -190,15 +191,22 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
  *
  * ## Why the whole array, and why no selector
  *
- * The backend has always authorised against the complete role array of the
- * token (`backend/app/seguridad/gestor_permisos.py`), and `RolServicio` can
- * assign any combination — alumno + entrenador is creatable today. The
- * frontend was the half that never finished: the session collapses the array
- * to one role by precedence (`pickPrimaryRole`, still untouched — it is what
- * route guards and redirects gate on), and the rail drew only that one. A
- * trainer who also plays therefore had no fees and no attendance of his own.
+ * D12d wrote this to fix a real person: the backend authorises against the
+ * complete role array of the token
+ * (`backend/app/seguridad/gestor_permisos.py`), `RolServicio` could assign any
+ * combination, and the session collapsed the array to one role by precedence
+ * while the rail drew only that one — so a trainer who also played had no fees
+ * and no attendance of his own.
  *
- * The rail is the UNION, not a mode. There is no role selector on purpose: a
+ * That person no longer exists. Exactly one active role per account became a
+ * database invariant in #785, and issue #762 removed the collapse this
+ * paragraph was written against, so `roles` arrives here with at most one
+ * recognized role and the union has exactly one thing to unite. Kept as a
+ * union rather than narrowed to a single role because D12d owns the shape of
+ * the rail and that decision has not been revisited; nothing below assumes
+ * more than one, and nothing above can supply more than one.
+ *
+ * There is no role selector on purpose: a
  * selector turns roles into modes and makes the person remember which one she
  * is standing in, when what she actually wants is one more section in the same
  * list. D12d of `docs/ux/rediseno-visual-2026-08.md` is the approved decision,
@@ -354,10 +362,10 @@ export function getRoleLabel(role: UserRole): string {
  * `PerfilPropio.roles` / `RolesResponse.roles`.
  *
  * Distinct from `getRoleLabel`, which names the ONE `UserRole` the session
- * resolved to. An account can hold several backend roles at once, and
- * `mapBackendRoleToUserRole` collapses them to the highest-privilege one — so
- * anywhere the full set must stay visible (see `/profile`'s identity rail),
- * this is the label to use.
+ * resolved to. This one names a backend role wherever the backend's own list
+ * is what is on screen — `/profile`'s identity rail reads `PerfilPropio.roles`
+ * straight from the API, which is a different source from the session and
+ * answers for the account whether or not a session was ever built from it.
  */
 export function getBackendRoleLabel(rol: BackendTipoRol): string {
   switch (rol) {
@@ -376,7 +384,7 @@ export function getBackendRoleLabel(rol: BackendTipoRol): string {
 
 /**
  * The backend role a given `UserRole` was derived from — the inverse of
- * `mapBackendRoleToUserRole` (src/lib/server/auth.ts). `null` for
+ * `resolveSessionRole` (src/lib/server/auth.ts). `null` for
  * `"unsupported"`, which by definition maps from no known role.
  */
 export function backendRoleForUserRole(role: UserRole): BackendTipoRol | null {
@@ -398,8 +406,8 @@ export function backendRoleForUserRole(role: UserRole): BackendTipoRol | null {
  * Read a session's backend role array into the frontend's own vocabulary.
  *
  * The inverse of `backendRoleForUserRole` above, and the client-side half of
- * what `mapBackendRoleToUserRole` (src/lib/server/auth.ts) does on the server
- * — with the collapse left out. That module is server-only by construction
+ * the same table `resolveSessionRole` (src/lib/server/auth.ts) reads on the
+ * server. That module is server-only by construction
  * (it reads `BACKEND_API_URL` and handles raw tokens, and says so at the top),
  * so nothing in it may be imported from a client component; this table is the
  * same four rows, in the module a component may import.
@@ -407,7 +415,8 @@ export function backendRoleForUserRole(role: UserRole): BackendTipoRol | null {
  * `AuthSession.roles` is typed `string[]`, not `BackendTipoRol[]`, because it
  * is whatever `/auth/me` sent. A role the backend adds tomorrow arrives here
  * as an unrecognised string and is dropped: an unknown role grants no section,
- * which is the same answer `mapBackendRoleToUserRole` gives it.
+ * which is the same answer `resolveSessionRole` gives it — and the reason an
+ * unknown role beside a known one is not read as a second role there either.
  */
 const USER_ROLE_BY_BACKEND_ROLE: Record<BackendTipoRol, UserRole> = {
   ADMINISTRADOR: "admin",
