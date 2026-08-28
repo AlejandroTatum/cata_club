@@ -13,6 +13,7 @@
  */
 
 import type { UserRole, Usuario } from "@/types/domain";
+import { userRolesFromBackendRoles } from "@/lib/auth-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,7 +23,14 @@ import type { UserRole, Usuario } from "@/types/domain";
 export interface AuthSession {
   /** The authenticated user profile. */
   user: Usuario;
-  /** Raw backend role strings (ADMINISTRADOR, ENTRENADOR, REPRESENTANTE, ALUMNO), preserved for callers that need the full multi-role set. `user.role` is the single primary role (see `pickPrimaryRole` in src/lib/server/auth.ts) used for current UI gating. */
+  /**
+   * The account's raw backend role strings (ADMINISTRADOR, ENTRENADOR,
+   * REPRESENTANTE, ALUMNO), as `/auth/me` sent them. At most one of them is
+   * recognized: exactly one active role per account is a database invariant
+   * (#785), and `resolveSessionRole` in src/lib/server/auth.ts refuses to
+   * build a session out of anything else. `user.role` is that same role, read
+   * through the frontend's own vocabulary.
+   */
   roles: string[];
   /** ISO timestamp of the login/hydration event. */
   loggedInAt: string;
@@ -42,6 +50,13 @@ export type AuthErrorKind =
    * `login` for why a 200 is not, on its own, proof of a session.
    */
   | "session_not_persisted"
+  /**
+   * The account holds more than one active role, so the BFF refused to build a
+   * session for it — /api/auth/login answered 409 with `error: "role_conflict"`
+   * (issue #762). Nothing the person typed is wrong and nothing is down;
+   * retrying cannot help until the club leaves the account one role.
+   */
+  | "role_conflict"
   | "timeout"
   | "backend_unavailable"
   | "config_error"
@@ -89,6 +104,18 @@ export function isValidAuthSession(data: unknown): data is AuthSession {
 
   if (!Array.isArray(candidate.roles) || !candidate.roles.every((r) => typeof r === "string")) return false;
   if (typeof candidate.loggedInAt !== "string") return false;
+
+  // Issue #762: at most ONE recognized role, or this is not a session.
+  //
+  // The BFF already refuses to build a multi-role session, so a payload with
+  // two of them should not exist — which is exactly the kind of thing this
+  // guard is here for (a stale deployment answering a fresh client, a proxied
+  // or hand-rolled body). It matters more than an ordinary shape check: two
+  // roles is the one payload the rail would draw as a union while every route
+  // guard answered from a single value, and the two disagreeing IS the bug.
+  // Unrecognized strings are dropped by the same table the rail reads, so a
+  // role the backend adds tomorrow is not a second role here either.
+  if (new Set(userRolesFromBackendRoles(candidate.roles as string[])).size > 1) return false;
 
   return true;
 }
@@ -178,6 +205,13 @@ export async function login(email: string, password: string): Promise<LoginResul
     // mislabeled as such.
     const isSessionValidationFailure = hasErrorCode(json) && json.error === "unauthorized";
     return { ok: false, error: isSessionValidationFailure ? "session_validation_failed" : "invalid_credentials" };
+  }
+  // Issue #762: the account holds more than one active role and the BFF
+  // refused to guess between them. A distinct kind, because every other
+  // failure here is either the person's typing or something that will come
+  // back on its own, and this is neither.
+  if (response.status === 409 && hasErrorCode(json) && json.error === "role_conflict") {
+    return { ok: false, error: "role_conflict" };
   }
   // A misconfigured BFF (missing BACKEND_API_URL and friends) is a permanent
   // fault, not a blip. It must never be folded into the retry-flavoured

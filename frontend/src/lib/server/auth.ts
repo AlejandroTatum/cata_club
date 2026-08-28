@@ -647,48 +647,61 @@ const BACKEND_ROLE_TO_USER_ROLE: Readonly<Record<string, UserRole>> = {
 };
 
 /**
- * Deterministic precedence for picking a user's *primary* frontend role when
- * `/auth/me` returns more than one backend role. Earlier entries win.
- * Administrator > representante > trainer > estudiante.
+ * Why a multi-role account has no answer here.
+ *
+ * There used to be a `ROLE_PRECEDENCE` list and a `pickPrimaryRole` that read
+ * it — admin > representante > trainer > estudiante — so a `/auth/me` carrying
+ * two roles still produced one. That guess is the whole of issue #762: the
+ * rail was built from the role ARRAY and the route guards from the guessed
+ * single value, so the same account was offered rows its own destinations then
+ * refused. Precedence also decided things nobody chose, most visibly putting
+ * representante above trainer, which took the attendance screens away from a
+ * trainer who happened to also be a parent while his token still authorised
+ * them server-side.
+ *
+ * Since #785 exactly one active role per account is a database invariant
+ * (`trg_usuario_rol_unico_por_usuario`), so the guess has nothing left to
+ * decide — and the ordering is deliberately gone rather than left unused,
+ * because a precedence list sitting in this file reads as a statement that
+ * multi-role accounts are still a supported shape.
  */
-const ROLE_PRECEDENCE: readonly UserRole[] = ["admin", "representante", "trainer", "estudiante"];
+export type SessionRoleResolution =
+  | { ok: true; role: UserRole }
+  | { ok: false; reason: "multiple_roles" };
 
 /**
- * Pick the primary role from a set of already-mapped frontend roles, using
- * `ROLE_PRECEDENCE`. Pure and independently testable — used by
- * `mapBackendRoleToUserRole` but doesn't itself know about backend role
- * strings.
+ * Resolve `/auth/me`'s backend role list to the ONE frontend `UserRole` the
+ * whole client gates on — nav, `ProtectedRoute`, default-route redirects.
  *
- * @returns The highest-precedence role present in `mappedRoles`, or `null`
- * if the set is empty (no recognized role at all).
+ * Unrecognized strings are dropped rather than counted: a role the backend
+ * adds tomorrow grants no section here, so it cannot make an account look
+ * multi-role either. The same role twice is the one role it is.
+ *
+ * An authenticated account with no recognized role at all resolves to
+ * `"unsupported"` — a real, explicit `UserRole` (not a silent coercion into
+ * `"representante"`, which is a separate, non-authenticated concept) that
+ * `getDefaultRoute`/`canAccess` in src/lib/auth-utils.ts route to
+ * `/unauthorized`. It is also an ordinary state, not a fault: ALUMNO is
+ * granted lazily, once a membership exists, so a freshly self-enrolled person
+ * genuinely holds none (see `derivePortalMode` in src/app/student/student-utils.ts).
+ *
+ * More than one recognized role is refused. Legacy accounts predating #785's
+ * trigger still exist — its migration reports them and deliberately corrects
+ * nothing, because choosing for them is the owner's decision and the supported
+ * fix is `scripts/remediar_rol_multiple.py --keep-role`. Until that runs, such
+ * an account gets no session at all: refusing is the answer that neither
+ * invents a role nor lets one half of the UI disagree with the other.
  */
-export function pickPrimaryRole(mappedRoles: UserRole[]): UserRole | null {
-  for (const candidate of ROLE_PRECEDENCE) {
-    if (mappedRoles.includes(candidate)) return candidate;
-  }
-  return null;
-}
+export function resolveSessionRole(roles: string[]): SessionRoleResolution {
+  const recognized = new Set(
+    roles
+      .map((role) => BACKEND_ROLE_TO_USER_ROLE[role])
+      .filter((role): role is UserRole => role !== undefined),
+  );
 
-/**
- * Map the backend's role list to the single frontend `UserRole` most of the
- * app still gates on (nav, ProtectedRoute, default-route redirects).
- *
- * All four backend roles (ADMINISTRADOR, ENTRENADOR, REPRESENTANTE, ALUMNO)
- * map explicitly via `BACKEND_ROLE_TO_USER_ROLE`. Multi-role users resolve
- * to a single primary role via `pickPrimaryRole`'s deterministic precedence.
- *
- * An authenticated user whose roles are empty or entirely unrecognized maps
- * to `"unsupported"` — a real, explicit `UserRole` value (not a silent
- * coercion into `"representante"`, which is a separate, non-authenticated
- * concept — see the adapter map above). `"unsupported"` is handled centrally
- * by `getDefaultRoute`/`canAccess` in src/lib/auth-utils.ts, which routes
- * these users to `/unauthorized` instead of any real role's pages.
- */
-export function mapBackendRoleToUserRole(roles: string[]): UserRole {
-  const mapped = roles
-    .map((role) => BACKEND_ROLE_TO_USER_ROLE[role])
-    .filter((role): role is UserRole => role !== undefined);
-  return pickPrimaryRole(mapped) ?? "unsupported";
+  if (recognized.size > 1) return { ok: false, reason: "multiple_roles" };
+  const [role] = recognized;
+  return { ok: true, role: role ?? "unsupported" };
 }
 
 // ---------------------------------------------------------------------------
@@ -698,13 +711,35 @@ export function mapBackendRoleToUserRole(roles: string[]): UserRole {
 
 export interface ServerSession {
   user: Usuario;
-  /** Raw backend role strings, preserved for multi-role handling (see `pickPrimaryRole`) and for any future UI that needs the full set, not just the primary role. */
+  /**
+   * The account's raw backend role strings, as `/auth/me` sent them.
+   *
+   * Still an array because that is the shape of the response, not because it
+   * can hold two grants: `resolveSessionRole` refuses that, so anything past
+   * this point carries at most one recognized role. The client reads it
+   * through `userRolesFromBackendRoles` (src/lib/auth-utils.ts) to draw the
+   * rail, which is why it must not be allowed to disagree with `user.role`.
+   */
   roles: string[];
   loggedInAt: string;
 }
 
-export function buildSession(me: BackendMeResponse): ServerSession {
-  const role = mapBackendRoleToUserRole(me.roles);
+/**
+ * The outcome of turning a `/auth/me` response into a browser session.
+ *
+ * Fallible on purpose. A caller cannot reach the session without answering
+ * what to do when there is none, which is what stops a refused account from
+ * quietly becoming a half-built identity somewhere downstream.
+ */
+export type SessionBuildResult =
+  | { ok: true; session: ServerSession }
+  | { ok: false; reason: "multiple_roles" };
+
+export function buildSession(me: BackendMeResponse): SessionBuildResult {
+  const resolution = resolveSessionRole(me.roles);
+  if (!resolution.ok) return resolution;
+
+  const role = resolution.role;
   const base = {
     id: String(me.personaId),
     name: `${me.nombres} ${me.apellidos}`.trim(),
@@ -722,8 +757,11 @@ export function buildSession(me: BackendMeResponse): ServerSession {
       : { ...base, role };
 
   return {
-    user,
-    roles: me.roles,
-    loggedInAt: new Date().toISOString(),
+    ok: true,
+    session: {
+      user,
+      roles: me.roles,
+      loggedInAt: new Date().toISOString(),
+    },
   };
 }

@@ -127,8 +127,10 @@ function useNavLinks(): NavLink[] {
   const { isAuthenticated, session } = useAuth();
 
   return useMemo<NavLink[]>((): NavLink[] => {
-    // Every role the account holds, not the one it collapses to: an account
-    // that is both trainer and player has to reach both from here as well.
+    // The account's role, read from the same array the sidebar reads so the
+    // two bars cannot offer different things. It carries at most one
+    // recognized role since #762 — an account holding two gets no session —
+    // so this is the same grant `session.user.role` names, in list form.
     const roles = isAuthenticated && session ? userRolesFromBackendRoles(session.roles) : null;
     // Only an "estudiante" session carries `fechaNacimiento` (see
     // UsuarioEstudiante in src/types/domain.ts) — `getNavGroupsForRoles` itself

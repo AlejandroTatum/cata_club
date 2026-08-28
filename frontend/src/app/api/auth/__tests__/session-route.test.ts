@@ -160,6 +160,41 @@ describe("GET /api/auth/session", () => {
     expect(response.cookies.get(ACCESS_TOKEN_COOKIE)).toBeUndefined();
   });
 
+  // -------------------------------------------------------------------------
+  // Issue #762 — a multi-role account has no session to hydrate.
+  //
+  // Unlike login, there is nobody reading a message here: this route answers a
+  // background hydration call. It reports unauthenticated and clears the
+  // cookies, so the next thing the person does is arrive at /login, where the
+  // reason gets said out loud.
+  // -------------------------------------------------------------------------
+
+  it("reports unauthenticated when /auth/me still returns more than one role", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ ...meBody, roles: ["ADMINISTRADOR", "ENTRENADOR"] }),
+    );
+
+    const access = makeJwt(3600);
+    const response = await GET(sessionRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+    const json = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(json.authenticated).toBe(false);
+    expect(json).not.toHaveProperty("user");
+  });
+
+  it("clears the cookies of a multi-role account rather than leaving it half-signed-in", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ ...meBody, roles: ["ENTRENADOR", "REPRESENTANTE"] }),
+    );
+
+    const access = makeJwt(3600);
+    const response = await GET(sessionRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+
+    expect(response.cookies.get(ACCESS_TOKEN_COOKIE)?.value).toBe("");
+    expect(response.cookies.get(REFRESH_TOKEN_COOKIE)?.value).toBe("");
+  });
+
   it("never includes a token anywhere in the JSON body", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(meBody));
 

@@ -248,8 +248,12 @@ describe("ProfilePage — staff view (ADMINISTRADOR/ENTRENADOR)", () => {
   });
 
   it("shows EVERY assigned role, not just the one the session resolved to", async () => {
-    // `mapBackendRoleToUserRole` collapses these four to "admin". If the rail
-    // renders only that, the other three exist nowhere in the product.
+    // The session used to collapse these four to "admin", and if this screen
+    // renders only that, the other three exist nowhere in the product. The
+    // account shape is gone since #762 — no session is built for it — but this
+    // list comes from `GET /auth/me`, not from the session, so what is pinned
+    // here is that the screen reports the API's answer rather than the
+    // session's.
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce({
       ...PERFIL_ADMIN,

@@ -38,7 +38,7 @@ export function isMinor(fechaNacimiento: string | null | undefined): boolean {
 /**
  * The honest intermediate state for an authenticated persona with no
  * recognized backend role (`UserRole === "unsupported"`, see
- * src/lib/server/auth.ts's `mapBackendRoleToUserRole`).
+ * src/lib/server/auth.ts's `resolveSessionRole`).
  *
  * Role assignment for ALUMNO is lazy (see backend
  * `rol_servicio.py::asignar_alumno_si_corresponde`'s docstring: granted only

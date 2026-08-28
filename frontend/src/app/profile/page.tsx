@@ -228,8 +228,15 @@ const ROLE_COPY: Record<
         ? "La cuenta tiene personas representadas vinculadas. El estado de membresía se muestra solo cuando la información está disponible."
         : "Esta cuenta tiene el rol de Representante. El estado de membresía se muestra solo cuando la información está disponible.",
   },
-  // `ProtectedRoute`'s `allowedRoles` on this page never admits "unsupported"
-  // — kept only so the lookup stays total and this never throws.
+  // Reached, not just kept total. The shell offers "Perfil" from the user menu
+  // to every session it draws, and it draws one for an "unsupported" account:
+  // ALUMNO is granted lazily, so a freshly self-enrolled person holds no role
+  // yet and still gets the student portal in its "pending" mode
+  // (`derivePortalMode`). This page used to refuse them — a row the menu
+  // offered and the guard then bounced, ejecting them from the portal to
+  // /unauthorized with a permission toast over it, which is the same defect
+  // issue #762 closes for multi-role accounts. Their data is all here: the
+  // staff branch reads `GET /api/auth/me`, which needs no role at all.
   unsupported: {
     lede: "Revise sus datos y mantenga segura su cuenta.",
     roleCaption: "Información de su cuenta",
@@ -962,10 +969,16 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   const roleLabel = getRoleLabel(props.role);
   /**
-   * Every role the backend has on this account. `PerfilPropio` is fetched on
-   * both branches (`GET /auth/me`), so a multi-role representante/alumno is
-   * covered too; it is only `null` while the student branch's own profile call
-   * is still in flight, and then the session's single role is all there is.
+   * Every role the backend has on this account, read from `PerfilPropio`
+   * (`GET /auth/me`, fetched on both branches). Only `null` while the student
+   * branch's own profile call is still in flight, and then the session's
+   * single role is all there is.
+   *
+   * More than one of them is unreachable in practice since issue #762: an
+   * account that still holds two gets no session, so nobody is logged in to
+   * look at this screen. The multi-role branches below are left standing
+   * because this list is the ACCOUNT's, read from the API rather than from the
+   * session, and a display that reads a list should not assume its length.
    */
   const assignedRoles = props.perfil?.roles ?? [];
   const sessionBackendRole = backendRoleForUserRole(props.role);
@@ -1184,12 +1197,13 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               </>
             )}
             {showsMultiRoleBreakdown && (
-              // EVERY assigned role, not just the session's. `mapBackendRoleToUserRole`
-              // collapses an account's backend roles to the single
+              // EVERY assigned role, not just the session's. The session used
+              // to collapse an account's backend roles to the single
               // highest-privilege one, so a person who is administrator AND
-              // trainer AND representante AND alumno used to read only
-              // "Administrador" here — and the other three appeared nowhere
-              // in the product. The session's own role keeps the solid
+              // trainer AND representante AND alumno read only "Administrador"
+              // here — and the other three appeared nowhere in the product.
+              // That collapse is gone (#762) and so is the account shape it
+              // described. The session's own role keeps the solid
               // badge; the rest are neutral, so "which one am I using right
               // now" survives.
               <DetailRow label="Roles asignados">
@@ -1544,7 +1558,7 @@ function ProfileContent(): React.ReactElement | null {
 
 export default function ProfilePage(): React.ReactElement {
   return (
-    <ProtectedRoute allowedRoles={["admin", "trainer", "representante", "estudiante"]}>
+    <ProtectedRoute allowedRoles={["admin", "trainer", "representante", "estudiante", "unsupported"]}>
       <ProfileContent />
     </ProtectedRoute>
   );

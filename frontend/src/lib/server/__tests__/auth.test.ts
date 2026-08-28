@@ -21,8 +21,6 @@ import {
   backendRefresh,
   backendLogout,
   buildSession,
-  mapBackendRoleToUserRole,
-  pickPrimaryRole,
   decodeJwtExpiry,
   isNearExpiry,
   setAuthCookies,
@@ -33,6 +31,7 @@ import {
   REFRESH_TOKEN_MAX_AGE_SECONDS,
   type AuthResult,
   type BackendLoginResponse,
+  type ServerSession,
 } from "../auth";
 import type { UserRole } from "@/types/domain";
 
@@ -575,109 +574,28 @@ describe("backendLogout", () => {
 });
 
 // ---------------------------------------------------------------------------
-// mapBackendRoleToUserRole
-// ---------------------------------------------------------------------------
-
-describe("mapBackendRoleToUserRole", () => {
-  it("maps ADMINISTRADOR to admin", () => {
-    expect(mapBackendRoleToUserRole(["ADMINISTRADOR"])).toBe("admin");
-  });
-
-  it("maps ENTRENADOR to trainer", () => {
-    expect(mapBackendRoleToUserRole(["ENTRENADOR"])).toBe("trainer");
-  });
-
-  it("maps REPRESENTANTE to representante", () => {
-    expect(mapBackendRoleToUserRole(["REPRESENTANTE"])).toBe("representante");
-  });
-
-  it("maps ALUMNO to estudiante", () => {
-    expect(mapBackendRoleToUserRole(["ALUMNO"])).toBe("estudiante");
-  });
-
-  it('maps an empty roles array to "unsupported"', () => {
-    expect(mapBackendRoleToUserRole([])).toBe("unsupported");
-  });
-
-  it('maps unrecognized role strings to "unsupported"', () => {
-    expect(mapBackendRoleToUserRole(["SUPERADMIN"])).toBe("unsupported");
-    expect(mapBackendRoleToUserRole(["", "GHOST_ROLE"])).toBe("unsupported");
-  });
-
-  it("prioritizes ADMINISTRADOR when multiple roles are present", () => {
-    expect(mapBackendRoleToUserRole(["ALUMNO", "ADMINISTRADOR"])).toBe("admin");
-  });
-
-  it("resolves REPRESENTANTE + ALUMNO to representante (representante outranks student)", () => {
-    expect(mapBackendRoleToUserRole(["REPRESENTANTE", "ALUMNO"])).toBe("representante");
-    expect(mapBackendRoleToUserRole(["ALUMNO", "REPRESENTANTE"])).toBe("representante");
-  });
-
-  it("resolves all four backend roles at once to admin", () => {
-    expect(
-      mapBackendRoleToUserRole(["ALUMNO", "REPRESENTANTE", "ENTRENADOR", "ADMINISTRADOR"]),
-    ).toBe("admin");
-  });
-
-  it("ignores unrecognized roles mixed in with a recognized one", () => {
-    expect(mapBackendRoleToUserRole(["GHOST_ROLE", "ENTRENADOR"])).toBe("trainer");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// pickPrimaryRole — deterministic multi-role precedence
-// ---------------------------------------------------------------------------
-
-describe("pickPrimaryRole", () => {
-  it("returns null for an empty set", () => {
-    expect(pickPrimaryRole([])).toBeNull();
-  });
-
-  it("returns the sole role when only one is present", () => {
-    expect(pickPrimaryRole(["estudiante"])).toBe("estudiante");
-    expect(pickPrimaryRole(["representante"])).toBe("representante");
-  });
-
-  it("prioritizes admin over every other role", () => {
-    const combos: UserRole[][] = [
-      ["admin", "representante"],
-      ["admin", "trainer"],
-      ["admin", "estudiante"],
-      ["admin", "representante", "trainer", "estudiante"],
-    ];
-    for (const combo of combos) {
-      expect(pickPrimaryRole(combo)).toBe("admin");
-    }
-  });
-
-  it("prioritizes representante over trainer and estudiante (but not admin)", () => {
-    expect(pickPrimaryRole(["representante", "trainer"])).toBe("representante");
-    expect(pickPrimaryRole(["representante", "estudiante"])).toBe("representante");
-    expect(pickPrimaryRole(["trainer", "estudiante", "representante"])).toBe("representante");
-  });
-
-  it("prioritizes trainer over estudiante", () => {
-    expect(pickPrimaryRole(["trainer", "estudiante"])).toBe("trainer");
-  });
-
-  it("is order-independent — same set, any input order, same result", () => {
-    expect(pickPrimaryRole(["estudiante", "trainer", "representante", "admin"])).toBe("admin");
-    expect(pickPrimaryRole(["admin", "representante", "trainer", "estudiante"])).toBe("admin");
-  });
-
-  it("ignores unsupported (outside the precedence list)", () => {
-    expect(pickPrimaryRole(["unsupported"])).toBeNull();
-    expect(pickPrimaryRole(["unsupported", "estudiante"])).toBe("estudiante");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // buildSession
+//
+// `resolveSessionRole`, and the refusal of an account that still holds more
+// than one role, live in single-role-session.test.ts: the mapping and the
+// invariant it enforces are one subject and are tested as one (issue #762).
+// What is covered here is everything else `buildSession` carries across.
 // ---------------------------------------------------------------------------
+
+/**
+ * The session of an account that has one — every case below states a single
+ * role, so a refusal here is a failure of the test's own premise and says so
+ * rather than surfacing as `undefined` three assertions later.
+ */
+function sessionFrom(me: Parameters<typeof buildSession>[0]): ServerSession {
+  const result = buildSession(me);
+  if (!result.ok) throw new Error(`expected a session, got ${result.reason}`);
+  return result.session;
+}
 
 describe("buildSession", () => {
   it("builds a token-free session for a staff role", () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "admin@cataclub.com",
       personaId: 42,
       nombres: "Ana",
@@ -698,7 +616,7 @@ describe("buildSession", () => {
   });
 
   it("builds an estudiante session with the extra discriminated fields", () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "alumno@cataclub.com",
       personaId: "7",
       nombres: "Luis",
@@ -714,7 +632,7 @@ describe("buildSession", () => {
   // is the field that carries it from /auth/me's `fechaNacimiento` through
   // to the client session.
   it("carries fechaNacimiento through for an estudiante session", () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "alumno2@cataclub.com",
       personaId: "8",
       nombres: "Marta",
@@ -727,7 +645,7 @@ describe("buildSession", () => {
   });
 
   it("builds a representante session", () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "representante@cataclub.com",
       personaId: "9",
       nombres: "Carla",
@@ -740,7 +658,7 @@ describe("buildSession", () => {
   });
 
   it('builds an "unsupported" session for an empty roles array, never "representante"', () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "ghost@cataclub.com",
       personaId: "10",
       nombres: "Nadie",
@@ -753,7 +671,7 @@ describe("buildSession", () => {
   });
 
   it('builds an "unsupported" session when only unrecognized roles are present', () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "ghost2@cataclub.com",
       personaId: "11",
       nombres: "Otro",
@@ -768,7 +686,7 @@ describe("buildSession", () => {
   // `fotoUrl` never left `/auth/me`'s response on its way into the session —
   // `buildSession` read the subset of fields it needed and stopped there.
   it("carries fotoUrl through when the backend returns it", () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "conFoto@cataclub.com",
       personaId: "12",
       nombres: "Sofia",
@@ -781,7 +699,7 @@ describe("buildSession", () => {
   });
 
   it("defaults fotoUrl to null when the backend omits it, so AppShell falls back to initials", () => {
-    const session = buildSession({
+    const session = sessionFrom({
       correo: "sinFoto@cataclub.com",
       personaId: "13",
       nombres: "Mateo",

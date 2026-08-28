@@ -335,6 +335,60 @@ describe("isValidAuthSession", () => {
       isValidAuthSession({ ...validSession, token: "leaked" }),
     ).toBe(true);
   });
+
+  // -------------------------------------------------------------------------
+  // Issue #762 — the client's own half of the single-role invariant.
+  //
+  // The BFF already refuses to build a multi-role session, so nothing should
+  // ever reach here carrying two roles. This guard exists precisely for the
+  // "should never" cases (a stale deployment, a proxied response, a hand-rolled
+  // body), and a payload with two roles is the one the rail would have drawn as
+  // a union while the route guards answered from a single value.
+  // -------------------------------------------------------------------------
+
+  it("rejects a session carrying more than one recognized role", () => {
+    expect(isValidAuthSession({ ...validSession, roles: ["ADMINISTRADOR", "ENTRENADOR"] })).toBe(false);
+    expect(isValidAuthSession({ ...validSession, roles: ["ENTRENADOR", "ALUMNO"] })).toBe(false);
+    expect(isValidAuthSession({ ...validSession, roles: ["REPRESENTANTE", "ALUMNO"] })).toBe(false);
+  });
+
+  it("accepts the shapes that are still exactly one role", () => {
+    expect(isValidAuthSession({ ...validSession, roles: ["ENTRENADOR"] })).toBe(true);
+    // No recognized role at all is the "unsupported" account, not a conflict.
+    expect(isValidAuthSession({ ...validSession, roles: [] })).toBe(true);
+    expect(isValidAuthSession({ ...validSession, roles: ["GHOST_ROLE"] })).toBe(true);
+    // An unknown role beside a known one grants nothing extra, so it is not a
+    // second role — same answer the BFF gives.
+    expect(isValidAuthSession({ ...validSession, roles: ["GHOST_ROLE", "ALUMNO"] })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// login — the multi-role refusal reaches the person who typed the password
+// ---------------------------------------------------------------------------
+
+describe("login — multi-role account (issue #762)", () => {
+  it('reports "role_conflict" for the BFF 409, not the generic unknown failure', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(errorResponse(409, { error: "role_conflict" }));
+
+    const result = await login("admin@cataclub.com", "admin123");
+
+    expect(result).toEqual({ ok: false, error: "role_conflict" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchSession — a multi-role body is not a session
+// ---------------------------------------------------------------------------
+
+describe("fetchSession — multi-role body (issue #762)", () => {
+  it("reads a 200 carrying two roles as unauthenticated rather than hydrating it", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      okResponse({ ...validSession, roles: ["ADMINISTRADOR", "ENTRENADOR"] }),
+    );
+
+    expect(await fetchSession()).toEqual({ kind: "unauthenticated" });
+  });
 });
 
 // ---------------------------------------------------------------------------

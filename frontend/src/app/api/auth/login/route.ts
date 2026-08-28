@@ -69,8 +69,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const session = buildSession(meResult.data);
-  const response = NextResponse.json(session, { status: 200 });
+  const built = buildSession(meResult.data);
+  if (!built.ok) {
+    // Issue #762: the account still holds more than one active role, which
+    // #785 made impossible to create but did not retroactively correct. There
+    // is no role to serve, and picking one is the defect this closes.
+    //
+    // 409, and not 401 or 500: the password was right and the deployment is
+    // fine, so neither of those is true — what conflicts is the account. It is
+    // also the status the database gives the same invariant, whose trigger
+    // raises SQLSTATE 23505 and surfaces through main.py's existing handler.
+    //
+    // No cookies are set, so the browser is left with nothing to hydrate: a
+    // refused login must not leave a session behind it.
+    return NextResponse.json(
+      {
+        error: "role_conflict",
+        message:
+          "Su cuenta tiene más de un rol activo y no podemos saber con cuál entrar. " +
+          "Comuníquese con el club para que le dejen uno solo.",
+      },
+      { status: 409 },
+    );
+  }
+
+  const response = NextResponse.json(built.session, { status: 200 });
   setAuthCookies(response, {
     accessToken: loginResult.data.access_token,
     refreshToken: loginResult.data.refresh_token,
