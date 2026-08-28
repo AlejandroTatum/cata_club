@@ -34,7 +34,6 @@ from app.infraestructura.tareas.comprobante_tareas import (
     generar_comprobante_pdf_tarea,
     reconciliar_comprobantes_faltantes,
 )
-from app.infraestructura.tareas.recuperacion_tareas import enviar_enlace_recuperacion
 from app.infraestructura.tareas.vencimientos_tareas import marcar_membresias_vencidas
 
 _DIRECTORIO_DE_TAREAS = (
@@ -49,7 +48,6 @@ _TOPE_ESPERADO = [
     (generar_comprobante_pdf_tarea, 5),
     (reconciliar_comprobantes_faltantes, 3),
     (alertar_vencimientos_hoy_mas_5, 3),
-    (enviar_enlace_recuperacion, 3),
     (marcar_membresias_vencidas, 3),
 ]
 

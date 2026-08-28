@@ -1,4 +1,5 @@
 from typing import Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dominio.enums import TipoRol
@@ -46,7 +47,35 @@ class UsuarioRepositorio:
         self.db = db
 
     def obtener_por_correo(self, correo: str) -> Optional[Usuario]:
-        return self.db.query(Usuario).filter(Usuario.correo == correo).first()
+        """Busca la cuenta SIN distinguir mayúsculas ni espacios al borde.
+
+        Una dirección de correo no distingue mayúsculas para el usuario que
+        la tipea, pero `usuario.correo` guarda literalmente lo que se escribió
+        al registrarse y la comparación era `==`. La consecuencia peor no era
+        el login -- ahí un error se ve -- sino la recuperación de contraseña:
+        `AuthServicio.solicitar_recuperacion` no encontraba al usuario,
+        respondía igual el mensaje de éxito anti-enumeración y no encolaba
+        nada, así que el correo nunca llegaba y nada quedaba registrado
+        (issue #764, reproducido contra QA: con `admin@cataclub.com` guardado,
+        pedir `Admin@CataClub.com` devuelve 200 y cero filas en el outbox).
+
+        Normalizar acá y no en cada llamador es lo que mantiene coherentes los
+        cuatro caminos que resuelven una cuenta por correo -- login, registro,
+        recuperación y restablecimiento -- y de paso hace que el registro
+        rechace una variante de mayúsculas de un correo ya usado en vez de
+        crear una segunda cuenta indistinguible.
+
+        `order_by(id)` porque la unicidad de `usuario.correo` es un btree
+        sensible a mayúsculas: si un despliegue ya tiene dos cuentas que solo
+        difieren en la capitalización, esta consulta tiene que devolver
+        siempre la misma (la más antigua) y no una al azar.
+        """
+        return (
+            self.db.query(Usuario)
+            .filter(func.lower(Usuario.correo) == correo.strip().lower())
+            .order_by(Usuario.id)
+            .first()
+        )
 
     def obtener_por_persona_id(self, persona_id: int) -> Optional[Usuario]:
         return self.db.query(Usuario).filter(Usuario.persona_id == persona_id).first()
