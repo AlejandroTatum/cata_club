@@ -37,6 +37,26 @@ logger = logging.getLogger("cataclub.tareas.alertas")
 logger.setLevel(logging.INFO)
 
 
+# Ventanas de recuperación (issue #791, punto 2): las tres constantes de abajo
+# NO cambian el día nominal en el que se dispara cada aviso -- si Beat corre
+# todas las noches, una membresía que vence en 5 días sigue avisándose a los
+# 5 días y una familia en mora sigue recibiendo el día 1 y el día 8, exacto
+# como antes. Lo que cambian es qué pasa si Beat NO corrió esa noche exacta
+# (contenedor OOM-killed, colgado, etc.): con un match por igualdad exacta
+# contra una fecha/`dias`, esa corrida perdida no se recupera nunca -- al día
+# siguiente la condición ya no matchea y el aviso desaparece para siempre. Con
+# un rango, la corrida siguiente todavía encuentra la fila pendiente. No hay
+# riesgo de duplicar: `_ya_notificado` dedupea por
+# `(tipo, persona_id, entidad_relacionada_id=pago_id)`, no por fecha, así que
+# una familia ya notificada dentro de la ventana no vuelve a notificarse en
+# una corrida posterior.
+DIAS_ANTICIPACION_VENCIMIENTO = 5
+DIAS_MORA_MIN_DIA_1 = 1
+DIAS_MORA_MAX_DIA_1 = 7  # tope: no pisar la ventana del aviso de día 8
+DIAS_MORA_MIN_DIA_8 = 8
+DIAS_MORA_MAX_DIA_8 = 14  # tope: respeta el silencio del día 15 (issue #285)
+
+
 @celery_app.task(
     name="app.infraestructura.tareas.alertas_tareas.alertar_vencimientos_hoy_mas_5",
     bind=True,
@@ -58,7 +78,7 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
     # `Pago.fecha_fin`, una fecha de calendario del club, y Celery Beat ya
     # planifica en `America/Guayaquil`.
     hoy = hoy_club()
-    fecha_objetivo = hoy + timedelta(days=5)
+    fecha_objetivo = hoy + timedelta(days=DIAS_ANTICIPACION_VENCIMIENTO)
 
     alertas_enviadas: list[dict] = []
 
@@ -78,7 +98,14 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
             .options(joinedload(Persona.usuario))
             .where(
                 Pago.estado_pago == EstadoPago.APROBADO,
-                Pago.fecha_fin == fecha_objetivo,
+                # Ventana de recuperación, no cambio de regla: en la corrida
+                # nominal (Beat corrió anoche) esto sigue siendo "vence en
+                # exactamente 5 días", porque ayer esa misma membresía tenía
+                # `fecha_fin` fuera del rango. Si Beat se saltó una noche, hoy
+                # la fila sigue apareciendo (`fecha_fin` entre hoy y hoy+5) en
+                # vez de perderse -- ver constantes arriba.
+                Pago.fecha_fin >= hoy,
+                Pago.fecha_fin <= fecha_objetivo,
                 Membresia.estado == EstadoMembresia.ACTIVA,
             )
         )
@@ -89,7 +116,13 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
 
         for pago, membresia, persona in filas:
             try:
-                _disparar_notificacion_vencimiento(db, persona, membresia, pago, fecha_objetivo)
+                # `pago.fecha_fin`, NO `fecha_objetivo`: dentro de la ventana
+                # de recuperación cada pago puede vencer en cualquier día
+                # entre `hoy` y `fecha_objetivo`, y el aviso debe nombrar la
+                # fecha REAL de ESE pago -- `fecha_objetivo` es solo el borde
+                # de la ventana escaneada por el lote, no la fecha de vencimiento
+                # de ninguna membresía en particular.
+                _disparar_notificacion_vencimiento(db, persona, membresia, pago, pago.fecha_fin)
                 alertas_enviadas.append({
                     "pago_id": pago.id,
                     "membresia_id": membresia.id,
@@ -465,9 +498,17 @@ def alertar_mora_diaria(self) -> dict:
 
         for membresia, persona, pago_id, ultima_fecha_fin in filas:
             dias = (hoy - ultima_fecha_fin).days
-            if dias == 1:
+            # Ventanas de recuperación, no cambio de regla: en la corrida
+            # nominal (Beat corrió anoche) `dias` sigue siendo exactamente 1 o
+            # exactamente 8 -- ayer mismo `dias` valía uno menos y no
+            # matcheaba ninguna ventana. Si Beat se saltó una noche, la fila
+            # sigue apareciendo dentro del rango en vez de perderse -- ver
+            # constantes arriba. `_ya_notificado` (dedup por
+            # `(tipo, persona_id, pago_id)`) evita que una corrida posterior
+            # dentro de la misma ventana repita un aviso ya emitido.
+            if DIAS_MORA_MIN_DIA_1 <= dias <= DIAS_MORA_MAX_DIA_1:
                 tipo = TipoNotificacion.MIEMBRESIA_MORA_DIA_1
-            elif dias == 8:
+            elif DIAS_MORA_MIN_DIA_8 <= dias <= DIAS_MORA_MAX_DIA_8:
                 tipo = TipoNotificacion.MIEMBRESIA_MORA_DIA_8
             else:
                 continue
