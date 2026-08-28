@@ -90,12 +90,16 @@ def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sab
 def test_main_repara_representante_preexistente_sin_roles():
     """Regresión del bug real observado con `laura@cataclub.com`.
 
-    La asignación de roles REPRESENTANTE+ALUMNO se añadió al seed DESPUÉS de
-    que las bases de datos de desarrollo ya estuvieran sembradas (commit
+    La asignación de rol al representante se añadió al seed DESPUÉS de que
+    las bases de datos de desarrollo ya estuvieran sembradas (commit
     `0bfd88d`). Como la rama "el usuario ya existe" solo imprimía y saltaba,
     esas cuentas quedaban con `roles = []` para siempre: `/auth/me` devuelve
     una lista vacía, el frontend la mapea a `"unsupported"` y el login
-    aterriza en `/unauthorized`. Volver a correr el seed debe repararlas."""
+    aterriza en `/unauthorized`. Volver a correr el seed debe repararlas.
+
+    Desde el issue #762 el backfill repone UN rol, no dos: reponer
+    REPRESENTANTE+ALUMNO es hoy un error de base, porque la segunda fila la
+    rechaza `trg_usuario_rol_unico_por_usuario`."""
     modulo = _cargar_modulo_seed()
     SessionLocal = _motor_en_memoria(modulo)
 
@@ -119,12 +123,12 @@ def test_main_repara_representante_preexistente_sin_roles():
         usuario = verificacion.execute(
             select(Usuario).where(Usuario.correo == rep["correo"])
         ).scalar_one()
-        assert {r.tipo_rol for r in usuario.roles} == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+        assert {r.tipo_rol for r in usuario.roles} == {TipoRol.REPRESENTANTE}
 
 
 def test_main_no_duplica_roles_de_un_representante_ya_correcto():
     """El backfill es idempotente: correr el seed dos veces no acumula roles
-    repetidos en la cuenta del representante."""
+    repetidos ni agrega un segundo rol a la cuenta del representante."""
     modulo = _cargar_modulo_seed()
     SessionLocal = _motor_en_memoria(modulo)
 
@@ -136,10 +140,7 @@ def test_main_no_duplica_roles_de_un_representante_ya_correcto():
         usuario = verificacion.execute(
             select(Usuario).where(Usuario.correo == rep["correo"])
         ).scalar_one()
-        tipos = [r.tipo_rol for r in usuario.roles]
-        assert sorted(tipos, key=lambda t: t.value) == sorted(
-            [TipoRol.ALUMNO, TipoRol.REPRESENTANTE], key=lambda t: t.value
-        )
+        assert [r.tipo_rol for r in usuario.roles] == [TipoRol.REPRESENTANTE]
 
 
 # ---------------------------------------------------------------------------

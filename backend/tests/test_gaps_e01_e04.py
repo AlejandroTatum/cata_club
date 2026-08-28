@@ -69,18 +69,21 @@ def test_obtener_roles_refleja_estado_actual_sin_mutar(client):
     assert resp.json()["roles"] == []
     assert resp.json()["activo"] is True
 
+    # Issue #762: acá se asignaban ENTRENADOR y ALUMNO seguidos. La segunda
+    # llamada ahora se rechaza (una cuenta tiene un solo rol activo), así que
+    # lo que este test mide -- que el GET refleje el estado real y no mute --
+    # se comprueba con el rol único y el cambio de estado de la cuenta.
     client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ENTRENADOR"})
-    client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ALUMNO"})
     client.patch(f"/api/v1/personas/{persona['id']}/cuenta/estado", json={"activo": False})
 
     resp = client.get(f"/api/v1/personas/{persona['id']}/roles")
     assert resp.status_code == 200
-    assert sorted(resp.json()["roles"]) == ["ALUMNO", "ENTRENADOR"]
+    assert resp.json()["roles"] == ["ENTRENADOR"]
     assert resp.json()["activo"] is False
 
     # Confirma que el GET no mutó nada: una segunda lectura da lo mismo.
     resp = client.get(f"/api/v1/personas/{persona['id']}/roles")
-    assert sorted(resp.json()["roles"]) == ["ALUMNO", "ENTRENADOR"]
+    assert resp.json()["roles"] == ["ENTRENADOR"]
     assert resp.json()["activo"] is False
 
 

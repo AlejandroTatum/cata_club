@@ -142,19 +142,31 @@ def test_independizar_happy_path(db_session):
     assert resultado.representante_id is None
 
 
-def test_independizar_asigna_rol_representante(db_session):
-    """Post-independización, la persona recibe el rol REPRESENTANTE."""
+def test_independizar_no_agrega_un_segundo_rol(db_session):
+    """Antes del issue #762 esta operación asignaba además el rol
+    REPRESENTANTE. Como quien se independiza es siempre un ex-menor con rol
+    ALUMNO, era una fábrica garantizada de cuentas ALUMNO+REPRESENTANTE: el
+    único de los cinco caminos que producía el segundo rol en el 100% de los
+    casos.
+
+    Lo que independiza a la persona es cortar el VÍNCULO, no el rol -- la
+    autorización de representación sale de `persona.representante_id` (ver
+    `PoliticaAcceso.puede_acceder`), no de `TipoRol.REPRESENTANTE`, que solo
+    habilita "agregar/vincular dependiente"."""
     rep = _crear_representante(db_session)
     persona = _crear_persona_adulta(db_session, representante_id=rep.id)
     _crear_usuario(db_session, persona)
+    usuario = UsuarioRepositorio(db_session).obtener_por_persona_id(persona.id)
+    roles_antes = {r.tipo_rol for r in usuario.roles}
 
-    PersonaServicio(db_session).independizar(
+    resultado = PersonaServicio(db_session).independizar(
         persona.id, IndependizarDTO(contrasenia="clave12345")
     )
 
-    usuario = UsuarioRepositorio(db_session).obtener_por_persona_id(persona.id)
-    roles = {r.tipo_rol for r in usuario.roles}
-    assert TipoRol.REPRESENTANTE in roles
+    assert resultado.representante_id is None
+    db_session.refresh(usuario)
+    assert {r.tipo_rol for r in usuario.roles} == roles_antes
+    assert TipoRol.REPRESENTANTE not in {r.tipo_rol for r in usuario.roles}
 
 
 def test_independizar_preserva_datos(db_session):

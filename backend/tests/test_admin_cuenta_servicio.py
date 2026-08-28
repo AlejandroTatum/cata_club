@@ -81,7 +81,10 @@ def test_crear_cuenta_jugador_asigna_rol_alumno(db_session):
     assert roles == {TipoRol.ALUMNO}
 
 
-def test_crear_cuenta_representante_asigna_roles_representante_y_alumno(db_session):
+def test_crear_cuenta_representante_asigna_solo_rol_representante(db_session):
+    """Issue #762: `ROLES_POR_TIPO_CUENTA["REPRESENTANTE"]` entregaba
+    REPRESENTANTE **y** ALUMNO, o sea que el alta administrativa fabricaba
+    una cuenta multirol de fábrica."""
     datos = AdminCrearCuentaDTO(**_base_payload(
         tipo_cuenta="REPRESENTANTE",
         correo="representante@test.com",
@@ -91,12 +94,12 @@ def test_crear_cuenta_representante_asigna_roles_representante_y_alumno(db_sessi
     assert "access_token" in result
     usuario = db_session.query(Usuario).filter(Usuario.correo == "representante@test.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
-    assert roles == {TipoRol.REPRESENTANTE, TipoRol.ALUMNO}
+    assert roles == {TipoRol.REPRESENTANTE}
 
 
 def test_crear_cuenta_entrenador_asigna_solo_rol_entrenador(db_session):
     """Un entrenador entrena, no se matricula: recibe ENTRENADOR y nada más
-    (a diferencia de REPRESENTANTE, que sí arrastra ALUMNO)."""
+    (desde el issue #762, REPRESENTANTE tampoco arrastra ALUMNO)."""
     datos = AdminCrearCuentaDTO(**_base_payload(
         tipo_cuenta="ENTRENADOR",
         correo="entrenador@test.com",
@@ -216,9 +219,9 @@ def test_representante_menor_de_edad_rechazado(client, db_session):
 # aviso para JUGADOR/REPRESENTANTE/ENTRENADOR -- esta rama solo validaba el
 # piso (`edad < EDAD_MAYORIA_EDAD`), nunca el techo. El fix de MENOR de la
 # misma tanda usa `EDAD_MINIMA_ALUMNO`/`EDAD_MAXIMA_ALUMNO`; no hay una cota
-# nueva para adultos, así que reutiliza `EDAD_MAXIMA_ALUMNO` (74) -- JUGADOR y
-# REPRESENTANTE ya reciben el rol ALUMNO (`ROLES_POR_TIPO_CUENTA`), y es el
-# único techo que el sistema define.
+# nueva para adultos, así que reutiliza `EDAD_MAXIMA_ALUMNO` (74): es el
+# único techo de edad que el sistema define para una persona (desde el issue
+# #762 ya no se deriva del rol, porque REPRESENTANTE no arrastra ALUMNO).
 @pytest.mark.parametrize("tipo_cuenta,correo", [
     ("JUGADOR", "jugador_1700@test.com"),
     ("REPRESENTANTE", "representante_1700@test.com"),

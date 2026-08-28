@@ -10,7 +10,7 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
      correo de cualquier cuenta propia (menor o adulto). Nada de esto
      escribe todavía.
   2. Dentro de una única transacción: crear Persona del representante (si
-     aplica) + Usuario (credenciales) + roles REPRESENTANTE y ALUMNO; crear
+     aplica) + Usuario (credenciales) + rol REPRESENTANTE; crear
      Persona del alumno (con representante_id si aplica); crear FichaMedica
      y AntecedentesClub si se proporcionaron; crear Usuario del alumno
      (menor con cuenta propia, o adulto autoinscrito) + rol ALUMNO.
@@ -34,6 +34,7 @@ from app.dominio.enums import TipoRol
 from app.soporte_transversal.tiempo import hoy_club
 from app.dominio.excepciones import EntidadDuplicada, ErrorDominio, OperacionInvalida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
+from app.dominio.rol_unico import exigir_rol_unico
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
@@ -269,8 +270,12 @@ class EnrollmentServicio:
                     persona_id=representante_id,
                 )
                 self.repo_usuario.crear(usuario, commit=False)
+                # Issue #762: acá se otorgaba también ALUMNO. Esas dos
+                # líneas seguidas eran el camino por el que la inscripción
+                # pública fabricaba cuentas REPRESENTANTE+ALUMNO. Quien
+                # inscribe a un menor entra como representante; si además
+                # quiere entrenar, es un cambio de rol explícito.
                 self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
-                self._asignar_rol(usuario, TipoRol.ALUMNO)
 
                 # Si el menor tiene credenciales propias, crear cuenta también
                 if datos.alumno.correo and datos.alumno.contrasenia:
@@ -413,7 +418,7 @@ class EnrollmentServicio:
         Solo `flush()`: forma parte de la transacción atómica de `enroll`
         (issue #338), que hace el único `commit()` al final del flujo feliz.
         """
-        if any(r.tipo_rol == tipo_rol for r in usuario.roles):
+        if not exigir_rol_unico(usuario, tipo_rol):
             return
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
