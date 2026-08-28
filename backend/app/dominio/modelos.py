@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
-    CheckConstraint, Index, UniqueConstraint, text, func,
+    CheckConstraint, Index, UniqueConstraint, text, func, event,
     Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
@@ -166,6 +166,9 @@ class Usuario(Base):
     persona: Mapped["Persona"] = relationship(back_populates="usuario")
     # 0..* en ambos lados (un rol puede existir sin usuarios asignados todavía)
     roles: Mapped[List["Rol"]] = relationship(secondary=usuario_rol, back_populates="usuarios")
+    consentimientos_legales: Mapped[List["ConsentimientoLegal"]] = relationship(
+        back_populates="cuenta", passive_deletes=True,
+    )
 
     def revocar_sesiones(self) -> None:
         """Invalida TODA sesión activa de este usuario bombeando el epoch
@@ -178,6 +181,72 @@ class Usuario(Base):
         este método, el ÚNICO lugar del dominio que expresa "retirar acceso".
         Reactivar una cuenta NO retira acceso y por lo tanto no bombea."""
         self.version_sesion += 1
+
+
+class ConsentimientoLegal(Base):
+    """Snapshot inmutable de una aceptación legal por documento y versión."""
+
+    __tablename__ = "consentimiento_legal"
+    __table_args__ = (
+        CheckConstraint(
+            "documento IN ('TERMINOS', 'PRIVACIDAD', 'DATOS_MEDICOS', 'FETM')",
+            name="ck_consentimiento_legal_documento",
+        ),
+        Index(
+            "uq_consentimiento_legal_cuenta_documento_version_representado",
+            "cuenta_id", "documento", "version_documento",
+            text("coalesce(representado_persona_id, 0)"), unique=True,
+        ),
+        Index("ix_consentimiento_legal_cuenta_aceptado", "cuenta_id", "aceptado_en"),
+        Index("ix_consentimiento_legal_representado_persona_id", "representado_persona_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    documento: Mapped[str] = mapped_column(String(30), nullable=False)
+    version_documento: Mapped[str] = mapped_column(String(20), nullable=False)
+    vigente_desde: Mapped[date] = mapped_column(
+        Date, default=date(2026, 8, 27), server_default="2026-08-27", nullable=False,
+    )
+    texto_aceptado: Mapped[str] = mapped_column(String(10000), nullable=False)
+    aceptado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, server_default=func.now(), nullable=False,
+    )
+    cuenta_id: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False,
+    )
+    representado_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id", ondelete="RESTRICT"), nullable=True,
+    )
+
+    cuenta: Mapped["Usuario"] = relationship(back_populates="consentimientos_legales")
+    representado: Mapped[Optional["Persona"]] = relationship(foreign_keys=[representado_persona_id])
+
+
+@event.listens_for(ConsentimientoLegal, "before_update")
+def _impedir_edicion_consentimiento(mapper, connection, target) -> None:
+    raise ValueError("el consentimiento legal es inmutable")
+
+
+class RevocacionConsentimientoLegal(Base):
+    """Evento de retiro prospectivo; nunca modifica el snapshot aceptado."""
+
+    __tablename__ = "revocacion_consentimiento_legal"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consentimiento_id: Mapped[int] = mapped_column(
+        ForeignKey("consentimiento_legal.id", ondelete="RESTRICT"), nullable=False, unique=True,
+    )
+    cuenta_id: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False,
+    )
+    revocado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, server_default=func.now(), nullable=False,
+    )
+    motivo: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    __table_args__ = (Index("ix_revocacion_consentimiento_legal_cuenta_id", "cuenta_id"),)
+
+    consentimiento: Mapped["ConsentimientoLegal"] = relationship()
+    cuenta: Mapped["Usuario"] = relationship()
 
 
 class Sesion(Base):
