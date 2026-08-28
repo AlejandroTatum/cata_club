@@ -93,6 +93,59 @@ class GestorAutenticacion:
             raise CredencialesInvalidas("El enlace de recuperación es inválido o expiró")
         return payload
 
+    # --- Issue #790: verificación de la dirección de correo -----------------
+    # Cuarto valor del claim `type`, junto a `access`, `refresh` y
+    # `reset_password`. La disciplina es la misma y por el mismo motivo: todos
+    # los tokens del sistema van firmados con la MISMA clave, así que `type`
+    # es lo único que impide que un enlace que viaja por correo -- y que puede
+    # quedar en el historial de un cliente de mail, en un proxy o en una
+    # captura -- sirva como credencial de autenticación. `decodificar_token`
+    # exige `type == "access"`, de modo que este token queda excluido de ahí
+    # sin necesidad de tocar esa función; lo que falta es el lado simétrico,
+    # que es el que aporta `decodificar_token_verificacion_correo`.
+    VERIFICACION_CORREO_EXPIRA_HORAS = 24
+
+    @staticmethod
+    def crear_token_verificacion_correo(
+        correo: str, expiracion_horas: int | None = None
+    ) -> str:
+        """Token de un solo propósito (`type=verify_email`).
+
+        Dura más que el de recuperación (24 h contra 30 min) porque cubre otra
+        situación: quien restablece su contraseña está sentado frente a la
+        pantalla esperando el correo, mientras que quien se inscribe en el club
+        puede abrir el enlace recién esa noche, desde otro dispositivo.
+
+        No lleva claim de versión, a diferencia de `crear_token_recuperacion`.
+        No hace falta: el único efecto de este token es marcar verificada la
+        dirección que él mismo nombra, así que reusarlo no puede conceder nada
+        que la primera vez no hubiera concedido ya. Y si la cuenta cambia de
+        dirección, el `sub` deja de resolver a ninguna cuenta y el token muere
+        solo."""
+        horas = expiracion_horas or GestorAutenticacion.VERIFICACION_CORREO_EXPIRA_HORAS
+        payload = {
+            "sub": correo,
+            "type": "verify_email",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=horas),
+        }
+        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algoritmo)
+
+    @staticmethod
+    def decodificar_token_verificacion_correo(token: str) -> dict:
+        """Devuelve el payload si el token es válido y de tipo `verify_email`.
+
+        Un access token, un refresh token o un token de recuperación llegan
+        acá con firma perfectamente válida: es este chequeo de `type` --
+        y solo este -- lo que impide que cualquiera de ellos marque verificada
+        una dirección que su portador nunca leyó."""
+        try:
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo])
+        except jwt.PyJWTError:
+            raise CredencialesInvalidas("El enlace de verificación es inválido o expiró")
+        if payload.get("type") != "verify_email":
+            raise CredencialesInvalidas("El enlace de verificación es inválido o expiró")
+        return payload
+
     # --- E01: invalidación de sesión (epoch compartido access + refresh) ----
     @staticmethod
     def epoch_valido(sver_claim: Optional[int], usuario: "Usuario") -> bool:

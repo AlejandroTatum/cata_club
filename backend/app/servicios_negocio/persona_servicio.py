@@ -6,8 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
 from app.dominio.enums import TipoRol, TipoNotificacion
-from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
-from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VINCULACION_NO_DISPONIBLE
+from app.dominio.excepciones import (
+    EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida, PermisosInsuficientes,
+)
+from app.dominio.mensajes import (
+    MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_IDENTIDAD_DUPLICADA,
+    MENSAJE_VINCULACION_NO_DISPONIBLE,
+)
 from app.dominio.rol_unico import exigir_rol_unico
 from app.soporte_transversal.tiempo import hoy_club
 from app.soporte_transversal.firma_archivos import es_firma_valida
@@ -204,7 +209,24 @@ class PersonaServicio:
         4. Tope de intentos: freno progresivo por representante (mismo
            patrón que `AuthServicio._calcular_retraso_login`, nunca bloqueo
            duro).
+        5. Issue #790: la cuenta que ejerce esta capacidad tiene que haber
+           probado el control de su dirección de correo. Es lo ÚNICO que
+           agrega ese issue, y no toca ninguno de los cuatro guardarraíles
+           de arriba: la vinculación sigue sin requerir la aprobación de
+           nadie.
+
+        Por qué el candado va acá y no en el rol ni en la política de acceso:
+        `REPRESENTANTE` desbloquea también cosas inofensivas, y
+        `PoliticaAccesoPersona` concede a partir de `representante_id`, que es
+        el vínculo que un representante recién inscripto YA tiene sobre el
+        hijo que él mismo dio de alta. Cerrar ahí dejaría a una familia real
+        sin acceso a la ficha de su propio chico mientras espera un correo.
+        Esta llamada es la única que ATA una cuenta a una persona que no creó,
+        que es exactamente el paso que convierte "controlo una dirección de
+        correo" en "puedo leer y escribir la ficha médica de un menor".
         """
+        self._exigir_correo_verificado_del_representante(representante_id)
+
         try:
             representado = self._resolver_representado_elegible(representante_id, datos.cedula)
         except OperacionInvalida:
@@ -227,6 +249,29 @@ class PersonaServicio:
             self._notificar_representante_anterior(representado, representante_anterior_id)
 
         return representado
+
+    def _exigir_correo_verificado_del_representante(self, representante_id: int) -> None:
+        """Issue #790: la cuenta a la que va a quedar atado el representado
+        tiene que haber probado que su dirección de correo es suya.
+
+        Se evalúa sobre la CUENTA destino, no sobre el rol de quien llama.
+        Una Persona sin cuenta -- un tutor que el club cargó a mano, sin
+        login -- no tiene ninguna dirección que probar y no gana ninguna
+        credencial con la vinculación, así que no se le bloquea nada: exigirle
+        una verificación imposible solo impediría trabajar al administrador
+        que lo está ayudando.
+
+        Corre ANTES de resolver la elegibilidad, y a propósito fuera del
+        `try` que penaliza: el freno progresivo existe para castigar a quien
+        prueba cédulas en serie, y un correo sin verificar no es un intento
+        fallido de adivinanza. Gastarle intentos al representante real solo lo
+        haría esperar de más por algo que no hizo mal. Además, resolver
+        primero significaría consultar la cédula buscada antes de saber si
+        quien pregunta puede preguntar.
+        """
+        cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
+        if cuenta is not None and not cuenta.correo_verificado:
+            raise PermisosInsuficientes(MENSAJE_CORREO_SIN_VERIFICAR)
 
     def _resolver_representado_elegible(self, representante_id: int, cedula: str) -> Persona:
         """Devuelve la Persona elegible para ser vinculada, o levanta

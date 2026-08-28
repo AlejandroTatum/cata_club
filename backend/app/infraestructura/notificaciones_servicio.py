@@ -158,3 +158,39 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[RECUPERAR_CONTRASENIA] correo=%s", correo)
+
+    def enviar_verificacion_correo(self, correo: str, token: str) -> None:
+        """Envía el enlace que prueba el control de la dirección (issue #790).
+
+        El cuerpo dice para qué sirve verificar y qué pasa si no se hace: sin
+        eso, quien se inscribe en el club no tiene forma de relacionar este
+        correo con el rechazo que va a encontrar cuando intente agregar a otro
+        representado."""
+        enlace = f"{self._frontend_url}/verificar-correo?token={token}"
+        asunto = "Verificación de correo - Cata Club"
+        texto = (
+            f"Hola,\n\n"
+            f"Gracias por registrarse en Cata Club. Para confirmar que esta "
+            f"dirección es suya, abra el siguiente enlace (válido por 24 horas):\n\n"
+            f"{enlace}\n\n"
+            f"Mientras no verifique su correo podrá usar su cuenta con "
+            f"normalidad, pero no podrá agregar a su cuenta a un representado "
+            f"que ya esté registrado en el club.\n\n"
+            f"Si usted no se registró, ignore este correo.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            "<p>Hola,</p>"
+            "<p>Gracias por registrarse en Cata Club. Para confirmar que esta "
+            "dirección es suya, abra el siguiente enlace:</p>"
+            f'<p><a href="{enlace}">Verificar mi correo</a> (válido por 24 horas)</p>'
+            "<p>Mientras no verifique su correo podrá usar su cuenta con "
+            "normalidad, pero no podrá agregar a su cuenta a un representado "
+            "que ya esté registrado en el club.</p>"
+            "<p>Si usted no se registró, ignore este correo.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[VERIFICAR_CORREO] correo=%s", correo)

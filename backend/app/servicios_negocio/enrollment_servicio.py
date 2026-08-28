@@ -20,12 +20,15 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
 """
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, AntecedentesClub
+from app.dominio.modelos import (
+    AntecedentesClub, Enfermedades, FichaMedica, Persona, Usuario,
+    VerificacionCorreoOutbox,
+)
 from app.servicios_negocio.consentimiento_legal_servicio import (
     ConsentimientoLegalServicio, DOCUMENTOS_LEGALES, VERSION_LEGAL_VIGENTE,
     TEXTOS_LEGALES_VIGENTES,
@@ -310,6 +313,7 @@ class EnrollmentServicio:
                 representado_persona_id=alumno.id if datos.representante else None,
                 commit=False,
             )
+            self._encolar_verificacion_de_correo(usuario)
             self._notificar_nueva_inscripcion(alumno)
             self.db.commit()
         except IntegrityError as error:
@@ -453,6 +457,28 @@ class EnrollmentServicio:
             "token_type": "bearer",
             "persona_id": usuario.persona_id,
         }
+
+    def _encolar_verificacion_de_correo(self, usuario: Usuario) -> None:
+        """Registra la intención de mandarle a la cuenta su enlace de
+        verificación (issue #790).
+
+        Solo la cuenta que RECIBE los tokens de auto-login, que es la del
+        adulto que está haciendo la inscripción y la única cuya dirección hace
+        falta probar para vincular a un representado. La cuenta opcional del
+        menor no se encola: su dirección la escribió el adulto, no habilita
+        ninguna capacidad de las que este control cuida, y escribirle sin que
+        el chico lo haya pedido es peor que no hacerlo.
+
+        Solo ESCRIBE la fila: se commitea con la inscripción entera (misma
+        transacción) y de ahí en adelante es del worker. Esa durabilidad es lo
+        que hace que un broker caído en el momento del alta no pierda la
+        verificación -- exactamente el mismo trato que
+        `_notificar_nueva_inscripcion`."""
+        self.db.add(VerificacionCorreoOutbox(
+            usuario_id=usuario.id,
+            expires_at=_ahora_utc() + timedelta(hours=24),
+        ))
+        self.db.flush()
 
     def _notificar_nueva_inscripcion(self, alumno: Persona) -> None:
         """Encola en el outbox un aviso por cada administrador.

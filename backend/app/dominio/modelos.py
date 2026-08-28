@@ -152,6 +152,21 @@ class Usuario(Base):
     # E01-RF013: permite al Administrador suspender una cuenta sin borrar los
     # datos (Persona/historial). Antes solo existía DELETE (borrado duro).
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Issue #790: la cuenta probó el control de la dirección con la que se
+    # registró. Plano distinto de `activo`: `activo` es una decisión del club
+    # sobre una cuenta (suspenderla), esto es un hecho sobre la dirección.
+    #
+    # `server_default="false"` es PERMANENTE, no andamiaje de backfill (al
+    # revés que `persona.activo`, que lo retira): acá el default del esquema
+    # es una compuerta de seguridad. Un INSERT crudo que saltee el ORM debe
+    # caer del lado no verificado; nacer verificado por omisión sería
+    # exactamente el agujero que esta columna viene a cerrar. La migración
+    # `a790verifcorreo` deja en `true` a las cuentas anteriores al control
+    # (ver su nota: desactivar en silencio a los tutores reales del club
+    # sería peor que el agujero).
+    correo_verificado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     # E01: versión monotónica de la SESIÓN. Dominio de invalidación separado
     # de `version_contrasenia` a propósito: "cerrar mis otras sesiones" y
     # "cambié mi contraseña" son eventos independientes, y reusar la misma
@@ -1778,6 +1793,52 @@ class RecuperacionOutbox(Base):
         Index("ix_recuperacion_outbox_usuario_id", "usuario_id"),
         Index(
             "uq_recuperacion_outbox_usuario_activo",
+            "usuario_id",
+            unique=True,
+            postgresql_where=text("status IN ('PENDIENTE', 'ENVIANDO')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_ahora_utc
+    )
+    sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error_redacted: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    usuario: Mapped["Usuario"] = relationship()
+
+
+class VerificacionCorreoOutbox(Base):
+    """Intención durable de enviarle a una cuenta su enlace de verificación.
+
+    Misma forma que `RecuperacionOutbox` a propósito (issue #790): un segundo
+    mecanismo para el mismo problema -- entregar un enlace por correo sin
+    perderlo si el broker o el proveedor SMTP están caídos -- sería una
+    duplicación que se desincroniza sola. Lo que se persiste es a QUIÉN hay
+    que escribirle y hasta cuándo vale el intento; el token se acuña recién
+    en el momento del envío y nunca toca la base.
+    """
+
+    __tablename__ = "verificacion_correo_outbox"
+    __table_args__ = (
+        Index("ix_verificacion_correo_outbox_pending_next", "status", "next_attempt_at"),
+        Index("ix_verificacion_correo_outbox_usuario_id", "usuario_id"),
+        Index(
+            "uq_verificacion_correo_outbox_usuario_activo",
             "usuario_id",
             unique=True,
             postgresql_where=text("status IN ('PENDIENTE', 'ENVIANDO')"),

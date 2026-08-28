@@ -21,6 +21,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.alertas_tareas",
         "app.infraestructura.tareas.comprobante_tareas",
         "app.infraestructura.tareas.recuperacion_tareas",
+        "app.infraestructura.tareas.verificacion_correo_tareas",
         "app.infraestructura.tareas.enrollment_notificacion_tareas",
         "app.infraestructura.tareas.vencimientos_tareas",
     ],
@@ -86,5 +87,16 @@ celery_app.conf.beat_schedule = {
     "limpiar-recuperaciones-expiradas": {
         "task": "app.infraestructura.tareas.recuperacion_tareas.limpiar_recuperaciones_expiradas",
         "schedule": crontab(minute=5),
+    },
+    # Issue #790. Mismo ritmo que la recuperación: quien acaba de inscribirse
+    # en el club está mirando la pantalla, y un enlace que tarda más de un
+    # minuto en salir se vive como que no llegó.
+    "despachar-verificaciones-pendientes": {
+        "task": "app.infraestructura.tareas.verificacion_correo_tareas.despachar_verificaciones_pendientes",
+        "schedule": crontab(minute="*/1"),
+    },
+    "limpiar-verificaciones-expiradas": {
+        "task": "app.infraestructura.tareas.verificacion_correo_tareas.limpiar_verificaciones_expiradas",
+        "schedule": crontab(minute=10),
     },
 }

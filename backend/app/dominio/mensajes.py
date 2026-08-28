@@ -45,3 +45,26 @@ MENSAJE_VINCULACION_NO_DISPONIBLE = (
     "No fue posible vincular esa cédula a su cuenta. Verifique el número e "
     "intente nuevamente."
 )
+
+# Issue #790: respuesta cuando la cuenta que intenta vincular a un representado
+# todavía no probó que la dirección de correo con la que se inscribió es suya.
+#
+# A diferencia de los dos textos de arriba, este SÍ es específico a propósito:
+# no habla de la persona buscada -- de la que no revela absolutamente nada --
+# sino del estado de la PROPIA cuenta de quien pregunta, que ya conoce. Un
+# mensaje genérico acá sería una trampa: el representante real quedaría
+# mirando un rechazo idéntico al de una cédula equivocada, sin manera de
+# descubrir que lo único que le falta es abrir un correo.
+MENSAJE_CORREO_SIN_VERIFICAR = (
+    "Para vincular a un representado primero debe verificar su correo. "
+    "Revise su bandeja de entrada o solicite un nuevo enlace de verificación."
+)
+
+# Issue #790, misma disciplina anti-enumeración que la recuperación de
+# contraseña: el reenvío del enlace de verificación responde EXACTAMENTE esto
+# exista o no la cuenta, y esté o no ya verificada. Si difiriera en algún
+# caso, el formulario de reenvío sería un buscador de direcciones registradas.
+MENSAJE_VERIFICACION_ENVIADA = (
+    "Si el correo está registrado y falta verificarlo, se envió un enlace de "
+    "verificación"
+)
