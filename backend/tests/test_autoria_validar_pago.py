@@ -47,9 +47,11 @@ def _crear_membresia(client, persona_id, tipo_id):
 
 
 def _crear_pago_pendiente(client, persona_id, membresia_id):
-    # TRANSFERENCIA, no EFECTIVO: un pago en efectivo solo puede registrarlo
-    # el propio socio o su representante (`test_efectivo_solo_por_socio.py`)
-    # -- acá `client` opera como ADMINISTRADOR a nombre de personas ajenas.
+    # TRANSFERENCIA por conveniencia de esta suite, no por una restricción:
+    # desde el issue #565 un ADMINISTRADOR también puede registrar EFECTIVO a
+    # nombre de un tercero (ver `test_efectivo_solo_por_socio.py`). Estos pagos
+    # van sin comprobante adjunto, y TRANSFERENCIA es la vía que ejercita el
+    # `motivo_excepcion_sin_comprobante` que estos tests ya declaran.
     return client.post(
         "/api/v1/membresias/pagos",
         json={
