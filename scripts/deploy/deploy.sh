@@ -74,6 +74,7 @@ do_checks() {
   cd "$STACK_DIR"
   log "Validación: servicios"
   docker compose "${COMPOSE_FILES[@]}" ps -a
+  check_celery
   log "Validación: health y readiness internos"
   docker compose "${COMPOSE_FILES[@]}" exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read().decode())"
   docker compose "${COMPOSE_FILES[@]}" exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).read().decode())"
@@ -85,6 +86,164 @@ else: raise SystemExit('/docs responde en producción')"
   "$SCRIPT_DIR/../ops/check-backup-freshness.sh" --max-age-hours "${BACKUP_MAX_AGE_HOURS:-26}"
   check_chatbot_config
   log "Validaciones OK"
+}
+
+# Issue #791, punto 3. `docker compose ps -a` de la línea anterior solo
+# IMPRIME: nada leía esa salida, así que una imagen que rompe el arranque de
+# celery-worker o celery-beat dejaba el deploy en verde y
+# `record-release.sh` anotaba el release como bueno con las tareas
+# asíncronas (vencimientos, mora, las bandejas de salida de correo) muertas
+# en silencio. `docker-compose.yml` YA declara un healthcheck bien diseñado
+# para cada uno (`inspect ping -d` para el worker, freshness del
+# `celerybeat-schedule` para beat); lo que faltaba era que algo los leyera.
+#
+# Fuera de Swarm, Compose no reinicia un contenedor por quedar `unhealthy`
+# -- solo por salir --, así que sin este candado un contenedor enfermo podía
+# quedar así indefinidamente sin que nada lo notara.
+check_celery() {
+  log "Validación: salud de celery-worker y celery-beat"
+  esperar_celery_saludable celery-worker
+  esperar_celery_saludable celery-beat
+  # Round-trip real, no solo el `Health` cacheado de Docker (que puede tener
+  # hasta un `interval` de atraso): un ping de control disparado ACÁ, desde
+  # el mismo contenedor backend que encola las tareas reales, prueba que el
+  # broker está alcanzable y que el worker sigue respondiendo en este
+  # instante. Mínimo razonable para un gate de deploy (no un sistema de
+  # monitoreo): un round-trip de encolar-y-esperar una tarea de negocio real
+  # tendría efectos secundarios en producción, y agregar una tarea nueva
+  # solo para esto es más superficie de la que este chequeo justifica.
+  log "Validación: round-trip de celery-worker (ping real al broker)"
+  if ! docker compose "${COMPOSE_FILES[@]}" exec -T backend \
+      uv run celery -A app.infraestructura.tareas.celery_app inspect ping \
+      --timeout "${CELERY_PING_TIMEOUT_SEGUNDOS:-10}" >/dev/null; then
+    die "$(printf '%s\n' \
+      "celery-worker no respondió al ping de control (broker/cola de" \
+      "       tareas). Los avisos de vencimiento, de mora y las bandejas de" \
+      "       salida de correo dependen de este worker. Revisá:" \
+      "         docker compose ${COMPOSE_FILES[*]} logs celery-worker")"
+  fi
+}
+
+# Sondea `docker compose ps --format json` hasta ver `Health: healthy` para
+# el servicio pedido, o aborta. Un poll acotado -- no una sola lectura -- es
+# necesario: justo después de `up -d` el contenedor recién creado está
+# `starting` (celery-worker declara `start_period: 90s` porque arranca el
+# runtime de uv, importa la app entera y conecta con Redis antes de poder
+# contestar el ping), así que una sola lectura fallaría en CADA deploy sano.
+# Servicio ausente (nunca llegó a crearse) da `Health` vacío -> mismo
+# camino de falla que "unhealthy", no un pase silencioso.
+#
+# SIN filtro posicional de servicio (`ps --format json <servicio>`): no es
+# un contrato estable entre versiones de Compose, y agregarlo suma un
+# segundo modo de falla version-dependiente además del de la forma de
+# salida (ver `como_lista` más abajo). Se pide SIEMPRE el listado completo
+# y se filtra del lado de Python por el campo `Service`.
+#
+# `ps --format json` tampoco tiene una forma de salida estable: Compose
+# reciente emite JSON Lines (un objeto por línea); versiones más viejas
+# emiten un único array JSON. `como_lista` acepta las dos, y cualquier otra
+# cosa -- salida vacía, un escalar suelto, basura no-JSON -- resuelve a
+# lista vacía en vez de propagar una excepción que mate a python3 (eso
+# dejaría `salud` en `""` por la razón EQUIVOCADA -- "no pude interpretar
+# la salida" en vez de "el servicio no está sano" -- pero el resultado
+# tiene que seguir siendo fail-closed en los dos casos: nunca un pase
+# silencioso).
+#
+# Regla ante más de un registro para el mismo servicio: sano solo si TODOS
+# los registros que matchean están 'healthy'. Un solo registro enfermo tira
+# abajo el servicio entero, aunque otro luzca bien -- fail-closed también
+# ante la ambigüedad de cuál de los dos es "el" contenedor real.
+#
+# Alcanzabilidad verificada, no supuesta: `ps` (sin `-a`/`--all`, que este
+# script nunca pasa) NO lista contenedores `exited` -- `docker compose ps
+# --help` es explícito: "-a, --all Show all stopped containers". Un
+# contenedor `exited` de un intento previo NO puede producir un segundo
+# registro acá; esa justificación era incorrecta y se retira. Tampoco hay
+# HOY ningún `deploy.replicas` ni `--scale` para celery-worker/celery-beat
+# en ningún compose de este repo (verificado con `rg`). El caso SÍ se
+# activaría el día que alguien agregue `deploy.replicas` a
+# docker-compose.prod.yml para escalar el worker -- un cambio que no toca
+# este script y que nadie tendría motivo de recordar que también le compete
+# a este healthcheck. La regla se mantiene (y se fija con tests) porque es
+# una comparación de un conjunto, no una feature nueva: barata de conservar,
+# cara de perder en silencio si alguien la "simplifica" a `in` en vez de
+# `==` -- que es exactamente lo que pasó una vez, sin que ningún test lo
+# notara.
+esperar_celery_saludable() {
+  local servicio="$1" intentos=0
+  local max_intentos="${CELERY_HEALTH_MAX_INTENTOS:-30}"
+  local intervalo="${CELERY_HEALTH_INTERVALO_SEGUNDOS:-5}"
+  local salud=""
+  command -v python3 >/dev/null 2>&1 || die "falta python3 para verificar la salud de celery"
+  # `while [ cond ]` (no `[ cond ] && break`): con `set -e`, un `&&` a nivel
+  # de sentencia tumba el script entero apenas la condición izquierda es
+  # falsa -- el mismo motivo por el que `check_chatbot_config` arma `exigir`
+  # con `if`, no con `&&`, un poco más abajo en este archivo.
+  while [ "$intentos" -lt "$max_intentos" ]; do
+    salud="$(docker compose "${COMPOSE_FILES[@]}" ps --format json 2>/dev/null \
+      | python3 -c 'import json, sys
+
+
+def como_lista(bruto):
+    bruto = bruto.strip()
+    if not bruto:
+        return []
+    datos = None
+    try:
+        datos = json.loads(bruto)
+    except Exception:
+        datos = None
+    if isinstance(datos, list):
+        return [item for item in datos if isinstance(item, dict)]
+    if isinstance(datos, dict):
+        return [datos]
+    if datos is not None:
+        # Un JSON válido pero de forma inesperada (string, numero, bool,
+        # null suelto): no es una lista de contenedores interpretable.
+        return []
+    # No parseó como un único documento JSON: probar JSON Lines. Cada
+    # línea se intenta por separado y las que no parsean se descartan --
+    # basura intercalada no debe tumbar a las líneas buenas ni al proceso.
+    registros = []
+    for linea in bruto.splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+        try:
+            objeto = json.loads(linea)
+        except Exception:
+            continue
+        if isinstance(objeto, dict):
+            registros.append(objeto)
+    return registros
+
+
+servicio_pedido = sys.argv[1]
+coincidencias = [
+    r for r in como_lista(sys.stdin.read()) if r.get("Service") == servicio_pedido
+]
+if not coincidencias:
+    print("")
+else:
+    estados = {str(r.get("Health", "")) for r in coincidencias}
+    print("healthy" if estados == {"healthy"} else ",".join(sorted(estados)))
+' "$servicio")"
+    if [ "$salud" = "healthy" ]; then
+      return 0
+    fi
+    intentos=$((intentos + 1))
+    if [ "$intentos" -lt "$max_intentos" ]; then
+      sleep "$intervalo"
+    fi
+  done
+  die "$(printf '%s\n' \
+    "$servicio no reportó healthcheck 'healthy' tras $((max_intentos * intervalo))s" \
+    "       (último estado: '${salud:-sin healthcheck o el servicio no está corriendo}')." \
+    "       Sin worker/beat sanos, los avisos de vencimiento, de mora y las" \
+    "       bandejas de salida de correo quedan sin procesar en silencio." \
+    "       Revisá:" \
+    "         docker compose ${COMPOSE_FILES[*]} ps -a" \
+    "         docker compose ${COMPOSE_FILES[*]} logs $servicio")"
 }
 
 # Smoke check de la clave del proveedor del chatbot (issue #766). No imprime el

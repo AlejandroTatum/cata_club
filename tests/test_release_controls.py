@@ -91,6 +91,60 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
         'case " $* " in\n'
+            # Issue #791: `do_checks` ya NO filtra por servicio en el argv --
+            # ese filtro posicional no es un contrato estable entre
+            # versiones de Compose (ver comentario junto a
+            # `esperar_celery_saludable` en deploy.sh). Pide SIEMPRE el
+            # listado completo (`ps --format json`, sin nombre de servicio)
+            # y filtra del lado de Python por el campo `Service`. Este case
+            # tiene que ir ANTES del `--format json` genérico de más abajo
+            # (usado por `configured_backend_image`): ambos patrones
+            # matchean el mismo argv, y `case` toma la primera rama que
+            # coincide.
+            #
+            # `PS_JSON_SHAPE` pinnea la forma de salida que deploy.sh tiene
+            # que aceptar: "lines" (default, Compose reciente: un objeto
+            # JSON por línea) o "array" (Compose viejo: un único array
+            # JSON). `PS_JSON_GARBAGE=1` devuelve basura no-JSON, para
+            # probar que el parser falla cerrado sin reventar python3.
+            #
+            # `${VAR-default}` (SIN `:`) a propósito: el default solo debe
+            # aplicar cuando la variable no está seteada. Con `:-` una
+            # variable seteada a "" (el caso "el servicio nunca arrancó",
+            # que acá se traduce en OMITIR su registro por completo) caería
+            # igual al default "running"/"healthy" y el test de esa falla
+            # nunca vería el escenario que dice ejercitar.
+            '  *" ps --format json "*)\n'
+            '    if [ "${PS_JSON_GARBAGE:-0}" = "1" ]; then\n'
+            '      printf \'%s\' \'esto-no-es-json{{{\'\n'
+            '    else\n'
+            '      registros=""\n'
+            '      if [ -n "${CELERY_WORKER_STATE-running}" ]; then\n'
+            '        salud="${CELERY_WORKER_HEALTH-healthy}"\n'
+            '        objeto=\'{"Service":"celery-worker","State":"\'"${CELERY_WORKER_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
+            '        registros="$registros$objeto\n"\n'
+            # Segundo registro para celery-worker (issue #791, dureza del
+            # candado ante réplicas): SOLO se agrega si la variable está
+            # SETEADA -- ni siquiera en "" -- de ahí `${VAR+x}` en vez de
+            # `-n`/`:-`. Simula lo que produciría `deploy.replicas: 2`: dos
+            # contenedores con el mismo `Service` y salud distinta.
+            '        if [ "${CELERY_WORKER_REPLICA_HEALTH+seteada}" = "seteada" ]; then\n'
+            '          objeto2=\'{"Service":"celery-worker","State":"running","Health":"\'"${CELERY_WORKER_REPLICA_HEALTH}"\'"}\'\n'
+            '          registros="$registros$objeto2\n"\n'
+            '        fi\n'
+            '      fi\n'
+            '      if [ -n "${CELERY_BEAT_STATE-running}" ]; then\n'
+            '        salud="${CELERY_BEAT_HEALTH-healthy}"\n'
+            '        objeto=\'{"Service":"celery-beat","State":"\'"${CELERY_BEAT_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
+            '        registros="$registros$objeto\n"\n'
+            '      fi\n'
+            '      if [ "${PS_JSON_SHAPE:-lines}" = "array" ]; then\n'
+            '        contenido="$(printf \'%s\' "$registros" | sed \'/^$/d\' | paste -sd, -)"\n'
+            '        printf \'[%s]\\n\' "$contenido"\n'
+            '      else\n'
+            '        printf \'%s\' "$registros"\n'
+            '      fi\n'
+            '    fi ;;\n'
             '  *" --format json "*) printf "%s\\n" "{\\\"services\\\":{\\\"backend\\\":{\\\"image\\\":\\\"registry.example/cata-backend:${IMAGE_TAG}\\\"}}}" ;;\n'
             '  *" --images backend "*) if [ "${REALISTIC_COMPOSE_OUTPUT:-0}" = "1" ]; then printf "%s\\n" "postgres:16" "redis:7" "registry.example/cata-backend:${IMAGE_TAG}"; else echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi; fi ;;\n'
         # El smoke check del chatbot corre DENTRO del contenedor backend
@@ -98,6 +152,10 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         # salida reales: 0 configurada/ausente, 1 incompleta, 2 ausente con
         # --exigir.
         '  *verificar_chatbot.py*) exit "${CHATBOT_CHECK_EXIT:-0}" ;;\n'
+        # Round-trip de celery-worker (issue #791): un `inspect ping` real
+        # contra el broker, disparado desde el contenedor backend.
+        # `CELERY_PING_EXIT` reproduce el caso en que ningún worker contesta.
+        '  *"inspect ping"*) exit "${CELERY_PING_EXIT:-0}" ;;\n'
         '  *" manifest inspect "*) [ "$3" = "registry.example/cata-backend:${IMAGE_TAG}" ] || exit 1 ;;\n'
         '  *" --status running "*) if [ "${DB_RUNNING:-0}" = "1" ]; then echo db; fi ;;\n'
         "esac\n"
@@ -118,6 +176,11 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "BACKUP_AGE_RECIPIENTS": DESTINATARIO_DE_PRUEBA,
         # Hermético: nunca mirar el /etc real de la máquina que corre la suite.
         "BACKUP_AGE_RECIPIENTS_FILE": str(tmp_path / "no-existe" / "recipients.txt"),
+        # Poll de salud de celery al mínimo en la suite: la pila del stub
+        # responde en el primer intento (o falla de entrada), así que no hay
+        # motivo para que un test real espere el `intervalo` de producción.
+        "CELERY_HEALTH_MAX_INTENTOS": "1",
+        "CELERY_HEALTH_INTERVALO_SEGUNDOS": "0",
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
     return env, backups, docker_log
@@ -504,3 +567,220 @@ def test_una_clave_ausente_con_chatbot_requerido_aborta_el_deploy(tmp_path):
     result = run_script("scripts/deploy/deploy.sh", env=env)
 
     assert result.returncode != 0, result.stdout
+
+
+# ─── Salud de celery-worker/celery-beat y round-trip (issue #791) ──────────
+#
+# `do_checks` imprimía `docker compose ps -a` sin leerlo y solo sondeaba
+# `/health` del backend: una imagen que rompe el arranque de celery-worker o
+# celery-beat dejaba el deploy en verde y `record-release.sh` anotaba el
+# release como bueno con las tareas asíncronas (vencimientos, mora, las
+# bandejas de correo) muertas en silencio. Los tres healthchecks de compose
+# (`docker-compose.yml`: celery-worker `inspect ping -d`, celery-beat
+# freshness del schedule) ya detectan justo esta falla; lo que faltaba era
+# que algo los leyera. Fuera de Swarm, Compose no reinicia un contenedor por
+# quedar `unhealthy` -- solo por salir -- así que sin este candado un
+# contenedor enfermo podía quedar así indefinidamente.
+
+
+def test_deploy_falla_si_celery_worker_no_esta_saludable(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+    env["CELERY_WORKER_HEALTH"] = "unhealthy"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-worker" in result.stderr
+    assert "up -d" in docker_log.read_text(), "las imágenes nuevas ya deben estar arriba"
+    assert not (Path(env["RELEASE_RECORD_DIR"])).exists(), (
+        "no se debe registrar el release con celery-worker enfermo"
+    )
+
+
+def test_deploy_falla_si_celery_beat_no_esta_saludable(tmp_path):
+    """beat ya reportaba esto en su propio healthcheck (freshness del
+    schedule); lo que faltaba era que el deploy lo leyera."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CELERY_BEAT_HEALTH"] = "unhealthy"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-beat" in result.stderr
+    assert not (Path(env["RELEASE_RECORD_DIR"])).exists()
+
+
+def test_deploy_falla_si_celery_worker_no_arranco(tmp_path):
+    """Un servicio que nunca llegó a crearse (falla en `up -d`) no aparece en
+    `docker compose ps`: la ausencia de salud debe abortar igual que
+    'unhealthy', no pasar de largo por falta de dato."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CELERY_WORKER_STATE"] = ""
+    env["CELERY_WORKER_HEALTH"] = ""
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-worker" in result.stderr
+
+
+def test_deploy_falla_si_el_round_trip_de_celery_no_responde(tmp_path):
+    """Healthy en el `Health` de Docker no alcanza: si ningún worker contesta
+    al ping de control, el deploy tiene que abortar igual."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+    env["CELERY_PING_EXIT"] = "1"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery" in result.stderr.lower()
+    assert "inspect ping" in docker_log.read_text(), "el deploy nunca intentó el round-trip"
+    assert not (Path(env["RELEASE_RECORD_DIR"])).exists()
+
+
+def test_deploy_pasa_si_celery_worker_y_beat_estan_sanos_y_el_round_trip_responde(tmp_path):
+    """Caso feliz explícito: pila sana, deploy verde, y los tres chequeos
+    nuevos quedan en el log en el orden esperado (salud antes que el
+    round-trip).
+
+    `ps --format json` ya NO lleva el nombre del servicio en el argv (issue
+    #791, corrección de dureza: el filtro posicional no es un contrato
+    estable entre versiones de Compose) -- el filtro por `Service` ocurre
+    del lado de Python, invisible en el log del stub. Lo que este test
+    puede observar desde el argv es que la llamada se repite una vez por
+    servicio (`esperar_celery_saludable` corre para celery-worker y para
+    celery-beat)."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = docker_log.read_text().splitlines()
+    health_calls = [i for i, line in enumerate(lines) if "ps --format json" in line]
+    ping_calls = [i for i, line in enumerate(lines) if "inspect ping" in line]
+    assert len(health_calls) >= 2, "deploy no consultó la salud de ambos servicios de celery"
+    assert ping_calls, "deploy nunca ejecutó el round-trip de celery"
+    assert max(health_calls) < ping_calls[0], (
+        "el round-trip debe correr DESPUÉS de confirmar que ambos servicios "
+        "están sanos, no antes"
+    )
+    assert (Path(env["RELEASE_RECORD_DIR"]) / "current.env").exists()
+
+
+# ─── `docker compose ps --format json` no tiene una forma estable ─────────
+#
+# Compose reciente emite JSON Lines (un objeto por línea); versiones más
+# viejas emiten un único array JSON. Un parser que asume una sola forma
+# (`sys.stdin.readline()` + `json.loads(linea).get(...)`) revienta con
+# `AttributeError` contra un array -- `.get()` no existe en una `list` -- y
+# esa excepción NO es un `json.JSONDecodeError`, así que ni siquiera la
+# atrapaba el único `except` que tenía el parser original. El resultado no
+# era un fallo limpio: era `salud=""` por la razón EQUIVOCADA ("no pude
+# interpretar la salida"), indistinguible de "el servicio no está sano", y
+# terminaba abortando TODOS los deploys contra un host con Compose viejo.
+# Ese gate roto es peor que ningún gate: lo primero que hace cualquiera es
+# desactivarlo.
+
+
+def test_deploy_pasa_si_celery_esta_sano_con_ps_como_array_json(tmp_path):
+    """La regresión real: Compose viejo devuelve un array JSON en vez de
+    JSON Lines, y una pila sana tiene que seguir pasando el deploy."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["PS_JSON_SHAPE"] = "array"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_deploy_falla_si_celery_worker_no_esta_sano_con_ps_como_array_json(tmp_path):
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["PS_JSON_SHAPE"] = "array"
+    env["CELERY_WORKER_HEALTH"] = "unhealthy"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-worker" in result.stderr
+
+
+def test_deploy_pasa_si_celery_esta_sano_con_ps_como_json_lines(tmp_path):
+    """Mismo caso feliz, pinneando explícitamente la forma JSON Lines (el
+    default de la fixture, pero acá es el comportamiento bajo prueba, no un
+    incidental)."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["PS_JSON_SHAPE"] = "lines"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_deploy_falla_si_celery_beat_no_esta_sano_con_ps_como_json_lines(tmp_path):
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["PS_JSON_SHAPE"] = "lines"
+    env["CELERY_BEAT_HEALTH"] = "unhealthy"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-beat" in result.stderr
+
+
+def test_deploy_falla_cerrado_si_ps_devuelve_basura_no_json(tmp_path):
+    """Ni JSON Lines ni un array: texto no-JSON en la salida (una versión de
+    Compose completamente inesperada, o `ps` fallando de una forma que no
+    es un `returncode` distinto de 0). El parser tiene que interpretarlo
+    como salud vacía y abortar -- nunca reventar python3 ni, mucho menos,
+    dejar pasar el deploy en silencio."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["PS_JSON_GARBAGE"] = "1"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery" in result.stderr.lower()
+
+
+# ─── Regla ante más de un registro para el mismo servicio ─────────────────
+#
+# Hoy esto no es alcanzable: `ps` sin `-a`/`--all` (que este script nunca
+# pasa) no lista contenedores `exited`, y ningún compose de este repo
+# declara `deploy.replicas` ni usa `--scale` para celery-worker/celery-beat
+# (verificado con `rg`). Pero el día que alguien agregue `deploy.replicas`
+# para escalar el worker, `ps --format json` va a devolver DOS registros
+# con el mismo `Service`, y la regla fail-closed (sano SOLO si TODOS los
+# registros matchean 'healthy') tiene que seguir sosteniéndose sin que
+# nadie la haya vuelto a mirar. Sin este candado, invertir la comparación
+# de conjuntos (`estados == {"healthy"}` -> `"healthy" in estados`) es un
+# cambio de una palabra que ninguna otra prueba de este archivo detecta --
+# confirmado: 29/29 seguían en verde con la variante invertida.
+
+
+def test_deploy_falla_si_una_replica_de_celery_worker_no_esta_saludable(tmp_path):
+    """Dos registros para celery-worker (simula `deploy.replicas: 2`): uno
+    'healthy', el otro 'unhealthy'. Tiene que abortar -- un solo registro
+    sano no alcanza para dar por bueno el servicio."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CELERY_WORKER_HEALTH"] = "healthy"
+    env["CELERY_WORKER_REPLICA_HEALTH"] = "unhealthy"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-worker" in result.stderr
+
+
+def test_deploy_falla_si_una_replica_de_celery_worker_no_reporta_salud(tmp_path):
+    """Mismo escenario, pero el segundo registro no trae `Health` (cadena
+    vacía) en vez de 'unhealthy' -- un contenedor sin healthcheck aplicado
+    todavía, o uno cuyo campo vino vacío por la razón que sea. Tampoco debe
+    alcanzar con que el otro esté sano."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CELERY_WORKER_HEALTH"] = "healthy"
+    env["CELERY_WORKER_REPLICA_HEALTH"] = ""
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "celery-worker" in result.stderr
