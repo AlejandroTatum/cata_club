@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # binario `age` en tests/test_backup_controls.py.
 DESTINATARIO_DE_PRUEBA = "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsxxxxxx"
 
+# URL de heartbeat de mentira. El token va en el path, así que si estos bytes
+# aparecen en el crontab es porque `install-cron` los escribió ahí -- y
+# `crontab -l` lo lista sin privilegios. `.invalid` es un TLD reservado
+# (RFC 2606): ningún camino de esta suite puede tocar la red.
+URL_DE_HEARTBEAT_DE_PRUEBA = "https://heartbeat.invalid/ping/TOKEN-DE-PRUEBA"
+
 
 def run_script(script: str, *args: str, env: dict[str, str] | None = None):
     return subprocess.run(
@@ -195,20 +201,30 @@ def _stub_crontab(bin_dir: Path) -> None:
     stub.chmod(0o755)
 
 
+def _entorno_install_cron(tmp_path, bin_dir: Path, **extra: str) -> dict[str, str]:
+    """Entorno hermético de `install-cron`: nada mira el /etc real de la máquina."""
+    destinatarios = tmp_path / "backup-recipients.txt"
+    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
+    heartbeat = tmp_path / "heartbeat-url.txt"
+    heartbeat.write_text(f"{URL_DE_HEARTBEAT_DE_PRUEBA}\n")
+    entorno = {
+        "CRON_FILE": str(tmp_path / "crontab"),
+        "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
+        "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
+        "HEARTBEAT_URL_FILE": str(heartbeat),
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    entorno.update(extra)
+    return entorno
+
+
 def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
     cron_file = tmp_path / "crontab"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _stub_crontab(bin_dir)
     _stub_age(bin_dir)
-    destinatarios = tmp_path / "backup-recipients.txt"
-    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
-    entorno = {
-        "CRON_FILE": str(cron_file),
-        "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
-        "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-    }
+    entorno = _entorno_install_cron(tmp_path, bin_dir)
 
     refused = run_script("scripts/deploy/deploy.sh", "install-cron", env=entorno)
 
@@ -586,30 +602,16 @@ def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):
         "scripts/deploy/deploy.sh",
         "install-cron",
         "--confirm-install-cron",
-        env={
-            "CRON_FILE": str(cron_file),
-            "BACKUP_AGE_RECIPIENTS_FILE": str(tmp_path / "no-existe.txt"),
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        },
+        env=_entorno_install_cron(
+            tmp_path,
+            bin_dir,
+            BACKUP_AGE_RECIPIENTS_FILE=str(tmp_path / "no-existe.txt"),
+        ),
     )
 
     assert result.returncode != 0
     assert "destinatario de cifrado" in result.stderr
     assert not cron_file.exists(), "no se debe tocar el crontab sin cifrado configurado"
-
-
-def _entorno_install_cron(tmp_path, bin_dir: Path, **extra: str) -> dict[str, str]:
-    """Entorno hermético de `install-cron`: nada mira el /etc real de la máquina."""
-    destinatarios = tmp_path / "backup-recipients.txt"
-    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
-    entorno = {
-        "CRON_FILE": str(tmp_path / "crontab"),
-        "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
-        "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-    }
-    entorno.update(extra)
-    return entorno
 
 
 def test_install_cron_se_niega_si_no_puede_crear_el_log_del_cron(tmp_path):
@@ -690,6 +692,141 @@ def test_install_cron_crea_el_log_cuando_todavia_no_existe(tmp_path):
     assert result.returncode == 0, result.stderr
     assert log_nuevo.exists(), "el preflight tiene que dejar el log listo, no solo mirarlo"
     assert "backup-db.sh" in (tmp_path / "crontab").read_text()
+
+
+def _linea_de_frescura(cron_file: Path) -> str:
+    lineas = [
+        linea
+        for linea in cron_file.read_text().splitlines()
+        if "check-backup-freshness.sh" in linea
+    ]
+    assert len(lineas) == 1, f"se esperaba una sola línea de frescura: {lineas!r}"
+    return lineas[0]
+
+
+def test_install_cron_encadena_el_heartbeat_solo_a_un_chequeo_exitoso(tmp_path):
+    """El heartbeat es un dead-man's-switch: se pingea SOLO si el backup está sano.
+
+    `check-backup-freshness.sh` sale 1 sin ningún dump y 2 con un dump vencido.
+    Si el ping saliera igual, el monitor externo vería verde exactamente cuando
+    hay que alertar -- el monitoreo quedaría peor que no tenerlo, porque además
+    daría una garantía falsa. Por eso el encadenado es `&&` y no `;`.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(tmp_path, bin_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    linea = _linea_de_frescura(tmp_path / "crontab")
+    # `rpartition`: el primer `&&` de la línea es el del `cd` al directorio del
+    # stack; el que importa es el último, el que gobierna el ping.
+    chequeo, separador, ping = linea.rpartition("&&")
+    assert separador == "&&", "la línea de frescura no encadena nada con `&&`"
+    assert "check-backup-freshness.sh" in chequeo
+    assert "notify-heartbeat.sh" in ping, (
+        f"el heartbeat no cuelga del `&&` del chequeo: {linea!r}"
+    )
+    assert "notify-heartbeat.sh" not in chequeo
+    assert ";" not in linea, (
+        "un `;` pingearía también con el chequeo en rojo: el dead-man's-switch "
+        "solo sirve si el ping falta cuando el backup falta"
+    )
+    assert "--max-age-hours" in chequeo, (
+        "el cron tiene que declarar el umbral como deploy.sh y preflight, no "
+        "caer al default implícito del script"
+    )
+
+
+def test_install_cron_nunca_escribe_la_url_del_heartbeat_en_el_crontab(tmp_path):
+    """`crontab -l` no pide privilegios; el archivo del heartbeat es de root.
+
+    Escribir la URL en el crontab la vuelve legible para cualquiera en el host,
+    y con ella se pingea a mano: la alarma queda en verde para siempre con el
+    backup muerto. Ese es el motivo entero de que el script lea la URL de un
+    archivo en vez de recibirla por argumento.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(tmp_path, bin_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    crontab = (tmp_path / "crontab").read_text()
+    assert URL_DE_HEARTBEAT_DE_PRUEBA not in crontab
+    assert "TOKEN-DE-PRUEBA" not in crontab
+    assert URL_DE_HEARTBEAT_DE_PRUEBA not in result.stdout + result.stderr
+
+
+def test_install_cron_se_niega_si_el_heartbeat_no_esta_configurado(tmp_path):
+    """Sin URL de heartbeat se aborta; NO se instala un cron sin el ping.
+
+    Instalar igual con un aviso degradaría la protección en silencio: el crontab
+    quedaría con las dos líneas de siempre, `crontab -l` se vería bien, y el
+    aviso se lo lleva el scroll de la terminal. Meses después nadie sabe que el
+    dead-man's-switch nunca se cableó, y no hay nada que lo delate -- que es
+    exactamente el modo de falla que este cambio existe para cerrar.
+
+    Abortar no cuesta nada: `install-cron` es idempotente y reescribe el crontab
+    entero en cada corrida, así que el estado tras el aborto es el de antes, con
+    el operador todavía en la terminal leyendo el comando exacto que lo arregla.
+    Es el mismo criterio que ya usa la compuerta del destinatario de cifrado.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path, bin_dir, HEARTBEAT_URL_FILE=str(tmp_path / "no-existe.txt")
+        ),
+    )
+
+    assert result.returncode != 0
+    assert str(tmp_path / "no-existe.txt") in result.stderr
+    assert not (tmp_path / "crontab").exists(), (
+        "no se debe instalar un cron sin el ping: sería una protección degradada "
+        "sin que nada lo diga"
+    )
+
+
+def test_install_cron_se_niega_si_el_archivo_de_heartbeat_esta_vacio(tmp_path):
+    """Un archivo creado con `touch` y nunca completado no es una configuración."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    vacio = tmp_path / "heartbeat-vacio.txt"
+    vacio.write_text("   \n\n")
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(tmp_path, bin_dir, HEARTBEAT_URL_FILE=str(vacio)),
+    )
+
+    assert result.returncode != 0
+    assert str(vacio) in result.stderr
+    assert not (tmp_path / "crontab").exists()
 
 
 def test_deploy_aborta_si_el_backup_pre_deploy_no_puede_cifrar(tmp_path):
