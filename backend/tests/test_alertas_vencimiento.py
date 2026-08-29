@@ -396,6 +396,79 @@ def test_alertar_vencimientos_no_incurre_en_n_mas_uno_al_cargar_usuario(
     )
 
 
+# --- Recuperación de corrida perdida (issue #791, punto 2) -----------------
+# El match original era `Pago.fecha_fin == fecha_objetivo` (exactamente HOY +
+# 5 días): si Beat no corre ese día (OOM, colgado), el aviso de esa membresía
+# se pierde para siempre -- el día siguiente ya no matchea "hoy + 5". La
+# ventana `hoy <= fecha_fin <= hoy + 5` cubre esa corrida perdida sin duplicar
+# gracias a `_ya_notificado` (dedup por `(tipo, persona_id, pago_id)`, no por
+# fecha).
+
+def test_vencimiento_a_3_dias_se_notifica_por_ventana_de_recuperacion(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Simula una corrida de Beat perdida: la membresía vence en 3 días (no en
+    5), así que con el match exacto original la fila no aparece nunca en
+    ningún lote. Con la ventana `hoy <= fecha_fin <= hoy + 5` sí se notifica."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    persona = _crear_persona(db_session, cedula_valida(120))
+    _crear_usuario(db_session, persona, "alumno021@cataclub.test")
+    _crear_membresia_con_pago(db_session, persona, HOY + timedelta(days=3))
+    llamadas = _mock_envio(monkeypatch)
+
+    resultado = alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    assert resultado["total_alertas"] == 1
+    assert len(llamadas) == 1
+    total = db_session.query(Notificacion).filter(
+        Notificacion.persona_id == persona.id
+    ).count()
+    assert total == 1
+    # La ventana amplió QUÉ pagos matchean, pero el aviso debe seguir
+    # nombrando la fecha REAL de vencimiento de ESE pago (HOY + 3), no el
+    # borde de la ventana escaneada (HOY + 5) -- ver
+    # `test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana`
+    # más abajo, que es la que realmente fija esta regla.
+    fecha_real = (HOY + timedelta(days=3)).strftime("%d/%m/%Y")
+    fila = db_session.query(Notificacion).filter(
+        Notificacion.persona_id == persona.id
+    ).one()
+    assert fecha_real in fila.mensaje
+
+
+def test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Pin de contenido, no solo de conteo: una membresía que vence en 3 días
+    (dentro de la ventana de recuperación `hoy..hoy+5`) debe recibir un aviso
+    que diga "vence el <HOY+3>" -- la fecha REAL de ESE pago -- y NUNCA
+    "vence el <HOY+5>" (`fecha_objetivo`, el borde de la ventana escaneada por
+    el lote). Cubre tanto la notificación in-app como el cuerpo del correo
+    realmente enviado."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    persona = _crear_persona(db_session, cedula_valida(121))
+    _crear_usuario(db_session, persona, "alumno022@cataclub.test")
+    _crear_membresia_con_pago(db_session, persona, HOY + timedelta(days=3))
+    llamadas = _mock_envio(monkeypatch)
+
+    alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    fecha_real = (HOY + timedelta(days=3)).strftime("%d/%m/%Y")
+    fecha_borde_ventana = (HOY + timedelta(days=5)).strftime("%d/%m/%Y")
+    assert fecha_real != fecha_borde_ventana  # la prueba no sería honesta si coincidieran
+
+    fila = db_session.query(Notificacion).filter(
+        Notificacion.persona_id == persona.id
+    ).one()
+    assert fecha_real in fila.mensaje
+    assert fecha_borde_ventana not in fila.mensaje
+
+    assert len(llamadas) == 1
+    cuerpo = llamadas[0]["cuerpo_texto"]
+    assert fecha_real in cuerpo
+    assert fecha_borde_ventana not in cuerpo
+
+
 def test_representante_recibe_una_sola_notificacion_en_reintento(
     db_session, sesion_inyectada, monkeypatch
 ):

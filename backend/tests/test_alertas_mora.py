@@ -463,6 +463,144 @@ def test_circuito_smtp_abierto_reintenta_con_cooldown(
     assert isinstance(kwargs["exc"], ServicioNoDisponible)
 
 
+# --- Recuperación de corrida perdida (issue #791, punto 2) -----------------
+# El match original era `dias == 1` / `dias == 8` exactos: si Beat no corre
+# ese día (OOM, colgado), la familia nunca recibe el aviso -- al día
+# siguiente `dias` ya vale otra cosa y la fila deja de matchear para siempre.
+# Las ventanas acotadas (1-7 para el día 1, 8-14 para el día 8) cubren la
+# corrida perdida sin romper el silencio del día 15 (issue #285) y sin
+# duplicar avisos ya emitidos, gracias a `_ya_notificado`
+# (`(tipo, persona_id, pago_id)`, no por fecha/`dias`).
+
+def test_mora_a_4_dias_recibe_aviso_dia_1_por_ventana_de_recuperacion(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Simula una corrida de Beat perdida el día exacto (`dias == 1`): la
+    familia lleva 4 días de mora y con el match exacto original nunca
+    recibiría el aviso de día 1. La ventana 1-7 lo cubre."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(221))
+    _crear_usuario(db_session, alumno, "alumno221@cataclub.test")
+    _crear_membresia_con_pago(
+        db_session, alumno, HOY - timedelta(days=4), estado=EstadoMembresia.VENCIDA,
+    )
+    llamadas = _mock_envio(monkeypatch)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["total_avisos_familia"] == 1
+    assert len(llamadas) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_8, alumno.id
+    ) == 0
+    # Pin de contenido (issue #791, corrección del reporte del defecto en
+    # `alertar_vencimientos_hoy_mas_5`): a diferencia de ese caso, acá
+    # `_disparar_notificacion_mora` recibe `ultima_fecha_fin` -- la fecha REAL
+    # de esa fila, no un borde de ventana compartido -- así que el mensaje
+    # debe nombrar la fecha real de vencimiento (HOY - 4 días).
+    fecha_real = (HOY - timedelta(days=4)).strftime("%d/%m/%Y")
+    fila = (
+        db_session.query(Notificacion)
+        .filter(
+            Notificacion.tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1,
+            Notificacion.persona_id == alumno.id,
+        )
+        .one()
+    )
+    assert fecha_real in fila.mensaje
+    assert fecha_real in llamadas[0]["cuerpo_texto"]
+
+
+def test_mora_a_11_dias_recibe_aviso_dia_8_por_ventana_de_recuperacion(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Simula una corrida de Beat perdida el día exacto (`dias == 8`): la
+    familia lleva 11 días de mora y con el match exacto original nunca
+    recibiría el segundo y último aviso. La ventana 8-14 lo cubre."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(222))
+    _crear_usuario(db_session, alumno, "alumno222@cataclub.test")
+    _crear_membresia_con_pago(
+        db_session, alumno, HOY - timedelta(days=11), estado=EstadoMembresia.VENCIDA,
+    )
+    llamadas = _mock_envio(monkeypatch)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["total_avisos_familia"] == 1
+    assert len(llamadas) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_8, alumno.id
+    ) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 0
+
+
+def test_mora_a_20_dias_no_notifica_se_respeta_el_silencio_del_dia_15(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Las ventanas de recuperación NO deben resucitar avisos más allá del
+    día 15 (issue #285): una familia con 20 días de mora no recibe nada, ni
+    siquiera bajo la ventana ampliada."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(223))
+    _crear_usuario(db_session, alumno, "alumno223@cataclub.test")
+    _crear_membresia_con_pago(
+        db_session, alumno, HOY - timedelta(days=20), estado=EstadoMembresia.VENCIDA,
+    )
+    llamadas = _mock_envio(monkeypatch)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["total_avisos_familia"] == 0
+    assert llamadas == []
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 0
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_8, alumno.id
+    ) == 0
+
+
+def test_ventana_de_recuperacion_no_duplica_en_corridas_de_dias_consecutivos(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """La prueba más importante de esta ventana: si la corrida de hoy cae
+    dentro de la ventana 1-7 y la corrida de MAÑANA (día del club distinto)
+    también cae dentro de esa misma ventana, la familia no debe recibir un
+    segundo aviso de día 1. La ventana ensancha QUÉ días matchean, pero
+    `_ya_notificado` sigue deduplicando por `(tipo, persona_id, pago_id)` --
+    no por fecha ni por `dias` -- así que la segunda corrida no encuentra
+    nada pendiente para esa familia."""
+    alumno = _crear_persona(db_session, cedula_valida(224))
+    _crear_usuario(db_session, alumno, "alumno224@cataclub.test")
+    _crear_membresia_con_pago(
+        db_session, alumno, HOY - timedelta(days=4), estado=EstadoMembresia.VENCIDA,
+    )
+    llamadas = _mock_envio(monkeypatch)
+
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    primer = alertas_mod.alertar_mora_diaria()
+
+    # "Mañana": la mora ahora es de 5 días, todavía dentro de la ventana 1-7.
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY + timedelta(days=1))
+    segundo = alertas_mod.alertar_mora_diaria()
+
+    assert primer["total_avisos_familia"] == 1
+    assert segundo["total_avisos_familia"] == 0
+    assert len(llamadas) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_8, alumno.id
+    ) == 0
+
+
 # --- Los tipos de notificación son distintos (clave de dedup) ----------------
 
 def test_dia_1_y_dia_8_son_tipos_distintos():
