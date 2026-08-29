@@ -1571,6 +1571,27 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
     expect(within(cuota).getByText("Registrar un pago")).toBeInTheDocument();
   });
 
+  // The figure line under the headline ("29 DÍAS VENCIDA") is `text-2xs` —
+  // 10.5px, i.e. NORMAL text for WCAG 1.4.3 — printed on the verdict's tone
+  // fill. On `state-bad-bg` the muted `ink-3` measures 3.95:1; `ink-3-strong`
+  // is the companion that exists for the surfaces that are not `paper`, and it
+  // clears AA on all three fills the verdict can wear (`color-contrast.test.ts`).
+  // The assertion reads the exact class TOKEN, because `text-ink-3-strong`
+  // CONTAINS `text-ink-3`: a substring check would pass on the failing class.
+  it("prints the overdue figure in the muted ink that clears AA on the tinted fill", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
+    mockFetchPagosDePersona.mockResolvedValue([PAGO_APROBADO]);
+
+    render(<StudentPage />);
+
+    const verdict = await screen.findByTestId("cuota-verdict");
+    const figure = await within(verdict).findByText(/vencida/i);
+    const classes = figure.className.split(/\s+/);
+
+    expect(classes).toContain("text-ink-3-strong");
+    expect(classes).not.toContain("text-ink-3");
+  });
+
   it("states the al día verdict itself and stays compact when the cuota is up to date", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
     // Coverage stretches well past today plus the "ending soon" window.
