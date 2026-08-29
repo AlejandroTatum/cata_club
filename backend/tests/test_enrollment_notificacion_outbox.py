@@ -3,23 +3,40 @@
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import Mock
 
+import pytest
+
 from app.dominio.enums import TipoNotificacion
 from app.dominio.modelos import EnrollmentNotificacionOutbox, Notificacion, Persona
 from app.infraestructura.repositorios.enrollment_notificacion_outbox_repositorio import (
+    MAX_ATTEMPTS,
     EnrollmentNotificacionOutboxRepositorio,
 )
+from tests import arnes_outbox as arnes
 
 
-def _personas(db_session):
-    admin = Persona(nombres="Admin", apellidos="Outbox", cedula="1710000001", fecha_nacimiento=date(1990, 1, 1), telefono="0991111111")
-    alumno = Persona(nombres="Alumno", apellidos="Outbox", cedula="1710000002", fecha_nacimiento=date(2010, 1, 1), telefono="0991111112")
+@pytest.fixture()
+def logs_de_inscripcion():
+    with arnes.logs_recogidos("cataclub.tareas.enrollment_notificacion") as registros:
+        yield registros
+
+
+def _mensajes(registros):
+    return [registro.getMessage() for registro in registros]
+
+
+def _personas(db_session, semilla: int = 0):
+    """`semilla=0` reproduce las cédulas históricas de este arnés
+    (1710000001/1710000002): un test que crea un solo evento no cambia."""
+    base = 1710000000 + semilla * 10
+    admin = Persona(nombres="Admin", apellidos="Outbox", cedula=str(base + 1), fecha_nacimiento=date(1990, 1, 1), telefono="0991111111")
+    alumno = Persona(nombres="Alumno", apellidos="Outbox", cedula=str(base + 2), fecha_nacimiento=date(2010, 1, 1), telefono="0991111112")
     db_session.add_all([admin, alumno])
     db_session.flush()
     return admin, alumno
 
 
-def _evento(db_session, **kwargs):
-    admin, alumno = _personas(db_session)
+def _evento(db_session, semilla: int = 0, **kwargs):
+    admin, alumno = _personas(db_session, semilla=semilla)
     event = EnrollmentNotificacionOutbox(
         admin_persona_id=admin.id,
         alumno_persona_id=alumno.id,
@@ -259,3 +276,117 @@ def test_la_entrega_sobrevive_al_worker_caido_y_avisa_una_sola_vez(db_session, m
     # Otro tick del beat no puede volver a avisar lo mismo.
     _correr_worker(db_session, monkeypatch)
     assert db_session.query(Notificacion).filter_by(persona_id=admin_id).count() == 1
+
+
+# ─── El fracaso terminal deja de ser invisible (issue #791) ─────────────────
+# `entregar_inscripcion_notificacion` no logueaba nada en el `except`: ni el
+# reintento transitorio ni el sexto fallo que agota la fila. Un admin dejaba
+# de recibir avisos de nueva inscripción sin que quedara una sola línea en los
+# logs -- y `limpiar_inscripcion_notificaciones` borraba esa evidencia después,
+# también en silencio. Mismo criterio que `outbox_despacho` (issue #764):
+# el reintento transitorio y el AGOTADO terminal tienen que distinguirse en
+# el log, y el borrado tiene que decir cuántas filas nunca llegaron al admin.
+
+def _falla_al_materializar_notificacion(db_session, monkeypatch):
+    """Hace que `db.add(Notificacion(...))` reviente, como si el broker
+    entregara la tarea pero algo fallara al escribir la notificación."""
+    original_add = db_session.add
+
+    def failing_add(value):
+        if isinstance(value, Notificacion):
+            raise RuntimeError("fallo de entrega")
+        original_add(value)
+
+    monkeypatch.setattr(db_session, "add", failing_add)
+
+
+def test_una_fila_que_agota_en_el_ultimo_intento_se_registra_como_agotada(
+    monkeypatch, db_session, logs_de_inscripcion,
+):
+    """El sexto fallo no puede quedar registrado igual que un reintento: es
+    el único estado terminal de fracaso y hoy no deja ningún rastro."""
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
+
+    event = _evento(db_session, status="ENVIANDO", attempts=MAX_ATTEMPTS)
+    event_id = event.id
+    admin_persona_id = event.admin_persona_id
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
+    _falla_al_materializar_notificacion(db_session, monkeypatch)
+
+    resultado = tasks.entregar_inscripcion_notificacion(event_id)
+
+    assert resultado["enviado"] is False
+    fila = db_session.get(EnrollmentNotificacionOutbox, event_id)
+    assert fila.status == "AGOTADO"
+    assert fila.attempts == MAX_ATTEMPTS
+
+    agotados = [
+        registro for registro in logs_de_inscripcion
+        if "AGOTADO" in registro.getMessage()
+    ]
+    assert agotados, (
+        "la fila se agotó sin dejar un log que lo diga. "
+        f"Mensajes vistos: {_mensajes(logs_de_inscripcion)}"
+    )
+    assert agotados[0].levelno >= 40, "el agotamiento es un fracaso terminal, no una advertencia"  # ERROR
+    assert str(event_id) in agotados[0].getMessage(), "el log de agotamiento no identifica la fila"
+    assert str(admin_persona_id) in agotados[0].getMessage(), (
+        "el log de agotamiento no identifica al admin que se quedó sin avisar"
+    )
+
+
+def test_una_falla_transitoria_se_registra_pero_no_se_confunde_con_agotada(
+    monkeypatch, db_session, logs_de_inscripcion,
+):
+    """Un fallo que todavía tiene reintentos por delante tiene que quedar
+    en el log -- pero sin decir "AGOTADO", que es el único estado terminal."""
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
+
+    event = _evento(db_session, status="ENVIANDO", attempts=1)
+    event_id = event.id
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
+    _falla_al_materializar_notificacion(db_session, monkeypatch)
+
+    resultado = tasks.entregar_inscripcion_notificacion(event_id)
+
+    assert resultado["enviado"] is False
+    fila = db_session.get(EnrollmentNotificacionOutbox, event_id)
+    assert fila.status == "PENDIENTE"
+
+    assert logs_de_inscripcion, "un fallo transitorio no puede quedar en silencio"
+    assert not any(
+        "AGOTADO" in registro.getMessage() for registro in logs_de_inscripcion
+    ), (
+        "un reintento transitorio se logueó como si fuera el fracaso terminal: "
+        f"{_mensajes(logs_de_inscripcion)}"
+    )
+
+
+def test_la_limpieza_reporta_cuantos_avisos_nunca_llegaron_al_admin(
+    monkeypatch, db_session, logs_de_inscripcion,
+):
+    """Borrar `AGOTADO`/`ENVIADO` en silencio es lo que vuelve invisible al
+    admin que dejó de recibir avisos: el borrado se conserva, el silencio no."""
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
+
+    # Los ids se leen ANTES de correr la tarea: cierra su propia sesión (la
+    # misma `db_session` inyectada), que desvincula los objetos ya cargados.
+    agotada_id = _evento(db_session, semilla=1, status="AGOTADO", attempts=MAX_ATTEMPTS).id
+    enviada_id = _evento(db_session, semilla=2, status="ENVIADO").id
+    pendiente_id = _evento(db_session, semilla=3, status="PENDIENTE").id
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
+
+    resultado = tasks.limpiar_inscripcion_notificaciones()
+
+    assert resultado["eliminadas"] == 2
+    assert resultado["agotadas"] == 1
+    restantes = {e.id for e in db_session.query(EnrollmentNotificacionOutbox).all()}
+    assert restantes == {pendiente_id}
+    assert db_session.get(EnrollmentNotificacionOutbox, agotada_id) is None
+    assert db_session.get(EnrollmentNotificacionOutbox, enviada_id) is None
+
+    mensajes = _mensajes(logs_de_inscripcion)
+    assert any("AGOTADO" in mensaje and "1" in mensaje for mensaje in mensajes), (
+        "la limpieza borró un aviso que nunca llegó al admin y no dejó rastro: "
+        f"{mensajes}"
+    )
