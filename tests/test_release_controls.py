@@ -603,7 +603,9 @@ def test_preflight_rejects_manual_review_required_without_real_pending_migration
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _docker_stub_sin_pendientes(bin_dir)
@@ -632,7 +634,9 @@ def test_preflight_rejects_none_when_migrations_are_actually_pending(tmp_path):
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _docker_stub_con_migraciones_derivables(bin_dir)
@@ -662,10 +666,13 @@ def test_preflight_accepts_backward_compatible_with_real_pending_migrations(tmp_
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _docker_stub_con_migraciones_derivables(bin_dir)
+    _stub_smtp_tools(bin_dir)
 
     result = run_script(
         "scripts/ops/preflight-production.sh",
@@ -707,7 +714,9 @@ def test_preflight_falla_cerrado_si_no_puede_leer_la_revision_desplegada(tmp_pat
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _docker_stub_db_inalcanzable(bin_dir)
@@ -752,7 +761,9 @@ def test_preflight_falla_cerrado_si_alembic_no_puede_listar_heads_en_la_imagen(t
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _docker_stub_alembic_falla_en_la_imagen(bin_dir)
@@ -823,7 +834,9 @@ def test_preflight_treats_missing_db_as_first_provision_when_no_release_was_ever
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
@@ -832,6 +845,7 @@ def test_preflight_treats_missing_db_as_first_provision_when_no_release_was_ever
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
+    _stub_smtp_tools(bin_dir)
     release_record_dir = tmp_path / "no-existe-releases"
 
     result = run_script(
@@ -861,7 +875,9 @@ def test_preflight_fails_closed_when_db_is_down_but_a_release_was_already_record
     (backup / "cataclub_today.dump").write_text("dump")
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
