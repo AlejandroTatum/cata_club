@@ -38,6 +38,28 @@ def _stub_age(bin_dir: Path) -> None:
     stub.chmod(0o755)
 
 
+def _stub_smtp_tools(bin_dir: Path, *, deterministic: bool = False) -> None:
+    scripts = {
+        "getent": "#!/usr/bin/env bash\n"
+        + ('[ "${SMTP_PREFLIGHT_MODE:-}" = dns-failure ] && exit 2\n' if deterministic else "")
+        + "exit 0\n",
+        "timeout": "#!/usr/bin/env bash\n"
+        + ('[ "${SMTP_PREFLIGHT_MODE:-}" = connect-timeout ] && [ "${2:-}" = bash ] && exit 124\n'
+           '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-failure ] && [ "${2:-}" = bash ] && exit 1\n'
+           '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-refused ] && [ "${2:-}" = bash ] && exit 1\n'
+           '[ "${SMTP_PREFLIGHT_MODE:-}" = starttls-failure ] && [ "${2:-}" = openssl ] && exit 1\n'
+           '[ "${SMTP_PREFLIGHT_MODE:-}" = elapsed-bound ] && exec /usr/bin/timeout "$@"\n' if deterministic else "")
+        + "exit 0\n",
+        "openssl": "#!/usr/bin/env bash\n"
+        + ('[ "${SMTP_PREFLIGHT_MODE:-}" = elapsed-bound ] && sleep 5\n' if deterministic else "")
+        + "exit 0\n",
+    }
+    for name, content in scripts.items():
+        stub = bin_dir / name
+        stub.write_text(content)
+        stub.chmod(0o755)
+
+
 def _smtp_preflight_env(
     tmp_path: Path,
     *,
@@ -61,28 +83,7 @@ def _smtp_preflight_env(
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
-    (bin_dir / "getent").write_text(
-        "#!/usr/bin/env bash\n"
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = dns-failure ] && exit 2\n'
-        "exit 0\n"
-    )
-    (bin_dir / "getent").chmod(0o755)
-    (bin_dir / "timeout").write_text(
-        "#!/usr/bin/env bash\n"
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-timeout ] && [ "${2:-}" = bash ] && exit 124\n'
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-failure ] && [ "${2:-}" = bash ] && exit 1\n'
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = connect-refused ] && [ "${2:-}" = bash ] && exit 1\n'
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = starttls-failure ] && [ "${2:-}" = openssl ] && exit 1\n'
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = elapsed-bound ] && exec /usr/bin/timeout "$@"\n'
-        "exit 0\n"
-    )
-    (bin_dir / "timeout").chmod(0o755)
-    (bin_dir / "openssl").write_text(
-        "#!/usr/bin/env bash\n"
-        '[ "${SMTP_PREFLIGHT_MODE:-}" = elapsed-bound ] && sleep 5\n'
-        "exit 0\n"
-    )
-    (bin_dir / "openssl").chmod(0o755)
+    _stub_smtp_tools(bin_dir, deterministic=True)
     return {
         "STACK_DIR": str(stack),
         "BACKUP_DIR": str(backup),
@@ -248,10 +249,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
     )
     (bin_dir / "docker").chmod(0o755)
     _stub_age(bin_dir)
-    for tool in ("getent", "timeout", "openssl"):
-        stub = bin_dir / tool
-        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
-        stub.chmod(0o755)
+    _stub_smtp_tools(bin_dir)
     env = {
         "STACK_DIR": str(stack),
         "BACKUP_DIR": str(backups),
@@ -378,10 +376,7 @@ def _manual_review_env(tmp_path: Path, approval: Path | None = None) -> dict[str
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
-    for tool in ("getent", "timeout", "openssl"):
-        stub = bin_dir / tool
-        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
-        stub.chmod(0o755)
+    _stub_smtp_tools(bin_dir)
     env = {
         "STACK_DIR": str(stack),
         "BACKUP_DIR": str(backup),
@@ -448,10 +443,7 @@ def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
-    for tool in ("getent", "timeout", "openssl"):
-        stub = bin_dir / tool
-        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
-        stub.chmod(0o755)
+    _stub_smtp_tools(bin_dir)
 
     result = run_script(
         "scripts/ops/preflight-production.sh",
