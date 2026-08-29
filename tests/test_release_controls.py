@@ -302,6 +302,12 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         '  *"inspect ping"*) exit "${CELERY_PING_EXIT:-0}" ;;\n'
         '  *" manifest inspect "*) [ "$3" = "registry.example/cata-backend:${IMAGE_TAG}" ] || exit 1 ;;\n'
         '  *" --status running "*) if [ "${DB_RUNNING:-0}" = "1" ]; then echo db; fi ;;\n'
+        # El preflight (issue #805) deriva la revisión desplegada y la
+        # compara contra el head de Alembic en la imagen. Acá no importa
+        # ESE rango, solo que el default `none` sin migraciones pendientes
+        # siga siendo un deploy legítimo: current == head, cero pendientes.
+        '  *" exec -T db "*) [ "${DB_RUNNING:-0}" = "1" ] && echo "fakehead001" ;;\n'
+        '  *"alembic heads"*) echo "fakehead001 (head)" ;;\n'
         "esac\n"
         "exit 0\n"
     )
@@ -408,12 +414,23 @@ def test_preflight_requires_explicitly_safe_migration_attestation(tmp_path):
     assert "manual-review-required" in result.stderr
 
 
+# Cadena Alembic FALSA para estos tests, deliberadamente DISTINTA del literal
+# viejo que este mismo fix borra (`c556legal01->e762rolunico->a790verifcorreo`,
+# issue #805): si algún predicado del script volviera a comparar contra ese
+# literal en vez del rango derivado, esta cadena lo expondría.
+FAKE_CURRENT_REVISION = "f100curren"
+FAKE_PENDING_1 = "f200midrev"
+FAKE_HEAD_REVISION = "f300headrv"
+FAKE_MIGRATION_RANGE = f"{FAKE_CURRENT_REVISION}->{FAKE_PENDING_1}->{FAKE_HEAD_REVISION}"
+FAKE_PENDING_MIGRATIONS = f"{FAKE_PENDING_1},{FAKE_HEAD_REVISION}"
+
+
 def _manual_review_approval(path: Path, **overrides: str) -> None:
     values = {
         "IMAGE_TAG": "abcdef1",
-        "MIGRATION_RANGE": "c556legal01->e762rolunico->a790verifcorreo",
-        "CURRENT_REVISION": "c556legal01",
-        "PENDING_MIGRATIONS": "e762rolunico,a790verifcorreo",
+        "MIGRATION_RANGE": FAKE_MIGRATION_RANGE,
+        "CURRENT_REVISION": FAKE_CURRENT_REVISION,
+        "PENDING_MIGRATIONS": FAKE_PENDING_MIGRATIONS,
         "RESTORE_CHECK": "passed",
         "MAINTENANCE_WINDOW": "planned",
         "APPROVED_BY": "release-reviewer",
@@ -422,6 +439,29 @@ def _manual_review_approval(path: Path, **overrides: str) -> None:
     }
     values.update(overrides)
     path.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+
+
+def _docker_stub_con_migraciones_derivables(bin_dir: Path) -> None:
+    """`docker` de mentira que responde lo necesario para que
+    `preflight-production.sh` derive el estado real de Alembic (issue #805):
+    el servicio `db` corriendo, su `alembic_version` (`FAKE_CURRENT_REVISION`)
+    y, DENTRO de la imagen, los heads y el historial hasta ese head."""
+    stub = bin_dir / "docker"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "case \" $* \" in\n"
+        f'  *" --images backend "*) echo registry.example/cata-backend:${{IMAGE_TAG}} ;;\n'
+        f'  *" --status running "*) echo db ;;\n'
+        f'  *" exec -T db "*) echo "{FAKE_CURRENT_REVISION}" ;;\n'
+        f'  *"alembic heads"*) echo "{FAKE_HEAD_REVISION} (head)" ;;\n'
+        f'  *"alembic history -r {FAKE_CURRENT_REVISION}:heads"*)\n'
+        f'    printf \'%s\\n\' \\\n'
+        f'      "{FAKE_PENDING_1} -> {FAKE_HEAD_REVISION} (head), migración de prueba dos" \\\n'
+        f'      "{FAKE_CURRENT_REVISION} -> {FAKE_PENDING_1}, migración de prueba uno" ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    stub.chmod(0o755)
 
 
 def _manual_review_env(tmp_path: Path, approval: Path | None = None) -> dict[str, str]:
@@ -433,12 +473,7 @@ def _manual_review_env(tmp_path: Path, approval: Path | None = None) -> dict[str
     (stack / ".env").write_text("IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text(
-        "#!/usr/bin/env bash\n"
-        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
-        "exit 0\n"
-    )
-    (bin_dir / "docker").chmod(0o755)
+    _docker_stub_con_migraciones_derivables(bin_dir)
     _stub_smtp_tools(bin_dir)
     env = {
         "STACK_DIR": str(stack),
@@ -491,6 +526,253 @@ def test_preflight_rejects_a_stale_manual_review_approval(tmp_path):
     assert "expir" in result.stderr
 
 
+def test_preflight_rejects_an_approval_bound_to_the_old_hardcoded_migration_range(tmp_path):
+    """El defecto central del issue #805: el rango ya NO se compara contra el
+    literal de un deploy anterior. Una aprobación que declara justamente ESE
+    literal viejo tiene que rechazarse porque no es el rango real derivado."""
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(
+        approval,
+        MIGRATION_RANGE="c556legal01->e762rolunico->a790verifcorreo",
+    )
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_manual_review_env(tmp_path, approval),
+    )
+
+    assert result.returncode == 1
+    assert "no corresponde al rango de migración real" in result.stderr
+
+
+def test_preflight_rejects_an_approval_bound_to_the_wrong_current_revision(tmp_path):
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(approval, CURRENT_REVISION="otrarevision")
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_manual_review_env(tmp_path, approval),
+    )
+
+    assert result.returncode == 1
+    assert "no corresponde a la revisión desplegada real" in result.stderr
+
+
+def test_preflight_rejects_an_approval_bound_to_the_wrong_pending_migrations(tmp_path):
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(approval, PENDING_MIGRATIONS="otramigracion")
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env=_manual_review_env(tmp_path, approval),
+    )
+
+    assert result.returncode == 1
+    assert "no corresponde a las migraciones pendientes reales" in result.stderr
+
+
+def _docker_stub_sin_pendientes(bin_dir: Path) -> None:
+    """`docker` de mentira donde la revisión desplegada YA es el head: cero
+    migraciones pendientes reales."""
+    stub = bin_dir / "docker"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "case \" $* \" in\n"
+        f'  *" --images backend "*) echo registry.example/cata-backend:${{IMAGE_TAG}} ;;\n'
+        f'  *" --status running "*) echo db ;;\n'
+        f'  *" exec -T db "*) echo "{FAKE_HEAD_REVISION}" ;;\n'
+        f'  *"alembic heads"*) echo "{FAKE_HEAD_REVISION} (head)" ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    stub.chmod(0o755)
+
+
+def test_preflight_rejects_manual_review_required_without_real_pending_migrations(tmp_path):
+    """No corresponde exigir aprobación manual si no hay nada que aprobar: la
+    revisión desplegada real ya es el head de Alembic."""
+    approval = tmp_path / "approval.env"
+    _manual_review_approval(
+        approval,
+        MIGRATION_RANGE=FAKE_HEAD_REVISION,
+        CURRENT_REVISION=FAKE_HEAD_REVISION,
+        PENDING_MIGRATIONS="ninguna",
+    )
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _docker_stub_sin_pendientes(bin_dir)
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "manual-review-required",
+            "MIGRATION_APPROVAL_FILE": str(approval),
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 1
+    assert "no hay migraciones pendientes reales" in result.stderr
+
+
+def test_preflight_rejects_none_when_migrations_are_actually_pending(tmp_path):
+    """Criterio de cierre del issue #805: declarar `none` no puede convivir
+    con migraciones pendientes reales."""
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _docker_stub_con_migraciones_derivables(bin_dir)
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "none",
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 1
+    assert "MIGRATION_COMPATIBILITY=none" in result.stderr
+    assert FAKE_PENDING_MIGRATIONS in result.stderr
+
+
+def test_preflight_accepts_backward_compatible_with_real_pending_migrations(tmp_path):
+    """`backward-compatible` SÍ puede convivir con migraciones pendientes
+    (Alembic no puede verificar downgrade-safety solo; queda atestiguado por
+    quien despliega) — pero el rango tiene que derivarse igual, no omitirse."""
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _docker_stub_con_migraciones_derivables(bin_dir)
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "backward-compatible",
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert FAKE_MIGRATION_RANGE in result.stdout
+
+
+def _docker_stub_db_inalcanzable(bin_dir: Path) -> None:
+    """`docker` de mentira donde el servicio `db` está corriendo pero leer
+    `alembic_version` falla (base inalcanzable, credenciales rotas, etc.)."""
+    stub = bin_dir / "docker"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "case \" $* \" in\n"
+        '  *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG} ;;\n'
+        '  *" --status running "*) echo db ;;\n'
+        '  *" exec -T db "*) echo "no se pudo conectar a la base" >&2; exit 1 ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    stub.chmod(0o755)
+
+
+def test_preflight_falla_cerrado_si_no_puede_leer_la_revision_desplegada(tmp_path):
+    """La base desplegada está inalcanzable: el preflight tiene que fallar
+    cerrado y decirlo con un mensaje DISTINGUIBLE del de una aprobación que no
+    coincide (para que el operador sepa qué está roto)."""
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _docker_stub_db_inalcanzable(bin_dir)
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "backward-compatible",
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 1
+    assert "no se pudo derivar la revisión desplegada" in result.stderr
+    assert "no corresponde" not in result.stderr
+
+
+def _docker_stub_alembic_falla_en_la_imagen(bin_dir: Path) -> None:
+    """`docker` de mentira donde la base responde, pero Alembic no puede
+    listar los heads DENTRO de la imagen (imagen corrupta, dependencia rota,
+    etc.)."""
+    stub = bin_dir / "docker"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "case \" $* \" in\n"
+        '  *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG} ;;\n'
+        '  *" --status running "*) echo db ;;\n'
+        f'  *" exec -T db "*) echo "{FAKE_CURRENT_REVISION}" ;;\n'
+        '  *"alembic heads"*) echo "Traceback: alembic explotó" >&2; exit 1 ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    stub.chmod(0o755)
+
+
+def test_preflight_falla_cerrado_si_alembic_no_puede_listar_heads_en_la_imagen(tmp_path):
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _docker_stub_alembic_falla_en_la_imagen(bin_dir)
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "backward-compatible",
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 1
+    assert "no se pudo derivar las migraciones pendientes" in result.stderr
+    assert "no corresponde" not in result.stderr
+
+
 def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
     backup = tmp_path / "backups"
     backup.mkdir()
@@ -515,6 +797,10 @@ def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
             "BACKUP_DIR": str(backup),
             "IMAGE_TAG": "abcdef1",
             "MIGRATION_COMPATIBILITY": "backward-compatible",
+            # Hermético: si no se fija, el default real
+            # (/var/lib/cata-club/releases) filtraría el estado de la máquina
+            # que corre la suite hacia adentro del test.
+            "RELEASE_RECORD_DIR": str(tmp_path / "no-existe-releases"),
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
         },
     )
@@ -522,6 +808,90 @@ def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "Preflight OK" in result.stdout
     assert "registry.example/cata-backend:abcdef1" in result.stdout
+
+
+def test_preflight_treats_missing_db_as_first_provision_when_no_release_was_ever_recorded(
+    tmp_path,
+):
+    """`db` no corriendo por sí solo no prueba nada: la señal real es si YA
+    se registró un release para este stack (`current.env`, que escribe
+    record-release.sh y lee rollback-release.sh:24). Sin ese archivo no hay
+    evidencia de un deploy previo, así que se asume primer aprovisionamiento
+    y NO se falla cerrado."""
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        "exit 0\n"
+    )
+    (bin_dir / "docker").chmod(0o755)
+    release_record_dir = tmp_path / "no-existe-releases"
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "backward-compatible",
+            "RELEASE_RECORD_DIR": str(release_record_dir),
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "primer aprovisionamiento" in result.stdout
+
+
+def test_preflight_fails_closed_when_db_is_down_but_a_release_was_already_recorded(
+    tmp_path,
+):
+    """Contraejemplo del carve-out: si YA hay un release registrado, `db` no
+    corriendo es una base caída, no un primer aprovisionamiento. El mensaje
+    tiene que decir eso, no inventar la causa benigna."""
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        "exit 0\n"
+    )
+    (bin_dir / "docker").chmod(0o755)
+    release_record_dir = tmp_path / "releases"
+    release_record_dir.mkdir()
+    (release_record_dir / "current.env").write_text(
+        "IMAGE_TAG=deadbee\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+
+    result = run_script(
+        "scripts/ops/preflight-production.sh",
+        env={
+            "STACK_DIR": str(stack),
+            "BACKUP_DIR": str(backup),
+            "IMAGE_TAG": "abcdef1",
+            "MIGRATION_COMPATIBILITY": "backward-compatible",
+            "RELEASE_RECORD_DIR": str(release_record_dir),
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 1
+    assert "no está corriendo" in result.stderr
+    assert "release previo registrado" in result.stderr
+    assert "primer aprovisionamiento" not in result.stderr
 
 
 def test_record_release_writes_auditable_current_record_without_credentials(tmp_path):
