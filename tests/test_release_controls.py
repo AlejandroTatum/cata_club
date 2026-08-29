@@ -5,6 +5,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -181,23 +183,30 @@ def test_preflight_smtp_diagnostics_never_leak_credentials(tmp_path):
     assert "super-secret-password" not in output
 
 
-def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
-    cron_file = tmp_path / "crontab"
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "crontab").write_text(
+def _stub_crontab(bin_dir: Path) -> None:
+    """`crontab` de mentira: lee y escribe `$CRON_FILE` en vez del crontab real."""
+    stub = bin_dir / "crontab"
+    stub.write_text(
         "#!/usr/bin/env bash\n"
         'if [ "${1:-}" = "-l" ]; then [ -f "$CRON_FILE" ] && cat "$CRON_FILE"; exit 0; fi\n'
         'if [ "${1:-}" = "-" ]; then cat > "$CRON_FILE"; exit 0; fi\n'
         "exit 1\n"
     )
-    (bin_dir / "crontab").chmod(0o755)
+    stub.chmod(0o755)
+
+
+def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
     _stub_age(bin_dir)
     destinatarios = tmp_path / "backup-recipients.txt"
     destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
     entorno = {
         "CRON_FILE": str(cron_file),
         "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
+        "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
 
@@ -570,13 +579,7 @@ def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):
     cron_file = tmp_path / "crontab"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "crontab").write_text(
-        "#!/usr/bin/env bash\n"
-        'if [ "${1:-}" = "-l" ]; then [ -f "$CRON_FILE" ] && cat "$CRON_FILE"; exit 0; fi\n'
-        'if [ "${1:-}" = "-" ]; then cat > "$CRON_FILE"; exit 0; fi\n'
-        "exit 1\n"
-    )
-    (bin_dir / "crontab").chmod(0o755)
+    _stub_crontab(bin_dir)
     _stub_age(bin_dir)
 
     result = run_script(
@@ -593,6 +596,100 @@ def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):
     assert result.returncode != 0
     assert "destinatario de cifrado" in result.stderr
     assert not cron_file.exists(), "no se debe tocar el crontab sin cifrado configurado"
+
+
+def _entorno_install_cron(tmp_path, bin_dir: Path, **extra: str) -> dict[str, str]:
+    """Entorno hermético de `install-cron`: nada mira el /etc real de la máquina."""
+    destinatarios = tmp_path / "backup-recipients.txt"
+    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
+    entorno = {
+        "CRON_FILE": str(tmp_path / "crontab"),
+        "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
+        "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    entorno.update(extra)
+    return entorno
+
+
+def test_install_cron_se_niega_si_no_puede_crear_el_log_del_cron(tmp_path):
+    """Un cron que no puede escribir su log muere ANTES de ejecutar nada.
+
+    Las dos entradas redirigen a `$BACKUP_CRON_LOG`. Si esa redirección falla,
+    el shell del cron aborta el comando entero: se caen a la vez el backup de
+    las 03:30 y la alarma de frescura de las 07:00, que es lo ÚNICO que avisaría
+    del backup muerto. Sin MAILTO ni MTA en el host, las dos mueren calladas y
+    `install-cron` reporta éxito. Pasó en el host real: el usuario que corre el
+    cron no está en el grupo dueño de `/var/log` y no puede crear el archivo.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    # Directorio inexistente: la creación del log falla con ENOENT para
+    # cualquier usuario, incluido root, así que el candado no depende del uid
+    # con el que corra la suite.
+    log_inalcanzable = tmp_path / "sin-directorio" / "cataclub-backup.log"
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path, bin_dir, BACKUP_CRON_LOG=str(log_inalcanzable)
+        ),
+    )
+
+    assert result.returncode != 0
+    assert str(log_inalcanzable) in result.stderr
+    assert not (tmp_path / "crontab").exists(), (
+        "no se debe instalar un cron que muere en la redirección de su propio log"
+    )
+
+
+@pytest.mark.skipif(
+    os.geteuid() == 0, reason="root escribe igual un archivo sin permiso de escritura"
+)
+def test_install_cron_se_niega_si_el_log_existe_pero_no_es_escribible(tmp_path):
+    """El modo de falla del host real: el archivo existe y el cron no lo puede abrir."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    log_ajeno = tmp_path / "cataclub-backup.log"
+    log_ajeno.write_text("")
+    log_ajeno.chmod(0o444)
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(tmp_path, bin_dir, BACKUP_CRON_LOG=str(log_ajeno)),
+    )
+
+    assert result.returncode != 0
+    assert str(log_ajeno) in result.stderr
+    assert not (tmp_path / "crontab").exists()
+
+
+def test_install_cron_crea_el_log_cuando_todavia_no_existe(tmp_path):
+    """El caso feliz del primer aprovisionamiento: el log no existe y se puede crear."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    log_nuevo = tmp_path / "cataclub-backup.log"
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(tmp_path, bin_dir, BACKUP_CRON_LOG=str(log_nuevo)),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert log_nuevo.exists(), "el preflight tiene que dejar el log listo, no solo mirarlo"
+    assert "backup-db.sh" in (tmp_path / "crontab").read_text()
 
 
 def test_deploy_aborta_si_el_backup_pre_deploy_no_puede_cifrar(tmp_path):
