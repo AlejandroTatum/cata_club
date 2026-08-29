@@ -10,6 +10,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STACK_DIR="${STACK_DIR:-/opt/cata-club}"
 IMAGE_TAG="${IMAGE_TAG:-}"
 MIGRATION_COMPATIBILITY="${MIGRATION_COMPATIBILITY:-}"
+# Mismo default que scripts/ops/record-release.sh:11 y
+# scripts/ops/rollback-release.sh:18: los tres tienen que mirar el mismo
+# directorio para que "current.env" signifique lo mismo en los tres.
+RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
+CURRENT_RELEASE_RECORD="$RELEASE_RECORD_DIR/current.env"
 
 [ -d "$STACK_DIR" ] || die "STACK_DIR no existe: $STACK_DIR"
 [ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env"
@@ -43,8 +48,133 @@ stack_value() {
     case "$IMAGE_TAG" in
   ''|latest|*[!0-9a-fA-F]*) die "IMAGE_TAG debe ser un SHA hexadecimal inmutable, nunca latest" ;;
 esac
+
+# --- Derivación del estado real de Alembic (issue #805) ---------------------
+# Hasta acá, la aprobación de migración manual se comparaba contra literales
+# de UN despliegue puntual: el próximo deploy con migraciones distintas fallaba
+# siempre, y la salida obvia (editar los literales a mano) volvía la
+# aprobación ceremonia. Lo que sigue deriva la revisión desplegada y las
+# migraciones pendientes del estado real en vez de recordarlas.
+#
+# La revisión desplegada se lee de `alembic_version` en la base productiva,
+# siguiendo el mismo patrón que scripts/backup/restore-check.sh:135-137 (que
+# ya lee esa tabla) y scripts/backup/backup-db.sh:153 (que ya opera el
+# servicio `db` con `docker compose exec -T db sh -c '...'`).
+#
+# Las migraciones pendientes se derivan corriendo Alembic DENTRO de la imagen
+# que se va a desplegar, con el mismo invocador que usa el contenedor en
+# producción (`uv run --frozen --no-build alembic ...`, ver
+# backend/scripts/entrypoint.sh:20). `alembic history` sin `--indicate-current`
+# nunca ejecuta `backend/alembic/env.py` (que es lo único que abre una
+# conexión a la base), así que esto corre sin exponerle credenciales de base
+# de datos a la imagen ni tocar la base desplegada por segunda vez.
+#
+# `db` no corriendo NO prueba por sí solo que sea un primer aprovisionamiento:
+# una base caída (crash, OOM, reinicio a mitad de camino, mal configurada)
+# toma la misma rama, y no hay nada en "db no responde" que distinga esos dos
+# casos. La señal real es si YA existe un release registrado para este stack:
+# `record-release.sh` (scripts/ops/record-release.sh:44-46) escribe
+# "${RELEASE_RECORD_DIR}/current.env" en cada deploy exitoso, y
+# `rollback-release.sh:24` ya lo lee como el registro autoritativo del último
+# release. Si ese archivo existe, hubo un deploy previo: la base tiene que
+# estar arriba, y que no lo esté es una falla, no un primer aprovisionamiento.
+# Si no existe, no hay evidencia de ningún release previo: recién ahí se
+# asume primer aprovisionamiento, con el mismo criterio que
+# `BACKUP_TOLERATE_MISSING` ya usa para el backup pre-deploy.
+release_previo_registrado() {
+  [ -f "$CURRENT_RELEASE_RECORD" ]
+}
+
+db_esta_corriendo() {
+  local running
+  running="$(
+    cd "$STACK_DIR"
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+      ps --status running --services 2>/dev/null || true
+  )"
+  printf '%s\n' "$running" | grep -qx 'db'
+}
+
+resolver_imagen_backend() {
+  local ref
+  command -v docker >/dev/null 2>&1 || die "docker no está disponible"
+  docker compose version >/dev/null || die "docker compose no está disponible"
+  ref="$(
+    cd "$STACK_DIR"
+    IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+      config --images backend
+  )"
+  case "$ref" in
+    ''|*$'\n'*|*":${IMAGE_TAG}") ;;
+    *) die "la imagen backend configurada no usa IMAGE_TAG=${IMAGE_TAG}" ;;
+  esac
+  [ -n "$ref" ] || die "Compose no resolvió una imagen para backend"
+  printf '%s' "$ref"
+}
+
+# Deja CURRENT_REVISION, PENDING_MIGRATIONS_LIST (una por línea, de la más
+# vieja a la más nueva), PENDING_MIGRATIONS_CSV y MIGRATION_RANGE_DERIVADO
+# (current->pendiente1->pendiente2->...) derivados del estado real. Cualquier
+# falla en la derivación es fatal: no hay un valor "seguro" para adivinar acá.
+derivar_estado_migraciones() {
+  local imagen raw heads_output head_count head_revision history_output
+
+  imagen="$(resolver_imagen_backend)"
+
+  raw="$(
+    cd "$STACK_DIR"
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T db \
+      sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "SELECT version_num FROM alembic_version;"'
+  )" || die "no se pudo derivar la revisión desplegada: no se pudo leer alembic_version de la base"
+  CURRENT_REVISION="$(printf '%s' "$raw" | tr -d '[:space:]')"
+  [ -n "$CURRENT_REVISION" ] || die "no se pudo derivar la revisión desplegada: alembic_version devolvió vacío"
+
+  heads_output="$(docker run --rm "$imagen" uv run --frozen --no-build alembic heads)" \
+    || die "no se pudo derivar las migraciones pendientes: Alembic no pudo listar los heads en la imagen ${imagen}"
+  head_count="$(printf '%s\n' "$heads_output" | grep -c . || true)"
+  [ "$head_count" -eq 1 ] || die "no se pudo derivar las migraciones pendientes: Alembic reporta ${head_count} heads en la imagen, el rango no es único"
+  head_revision="$(printf '%s' "$heads_output" | awk '{print $1}')"
+
+  if [ "$CURRENT_REVISION" = "$head_revision" ]; then
+    PENDING_MIGRATIONS_LIST=""
+  else
+    history_output="$(docker run --rm "$imagen" uv run --frozen --no-build alembic history -r "${CURRENT_REVISION}:heads")" \
+      || die "no se pudo derivar las migraciones pendientes desde ${CURRENT_REVISION}: Alembic no localizó esa revisión en la imagen ${imagen}"
+    PENDING_MIGRATIONS_LIST="$(
+      printf '%s\n' "$history_output" \
+        | awk -F' -> ' '{print $2}' \
+        | awk -F'[, ]' '{print $1}' \
+        | tac \
+        | awk -v cur="$CURRENT_REVISION" '$0 != cur'
+    )"
+    [ -n "$PENDING_MIGRATIONS_LIST" ] || die "no se pudo derivar las migraciones pendientes: Alembic no reportó ninguna entre ${CURRENT_REVISION} y ${head_revision}"
+  fi
+
+  PENDING_MIGRATIONS_CSV="$(printf '%s' "$PENDING_MIGRATIONS_LIST" | tr '\n' ',' | sed 's/,$//')"
+  MIGRATION_RANGE_DERIVADO="$CURRENT_REVISION"
+  if [ -n "$PENDING_MIGRATIONS_LIST" ]; then
+    while IFS= read -r rev; do
+      MIGRATION_RANGE_DERIVADO="${MIGRATION_RANGE_DERIVADO}->${rev}"
+    done < <(printf '%s\n' "$PENDING_MIGRATIONS_LIST")
+  fi
+}
+
 case "$MIGRATION_COMPATIBILITY" in
-  none|backward-compatible) ;;
+  none|backward-compatible)
+        if db_esta_corriendo; then
+          derivar_estado_migraciones
+          if [ "$MIGRATION_COMPATIBILITY" = "none" ] && [ -n "$PENDING_MIGRATIONS_LIST" ]; then
+            die "MIGRATION_COMPATIBILITY=none pero hay migraciones pendientes reales (${PENDING_MIGRATIONS_CSV}); declarar backward-compatible o manual-review-required"
+          fi
+          if [ "$MIGRATION_COMPATIBILITY" = "backward-compatible" ]; then
+            log "backward-compatible: Alembic no puede verificar automáticamente que un downgrade sea seguro; queda atestiguado por quien despliega. Rango real derivado: ${MIGRATION_RANGE_DERIVADO}"
+          fi
+        elif release_previo_registrado; then
+          die "el servicio db no está corriendo, pero hay un release previo registrado en ${CURRENT_RELEASE_RECORD}: la base debería estar arriba y no lo está"
+        else
+          log "AVISO: el servicio db no está corriendo y no hay ningún release previo registrado en ${CURRENT_RELEASE_RECORD}; se asume primer aprovisionamiento y se omite la validación de migraciones para ${MIGRATION_COMPATIBILITY}"
+        fi
+        ;;
   manual-review-required)
         APPROVAL_FILE="${MIGRATION_APPROVAL_FILE:-}"
         [ -n "$APPROVAL_FILE" ] || die "MIGRATION_APPROVAL_FILE es obligatorio para manual-review-required"
@@ -62,9 +192,12 @@ case "$MIGRATION_COMPATIBILITY" in
           printf '%s' "$value"
         }
         [ "$(approval_value IMAGE_TAG)" = "$IMAGE_TAG" ] || die "la aprobación no corresponde a IMAGE_TAG=${IMAGE_TAG}"
-        [ "$(approval_value MIGRATION_RANGE)" = "c556legal01->e762rolunico->a790verifcorreo" ] || die "la aprobación no corresponde al rango de migración esperado"
-        [ "$(approval_value CURRENT_REVISION)" = "c556legal01" ] || die "la aprobación no corresponde a la revisión desplegada c556legal01"
-        [ "$(approval_value PENDING_MIGRATIONS)" = "e762rolunico,a790verifcorreo" ] || die "la aprobación no corresponde a las dos migraciones pendientes"
+        db_esta_corriendo || die "manual-review-required exige derivar el rango real de migraciones, pero el servicio db no está corriendo"
+        derivar_estado_migraciones
+        [ -n "$PENDING_MIGRATIONS_LIST" ] || die "no hay migraciones pendientes reales; manual-review-required no corresponde sin migraciones pendientes"
+        [ "$(approval_value MIGRATION_RANGE)" = "$MIGRATION_RANGE_DERIVADO" ] || die "la aprobación no corresponde al rango de migración real (derivado: ${MIGRATION_RANGE_DERIVADO})"
+        [ "$(approval_value CURRENT_REVISION)" = "$CURRENT_REVISION" ] || die "la aprobación no corresponde a la revisión desplegada real (${CURRENT_REVISION})"
+        [ "$(approval_value PENDING_MIGRATIONS)" = "$PENDING_MIGRATIONS_CSV" ] || die "la aprobación no corresponde a las migraciones pendientes reales (${PENDING_MIGRATIONS_CSV})"
         [ "$(approval_value RESTORE_CHECK)" = "passed" ] || die "la aprobación requiere RESTORE_CHECK=passed"
         [ "$(approval_value MAINTENANCE_WINDOW)" = "planned" ] || die "la aprobación requiere MAINTENANCE_WINDOW=planned"
         approval_value APPROVED_BY >/dev/null
@@ -76,7 +209,7 @@ case "$MIGRATION_COMPATIBILITY" in
         esac
         now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         [ "$EXPIRES_AT" \> "$now_utc" ] || die "la aprobación de migración está expirada"
-        log "Aprobación manual válida para ${IMAGE_TAG} y el rango de migración declarado"
+        log "Aprobación manual válida para ${IMAGE_TAG} y el rango de migración real ${MIGRATION_RANGE_DERIVADO}"
         ;;
   *) die "MIGRATION_COMPATIBILITY debe declarar none, backward-compatible o manual-review-required" ;;
 esac
