@@ -268,6 +268,18 @@ const config: Config = {
            * `fuchsia-ink` exist for the yellow and the pink.
            */
           red: "#D92128",
+          /**
+           * Text-weight companion to `cata-red` on the near-black chrome, the
+           * same job `fuchsia-ink` does for the pink on light surfaces.
+           *
+           * The institutional header's "Tenis de Mesa" wordmark used the shared
+           * token: as TEXT on the bar's `bg-cata-dark/95` composited over the
+           * canvas (#15151D) that is 3.63:1, under AA. This value is 4.88:1
+           * there (5.30:1 on the bare `cata-dark`). The shared token must NOT be
+           * lightened to fix it — it is the primary-button FILL that white sits
+           * on at 5.0:1. This hex is already load-bearing as the
+           * `.btn-primary:hover` fill (globals.css:99-104), so it does not move.
+           */
           "red-light": "#E55157",
           "red-dark": "#A11D22",
           yellow: "#FFD600",

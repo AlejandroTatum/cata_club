@@ -138,7 +138,7 @@ function CuotaVerdict({ situation }: { situation: PaymentSituation }): React.Rea
           {situation.headline}
         </p>
         {situation.figure && (
-          <p className="mt-0.5 text-2xs font-extrabold uppercase tracking-flat text-ink-3">
+          <p className="mt-0.5 text-2xs font-extrabold uppercase tracking-flat text-ink-3-strong">
             {situation.figure.value} {situation.figure.unit}
           </p>
         )}

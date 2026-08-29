@@ -632,6 +632,82 @@ describe("/trainer — fuchsia quick-action cards", () => {
   });
 });
 
+describe("the institutional header's wordmark — Header.tsx", () => {
+  // "Tenis de Mesa", the second line of the brand lockup, is `text-2xs` — 10.5px,
+  // i.e. NORMAL text for 1.4.3, so 4.5:1 applies and not the large-text 3:1.
+  //
+  // The bar is `bg-cata-dark/95`, so the real backdrop is the composite against
+  // whatever is behind it, and behind it is the body's own `canvas`. That is why
+  // the surface is built here the same way the coal panel's fills are above,
+  // rather than measured against the bare token.
+  const HEADER_BG = compositeOver(cata.dark, CANVAS, 0.95);
+
+  it("confirms the CTA red fails AA as the wordmark on that bar", () => {
+    // 3.63:1 — the same shape of mistake `fuchsia-ink` and `ball-ink` exist to
+    // correct, in the opposite direction: a FILL used as text, here on a dark
+    // field instead of a light one.
+    const ratio = contrastRatio(cata.red, HEADER_BG);
+    expect(ratio, `cata-red on the header measures ${ratio.toFixed(2)}:1`)
+      .toBeLessThan(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA with the on-dark companion the palette already carries", () => {
+    const ratio = contrastRatio(cata["red-light"], HEADER_BG);
+    expect(ratio, `cata-red-light on the header measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("keeps that companion passing on the bare token, so dropping the /95 cannot break it", () => {
+    // 5.30:1. The alpha is a backdrop-blur decision, not a contrast one, and a
+    // future `bg-cata-dark` without it must not quietly become the failing case.
+    const ratio = contrastRatio(cata["red-light"], cata.dark);
+    expect(ratio, `cata-red-light on cata-dark measures ${ratio.toFixed(2)}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  // Why the companion and not a darker `cata-red`: same argument as the fuchsia
+  // block above. `cata-red` is the primary button's FILL, and white on it is
+  // 5.0:1 — moving the shared token to rescue a line of text on the header
+  // would spend the button's own contrast budget.
+  it("keeps the CTA red where it belongs, as the fill white is printed on", () => {
+    expect(contrastRatio("#FFFFFF", cata.red)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});
+
+describe("/student — the cuota verdict's figure line", () => {
+  // `CuotaVerdict` prints the figure ("1 DÍA VENCIDA", "12 DÍAS DE COBERTURA")
+  // at `text-2xs` — 10.5px, normal text for 1.4.3 — under the headline. The
+  // verdict block changes fill with the tone, so ONE class has to clear AA on
+  // three different backgrounds:
+  //
+  //   bad ...... bg-state-bad-bg   the overdue case the audit filed
+  //   ok ....... bg-state-ok-bg
+  //   neutral .. bg-sunken
+  //
+  // `ink-3` is the muted ink a secondary line reaches for by reflex and it
+  // fails all three; `ink-3-strong` is the companion that exists for surfaces
+  // that are not `paper`.
+  const FILLS = [
+    ["state-bad-bg", state["bad-bg"]],
+    ["state-ok-bg", state["ok-bg"]],
+    ["sunken", SUNKEN],
+  ] as const;
+
+  it.each(FILLS)("meets AA with ink-3-strong on the %s fill", (_name, fill) => {
+    const ratio = contrastRatio(ink["3-strong"], fill);
+    expect(ratio, `ink-3-strong on ${_name} measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it("confirms ink-3 failed on both tinted fills", () => {
+    // 3.95:1 and 4.08:1. The third failure — `ink-3` on `sunken`, 4.21:1 — is
+    // already asserted by "muted small print that sits OUTSIDE a card" above,
+    // and is not restated here.
+    expect(contrastRatio(ink["3"], state["bad-bg"])).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio(ink["3"], state["ok-bg"])).toBeLessThan(AA_NORMAL_TEXT);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The palette on the screens — every surface fill must be a NAMED colour
 // ---------------------------------------------------------------------------

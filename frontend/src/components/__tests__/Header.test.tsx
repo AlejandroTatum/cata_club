@@ -219,6 +219,22 @@ describe("Header", (): void => {
     expect(screen.queryByRole("button", { name: /Cerrar Sesi\u00f3n/i })).not.toBeInTheDocument();
   });
 
+  // The wordmark is `text-2xs` — 10.5px, i.e. NORMAL text for WCAG 1.4.3 — on
+  // the bar's `bg-cata-dark/95`, where `cata-red` measures 3.63:1 and the
+  // palette's on-dark companion measures 4.88:1 (`color-contrast.test.ts`).
+  // The assertion reads the exact class TOKEN rather than a substring, because
+  // `text-cata-red-light` CONTAINS `text-cata-red`: a `toContain` check on the
+  // className string would pass on the failing class too.
+  it("prints the wordmark in the on-dark red, not in the CTA fill", (): void => {
+    mockPathname.mockReturnValue("/");
+    render(<Header />);
+
+    const classes = screen.getByText("Tenis de Mesa").className.split(/\s+/);
+
+    expect(classes).toContain("text-cata-red-light");
+    expect(classes).not.toContain("text-cata-red");
+  });
+
   it("shows institutional mobile menu on landing", () => {
     mockPathname.mockReturnValue("/");
     render(<Header />);

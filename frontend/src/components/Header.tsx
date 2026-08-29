@@ -284,7 +284,7 @@ function InstitutionalHeader(): React.ReactElement {
             <span className="text-lg font-bold leading-tight tracking-tight text-white">
               Cata Club
             </span>
-            <span className="text-2xs font-bold uppercase tracking-caps-wide text-cata-red">
+            <span className="text-2xs font-bold uppercase tracking-caps-wide text-cata-red-light">
               Tenis de Mesa
             </span>
           </div>
