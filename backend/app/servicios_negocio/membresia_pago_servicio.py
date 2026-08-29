@@ -482,30 +482,15 @@ class PagoServicio:
                 "pueden registrar este pago"
             )
 
-        # El administrador autorizado puede registrar EFECTIVO desde Members;
-        # los demás solicitantes siguen sujetos a la autorización owner/representative.
-        # La rama siguiente solo conserva la defensa para una llamada que hubiera
-        # atravesado este punto sin dueño, representante ni rol administrativo;
-        # normalmente el guard de autorización anterior ya la rechazó.
-        #
-        #
-        #
-        if (
-                datos.tipo_pago == TipoPago.EFECTIVO
-                and not es_duenio
-                and not es_representante
-                and not es_admin
-            ):
-            if persona_id_solicitante is not None:
-                persona_objetivo = self.repo_persona.obtener_por_id(datos.persona_id)
-                es_representante = bool(
-                    persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
-                )
-            if not es_representante:
-                raise PermisosInsuficientes(
-                    "El pago en efectivo solo puede registrarlo el propio socio "
-                    "o su representante"
-                )
+        # EFECTIVO no tiene guarda propia (issue #565): el administrador
+        # autorizado puede registrarlo desde Members a nombre de un tercero, y
+        # cualquier otro solicitante ya quedó filtrado por el guard de arriba
+        # -- dueño y representante son justamente los que sí pueden declarar la
+        # entrega. Hasta el issue #823 acá sobrevivía una rama que exigía `not`
+        # sobre los tres flags a la vez: la negación exacta de lo que el guard
+        # anterior acababa de garantizar, inalcanzable por construcción y sin
+        # una sola línea de cobertura. La regla real de efectivo es la que
+        # fija `tests/test_efectivo_solo_por_socio.py`.
 
         # Recién aquí (ya autorizado) se resuelve existencia real y, si
         # corresponde, el chequeo de solo-lectura financiera para menores
