@@ -16,15 +16,27 @@ Este archivo prueba las DOS capas del arreglo, por separado:
   que cubre forma + provincia + dígito verificador. Se prueba escribiendo
   por `db_session` directo, sin DTO ni endpoint (el "Candado" textual del
   issue).
-- Capa base de datos (`CheckConstraint`): cubre la FORMA, y se prueba con
-  SQL crudo que esquiva el ORM por completo. Sin este segundo grupo, un
-  `@validates` que alguien borre sin querer dejaría el archivo en verde.
+- Capa base de datos (`CheckConstraint`): cubre la FORMA de `cedula`,
+  `telefono_contacto` y `telefono_emergencia`, y se prueba con SQL crudo que
+  esquiva el ORM por completo. Sin este segundo grupo, un `@validates` que
+  alguien borre sin querer dejaría el archivo en verde.
 
-Límite conocido y deliberado: el dígito verificador NO está en la base de
-datos. Implementarlo en PL/pgSQL sería una segunda copia del algoritmo en
-otro lenguaje, que es exactamente el defecto que el carril de identidad
-existe para borrar. Ver `test_sql_crudo_admite_cedula_con_forma_valida_y_
-verificador_roto`, que documenta el hueco en vez de esconderlo.
+DOS LÍMITES CONOCIDOS Y DELIBERADOS, los dos con un test que los fija:
+
+1. El dígito verificador NO está en la base de datos. Implementarlo en
+   PL/pgSQL sería una segunda copia del algoritmo en otro lenguaje, que es
+   exactamente el defecto que el carril de identidad existe para borrar. Ver
+   `test_sql_crudo_admite_cedula_con_forma_valida_y_verificador_roto`.
+2. `persona.telefono` NO tiene CHECK en la base: su garantía es solo el
+   `@validates`. Cualquier constraint sobre esa columna dejaría la fila de
+   bootstrap de staging (`telefono = '0000000000'`) imposible de actualizar
+   en cualquier campo, porque Postgres reevalúa el CHECK contra la fila
+   nueva completa en cada UPDATE. Ver
+   `test_sql_crudo_con_telefono_sin_forma_entra_porque_no_hay_check` y el
+   docstring de la migración `f1a7ident828`.
+
+Los dos huecos están escritos, no escondidos: cerrarlos rompe su test, y
+romperlo tiene que ser un acto deliberado.
 """
 from datetime import date
 
@@ -102,7 +114,12 @@ def test_cedula_vacia_es_rechazada(db_session):
 
 # --- Capa ORM: teléfono -----------------------------------------------------
 def test_telefono_invalido_por_db_session_directo_es_rechazado(db_session):
-    """Mismo candado que la cédula, para `persona.telefono`."""
+    """Mismo candado que la cédula, para `persona.telefono` -- y para esta
+    columna es el ÚNICO: es la única de las cuatro sin CHECK en la base
+    (ver `test_sql_crudo_con_telefono_sin_forma_entra_porque_no_hay_check` y
+    el docstring de la migración `f1a7ident828`). Si alguien borra el
+    `@validates` de `telefono`, no queda ninguna otra red: este test es la
+    que tiene que ponerse roja."""
     with pytest.raises(ValueError):
         db_session.add(_persona(telefono=TELEFONO_TODO_CEROS))
         db_session.commit()
@@ -268,40 +285,76 @@ def test_la_sesion_sigue_usable_despues_de_un_rechazo(db_session):
 # --- Capa base de datos: el CHECK muerde sin ORM ----------------------------
 _INSERT_CRUDO = text(
     "INSERT INTO persona (nombres, apellidos, cedula, fecha_nacimiento, "
-    "telefono, activo, fecha_registro) VALUES (:nombres, :apellidos, "
-    ":cedula, :fecha_nacimiento, :telefono, true, now())"
+    "telefono, telefono_contacto, activo, fecha_registro) VALUES "
+    "(:nombres, :apellidos, :cedula, :fecha_nacimiento, :telefono, "
+    ":telefono_contacto, true, now())"
 )
 
 
-def _insertar_crudo(db_session, cedula: str, telefono: str) -> None:
+def _insertar_crudo(
+    db_session, cedula: str, telefono: str, telefono_contacto: str | None = None
+) -> None:
     """INSERT por SQL crudo: no pasa por el mapper, así que ningún
     `@validates` puede intervenir. Lo único que puede rechazarlo es la base
     de datos."""
     db_session.execute(_INSERT_CRUDO, {
         "nombres": "Raw", "apellidos": "Sql", "cedula": cedula,
         "fecha_nacimiento": date(1990, 1, 1), "telefono": telefono,
+        "telefono_contacto": telefono_contacto,
     })
 
 
 def test_sql_crudo_con_cedula_sin_forma_lo_rechaza_la_base(db_session):
-    """Prueba la capa 2 con independencia de la capa 1."""
-    with pytest.raises(IntegrityError):
+    """Prueba la capa 2 con independencia de la capa 1. El `match` nombra el
+    constraint: así el test prueba CUÁL compuerta disparó, y no se pone verde
+    por un `IntegrityError` de otra cosa (un NOT NULL, la unicidad de
+    cédula)."""
+    with pytest.raises(IntegrityError, match="ck_persona_cedula_forma"):
         _insertar_crudo(db_session, CEDULA_SIN_FORMA, TELEFONO_OK)
     db_session.rollback()
 
 
 def test_sql_crudo_con_cedula_de_provincia_inexistente_lo_rechaza_la_base(db_session):
-    with pytest.raises(IntegrityError):
+    with pytest.raises(IntegrityError, match="ck_persona_cedula_forma"):
         _insertar_crudo(db_session, CEDULA_PROVINCIA_INEXISTENTE, TELEFONO_OK)
     db_session.rollback()
 
 
-def test_sql_crudo_con_telefono_sin_forma_lo_rechaza_la_base(db_session):
-    """El CHECK de teléfono es `NOT VALID` (no revalida las filas viejas),
-    pero Postgres SÍ lo aplica a todo INSERT y UPDATE nuevo."""
-    with pytest.raises(IntegrityError):
-        _insertar_crudo(db_session, CEDULA_OK, TELEFONO_TODO_CEROS)
+def test_sql_crudo_con_telefono_de_contacto_sin_forma_lo_rechaza_la_base(db_session):
+    """La capa 2 del teléfono se prueba sobre `telefono_contacto`, no sobre
+    `telefono`: esa última NO tiene CHECK en la base a propósito (le
+    congelaría la fila de bootstrap de staging, ver el docstring de la
+    migración `f1a7ident828`). Su garantía es solo el `@validates`, que se
+    prueba en `test_telefono_todo_ceros_lo_rechaza_el_orm`."""
+    with pytest.raises(
+        IntegrityError, match="ck_persona_telefono_contacto_forma"
+    ):
+        _insertar_crudo(
+            db_session, CEDULA_OK, TELEFONO_OK,
+            telefono_contacto=TELEFONO_TODO_CEROS,
+        )
     db_session.rollback()
+
+
+def test_sql_crudo_con_telefono_sin_forma_entra_porque_no_hay_check(db_session):
+    """HUECO DELIBERADO Y ACOTADO, escrito para que se rompa ruidosamente.
+
+    `persona.telefono` no lleva CHECK: cualquiera sobre esa columna haría
+    que la fila legacy de staging (`telefono = '0000000000'`) quedara
+    imposible de actualizar en NINGÚN campo, porque Postgres reevalúa el
+    CHECK contra la fila nueva completa en cada UPDATE. El precio es este:
+    una escritura por SQL crudo que esquive el ORM puede meter un teléfono
+    con forma imposible.
+
+    El día que la fila legacy se corrija con el teléfono real del
+    administrador y una migración agregue el constraint, este test se pone
+    rojo y hay que reescribirlo a propósito -- que es exactamente lo que
+    debe pasar."""
+    _insertar_crudo(db_session, CEDULA_OK, TELEFONO_TODO_CEROS)
+
+    assert db_session.execute(text(
+        "SELECT telefono FROM persona WHERE cedula = :c"
+    ), {"c": CEDULA_OK}).scalar() == TELEFONO_TODO_CEROS
 
 
 def test_sql_crudo_con_valores_validos_entra(db_session):

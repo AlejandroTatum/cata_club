@@ -47,3 +47,27 @@ def test_separadores_se_rechazan_no_se_descartan():
 def test_prefijo_internacional_se_rechaza():
     assert es_telefono_valido("+593991234567") is False
     assert es_telefono_valido("593991234567") is False
+
+
+def test_digitos_no_ascii_se_rechazan():
+    """`str.isdigit()` sola dice True para los dígitos arábigo-índicos, pero
+    el `[0-9]` del CHECK de la base (migración `f1a7ident828`) no los acepta.
+    Si esta capa los admitiera, la capa 2 los rechazaría en el flush con un
+    `IntegrityError` en vez de un `ValueError` limpio en la puerta.
+
+    Se construye con el largo y el prefijo VÁLIDOS a propósito: lo único que
+    puede hacer fallar estos casos es la ascii-dad de los dígitos."""
+    arabigo_indicos = "٢" * 8  # ٢
+    assert ("09" + arabigo_indicos).isdigit() is True  # la trampa
+    assert es_telefono_valido("09" + arabigo_indicos) is False
+
+    devanagari = "२" * 7  # २
+    assert es_telefono_valido("0" + devanagari + "1") is False
+
+
+def test_digitos_con_volado_se_rechazan():
+    # Otra familia que `str.isdigit()` acepta y `[0-9]` no: los dígitos con
+    # volado. `'²'.isdigit()` es True. (Las fracciones como `'½'` no hacen
+    # falta acá: `isdigit()` ya las rechaza, solo `isnumeric()` las acepta.)
+    assert ("09" + "²" * 8).isdigit() is True  # la trampa
+    assert es_telefono_valido("09" + "²" * 8) is False

@@ -4,7 +4,11 @@
 un dígito verificador equivocado, una provincia que no existe, un número
 que no cierra por ningún lado, y una cédula real de control.
 """
-from app.dominio.cedula import digito_verificador_cedula, es_cedula_valida
+from app.dominio.cedula import (
+    cedula_valida,
+    digito_verificador_cedula,
+    es_cedula_valida,
+)
 
 
 def test_1712345678_es_invalida_por_digito_verificador():
@@ -40,3 +44,27 @@ def test_largo_distinto_de_diez_es_invalido():
 
 def test_caracteres_no_numericos_son_invalidos():
     assert es_cedula_valida("171003406a") is False
+
+
+def test_digitos_no_ascii_son_invalidos():
+    """`str.isdigit()` sola acepta dígitos arábigo-índicos; el `[0-9]` del
+    CHECK de la base (migración `f1a7ident828`) no. Una cédula ecuatoriana
+    escrita en dígitos no ASCII no es una cédula, y admitirla acá movería el
+    rechazo desde un `ValueError` en la puerta hasta un `IntegrityError` en
+    el flush.
+
+    El caso se construye TRADUCIENDO una cédula válida dígito por dígito, no
+    inventando una: `int()` acepta los arábigo-índicos igual que los ASCII,
+    así que este candidato pasa el largo, la provincia Y el módulo 10. Lo
+    ÚNICO que puede rechazarlo es el chequeo de ASCII -- si se construyera
+    con dígitos repetidos, el test pasaría igual sin el arreglo, porque lo
+    voltearía el verificador, y no probaría nada."""
+    tabla = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+    candidato = cedula_valida(828).translate(tabla)
+
+    # La trampa, afirmada: todo lo demás cierra.
+    assert len(candidato) == 10 and candidato.isdigit() is True
+    assert int(candidato[:2]) == 17
+    assert digito_verificador_cedula(candidato[:9]) == int(candidato[9])
+
+    assert es_cedula_valida(candidato) is False

@@ -448,28 +448,35 @@ class Persona(Base):
         # anteponer. Verificado en `tests/test_indices_consultas_reales.py`.
         Index("ix_persona_fecha_registro", "fecha_registro"),
         # Issue #828, segunda capa: la FORMA de la identidad también vive en
-        # la base, para que ni el SQL crudo la esquive. Los tres constraints
-        # los crea la migración `f1a7ident828`; los de teléfono nacen ahí
-        # como `NOT VALID` (una fila legacy de bootstrap con `0000000000` en
-        # staging haría abortar el deploy), matiz que `CheckConstraint` no
-        # sabe expresar y que por eso vive en la migración.
+        # la base, para que ni el SQL crudo la esquive. Los crea la migración
+        # `f1a7ident828`, ya VALIDADOS.
         _check_identidad(
             f"cedula ~ '{_RE_CEDULA_FORMA}'",
             "ck_persona_cedula_forma",
-        ),
-        # El `IS NULL` sobra acá (`telefono` es NOT NULL) y se deja igual: las
-        # tres columnas de teléfono usan la MISMA plantilla, en el modelo y en
-        # la migración, para que la regla no se bifurque por columna.
-        _check_identidad(
-            "telefono IS NULL OR telefono = '' "
-            f"OR telefono ~ '{_RE_TELEFONO_FORMA}'",
-            "ck_persona_telefono_forma",
         ),
         _check_identidad(
             "telefono_contacto IS NULL OR telefono_contacto = '' "
             f"OR telefono_contacto ~ '{_RE_TELEFONO_FORMA}'",
             "ck_persona_telefono_contacto_forma",
         ),
+        # AUSENTE A PROPÓSITO: `persona.telefono` NO lleva CheckConstraint.
+        # Staging tiene una fila de bootstrap con `telefono = '0000000000'`
+        # (el default del `crear_primer_admin.py` anterior a este cambio), y
+        # Postgres reevalúa un CHECK contra la fila NUEVA COMPLETA en cada
+        # UPDATE: con el constraint puesto, cambiarle el nombre o el `activo`
+        # a ese administrador tira `IntegrityError` -> HTTP 500, y la fila
+        # queda congelada contra toda escritura. `NOT VALID` no lo evita:
+        # solo saltea el recorrido inicial de la tabla.
+        # Esta columna queda con su garantía en el `@validates` de abajo y
+        # sin ninguna en la base. Es asimétrico respecto de las otras dos
+        # columnas de teléfono, y es deliberado.
+        # Cómo se cierra: cuando alguien aporte el teléfono real del
+        # administrador y esa fila se corrija, una migración posterior puede
+        # agregar `ck_persona_telefono_forma` ya validado, y acá su
+        # `_check_identidad`. Candados:
+        # `test_migracion_identidad_forma.py::
+        # test_la_fila_legacy_sigue_siendo_editable_en_sus_otros_campos` y
+        # `test_persona_telefono_no_tiene_ningun_check_en_la_base`.
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -538,12 +545,28 @@ class Persona(Base):
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="persona")
 
     # --- Invariantes de identidad (issue #828) ---
-    # Se disparan en CUALQUIER asignación de atributo del ORM: constructor,
-    # `setattr` genérico de `PersonaRepositorio.actualizar()`, seeds y
-    # scripts. No se disparan al CARGAR una fila existente, así que la fila
-    # legacy de staging con teléfono `0000000000` se sigue pudiendo leer y
-    # editar en sus otros campos (ver el docstring de la migración
-    # `f1a7ident828`).
+    # QUÉ CUBREN: la asignación de atributo sobre una INSTANCIA mapeada --
+    # constructor, `setattr` genérico de `PersonaRepositorio.actualizar()`,
+    # seeds y scripts. Es el camino por el que escribe todo el código de la
+    # app hoy.
+    #
+    # QUÉ NO CUBREN: SQLAlchemy saltea `@validates` en todo lo que no pase
+    # por el atributo de la instancia. Esta lista no es teórica, es el
+    # contrato del ORM: `session.execute(insert(Persona), [...])` y demás
+    # INSERTs masivos por Core, `bulk_insert_mappings`, `bulk_save_objects`,
+    # `Query.update()` / `session.execute(update(Persona))`, y
+    # `merge(..., load=False)`. `session.merge()` con su `load=True` por
+    # defecto SÍ los dispara, porque asigna atributo por atributo.
+    # Un relevamiento de `app/` y `scripts/` no encontró ni un solo uso de
+    # esas APIs, así que el hueco hoy es teórico -- pero es un hueco, y la
+    # próxima escritura masiva que alguien agregue lo abre sin avisar. La
+    # red bajo ese caso es el CHECK de la base (migración `f1a7ident828`),
+    # que cubre la FORMA, salvo en `persona.telefono`, que no tiene
+    # constraint (ver el docstring de esa migración: un CHECK ahí congelaría
+    # la fila de bootstrap de staging).
+    #
+    # Tampoco se disparan al CARGAR una fila existente, así que la fila
+    # legacy de staging con teléfono `0000000000` se sigue leyendo bien.
     @validates("cedula")
     def _validar_cedula(self, key: str, value):
         return _exigir_cedula_valida(value)
@@ -1734,7 +1757,10 @@ class FichaMedica(Base):
     __tablename__ = "ficha_medica"
     __table_args__ = (
         # Issue #828: mismo criterio que `persona.telefono_contacto`. Creado
-        # `NOT VALID` por `f1a7ident828` -- ver el docstring de esa migración.
+        # VALIDADO por `f1a7ident828`: staging tiene ocho filas no nulas acá
+        # y las ocho son válidas, QA no tiene ninguna, así que validar no
+        # aborta el deploy ni congela ninguna fila -- ver el docstring de esa
+        # migración.
         _check_identidad(
             "telefono_emergencia IS NULL OR telefono_emergencia = '' "
             f"OR telefono_emergencia ~ '{_RE_TELEFONO_FORMA}'",
