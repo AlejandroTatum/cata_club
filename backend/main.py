@@ -382,14 +382,18 @@ def _verificar_redis() -> bool:
         return False
 
 
-@app.get("/health/ready", tags=["Salud"])
-async def salud_lista():
-    """Sonda de readiness: sin `Depends` (ni autenticación ni sesión de
-    negocio) a propósito -- es un guardia estructural espejo del que tiene
-    `/health`. Los dos chequeos son bloqueantes por naturaleza (ambos
-    drivers son síncronos), así que corren en el threadpool vía
-    `asyncio.to_thread` y se combinan con `gather` para no serializar el
-    peor caso de cada uno sobre el event loop.
+async def _evaluar_readiness() -> tuple[int, list[str]]:
+    """Núcleo compartido por los dos handlers de /health/ready (GET y HEAD).
+    Devuelve `(código, caídas)`: el código de estado que corresponde y la
+    lista de dependencias que no respondieron -- vacía cuando todo está
+    listo. Que el código salga de acá y no de cada handler es lo que
+    garantiza que HEAD nunca pueda discrepar con GET sobre si el servicio
+    está listo; lo único que los diferencia es el cuerpo.
+
+    Los dos chequeos son bloqueantes por naturaleza (ambos drivers son
+    síncronos), así que corren en el threadpool vía `asyncio.to_thread` y se
+    combinan con `gather` para no serializar el peor caso de cada uno sobre
+    el event loop.
 
     Ninguna excepción puede escapar como 500 por triple capa: cada
     verificador ya captura `Exception` y devuelve `bool`; `gather(...,
@@ -405,18 +409,50 @@ async def salud_lista():
     )
     postgres_ok, redis_ok = (resultado is True for resultado in resultados)
 
-    if postgres_ok and redis_ok:
-        return {"estado": "listo", "postgres": "ok", "redis": "ok"}
-
     caidas = [
         nombre
         for nombre, ok in (("postgres", postgres_ok), ("redis", redis_ok))
         if not ok
     ]
+    codigo = (
+        status.HTTP_200_OK if not caidas else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+    return codigo, caidas
+
+
+@app.get("/health/ready", tags=["Salud"])
+async def salud_lista():
+    """Sonda de readiness: sin `Depends` (ni autenticación ni sesión de
+    negocio) a propósito -- es un guardia estructural espejo del que tiene
+    `/health`. La evaluación en sí vive en `_evaluar_readiness`, compartida
+    con el handler HEAD de abajo; acá solo se traduce a cuerpo JSON.
+    """
+    codigo, caidas = await _evaluar_readiness()
+
+    if not caidas:
+        return {"estado": "listo", "postgres": "ok", "redis": "ok"}
+
     return _respuesta_error(
-        status.HTTP_503_SERVICE_UNAVAILABLE,
+        codigo,
         f"Dependencias no disponibles: {', '.join(caidas)}.",
     )
+
+
+# HEAD va declarado a mano porque FastAPI NO lo deriva del GET: `APIRoute`
+# arma `self.methods` únicamente con los métodos declarados, a diferencia del
+# `Route` pelado de Starlette, que sí agrega HEAD a toda ruta GET. Sin este
+# handler, `HEAD /health/ready` es un `405 Allow: GET` (issue #862), y el plan
+# gratuito de UptimeRobot sondea con HEAD -- elegir GET es un control pago.
+# Dos handlers explícitos en vez de `methods=["GET", "HEAD"]` en uno solo para
+# que el esquema OpenAPI del GET quede intacto (de ahí el
+# `include_in_schema=False`), y sin `Depends`, igual que su par.
+@app.head("/health/ready", tags=["Salud"], include_in_schema=False)
+async def salud_lista_head():
+    """Mismo veredicto que `salud_lista` (mismo `_evaluar_readiness`, mismo
+    código de estado) pero sin cuerpo, como manda HTTP para HEAD: `Response`
+    sin contenido responde con `Content-Length: 0` y sin `Content-Type`."""
+    codigo, _ = await _evaluar_readiness()
+    return Response(status_code=codigo)
 
 
 # --- Diagnóstico de circuit breakers -------------------------------------
