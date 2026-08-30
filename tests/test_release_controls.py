@@ -454,7 +454,23 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
             '        printf \'%s\' "$registros"\n'
             '      fi\n'
             '    fi ;;\n'
-            '  *" --format json "*) printf "%s\\n" "{\\\"services\\\":{\\\"backend\\\":{\\\"image\\\":\\\"registry.example/cata-backend:${IMAGE_TAG}\\\"}}}" ;;\n'
+            # Issue #851: hace falta poder envenenar la resolución de la imagen
+            # a partir de UNA llamada concreta, porque
+            # `preflight-production.sh` resuelve la misma imagen con el mismo
+            # comando justo antes que `check_remote_image` y lo taparía. Cada
+            # invocación lleva su número en `$COMPOSE_JSON_CONTADOR`; sin
+            # `COMPOSE_JSON_ENVENENADO` la respuesta es la de siempre, así que
+            # el resto de la suite no se entera.
+            '  *" --format json "*)\n'
+            '    llamada=0\n'
+            '    if [ -f "$COMPOSE_JSON_CONTADOR" ]; then read -r llamada < "$COMPOSE_JSON_CONTADOR"; fi\n'
+            '    llamada=$((llamada + 1))\n'
+            '    printf \'%s\' "$llamada" > "$COMPOSE_JSON_CONTADOR"\n'
+            '    if [ -n "${COMPOSE_JSON_ENVENENADO:-}" ] && [ "$llamada" -ge "${COMPOSE_JSON_DESDE_LLAMADA:-1}" ]; then\n'
+            '      printf \'%s\\n\' "$COMPOSE_JSON_ENVENENADO"\n'
+            '    else\n'
+            '      printf \'%s\\n\' "{\\"services\\":{\\"backend\\":{\\"image\\":\\"registry.example/cata-backend:${IMAGE_TAG}\\"}}}"\n'
+            '    fi ;;\n'
             '  *" --images backend "*) if [ "${REALISTIC_COMPOSE_OUTPUT:-0}" = "1" ]; then printf "%s\\n" "postgres:16" "redis:7" "registry.example/cata-backend:${IMAGE_TAG}"; else echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi; fi ;;\n'
         # `caddy validate` en un contenedor descartable (issue #849).
         # `CADDY_VALIDATE_FAILS=1` reproduce un Caddyfile inválido: el deploy
@@ -501,6 +517,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "IMAGE_TAG": "abcdef1",
         "MIGRATION_COMPATIBILITY": "none",
         "DOCKER_LOG": str(docker_log),
+        "COMPOSE_JSON_CONTADOR": str(tmp_path / "config-json.contador"),
         "DB_RUNNING": "1" if db_running else "0",
         # El backup pre-deploy cifra: sin destinatario configurado, deploy
         # aborta a propósito (ver test_deploy_aborta_si_el_backup_no_puede_cifrar).
@@ -2225,3 +2242,165 @@ def test_el_subcomando_checks_tambien_prueba_el_borde_publico(tmp_path):
 
     assert result.returncode != 0, result.stdout
     assert "/health/ready no responde JSON por el borde público" in result.stderr
+
+
+# --- Salto de línea REAL en la imagen resuelta (issue #851) ------------------
+# `configured_backend_image` filtraba con `"\\n" in image` dentro de una cadena
+# de shell entre comillas SIMPLES: bash no toca esos backslashes, así que
+# python recibía `"\\n"` -- dos caracteres, backslash y `n` -- y no un salto de
+# línea. Un LF de verdad pasaba entero. `preflight-production.sh:126` y
+# `record-release.sh` ya usaban el `"\n"` correcto.
+#
+# En estos JSON el `\n` es la SECUENCIA DE ESCAPE de JSON (en el fuente python
+# se escribe `\\n` para que el documento lleve backslash+n): al parsearlo,
+# `image` queda con un salto de línea REAL. Es la misma construcción que usan
+# los tests de resolución del preflight.
+_JSON_IMAGEN_CON_LF_REAL = (
+    '{"services":{"backend":{"image":"registry.example/cata-backend:abcdef1'
+    '\\nregistry.example/otra:abcdef1"}}}'
+)
+_JSON_IMAGEN_CON_CR_REAL = (
+    '{"services":{"backend":{"image":"registry.example/cata-backend:abcdef1'
+    '\\rregistry.example/otra:abcdef1"}}}'
+)
+# Termina en `:abcdef1`, así que el `case` viejo lo daba por bueno por el arm
+# del tag además de por el arm del salto de línea.
+_JSON_IMAGEN_CON_LF_QUE_TERMINA_EN_EL_TAG = (
+    '{"services":{"backend":{"image":"registry.example/otra:abcdef1'
+    '\\nregistry.example/cata-backend:abcdef1"}}}'
+)
+
+# `check_remote_image` es el SEGUNDO portón: `preflight-production.sh` resuelve
+# la misma imagen con el mismo comando inmediatamente antes y, como su filtro sí
+# estaba bien, taparía cualquier veneno servido desde la primera llamada. Por
+# eso el veneno entra recién en la llamada 2 (medido: con la base abajo el
+# preflight resuelve una sola vez), y cada test afirma que el preflight pasó --
+# si el veneno lo alcanzara, no habría `Preflight OK` y el test se caería en vez
+# de aprobar por el motivo equivocado.
+_LLAMADA_DE_CHECK_REMOTE_IMAGE = "2"
+
+
+def _deploy_env_con_imagen_envenenada(tmp_path, compose_json: str):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["COMPOSE_JSON_ENVENENADO"] = compose_json
+    env["COMPOSE_JSON_DESDE_LLAMADA"] = _LLAMADA_DE_CHECK_REMOTE_IMAGE
+    return env, docker_log
+
+
+def _manifiestos_consultados(docker_log: Path) -> list[str]:
+    return [l for l in docker_log.read_text().splitlines() if "manifest inspect" in l]
+
+
+def test_el_deploy_rechaza_una_imagen_con_un_salto_de_linea_real(tmp_path):
+    """El filtro comparaba contra un backslash-n literal, así que un LF de
+    verdad viajaba entero hasta `docker manifest inspect`, que moría con
+    `invalid reference format` -- y el operador leía "no se encontró la imagen
+    configurada", que apunta al registro y no al render de Compose."""
+    env, docker_log = _deploy_env_con_imagen_envenenada(tmp_path, _JSON_IMAGEN_CON_LF_REAL)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert "Preflight OK" in result.stdout, (
+        "el veneno alcanzó al preflight: este test dejó de medir check_remote_image"
+    )
+    assert result.returncode == 1
+    assert "Compose no resolvió exactamente una imagen para backend" in result.stderr
+    assert "no se encontró la imagen configurada" not in result.stderr
+    assert _manifiestos_consultados(docker_log) == [], (
+        "la referencia multilínea llegó a docker manifest inspect"
+    )
+
+
+def test_el_deploy_rechaza_una_imagen_con_un_retorno_de_carro_real(tmp_path):
+    """Mismo defecto en el filtro de `\\r`: un CR parte la referencia igual que
+    un LF y ningún portón lo veía."""
+    env, docker_log = _deploy_env_con_imagen_envenenada(tmp_path, _JSON_IMAGEN_CON_CR_REAL)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert "Preflight OK" in result.stdout, (
+        "el veneno alcanzó al preflight: este test dejó de medir check_remote_image"
+    )
+    assert result.returncode == 1
+    assert "Compose no resolvió exactamente una imagen para backend" in result.stderr
+    assert _manifiestos_consultados(docker_log) == [], (
+        "la referencia con CR llegó a docker manifest inspect"
+    )
+
+
+def test_el_deploy_rechaza_un_salto_de_linea_aunque_el_bloque_termine_en_el_tag(tmp_path):
+    """El `case` viejo comparaba el tag contra el FINAL del bloque, así que un
+    bloque de dos referencias cuya última línea termina en `:abcdef1` pasaba
+    por el arm del tag además de por el del salto de línea. Con una sola
+    referencia, el bloque entero se rechaza antes de comparar nada."""
+    env, docker_log = _deploy_env_con_imagen_envenenada(
+        tmp_path, _JSON_IMAGEN_CON_LF_QUE_TERMINA_EN_EL_TAG
+    )
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert "Preflight OK" in result.stdout, (
+        "el veneno alcanzó al preflight: este test dejó de medir check_remote_image"
+    )
+    assert result.returncode == 1
+    assert "Compose no resolvió exactamente una imagen para backend" in result.stderr
+    assert _manifiestos_consultados(docker_log) == []
+
+
+@pytest.mark.parametrize(
+    "compose_json",
+    [
+        pytest.param('{"services":{"db":{"image":"postgres:16-alpine"}}}', id="sin-backend"),
+        pytest.param('{"services":{"backend":{}}}', id="sin-clave-image"),
+        pytest.param('{"services":{"backend":{"image":""}}}', id="imagen-vacia"),
+        pytest.param("esto-no-es-json{{{", id="json-invalido"),
+    ],
+)
+def test_el_deploy_muere_con_el_mensaje_de_resolucion_si_no_hay_imagen(tmp_path, compose_json):
+    """Una imagen irresoluble tiene que nombrar el render de Compose, no el
+    registro: el `case` viejo dejaba pasar la cadena vacía y el operador
+    terminaba leyendo "no se encontró la imagen configurada" o el mensaje del
+    tag, los dos apuntando al lugar equivocado."""
+    env, docker_log = _deploy_env_con_imagen_envenenada(tmp_path, compose_json)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert "Preflight OK" in result.stdout, (
+        "el veneno alcanzó al preflight: este test dejó de medir check_remote_image"
+    )
+    assert result.returncode == 1
+    assert "Compose no resolvió exactamente una imagen para backend" in result.stderr
+    assert "no usa IMAGE_TAG" not in result.stderr
+    assert "no se encontró la imagen configurada" not in result.stderr
+    assert _manifiestos_consultados(docker_log) == []
+
+
+def test_el_deploy_sigue_muriendo_con_el_mensaje_del_tag_si_el_tag_no_coincide(tmp_path):
+    """El otro camino no se toca: una referencia única y bien formada con otro
+    SHA sigue muriendo por el tag, no por la resolución."""
+    env, docker_log = _deploy_env_con_imagen_envenenada(
+        tmp_path, '{"services":{"backend":{"image":"registry.example/cata-backend:deadbee"}}}'
+    )
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert "Preflight OK" in result.stdout, (
+        "el veneno alcanzó al preflight: este test dejó de medir check_remote_image"
+    )
+    assert result.returncode == 1
+    assert "no usa IMAGE_TAG=abcdef1" in result.stderr
+    assert "no resolvió exactamente una imagen" not in result.stderr
+    assert _manifiestos_consultados(docker_log) == []
+
+
+def test_una_imagen_unica_y_valida_sigue_llegando_al_manifiesto(tmp_path):
+    """El camino sano no cambia: se resuelve una sola referencia, se consulta
+    su manifiesto y el deploy sigue."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _manifiestos_consultados(docker_log) == [
+        "manifest inspect registry.example/cata-backend:abcdef1"
+    ]
