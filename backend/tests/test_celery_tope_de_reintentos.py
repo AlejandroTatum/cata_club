@@ -23,9 +23,6 @@ autorreintento — `add_autoretry_behaviour` termina en
 tope real es otro. Reintroduciría, en otra forma, exactamente el problema que
 este candado existe para impedir: declarar una cosa y hacer otra.
 """
-import ast
-from pathlib import Path
-
 import pytest
 from celery.app.task import Task
 
@@ -35,10 +32,7 @@ from app.infraestructura.tareas.comprobante_tareas import (
     reconciliar_comprobantes_faltantes,
 )
 from app.infraestructura.tareas.vencimientos_tareas import marcar_membresias_vencidas
-
-_DIRECTORIO_DE_TAREAS = (
-    Path(__file__).resolve().parent.parent / "app" / "infraestructura" / "tareas"
-)
+from tests.arnes_celery_tareas import archivos_de_tareas, kwargs_de_decoradores_de_tarea
 
 # Tope declarado por cada tarea. `generar_comprobante_pdf_tarea` es la única
 # que pide más que el default: es la que sube el PDF a Cloudinary, o sea la que
@@ -75,28 +69,6 @@ def _opciones_validas() -> frozenset[str]:
     return frozenset(dir(Task)) | _OPCIONES_DEL_DECORADOR | _OPCIONES_DE_AUTORETRY
 
 
-def _decoradores_de_tarea(ruta: Path):
-    """Devuelve (nombre_de_la_funcion, linea, {kwargs}) por cada función
-    decorada con `@celery_app.task(...)` en el archivo."""
-    arbol = ast.parse(ruta.read_text(encoding="utf-8"))
-    for nodo in ast.walk(arbol):
-        if not isinstance(nodo, ast.FunctionDef):
-            continue
-        for decorador in nodo.decorator_list:
-            if not isinstance(decorador, ast.Call):
-                continue
-            objetivo = decorador.func
-            if not (
-                isinstance(objetivo, ast.Attribute)
-                and objetivo.attr == "task"
-                and isinstance(objetivo.value, ast.Name)
-                and objetivo.value.id == "celery_app"
-            ):
-                continue
-            claves = {kw.arg for kw in decorador.keywords if kw.arg is not None}
-            yield nodo.name, decorador.lineno, claves
-
-
 @pytest.mark.parametrize(
     "tarea, tope",
     _TOPE_ESPERADO,
@@ -119,12 +91,9 @@ def test_ningun_decorador_usa_una_opcion_que_celery_ignora():
     validas = _opciones_validas()
     violaciones = []
 
-    archivos = sorted(_DIRECTORIO_DE_TAREAS.glob("*_tareas.py"))
-    assert archivos, f"No se encontró ninguna tarea en {_DIRECTORIO_DE_TAREAS}"
-
-    for ruta in archivos:
-        for nombre, linea, claves in _decoradores_de_tarea(ruta):
-            for clave in sorted(claves - validas):
+    for ruta in archivos_de_tareas():
+        for nombre, linea, valores in kwargs_de_decoradores_de_tarea(ruta):
+            for clave in sorted(valores.keys() - validas):
                 violaciones.append(f"{ruta.name}:{linea} {nombre}() -> {clave}")
 
     assert not violaciones, (

@@ -31,6 +31,24 @@ celery_app.conf.update(
     broker_url=settings.broker_url_efectivo,
     result_backend=settings.result_backend_efectivo,
     result_expires=settings.celery_result_expira_segundos,
+    # Issue #840. Nadie lee los resultados: no hay un solo `AsyncResult`,
+    # `.ready()` ni `.get()` en el repositorio, y las cinco publicaciones
+    # descartan el handle. Aun así cada corrida dejaba en Redis una clave
+    # `celery-task-meta-*` viva 24 h; con el beat despachando cada minuto son
+    # ~1440 objetos por día disputándole memoria a la cola de trabajo dentro
+    # del tope de 64 MB de producción (`docker-compose.prod.yml`), que es lo
+    # único que ahí hace falta guardar. Con esto Celery ni siquiera las
+    # escribe, y como `task_store_errors_even_if_ignored` es False por
+    # defecto, tampoco guarda los fallos.
+    #
+    # El backend SIGUE configurado a propósito, y no es un descuido: es lo que
+    # deja abierta la salida de emergencia de poner `ignore_result=False` en
+    # una tarea puntual el día que alguien de verdad necesite leer su
+    # resultado — sin backend ese kwarg no tiene dónde escribir. Por lo mismo
+    # `result_expires` de arriba NO es código muerto: hoy gobierna un conjunto
+    # vacío, pero sigue siendo el TTL que le aplicaría a cualquier tarea que
+    # se reactive así.
+    task_ignore_result=True,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
