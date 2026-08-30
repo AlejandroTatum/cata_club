@@ -68,7 +68,15 @@ def _clasificar_rutas():
     roles_requeridos = {}
 
     for ruta in _rutas_declaradas():
-        metodos = sorted(ruta.methods - {"HEAD", "OPTIONS"})
+        # HEAD y OPTIONS se descartan porque normalmente son metodos derivados
+        # de un GET real, no rutas propias. El `or` cubre el caso contrario
+        # (issue #862): `HEAD /health/ready` es una ruta DECLARADA aparte
+        # -- FastAPI no deriva HEAD del GET -- y descartarla dejaria un handler
+        # anonimo fuera de esta clasificacion, que es justo lo que este
+        # guardia existe para impedir.
+        metodos = sorted(ruta.methods - {"HEAD", "OPTIONS"}) or sorted(
+            ruta.methods - {"OPTIONS"}
+        )
         assert len(metodos) == 1, (
             f"Ruta con multiples metodos HTTP reales, este guardia asume "
             f"uno solo por ruta: {ruta.path} -> {metodos}"
@@ -112,6 +120,10 @@ RUTAS_PUBLICAS = {
                                # de la que depende autenticar. No expone dato
                                # alguno mas alla del estado up/down de cada
                                # dependencia.
+    ("HEAD", "/health/ready"),  # issue #862: mismo endpoint, handler declarado
+                                # aparte porque FastAPI no deriva HEAD del GET.
+                                # Anonimo por identico motivo, y ademas mudo:
+                                # responde 200/503 sin cuerpo.
     ("GET", "/personas/instituciones"),
     ("GET", "/membresias/tarifas"),  # issue #394/#331: mitad pública del catálogo
                                       # de tarifas, misma clase que /personas/instituciones.

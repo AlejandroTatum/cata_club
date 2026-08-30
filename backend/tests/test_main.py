@@ -234,9 +234,16 @@ def test_health_ready_no_declara_ninguna_dependencia():
     """Guardia estructural, espejo de `test_health_no_declara_ninguna_
     dependencia`: /health/ready tampoco depende de `obtener_sesion` ni de
     autenticación -- las verificaciones de Postgres/Redis las hace el propio
-    endpoint con clientes de sonda dedicados, no vía `Depends`."""
-    ruta = next(r for r in app.routes if getattr(r, "path", None) == "/health/ready")
-    assert ruta.dependant.dependencies == []
+    endpoint con clientes de sonda dedicados, no vía `Depends`.
+
+    Se afirma sobre TODAS las rutas de ese path y no sobre la primera que
+    aparezca: desde el issue #862 son dos (GET y HEAD), y un `next(...)`
+    dejaría a la segunda sin guardia alguno."""
+    rutas = [r for r in app.routes if getattr(r, "path", None) == "/health/ready"]
+
+    assert {metodo for ruta in rutas for metodo in ruta.methods} == {"GET", "HEAD"}
+    for ruta in rutas:
+        assert ruta.dependant.dependencies == [], sorted(ruta.methods)
 
 
 def test_health_ready_responde_200_cuando_ambas_dependencias_estan_sanas(monkeypatch):
@@ -248,6 +255,61 @@ def test_health_ready_responde_200_cuando_ambas_dependencias_estan_sanas(monkeyp
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"estado": "listo", "postgres": "ok", "redis": "ok"}
+
+
+def test_head_health_ready_responde_200_cuando_ambas_dependencias_estan_sanas(monkeypatch):
+    """UptimeRobot en plan gratuito sondea con HEAD (elegir GET es un control
+    pago), así que el mismo path tiene que contestar por los dos métodos.
+    FastAPI no lo deriva solo: `APIRoute` arma `methods` únicamente con lo
+    declarado y, a diferencia del `Route` pelado de Starlette, no agrega HEAD
+    a las rutas GET -- sin un handler explícito esto es un `405 Allow: GET`."""
+    monkeypatch.setattr(main, "_verificar_postgres", lambda: True)
+    monkeypatch.setattr(main, "_verificar_redis", lambda: True)
+
+    with TestClient(app) as cliente:
+        respuesta = cliente.head("/health/ready")
+
+    assert respuesta.status_code == 200
+    # `content` es condición necesaria pero NO suficiente: el transporte ASGI
+    # de `TestClient` descarta el cuerpo de toda respuesta a un HEAD, así que
+    # `content == b""` también pasaría con un handler que devolviera JSON
+    # (verificado contra un handler HEAD que devuelve un dict: content b'',
+    # content-length '14'). Lo que muerde de verdad es `content-length`, que
+    # el propio `Response` calcula sobre el cuerpo real.
+    assert respuesta.content == b""
+    assert respuesta.headers["content-length"] == "0"
+
+
+def test_head_health_ready_responde_503_sin_cuerpo_cuando_una_dependencia_esta_caida(
+    monkeypatch,
+):
+    """Contrapartida de `test_health_ready_responde_503_cuando_postgres_esta_
+    caida`: HEAD tiene que dar el MISMO veredicto que GET (503) pero sin
+    cuerpo -- ni el JSON de `_respuesta_error` ni los nombres de las
+    dependencias caídas."""
+    monkeypatch.setattr(main, "_verificar_postgres", lambda: False)
+    monkeypatch.setattr(main, "_verificar_redis", lambda: True)
+
+    with TestClient(app) as cliente:
+        respuesta = cliente.head("/health/ready")
+
+    assert respuesta.status_code == 503
+    assert respuesta.content == b""
+    assert respuesta.headers["content-length"] == "0"
+
+
+def test_head_health_ready_responde_sin_autenticacion_ni_overrides(
+    client_sin_token, monkeypatch
+):
+    """Espejo de `test_health_ready_responde_sin_autenticacion_ni_overrides`
+    para HEAD: el handler nuevo tampoco declara `Depends` de autenticación,
+    así que un cliente sin token no puede comerse un 401 ni un 403."""
+    monkeypatch.setattr(main, "_verificar_postgres", lambda: True)
+    monkeypatch.setattr(main, "_verificar_redis", lambda: True)
+
+    respuesta = client_sin_token.head("/health/ready")
+
+    assert respuesta.status_code not in (401, 403)
 
 
 def test_health_ready_responde_sin_autenticacion_ni_overrides(client_sin_token, monkeypatch):

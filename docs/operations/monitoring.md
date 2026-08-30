@@ -27,6 +27,11 @@ La respuesta es anónima y deliberadamente muda: `200` con `{"estado": "listo"}`
 si Postgres y Redis contestan, `503` si no, sin decir cuál se cayó. Un
 desconocido no aprende de qué dependencia depende el sistema.
 
+El endpoint contesta por GET y por HEAD, con el mismo veredicto (HEAD no
+devuelve cuerpo). El HEAD existe porque el plan gratuito de UptimeRobot sondea
+con ese método y elegirlo es un control pago: sin un handler propio la sonda
+recibía `405` (issue #862), porque FastAPI no deriva HEAD del GET.
+
 ### 2. Heartbeat del backup (¿el backup sigue vivo?)
 
 Un monitor tipo *heartbeat* (dead-man's-switch) con período de 24 h y tolerancia
