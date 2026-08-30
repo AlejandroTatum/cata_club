@@ -6,6 +6,7 @@ from app.dominio.enums import TipoNotificacion
 from app.dominio.modelos import EnrollmentNotificacionOutbox, Notificacion
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.repositorios.enrollment_notificacion_outbox_repositorio import EnrollmentNotificacionOutboxRepositorio
+from app.infraestructura.tareas import outbox_despacho
 from app.infraestructura.tareas.celery_app import celery_app
 
 logger = logging.getLogger("cataclub.tareas.enrollment_notificacion")
@@ -13,10 +14,26 @@ logger = logging.getLogger("cataclub.tareas.enrollment_notificacion")
 
 @celery_app.task(name="app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones")
 def despachar_inscripcion_notificaciones():
+    """Reclama hasta un lote de avisos y publica la entrega de cada uno.
+
+    El bucle se conserva acá en vez de delegar en
+    `outbox_despacho.reclamar_y_publicar` (issue #841): esta cola ATRAPA el
+    fallo de `.delay`, lo loguea y CONTINÚA, mientras que el helper lo deja
+    escapar y corta la corrida. Son dos decisiones distintas frente a un
+    broker caído, y unificarlas cambiaría el comportamiento de una de las dos
+    sin que nada lo pidiera. Lo que sí se comparte es el techo del lote, que
+    es un número, no una semántica.
+
+    Ese techo importa especialmente acá: al tragarse el fallo, un broker caído
+    hacía que esta corrida recorriera la tabla ENTERA gastando un intento por
+    fila -- de los seis que hay antes de `AGOTADO` -- sin entregar ninguna.
+    Ahora quema como mucho un lote por tick.
+    """
+    tope = outbox_despacho.tope_de_lote()
     reclamadas = 0
     with SessionLocal() as db:
         repo = EnrollmentNotificacionOutboxRepositorio(db)
-        while True:
+        while reclamadas < tope:
             event = repo.claim_pending()
             if not event:
                 break
@@ -26,7 +43,7 @@ def despachar_inscripcion_notificaciones():
             except Exception as exc:
                 logger.warning("No se pudo encolar la entrega %s: %s", event.id, type(exc).__name__)
             reclamadas += 1
-    return {"reclamadas": reclamadas}
+    return outbox_despacho.resultado_de_despacho(reclamadas, tope)
 
 
 @celery_app.task(name="app.infraestructura.tareas.enrollment_notificacion_tareas.entregar_inscripcion_notificacion")

@@ -176,7 +176,14 @@ def test_una_fila_pendiente_termina_en_un_correo_enviado(
         resultado = despachar_recuperaciones_pendientes()
         remitente, destinatario, mensaje = _mensaje_enviado(smtp_cls)
 
-    assert resultado == {"reclamadas": 1}
+    # Issue #841: la corrida reporta además el techo del lote y si lo tocó.
+    # El techo se lee de `settings` y no como literal para que este test siga
+    # midiendo la única fila que sembró, no el default vigente.
+    assert resultado == {
+        "reclamadas": 1,
+        "tope": settings.celery_outbox_lote_maximo,
+        "tope_alcanzado": False,
+    }
     assert destinatario == "puntaapunta@x.com"
     assert remitente == settings.smtp_from
     assert mensaje["To"] == "puntaapunta@x.com"

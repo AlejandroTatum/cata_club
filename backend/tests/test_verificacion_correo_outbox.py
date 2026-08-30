@@ -279,7 +279,12 @@ def test_una_fila_pendiente_termina_en_un_correo_con_el_enlace(
     with patch(
         "app.infraestructura.notificaciones_servicio.smtplib.SMTP", MagicMock()
     ) as smtp_cls:
-        assert despachar_verificaciones_pendientes() == {"reclamadas": 1}
+        # Issue #841: la corrida reporta además el techo del lote y si lo tocó.
+        assert despachar_verificaciones_pendientes() == {
+            "reclamadas": 1,
+            "tope": settings.celery_outbox_lote_maximo,
+            "tope_alcanzado": False,
+        }
 
     _, destinatario, mensaje = arnes.mensaje_enviado(smtp_cls)
     assert destinatario == cuenta.correo
