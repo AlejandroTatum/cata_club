@@ -26,7 +26,6 @@ import os
 import shlex
 import shutil
 import subprocess
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -61,12 +60,14 @@ if [ "${FAKE_AWS_LEAK:-0}" = "1" ]; then
     "${AWS_SECRET_ACCESS_KEY:-}" >&2
 fi
 
-sub=""; cuerpo=""; previo=""
+sub=""; cuerpo=""; clave=""; prefijo=""; previo=""
 for a in "$@"; do
   case "$a" in
     put-object|head-object|list-objects-v2) [ -z "$sub" ] && sub="$a" ;;
   esac
   [ "$previo" = "--body" ] && cuerpo="$a"
+  [ "$previo" = "--key" ] && clave="$a"
+  [ "$previo" = "--prefix" ] && prefijo="$a"
   previo="$a"
 done
 
@@ -77,6 +78,7 @@ case "$sub" in
     [ "$rc" -eq 0 ] || { echo "An error occurred (InvalidAccessKeyId)" >&2; exit "$rc"; }
     wc -c < "$cuerpo" | tr -d ' ' > "${FAKE_AWS_STATE}.size"
     sha256sum "$cuerpo" | cut -d' ' -f1 > "${FAKE_AWS_STATE}.sha"
+    printf '%s' "$clave" > "${FAKE_AWS_STATE}.key"
     ;;
   head-object)
     rc="${FAKE_AWS_HEAD_RC:-0}"
@@ -91,7 +93,19 @@ case "$sub" in
   list-objects-v2)
     rc="${FAKE_AWS_LIST_RC:-0}"
     [ "$rc" -eq 0 ] || { echo "An error occurred (AccessDenied)" >&2; exit "$rc"; }
-    printf '%s\n' "${FAKE_AWS_LISTADO-$FAKE_AWS_CLAVE_ESPERADA}"
+    if [ -n "${FAKE_AWS_LISTADO+definida}" ]; then
+      printf '%s\n' "$FAKE_AWS_LISTADO"
+      exit 0
+    fi
+    # El listado devuelve la clave que REALMENTE se subió, y solo si cae bajo
+    # el prefijo consultado. Una constante acá haría que el test dependiera de
+    # la fecha del día (el artefacto lleva `date +%F` en el nombre) y que un
+    # prefijo equivocado pasara igual.
+    subida="$(cat "${FAKE_AWS_STATE}.key" 2>/dev/null || true)"
+    case "$subida" in
+      "$prefijo"*) printf '%s\n' "$subida" ;;
+      *) printf '\n' ;;
+    esac
     ;;
 esac
 exit 0
@@ -158,7 +172,6 @@ def _entorno_b2(tmp_path: Path, **extra: str) -> dict[str, str]:
         "FAKE_AWS_ARGV": str(tmp_path / "argv.log"),
         "FAKE_AWS_ENV": str(tmp_path / "env.log"),
         "FAKE_AWS_STATE": str(tmp_path / "estado"),
-        "FAKE_AWS_CLAVE_ESPERADA": "cataclub/produccion/cataclub_2026-08-29.dump.age",
         "BACKUP_B2_ENABLED": "1",
         "BACKUP_B2_ENDPOINT": "https://s3.us-west-004.backblazeb2.com",
         "BACKUP_B2_REGION": "us-west-004",
@@ -750,7 +763,8 @@ def test_backup_db_con_replicacion_activada_rechaza_un_backup_en_claro(tmp_path)
     assert resultado.returncode != 0, resultado.stdout
     assert _argv(tmp_path) == ""
     # El dump local se escribió; lo que se rechaza es sacarlo del host.
-    assert _artefactos(tmp_path) == [f"cataclub_{date.today().isoformat()}.dump"]
+    escritos = _artefactos(tmp_path)
+    assert len(escritos) == 1 and escritos[0].endswith(".dump"), escritos
 
 
 @requiere_age
