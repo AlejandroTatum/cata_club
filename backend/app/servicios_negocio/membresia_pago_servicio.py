@@ -2317,7 +2317,23 @@ class PagoServicio:
           4b. la firma binaria real coincide con el tipo declarado (400
               OperacionInvalida) -- REQ-SEC-3, sdd/production-readiness
           5. tamaño <= 5 MB (400 OperacionInvalida)
-          6. Subida a Cloudinary (carpeta vouchers) + commit en Pago.
+          6. Subida a Cloudinary (carpeta vouchers), SIN transacción abierta.
+          7. Transacción corta que revalida estado y persiste el public_id.
+
+        Los pasos 6 y 7 están separados por el issue #813: antes la subida
+        corría dentro de la MISMA transacción que abrió la lectura del paso
+        1, así que una conexión del pool quedaba tomada durante toda la
+        transferencia. Ver el comentario extenso en el cuerpo.
+
+        La AUTORIZACIÓN se comprueba antes de la subida y NO se vuelve a
+        comprobar después: la relectura del paso 7 mira estado y existencia,
+        no vínculo ni edad. No hay escalada de privilegio alcanzable
+        (`pago.persona_id` no tiene camino de mutación en la app y la minoría
+        solo se relaja con el tiempo); el único caso vivo es que un
+        administrador desvincule al representante durante la ventana, y
+        entonces la evidencia que ese ex-representante ya había elegido
+        termina adjunta a un pago para el que SÍ estaba autorizado cuando
+        pidió subirla.
 
         Se permite SOBREESCRIBIR un voucher ya existente mientras el pago siga
         PENDIENTE_VALIDACION (el cliente puede corregir una subida errónea).
@@ -2385,16 +2401,112 @@ class PagoServicio:
         if len(contenido) > TAMANO_MAXIMO_VOUCHER_BYTES:
             raise OperacionInvalida("El archivo excede el tamaño máximo de 5MB")
 
-        # 6. Subida a Cloudinary y persistencia en Pago (sobrescribe si ya había).
+        # 6. Subida a Cloudinary, con la transacción ya SOLTADA (issue #813).
+        #
+        # Hasta acá esta petición solo leyó, pero esa lectura ya dejó tomada
+        # una conexión del pool: `SessionLocal` es `autocommit=False`, así
+        # que el primer acceso ORM abre la transacción y la sostiene hasta el
+        # commit. Sostenerla también durante la subida -- hasta 5 MB, acotada
+        # en `TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS` -- significa que 30 subidas
+        # concurrentes (`pool_size=10` + `max_overflow=20`, un solo proceso
+        # de uvicorn) vacían el pool del backend ENTERO, y la espera se
+        # propaga a endpoints que no tienen nada que ver con vouchers.
+        #
+        # `rollback()` devuelve la conexión al pool. No hay nada escrito que
+        # perder, y las seis validaciones de arriba YA corrieron: soltar la
+        # transacción no relaja ni adelanta ningún chequeo. Es la misma forma
+        # que `alertas_tareas.py::_disparar_notificacion_vencimiento` (leer y
+        # deduplicar, soltar, hacer la E/S lenta, y recién entonces una
+        # transacción corta que commitea).
+        #
+        # `public_id` se calcula ANTES a propósito, igual que todo lo que se
+        # necesita después: `rollback()` EXPIRA cada objeto ORM de la sesión,
+        # así que leer un atributo de `pago` a partir de esta línea
+        # dispararía un SELECT de refresco -- o un `ObjectDeletedError` si la
+        # fila ya no está. Los únicos datos que cruzan el corte son
+        # primitivos (`pago_id`, `public_id`, `contenido`, `content_type`).
+        #
+        # PRECONDICIÓN DEL MÉTODO: la sesión que recibe no puede traer
+        # escrituras sin commitear. `self.db` es la sesión de la REQUEST
+        # (`Depends(obtener_sesion)`) y este `rollback()` descarta TODO lo que
+        # esa sesión haya escrito antes de entrar acá, no solo lo de este
+        # método. Hoy se cumple porque nadie compone nada: la única otra
+        # dependencia de esta ruta que toca la base es
+        # `GestorAutenticacion.decodificar_token` (`app/seguridad/
+        # gestor_auth.py`), que solo lee. Para un llamador futuro que escriba
+        # ANTES de llamar acá sería destructivo y SILENCIOSO: no falla, pierde
+        # la escritura. Ese es exactamente el motivo por el que
+        # `alertas_tareas.py` abre su propio `SessionLocal()` en vez de meter
+        # mano en la transacción de un llamador -- si este método alguna vez
+        # necesita componerse con una escritura previa, la salida es esa, no
+        # correr de lugar el `rollback()`.
+        public_id = f"voucher-pago-{pago_id:08d}"
+        self.db.rollback()
+
         from app.infraestructura.cloudinary_cliente import subir_voucher_pago
 
-        public_id = f"voucher-pago-{pago_id:08d}"
         subir_voucher_pago(
             contenido=contenido,
             nombre_publico=public_id,
             content_type=content_type,
             pago_id=pago_id,
         )
+
+        # 7. Transacción CORTA de escritura.
+        #
+        # La fila se RELEE en vez de reusar el objeto expirado: entre el paso
+        # 1 y este punto pasaron hasta 8 s, tiempo de sobra para que un
+        # administrador valide el pago. Ese es el desenlace REAL de la ventana.
+        # La rama del 404 es defensiva contra un camino que HOY NO EXISTE: no
+        # hay ruta DELETE en `membresias_pagos_router.py`, `Pago` no figura en
+        # `eliminacion_segura.py` y el repositorio no expone ningún borrado
+        # (el test que la ejercita fabrica el borrado con SQL crudo). Se
+        # mantiene igual porque si alguna vez aparece ese camino, sin la rama
+        # el fallo sería un `ObjectDeletedError` crudo (500) en vez del 404
+        # que este método ya documenta. Los dos desenlaces responden
+        # exactamente lo mismo que ya respondían los chequeos #2 y #3 (404 y
+        # 400, mismos mensajes); lo único nuevo es la ventana, no la respuesta.
+        #
+        # Qué deja atrás una caída entre la subida y este commit. El
+        # `public_id` es DETERMINISTA, pero eso NO significa lo mismo en los
+        # dos caminos de rechazo, así que va por separado:
+        #
+        #   - Pago que sigue existiendo (rama 400, y también un corte de
+        #     proceso): Cloudinary queda con un objeto en
+        #     `voucher-pago-{id:08d}` que ninguna fila referencia
+        #     (`voucher_url` sigue en NULL si no había voucher previo). Es
+        #     RECUPERABLE: el próximo intento sobre ese mismo pago sube al
+        #     mismo destino y lo pisa.
+        #   - Pago que ya NO existe (rama 404): el id no se reutiliza, así que
+        #     nadie va a volver a subir a ese `public_id` ni a leerlo. Ese
+        #     objeto queda huérfano PARA SIEMPRE. Acá no se compensa con un
+        #     `destroy()`: el borrado tendría que vivir en las dos ramas para
+        #     ser una política y no un parche, y en la rama 400 borrar sería
+        #     PEOR -- si el pago ya tenía un voucher, `voucher_url` apunta a
+        #     ese mismo `public_id` determinista, y el `destroy()` le sacaría a
+        #     la fila superviviente el objeto que todavía dice tener. Limpiar
+        #     el huérfano del 404 pide un barrido aparte, fuera del #813.
+        #
+        # VENTANA CONOCIDA Y NO CERRADA (misma causa, otra consecuencia):
+        # `subir_voucher_pago` escribe con `overwrite=True, invalidate=True`
+        # sobre ese `public_id` determinista, y lo hace ANTES de esta
+        # relectura. Precondición: un voucher PREVIO más una validación
+        # concurrente. Si el pago ya tenía el voucher A, su dueño sube el B y
+        # un administrador valida dentro de la ventana, la petición se rechaza
+        # con el 400 de abajo -- pero B YA pisó a A en Cloudinary, mientras la
+        # fila sigue describiendo a A (`voucher_formato` y
+        # `voucher_fecha_carga` viejos). Los metadatos guardados dejan de
+        # corresponder al objeto guardado. Sin voucher previo no hay nada que
+        # pisar y el problema no existe. Cerrarla exige un `public_id` con
+        # nonce y un swap posterior al commit: cambio de diseño que excede el
+        # issue #813 y que además obliga a decidir quién borra al perdedor.
+        pago = self.repo.obtener_por_id(pago_id)
+        if not pago:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+        if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
+            raise OperacionInvalida(
+                "Solo se puede adjuntar voucher a un pago pendiente de validación"
+            )
 
         # Se persiste el public_id, NO una URL: el voucher se sube como
         # `type="authenticated"` (hallazgo de privacidad "voucher no

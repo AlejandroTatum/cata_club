@@ -303,7 +303,8 @@ def test_subir_voucher_excede_tamano_maximo_da_400_antes_de_cloudinary(_mock_clo
     _mock_cloudinary.assert_not_called()
 
 
-def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(client_sin_permisos, client):
+@patch("app.infraestructura.cloudinary_cliente.subir_voucher_pago")
+def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(_mock_cloudinary, client_sin_permisos, client):
     """
     Esquema:
       - Con `client` (admin) creamos persona+membresía+pago PENDIENTE_VALIDACION.
@@ -339,3 +340,8 @@ def test_subir_voucher_sin_ser_duenio_ni_admin_da_403(client_sin_permisos, clien
         files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
     )
     assert resp.status_code == 403
+    # Issue #813: la autorización sigue corriendo ANTES de la subida. Al
+    # sacar la red de la transacción, el orden de los pasos es lo único que
+    # garantiza que un desconocido no pueda hacernos escribir en Cloudinary
+    # -- un 403 devuelto DESPUÉS de subir el archivo seguiría siendo un 403.
+    _mock_cloudinary.assert_not_called()

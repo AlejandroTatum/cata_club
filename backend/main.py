@@ -11,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import TimeoutError as TimeoutDePool
 from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.infraestructura.db import TIMEOUT_POOL_SEGUNDOS
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.soporte_transversal.circuito_breaker import resumen_circuitos
 from app.soporte_transversal.configuracion import settings, urls_documentacion
@@ -188,6 +190,54 @@ async def _integrity_error_handler(request: Request, exc: IntegrityError):
         status.HTTP_409_CONFLICT,
         "La operación entra en conflicto con el estado actual de los datos.",
     )
+
+
+# --- Pool agotado: 503 con Retry-After, nunca un 500 (issue #813) -----------
+# Contrapartida obligatoria de declarar `pool_timeout` en
+# `app/infraestructura/db.py`. Sin ese parámetro regía el default de 30 s de
+# SQLAlchemy: bajo saturación las requests no fallaban, se encolaban invisibles
+# medio minuto y en general terminaban entrando. Con el timeout corto ahora SÍ
+# fallan -- y sin este manejador esa falla sale como un 500 pelado, que no le
+# dice al cliente ni qué pasó ni que reintentar sirve. Fallar rápido y confuso
+# no es una mejora sobre encolar; el arreglo se completa acá.
+#
+# 503 y no 500: el servidor no se rompió, está saturado, y esa distinción es
+# la que decide si el cliente reintenta o abandona. Es el mismo código que
+# `ServicioNoDisponible` (ver `_MAPA_EXCEPCIONES`), con el `Retry-After` que a
+# aquel le falta.
+MENSAJE_POOL_AGOTADO = (
+    "El servicio está recibiendo más solicitudes de las que puede atender en "
+    "este momento. Espere unos segundos e intente nuevamente."
+)
+
+# Se reusa el propio `pool_timeout` como espera sugerida: es el tiempo que la
+# aplicación está dispuesta a tener a alguien haciendo cola por una conexión,
+# así que reintentar antes cae con altísima probabilidad en la misma cola. Es
+# un piso razonable, no una promesa de que en 5 s haya lugar; un cliente que
+# lo respete deja de amplificar la saturación, que es lo único que este header
+# puede lograr desde acá.
+SEGUNDOS_REINTENTO_POOL_AGOTADO = TIMEOUT_POOL_SEGUNDOS
+
+
+@app.exception_handler(TimeoutDePool)
+async def _pool_agotado_handler(request: Request, exc: TimeoutDePool):
+    # El mensaje crudo de `QueuePool` publica el `pool_size`, el
+    # `max_overflow` y el `pool_timeout` configurados: inventario de capacidad
+    # del backend, regalado a cualquiera que sepa saturarlo. Va al log --con
+    # traceback, para poder ver QUÉ endpoint drenó el pool-- y nunca al cuerpo,
+    # misma separación que hacen los manejadores de dominio con
+    # `detalle_tecnico`.
+    _log.exception(
+        "Pool de conexiones agotado en %s %s [request_id=%s]",
+        request.method,
+        request.url.path,
+        getattr(request.state, "request_id", "-"),
+    )
+    respuesta = _respuesta_error(
+        status.HTTP_503_SERVICE_UNAVAILABLE, MENSAJE_POOL_AGOTADO, mensaje_seguro=True,
+    )
+    respuesta.headers["Retry-After"] = str(SEGUNDOS_REINTENTO_POOL_AGOTADO)
+    return respuesta
 
 
 # --- HTTPException de FastAPI también devuelve {detail, message} ------------
