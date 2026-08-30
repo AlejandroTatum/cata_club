@@ -8,6 +8,7 @@ from app.infraestructura.db import obtener_sesion
 from app.presentacion.schemas.sponsor_schemas import SponsorCreateDTO, SponsorResponseDTO
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.sponsor_servicio import SponsorServicio
+from app.soporte_transversal.lectura_archivos import leer_con_limite
 
 router = APIRouter(prefix="/sponsors", tags=["Patrocinadores"])
 ROL_ADMIN = ["ADMINISTRADOR"]
@@ -43,7 +44,13 @@ async def crear_sponsor(
         datos = SponsorCreateDTO(nombre=nombre)
     except ValidationError as exc:
         raise RequestValidationError(exc.errors()) from exc
-    contenido = await archivo.read()
+    # Issues #824 y #838: antes se leía el cuerpo completo sin tope y recién
+    # el servicio comparaba el tamaño -- este era el único upload del backend
+    # fuera de `leer_con_limite` (auth_router.py:144, personas_router.py:563
+    # y membresias_pagos_router.py:657 ya lo usaban). Además del pico de
+    # memoria, el rechazo salía con un mensaje propio en vez del compartido,
+    # obligando al frontend a distinguir el caso.
+    contenido = await leer_con_limite(archivo, SponsorServicio.TAMANO_MAXIMO_LOGO_BYTES)
     return SponsorServicio(db).crear(datos, contenido, archivo.content_type)
 
 

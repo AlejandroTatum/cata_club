@@ -6,7 +6,9 @@ primero. Se usa un doble de prueba (`_ArchivoFalso`) en vez de un
 `UploadFile` real para poder probar los casos límite (cap-1/cap/cap+1) de
 forma determinística y espiar cuántas veces se llamó a `.read()`.
 """
+import ast
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -72,3 +74,76 @@ def test_usa_tamanio_ya_conocido_para_rechazar_sin_leer_nada():
     with pytest.raises(OperacionInvalida):
         _leer(archivo, limite=10)
     assert archivo.llamadas_a_read == 0
+
+
+# --- Candado de paridad de las lecturas de upload (issue #824) --------------
+# `leer_con_limite` se introdujo DESPUÉS de que existiera el endpoint de
+# sponsors y se aplicó a los tres uploads que había en ese momento; el de
+# sponsors quedó afuera durante meses sin que nada avisara. La asimetría era
+# la prueba del olvido: no había ningún comentario que la justificara. Este
+# candado la vuelve imposible de repetir en silencio para el próximo upload
+# que se agregue.
+
+# `lectura_archivos.py` es la ÚNICA exención legítima de todo `app/`:
+# `leer_con_limite` ES la implementación del tope, y para acotar tiene que
+# pedirle bloques al archivo (`archivo.read(TAMANIO_BLOQUE)`). Agregar un
+# módulo acá es una decisión consciente que hay que justificar; el candado no
+# se afloja para acomodar un call site nuevo.
+_MODULOS_EXENTOS = {"lectura_archivos.py"}
+
+
+def _lecturas_crudas(arbol: ast.AST) -> list[int]:
+    """Líneas con una llamada a `.read(...)` sobre CUALQUIER receptor.
+
+    Se recorre el AST y no el texto: un `.read()` citado dentro de un
+    comentario o un docstring -- por ejemplo el que documenta ESTE candado --
+    no es código y no debe contar como infracción.
+
+    La regla ignora deliberadamente los argumentos y el `await`. Mirarlos
+    (`.read()` sin argumentos y precedido de `ast.Await`, como en la primera
+    versión de este candado) deja tres agujeros exactos, y son justo las tres
+    formas por las que se reintroduce el #824:
+
+      - `await archivo.read(-1)`: Starlette reenvía el `size` tal cual a
+        `self.file.read(-1)`, que es la lectura TOTAL, sin cota ninguna.
+      - `await archivo.read(archivo.size)`: acota al tamaño que declaró el
+        cliente, o sea a nada.
+      - `archivo.file.read()`: el `SpooledTemporaryFile` de abajo, sincrónico
+        -- no hay ningún nodo `ast.Await` que filtrar.
+
+    La lectura correcta no cae acá por construcción: `leer_con_limite(archivo,
+    <tope>)` es una llamada a una función, no un atributo `.read` de nadie.
+    """
+    return sorted(
+        nodo.lineno
+        for nodo in ast.walk(arbol)
+        if isinstance(nodo, ast.Call)
+        and isinstance(nodo.func, ast.Attribute)
+        and nodo.func.attr == "read"
+    )
+
+
+def test_ningun_modulo_lee_un_upload_sin_limite():
+    """Ningún módulo de `app/` puede llamar a `.read()` sobre el archivo
+    subido: la lectura de un `UploadFile` va siempre por `leer_con_limite`,
+    que corta apenas se cruza el tope en vez de materializar en RAM lo que
+    decida el cliente.
+
+    El barrido es sobre `app/` COMPLETO y recursivo, no sobre
+    `presentacion/routers/*.py`: un router en un subdirectorio, o un servicio
+    que reciba el `UploadFile` en vez de los bytes ya leídos, quedaban fuera
+    de un candado que decía cubrir "los routers"."""
+    directorio_app = Path(__file__).resolve().parents[1] / "app"
+
+    infractores = {
+        str(ruta.relative_to(directorio_app)): lineas
+        for ruta in sorted(directorio_app.rglob("*.py"))
+        if ruta.name not in _MODULOS_EXENTOS
+        and (lineas := _lecturas_crudas(ast.parse(ruta.read_text(encoding="utf-8"))))
+    }
+
+    assert infractores == {}, (
+        "estos módulos leen el archivo subido sin límite; usá "
+        "`await leer_con_limite(archivo, <tope>)` en su lugar: "
+        f"{infractores}"
+    )
