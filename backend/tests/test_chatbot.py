@@ -16,6 +16,8 @@ contra la API real). Cubre:
     respaldo (issue #766).
 """
 import logging
+import threading
+import time
 from types import SimpleNamespace
 
 import httpx
@@ -273,7 +275,16 @@ def test_falla_del_proveedor_conocida_entrega_fallback(client, monkeypatch):
     assert "Mi Cuenta" in resp.json()["respuesta"]
 
 
-def test_cada_falla_entrega_una_respuesta_local(client, monkeypatch):
+def test_cada_falla_entrega_una_respuesta_local(client, monkeypatch, logs_del_chatbot):
+    """Los dos reinicios dentro del bucle no son ceremonia (issue #834), son
+    lo que mantiene vivo este test: desde que el cliente `openai` está
+    memoizado por configuración, sin `reiniciar_cliente()` las vueltas 2 a 4
+    seguirían usando el doble de la PRIMERA y el test afirmaría cuatro veces
+    sobre la misma falla; y sin reiniciar el circuito, la cuarta vuelta ni
+    llegaría al proveedor porque el umbral son 3 fallas seguidas.
+
+    Que cada falla llegó de verdad no se asume: se verifica contra el log, que
+    nombra el tipo de excepción de cada una (issue #766)."""
     mensajes = set()
     fallas = [
         openai.RateLimitError("rate limited", response=_respuesta_httpx(429), body=None),
@@ -291,11 +302,19 @@ def test_cada_falla_entrega_una_respuesta_local(client, monkeypatch):
     ]
     for falla in fallas:
         _mockear_cliente_openai_que_falla(monkeypatch, falla)
+        chatbot_servicio_mod.reiniciar_cliente()
+        chatbot_servicio_mod._circuito_chatbot.reiniciar()
         resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
         assert resp.status_code == 200, resp.text
         mensajes.add(resp.json()["respuesta"])
 
     assert mensajes
+    texto = " ".join(r.getMessage() for r in _registros_del_chatbot(logs_del_chatbot))
+    for falla in fallas:
+        assert type(falla).__name__ in texto, (
+            f"la falla {type(falla).__name__} nunca llegó al servicio: el "
+            "bucle afirmó sobre una vuelta anterior, no sobre esta"
+        )
 
 
 # --- Credencial ausente (issue #337) ----------------------------------------
@@ -738,3 +757,277 @@ def test_limite_del_endpoint_es_parseable_por_slowapi():
     limites = parse_many(chatbot_router_mod.LIMITE_CONSULTAS)
 
     assert len(limites) == 2
+
+
+# --- La consulta no puede correr sobre el event loop (issue #834) -----------
+# `ChatbotServicio.consultar` es SÍNCRONO y su llamada al gateway es una
+# request HTTP bloqueante con un presupuesto de pared de 24s
+# (PRESUPUESTO_TOTAL_SEGUNDOS). Invocado directo desde una `async def` del
+# router, ese bloqueo retiene el único hilo del event loop del proceso Uvicorn:
+# mientras una sola persona pregunta algo, NINGÚN otro cliente es atendido --
+# ni siquiera `GET /health`, que no toca ni la BD ni el gateway. Y el endpoint
+# es público y sin auth, así que no hace falta una cuenta para provocarlo.
+#
+# Es exactamente el defecto que ya se corrigió en `POST /auth/login`
+# (issue #311, `auth_router.py`): la corrección es la misma, correr el trabajo
+# bloqueante en el threadpool de FastAPI.
+
+# El proveedor falso duerme lo suficiente como para que la diferencia entre
+# "bloqueó el loop" y "no lo bloqueó" no sea ruido de medición, pero muy por
+# debajo del presupuesto real de 24s para no alargar la suite.
+DEMORA_FALSA_DEL_PROVEEDOR_SEGUNDOS = 3.0
+
+# Techo de lo que puede tardar `GET /health` (un `async def` que devuelve un
+# dict literal) mientras la consulta está en vuelo. Con el loop bloqueado
+# tarda lo que duerma el proveedor (~3s); con la consulta en el threadpool
+# tarda milisegundos. 1s deja un orden de magnitud de margen para un runner
+# de CI cargado sin dejar de separar los dos mundos.
+TECHO_DE_SALUD_CON_CONSULTA_EN_VUELO_SEGUNDOS = 1.0
+
+
+def test_una_consulta_en_vuelo_no_congela_el_resto_de_la_api(client, monkeypatch):
+    """El test decisivo del issue #834, y el único que distingue las dos
+    implementaciones desde afuera: con una consulta lenta en vuelo, `GET
+    /health` tiene que contestar igual de rápido que siempre.
+
+    La concurrencia es REAL, no simulada: el `TestClient` de Starlette, usado
+    dentro de su bloque `with` (ver la fixture `client` de conftest.py),
+    reutiliza UN portal -- es decir, un único event loop en un hilo de fondo --
+    para todas las requests, así que dos hilos que entran a la vez compiten por
+    ese mismo loop igual que dos clientes reales contra Uvicorn. Si la llamada
+    al proveedor corre sobre el loop, el `GET /health` de este test no se
+    atiende hasta que el proveedor termine."""
+    consulta_en_vuelo = threading.Event()
+
+    class _Completions:
+        def create(self, **kwargs):
+            consulta_en_vuelo.set()
+            # `time.sleep` real y no un mock de reloj: lo que se está midiendo
+            # es justamente si el hilo que ejecuta esto es el del event loop.
+            time.sleep(DEMORA_FALSA_DEL_PROVEEDOR_SEGUNDOS)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="Tarde, pero llegó."))]
+            )
+
+    class _Cliente:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(completions=_Completions())
+
+    monkeypatch.setattr(chatbot_servicio_mod.openai, "OpenAI", _Cliente)
+
+    resultado: dict = {}
+
+    def _consultar():
+        resultado["respuesta"] = client.post(
+            "/api/v1/chatbot/consultar", json={"mensaje": "Hola"}
+        )
+
+    hilo = threading.Thread(target=_consultar, daemon=True)
+    hilo.start()
+    try:
+        assert consulta_en_vuelo.wait(timeout=10.0), (
+            "la consulta nunca llegó a llamar al proveedor; sin eso no hay "
+            "nada en vuelo y la medición de abajo no significaría nada"
+        )
+        inicio = time.monotonic()
+        salud = client.get("/health")
+        demoro = time.monotonic() - inicio
+    finally:
+        hilo.join(timeout=DEMORA_FALSA_DEL_PROVEEDOR_SEGUNDOS + 10.0)
+
+    assert salud.status_code == 200
+    assert demoro < TECHO_DE_SALUD_CON_CONSULTA_EN_VUELO_SEGUNDOS, (
+        f"GET /health tardó {demoro:.2f}s con una consulta del chatbot en "
+        "vuelo: la llamada bloqueante al gateway está corriendo sobre el event "
+        "loop y retiene a TODOS los demás clientes del proceso"
+    )
+    assert resultado["respuesta"].status_code == 200, resultado["respuesta"].text
+    assert resultado["respuesta"].json()["respuesta"] == "Tarde, pero llegó."
+
+
+# --- Circuit breaker del chatbot (issue #834) -------------------------------
+# Sin breaker, una caída del gateway le cuesta a CADA request el presupuesto
+# completo de 24s: el usuario espera lo mismo que si el proveedor fuera a
+# contestar, para recibir igual la FAQ local que ya estaba disponible en el
+# primer milisegundo. Con el proveedor caído, la respuesta correcta es la
+# local, y es gratis: solo hay que dejar de preguntar.
+
+
+class _RelojFalso:
+    """Reloj monotónico falso, gemelo del de `test_circuito_breaker.py`: solo
+    avanza cuando se lo pide `avanzar()`. Se duplica en vez de importarse
+    porque `tests/` no es un paquete importable y un import entre archivos de
+    test acopla dos suites que no comparten nada más."""
+
+    def __init__(self, inicio: float = 0.0):
+        self._ahora = inicio
+
+    def __call__(self) -> float:
+        return self._ahora
+
+    def avanzar(self, segundos: float) -> None:
+        self._ahora += segundos
+
+
+def _gateway_caido() -> openai.InternalServerError:
+    return openai.InternalServerError(
+        "upstream boom", response=_respuesta_httpx(502), body=None
+    )
+
+
+def test_fallas_seguidas_abren_el_circuito_y_la_siguiente_no_llama_al_proveedor(
+    client, monkeypatch
+):
+    """El criterio del breaker: tras el umbral de fallas ajenas al modelo, la
+    consulta siguiente NO puede llegar al gateway. Se afirma sobre los intentos
+    registrados por el cliente falso, no sobre la latencia: que la respuesta
+    sea la FAQ local no distingue nada (también lo es tras 24s de espera), y lo
+    que este cambio compra es justamente no gastar esos 24s."""
+    from app.soporte_transversal.resiliencia import CIRCUITO_CHATBOT_UMBRAL_FALLOS
+
+    _configurar_modelos(monkeypatch, principal="modelo-unico-de-prueba", respaldo="")
+    intentos = _cliente_que_registra_intentos(
+        monkeypatch, {"modelo-unico-de-prueba": _gateway_caido()}
+    )
+
+    for _ in range(CIRCUITO_CHATBOT_UMBRAL_FALLOS):
+        assert client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"}).status_code == 200
+
+    assert chatbot_servicio_mod._circuito_chatbot.estado == "abierto", (
+        f"{CIRCUITO_CHATBOT_UMBRAL_FALLOS} fallas consecutivas del gateway no "
+        "abrieron el circuito"
+    )
+
+    intentos_antes = list(intentos)
+    resp = client.post(
+        "/api/v1/chatbot/consultar", json={"mensaje": "¿Cómo veo mis pagos?"}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert "Mi Cuenta" in resp.json()["respuesta"]
+    assert "no está disponible" in resp.json()["respuesta"]
+    assert intentos == intentos_antes, (
+        "con el circuito ABIERTO igual se llamó al gateway: el usuario paga el "
+        f"presupuesto completo para recibir la misma FAQ local ({intentos})"
+    )
+
+
+def test_el_circuito_se_cierra_cuando_el_gateway_vuelve(client, monkeypatch):
+    """Un breaker que abre y no cierra es una caída permanente disfrazada. Se
+    inyecta un reloj falso por constructor (mismo contrato que usa
+    `test_circuito_breaker.py`) en vez de dormir el cooldown real: 30s de
+    `time.sleep` en la suite no prueban nada que el reloj falso no pruebe.
+
+    Consecuencia conocida y aceptada: construir otro breaker llamado "chatbot"
+    pisa su entrada en el registro de `circuito_breaker._REGISTRO` (last-wins,
+    documentado en el docstring de ese módulo). Nada afirma sobre esa entrada;
+    `resumen_circuitos()` se verifica por subconjunto."""
+    from app.soporte_transversal.circuito_breaker import CircuitoBreaker
+    from app.soporte_transversal.resiliencia import (
+        CIRCUITO_CHATBOT_COOLDOWN_SEGUNDOS,
+        CIRCUITO_CHATBOT_UMBRAL_FALLOS,
+    )
+
+    reloj = _RelojFalso()
+    breaker = CircuitoBreaker(
+        nombre="chatbot",
+        umbral_fallos=CIRCUITO_CHATBOT_UMBRAL_FALLOS,
+        cooldown_segundos=CIRCUITO_CHATBOT_COOLDOWN_SEGUNDOS,
+        reloj=reloj,
+    )
+    monkeypatch.setattr(chatbot_servicio_mod, "_circuito_chatbot", breaker)
+
+    _configurar_modelos(monkeypatch, principal="modelo-unico-de-prueba", respaldo="")
+    # `fallas` se consulta en cada `create`, así que vaciarlo a mitad del test
+    # es exactamente "el gateway se recuperó".
+    fallas = {"modelo-unico-de-prueba": _gateway_caido()}
+    _cliente_que_registra_intentos(monkeypatch, fallas)
+
+    for _ in range(CIRCUITO_CHATBOT_UMBRAL_FALLOS):
+        client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+    assert breaker.estado == "abierto"
+
+    reloj.avanzar(CIRCUITO_CHATBOT_COOLDOWN_SEGUNDOS)
+    fallas.clear()
+
+    resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["respuesta"] == "OK modelo-unico-de-prueba", (
+        "vencido el cooldown, la sonda tenía que llegar al gateway y su "
+        "respuesta tenía que ser la que ve el usuario"
+    )
+    assert breaker.estado == "cerrado", (
+        "la sonda respondió bien y el circuito no volvió a CERRADO; queda "
+        f"atascado en {breaker.estado}"
+    )
+
+
+def test_un_modelo_retirado_no_abre_el_circuito(client, monkeypatch):
+    """Un 404 `model_not_found` es una RESPUESTA del gateway: prueba que el
+    proveedor está vivo. Contarlo como falla del proveedor abriría el circuito
+    ante una retirada rutinaria de un modelo del tier gratuito -- el escenario
+    para el que existe la cadena de respaldo (issue #766) -- y dejaría al
+    chatbot sirviendo la FAQ local con un modelo bueno a un salto de distancia.
+
+    Se dan más vueltas que el umbral a propósito: si el 404 contara como falla,
+    el circuito abriría y la cadena dejaría de llegar al modelo de respaldo."""
+    from app.soporte_transversal.resiliencia import CIRCUITO_CHATBOT_UMBRAL_FALLOS
+
+    _configurar_modelos(monkeypatch, principal="modelo-retirado", respaldo="modelo-vivo")
+    intentos = _cliente_que_registra_intentos(
+        monkeypatch, {"modelo-retirado": _modelo_retirado()}
+    )
+
+    vueltas = CIRCUITO_CHATBOT_UMBRAL_FALLOS + 1
+    for _ in range(vueltas):
+        resp = client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["respuesta"] == "OK modelo-vivo"
+
+    assert chatbot_servicio_mod._circuito_chatbot.estado == "cerrado", (
+        "un 404 de modelo retirado abrió el circuito; el gateway estaba vivo y "
+        "el respaldo contestó en todas las vueltas"
+    )
+    assert intentos == ["modelo-retirado", "modelo-vivo"] * vueltas
+
+
+# --- Reuso del cliente del SDK (issue #834) ---------------------------------
+# El cliente se construía dentro del bucle de modelos, así que cada intento
+# levantaba un `openai.OpenAI` nuevo -- y con él un pool de conexiones nuevo,
+# es decir un handshake TCP+TLS completo contra el gateway por cada consulta.
+# Memoizarlo no puede romper el contrato que ya existe: cambiar el `.env` y
+# recrear el contenedor tiene que seguir alcanzando (ver el docstring de
+# `modelos_a_intentar`), así que la clave de caché es la configuración misma.
+
+
+def test_dos_consultas_seguidas_reusan_el_mismo_cliente(client, monkeypatch):
+    construidos = _mockear_cliente_openai(monkeypatch)
+
+    client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+    client.post("/api/v1/chatbot/consultar", json={"mensaje": "¿Y los horarios?"})
+
+    assert len(construidos) == 1, (
+        "se construyó un cliente openai por consulta; cada uno estrena su "
+        f"propio pool de conexiones (handshake TCP+TLS): {len(construidos)}"
+    )
+
+
+def test_cambiar_la_credencial_construye_un_cliente_nuevo(client, monkeypatch):
+    """El caché no puede convertirse en una configuración congelada: el
+    operador cambia `OPENCODE_API_KEY` en el `.env`, recrea el contenedor y
+    espera que la consulta siguiente use la clave nueva. Acá se prueba lo
+    mismo dentro de un proceso vivo, que es la condición más exigente."""
+    construidos = _mockear_cliente_openai(monkeypatch)
+
+    client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+    monkeypatch.setattr(
+        chatbot_servicio_mod.settings, "opencode_api_key", "clave-nueva-4b7e"
+    )
+    client.post("/api/v1/chatbot/consultar", json={"mensaje": "Hola"})
+
+    assert len(construidos) == 2, (
+        "cambiar la credencial no construyó un cliente nuevo: el caché quedó "
+        "sirviendo un cliente con la clave vieja"
+    )
+    assert construidos[-1]["api_key"] == "clave-nueva-4b7e"

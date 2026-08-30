@@ -6,6 +6,7 @@ helper estático de FAQ. Rate-limited porque cada llamada tiene costo (gateway
 OpenCode Zen / MiMo).
 """
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 
 from app.presentacion.schemas.chatbot_schemas import ChatbotConsultaDTO, ChatbotRespuestaDTO
 from app.servicios_negocio.chatbot_servicio import ChatbotServicio
@@ -32,5 +33,18 @@ LIMITE_CONSULTAS = "4/10second;120/hour"
 @router.post("/consultar", response_model=ChatbotRespuestaDTO)
 @limiter.limit(LIMITE_CONSULTAS)
 async def consultar(request: Request, datos: ChatbotConsultaDTO):
-    respuesta = ChatbotServicio().consultar(datos.mensaje, datos.historial)
+    # `run_in_threadpool` (issue #834): `ChatbotServicio.consultar` es SÍNCRONO
+    # y su llamada al gateway es una request HTTP bloqueante con un presupuesto
+    # de pared de 24s (`PRESUPUESTO_TOTAL_SEGUNDOS`). Invocada directo desde
+    # esta coroutine, retiene el único hilo del event loop del proceso Uvicorn:
+    # mientras UNA persona pregunta algo, ningún otro cliente es atendido -- ni
+    # siquiera `GET /health`, que no toca la BD ni el gateway. Y este endpoint
+    # es público y sin auth, así que provocarlo no requiere ni una cuenta.
+    #
+    # Es el mismo defecto y la misma corrección que en `POST /auth/login`
+    # (issue #311, `auth_router.py`), donde el `time.sleep` del freno
+    # progresivo bloqueaba a todo el proceso.
+    respuesta = await run_in_threadpool(
+        ChatbotServicio().consultar, datos.mensaje, datos.historial
+    )
     return {"respuesta": respuesta}

@@ -1,6 +1,6 @@
 """
-Política de resiliencia para llamadas a servicios externos (Cloudinary, SMTP)
-y para los workers de Celery.
+Política de resiliencia para llamadas a servicios externos (Cloudinary, SMTP,
+gateway del chatbot) y para los workers de Celery.
 
 Módulo PURO: solo constantes numéricas, CERO imports. La mecánica (cómo se
 usan estos números contra cada SDK/transporte) vive en cada adaptador de
@@ -81,6 +81,25 @@ CIRCUITO_SMTP_UMBRAL_FALLOS = 3
 # recuperación, y una sonda en SEMIABIERTO siempre entra dentro del límite
 # blando de 300s de abajo.
 CIRCUITO_SMTP_COOLDOWN_SEGUNDOS = 60.0
+
+# --- Circuit breaker del chatbot (issue #834) -------------------------------
+# 3 consultas fallidas seguidas, mismo criterio que Cloudinary y SMTP: una
+# sola falla puede ser un glitch del gateway, tres seguidas son una caída. Solo
+# cuentan las fallas AJENAS al modelo -- un 404 `model_not_found` es una
+# respuesta del gateway, así que prueba que está vivo (ver
+# `chatbot_servicio._es_atribuible_al_modelo`) -- de modo que 3 acá significan
+# 3 veces que no se pudo hablar con el proveedor, nunca 3 ids retirados.
+CIRCUITO_CHATBOT_UMBRAL_FALLOS = 3
+
+# Mayor al peor caso de pared de UNA consulta
+# (`chatbot_servicio.PRESUPUESTO_TOTAL_SEGUNDOS` = 24s: 12s de timeout por
+# intento por 1+1 reintentos), por el mismo motivo que
+# `CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS`: una sonda en SEMIABIERTO tiene que
+# terminar SIEMPRE antes de que se admita otra, y con un cooldown menor al
+# presupuesto podrían quedar dos sondas en vuelo a la vez. 30s también acota lo
+# que espera una persona a que el sistema vuelva a probar el gateway, y es el
+# orden de magnitud de una interrupción típica del tier gratuito.
+CIRCUITO_CHATBOT_COOLDOWN_SEGUNDOS = 30.0
 
 # --- Celery: límites de tiempo de worker -------------------------------------
 # Dimensionado para el PEOR batch, no para una subida individual: el límite
