@@ -405,6 +405,24 @@ export interface MembershipState {
 }
 
 /**
+ * The "this membership is never charged" fact — written down once, read by
+ * everything that has to yield to it.
+ *
+ * `Membresia.esGratuidadFamiliar` is the AUTHORITATIVE gratuity signal (issue
+ * #400, slice 4c-b — `montoAplicado` keeps the real tariff and can no longer
+ * be read as "gratuity if falsy"), and it only means anything about a
+ * membership that exists: the flag on nothing is nothing. Both readings of
+ * this state — the badge and the payment band — gate on this exact predicate
+ * so neither can drift into its own version of the rule.
+ */
+function isGratuitousMembership(input: {
+  hasMembership: boolean;
+  esGratuidadFamiliar?: boolean;
+}): boolean {
+  return input.hasMembership && Boolean(input.esGratuidadFamiliar);
+}
+
+/**
  * The single reading of a membership's state for the family-facing screens.
  *
  * The carnet on `/student` and the status card on `/student/payments` used to
@@ -435,21 +453,48 @@ export interface MembershipState {
  * is also why a `"none"` standing never borrows the word "vencida" — nothing
  * expired for a family that has never had a payment approved.
  *
+ * ## Why gratuity outranks that reading
+ *
+ * `resolveSituation` checks `isGratuitousMembership` BEFORE any of its
+ * coverage-driven branches, deliberately: "no tiene ningún pago aprobado" and
+ * "su cobertura venció" are both false statements about a membership the club
+ * charges $0 for, and the gratuity paragraph they would sit above says so in
+ * as many words ("esta membresía no genera ningún cobro"). Reading coverage
+ * here unconditionally made this badge a FOURTH wording of one state — one
+ * that matched the band on every date and disagreed with it on which fact
+ * wins. It now yields in the same place, from the same predicate, so a
+ * gratuitous membership gets what `estado` alone already said correctly for
+ * this reader: "Membresía activa", and no claim about coverage at all.
+ *
  * @param coverageEnd The furthest `fechaFin` among APPROVED payments
  *   (`resolveCoverageEnd`) — NOT `MembershipSummary.fechaFin`, which no
  *   adapter populates.
+ * @param membership The membership facts that outrank the date — today only
+ *   `esGratuidadFamiliar`. Optional so a caller with no membership at hand
+ *   still gets the `estado`-and-coverage reading it always got.
  */
 export function describeMembershipState(
   estado: string | null | undefined,
   coverageEnd: string | null | undefined,
   today: Date = new Date(),
+  membership: { esGratuidadFamiliar?: boolean } = {},
 ): MembershipState {
-  const standing = readCoverageStanding(coverageEnd, today);
+  // An `estado` is what "the club has created a Membresia" looks like on this
+  // side of the wire, and every reading below — the gratuity precedence
+  // included — is a statement ABOUT one, so this answers first.
+  const hasMembership = Boolean(estado);
+  if (!hasMembership) return { label: "Sin membresía", tone: "neutral", active: false };
 
-  if (!estado) return { label: "Sin membresía", tone: "neutral", active: false };
+  // `null` is not a fourth standing: it means this membership's coverage was
+  // never read, because gratuity already decided the question.
+  const standing = isGratuitousMembership({ hasMembership, ...membership })
+    ? null
+    : readCoverageStanding(coverageEnd, today);
 
   if (estado === "ACTIVA") {
-    if (standing === "current") return { label: "Membresía activa", tone: "ok", active: true };
+    if (standing === null || standing === "current") {
+      return { label: "Membresía activa", tone: "ok", active: true };
+    }
     if (standing === "lapsed") return { label: "Cobertura vencida", tone: "bad", active: false };
     // `warn`, not `bad`, for the same reason INACTIVA gets it: a membership
     // the club just opened is waiting on a first payment, not broken.
@@ -478,6 +523,9 @@ export function describeMembershipState(
     if (standing === "lapsed") {
       return { label: "Suspendida — cobertura vencida", tone: "bad", active: false };
     }
+    // Nothing read (gratuity) or nothing to read: the bare label claims
+    // coverage in neither direction, which is the honest thing to say when
+    // the question was not asked.
     return { label: "Suspendida", tone: "warn", active: false };
   }
 
@@ -521,6 +569,9 @@ export function resolveCoverageEnd(pagos: PagoPersona[]): string | null {
     );
 }
 
+/** The three readings of paid coverage — see `readCoverageStanding` for what each one means. */
+export type CoverageStanding = "current" | "lapsed" | "none";
+
 /**
  * Whether paid coverage is in force right now — `"none"` when there is no
  * readable date to judge it by.
@@ -538,9 +589,12 @@ export function resolveCoverageEnd(pagos: PagoPersona[]): string | null {
  * `fechaFin` is not evidence of coverage in either direction — same reasoning
  * that makes `resolveSituation` treat it as no coverage rather than as
  * "hace NaN días".
+ *
+ * It answers about the DATE and nothing else. Whether that answer is the one
+ * the reader should be shown is a question of precedence — a gratuitous
+ * membership never lapses for non-payment however this reads — and it belongs
+ * to the caller (`describeMembershipState`, `resolveSituation`).
  */
-export type CoverageStanding = "current" | "lapsed" | "none";
-
 export function readCoverageStanding(
   coverageEnd: string | null | undefined,
   today: Date = new Date(),
@@ -782,7 +836,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
   // of the real tariff behind it. `priceNote` is deliberately dropped (not
   // reused from `priceNote` above): showing "$35,00 al mes" next to "no
   // paga" reads as a contradiction, not as context.
-  if (input.hasMembership && input.esGratuidadFamiliar) {
+  if (isGratuitousMembership(input)) {
     return {
       kind: "gratuitous",
       figure: null,

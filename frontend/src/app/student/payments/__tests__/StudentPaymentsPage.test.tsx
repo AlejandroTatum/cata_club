@@ -1110,6 +1110,60 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(within(card).queryByText("Valor mensual")).not.toBeInTheDocument();
   });
 
+  /**
+   * Issue #815 (corrección): el caso de arriba hereda el pago aprobado y
+   * FUTURO que siembra `makePago`, así que el badge sale "Membresía activa"
+   * por la cobertura, no por la gratuidad — la ruta que importa nunca se
+   * ejercita ahí. La forma normal de una membresía con gratuidad familiar es
+   * la contraria: no hay ningún pago aprobado, porque la gratuidad es
+   * justamente la ausencia de cobro.
+   */
+  function gratuitousPortal(): StudentPortalSummary {
+    return {
+      ...PORTAL,
+      self: {
+        ...SELF,
+        membership: { ...SELF.membership!, montoAplicado: "35.00", esGratuidadFamiliar: true },
+      },
+    };
+  }
+
+  it("does not announce a lapse over the gratuity copy when no payment was ever approved", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(gratuitousPortal());
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    // La explicación de la gratuidad vive DENTRO de esta misma tarjeta…
+    expect(await within(card).findByText(/no genera ningún cobro/i)).toBeInTheDocument();
+    // …así que nada por encima de ella puede reclamarle un pago que el club
+    // nunca emitió, ni dar por vencida una cobertura que no se pierde por
+    // falta de pago.
+    expect(within(card).queryByText("Sin pagos aprobados")).not.toBeInTheDocument();
+    expect(within(card).queryByText(/vencida/i)).not.toBeInTheDocument();
+    // Badge y punto del pie, los dos leyendo la misma precedencia.
+    expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
+  });
+
+  it("does not announce a lapse over the gratuity copy when the only approved payment is old", async () => {
+    // Una membresía con gratuidad puede arrastrar un pago aprobado de antes de
+    // que el club se la otorgara. La cobertura pagada venció; el cobro sigue
+    // siendo $0, y "Cobertura vencida" seguiría contradiciendo el párrafo de
+    // abajo.
+    mockFetchStudentPortal.mockReset().mockResolvedValue(gratuitousPortal());
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ fechaInicio: PAGO_START_PAST, fechaFin: COVERAGE_END_PAST })]);
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    expect(await within(card).findByText(/no genera ningún cobro/i)).toBeInTheDocument();
+    expect(within(card).queryByText(/cobertura vencida/i)).not.toBeInTheDocument();
+    expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
+  });
+
   it("blocks a second registration while one is still awaiting validation", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "PENDIENTE_VALIDACION" }),

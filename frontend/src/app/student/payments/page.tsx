@@ -205,9 +205,15 @@ function MembershipCard({
   // that heading can no longer tell the reader two different things. Reading
   // `estado` alone let this badge say "Membresía activa" over a coverage date
   // that had already passed, every night until the 02:35 batch caught up.
-  // `today` is left at its default for the same reason `describePaymentSituation`
-  // is called without one further down this file: one clock per screen.
-  const state = describeMembershipState(membership?.estado, coverageEnd);
+  // `today` is left at its default (hence the explicit `undefined`) for the
+  // same reason `describePaymentSituation` is called without one further down
+  // this file: one clock per screen.
+  //
+  // The membership goes in whole because gratuity outranks that coverage
+  // reading — `esGratuidadFamiliar` is checked before the dates on both sides
+  // of this card, so the badge cannot report a lapse over the very paragraph
+  // this card renders below it ("esta membresía no genera ningún cobro").
+  const state = describeMembershipState(membership?.estado, coverageEnd, undefined, membership ?? {});
 
   const facts: { label: string; value: string }[] = [];
   if (membership?.categoria) facts.push({ label: "Plan", value: membership.categoria });

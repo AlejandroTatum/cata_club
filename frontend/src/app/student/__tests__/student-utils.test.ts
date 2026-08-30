@@ -287,6 +287,22 @@ describe("readCoverageStanding", () => {
     expect(describePaymentSituation(situation({ coverageEnd: null }), TODAY).kind).toBe(
       "never-paid",
     );
+
+    // The dates are only HALF of that agreement, and this test used to be
+    // blind to the other half. `readCoverageStanding` is arithmetic and takes
+    // no membership facts, so gratuity cannot move it — while it moves
+    // `resolveSituation`'s verdict completely, because gratuity is checked
+    // BEFORE any coverage branch there. So the standing alone can never word
+    // a badge: whatever consumes it has to apply the same precedence. That
+    // half is locked in `describeMembershipState`'s own suite below.
+    for (const end of [LAPSED_END, ENDS_TODAY, LIVE_END, null]) {
+      expect(
+        describePaymentSituation(
+          situation({ coverageEnd: end, esGratuidadFamiliar: true }),
+          TODAY,
+        ).kind,
+      ).toBe("gratuitous");
+    }
   });
 });
 
@@ -390,6 +406,80 @@ describe("describeMembershipState", () => {
     expect(describeMembershipState("ALGO_NUEVO", LIVE_END, TODAY).active).toBe(false);
     expect(describeMembershipState("ALGO_NUEVO", LAPSED_END, TODAY).active).toBe(false);
     expect(describeMembershipState("ALGO_NUEVO", LIVE_END, TODAY).label).toBe("Membresía vencida");
+  });
+
+  // -------------------------------------------------------------------------
+  // Gratuity outranks the coverage reading — the precedence half of #815
+  //
+  // `resolveSituation` checks `hasMembership && esGratuidadFamiliar` BEFORE
+  // "never-paid", "expired" and "ending-soon", deliberately: none of those
+  // describes a membership the club charges $0 for. Reading the coverage
+  // standing here unconditionally made the badge a FOURTH wording of the same
+  // state — one that agreed with the band on the dates and disagreed with it
+  // on which fact wins. The card is where that shows: the gratuity paragraph
+  // ("esta membresía no genera ningún cobro") renders inside the very card the
+  // badge sits on top of.
+  // -------------------------------------------------------------------------
+
+  it("never reports a lapse for a gratuitous membership, whatever the coverage says", () => {
+    // A gratuitous membership normally has NO approved payment at all —
+    // gratuity IS the absence of a charge — so `coverageEnd: null` is its
+    // ordinary shape, not an edge case. "Sin pagos aprobados" over "no genera
+    // ningún cobro" reads as a reproach for a bill that was never issued, and
+    // "Cobertura vencida" is a plain falsehood: nothing lapses for non-payment
+    // here. `active: true` is what `estado` alone said before #815, and for
+    // this reader it was right all along.
+    const active = { label: "Membresía activa", tone: "ok", active: true };
+    const gratuitous = { esGratuidadFamiliar: true };
+    expect(describeMembershipState("ACTIVA", null, TODAY, gratuitous)).toEqual(active);
+    expect(describeMembershipState("ACTIVA", LAPSED_END, TODAY, gratuitous)).toEqual(active);
+    expect(describeMembershipState("ACTIVA", ENDS_TODAY, TODAY, gratuitous)).toEqual(active);
+    expect(describeMembershipState("ACTIVA", LIVE_END, TODAY, gratuitous)).toEqual(active);
+  });
+
+  it("lets gratuity silence a coverage claim without overruling what only estado knows", () => {
+    // Gratuity outranks the COVERAGE reading, not the administrative one:
+    // activation, suspension and "not opened yet" are facts no payment date
+    // implies, and no gratuity flag implies them either. What changes is that
+    // a suspended gratuitous membership stops wording its coverage at all —
+    // "Suspendida" makes no claim in either direction, which is the safe side
+    // of the same asymmetry the rest of this function follows.
+    const suspended = { label: "Suspendida", tone: "warn", active: false };
+    const gratuitous = { esGratuidadFamiliar: true };
+    expect(describeMembershipState("SUSPENDIDA", LAPSED_END, TODAY, gratuitous)).toEqual(suspended);
+    expect(describeMembershipState("SUSPENDIDA", LIVE_END, TODAY, gratuitous)).toEqual(suspended);
+    expect(describeMembershipState("INACTIVA", null, TODAY, gratuitous)).toEqual({
+      label: "Membresía pendiente",
+      tone: "warn",
+      active: false,
+    });
+    // No `estado` means no `Membresia` on this side of the wire, and gratuity
+    // is a fact ABOUT a membership — it cannot conjure one into existence.
+    expect(describeMembershipState(null, LAPSED_END, TODAY, gratuitous)).toEqual({
+      label: "Sin membresía",
+      tone: "neutral",
+      active: false,
+    });
+  });
+
+  it("agrees with describePaymentSituation on precedence, not only on the dates", () => {
+    // The lock the `readCoverageStanding` suite above cannot carry: it varies
+    // only `coverageEnd`, so the gratuity branch stays inert there and the
+    // badge could disagree with the band about which fact wins while matching
+    // it on every date. Here both sides are asked the same two questions at
+    // once, and the badge may speak of coverage exactly when the band does.
+    for (const esGratuidadFamiliar of [false, true]) {
+      for (const end of [LAPSED_END, ENDS_TODAY, LIVE_END, null]) {
+        const kind = describePaymentSituation(
+          situation({ coverageEnd: end, esGratuidadFamiliar }),
+          TODAY,
+        ).kind;
+        const { label } = describeMembershipState("ACTIVA", end, TODAY, { esGratuidadFamiliar });
+        expect(label === "Cobertura vencida").toBe(kind === "expired");
+        expect(label === "Sin pagos aprobados").toBe(kind === "never-paid");
+        expect(label === "Membresía activa").toBe(kind !== "expired" && kind !== "never-paid");
+      }
+    }
   });
 });
 
