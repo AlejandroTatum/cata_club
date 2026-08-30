@@ -73,11 +73,20 @@ hacer con ellas.
    una alerta por backup ausente/viejo~~ — **hecho**: el cron de las 07:00
    encadena el heartbeat, y su ausencia es la alerta. Verificado que con
    exit 1 y exit 2 el ping no sale.
-3. **Pendiente.** Replicar los dumps a almacenamiento fuera del host y fijar
-   allí la retención/lifecycle. El backup local no protege ante la pérdida total
-   del host. Ya salen cifrados de `backup-db.sh` (`age`, destinatario público),
-   así que se pueden replicar sin exponer el padrón; el destino igual necesita
-   sus propios controles de acceso.
+3. **Mecanismo listo; falta configurarlo en producción.** `backup-db.sh`
+   replica el artefacto ya cifrado a un object store S3-compatible y verifica
+   el objeto remoto (`scripts/backup/upload-b2.sh`). Queda por hacer, y es
+   trabajo de consola, no de repositorio: crear el bucket con Object Lock
+   (retención por defecto 30 días) y lifecycle (~90 días), emitir una
+   application key restringida a ese bucket **sin permiso de borrado**, y
+   escribir `/etc/cataclub/b2-backup.env` en el droplet. El procedimiento
+   completo, incluido el de restauración, está en
+   [`backup-offsite.md`](backup-offsite.md).
+
+   **Salvedad conocida:** el heartbeat de las 07:00 mira el disco local. Si la
+   réplica falla, el backup de las 03:30 sale distinto de cero pero el
+   artefacto local queda fresco, así que el ping sale igual y el monitor
+   externo se queda en verde. La evidencia queda solo en `BACKUP_CRON_LOG`.
 4. **Pendiente.** Probar restore en un entorno desechable antes de declarar
    recuperabilidad. Con artefactos cifrados hace falta la identidad privada:
    `restore-check.sh <dump>.dump.age --identity <archivo>`. Probarlo **también**

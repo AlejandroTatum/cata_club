@@ -349,9 +349,21 @@ sudo install -o $(id -un) -g $(id -gn) -m 640 /dev/null /var/log/cataclub-backup
 
 `backup-db.sh` escribe el artefacto de forma atómica en
 `cataclub_<fecha>.dump.age` y no elimina backups: cuando se supera
-`BACKUP_RETENTION`, avisa. La retención y la réplica fuera del host son
-políticas del proveedor de almacenamiento y siguen pendientes de configurar; el
-cifrado ya no.
+`BACKUP_RETENTION`, avisa.
+
+Al final de cada corrida invoca `scripts/backup/upload-b2.sh`, que replica ese
+mismo artefacto **ya cifrado** a un object store S3-compatible y verifica el
+objeto remoto. Con la réplica desactivada (el default) es un no-op y nada
+cambia. Con la réplica activada, una subida o una verificación fallida hace
+fallar la corrida entera: un backup que no salió del host no protege de la
+pérdida del host. El artefacto local se conserva en cualquier caso.
+
+La retención remota y la inmutabilidad (Object Lock, lifecycle) son
+configuración del bucket y se administran en el proveedor, no desde acá — el
+host no puede borrar su propio histórico, y eso es deliberado. El
+aprovisionamiento del bucket, la application key y el archivo
+`/etc/cataclub/b2-backup.env`, más el procedimiento de restauración desde la
+réplica, están en [`backup-offsite.md`](backup-offsite.md).
 
 En desarrollo local, sin destinatario configurado, el script **falla** y nombra
 la salida: `BACKUP_ALLOW_PLAINTEXT=1` produce un `.dump` sin cifrar, solo apto

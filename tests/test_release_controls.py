@@ -212,10 +212,112 @@ def _entorno_install_cron(tmp_path, bin_dir: Path, **extra: str) -> dict[str, st
         "BACKUP_AGE_RECIPIENTS_FILE": str(destinatarios),
         "BACKUP_CRON_LOG": str(tmp_path / "cataclub-backup.log"),
         "HEARTBEAT_URL_FILE": str(heartbeat),
+        # Hermético también para la réplica fuera del host: sin esto, la
+        # compuerta de `install-cron` leería el /etc real de la máquina que
+        # corre la suite y el resultado dependería del host.
+        "BACKUP_B2_CONFIG_FILE": str(tmp_path / "no-existe" / "b2-backup.env"),
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
     entorno.update(extra)
     return entorno
+
+
+def _config_b2(tmp_path: Path, **overrides: str) -> Path:
+    """Archivo de configuración de la réplica, como el que lee el cron."""
+    valores = {
+        "BACKUP_B2_ENABLED": "1",
+        "BACKUP_B2_ENDPOINT": "https://s3.us-west-004.backblazeb2.com",
+        "BACKUP_B2_REGION": "us-west-004",
+        "BACKUP_B2_BUCKET": "cataclub-backups-test",
+        "BACKUP_B2_PREFIX": "cataclub/produccion",
+        "BACKUP_B2_KEY_ID": "0055aabbccddeeff0000000012",
+        "BACKUP_B2_APPLICATION_KEY": "K005NoEsUnaClaveReal0123456789",
+    }
+    valores.update(overrides)
+    archivo = tmp_path / "b2-backup.env"
+    archivo.write_text(
+        "".join(f"{k}={v}\n" for k, v in valores.items() if v != "")
+    )
+    return archivo
+
+
+def test_install_cron_se_niega_si_la_replica_esta_activada_y_mal_configurada(tmp_path):
+    """Una réplica activada a medias falla a las 03:30, contra un log que nadie mira.
+
+    Es el mismo criterio que el destinatario de cifrado y la URL del heartbeat:
+    lo que el cron va a necesitar se verifica ACÁ, con el operador todavía en
+    la terminal, y si falta se aborta en vez de instalar un cron que se ve bien
+    y no replica nada.
+    """
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    (bin_dir / "aws").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "aws").chmod(0o755)
+
+    resultado = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path,
+            bin_dir,
+            BACKUP_B2_CONFIG_FILE=str(_config_b2(tmp_path, BACKUP_B2_BUCKET="")),
+        ),
+    )
+
+    assert resultado.returncode != 0, resultado.stdout
+    assert "BACKUP_B2_BUCKET" in resultado.stderr
+    assert not cron_file.exists(), "no se instala un cron cuya réplica no funciona"
+
+
+def test_install_cron_se_niega_si_falta_el_cliente_s3(tmp_path):
+    """Réplica activada sin cliente S3 instalado: falla todas las noches."""
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+
+    resultado = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path,
+            bin_dir,
+            BACKUP_B2_CONFIG_FILE=str(_config_b2(tmp_path)),
+            BACKUP_B2_AWS_BIN=str(tmp_path / "no-existe" / "aws"),
+        ),
+    )
+
+    assert resultado.returncode != 0, resultado.stdout
+    assert not cron_file.exists()
+
+
+def test_install_cron_instala_con_la_replica_bien_configurada(tmp_path):
+    """La compuerta anterior no puede bloquear el caso que existe para servir."""
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    (bin_dir / "aws").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "aws").chmod(0o755)
+
+    resultado = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path, bin_dir, BACKUP_B2_CONFIG_FILE=str(_config_b2(tmp_path))
+        ),
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "backup-db.sh" in cron_file.read_text()
 
 
 def test_install_cron_requires_confirmation_before_modifying_crontab(tmp_path):

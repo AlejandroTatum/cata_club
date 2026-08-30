@@ -38,9 +38,20 @@
 #   BACKUP_AGE_RECIPIENTS       alternativa por entorno, separados por espacios.
 #   BACKUP_ALLOW_PLAINTEXT=1    escape SOLO para desarrollo local; se ignora
 #                               (y aborta) en cualquier invocación productiva.
+#
+# RÉPLICA FUERA DEL HOST
+# Al final, y solo si el backup local terminó bien, se invoca `upload-b2.sh`
+# sobre el artefacto FINAL. Ese script decide si hay algo que replicar
+# (BACKUP_B2_ENABLED) y documenta su propia configuración. Si la réplica está
+# activada y falla, esta corrida falla: un backup que no salió del host no
+# protege de la pérdida del host. El artefacto local ya escrito se conserva.
 set -euo pipefail
 # Ni el artefacto ni el directorio deben nacer legibles por todo el host.
 umask 077
+
+# Se resuelve ANTES del `cd "$STACK_DIR"` de más abajo, que invalida cualquier
+# ruta relativa a este script.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 fatal() { log "ERROR: $*" >&2; exit 2; }
@@ -177,4 +188,15 @@ if [ "$CIFRAR" = "1" ] && [ "$en_claro" -gt 0 ]; then
   log "AVISO: quedan ${en_claro} dump(s) SIN CIFRAR en ${BACKUP_DIR}."
   log "AVISO: cifralos o borralos de forma segura (ver docs/operations/provisioning.md)."
 fi
+
+# Réplica fuera del host, sobre el artefacto FINAL y después de los avisos de
+# retención: el disco local ya quedó en su estado definitivo, así que una falla
+# de réplica no puede cambiar lo que se conservó acá.
+#
+# Se invoca siempre, sin condicionar por CIFRAR: con la réplica desactivada es
+# un no-op, y con la réplica activada sobre un dump EN CLARO el uploader
+# rechaza el artefacto en vez de sacar el padrón del host. Envolverlo en un
+# `if` acá duplicaría esa decisión en dos lugares.
+"$SCRIPT_DIR/upload-b2.sh" "$DUMP_FINAL"
+
 log "Backup completo"
