@@ -42,6 +42,21 @@ services:
     command: >
       postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
 
+  # La cola de Celery, efímera por el mismo motivo que la base de arriba. La
+  # base explicita `cataclub_redis_data:/data` para que el broker sobreviva a
+  # un reinicio en producción, pero en QA eso trabajaría en contra: `make
+  # qa-up` NO baja el stack antes de levantarlo (corre directo `up -d --build
+  # --wait`), así que las tareas que hayan quedado encoladas en una ronda se
+  # despacharían en la siguiente -- contra una base que `qa-up` acaba de
+  # resembrar desde cero, o sea contra IDs que ya no significan lo mismo.
+  #
+  # Mismo truco de fusión que el `db`: sintaxis larga con el mismo `target`,
+  # así el tmpfs REEMPLAZA el volumen nombrado en vez de sumarse a él.
+  redis:
+    volumes:
+      - type: tmpfs
+        target: /data
+
   # `AMBIENTE` literal, no `${AMBIENTE:-production}`: el entorno tiene que
   # comportarse igual sin importar qué diga el `.env` de quien lo levanta. En
   # `development` pasan dos cosas de las que depende todo lo demás:

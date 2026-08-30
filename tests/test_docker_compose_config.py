@@ -697,6 +697,74 @@ def test_caddy_persiste_certificados_en_un_volumen_nombrado():
     )
 
 
+def test_redis_persiste_la_cola_en_un_volumen_nombrado():
+    """La cola de Celery vive ENTERA en Redis: es el broker, no un caché al
+    que se le pueda perder el contenido sin consecuencias. Sin un volumen
+    para `/data`, cualquier reinicio del contenedor -- el `up -d` de un
+    deploy, un OOM-kill, un reboot del droplet -- borra las tareas encoladas
+    que todavía no se despacharon, y el síntoma es una falla silenciosa: la
+    API ya respondió 200 y el correo nunca sale.
+
+    Mismo criterio que los certificados de `caddy`: un bind mount o un
+    `tmpfs` no sirven, porque lo que hay que garantizar es sobrevivir a un
+    `docker compose down` sin flags, y eso solo lo da un volumen con nombre.
+    """
+    config = _config_produccion()
+    montajes = config["services"]["redis"].get("volumes", [])
+    montajes_data = [m for m in montajes if m.get("target") == "/data"]
+    assert montajes_data, "'redis' no monta nada en `/data` en el render de producción"
+    tipos = {m.get("type") for m in montajes_data}
+    assert tipos == {"volume"}, (
+        f"'redis' debe montar `/data` como volumen nombrado (`type: volume`), "
+        f"y se encontró {tipos}"
+    )
+    nombres_volumen = {m.get("source") for m in montajes_data}
+    volumenes_declarados = set(config.get("volumes", {}).keys())
+    assert nombres_volumen & volumenes_declarados, (
+        f"el volumen que 'redis' monta en `/data` ({nombres_volumen}) no está "
+        f"declarado en la sección `volumes:` de nivel superior "
+        f"({volumenes_declarados})"
+    )
+
+
+def test_redis_declara_persistencia_y_tope_de_memoria_sin_desalojo():
+    """Tres banderas que solo sirven juntas, y la tercera es la que decide si
+    el volumen del test de arriba sirve de algo:
+
+      * `--appendonly yes` es lo que hace que ese volumen guarde la cola. Sin
+        AOF, Redis solo persiste por snapshots RDB periódicos y un reinicio
+        entre snapshot y snapshot pierde igual lo encolado.
+      * `--maxmemory 48mb` tiene que quedar POR DEBAJO del `mem_limit: 64m`
+        que le pone `docker-compose.prod.yml`. El default de Redis es "sin
+        límite": crece hasta pasarse del cgroup y ahí lo mata el kernel, que
+        no negocia y se lleva lo que estuviera en vuelo. Con el techo propio
+        más abajo, Redis reacciona él primero y dentro de su proceso.
+      * `--maxmemory-policy noeviction` se afirma LITERAL, no "alguna
+        política". En un broker, cualquier variante LRU/LFU/random cumple el
+        techo descartando claves -- o sea, tirando tareas encoladas en
+        silencio, que es peor que el problema original. `noeviction` rechaza
+        la escritura con un error visible: el encolado falla ruidosamente en
+        vez de aceptar una tarea que nadie va a ejecutar.
+    """
+    comando = _config_produccion()["services"]["redis"].get("command") or []
+    comando_texto = comando if isinstance(comando, str) else " ".join(comando)
+    assert re.search(r"--appendonly\s+yes", comando_texto), (
+        f"'redis' no declara `--appendonly yes` en el command: {comando_texto!r}"
+    )
+    assert re.search(r"--maxmemory\s+48mb", comando_texto), (
+        f"'redis' no declara `--maxmemory 48mb` en el command: {comando_texto!r}"
+    )
+    politica = re.search(r"--maxmemory-policy\s+(\S+)", comando_texto)
+    assert politica, (
+        f"'redis' no declara `--maxmemory-policy` en el command: {comando_texto!r}"
+    )
+    assert politica.group(1) == "noeviction", (
+        f"'redis' declara `--maxmemory-policy {politica.group(1)}`, se esperaba "
+        f"'noeviction': toda política de desalojo descarta tareas encoladas sin "
+        f"avisar"
+    )
+
+
 def test_el_overlay_de_produccion_exige_dominio():
     """Sin `DOMINIO`, Caddy no tiene para qué host emitir el certificado TLS
     ni a dónde enrutar -- mismo patrón que
@@ -1195,6 +1263,30 @@ def test_la_base_de_qa_no_monta_el_volumen_de_desarrollo():
     }
     assert tipos_en_pgdata == {"tmpfs"}, (
         f"se esperaba PGDATA en tmpfs y se encontró {tipos_en_pgdata or 'nada'}"
+    )
+
+
+def test_la_cola_de_qa_no_monta_el_volumen_persistente_de_redis():
+    """`make qa-up` NO baja el stack antes de levantarlo: corre directo
+    `up -d --build --wait` (Makefile), así que todo lo que persista cruza de
+    una corrida a la siguiente. Con la cola en el volumen nombrado, las
+    tareas que quedaron encoladas en una ronda de QA se despacharían en la
+    próxima -- contra una base que `qa-up` acaba de resembrar desde cero, o
+    sea contra IDs que ya no significan lo mismo.
+
+    Es la misma razón por la que la base de QA es tmpfs, aplicada al otro
+    almacén de estado del stack: el overlay repite el truco de fusión por
+    ruta de montaje (documentado arriba, en el bloque `db`) para que
+    `docker-compose.qa.yml` siga siendo un stack desechable."""
+    montajes = _config_qa()["services"]["redis"].get("volumes", [])
+    fuentes = {m.get("source") for m in montajes}
+    assert "cataclub_redis_data" not in fuentes, (
+        "el `redis` de QA volvió a montar el volumen persistente de desarrollo"
+    )
+    tipos_en_data = {m["type"] for m in montajes if m.get("target") == "/data"}
+    assert tipos_en_data == {"tmpfs"}, (
+        f"se esperaba el `/data` de redis en tmpfs y se encontró "
+        f"{tipos_en_data or 'nada'}"
     )
 
 
