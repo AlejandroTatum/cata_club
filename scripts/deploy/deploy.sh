@@ -327,6 +327,17 @@ case "$cmd" in
         "       La identidad PRIVADA no va en este host.")"
     fi
     command -v age >/dev/null 2>&1 || die "falta 'age' en el host (apt-get install -y age); el cron de backup no cifraría"
+    # Misma compuerta para la réplica fuera del host: si está activada y le
+    # falta algo, el backup de las 03:30 escribe el artefacto local y después
+    # sale distinto de cero contra un log que nadie mira. La verificación la
+    # hace el propio uploader (--check-config no toca la red ni necesita un
+    # artefacto), así que el formato del archivo y los mensajes viven en UN
+    # solo lugar. Con la réplica desactivada sale 0 y no molesta.
+    "$SCRIPT_DIR/../backup/upload-b2.sh" --check-config \
+      || die "$(printf '%s\n' \
+        "la réplica del backup fuera del host está activada pero mal configurada." \
+        "       El detalle está arriba. No se instala un cron que replicaría" \
+        "       nada todas las noches: ver docs/operations/backup-offsite.md")"
     # Las DOS entradas del cron redirigen su salida a `$BACKUP_CRON_LOG`. Una
     # redirección que falla aborta el comando ANTES de ejecutarlo, así que un
     # log inescribible no degrada el monitoreo: lo apaga entero. Se caen juntos
