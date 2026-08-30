@@ -34,6 +34,26 @@ def run_script(script: str, *args: str, env: dict[str, str] | None = None):
     )
 
 
+# Respuestas de `docker compose` que TODOS los stubs de preflight comparten,
+# reproduciendo lo que Compose devuelve de verdad (issue #846):
+#
+# - `config --images backend` trae también las imágenes de las dependencias,
+#   porque `backend` declara `depends_on: db, redis` (docker-compose.yml:73-77);
+# - la resolución confiable es `.services.backend.image` de `config --format
+#   json`, que devuelve una sola referencia por construcción.
+#
+# Que el arm de `--images` mienta con la salida REAL (tres líneas) es
+# deliberado: si el preflight volviera a parsear esa salida, rompen todos estos
+# tests y no solo los que ejercitan la resolución a propósito.
+_ARMS_IMAGEN_BACKEND = (
+    '  *" --format json "*) printf "%s\\n" '
+    '"{\\"services\\":{\\"backend\\":{\\"image\\":\\"registry.example/cata-backend:${IMAGE_TAG}\\"}}}" ;;\n'
+    '  *" --images backend "*) printf \'%s\\n\' "postgres:16-alpine" "redis:7-alpine" '
+    '"registry.example/cata-backend:${IMAGE_TAG}" ;;\n'
+)
+_CASE_IMAGEN_BACKEND = 'case " $* " in\n' + _ARMS_IMAGEN_BACKEND + "esac\n"
+
+
 def _stub_age(bin_dir: Path) -> None:
     """`age` de mentira: copia stdin a la salida, respetando `-o`."""
     stub = bin_dir / "age"
@@ -87,7 +107,7 @@ def _smtp_preflight_env(
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
-        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        + _CASE_IMAGEN_BACKEND +
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
@@ -577,7 +597,7 @@ def _docker_stub_con_migraciones_derivables(bin_dir: Path) -> None:
     stub.write_text(
         "#!/usr/bin/env bash\n"
         "case \" $* \" in\n"
-        f'  *" --images backend "*) echo registry.example/cata-backend:${{IMAGE_TAG}} ;;\n'
+        + _ARMS_IMAGEN_BACKEND +
         f'  *" --status running "*) echo db ;;\n'
         f'  *" exec -T db "*) echo "{FAKE_CURRENT_REVISION}" ;;\n'
         f'  *"alembic heads"*) echo "{FAKE_HEAD_REVISION} (head)" ;;\n'
@@ -705,7 +725,7 @@ def _docker_stub_sin_pendientes(bin_dir: Path) -> None:
     stub.write_text(
         "#!/usr/bin/env bash\n"
         "case \" $* \" in\n"
-        f'  *" --images backend "*) echo registry.example/cata-backend:${{IMAGE_TAG}} ;;\n'
+        + _ARMS_IMAGEN_BACKEND +
         f'  *" --status running "*) echo db ;;\n'
         f'  *" exec -T db "*) echo "{FAKE_HEAD_REVISION}" ;;\n'
         f'  *"alembic heads"*) echo "{FAKE_HEAD_REVISION} (head)" ;;\n'
@@ -816,6 +836,178 @@ def test_preflight_accepts_backward_compatible_with_real_pending_migrations(tmp_
     assert FAKE_MIGRATION_RANGE in result.stdout
 
 
+# --- Resolución de la imagen backend en el preflight (issue #846) -----------
+# `docker compose config --images backend` NO devuelve una sola línea: Compose
+# expande el servicio a su grafo de dependencias, y `backend` declara
+# `depends_on: db, redis` (docker-compose.yml:73-77), así que esa salida trae
+# siempre postgres y redis además de la imagen del backend. `deploy.sh` ya
+# había resuelto esto (issue #747) resolviendo `.services.backend.image` desde
+# `config --format json`; el preflight se quedó con el patrón viejo y le pasó
+# el bloque entero a `docker run`.
+COMPOSE_JSON_BACKEND_VALIDO = (
+    '{"services":{"backend":{"image":"registry.example/cata-backend:abcdef1"}}}'
+)
+
+
+def _docker_stub_resolucion_imagen(bin_dir: Path) -> None:
+    """`docker` de mentira que reproduce dos comportamientos reales a la vez:
+
+    1. `config --images backend` devuelve las imágenes de las dependencias
+       además de la del backend, que es lo que hace Compose con `depends_on`;
+    2. `docker run` rechaza una referencia vacía o multilínea con el mismo
+       error que abortó el preflight de staging (`invalid reference format`).
+
+    La salida de `config --format json` la fija cada test vía `COMPOSE_JSON`, y
+    toda invocación de `docker run` queda registrada en `DOCKER_RUN_LOG` para
+    poder afirmar QUÉ referencia llegó a ejecutarse (o que no llegó ninguna).
+    """
+    stub = bin_dir / "docker"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = run ]; then\n'
+        # `docker run --rm <imagen> ...`: la referencia es el tercer argumento.
+        '  imagen="$3"\n'
+        "  printf 'run %q\\n' \"$imagen\" >> \"$DOCKER_RUN_LOG\"\n"
+        '  case "$imagen" in\n'
+        "    ''|*$'\\n'*) printf 'docker: invalid reference format\\n' >&2; exit 125 ;;\n"
+        "  esac\n"
+        '  case "$*" in *"alembic heads"*) echo "fakehead001 (head)" ;; esac\n'
+        "  exit 0\n"
+        "fi\n"
+        'case " $* " in\n'
+        '  *" --format json "*) printf \'%s\\n\' "$COMPOSE_JSON" ;;\n'
+        '  *" --images backend "*) printf \'%s\\n\' "postgres:16-alpine" "redis:7-alpine" '
+        '"registry.example/cata-backend:${IMAGE_TAG}" ;;\n'
+        '  *" --status running "*) [ "${DB_RUNNING:-0}" = "1" ] && echo db ;;\n'
+        '  *" exec -T db "*) echo "fakehead001" ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    stub.chmod(0o755)
+
+
+def _preflight_imagen_env(
+    tmp_path: Path,
+    *,
+    compose_json: str = COMPOSE_JSON_BACKEND_VALIDO,
+    db_running: bool = True,
+) -> tuple[dict[str, str], Path]:
+    backup = tmp_path / "backups"
+    backup.mkdir()
+    (backup / "cataclub_today.dump").write_text("dump")
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _docker_stub_resolucion_imagen(bin_dir)
+    _stub_smtp_tools(bin_dir)
+    run_log = tmp_path / "docker-run.log"
+    run_log.write_text("")
+    env = {
+        "STACK_DIR": str(stack),
+        "BACKUP_DIR": str(backup),
+        "IMAGE_TAG": "abcdef1",
+        "MIGRATION_COMPATIBILITY": "backward-compatible",
+        "COMPOSE_JSON": compose_json,
+        "DOCKER_RUN_LOG": str(run_log),
+        "DB_RUNNING": "1" if db_running else "0",
+        # Hermético: sin esto, el default real (/var/lib/cata-club/releases)
+        # filtraría el estado de la máquina que corre la suite hacia el test.
+        "RELEASE_RECORD_DIR": str(tmp_path / "no-existe-releases"),
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    return env, run_log
+
+
+def test_preflight_resuelve_una_sola_imagen_backend_con_salida_de_dependencias(tmp_path):
+    """Reproduce la falla de staging: `config --images backend` trae tres
+    líneas y el bloque entero llegaba a `docker run`, que respondía
+    `docker: invalid reference format` y abortaba el deploy."""
+    env, run_log = _preflight_imagen_env(tmp_path)
+
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "invalid reference format" not in result.stderr
+    ejecutadas = run_log.read_text().splitlines()
+    assert ejecutadas, "el preflight nunca corrió Alembic dentro de la imagen"
+    for linea in ejecutadas:
+        assert "registry.example/cata-backend:abcdef1" in linea, linea
+        assert "postgres" not in linea and "redis" not in linea, linea
+        assert "\\n" not in linea, f"llegó una referencia multilínea a docker run: {linea}"
+
+
+def test_preflight_reporta_una_referencia_unica_sin_derivar_migraciones(tmp_path):
+    """La verificación final de `IMAGE_REFERENCE` corre incluso con la base
+    abajo, y tiene que quedar sujeta a la misma resolución: si copiara el
+    bloque multilínea, el `Preflight OK` reportaría postgres y redis como si
+    fueran la imagen que se va a desplegar."""
+    env, run_log = _preflight_imagen_env(tmp_path, db_running=False)
+
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Preflight OK: registry.example/cata-backend:abcdef1;" in result.stdout
+    assert "postgres" not in result.stdout and "redis" not in result.stdout
+    assert run_log.read_text() == "", "no había base que consultar: nada debía correr"
+
+
+@pytest.mark.parametrize(
+    "compose_json",
+    [
+        pytest.param('{"services":{"db":{"image":"postgres:16-alpine"}}}', id="sin-backend"),
+        pytest.param('{"services":{"backend":{"image":""}}}', id="imagen-vacia"),
+        pytest.param('{"services":{"backend":{}}}', id="sin-clave-image"),
+        pytest.param("esto-no-es-json{{{", id="json-invalido"),
+    ],
+)
+def test_preflight_falla_cerrado_si_compose_no_resuelve_la_imagen_backend(tmp_path, compose_json):
+    env, run_log = _preflight_imagen_env(tmp_path, compose_json=compose_json)
+
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    assert result.returncode == 1
+    assert "no resolvió exactamente una imagen para backend" in result.stderr
+    assert run_log.read_text() == "", "falló DESPUÉS de invocar docker run"
+
+
+def test_preflight_falla_cerrado_si_la_imagen_backend_trae_mas_de_una_referencia(tmp_path):
+    """Ambigüedad: dos referencias en el valor de `image`. No se elige ninguna
+    —ni la primera ni la última—, se falla cerrado ANTES de `docker run`."""
+    env, run_log = _preflight_imagen_env(
+        tmp_path,
+        compose_json=(
+            '{"services":{"backend":{"image":"registry.example/cata-backend:abcdef1'
+            '\\nregistry.example/cata-frontend:abcdef1"}}}'
+        ),
+    )
+
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    assert result.returncode == 1
+    assert "no resolvió exactamente una imagen para backend" in result.stderr
+    assert "invalid reference format" not in result.stderr
+    assert run_log.read_text() == "", "falló DESPUÉS de invocar docker run"
+
+
+def test_preflight_falla_cerrado_si_la_imagen_backend_no_usa_el_image_tag_pedido(tmp_path):
+    """El bloque multilínea terminaba en `:abcdef1`, así que la comparación de
+    tag lo daba por bueno. Con una sola referencia, un tag distinto se ve."""
+    env, run_log = _preflight_imagen_env(
+        tmp_path,
+        compose_json='{"services":{"backend":{"image":"registry.example/cata-backend:deadbee"}}}',
+    )
+
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    assert result.returncode == 1
+    assert "no usa IMAGE_TAG=abcdef1" in result.stderr
+    assert run_log.read_text() == "", "falló DESPUÉS de invocar docker run"
+
+
 def _docker_stub_db_inalcanzable(bin_dir: Path) -> None:
     """`docker` de mentira donde el servicio `db` está corriendo pero leer
     `alembic_version` falla (base inalcanzable, credenciales rotas, etc.)."""
@@ -823,7 +1015,7 @@ def _docker_stub_db_inalcanzable(bin_dir: Path) -> None:
     stub.write_text(
         "#!/usr/bin/env bash\n"
         "case \" $* \" in\n"
-        '  *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG} ;;\n'
+        + _ARMS_IMAGEN_BACKEND +
         '  *" --status running "*) echo db ;;\n'
         '  *" exec -T db "*) echo "no se pudo conectar a la base" >&2; exit 1 ;;\n'
         "esac\n"
@@ -872,7 +1064,7 @@ def _docker_stub_alembic_falla_en_la_imagen(bin_dir: Path) -> None:
     stub.write_text(
         "#!/usr/bin/env bash\n"
         "case \" $* \" in\n"
-        '  *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG} ;;\n'
+        + _ARMS_IMAGEN_BACKEND +
         '  *" --status running "*) echo db ;;\n'
         f'  *" exec -T db "*) echo "{FAKE_CURRENT_REVISION}" ;;\n'
         '  *"alembic heads"*) echo "Traceback: alembic explotó" >&2; exit 1 ;;\n'
@@ -922,7 +1114,7 @@ def test_preflight_accepts_an_explicitly_backward_compatible_release(tmp_path):
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
-        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        + _CASE_IMAGEN_BACKEND +
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
@@ -968,7 +1160,7 @@ def test_preflight_treats_missing_db_as_first_provision_when_no_release_was_ever
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
-        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        + _CASE_IMAGEN_BACKEND +
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
@@ -1009,7 +1201,7 @@ def test_preflight_fails_closed_when_db_is_down_but_a_release_was_already_record
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
-        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
+        + _CASE_IMAGEN_BACKEND +
         "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
@@ -1043,6 +1235,14 @@ def test_record_release_writes_auditable_current_record_without_credentials(tmp_
     stack.mkdir()
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    # Stub de UNA línea a propósito, y es la excepción de esta suite.
+    # `record-release.sh:23-31` todavía parsea `config --images backend` con el
+    # mismo case defectuoso que este fix saca del preflight, así que contra la
+    # salida real escribiría `IMAGE_REFERENCE=postgres:16-alpine\nredis:...` en
+    # un registro que `rollback-release.sh:24` lee como autoritativo. Ese
+    # defecto queda FUERA del alcance del issue #846 y se sigue en #847; este
+    # test mide lo suyo (que el registro no filtre credenciales) sin fingir que
+    # aquel está arreglado.
     (bin_dir / "docker").write_text(
         "#!/usr/bin/env bash\n"
         'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'

@@ -95,20 +95,45 @@ db_esta_corriendo() {
   printf '%s\n' "$running" | grep -qx 'db'
 }
 
+# Única resolución de la imagen backend del preflight: la usan tanto la
+# derivación de migraciones (que se la pasa a `docker run`) como la
+# verificación final de IMAGE_REFERENCE.
+#
+# `config --images backend` NO devuelve una sola línea (issue #846): Compose
+# expande el servicio a su grafo de dependencias, y `backend` declara
+# `depends_on: db, redis` (docker-compose.yml:73-77), así que esa salida trae
+# siempre postgres y redis además de la imagen que se va a desplegar. Pasarla
+# entera a `docker run` es el `docker: invalid reference format` que abortó el
+# preflight de staging antes de desplegar.
+#
+# `deploy.sh:27-41` ya había resuelto exactamente esto (issue #747): se le
+# pregunta a Compose QUÉ imagen usa el servicio `backend`, que devuelve una
+# sola referencia por construcción en vez de obligar a elegir una línea de una
+# lista. Elegir la primera o la última sería adivinar; acá cualquier salida de
+# la que no salga exactamente una referencia utilizable muere.
 resolver_imagen_backend() {
   local ref
   command -v docker >/dev/null 2>&1 || die "docker no está disponible"
   docker compose version >/dev/null || die "docker compose no está disponible"
+  command -v python3 >/dev/null 2>&1 || die "falta python3 para resolver la imagen backend"
   ref="$(
     cd "$STACK_DIR"
     IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-      config --images backend
-  )"
+      config --format json | python3 -c 'import json, sys
+try:
+    services = json.load(sys.stdin).get("services")
+    image = services["backend"]["image"] if isinstance(services, dict) and isinstance(services.get("backend"), dict) else None
+    if not isinstance(image, str) or not image or "\n" in image or "\r" in image:
+        raise ValueError
+    print(image)
+except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+    sys.exit(1)'
+  )" || die "Compose no resolvió exactamente una imagen para backend"
+  [ -n "$ref" ] || die "Compose no resolvió exactamente una imagen para backend"
   case "$ref" in
-    ''|*$'\n'*|*":${IMAGE_TAG}") ;;
+    *":${IMAGE_TAG}") ;;
     *) die "la imagen backend configurada no usa IMAGE_TAG=${IMAGE_TAG}" ;;
   esac
-  [ -n "$ref" ] || die "Compose no resolvió una imagen para backend"
   printf '%s' "$ref"
 }
 
@@ -221,14 +246,10 @@ docker compose version >/dev/null || die "docker compose no está disponible"
   docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
 ) || die "la configuración Compose de producción no es válida"
 check_smtp_endpoint
-    IMAGE_REFERENCE="$(
-  cd "$STACK_DIR"
-  IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml config --images backend
-)"
-case "$IMAGE_REFERENCE" in
-  ''|*$'\n'*|*":${IMAGE_TAG}") ;;
-  *) die "la imagen backend configurada no usa IMAGE_TAG=${IMAGE_TAG}" ;;
-esac
-[ -n "$IMAGE_REFERENCE" ] || die "Compose no resolvió una imagen para backend"
+# Misma resolución que usa la derivación de migraciones, no una copia: el
+# parseo duplicado era lo que dejaba que este camino reportara postgres y redis
+# como si fueran la imagen a desplegar cuando `db` no estaba corriendo y
+# `derivar_estado_migraciones` no llegaba a correr (issue #846).
+IMAGE_REFERENCE="$(resolver_imagen_backend)"
 "$SCRIPT_DIR/check-backup-freshness.sh" --max-age-hours "${BACKUP_MAX_AGE_HOURS:-26}"
 log "Preflight OK: ${IMAGE_REFERENCE}; migración declarada ${MIGRATION_COMPATIBILITY}"
