@@ -358,6 +358,11 @@ class Persona(Base):
         Index("ix_persona_representante_id", "representante_id"),
         Index("ix_persona_direccion_id", "direccion_id"),
         Index("ix_persona_institucion_id", "institucion_id"),
+        # E04-RF014 (issue #811): `PersonaRepositorio.listar_nuevas_por_periodo`
+        # acota `fecha_registro` por sus dos extremos y ordena por esa misma
+        # columna. Una sola columna alcanza: no hay igualdad previa que
+        # anteponer. Verificado en `tests/test_indices_consultas_reales.py`.
+        Index("ix_persona_fecha_registro", "fecha_registro"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -580,7 +585,42 @@ class Pago(Base):
             unique=True,
             postgresql_where=text("estado_pago = 'PENDIENTE_VALIDACION'"),
         ),
-        Index("ix_pago_persona_id", "persona_id"),
+        # Índices de las consultas REALES sobre `pago` (issue #811). Cada uno
+        # antepone la columna de IGUALDAD y deja la de rango/orden después,
+        # que es el único orden que sirve al filtro y al `ORDER BY` a la vez.
+        # Sin `DESC` explícito a propósito: un btree se recorre para atrás
+        # igual de barato, así que el índice ASC sirve el orden descendente.
+        # Verificados contra el catálogo de Postgres en
+        # `tests/test_indices_consultas_reales.py`.
+        #
+        # Cola de validación del administrador: `PagoRepositorio.listar` y
+        # `.contar` filtran por `estado_pago` (opcional) más rango de
+        # `fecha_registro` (opcional) y ordenan por `fecha_registro DESC`.
+        Index("ix_pago_estado_fecha_registro", "estado_pago", "fecha_registro"),
+        # Historial de una persona: `PagoRepositorio.listar_por_persona`
+        # filtra por `persona_id` y ordena por `fecha_registro DESC`.
+        # REEMPLAZA a `ix_pago_persona_id`: este compuesto ya sirve `WHERE
+        # persona_id = ?` por su columna más a la izquierda, y además evita
+        # el sort que aquel dejaba suelto.
+        Index("ix_pago_persona_fecha_registro", "persona_id", "fecha_registro"),
+        # Última cobertura aprobada por membresía, con dos consumidores:
+        # `vencimientos_tareas.marcar_membresias_vencidas` (`MAX(fecha_fin)
+        # GROUP BY membresia_id`) y `alertas_tareas` (`ROW_NUMBER() OVER
+        # (PARTITION BY membresia_id ORDER BY fecha_fin DESC, id DESC)`).
+        # Son consultas distintas y el mismo índice sirve a las dos: con
+        # `estado_pago` fijo, el recorrido entrega las filas ya ordenadas por
+        # `(membresia_id, fecha_fin)`.
+        Index(
+            "ix_pago_estado_membresia_fecha_fin",
+            "estado_pago", "membresia_id", "fecha_fin",
+        ),
+        # Aviso de vencimiento próximo (`alertas_tareas`): igualdad por
+        # `estado_pago` APROBADO más rango sobre `fecha_fin`.
+        Index("ix_pago_estado_fecha_fin", "estado_pago", "fecha_fin"),
+        # Reconciliación de comprobantes (`comprobante_tareas`): igualdad por
+        # `estado_pago` APROBADO más `fecha_validacion` NOT NULL y anterior
+        # al umbral.
+        Index("ix_pago_estado_fecha_validacion", "estado_pago", "fecha_validacion"),
         Index("ix_pago_membresia_id", "membresia_id"),
         Index("ix_pago_descuento_id", "descuento_id"),
         Index("ix_pago_descuento_autorizado_por_persona_id", "descuento_autorizado_por_persona_id"),
@@ -1305,8 +1345,12 @@ class HorarioEntrenamiento(Base):
     # migración (`b7e4a9f2c6d1`), que además colapsa los duplicados
     # preexistentes -- ver el comentario de esa migración para la regla de
     # limpieza.
+    # Sin `Index("ix_horario_entrenamiento_categoria", ...)` (issue #811):
+    # `categoria` ya es la columna más a la izquierda de
+    # `uq_horario_categoria_dia`, que no es parcial -- ese índice único sirve
+    # `WHERE categoria = ?` igual de bien, así que el índice simple era costo
+    # de escritura y de espacio sin ninguna consulta que lo prefiriera.
     __table_args__ = (
-        Index("ix_horario_entrenamiento_categoria", "categoria"),
         UniqueConstraint("categoria", "dia_semana", name="uq_horario_categoria_dia"),
     )
 
@@ -1332,8 +1376,26 @@ class Asistencia(Base):
     """
     __tablename__ = "asistencia"
     __table_args__ = (
-        Index("ix_asistencia_persona_id", "persona_id"),
-        Index("ix_asistencia_horario_id", "horario_id"),
+        # Índices de las consultas REALES sobre `asistencia` (issue #811).
+        # REEMPLAZAN a `ix_asistencia_persona_id` e `ix_asistencia_horario_id`:
+        # cada compuesto sirve `WHERE <columna> = ?` por su columna más a la
+        # izquierda, y además cubre el rango de `fecha_entrenamiento` que
+        # aquellos dejaban fuera. Verificados contra el catálogo de Postgres
+        # en `tests/test_indices_consultas_reales.py`.
+        #
+        # `AsistenciaRepositorio.listar_por_persona` y la rama `persona_id` de
+        # `_query_reporte`: igualdad por alumno más el rango de fechas.
+        Index(
+            "ix_asistencia_persona_fecha_entrenamiento",
+            "persona_id", "fecha_entrenamiento",
+        ),
+        # Rama `horario_id` de `_query_reporte`: filtro opcional INDEPENDIENTE
+        # del de `persona_id` (los tres se combinan con AND), así que necesita
+        # su propio compuesto -- el de arriba no lo cubre.
+        Index(
+            "ix_asistencia_horario_fecha_entrenamiento",
+            "horario_id", "fecha_entrenamiento",
+        ),
         Index("ix_asistencia_registrado_por_id", "registrado_por_id"),
         UniqueConstraint(
             "persona_id", "horario_id", "fecha_entrenamiento",
@@ -1632,7 +1694,16 @@ class ConsultaFichaEmergencia(Base):
 class Notificacion(Base):
     __tablename__ = "notificacion"
     __table_args__ = (
-        Index("ix_notificacion_persona_id", "persona_id"),
+        # REEMPLAZA a `ix_notificacion_persona_id` (issue #811):
+        # `NotificacionRepositorio.listar_por_persona` filtra por `persona_id`
+        # y ordena por `fecha_creacion DESC, id DESC`. El compuesto sirve
+        # `WHERE persona_id = ?` por su columna más a la izquierda y además el
+        # orden. Matiz: `NotificacionServicio` (`servicios_negocio/
+        # notificacion_servicio.py`) usa `persona_id.in_(...)` para incluir a
+        # los representados -- ahí el índice acelera la búsqueda de cada valor
+        # pero no devuelve gratis un resultado globalmente ordenado.
+        # Verificado en `tests/test_indices_consultas_reales.py`.
+        Index("ix_notificacion_persona_fecha_creacion", "persona_id", "fecha_creacion"),
             Index("uq_notificacion_enrollment_outbox_id", "enrollment_outbox_id", unique=True, postgresql_where=text("enrollment_outbox_id IS NOT NULL")),
     )
 
@@ -1688,7 +1759,10 @@ class EnrollmentNotificacionOutbox(Base):
     __tablename__ = "enrollment_notificacion_outbox"
     __table_args__ = (
         Index("ix_enrollment_notif_outbox_pending_next", "status", "next_attempt_at"),
-        Index("ix_enrollment_notif_outbox_admin", "admin_persona_id"),
+        # Sin `Index("ix_enrollment_notif_outbox_admin", ...)` (issue #811):
+        # `admin_persona_id` ya es la columna más a la izquierda de
+        # `uq_enrollment_notif_outbox_admin_alumno`, que no es parcial -- ese
+        # índice único sirve `WHERE admin_persona_id = ?` igual de bien.
         Index("ix_enrollment_notif_outbox_alumno", "alumno_persona_id"),
         UniqueConstraint("admin_persona_id", "alumno_persona_id", name="uq_enrollment_notif_outbox_admin_alumno"),
     )
