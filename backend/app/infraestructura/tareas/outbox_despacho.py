@@ -22,26 +22,72 @@ from typing import Callable, Optional
 
 from sqlalchemy import delete, func, or_, select
 
+from app.soporte_transversal.configuracion import settings
+
+
+def tope_de_lote() -> int:
+    """Filas que UNA corrida de despacho puede reclamar, como mucho.
+
+    El número es el mismo para las tres colas y vive una sola vez, en
+    `settings`. Se resuelve en el momento de la llamada y no al importar: leer
+    el valor tarde es lo que permite moverlo -- en un test o por variable de
+    entorno -- sin reimportar los tres módulos de tareas.
+    """
+    return settings.celery_outbox_lote_maximo
+
+
+def resultado_de_despacho(reclamadas: int, tope: int) -> dict:
+    """Las cuentas de UNA corrida, armadas sin ninguna consulta extra.
+
+    `tope_alcanzado` es la única señal de "puede quedar atraso", y se deriva
+    del contador que la corrida ya venía llevando. Informar cuántas filas
+    QUEDAN exigiría un `COUNT(*)` sobre la tabla en cada tick -- exactamente
+    el trabajo sin techo que este cambio retira --, y ese número estaría
+    viejo antes de llegar al registro.
+
+    Que `reclamadas == tope` con la tabla justo vacía diga igual "puede
+    quedar" es deliberado: ese falso positivo cuesta un tick de más, mientras
+    que el error simétrico escondería un atraso real.
+    """
+    return {
+        "reclamadas": reclamadas,
+        "tope": tope,
+        "tope_alcanzado": reclamadas >= tope,
+    }
+
 
 def reclamar_y_publicar(abrir_sesion, repositorio, publicar) -> dict:
-    """Reclama filas con lease y publica una tarea por cada una.
+    """Reclama hasta un lote de filas con lease y publica una tarea por cada una.
 
     El `commit()` va ANTES de publicar: si el broker está caído, la fila ya
     quedó marcada `ENVIANDO` con su lease, y el vencimiento de ese lease la
     devuelve a la cola. Publicar primero y comitear después dejaría al worker
     leyendo una fila que todavía no existe para nadie más.
+
+    El lote tiene techo (issue #841). `claim_pending()` devuelve UNA fila por
+    consulta, así que un bucle sin tope convertía una tabla atrasada en tantas
+    idas y vueltas a Postgres -- y tantos commits -- como filas hubiera,
+    dentro de un tick que se repite cada minuto sobre un worker de
+    `--concurrency=1`. Acotar no descarta nada: lo que no entró en el lote
+    sigue `PENDIENTE` y elegible, y el tick siguiente lo toma.
+
+    Si `publicar` falla, el error NO se atrapa y la corrida se corta ahí. Es
+    la semántica de esta función y se conserva a propósito: con el broker
+    caído, seguir reclamando gastaría un intento por fila (de los seis que hay
+    antes de `AGOTADO`) sin entregar ni una.
     """
+    tope = tope_de_lote()
     reclamadas = 0
     with abrir_sesion() as db:
         repo = repositorio(db)
-        while True:
+        while reclamadas < tope:
             evento = repo.claim_pending()
             if evento is None:
                 break
             db.commit()
             publicar(evento.id)
             reclamadas += 1
-    return {"reclamadas": reclamadas}
+    return resultado_de_despacho(reclamadas, tope)
 
 
 def entregar_fila(

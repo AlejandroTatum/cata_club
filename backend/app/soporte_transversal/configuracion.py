@@ -201,6 +201,11 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
     "celery_result_backend": "vacío es VÁLIDO: result_backend_efectivo (:217) cae a redis_url",
     "celery_result_expira_segundos": "default operativo (24h), independiente del despliegue",
     "celery_hora_automatizaciones": "default operativo (02:30 hora local), independiente del despliegue",
+    "celery_outbox_lote_maximo": (
+        "default operativo (50 filas por corrida de despacho), independiente "
+        "del despliegue; el propio campo impide el único valor peligroso (0) "
+        "con `ge=1`"
+    ),
     "cloudinary_carpeta_comprobantes": (
         "nombre de carpeta dentro de la cuenta de Cloudinary; el default es "
         "correcto y no es un secreto"
@@ -484,6 +489,14 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
     celery_result_expira_segundos: int = 60 * 60 * 24  # 24h
     celery_hora_automatizaciones: str = "02:30"  # HH:MM (Hora local) para tareas diarias
+    # Techo de filas que UNA corrida de una despachadora de outbox puede
+    # reclamar (issue #841). Las tres despachadoras corren cada minuto sobre
+    # un worker de `--concurrency=1`: sin techo, una tabla atrasada se drenaba
+    # entera dentro de un solo tick, con una consulta y un commit por fila.
+    # `ge=1` porque un 0 no significaría "sin límite" sino tres colas paradas
+    # en silencio, que es el único valor capaz de romper la entrega sin que
+    # nada falle al arrancar.
+    celery_outbox_lote_maximo: int = Field(default=50, ge=1)
 
     # --- Cloudinary ---
     cloudinary_cloud_name: str = ""
