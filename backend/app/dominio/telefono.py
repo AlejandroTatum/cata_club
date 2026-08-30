@@ -26,7 +26,13 @@ def es_telefono_valido(telefono: str) -> bool:
     dígitos, `0...`) ecuatoriano. No normaliza ni descarta caracteres --
     quien llama decide qué hacer con un teléfono mal tipeado, este
     helper solo dice si el que llegó es válido tal cual."""
-    if not telefono.isdigit():
+    # `isascii()` antes de `isdigit()`: `str.isdigit()` sola acepta dígitos
+    # no ASCII (arábigo-índicos `٠١٢`, devanagari, con volado...), y el
+    # `[0-9]` del CHECK de la base NO los acepta. Sin este filtro, un
+    # `'09' + '٢'*8` pasaba esta capa y estallaba recién en el flush como
+    # `IntegrityError`, en vez de salir como un `ValueError` limpio. Las dos
+    # capas tienen que coincidir en qué es un dígito.
+    if not (telefono.isascii() and telefono.isdigit()):
         return False
     if len(telefono) == _LARGO_CELULAR:
         return telefono.startswith(_PREFIJO_CELULAR)

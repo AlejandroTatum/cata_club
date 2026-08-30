@@ -35,6 +35,7 @@ import pytest
 
 import jwt
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona, Sesion, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.auth_servicio import AuthServicio, LIMITE_SESIONES_LISTADAS
@@ -79,7 +80,7 @@ class TestListado:
 
     def test_no_devuelve_las_sesiones_de_otra_cuenta(self, db_session):
         ana = _crear_usuario(db_session)
-        _crear_usuario(db_session, correo="beto@cataclub.test", cedula="0705806355")
+        _crear_usuario(db_session, correo="beto@cataclub.test", cedula=cedula_valida(20))
         servicio = AuthServicio(db_session)
         servicio.login("ana@cataclub.test", "clave12345", user_agent="curl/8.7.1")
         servicio.login("beto@cataclub.test", "clave12345", user_agent="curl/8.7.1")

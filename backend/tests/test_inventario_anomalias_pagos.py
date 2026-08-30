@@ -17,6 +17,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.modelos import Pago
 from scripts.inventario_anomalias_pagos import (
@@ -59,7 +60,7 @@ def _pago(sesion, persona, membresia, inicio, fin, *,
 @pytest.fixture
 def escenario(db_session):
     """Persona + tipo a $30 + membresía a $30, el caso sano de referencia."""
-    persona = crear_persona_orm(db_session, "1200000001")
+    persona = crear_persona_orm(db_session, cedula_valida(201))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
@@ -95,7 +96,7 @@ def test_superpuestas_no_flaggea_periodos_adyacentes(db_session, escenario):
 
 def test_superpuestas_ignora_membresias_distintas(db_session, escenario):
     persona, membresia = escenario
-    otra_persona = crear_persona_orm(db_session, "1200000002")
+    otra_persona = crear_persona_orm(db_session, cedula_valida(202))
     tipo2 = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     otra_membresia = crear_membresia_orm(
         db_session, otra_persona, tipo2, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
@@ -165,7 +166,7 @@ def test_incompatible_no_flaggea_una_regularizacion(db_session, escenario):
 # --- A5: meses no derivables (falta de snapshot) -----------------------------
 
 def test_no_derivables_detecta_precio_mensual_cero(db_session):
-    persona = crear_persona_orm(db_session, "1200000003")
+    persona = crear_persona_orm(db_session, cedula_valida(203))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
@@ -240,7 +241,7 @@ def test_incompatible_no_flaggea_pago_gratuito_con_snapshot(db_session):
     nunca calzaba con eso y el pago salía marcado A3b. Con el snapshot
     congelado (`meses_comprados=3`), el detector usa ese número y el pago
     no se reporta."""
-    persona = crear_persona_orm(db_session, "1200000010")
+    persona = crear_persona_orm(db_session, cedula_valida(210))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
@@ -260,7 +261,7 @@ def test_no_derivables_sigue_flaggeando_gratuito_legado_sin_snapshot(db_session)
     (anterior al slice 4c-b, cuando la gratuidad todavía zereaba
     `monto_aplicado`) debe seguir cayendo en A5 -- el camino viejo no
     cambia para datos que ya existían antes de este slice."""
-    persona = crear_persona_orm(db_session, "1200000011")
+    persona = crear_persona_orm(db_session, cedula_valida(211))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
@@ -305,8 +306,9 @@ def _filas_del_inventario(inventario):
 def test_reporte_no_expone_datos_privados_de_la_persona(db_session):
     """Allow-list de claves, no block-list: lo que hay que fijar es que
     ninguna fila lleve una clave fuera de IDs, plata, fechas y conteos."""
+    cedula = cedula_valida(219)
     persona = crear_persona_orm(
-        db_session, "1919191919",
+        db_session, cedula,
         nombres="Zutanoxxxxx", apellidos="Mengueitoso", telefono="0987650000",
     )
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
@@ -325,7 +327,7 @@ def test_reporte_no_expone_datos_privados_de_la_persona(db_session):
         assert set(fila) <= _CLAVES_PERMITIDAS, f"clave no permitida en {sorted(fila)}"
 
     salida = formatear_json(inventario)
-    for privado in ("Zutanoxxxxx", "Mengueitoso", "1919191919", "0987650000"):
+    for privado in ("Zutanoxxxxx", "Mengueitoso", cedula, "0987650000"):
         assert privado not in salida
 
 

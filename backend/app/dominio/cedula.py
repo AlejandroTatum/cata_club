@@ -46,8 +46,12 @@ def digito_verificador_cedula(nueve_digitos: str) -> int:
 def es_cedula_valida(cedula: str) -> bool:
     """True si `cedula` son 10 dígitos, la provincia (dos primeros dígitos)
     existe (`01`-`24` o `30`) y el décimo dígito cierra el módulo 10 de los
-    primeros nueve."""
-    if len(cedula) != 10 or not cedula.isdigit():
+    primeros nueve. Los dígitos deben ser ASCII: una cédula ecuatoriana
+    escrita en dígitos arábigo-índicos no es una cédula, y además el `[0-9]`
+    del CHECK de la base (migración `f1a7ident828`) tampoco los acepta -- si
+    esta capa los admitiera, el rechazo llegaría como `IntegrityError` en el
+    flush en vez de como un `ValueError` en la puerta."""
+    if len(cedula) != 10 or not (cedula.isascii() and cedula.isdigit()):
         return False
     provincia = int(cedula[:2])
     if not (_PROVINCIA_MINIMA <= provincia <= _PROVINCIA_MAXIMA or provincia == _PROVINCIA_EXTERIOR):

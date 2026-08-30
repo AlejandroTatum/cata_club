@@ -35,6 +35,12 @@ CEDULA_VALIDA = cedula_valida(9001)
 CEDULA_INVALIDA = "1712345678"  # issue #228: verificador debería ser 5, tiene 8
 TELEFONO_VALIDO = "0991234567"
 TELEFONO_INVALIDO = "099abc4567"
+# Dígitos arábigo-índicos: `str.isdigit()` los da por buenos, pero ni los
+# validadores del dominio ni el `[0-9]` del CHECK de la base los aceptan. Los
+# dos tienen la forma "correcta" salvo por el alfabeto: diez caracteres, y el
+# teléfono empieza en `٠٩` (el `09` de un celular).
+CEDULA_DIGITOS_NO_ASCII = "١٧١٠٠٣٤٠٦٥"
+TELEFONO_DIGITOS_NO_ASCII = "٠٩٩١٢٣٤٥٦٧"
 FECHA_NACIMIENTO_ADULTO = date(1990, 5, 14)
 
 
@@ -64,6 +70,28 @@ class TestPersonaCreateDTO:
 
     def test_acepta_telefono_contacto_ausente(self):
         PersonaCreateDTO(**self._base())
+
+    # --- Qué MENSAJE recibe quien manda dígitos no ASCII --------------------
+    # El 422 nunca estuvo en duda: los validadores canónicos exigen dígitos
+    # ASCII, así que estos valores se rechazaban igual. Lo que estaba mal era
+    # el mensaje: el pre-chequeo del DTO usaba un `isdigit()` pelado, que los
+    # acepta, y el error caía en la rama equivocada. Estos dos tests fijan la
+    # rama, no el rechazo.
+    def test_cedula_con_digitos_no_ascii_reporta_el_error_de_forma(self):
+        with pytest.raises(ValidationError) as error:
+            PersonaCreateDTO(**self._base(cedula=CEDULA_DIGITOS_NO_ASCII))
+
+        mensaje = str(error.value)
+        assert "La cédula debe tener exactamente 10 dígitos." in mensaje
+        assert "Ese número de cédula no es válido." not in mensaje
+
+    def test_telefono_con_digitos_no_ascii_reporta_solo_puede_tener_digitos(self):
+        with pytest.raises(ValidationError) as error:
+            PersonaCreateDTO(**self._base(telefono=TELEFONO_DIGITOS_NO_ASCII))
+
+        mensaje = str(error.value)
+        assert "El teléfono solo puede tener dígitos." in mensaje
+        assert "empezar en 09" not in mensaje
 
 
 class TestRepresentadoCreateDTO:

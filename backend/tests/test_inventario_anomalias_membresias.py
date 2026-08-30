@@ -11,6 +11,7 @@ docstring de `scripts/inventario_anomalias_membresias.py`.
 """
 from decimal import Decimal
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia
 from app.dominio.modelos import Membresia
 from scripts.inventario_anomalias_membresias import (
@@ -26,7 +27,7 @@ from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_t
 # --- A1: deriva de tarifa ----------------------------------------------------
 
 def test_deriva_detecta_membresia_con_monto_distinto_al_precio_vigente(db_session):
-    persona = crear_persona_orm(db_session, "1000000001")
+    persona = crear_persona_orm(db_session, cedula_valida(101))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("25.00"),
@@ -41,7 +42,7 @@ def test_deriva_detecta_membresia_con_monto_distinto_al_precio_vigente(db_sessio
 
 
 def test_deriva_no_flaggea_monto_igual_al_precio_vigente(db_session):
-    persona = crear_persona_orm(db_session, "1000000002")
+    persona = crear_persona_orm(db_session, cedula_valida(102))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
@@ -52,7 +53,7 @@ def test_deriva_no_flaggea_monto_igual_al_precio_vigente(db_session):
 
 def test_deriva_no_flaggea_gratuidad_en_cero(db_session):
     """Un cero de gratuidad familiar es A2, nunca deriva de tarifa."""
-    persona = crear_persona_orm(db_session, "1000000003")
+    persona = crear_persona_orm(db_session, cedula_valida(103))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
@@ -70,8 +71,8 @@ def test_importes_cero_gratuidad_con_tarifa_real(db_session):
     REAL (no cero) -- ya no zerea `monto_aplicado`. Cae en `a2_gratuidad`,
     nunca en `incoherente`, porque la persona SÍ tiene representante (la
     precondición de negocio de la regla)."""
-    representante = crear_persona_orm(db_session, "1000000004")
-    alumno = crear_persona_orm(db_session, "1000000014")
+    representante = crear_persona_orm(db_session, cedula_valida(104))
+    alumno = crear_persona_orm(db_session, cedula_valida(114))
     alumno.representante_id = representante.id
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("35.00"))
     membresia = crear_membresia_orm(
@@ -88,7 +89,7 @@ def test_importes_cero_gratuidad_con_tarifa_real(db_session):
 
 
 def test_importes_cero_cero_inexplicado(db_session):
-    persona = crear_persona_orm(db_session, "1000000005")
+    persona = crear_persona_orm(db_session, cedula_valida(105))
     tipo = crear_tipo_membresia_orm(db_session)
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("0.00"),
@@ -108,7 +109,7 @@ def test_importes_cero_gratuidad_incoherente_sin_representante(db_session):
     `_aplicar_regla_familiar_si_corresponde` exige antes de ponerla; sin
     representante, ningún camino del código pudo haber llegado a
     `True`."""
-    persona = crear_persona_orm(db_session, "1000000006")
+    persona = crear_persona_orm(db_session, cedula_valida(106))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("15.00"),
@@ -126,7 +127,7 @@ def test_importes_cero_gratuidad_incoherente_sin_representante(db_session):
 # --- A4: múltiples membresías no activas por persona -------------------------
 
 def test_no_activas_flaggea_persona_con_dos_membresias_no_activas(db_session):
-    persona = crear_persona_orm(db_session, "1000000007")
+    persona = crear_persona_orm(db_session, cedula_valida(107))
     tipo = crear_tipo_membresia_orm(db_session)
     m1 = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.VENCIDA)
     m2 = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
@@ -155,7 +156,7 @@ def test_a1_y_a2_no_se_solapan(db_session):
     """A1 y A2 particionan: una gratuidad incoherente (bandera dice gratis,
     monto no es cero ni igual al precio) cae en A2 y NUNCA tambien en A1.
     Sin este test la exclusion mutua queda afirmada solo por inspeccion."""
-    persona = crear_persona_orm(db_session, "1000000010")
+    persona = crear_persona_orm(db_session, cedula_valida(110))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("15.00"),
@@ -194,8 +195,9 @@ def _filas_del_inventario(inventario):
 def test_reporte_no_expone_datos_privados_de_la_persona(db_session):
     """Candado de privacidad (#400): ninguna fila puede llevar una clave fuera
     de la allow-list, y los datos sembrados no aparecen en el JSON."""
+    cedula = cedula_valida(117)
     persona = crear_persona_orm(
-        db_session, "1717171717",
+        db_session, cedula,
         nombres="Xilonenxxxxx", apellidos="Apuntobrilloso", telefono="0987654321",
     )
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
@@ -212,7 +214,7 @@ def test_reporte_no_expone_datos_privados_de_la_persona(db_session):
         assert set(fila) <= _CLAVES_PERMITIDAS, f"clave no permitida en {sorted(fila)}"
 
     salida = formatear_json(inventario)
-    for privado in ("Xilonenxxxxx", "Apuntobrilloso", "1717171717", "0987654321"):
+    for privado in ("Xilonenxxxxx", "Apuntobrilloso", cedula, "0987654321"):
         assert privado not in salida
 
 
@@ -222,7 +224,7 @@ def test_construir_inventario_no_vacia_cambios_pendientes_del_llamador(db_sessio
     cambios que el llamador todavia tenia pendientes. Estas funciones reciben
     una sesion ajena a proposito, asi que el caso no es hipotetico. Contar
     filas antes y despues no lo detecta: un UPDATE no cambia el conteo."""
-    persona = crear_persona_orm(db_session, "1000000009")
+    persona = crear_persona_orm(db_session, cedula_valida(109))
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("30.00"))
     membresia = crear_membresia_orm(
         db_session, persona, tipo, EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),

@@ -88,7 +88,8 @@ roles exige un administrador existente. El bootstrap rompe ese ciclo:
 docker compose exec \
   -e BOOTSTRAP_ADMIN_EMAIL=duenio@club.com \
   -e BOOTSTRAP_ADMIN_PASSWORD='<contraseña fuerte>' \
-  -e BOOTSTRAP_ADMIN_CEDULA=1712345678 \
+  -e BOOTSTRAP_ADMIN_CEDULA='<cédula real del propietario>' \
+  -e BOOTSTRAP_ADMIN_TELEFONO='<celular real del propietario>' \
   backend uv run python scripts/crear_primer_admin.py
 ```
 
@@ -96,6 +97,15 @@ Exige una contraseña de 12+ caracteres (rechaza las publicadas en el seed),
 crea persona + usuario + rol en una transacción y se niega si ya existe un
 ADMINISTRADOR — repetirlo es inofensivo. Los siguientes administradores se
 asignan desde la aplicación con esta cuenta.
+
+`BOOTSTRAP_ADMIN_CEDULA` y `BOOTSTRAP_ADMIN_TELEFONO` son **obligatorias** y
+se validan contra la regla real del dominio antes de escribir nada: la cédula
+necesita 10 dígitos con provincia existente (01-24 o 30) y dígito verificador
+correcto; el teléfono, 10 dígitos empezando en `09` (celular) o 9 empezando en
+`0` (fijo), sin espacios ni separadores. El teléfono era opcional y tenía como
+default `0000000000`, que no es un teléfono válido (issue #828): un dato de
+identidad se pide, no se inventa. Si alguna no calza, el script se niega
+diciendo cuál corregir y no deja rastro en la base.
 
 ## Clave del proveedor del chatbot (`OPENCODE_API_KEY`)
 
