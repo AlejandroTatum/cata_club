@@ -150,14 +150,29 @@ def _reiniciar_circuitos_breaker():
     `test_circuito_abierto_no_abre_smtp` -- dejaría ese estado filtrado al
     siguiente test si no se reinicia acá. Autouse: aplica a toda la suite,
     no solo a los tests de circuit breaker (protege en particular a
-    `test_ninguna_funcion_reintenta_tras_un_fallo`)."""
+    `test_ninguna_funcion_reintenta_tras_un_fallo`).
+
+    El chatbot (issue #834) se suma con DOS estados a limpiar, no uno: su
+    circuit breaker y su cliente `openai` memoizado. El cliente vive
+    cacheado a nivel de módulo con la configuración como clave, así que un
+    test que monkeypatchea `openai.OpenAI` deja SU doble cacheado y el
+    siguiente lo heredaría con la misma configuración -- entre otras cosas,
+    `test_cliente_openai_fija_timeout_y_reintentos` y
+    `test_el_modelo_y_el_gateway_salen_de_la_configuracion` afirman sobre un
+    cliente construido DURANTE su propia request, y sin este reinicio no
+    habría ninguna construcción que inspeccionar."""
     import app.infraestructura.cloudinary_cliente as cloudinary_cliente_mod
     import app.infraestructura.notificaciones_servicio as notificaciones_servicio_mod
+    import app.servicios_negocio.chatbot_servicio as chatbot_servicio_mod
     cloudinary_cliente_mod._circuito_cloudinary.reiniciar()
     notificaciones_servicio_mod._circuito_smtp.reiniciar()
+    chatbot_servicio_mod._circuito_chatbot.reiniciar()
+    chatbot_servicio_mod.reiniciar_cliente()
     yield
     cloudinary_cliente_mod._circuito_cloudinary.reiniciar()
     notificaciones_servicio_mod._circuito_smtp.reiniciar()
+    chatbot_servicio_mod._circuito_chatbot.reiniciar()
+    chatbot_servicio_mod.reiniciar_cliente()
 
 
 @pytest.fixture()

@@ -36,14 +36,20 @@ exactamente la misma salida observable.
 """
 import logging
 import re
+import threading
 import time
 import unicodedata
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import openai
 
 from app.servicios_negocio import conocimiento_club
+from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
+from app.soporte_transversal.resiliencia import (
+    CIRCUITO_CHATBOT_COOLDOWN_SEGUNDOS,
+    CIRCUITO_CHATBOT_UMBRAL_FALLOS,
+)
 
 logger = logging.getLogger("cataclub.chatbot")
 
@@ -78,6 +84,85 @@ MAX_REINTENTOS_LLM = 1
 # multiplicar la latencia contra un BFF que aborta a los 30s y dejar al usuario
 # esperando por nada para llegar al mismo respaldo local.
 PRESUPUESTO_TOTAL_SEGUNDOS = TIMEOUT_LLM_SEGUNDOS * (1 + MAX_REINTENTOS_LLM)
+
+# --- Circuit breaker del gateway (issue #834) -------------------------------
+# Una única instancia a nivel de módulo, igual que `_circuito_cloudinary` y
+# `_circuito_smtp` (Decisión E de sdd/degradacion-controlada: estado en
+# memoria por proceso, reloj monotónico y lock, sin Redis compartido).
+#
+# Qué compra acá: sin breaker, CADA consulta durante una caída del gateway
+# paga el presupuesto completo de 24s para terminar entregando la misma FAQ
+# local que ya estaba disponible en el primer milisegundo. Con el proveedor
+# caído no hay nada que ganar preguntando de nuevo: la respuesta correcta ya
+# se conoce y es gratis.
+_circuito_chatbot = CircuitoBreaker(
+    nombre="chatbot",
+    umbral_fallos=CIRCUITO_CHATBOT_UMBRAL_FALLOS,
+    cooldown_segundos=CIRCUITO_CHATBOT_COOLDOWN_SEGUNDOS,
+)
+
+# --- Cliente del SDK, memoizado por configuración (issue #834) --------------
+# El cliente se construía DENTRO del bucle de modelos, así que cada intento de
+# cada consulta estrenaba un `openai.OpenAI` -- y con él un pool de conexiones
+# httpx nuevo, es decir un handshake TCP+TLS completo contra el gateway que se
+# tiraba a la basura al terminar la request. Reusar la instancia reusa la
+# conexión.
+#
+# La clave del caché es la CONFIGURACIÓN, no un flag de "ya construido": el
+# contrato vigente es que cambiar el `.env` y recrear el contenedor alcanza
+# (mismo razonamiento que el docstring de `modelos_a_intentar`), y un caché
+# ciego lo rompería dejando servido un cliente con la credencial vieja. Si la
+# clave cambia, el cliente anterior se descarta.
+#
+# El lock no es decorativo: desde el issue #834 el router corre `consultar` en
+# el threadpool de FastAPI, así que dos consultas simultáneas evalúan esto en
+# hilos distintos de verdad.
+_cliente_lock = threading.Lock()
+_cliente_memoizado: Optional[Tuple[Tuple[str, str], "openai.OpenAI"]] = None
+
+
+def _cliente_openai() -> "openai.OpenAI":
+    """Cliente del gateway para la configuración vigente.
+
+    `timeout`/`max_retries` explícitos: sin ellos el SDK usa 600s y 2
+    reintentos, y el backend sobrevive al abort del BFF gastando tokens contra
+    un cliente que ya colgó (ver la cuenta del presupuesto de tiempo arriba).
+
+    `api_key` explícito y no `os.environ`: `settings.opencode_api_key` viene de
+    OPENCODE_API_KEY vía Settings/pydantic-settings, igual que el resto de la
+    config de la app; `os.environ.get(...)` NO se popula solo desde el `.env`
+    (a diferencia de `anthropic.Anthropic()`, que sí lee la env var sola).
+
+    IMPORTANTE para quien mueva esta llamada: sin OPENCODE_API_KEY configurada
+    el SDK levanta `OpenAIError: Missing credentials` en el CONSTRUCTOR, no en
+    la request. Por eso `ChatbotServicio.consultar` la invoca DENTRO de su
+    `try` (issue #337): construida fuera del bloque protegido, el fallo más
+    probable de un despliegue nuevo vuelve a escaparse como un 500 sin manejar.
+    """
+    global _cliente_memoizado
+    clave = (settings.opencode_base_url, settings.opencode_api_key)
+    with _cliente_lock:
+        if _cliente_memoizado is not None and _cliente_memoizado[0] == clave:
+            return _cliente_memoizado[1]
+        cliente = openai.OpenAI(
+            base_url=settings.opencode_base_url,
+            api_key=settings.opencode_api_key,
+            timeout=TIMEOUT_LLM_SEGUNDOS,
+            max_retries=MAX_REINTENTOS_LLM,
+        )
+        _cliente_memoizado = (clave, cliente)
+        return cliente
+
+
+def reiniciar_cliente() -> None:
+    """Descarta el cliente memoizado. La usa el fixture de aislamiento de la
+    suite (`tests/conftest.py`), gemelo del que reinicia los circuit breakers:
+    sin esto, un test que monkeypatchea `openai.OpenAI` deja SU doble cacheado
+    y el test siguiente lo hereda sin pedirlo."""
+    global _cliente_memoizado
+    with _cliente_lock:
+        _cliente_memoizado = None
+
 
 # Fallas del proveedor que degradan a la FAQ local. Se conserva el catch
 # explícito: errores de autenticación de la app, de seguridad o de programación
@@ -266,30 +351,27 @@ class ChatbotServicio:
         modelos = modelos_a_intentar()
         limite = time.monotonic() + PRESUPUESTO_TOTAL_SEGUNDOS
         for posicion, modelo in enumerate(modelos):
-            try:
-                # El cliente se construye ACÁ DENTRO, no en __init__ (issue
-                # #337): settings.opencode_api_key viene de OPENCODE_API_KEY en
-                # .env (vía Settings/pydantic-settings, igual que el resto de la
-                # config de la app) — os.environ.get(...) directo NO se popula
-                # solo desde .env, así que hay que pasarlo explícito al cliente
-                # openai (a diferencia de anthropic.Anthropic(), que sí lee la
-                # env var automáticamente).
-                # timeout/max_retries explícitos: sin ellos el SDK usa 600s y 2
-                # reintentos y el backend sobrevive al abort del BFF (ver la
-                # cuenta del presupuesto de tiempo arriba).
-                #
-                # Construirlo en __init__ dejaba `openai.OpenAI(api_key="")`
-                # fuera de este try/except: sin OPENCODE_API_KEY configurada, el
-                # SDK levanta `OpenAIError: Missing credentials` en el
-                # CONSTRUCTOR -- antes de que existiera el bloque protegido, así
-                # que ninguno de los `except` de abajo podía verlo y el fallo más
-                # probable de un despliegue nuevo escapaba como 500 sin manejar.
-                client = openai.OpenAI(
-                    base_url=settings.opencode_base_url,
-                    api_key=settings.opencode_api_key,
-                    timeout=TIMEOUT_LLM_SEGUNDOS,
-                    max_retries=MAX_REINTENTOS_LLM,
+            # El breaker se consulta antes de CADA intento, no una vez por
+            # consulta: cada id de la cadena es una llamada real al gateway.
+            if not _circuito_chatbot.permitir():
+                # Sin traceback y sin el error crudo, mismas reglas que
+                # `_registrar_falla`: nada que pueda arrastrar la credencial.
+                logger.error(
+                    "Chatbot: circuito ABIERTO, no se llama al gateway (%s); se "
+                    "entrega la FAQ local sin gastar el presupuesto de %ss",
+                    settings.opencode_base_url,
+                    PRESUPUESTO_TOTAL_SEGUNDOS,
                 )
+                break
+            try:
+                # El cliente se pide ACÁ DENTRO, no en __init__ ni fuera del
+                # try (issue #337): sin OPENCODE_API_KEY configurada el SDK
+                # levanta `OpenAIError: Missing credentials` en el CONSTRUCTOR,
+                # y `_cliente_openai()` construye cuando la configuración
+                # cambió. Fuera de este bloque protegido, ninguno de los
+                # `except` de abajo podría verlo y el fallo más probable de un
+                # despliegue nuevo volvería a escaparse como un 500 sin manejar.
+                client = _cliente_openai()
                 respuesta = client.chat.completions.create(
                     model=modelo,
                     max_tokens=MAX_TOKENS_RESPUESTA,
@@ -300,9 +382,26 @@ class ChatbotServicio:
                 # #766): el usuario recibe el mismo 200 con la FAQ local para
                 # todas, sin importar si fue la clave, la cuota o el modelo.
                 _registrar_falla(error, modelo)
+                if _es_atribuible_al_modelo(error):
+                    # Un 404 `model_not_found` NO es una falla del proveedor:
+                    # es una RESPUESTA del gateway, así que prueba que está
+                    # vivo. Contarlo como fallo abriría el circuito ante una
+                    # retirada rutinaria de un modelo del tier gratuito y
+                    # cortaría la cadena de respaldo justo cuando existe para
+                    # eso (issue #766), dejando la FAQ local con un modelo
+                    # bueno a un salto de distancia.
+                    #
+                    # Además RESUELVE la sonda: si el circuito venía en
+                    # SEMIABIERTO, no reportar nada lo dejaría ahí para
+                    # siempre -- `permitir()` devuelve `False` en SEMIABIERTO
+                    # hasta que alguien registre éxito o fallo.
+                    _circuito_chatbot.registrar_exito()
+                else:
+                    _circuito_chatbot.registrar_fallo()
                 if not _sigue_la_cadena(error, posicion, modelos, limite):
                     break
                 continue
+            _circuito_chatbot.registrar_exito()
             return self._limpiar_markdown(respuesta.choices[0].message.content or "")
         return self._respuesta_local(mensaje)
 
