@@ -18,6 +18,7 @@ from datetime import date
 from decimal import Decimal
 
 import app.servicios_negocio.membresia_pago_servicio as mps
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.modelos import Pago
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
@@ -188,7 +189,7 @@ def test_bulk_no_incurre_en_n_mas_uno(db_session, contar_selects, monkeypatch):
 
     ids_pocos = []
     for i in range(3):
-        persona, membresia = _crear_persona_membresia(db_session, cedula=f"170100000{i}")
+        persona, membresia = _crear_persona_membresia(db_session, cedula=cedula_valida(1000 + i))
         _crear_pago_aprobado(db_session, persona, membresia, date(2026, 3, 31))
         ids_pocos.append(membresia.id)
 
@@ -198,7 +199,7 @@ def test_bulk_no_incurre_en_n_mas_uno(db_session, contar_selects, monkeypatch):
 
     ids_muchos = list(ids_pocos)
     for i in range(10):
-        persona, membresia = _crear_persona_membresia(db_session, cedula=f"170200{i:04d}")
+        persona, membresia = _crear_persona_membresia(db_session, cedula=cedula_valida(2000 + i))
         _crear_pago_aprobado(db_session, persona, membresia, date(2026, 3, 31))
         ids_muchos.append(membresia.id)
 

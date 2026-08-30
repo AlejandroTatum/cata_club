@@ -7,9 +7,19 @@ en CUALQUIER ambiente: exige contraseña fuerte y se niega si ya existe algún
 ADMINISTRADOR (repetirlo es inofensivo). Uso tras el primer deploy: ver
 docs/operations/provisioning.md. Todo entra por variables de entorno
 (obligatorias: BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD,
-BOOTSTRAP_ADMIN_CEDULA; opcionales: BOOTSTRAP_ADMIN_NOMBRES, _APELLIDOS,
-_TELEFONO, _FECHA_NACIMIENTO en ISO), nada por argv: una contraseña en
-argumentos de CLI queda visible en `ps` y en el historial del shell."""
+BOOTSTRAP_ADMIN_CEDULA, BOOTSTRAP_ADMIN_TELEFONO; opcionales:
+BOOTSTRAP_ADMIN_NOMBRES, _APELLIDOS, _FECHA_NACIMIENTO en ISO), nada por
+argv: una contraseña en argumentos de CLI queda visible en `ps` y en el
+historial del shell.
+
+BOOTSTRAP_ADMIN_TELEFONO pasó de opcional a OBLIGATORIA (issue #828). Antes
+tenía como default `"0000000000"`, que no es un teléfono ecuatoriano válido
+-- diez dígitos que no empiezan en `09`, así que no es celular ni fijo -- y
+que quedó grabado en la fila del administrador de staging. Ningún default lo
+reemplaza: inventar un número con forma válida sería fabricar un dato de
+contacto falso, y dejarlo vacío daría de alta al ÚNICO administrador del club
+sin forma de llamarlo. El teléfono es dato de identidad igual que la cédula,
+que ya era obligatoria; se pide, no se adivina."""
 import os
 import sys
 from datetime import date
@@ -18,8 +28,10 @@ from pathlib import Path
 _RAIZ_BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_RAIZ_BACKEND))
 
+from app.dominio.cedula import es_cedula_valida  # noqa: E402
 from app.dominio.enums import TipoRol  # noqa: E402
 from app.dominio.modelos import Persona, Rol, Usuario  # noqa: E402
+from app.dominio.telefono import es_telefono_valido  # noqa: E402
 from app.seguridad.gestor_auth import GestorAutenticacion  # noqa: E402
 
 
@@ -46,6 +58,26 @@ def validar_contrasenia(contrasenia: str) -> None:
         )
 
 
+def validar_identidad(cedula: str, telefono: str) -> None:
+    """Issue #828: desde que `Persona` valida su propia identidad, una cédula
+    o un teléfono malos ya no entran a la base -- explotan con un `ValueError`
+    del ORM en medio del alta. Este chequeo va ANTES del primer `add` para
+    que el operador reciba un `BootstrapAdminError` que dice qué variable
+    corregir y con qué forma, en vez de una traza de SQLAlchemy."""
+    if not es_cedula_valida(cedula):
+        raise BootstrapAdminError(
+            "BOOTSTRAP_ADMIN_CEDULA no es una cédula ecuatoriana válida: "
+            "deben ser 10 dígitos, con provincia existente (01-24 o 30) y "
+            "dígito verificador correcto."
+        )
+    if not es_telefono_valido(telefono):
+        raise BootstrapAdminError(
+            "BOOTSTRAP_ADMIN_TELEFONO no es un teléfono ecuatoriano válido: "
+            "10 dígitos empezando en 09 (celular) o 9 dígitos empezando en 0 "
+            "(fijo), sin espacios ni separadores."
+        )
+
+
 def existe_administrador(db) -> bool:
     return db.query(Usuario).join(Usuario.roles).filter(
         Rol.tipo_rol == TipoRol.ADMINISTRADOR
@@ -60,6 +92,7 @@ def crear_primer_admin(
     las validaciones van antes del primer `add` y el único `commit` está al
     final, así un rechazo no deja rastro en la base."""
     validar_contrasenia(contrasenia)
+    validar_identidad(cedula, telefono)
 
     if existe_administrador(db):
         raise BootstrapAdminError(
@@ -99,9 +132,11 @@ def main() -> None:
     correo = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip()
     contrasenia = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
     cedula = os.environ.get("BOOTSTRAP_ADMIN_CEDULA", "").strip()
-    if not correo or not contrasenia or not cedula:
+    telefono = os.environ.get("BOOTSTRAP_ADMIN_TELEFONO", "").strip()
+    if not correo or not contrasenia or not cedula or not telefono:
         print("Bootstrap denegado: faltan BOOTSTRAP_ADMIN_EMAIL, "
-              "BOOTSTRAP_ADMIN_PASSWORD y/o BOOTSTRAP_ADMIN_CEDULA.", file=sys.stderr)
+              "BOOTSTRAP_ADMIN_PASSWORD, BOOTSTRAP_ADMIN_CEDULA y/o "
+              "BOOTSTRAP_ADMIN_TELEFONO.", file=sys.stderr)
         sys.exit(1)
 
     from app.infraestructura.db import SessionLocal
@@ -115,7 +150,7 @@ def main() -> None:
             cedula=cedula,
             nombres=os.environ.get("BOOTSTRAP_ADMIN_NOMBRES", "Admin"),
             apellidos=os.environ.get("BOOTSTRAP_ADMIN_APELLIDOS", "Cata Club"),
-            telefono=os.environ.get("BOOTSTRAP_ADMIN_TELEFONO", "0000000000"),
+            telefono=telefono,
             fecha_nacimiento=date.fromisoformat(
                 os.environ.get("BOOTSTRAP_ADMIN_FECHA_NACIMIENTO", "1990-01-01")
             ),

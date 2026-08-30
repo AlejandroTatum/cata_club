@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona, Usuario
 from app.infraestructura.repositorios.recuperacion_outbox_repositorio import (
     RecuperacionOutbox,
@@ -24,7 +25,7 @@ def _usuario(db_session, cedula):
 
 
 def test_claim_usa_lease_y_no_reclama_fila_vigente(db_session):
-    usuario = _usuario(db_session, "1710000001")
+    usuario = _usuario(db_session, cedula_valida(1))
     evento = RecuperacionOutbox(
         usuario_id=usuario.id,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
@@ -43,7 +44,7 @@ def test_claim_usa_lease_y_no_reclama_fila_vigente(db_session):
 
 
 def test_stale_lease_es_reclamable(db_session):
-    usuario = _usuario(db_session, "1710000002")
+    usuario = _usuario(db_session, cedula_valida(2))
     evento = RecuperacionOutbox(
         usuario_id=usuario.id,
         status="ENVIANDO",
@@ -61,7 +62,7 @@ def test_stale_lease_es_reclamable(db_session):
 
 
 def test_requeue_aplica_backoff_y_agota_en_sexto_intento(db_session):
-    usuario = _usuario(db_session, "1710000003")
+    usuario = _usuario(db_session, cedula_valida(3))
     evento = RecuperacionOutbox(
         usuario_id=usuario.id,
         attempts=5,

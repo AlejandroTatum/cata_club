@@ -48,9 +48,9 @@ def test_listar_por_horario_ordena_por_apellidos_y_nombres(db_session):
     # Insertados en orden INVERSO al alfabético: un listado sin `ORDER BY`
     # devolvería el orden físico de inserción y no pasaría esta aserción.
     for cedula, nombres, apellidos in (
-        ("1710034501", "Zoe", "Zambrano"),
-        ("1710034502", "Mario", "Mendoza"),
-        ("1710034503", "Beatriz", "Alvarez"),
+        (cedula_valida(501), "Zoe", "Zambrano"),
+        (cedula_valida(502), "Mario", "Mendoza"),
+        (cedula_valida(503), "Beatriz", "Alvarez"),
     ):
         persona = _crear_persona(db_session, cedula, nombres, apellidos)
         db_session.add(AlumnoHorario(persona_id=persona.id, horario_id=horario.id))
@@ -66,7 +66,7 @@ def test_listar_por_horario_ordena_por_apellidos_y_nombres(db_session):
 def test_listar_por_horario_desempata_por_id_de_asignacion(db_session):
     horario = _crear_horario(db_session)
     asignaciones_creadas = []
-    for cedula in ("1710034511", cedula_valida(130), cedula_valida(131)):
+    for cedula in (cedula_valida(511), cedula_valida(130), cedula_valida(131)):
         persona = _crear_persona(db_session, cedula, "Ana", "Torres")
         asignacion = AlumnoHorario(persona_id=persona.id, horario_id=horario.id)
         db_session.add(asignacion)

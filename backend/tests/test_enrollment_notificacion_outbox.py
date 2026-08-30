@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoNotificacion
 from app.dominio.modelos import EnrollmentNotificacionOutbox, Notificacion, Persona
 from app.infraestructura.repositorios.enrollment_notificacion_outbox_repositorio import (
@@ -25,11 +26,14 @@ def _mensajes(registros):
 
 
 def _personas(db_session, semilla: int = 0):
-    """`semilla=0` reproduce las cédulas históricas de este arnés
-    (1710000001/1710000002): un test que crea un solo evento no cambia."""
-    base = 1710000000 + semilla * 10
-    admin = Persona(nombres="Admin", apellidos="Outbox", cedula=str(base + 1), fecha_nacimiento=date(1990, 1, 1), telefono="0991111111")
-    alumno = Persona(nombres="Alumno", apellidos="Outbox", cedula=str(base + 2), fecha_nacimiento=date(2010, 1, 1), telefono="0991111112")
+    """Dos cédulas distintas y estables por `semilla`. Antes se armaban
+    concatenando (`1710000000 + semilla * 10 + n`), que produce diez dígitos
+    pero no cédulas: el dígito verificador salía por casualidad. Desde el
+    issue #828 el modelo las rechaza, así que se derivan del generador
+    canónico del dominio."""
+    base = 500 + semilla * 10
+    admin = Persona(nombres="Admin", apellidos="Outbox", cedula=cedula_valida(base + 1), fecha_nacimiento=date(1990, 1, 1), telefono="0991111111")
+    alumno = Persona(nombres="Alumno", apellidos="Outbox", cedula=cedula_valida(base + 2), fecha_nacimiento=date(2010, 1, 1), telefono="0991111112")
     db_session.add_all([admin, alumno])
     db_session.flush()
     return admin, alumno

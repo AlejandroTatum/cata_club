@@ -24,6 +24,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
+from app.dominio.cedula import es_cedula_valida
+from app.dominio.telefono import es_telefono_valido
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
     TipoPago, EstadoAsistencia, TipoEscuela, NivelTecnicoAlumno, TipoSangre, DiaSemana,
@@ -45,6 +47,88 @@ class Base(DeclarativeBase):
 
 
 _HORARIO_FK = "horario_entrenamiento.id"
+
+# Forma canónica de la cédula, en regex de Postgres. Es la MISMA regla de
+# `es_cedula_valida` MENOS el dígito verificador: diez dígitos cuyos dos
+# primeros son una provincia existente (`01`-`24` o `30` para registrados en
+# el exterior). El verificador se queda fuera a propósito -- ver el docstring
+# del módulo `dominio/cedula.py` y el de la migración `f1a7ident828`.
+_RE_CEDULA_FORMA = "^(0[1-9]|1[0-9]|2[0-4]|30)[0-9]{8}$"
+# Forma canónica del teléfono ecuatoriano, misma regla que
+# `es_telefono_valido`: celular de 10 dígitos que empieza en `09`, o fijo de
+# 9 dígitos que empieza en `0`.
+_RE_TELEFONO_FORMA = "^(09[0-9]{8}|0[0-9]{8})$"
+
+
+# ---------------------------------------------------------------------------
+# Invariantes de identidad (issue #828)
+# ---------------------------------------------------------------------------
+# `es_cedula_valida`/`es_telefono_valido` existían desde el PR 4b pero solo
+# los invocaban los validadores Pydantic de
+# `presentacion/schemas/validadores.py`. Toda escritura que no pasara por un
+# DTO -- un servicio que arma el ORM a mano, un script de bootstrap, un seed,
+# `PersonaRepositorio.actualizar()` recorriendo un dict crudo con `setattr` --
+# podía persistir identidad inválida. Una regla que solo corre en la puerta de
+# entrada no es un invariante; acá baja al modelo, que es por donde pasa TODA
+# escritura del ORM.
+#
+# Se REUSAN los validadores canónicos del dominio a propósito: duplicar acá la
+# forma o el dígito verificador crearía la segunda copia del algoritmo que el
+# carril de identidad existe para borrar (ver docstring de `dominio/cedula.py`).
+# El mensaje NO incluye el valor rechazado: la cédula y el teléfono son datos
+# personales y esta excepción termina en logs y trazas de servidor.
+
+
+def _check_identidad(expresion: str, nombre: str) -> CheckConstraint:
+    """`CheckConstraint` de identidad, acotado a PostgreSQL.
+
+    El operador de regex `~` es de PostgreSQL: en SQLite, `~` es el NOT
+    binario UNARIO y `columna ~ 'algo'` es un error de sintaxis. Los arneses
+    que arman el esquema con `Base.metadata.create_all()` sobre SQLite en
+    memoria (`test_crear_primer_admin.py`, `test_seed_dev_base.py`) se caerían
+    al crear la tabla. `ddl_if` los deja crear la tabla sin el constraint --
+    esos arneses prueban lógica de script, no invariantes de esquema, y la
+    capa `@validates` sí corre ahí porque es Python.
+
+    La base real, que es la única donde este constraint tiene que morder, es
+    PostgreSQL en todos los ambientes."""
+    return CheckConstraint(expresion, name=nombre).ddl_if(dialect="postgresql")
+
+
+def _exigir_cedula_valida(valor: Optional[str]) -> Optional[str]:
+    """`None` pasa: `persona.cedula` es NOT NULL y esa es la regla que lo
+    rechaza, sin que este validador tenga que duplicar el `nullable` del
+    esquema. `""` NO pasa -- a diferencia del teléfono, una cédula vacía no
+    representa a nadie y la columna además es única."""
+    if valor is None:
+        return valor
+    if not es_cedula_valida(valor):
+        raise ValueError(
+            "Cédula inválida: deben ser 10 dígitos, con provincia existente "
+            "(01-24 o 30) y dígito verificador correcto."
+        )
+    return valor
+
+
+def _exigir_telefono_valido(valor: Optional[str], campo: str) -> Optional[str]:
+    """Tolera `None` y `""`.
+
+    `""` significa "sin teléfono", no "teléfono inválido":
+    `tests/test_auth_perfil_propio.py::test_auth_me_telefono_vacio_si_persona_sin_telefono`
+    construye a propósito una `Persona` con `telefono=""` y afirma que
+    `/auth/me` devuelve la cadena vacía. Es comportamiento vigente, y un
+    invariante nuevo no reescribe un contrato existente para que le cierre la
+    regla: tolera la ausencia y rechaza solo lo que pretende ser un número y
+    no lo es."""
+    if valor is None or valor == "":
+        return valor
+    if not es_telefono_valido(valor):
+        raise ValueError(
+            f"Teléfono inválido en «{campo}»: deben ser 10 dígitos empezando "
+            "en 09 (celular) o 9 dígitos empezando en 0 (fijo), sin espacios "
+            "ni separadores."
+        )
+    return valor
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +447,29 @@ class Persona(Base):
         # columna. Una sola columna alcanza: no hay igualdad previa que
         # anteponer. Verificado en `tests/test_indices_consultas_reales.py`.
         Index("ix_persona_fecha_registro", "fecha_registro"),
+        # Issue #828, segunda capa: la FORMA de la identidad también vive en
+        # la base, para que ni el SQL crudo la esquive. Los tres constraints
+        # los crea la migración `f1a7ident828`; los de teléfono nacen ahí
+        # como `NOT VALID` (una fila legacy de bootstrap con `0000000000` en
+        # staging haría abortar el deploy), matiz que `CheckConstraint` no
+        # sabe expresar y que por eso vive en la migración.
+        _check_identidad(
+            f"cedula ~ '{_RE_CEDULA_FORMA}'",
+            "ck_persona_cedula_forma",
+        ),
+        # El `IS NULL` sobra acá (`telefono` es NOT NULL) y se deja igual: las
+        # tres columnas de teléfono usan la MISMA plantilla, en el modelo y en
+        # la migración, para que la regla no se bifurque por columna.
+        _check_identidad(
+            "telefono IS NULL OR telefono = '' "
+            f"OR telefono ~ '{_RE_TELEFONO_FORMA}'",
+            "ck_persona_telefono_forma",
+        ),
+        _check_identidad(
+            "telefono_contacto IS NULL OR telefono_contacto = '' "
+            f"OR telefono_contacto ~ '{_RE_TELEFONO_FORMA}'",
+            "ck_persona_telefono_contacto_forma",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -429,6 +536,21 @@ class Persona(Base):
 
     # Asignación directa a horarios
     alumno_horarios: Mapped[List["AlumnoHorario"]] = relationship(back_populates="persona")
+
+    # --- Invariantes de identidad (issue #828) ---
+    # Se disparan en CUALQUIER asignación de atributo del ORM: constructor,
+    # `setattr` genérico de `PersonaRepositorio.actualizar()`, seeds y
+    # scripts. No se disparan al CARGAR una fila existente, así que la fila
+    # legacy de staging con teléfono `0000000000` se sigue pudiendo leer y
+    # editar en sus otros campos (ver el docstring de la migración
+    # `f1a7ident828`).
+    @validates("cedula")
+    def _validar_cedula(self, key: str, value):
+        return _exigir_cedula_valida(value)
+
+    @validates("telefono", "telefono_contacto")
+    def _validar_telefonos(self, key: str, value):
+        return _exigir_telefono_valido(value, key)
 
 
 class AntecedentesClub(Base):
@@ -1610,6 +1732,16 @@ class AlumnoHorario(Base):
 # ---------------------------------------------------------------------------
 class FichaMedica(Base):
     __tablename__ = "ficha_medica"
+    __table_args__ = (
+        # Issue #828: mismo criterio que `persona.telefono_contacto`. Creado
+        # `NOT VALID` por `f1a7ident828` -- ver el docstring de esa migración.
+        _check_identidad(
+            "telefono_emergencia IS NULL OR telefono_emergencia = '' "
+            f"OR telefono_emergencia ~ '{_RE_TELEFONO_FORMA}'",
+            "ck_ficha_medica_telefono_emergencia_forma",
+        ),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     tipo_sangre: Mapped[TipoSangre] = mapped_column(SAEnum(TipoSangre))
 
@@ -1631,6 +1763,13 @@ class FichaMedica(Base):
     enfermedades: Mapped[List["Enfermedades"]] = relationship(
         back_populates="ficha_medica", cascade="all, delete-orphan"
     )
+
+    # Issue #828: el teléfono de emergencia es el número al que se llama en
+    # una emergencia real. Un número con forma imposible ahí no es un dato
+    # feo, es una llamada que no entra.
+    @validates("telefono_emergencia")
+    def _validar_telefono_emergencia(self, key: str, value):
+        return _exigir_telefono_valido(value, key)
 
 
 class Enfermedades(Base):

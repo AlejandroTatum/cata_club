@@ -92,7 +92,7 @@ def test_alumnos_por_horario_responde_el_envelope_paginado(client, db_session):
     horario = _crear_horario(db_session)
     for i in range(5):
         alumno = _alta_alumno(
-            db_session, f"Alumno{i}", f"Apellido{i:02d}", f"172001060{i}"
+            db_session, f"Alumno{i}", f"Apellido{i:02d}", cedula_valida(1060 + i)
         )
         db_session.add(AlumnoHorario(persona_id=alumno.id, horario_id=horario.id))
     db_session.commit()
@@ -123,7 +123,7 @@ def test_alumnos_por_horario_total_excluye_a_los_dados_de_baja(client, db_sessio
     horario = _crear_horario(db_session)
     for i in range(3):
         alumno = _alta_alumno(
-            db_session, f"Activo{i}", f"Apellido{i:02d}", f"172001070{i}"
+            db_session, f"Activo{i}", f"Apellido{i:02d}", cedula_valida(1070 + i)
         )
         db_session.add(AlumnoHorario(persona_id=alumno.id, horario_id=horario.id))
     baja = _alta_alumno(db_session, "Baja", "Zulueta", cedula_valida(490), activo=False)
@@ -144,7 +144,7 @@ def test_alumnos_por_horario_pagina_sin_solape_con_orden_estable(client, db_sess
     páginas sin solape que cubren el roster completo del horario."""
     horario = _crear_horario(db_session)
     alumnos = [
-        _alta_alumno(db_session, f"Alumno{i}", f"Apellido{9 - i:02d}", f"172001080{i}")
+        _alta_alumno(db_session, f"Alumno{i}", f"Apellido{9 - i:02d}", cedula_valida(1080 + i))
         for i in range(5)
     ]
     for alumno in alumnos:

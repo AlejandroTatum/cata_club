@@ -96,7 +96,7 @@ def _crear_coincidencias(db_session, cantidad: int) -> None:
     matchee; los nombres se insertan en orden inverso al alfabético."""
     nombres = ["Ursula", "Tamara", "Rosa", "Karina", "Ana"]
     for i in range(cantidad):
-        _crear_persona(db_session, f"171003444{i}", nombres[i], "Torres")
+        _crear_persona(db_session, cedula_valida(3440 + i), nombres[i], "Torres")
     db_session.commit()
 
 

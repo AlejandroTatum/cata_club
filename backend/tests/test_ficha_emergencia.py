@@ -12,6 +12,7 @@ Los cuatro candados del issue, uno por test class:
 """
 from datetime import date
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoSangre
 from app.dominio.modelos import ConsultaFichaEmergencia, FichaMedica, Persona
 from tests.conftest import crear_entrenador
@@ -37,7 +38,7 @@ def _crear_representante(db_session, cedula="1710034065"):
     return representante
 
 
-def _crear_alumno_menor(db_session, representante, cedula="1710034066"):
+def _crear_alumno_menor(db_session, representante, cedula=cedula_valida(66)):
     alumno = Persona(
         nombres="Iker", apellidos="Solís", cedula=cedula,
         fecha_nacimiento=date(2015, 5, 14), telefono="0990000000",
@@ -58,7 +59,7 @@ class TestCandado1ExactamenteLosCamposEnumerados:
         # dependa de que la primera Persona creada abajo herede el id=1 por
         # casualidad de la secuencia.
         crear_entrenador(db_session)
-        representante = _crear_representante(db_session, cedula="1710034070")
+        representante = _crear_representante(db_session, cedula=cedula_valida(70))
         alumno = _crear_alumno_menor(db_session, representante)
         ficha = FichaMedica(
             tipo_sangre=TipoSangre.O_POSITIVO, persona_id=alumno.id,
@@ -83,8 +84,8 @@ class TestCandado1ExactamenteLosCamposEnumerados:
 
     def test_un_administrador_tambien_puede_consultarla(self, client, db_session):
         crear_entrenador(db_session)  # ocupa el id=1 que también usa el token de `client`
-        representante = _crear_representante(db_session, cedula="1710034071")
-        alumno = _crear_alumno_menor(db_session, representante, cedula="1710034072")
+        representante = _crear_representante(db_session, cedula=cedula_valida(71))
+        alumno = _crear_alumno_menor(db_session, representante, cedula=cedula_valida(72))
 
         resp = client.get(f"/api/v1/fichas-medicas/persona/{alumno.id}/emergencia")
 
@@ -105,7 +106,7 @@ class TestCandado2LaFichaCompletaSigueCerrada:
         # razón equivocada.
         crear_entrenador(db_session)
         representante = _crear_representante(db_session, cedula="1710034073")
-        alumno = _crear_alumno_menor(db_session, representante, cedula="1710034074")
+        alumno = _crear_alumno_menor(db_session, representante, cedula=cedula_valida(74))
 
         resp = client_entrenador.get(f"/api/v1/fichas-medicas/persona/{alumno.id}")
 
@@ -117,8 +118,8 @@ class TestCandado3RespaldoDelRepresentanteSinFichaMedica:
         self, client_entrenador, db_session,
     ):
         crear_entrenador(db_session)
-        representante = _crear_representante(db_session, cedula="1710034075")
-        alumno = _crear_alumno_menor(db_session, representante, cedula="1710034076")
+        representante = _crear_representante(db_session, cedula=cedula_valida(75))
+        alumno = _crear_alumno_menor(db_session, representante, cedula=cedula_valida(76))
 
         resp = client_entrenador.get(f"/api/v1/fichas-medicas/persona/{alumno.id}/emergencia")
 
@@ -137,8 +138,8 @@ class TestCandado4LaConsultaQuedaAuditada:
         self, client_entrenador, db_session,
     ):
         crear_entrenador(db_session)
-        representante = _crear_representante(db_session, cedula="1710034077")
-        alumno = _crear_alumno_menor(db_session, representante, cedula="1710034078")
+        representante = _crear_representante(db_session, cedula=cedula_valida(77))
+        alumno = _crear_alumno_menor(db_session, representante, cedula=cedula_valida(78))
 
         resp = client_entrenador.get(f"/api/v1/fichas-medicas/persona/{alumno.id}/emergencia")
         assert resp.status_code == 200
@@ -157,8 +158,8 @@ class TestCandado4LaConsultaQuedaAuditada:
         self, client_entrenador, db_session,
     ):
         crear_entrenador(db_session)
-        representante = _crear_representante(db_session, cedula="1710034079")
-        alumno = _crear_alumno_menor(db_session, representante, cedula="1710034080")
+        representante = _crear_representante(db_session, cedula=cedula_valida(79))
+        alumno = _crear_alumno_menor(db_session, representante, cedula=cedula_valida(80))
 
         client_entrenador.get(f"/api/v1/fichas-medicas/persona/{alumno.id}/emergencia")
         client_entrenador.get(f"/api/v1/fichas-medicas/persona/{alumno.id}/emergencia")
