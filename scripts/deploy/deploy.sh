@@ -37,6 +37,15 @@ load_dominio() {
   fi
 }
 
+# `"\n"` y `"\r"`, con UN backslash (issue #851). El programa de python va
+# entre comillas SIMPLES: bash lo pasa tal cual, así que lo que se escriba acá
+# es lo que python compila. `"\\n"` -- que es lo que había -- le llega a python
+# como dos caracteres, backslash y `n`, de modo que el filtro comparaba contra
+# un backslash-n LITERAL y un salto de línea de verdad pasaba entero. La
+# comilla doble exterior de un `"$( ... )"` no cambia nada: dentro de una
+# sustitución de comandos el contenido se parsea de cero, que es por lo que
+# `preflight-production.sh:126` y `record-release.sh` ya usaban un solo
+# backslash aun estando entre comillas dobles.
 configured_backend_image() {
   (
     cd "$STACK_DIR"
@@ -45,7 +54,7 @@ configured_backend_image() {
 try:
     services = json.load(sys.stdin).get("services")
     image = services["backend"]["image"] if isinstance(services, dict) and isinstance(services.get("backend"), dict) else None
-    if not isinstance(image, str) or not image or "\\n" in image or "\\r" in image:
+    if not isinstance(image, str) or not image or "\n" in image or "\r" in image:
         raise ValueError
     print(image)
 except (ValueError, KeyError, TypeError, json.JSONDecodeError):
@@ -53,14 +62,28 @@ except (ValueError, KeyError, TypeError, json.JSONDecodeError):
   )
 }
 
+# Mismo portón que `preflight-production.sh` y `record-release.sh`: un `|| die`
+# sobre la sustitución, una comprobación de no-vacío explícita, y un `case`
+# cuyo ÚNICO arm que pasa es `*":${IMAGE_TAG}")`.
+#
+# El `case` que había acá tenía `''` y `*$'\n'*` en el arm que PASA (la forma
+# que los issues #846 y #847 ya sacaron de los otros dos scripts), así que una
+# referencia vacía o multilínea seguía viaje: la vacía moría después con
+# "Compose no resolvió una imagen" y la multilínea llegaba hasta `docker
+# manifest inspect`, que responde `invalid reference format` y deja al operador
+# leyendo "no se encontró la imagen configurada" -- un mensaje que apunta al
+# registro cuando el problema está en el render de Compose. Comparar el tag
+# contra el final de un bloque tampoco servía: un bloque de tres líneas que
+# termina en `:${IMAGE_TAG}` daba por bueno el tag de la última.
 check_remote_image() {
   local image_reference
-  image_reference="$(configured_backend_image)"
+  image_reference="$(configured_backend_image)" \
+    || die "Compose no resolvió exactamente una imagen para backend"
+  [ -n "$image_reference" ] || die "Compose no resolvió exactamente una imagen para backend"
   case "$image_reference" in
-    ''|*$'\n'*|*":${IMAGE_TAG}") ;;
+    *":${IMAGE_TAG}") ;;
     *) die "la imagen backend configurada no usa IMAGE_TAG=${IMAGE_TAG}" ;;
   esac
-  [ -n "$image_reference" ] || die "Compose no resolvió una imagen para backend"
   docker manifest inspect "$image_reference" >/dev/null 2>&1 \
     || die "no se encontró la imagen configurada (o el registro no autoriza el acceso)"
 }
