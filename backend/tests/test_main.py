@@ -12,6 +12,7 @@ import pytest
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import TimeoutError as TimeoutDePool
 
 import main
 from app.dominio.excepciones import EntidadNoEncontrada, ServicioNoDisponible
@@ -168,6 +169,100 @@ def test_integrity_error_loguea_el_request_id_de_correlacion(
     assert registros, "se esperaba al menos un registro del logger 'main'"
     mensaje = registros[-1].getMessage()
     assert f"[request_id={id_de_correlacion}]" in mensaje
+
+
+# --- Pool agotado: 503 con Retry-After, nunca un 500 (issue #813) -----------
+_RUTA_DESCARTABLE_POOL = "/__prueba__/pool-agotado"
+
+# Reproducción literal del texto que arma `QueuePool` cuando se le acaba el
+# `pool_timeout` (sqlalchemy/pool/impl.py): dice el tamaño del pool, el
+# overflow y el timeout configurados. Es exactamente lo que NO puede llegar
+# al cuerpo de la respuesta.
+_MENSAJE_CRUDO_DEL_POOL = (
+    "QueuePool limit of size 10 overflow 20 reached, "
+    "connection timed out, timeout 5.00"
+)
+
+
+@pytest.fixture()
+def ruta_que_agota_el_pool():
+    """Ruta descartable que lanza el `sqlalchemy.exc.TimeoutError` que emite
+    `QueuePool` cuando expira `pool_timeout`, con su mensaje real.
+
+    Se levanta la excepción a mano en vez de saturar un pool de verdad: lo
+    que este test fija es la TRADUCCIÓN en `main.py`, no la mecánica del
+    pool (esa vive en `test_voucher_sin_retener_conexion.py`). Misma
+    restauración por slice y misma auto-verificación que
+    `ruta_que_lanza_integrity_error`.
+    """
+    rutas_previas = list(app.router.routes)
+
+    @app.get(_RUTA_DESCARTABLE_POOL, include_in_schema=False)
+    async def _lanzar():
+        raise TimeoutDePool(_MENSAJE_CRUDO_DEL_POOL)
+
+    try:
+        yield _RUTA_DESCARTABLE_POOL
+    finally:
+        app.router.routes[:] = rutas_previas
+        app.openapi_schema = None
+        assert all(getattr(r, "path", None) != _RUTA_DESCARTABLE_POOL for r in app.routes)
+
+
+def test_pool_agotado_responde_503_con_retry_after_y_sin_filtrar_internos(
+    ruta_que_agota_el_pool, caplog, monkeypatch
+):
+    """Declarar `pool_timeout=5` (issue #813) convirtió una espera invisible
+    de 30 s en un `TimeoutError` rápido -- pero sin manejador ese error sale
+    como un 500 pelado, que no le dice al cliente ni qué pasó ni que
+    reintentar sirve. Fallar rápido y confuso no es mejor que encolar.
+
+    El contrato es el de una indisponibilidad temporal: 503 (no 500: el
+    servidor no se rompió, está saturado), `Retry-After` para que el cliente
+    sepa cuánto esperar, y un mensaje en castellano escrito para un socio.
+
+    El detalle técnico va al log, nunca al cuerpo: el mensaje crudo de
+    `QueuePool` publica el tamaño del pool, el overflow y el timeout
+    configurados -- inventario de capacidad del backend regalado a cualquiera
+    que sepa saturarlo.
+
+    Mismo gotcha heredado que los tests del 409: Alembic deja el logger
+    'main' deshabilitado, así que hay que reactivarlo antes de `caplog`."""
+    monkeypatch.setattr(logging.getLogger("main"), "disabled", False)
+
+    with caplog.at_level(logging.ERROR, logger="main"):
+        with TestClient(app) as cliente:
+            respuesta = cliente.get(ruta_que_agota_el_pool)
+
+    assert respuesta.status_code == 503, (
+        "un pool agotado tiene que ser un 503 temporal, no un 500 que dice "
+        "'el servidor se rompió' sobre una saturación pasajera (#813)"
+    )
+    assert respuesta.headers.get("Retry-After"), (
+        "sin `Retry-After` el cliente no sabe que reintentar sirve ni cuándo"
+    )
+    assert int(respuesta.headers["Retry-After"]) > 0
+
+    cuerpo = respuesta.json()
+    assert cuerpo["detail"] == cuerpo["message"]
+    assert cuerpo["detail"] == main.MENSAJE_POOL_AGOTADO
+    assert cuerpo["mensaje_seguro"] is True, (
+        "el texto lo escribimos nosotros y no interpola nada de la excepción: "
+        "si no se marca seguro, el frontend lo descarta por ser un 5xx (#355)"
+    )
+
+    cuerpo_serializado = respuesta.text.lower()
+    for filtracion in ("queuepool", "overflow", "sqlalchemy", "timeout", "pool"):
+        assert filtracion not in cuerpo_serializado, (
+            f"el cuerpo de la respuesta filtra '{filtracion}' -- el detalle "
+            "técnico va al log, no al cliente"
+        )
+
+    registros = [r for r in caplog.records if r.name == "main"]
+    assert registros, "se esperaba al menos un registro del logger 'main'"
+    assert registros[-1].exc_info is not None, (
+        "un pool agotado sin traceback en el log es indiagnosticable"
+    )
 
 
 # --- `mensaje_seguro` en el body de error (issue #355) ----------------------
