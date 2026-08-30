@@ -8,6 +8,7 @@ import {
   isRepresentative,
   isMinor,
   describeMembershipState,
+  readCoverageStanding,
   breakdownAttendance,
   daysUntil,
   paymentBandTone,
@@ -235,51 +236,149 @@ describe("daysUntil", () => {
 });
 
 // ---------------------------------------------------------------------------
+// readCoverageStanding
+// ---------------------------------------------------------------------------
+
+// The clock is `TODAY` (25/07/2026, local midnight), declared with the
+// `describePaymentSituation` fixtures below and shared on purpose: these two
+// suites have to be reading the same day for the agreement lock to mean
+// anything.
+/** Coverage that still has days left on it. */
+const LIVE_END = "2026-07-31";
+/** Coverage whose last day IS today. */
+const ENDS_TODAY = "2026-07-25";
+/** Coverage that ran out five days ago. */
+const LAPSED_END = "2026-07-20";
+
+describe("readCoverageStanding", () => {
+  it("calls coverage current while days remain", () => {
+    expect(readCoverageStanding(LIVE_END, TODAY)).toBe("current");
+  });
+
+  it("still calls coverage current on its last day, not lapsed", () => {
+    // Same boundary `daysUntil` draws: the `fecha_fin` day returns 0, and a
+    // family that paid through today is covered through today.
+    expect(readCoverageStanding(ENDS_TODAY, TODAY)).toBe("current");
+  });
+
+  it("calls coverage lapsed the day after it ends", () => {
+    expect(readCoverageStanding(LAPSED_END, TODAY)).toBe("lapsed");
+    expect(readCoverageStanding("2026-07-24", TODAY)).toBe("lapsed");
+  });
+
+  it('reports "none" — never "lapsed" — when there is no readable date at all', () => {
+    // Nothing expired for a family that never had an approved payment, and
+    // an unparseable `fechaFin` is not evidence of coverage either way.
+    expect(readCoverageStanding(null, TODAY)).toBe("none");
+    expect(readCoverageStanding("", TODAY)).toBe("none");
+    expect(readCoverageStanding("pronto", TODAY)).toBe("none");
+  });
+
+  it("draws the same two lines describePaymentSituation draws", () => {
+    // The lock behind "one reading, spoken once": this is not a second date
+    // rule living beside `resolveSituation`, it is the SAME two thresholds
+    // (`daysLeft === null`, `daysLeft < 0`) given a name so the badge can
+    // consume them. If either side ever moves, this fails.
+    for (const end of [LAPSED_END, "2026-07-24", ENDS_TODAY, "2026-07-26", LIVE_END]) {
+      const kind = describePaymentSituation(situation({ coverageEnd: end }), TODAY).kind;
+      expect(readCoverageStanding(end, TODAY) === "lapsed").toBe(kind === "expired");
+    }
+    expect(readCoverageStanding(null, TODAY)).toBe("none");
+    expect(describePaymentSituation(situation({ coverageEnd: null }), TODAY).kind).toBe(
+      "never-paid",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // describeMembershipState
 // ---------------------------------------------------------------------------
 
 describe("describeMembershipState", () => {
-  it("reads an ACTIVA membership as active", () => {
-    expect(describeMembershipState("ACTIVA")).toEqual({
+  it("reads an ACTIVA membership with live coverage as active", () => {
+    expect(describeMembershipState("ACTIVA", LIVE_END, TODAY)).toEqual({
       label: "Membresía activa",
       tone: "ok",
       active: true,
     });
   });
 
-  it("reads an INACTIVA membership as pending, never as failed", () => {
-    // A membership the club has not activated yet is waiting, not broken —
-    // `bad` here would tell a parent something is wrong when nothing is.
-    expect(describeMembershipState("INACTIVA")).toEqual({
-      label: "Membresía pendiente",
-      tone: "warn",
-      active: false,
+  it("still reads ACTIVA as active on the last day of coverage", () => {
+    // The `fecha_fin` day counts as covered on both sides of the screen —
+    // `resolveSituation` calls it "termina hoy", not "venció".
+    expect(describeMembershipState("ACTIVA", ENDS_TODAY, TODAY)).toEqual({
+      label: "Membresía activa",
+      tone: "ok",
+      active: true,
     });
   });
 
-  it("reads a VENCIDA membership as expired", () => {
-    expect(describeMembershipState("VENCIDA")).toEqual({
-      label: "Membresía vencida",
+  it("never announces active coverage once the approved period has lapsed", () => {
+    // Issue #815 — the defect. `Membresia.estado` only flips ACTIVA→VENCIDA
+    // in a daily 02:35 batch, so from local midnight until the batch runs an
+    // estado-only badge announced "Membresía activa" over coverage that had
+    // already run out.
+    expect(describeMembershipState("ACTIVA", LAPSED_END, TODAY)).toEqual({
+      label: "Cobertura vencida",
       tone: "bad",
       active: false,
     });
   });
 
-  it("reads the absence of a membership as neutral, not as a failure", () => {
-    expect(describeMembershipState(null)).toEqual({
-      label: "Sin membresía",
-      tone: "neutral",
+  it("says nothing was approved rather than that something expired", () => {
+    expect(describeMembershipState("ACTIVA", null, TODAY)).toEqual({
+      label: "Sin pagos aprobados",
+      tone: "warn",
       active: false,
     });
   });
 
-  it("reads a SUSPENDIDA membership as suspended, never as expired", () => {
+  it("reads an INACTIVA membership as pending, whatever the coverage says", () => {
+    // A membership the club has not activated yet is waiting, not broken —
+    // `bad` here would tell a parent something is wrong when nothing is. And
+    // "pendiente" asserts nothing about coverage, so no date can contradict it.
+    const pending = { label: "Membresía pendiente", tone: "warn", active: false };
+    expect(describeMembershipState("INACTIVA", LIVE_END, TODAY)).toEqual(pending);
+    expect(describeMembershipState("INACTIVA", LAPSED_END, TODAY)).toEqual(pending);
+    expect(describeMembershipState("INACTIVA", null, TODAY)).toEqual(pending);
+  });
+
+  it("reads a VENCIDA membership as expired, whatever the coverage says", () => {
+    // Deliberately not softened when coverage is still live: under-reporting
+    // coverage costs a second look, over-reporting it costs the family money.
+    const expired = { label: "Membresía vencida", tone: "bad", active: false };
+    expect(describeMembershipState("VENCIDA", LAPSED_END, TODAY)).toEqual(expired);
+    expect(describeMembershipState("VENCIDA", LIVE_END, TODAY)).toEqual(expired);
+  });
+
+  it("reads the absence of a membership as neutral, not as a failure", () => {
+    const none = { label: "Sin membresía", tone: "neutral", active: false };
+    expect(describeMembershipState(null, LIVE_END, TODAY)).toEqual(none);
+    expect(describeMembershipState(undefined, LAPSED_END, TODAY)).toEqual(none);
+  });
+
+  it("reads a SUSPENDIDA membership with live coverage as suspended, never as expired", () => {
     // Bug fix (issue #400, slice 06): SUSPENDIDA used to fall through to the
     // generic "vencida" branch, which is misleading — a suspension (5a)
     // never forfeits the coverage already paid for. `warn`, not `bad`: same
     // "pending, not broken" reasoning INACTIVA already gets.
-    expect(describeMembershipState("SUSPENDIDA")).toEqual({
+    expect(describeMembershipState("SUSPENDIDA", LIVE_END, TODAY)).toEqual({
       label: "Suspendida — cobertura vigente",
+      tone: "warn",
+      active: false,
+    });
+  });
+
+  it('stops claiming "cobertura vigente" for a suspension whose coverage ran out', () => {
+    // Issue #815: the label itself asserts coverage is current. A suspension
+    // does not forfeit paid coverage — but it does not extend it either.
+    expect(describeMembershipState("SUSPENDIDA", LAPSED_END, TODAY)).toEqual({
+      label: "Suspendida — cobertura vencida",
+      tone: "bad",
+      active: false,
+    });
+    expect(describeMembershipState("SUSPENDIDA", null, TODAY)).toEqual({
+      label: "Suspendida",
       tone: "warn",
       active: false,
     });
@@ -287,8 +386,10 @@ describe("describeMembershipState", () => {
 
   it("falls back to 'vencida' for any other estado the backend may add", () => {
     // Same fallback the carnet has always used — an unknown estado is never
-    // reported as active.
-    expect(describeMembershipState("ALGO_NUEVO").active).toBe(false);
+    // reported as active, and live coverage does not promote it either.
+    expect(describeMembershipState("ALGO_NUEVO", LIVE_END, TODAY).active).toBe(false);
+    expect(describeMembershipState("ALGO_NUEVO", LAPSED_END, TODAY).active).toBe(false);
+    expect(describeMembershipState("ALGO_NUEVO", LIVE_END, TODAY).label).toBe("Membresía vencida");
   });
 });
 

@@ -200,7 +200,14 @@ function MembershipCard({
   studentName: string | null;
   children?: React.ReactNode;
 }): React.ReactElement {
-  const state = describeMembershipState(membership?.estado);
+  // Issue #815: `coverageEnd` — the furthest APPROVED `PagoPersona.fechaFin`,
+  // the very date the heading below prints — is passed in, so the badge and
+  // that heading can no longer tell the reader two different things. Reading
+  // `estado` alone let this badge say "Membresía activa" over a coverage date
+  // that had already passed, every night until the 02:35 batch caught up.
+  // `today` is left at its default for the same reason `describePaymentSituation`
+  // is called without one further down this file: one clock per screen.
+  const state = describeMembershipState(membership?.estado, coverageEnd);
 
   const facts: { label: string; value: string }[] = [];
   if (membership?.categoria) facts.push({ label: "Plan", value: membership.categoria });

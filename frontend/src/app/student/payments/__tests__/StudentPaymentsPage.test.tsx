@@ -135,6 +135,17 @@ const COVERAGE_END = "2026-07-31";
 /** Un mes desde `COVERAGE_END`, el período que propone la renovación. */
 const RENEWAL_END = "2026-08-31";
 
+/** Inicio del período de un pago aprobado que ya venció. */
+const PAGO_START_PAST = "2026-06-01";
+/**
+ * Cobertura vencida respecto del reloj congelado (issue #815).
+ *
+ * `Membresia.estado` sigue en `ACTIVA` en el fixture a propósito: el lote de
+ * las 02:35 es lo único que lo pasa a `VENCIDA`, así que este es exactamente
+ * el estado que tiene la base entre la medianoche local y esa hora.
+ */
+const COVERAGE_END_PAST = "2026-06-30";
+
 /** Cobertura de los casos que pagan por adelantado. */
 const COVERAGE_END_AHEAD = "2026-08-31";
 /** Un mes desde `COVERAGE_END_AHEAD`; septiembre no tiene 31, y se recorta. */
@@ -438,6 +449,65 @@ describe("StudentPaymentsPage — the membership card", () => {
     // The CTA ("Registrar un pago") lives in the SAME card as the dot, not
     // a separate section the reader has to scroll to find.
     expect(within(card).getByRole("button", { name: /^registrar un pago$/i })).toBeInTheDocument();
+  });
+
+  // Issue #815: the badge read `Membresia.estado` and nothing else, while the
+  // heading right under it read the furthest approved `PagoPersona.fechaFin`.
+  // `estado` only flips ACTIVA→VENCIDA in a daily 02:35 batch, so every night
+  // between local midnight and that batch the same card announced "Membresía
+  // activa" directly above "Pagado hasta el <fecha ya pasada>".
+  it("never announces active coverage over a coverage date that already passed", async () => {
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ fechaInicio: PAGO_START_PAST, fechaFin: COVERAGE_END_PAST })]);
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    // The heading still reports the same date it always did…
+    await waitFor(() => {
+      expect(within(card).getByText(shown(COVERAGE_END_PAST))).toBeInTheDocument();
+    });
+    // …and `estado` is still ACTIVA in the fixture, exactly as the database
+    // has it before the batch runs — but nothing on the card says so.
+    expect(within(card).queryByText("Membresía activa")).not.toBeInTheDocument();
+    // Badge and status-footer dot, both reading the coverage the heading shows.
+    expect(within(card).getAllByText("Cobertura vencida")).toHaveLength(2);
+  });
+
+  // The other half of the same rule: reading coverage instead of `estado` must
+  // not start under-reporting a family that genuinely IS covered.
+  it("still reads a genuinely covered ACTIVA membership as active", async () => {
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    await waitFor(() => {
+      expect(within(card).getByText(shown(COVERAGE_END_AHEAD))).toBeInTheDocument();
+    });
+    expect(within(card).getAllByText("Membresía activa")).toHaveLength(2);
+    expect(within(card).queryByText(/cobertura vencida/i)).not.toBeInTheDocument();
+  });
+
+  // The card can be reached with a membership row but no approved payment at
+  // all. Nothing expired for that reader, so the badge must not say anything
+  // did — "vencida" would be a plain falsehood about a family that just joined.
+  it("says no payment was approved rather than that coverage expired", async () => {
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ estadoPago: "PENDIENTE_VALIDACION" })]);
+
+    render(<StudentPaymentsPage />);
+
+    const card = await screen.findByTestId("membership-status");
+    await waitFor(() => {
+      expect(within(card).getAllByText("Sin pagos aprobados")).toHaveLength(2);
+    });
+    expect(within(card).queryByText(/vencida/i)).not.toBeInTheDocument();
+    expect(within(card).queryByText("Membresía activa")).not.toBeInTheDocument();
   });
 });
 
