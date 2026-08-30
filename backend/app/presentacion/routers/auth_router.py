@@ -83,7 +83,14 @@ async def registro(request: Request, datos: RegistroUsuarioDTO, db: Session = De
     que ya existe. Antes era público (sin auth) — ahora está protegido
     para que nadie pueda crear credenciales ajenas usando solo una cédula.
     """
-    return AuthServicio(db).registrar_usuario(datos)
+    # `run_in_threadpool` (issue #826): `registrar_usuario` hashea la
+    # contraseña con bcrypt (`GestorAutenticacion.obtener_hash_contrasenia` ->
+    # `pwd_context.hash`), cientos de ms de CPU PURA. A diferencia del bloqueo por
+    # red de `login`, acá no hay E/S que ceder: llamado directo desde esta
+    # coroutine, ese cómputo retiene el único hilo del event loop de punta a
+    # punta. El candado de `tests/test_bloqueo_del_event_loop.py` exige esta
+    # forma para todo handler que alcance un hasheo o una subida.
+    return await run_in_threadpool(AuthServicio(db).registrar_usuario, datos)
 
 
 @router.get("/me", response_model=UsuarioMeResponseDTO)
@@ -142,7 +149,14 @@ async def actualizar_foto_perfil(
     usuario nunca pueda reemplazar la foto de otro.
     """
     contenido = await leer_con_limite(archivo, AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES)
-    return AuthServicio(db).actualizar_foto_perfil(
+    # `run_in_threadpool` (issue #826, mismo patrón que `subir_voucher` en
+    # membresias_pagos_router.py, issue #450): `actualizar_foto_perfil` termina
+    # en `cloudinary.uploader.upload`, SDK síncrono contra la red acotado por
+    # `TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS` (8 s). Sin threadpool, una subida
+    # lenta retiene el único hilo del event loop y ningún otro cliente es
+    # atendido mientras tanto.
+    return await run_in_threadpool(
+        AuthServicio(db).actualizar_foto_perfil,
         correo_actual=token_payload["sub"],
         contenido=contenido,
         content_type=archivo.content_type,
@@ -231,7 +245,13 @@ async def solicitar_recuperacion(request: Request, datos: SolicitarRecuperacionD
 @router.post("/restablecer-contrasenia", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("20/minute")
 async def restablecer_contrasenia(request: Request, datos: RestablecerContraseniaDTO, db: Session = Depends(obtener_sesion)):
-    AuthServicio(db).restablecer_contrasenia(datos.token, datos.nueva_contrasenia)
+    # `run_in_threadpool` (issue #826): hashea la contraseña nueva con bcrypt,
+    # el mismo bloqueo de CPU que `registro`. Este endpoint es PÚBLICO (quien
+    # olvidó su clave puede no tener sesión), así que provocarlo no requiere
+    # estar autenticado.
+    await run_in_threadpool(
+        AuthServicio(db).restablecer_contrasenia, datos.token, datos.nueva_contrasenia,
+    )
 
 
 # --- Issue #790: verificación de la dirección de correo ----------------------

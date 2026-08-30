@@ -1,5 +1,6 @@
 """API de patrocinadores: lectura pública y administración exclusiva del club."""
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -51,7 +52,17 @@ async def crear_sponsor(
     # memoria, el rechazo salía con un mensaje propio en vez del compartido,
     # obligando al frontend a distinguir el caso.
     contenido = await leer_con_limite(archivo, SponsorServicio.TAMANO_MAXIMO_LOGO_BYTES)
-    return SponsorServicio(db).crear(datos, contenido, archivo.content_type)
+    # `run_in_threadpool` (issue #826): `SponsorServicio.crear` termina en
+    # `cloudinary.uploader.upload`, SDK síncrono contra la red acotado por
+    # `TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS` (8 s). El backend corre UN proceso de
+    # uvicorn sin `--workers` (`Dockerfile:53`), así que esa subida llamada
+    # directo desde la coroutine retiene el único hilo del event loop y ningún
+    # otro cliente es atendido -- ni `GET /health`. Misma corrección que
+    # `subir_voucher` (issue #450) y `login` (issue #311); el candado de
+    # `tests/test_bloqueo_del_event_loop.py` la vuelve obligatoria.
+    return await run_in_threadpool(
+        SponsorServicio(db).crear, datos, contenido, archivo.content_type,
+    )
 
 
 @router.delete(
@@ -59,4 +70,9 @@ async def crear_sponsor(
     dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
 )
 async def eliminar_sponsor(sponsor_id: int, db: Session = Depends(obtener_sesion)):
-    SponsorServicio(db).eliminar(sponsor_id)
+    # `run_in_threadpool` (issue #835): el borrado también habla con Cloudinary
+    # -- `eliminar_logo_sponsor` llama a `cloudinary.uploader.destroy`, con el
+    # mismo presupuesto de red que la subida. La corrección de #826 no lo
+    # incluía: es la cuarta vez que este defecto se arregla de a un sitio, y el
+    # motivo de que el candado mire la clase entera y no una lista.
+    await run_in_threadpool(SponsorServicio(db).eliminar, sponsor_id)

@@ -73,7 +73,11 @@ async def crear_cuenta_admin(
 ):
     """Crea Persona + Usuario + Rol en un solo request (JUGADOR / REPRESENTANTE / MENOR).
     Retorna tokens JWT para auto-login inmediato del admin y de la cuenta creada."""
-    return AdminCuentaServicio(db).crear_cuenta(datos)
+    # `run_in_threadpool` (issue #826, mismo motivo que `registro` en
+    # auth_router.py): `crear_cuenta` hashea con bcrypt (cientos de ms de CPU
+    # pura), y un cómputo no cede el event loop ni con un driver async. Ver el
+    # candado en `tests/test_bloqueo_del_event_loop.py`.
+    return await run_in_threadpool(AdminCuentaServicio(db).crear_cuenta, datos)
 
 
 @router.post(
@@ -475,7 +479,12 @@ async def crear_representado(
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
-    return PersonaServicio(db).crear_representado(persona_id, datos)
+    # `run_in_threadpool` (issue #826): si el representado trae credenciales
+    # propias, `crear_representado` hashea con bcrypt. Mismo bloqueo de CPU que
+    # `crear_cuenta_admin`.
+    return await run_in_threadpool(
+        PersonaServicio(db).crear_representado, persona_id, datos,
+    )
 
 
 # --- Vincular un representado ya existente (INS-2) --------------------------
@@ -529,7 +538,17 @@ async def independizar_persona(
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
-    return PersonaServicio(db).independizar(persona_id, datos)
+    # `run_in_threadpool` (issue #826): `independizar` confirma la contraseña
+    # con `GestorAutenticacion.verificar_contrasenia` -> `pwd_context.verify`.
+    # Verificar cuesta EXACTAMENTE lo mismo que hashear (cientos de ms de CPU pura):
+    # bcrypt vuelve a derivar la clave con el costo y la sal que vienen dentro
+    # del hash guardado, no compara cadenas. Y a diferencia del resto de los
+    # sitios de #826, esta ruta no tiene `@limiter.limit`, así que cualquier
+    # autenticado podía congelar el único hilo del event loop (`Dockerfile:53`,
+    # sin `--workers`) esos cientos de ms por request, en un bucle sin freno.
+    return await run_in_threadpool(
+        PersonaServicio(db).independizar, persona_id, datos,
+    )
 
 
 # --- Foto de una persona (carnet de socio, issue #286) ---------------------
@@ -561,7 +580,13 @@ async def actualizar_foto_persona(
         mensaje="Solo la propia persona, su representante, o un administrador pueden actualizar su foto",
     )
     contenido = await leer_con_limite(archivo, AuthServicio.TAMANO_MAXIMO_FOTO_PERFIL_BYTES)
-    return PersonaServicio(db).actualizar_foto(
+    # `run_in_threadpool` (issue #826, mismo caso que su gemelo self-service
+    # `POST /auth/me/foto`): `actualizar_foto` termina en
+    # `cloudinary.uploader.upload`, SDK síncrono con hasta 8 s de presupuesto
+    # de red. Llamarlo directo desde esta coroutine congela al proceso entero
+    # durante la subida.
+    return await run_in_threadpool(
+        PersonaServicio(db).actualizar_foto,
         persona_id=persona_id,
         contenido=contenido,
         content_type=archivo.content_type,
