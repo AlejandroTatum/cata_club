@@ -65,8 +65,9 @@ _MENSAJE_SUBIDA_NO_DISPONIBLE = (
 )
 
 # Circuit breaker en proceso (degradacion-controlada, slice 2): una única
-# instancia a nivel de módulo, compartida por las 3 funciones públicas de
-# este módulo porque todas pasan por `_subir()`. Ver Decisión E del diseño:
+# instancia a nivel de módulo, compartida por TODAS las llamadas de red del
+# módulo: las subidas, que pasan por `_subir()`, y `eliminar_logo_sponsor`,
+# que llama al SDK por su cuenta (issue #838). Ver Decisión E del diseño:
 # estado en memoria + reloj monotónico + lock, sin Redis compartido -- un
 # solo proceso Uvicorn y Celery con `--concurrency=2` no lo necesitan.
 _circuito_cloudinary = CircuitoBreaker(
@@ -84,6 +85,27 @@ def _configurar_cliente() -> None:
         api_key=settings.cloudinary_api_key,
         api_secret=settings.cloudinary_api_secret,
         secure=True,  # SIEMPRE HTTPS para las URLs públicas devueltas
+    )
+
+
+def _timeout_cloudinary() -> Timeout:
+    """Cota de reloj de pared para CUALQUIER llamada de red al SDK.
+
+    Es un `urllib3.util.Timeout` y no un float: un float se convierte en
+    `Timeout(read=t, connect=t)` per-operación de socket, sin cota real
+    (`urllib3/util/timeout.py:186`). Solo una instancia de `Timeout` respeta
+    el `total=` (`connectionpool.py:351`). Nota: `total=` no cubre
+    completamente la fase de ENVÍO del cuerpo del request -- un cuerpo que
+    fluye sin nunca estancarse 3s queda sin cota en esa fase específica;
+    documentado, no resuelto (ver diseño).
+
+    Se construye en cada llamada (y no una sola vez a nivel de módulo) para
+    que las constantes se lean en el momento de usarlas, no al importar.
+    """
+    return Timeout(
+        connect=TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
+        read=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
+        total=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
     )
 
 
@@ -113,13 +135,9 @@ def _subir(
     contradice: el breaker decide si se hace el único intento permitido, no
     agrega un segundo intento sobre uno que ya falló.
 
-    El `timeout` es un `urllib3.util.Timeout` (no un float): un float se
-    convierte en `Timeout(read=t, connect=t)` per-operación de socket, sin
-    cota de reloj de pared real (`urllib3/util/timeout.py:186`). Solo una
-    instancia de `Timeout` respeta el `total=` (`connectionpool.py:351`).
-    Nota: `total=` no cubre completamente la fase de ENVÍO del cuerpo del
-    request — un cuerpo que fluye sin nunca estancarse 3s queda sin cota en
-    esa fase específica; documentado, no resuelto (ver diseño).
+    El `timeout` sale de `_timeout_cloudinary()`, compartido con el resto de
+    las llamadas de red del módulo -- ver su docstring para el porqué de un
+    `urllib3.util.Timeout` y no un float.
     """
     if not _circuito_cloudinary.permitir():
         raise ServicioNoDisponible(
@@ -128,11 +146,7 @@ def _subir(
             seguro_mostrar=True,
         )
 
-    timeout = Timeout(
-        connect=TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS,
-        read=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
-        total=TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS,
-    )
+    timeout = _timeout_cloudinary()
 
     inicio = time.perf_counter()
     try:
@@ -381,20 +395,59 @@ def subir_logo_sponsor(contenido: bytes, nombre_publico: str, content_type: str)
     }, f"logo de patrocinador (public_id={nombre_publico})")
 
 
+_MENSAJE_BORRADO_NO_DISPONIBLE = (
+    "No se pudo eliminar el logo del patrocinador. Intente nuevamente."
+)
+
+
 def eliminar_logo_sponsor(nombre_publico: str) -> None:
-    """Retira un logo público; la fila se borra solo si el proveedor responde."""
+    """Retira un logo público; la fila se borra solo si el proveedor responde.
+
+    Única llamada de red del módulo que no pasa por `_subir()`, y por eso la
+    única que se había quedado sin las dos protecciones que ya tenían las
+    subidas (issue #838, punto 3):
+
+      - `timeout=`: `destroy()` acepta el mismo kwarg que `upload()`. Sin él,
+        un par TCP que no responde cuelga la llamada indefinidamente -- y
+        como `eliminar_sponsor` corre sobre el event loop, cuelga el proceso.
+      - `_circuito_cloudinary`: sin registrar sus fallos, un Cloudinary caído
+        nunca abría el circuito por este camino y cada request lo seguía
+        intentando. Con el circuito ABIERTO no se llama al SDK, igual que en
+        `_subir()`.
+    """
     _configurar_cliente()
+
+    if not _circuito_cloudinary.permitir():
+        raise ServicioNoDisponible(
+            _MENSAJE_BORRADO_NO_DISPONIBLE,
+            detalle_tecnico=(
+                "Cloudinary no disponible (circuito abierto): eliminar logo "
+                f"sponsor {nombre_publico}"
+            ),
+            seguro_mostrar=True,
+        )
+
     try:
         cloudinary.uploader.destroy(
-            f"cataclub/sponsors/{nombre_publico}", resource_type="image", type="upload", invalidate=True,
+            f"cataclub/sponsors/{nombre_publico}", resource_type="image", type="upload",
+            invalidate=True, timeout=_timeout_cloudinary(),
         )
     except Exception as exc:
-        logger.exception("Fallo eliminando logo de patrocinador de Cloudinary")
+        _circuito_cloudinary.registrar_fallo()
+        detalle = _redactar_detalle_sensible(str(exc))
+        # Se registra el string YA redactado y SIN `exc_info`, igual que
+        # `_subir()` arriba. Un `logger.exception(...)` escribe el traceback
+        # completo, cuya última línea es `Tipo: str(exc)` sin pasar por
+        # `_redactar_detalle_sensible`: redactar solo `detalle_tecnico` no
+        # sirve de nada si el traceback ya copió la credencial al log.
+        logger.error("Fallo eliminando logo de patrocinador de Cloudinary: %s", detalle)
         raise ServicioNoDisponible(
-            "No se pudo eliminar el logo del patrocinador. Intente nuevamente.",
-            detalle_tecnico=f"Error eliminando logo sponsor {nombre_publico}: {exc}",
+            _MENSAJE_BORRADO_NO_DISPONIBLE,
+            detalle_tecnico=f"Error eliminando logo sponsor {nombre_publico}: {detalle}",
             seguro_mostrar=True,
         ) from exc
+
+    _circuito_cloudinary.registrar_exito()
 
 
 # --- Entrega de PDF: endpoint de descarga de la API, no la CDN -------------

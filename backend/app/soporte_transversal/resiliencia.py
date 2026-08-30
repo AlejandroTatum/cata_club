@@ -6,16 +6,18 @@ Módulo PURO: solo constantes numéricas, CERO imports. La mecánica (cómo se
 usan estos números contra cada SDK/transporte) vive en cada adaptador de
 `app.infraestructura.*`, no acá. Esto mantiene un solo lugar de política y
 deja la implementación de transporte donde corresponde (ver
-`cloudinary_cliente.py::_subir`, que arma un `urllib3.util.Timeout` con los
-dos primeros valores).
+`cloudinary_cliente.py::_timeout_cloudinary`, que arma un
+`urllib3.util.Timeout` con los dos primeros valores y lo usan TODAS las
+llamadas de red de ese módulo: las subidas y el borrado de logo).
 
 Todo call site de timeout/retry del proyecto DEBE importar sus valores desde
 este módulo. Ningún call site puede tener un literal numérico propio (hay una
 prueba de guardia que lo verifica, ver `test_cloudinary_cliente.py`).
 """
 
-# --- Cloudinary (ruta de request: voucher, foto de perfil; ruta de tarea:
-# PDF de membresía) ----------------------------------------------------------
+# --- Cloudinary (ruta de request: voucher, foto de perfil, y logo de
+# patrocinador tanto al subirlo como al borrarlo; ruta de tarea: PDF de
+# membresía) -----------------------------------------------------------------
 # Un handshake TCP+TLS contra un CDN global termina bien por debajo de 1s o no
 # termina. Un connect fallido no cuesta nada: no se envió ningún byte.
 TIMEOUT_CLOUDINARY_CONEXION_SEGUNDOS = 3.0
@@ -35,10 +37,13 @@ TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS = 8.0
 UMBRAL_SUBIDA_LENTA_SEGUNDOS = 4.0
 
 # --- Circuit breaker Cloudinary (degradacion-controlada, slice 2) -----------
-# 3 subidas fallidas seguidas, no una sola: una sola falla puede ser un
+# 3 LLAMADAS fallidas seguidas, no una sola: una sola falla puede ser un
 # glitch transitorio de un peer; 3 x el timeout total (~8s c/u, ~24s en
 # total) alcanza para confirmar que el proveedor está caído de verdad, no
-# que hubo una subida floja.
+# que hubo una llamada floja. Cuentan las 4 subidas Y el borrado de logo de
+# patrocinador (issue #838): comparten la misma instancia de breaker porque
+# lo que se mide es si Cloudinary CONTESTA, no qué operación se le pidió --
+# 3 borrados que se cuelgan prueban lo mismo que 3 subidas que se cuelgan.
 CIRCUITO_CLOUDINARY_UMBRAL_FALLOS = 3
 
 # Mayor al timeout total (8s), para que una sonda en SEMIABIERTO siempre

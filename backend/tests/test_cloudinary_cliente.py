@@ -63,15 +63,31 @@ def _subir_foto(**overrides):
     return cc.subir_foto_perfil(**kwargs)
 
 
+def _subir_logo(**overrides):
+    kwargs = dict(
+        contenido=b"contenido-logo", nombre_publico="logo-1", content_type="image/png",
+    )
+    kwargs.update(overrides)
+    return cc.subir_logo_sponsor(**kwargs)
+
+
 FUNCIONES = [
     ("subir_pdf_membresia", _subir_pdf),
     ("subir_voucher_pago", _subir_voucher),
     ("subir_foto_perfil", _subir_foto),
+    # El logo de patrocinador es la 4ta función pública que pasa por
+    # `_subir()`; estaba fuera de esta lista y por lo tanto de todos los
+    # candados de contrato de abajo (issue #838).
+    ("subir_logo_sponsor", _subir_logo),
 ]
 
 
 def _parchear_upload():
     return patch("app.infraestructura.cloudinary_cliente.cloudinary.uploader.upload")
+
+
+def _parchear_destroy():
+    return patch("app.infraestructura.cloudinary_cliente.cloudinary.uploader.destroy")
 
 
 # --- 1. Contrato: cada una de las 3 funciones pasa un Timeout explícito -----
@@ -294,9 +310,11 @@ def test_subida_rapida_emite_info_no_warning(caplog, monkeypatch):
 
 # --- 8. Circuit breaker (degradacion-controlada, slice 2) -------------------
 # El circuito de Cloudinary vive como una única instancia a nivel de módulo
-# (`cc._circuito_cloudinary`), compartida por las 3 funciones públicas porque
-# todas pasan por `_subir()`. El fixture autouse de `tests/conftest.py` lo
-# reinicia entre tests para que el estado de uno no se filtre al siguiente.
+# (`cc._circuito_cloudinary`), compartida por TODAS las llamadas de red del
+# módulo: las 4 subidas, que pasan por `_subir()`, y `eliminar_logo_sponsor`,
+# que llama al SDK por su cuenta (issue #838). El fixture autouse de
+# `tests/conftest.py` lo reinicia entre tests para que el estado de uno no se
+# filtre al siguiente.
 def test_circuito_abierto_no_llama_al_sdk():
     for _ in range(CIRCUITO_CLOUDINARY_UMBRAL_FALLOS):
         cc._circuito_cloudinary.registrar_fallo()
@@ -307,6 +325,137 @@ def test_circuito_abierto_no_llama_al_sdk():
             _subir_pdf()
 
         assert mock_upload.call_count == 0
+
+
+# --- 8b. `eliminar_logo_sponsor`: la ÚNICA llamada de red del módulo que no
+# pasa por `_subir()` (issue #838, punto 3). Antes del fix no pasaba
+# `timeout=` ni consultaba `_circuito_cloudinary`: un Cloudinary caído nunca
+# abría el circuito para borrados, y cada request lo seguía intentando contra
+# un par TCP que puede no responder nunca -- sobre el event loop, o sea
+# colgando el proceso entero. `destroy()` acepta el mismo kwarg `timeout` que
+# `upload()`.
+
+def test_eliminar_logo_sponsor_pasa_un_timeout_urllib3_explicito():
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.return_value = {"result": "ok"}
+
+        cc.eliminar_logo_sponsor("logo-1")
+
+        _, kwargs = mock_destroy.call_args
+        timeout = kwargs["timeout"]
+        assert isinstance(timeout, Timeout), (
+            "un float se convierte en timeout per-operación de socket, sin "
+            "cota de reloj de pared: solo un `urllib3.util.Timeout` respeta `total=`"
+        )
+        assert timeout.connect_timeout == 3.0
+        assert timeout.total == 8.0
+
+
+def test_eliminar_logo_sponsor_toma_el_timeout_de_resiliencia_no_de_un_literal(monkeypatch):
+    monkeypatch.setattr(cc, "TIMEOUT_CLOUDINARY_TOTAL_SEGUNDOS", 99.0)
+
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.return_value = {"result": "ok"}
+
+        cc.eliminar_logo_sponsor("logo-1")
+
+        _, kwargs = mock_destroy.call_args
+        assert kwargs["timeout"].total == 99.0
+
+
+def test_eliminar_logo_sponsor_con_circuito_abierto_no_llama_al_sdk():
+    """Mismo contrato que `_subir`: con el circuito ABIERTO se levanta
+    `ServicioNoDisponible` SIN gastar la llamada al proveedor."""
+    for _ in range(CIRCUITO_CLOUDINARY_UMBRAL_FALLOS):
+        cc._circuito_cloudinary.registrar_fallo()
+    assert cc._circuito_cloudinary.estado == "abierto"
+
+    with _parchear_destroy() as mock_destroy:
+        with pytest.raises(ServicioNoDisponible) as error:
+            cc.eliminar_logo_sponsor("logo-1")
+
+        assert mock_destroy.call_count == 0
+    assert error.value.seguro_mostrar is True
+
+
+def test_eliminar_logo_sponsor_registra_el_fallo_en_el_circuito():
+    """Sin esto, un Cloudinary caído nunca abría el circuito por el camino de
+    borrado: los fallos no se contaban en ningún lado."""
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.side_effect = Exception("Cloudinary caído")
+
+        with pytest.raises(ServicioNoDisponible) as error:
+            cc.eliminar_logo_sponsor("logo-1")
+
+    assert cc._circuito_cloudinary.fallos_consecutivos == 1
+    # Mismo criterio que las 3 ramas de `_subir` y que la rama de circuito
+    # abierto de acá arriba: `main.py::_MAPA_EXCEPCIONES` solo copia `mensaje`
+    # al body del 503 si está marcado como seguro; sin esto, el admin recibe
+    # el genérico que descarta cualquier 5xx.
+    assert error.value.seguro_mostrar is True
+
+
+def test_eliminar_logo_sponsor_abre_el_circuito_tras_el_umbral_de_fallos():
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.side_effect = Exception("Cloudinary caído")
+
+        for _ in range(CIRCUITO_CLOUDINARY_UMBRAL_FALLOS):
+            with pytest.raises(ServicioNoDisponible):
+                cc.eliminar_logo_sponsor("logo-1")
+
+        assert cc._circuito_cloudinary.estado == "abierto"
+
+        llamadas_hasta_abrir = mock_destroy.call_count
+        with pytest.raises(ServicioNoDisponible):
+            cc.eliminar_logo_sponsor("logo-1")
+
+        assert mock_destroy.call_count == llamadas_hasta_abrir
+
+
+def test_eliminar_logo_sponsor_exitoso_registra_el_exito_en_el_circuito():
+    cc._circuito_cloudinary.registrar_fallo()
+    assert cc._circuito_cloudinary.fallos_consecutivos == 1
+
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.return_value = {"result": "ok"}
+
+        cc.eliminar_logo_sponsor("logo-1")
+
+    assert cc._circuito_cloudinary.fallos_consecutivos == 0
+
+
+def test_eliminar_logo_sponsor_no_reintenta_tras_un_fallo():
+    """Mismo invariante que `_subir`: un reintento acá multiplicaría los
+    intentos contra el proveedor sin resolver nada."""
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.side_effect = Exception("Cloudinary caído")
+
+        with pytest.raises(ServicioNoDisponible):
+            cc.eliminar_logo_sponsor("logo-1")
+
+        assert mock_destroy.call_count == 1
+
+
+def test_fallo_al_eliminar_logo_redacta_credenciales_de_log_y_detalle(monkeypatch, caplog):
+    """Equivalente para el borrado del candado de redacción de `_subir`
+    (`test_fallo_cloudinary_redacta_credenciales_de_log_y_detalle`).
+
+    Redactar solo `detalle_tecnico` no alcanza: un `logger.exception` escribe
+    el traceback COMPLETO, y su última línea es `Tipo: str(exc)` sin pasar por
+    `_redactar_detalle_sensible` -- la credencial termina igual en el log."""
+    secreto = "cloudinary-secret-no-registrar"
+    monkeypatch.setattr(settings, "cloudinary_api_secret", secreto)
+    monkeypatch.setattr(cc.logger, "disabled", False)
+
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.side_effect = RuntimeError(f"vendor rechazó secret={secreto}")
+        with caplog.at_level(logging.ERROR, logger="cataclub.cloudinary"):
+            with pytest.raises(ServicioNoDisponible) as error:
+                cc.eliminar_logo_sponsor("logo-1")
+
+    assert secreto not in caplog.text
+    assert secreto not in error.value.detalle_tecnico
+    assert "[REDACTED]" in caplog.text
 
 
 # --- 9. Guardia estructural: el umbral/cooldown deben venir de resiliencia.py,
