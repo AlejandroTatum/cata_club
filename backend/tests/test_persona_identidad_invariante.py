@@ -325,7 +325,7 @@ def test_sql_crudo_con_telefono_de_contacto_sin_forma_lo_rechaza_la_base(db_sess
     `telefono`: esa última NO tiene CHECK en la base a propósito (le
     congelaría la fila de bootstrap de staging, ver el docstring de la
     migración `f1a7ident828`). Su garantía es solo el `@validates`, que se
-    prueba en `test_telefono_todo_ceros_lo_rechaza_el_orm`."""
+    prueba en `test_telefono_invalido_por_db_session_directo_es_rechazado`."""
     with pytest.raises(
         IntegrityError, match="ck_persona_telefono_contacto_forma"
     ):

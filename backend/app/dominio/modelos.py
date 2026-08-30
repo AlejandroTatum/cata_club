@@ -553,10 +553,12 @@ class Persona(Base):
     # QUÉ NO CUBREN: SQLAlchemy saltea `@validates` en todo lo que no pase
     # por el atributo de la instancia. Esta lista no es teórica, es el
     # contrato del ORM: `session.execute(insert(Persona), [...])` y demás
-    # INSERTs masivos por Core, `bulk_insert_mappings`, `bulk_save_objects`,
-    # `Query.update()` / `session.execute(update(Persona))`, y
-    # `merge(..., load=False)`. `session.merge()` con su `load=True` por
-    # defecto SÍ los dispara, porque asigna atributo por atributo.
+    # INSERTs masivos por Core, `bulk_insert_mappings`,
+    # `bulk_update_mappings`, `bulk_save_objects`, `Query.update()` /
+    # `session.execute(update(Persona))`, `merge(..., load=False)` y
+    # `attributes.set_committed_value()`. `session.merge()` con su
+    # `load=True` por defecto SÍ los dispara, porque asigna atributo por
+    # atributo.
     # Un relevamiento de `app/` y `scripts/` no encontró ni un solo uso de
     # esas APIs, así que el hueco hoy es teórico -- pero es un hueco, y la
     # próxima escritura masiva que alguien agregue lo abre sin avisar. La

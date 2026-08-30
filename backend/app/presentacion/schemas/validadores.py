@@ -22,8 +22,16 @@ from app.dominio.enums import TipoSangre
 from app.dominio.telefono import es_telefono_valido
 
 
+# `isascii()` antes de `isdigit()`, igual que en `dominio/cedula.py` y
+# `dominio/telefono.py`: `str.isdigit()` sola acepta dígitos no ASCII
+# (arábigo-índicos `٠١٢`, devanagari...). Estos pre-chequeos NO deciden qué
+# entra -- los validadores canónicos ya rechazan esos valores igual -- pero
+# sin el `isascii()` un `'٠٩'+'١'*8` caía en la SEGUNDA rama y el usuario leía
+# "debe tener 10 dígitos y empezar en 09" en vez de "solo puede tener
+# dígitos". Las dos capas tienen que coincidir en qué es un dígito para que
+# el mensaje nombre el problema real.
 def _validar_cedula(valor: str) -> str:
-    if not valor.isdigit() or len(valor) != 10:
+    if not (valor.isascii() and valor.isdigit()) or len(valor) != 10:
         raise ValueError("La cédula debe tener exactamente 10 dígitos.")
     if not es_cedula_valida(valor):
         raise ValueError("Ese número de cédula no es válido.")
@@ -33,7 +41,7 @@ def _validar_cedula(valor: str) -> str:
 def _validar_telefono(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El teléfono es obligatorio.")
-    if not valor.isdigit():
+    if not (valor.isascii() and valor.isdigit()):
         raise ValueError("El teléfono solo puede tener dígitos.")
     if not es_telefono_valido(valor):
         raise ValueError(
