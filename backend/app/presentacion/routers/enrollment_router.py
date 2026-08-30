@@ -10,6 +10,7 @@ Flujo:
   FichaMedica + AntecedentesClub → tokens JWT → auto-login inmediato.
 """
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -45,8 +46,18 @@ async def autoinscribir(
     # intento (y la reutiliza al reintentar); si no llega, el servicio acuña
     # una propia. Un intento en vuelo (PENDIENTE) responde 425 + Retry-After;
     # una clave ya consumida por otro payload responde 409.
+    #
+    # `run_in_threadpool` (issue #826): `enroll` hashea hasta dos contraseñas
+    # con bcrypt (`enrollment_servicio.py:267`, `:288` y `:437`), cientos de ms
+    # de CPU PURA cada una. Es el peor de los SEIS sitios de bcrypt del backend
+    # porque este endpoint es PÚBLICO y sin autenticación: cualquiera con
+    # `curl` puede congelar el único hilo del event loop de uvicorn
+    # (`Dockerfile:53`, sin `--workers`) y dejar sin servicio a todos los
+    # demás, sin necesidad de una cuenta. El rate limit acota la frecuencia, no
+    # el bloqueo de cada llamada.
     try:
-        return EnrollmentServicio(db).enroll(
+        return await run_in_threadpool(
+            EnrollmentServicio(db).enroll,
             datos,
             idempotency_key=request.headers.get("idempotency-key"),
         )

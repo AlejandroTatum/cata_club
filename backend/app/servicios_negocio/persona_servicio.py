@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import date
 from typing import Callable
+from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
@@ -174,6 +175,26 @@ class PersonaServicio:
             )
             self.repo_usuario.crear(usuario)
             self._asignar_rol(usuario, TipoRol.ALUMNO)
+
+        # `registrar_persona` (arriba) hace commit+refresh, pero cada paso
+        # posterior vuelve a commitear -- `FichaMedicaRepositorio.crear`,
+        # `repo_usuario.crear`, `_asignar_rol` -- y `expire_on_commit` está en
+        # su default `True` (`app/infraestructura/db.py:14`, el `sessionmaker`
+        # no lo declara). Así, `representado` sale de acá EXPIRADO: sus
+        # atributos ya no están en memoria.
+        #
+        # Quien lo despertaría entonces es la serialización de FastAPI contra
+        # `PersonaResponseDTO`, y eso corre en el hilo del EVENT LOOP, justo
+        # afuera del `run_in_threadpool` que el handler acaba de ganar (#826):
+        # el SELECT del refresh volvería a pagarse en el único hilo que atiende
+        # a todos los clientes. Refrescar acá lo deja adentro del threadpool.
+        #
+        # Es el único de los nueve sitios de #826 que devolvía un ORM expirado:
+        # `PersonaServicio.actualizar_foto` y `SponsorServicio.crear` devuelven
+        # objetos recién refrescados que nadie vuelve a invalidar, y
+        # `subir_voucher`/`login` devuelven diccionarios.
+        if inspeccionar_orm(representado).expired:
+            self.db.refresh(representado)
 
         return representado
 
