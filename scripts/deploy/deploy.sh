@@ -24,6 +24,19 @@ load_image_tag() {
   fi
 }
 
+# Mismo idioma que `load_image_tag`. El contenedor backend NO recibe `DOMINIO`
+# (solo lo declara el servicio `caddy` en docker-compose.prod.yml), y la sonda
+# del borde lo necesita para presentar el SNI y el Host del bloque `{$DOMINIO}`
+# del Caddyfile: sin eso Caddy no matchea el sitio y la prueba mediría otra
+# cosa. Se lee del mismo `.env` y se pasa al `exec` explícitamente, sin tocar
+# ningún archivo de Compose. `DOMINIO_INDEXABLE=` no matchea este patrón.
+load_dominio() {
+  if [ -z "${DOMINIO:-}" ] && [ -f "$STACK_DIR/.env" ]; then
+    DOMINIO="$(sed -n 's/^DOMINIO=//p' "$STACK_DIR/.env" | head -1)"
+    export DOMINIO
+  fi
+}
+
 configured_backend_image() {
   (
     cd "$STACK_DIR"
@@ -78,6 +91,7 @@ do_checks() {
   log "Validación: health y readiness internos"
   docker compose "${COMPOSE_FILES[@]}" exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read().decode())"
   docker compose "${COMPOSE_FILES[@]}" exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).read().decode())"
+  verificar_readiness_publica
   log "Validación: /docs deshabilitado"
   docker compose "${COMPOSE_FILES[@]}" exec -T backend python -c "import urllib.request, urllib.error
 try: urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=5)
@@ -86,6 +100,122 @@ else: raise SystemExit('/docs responde en producción')"
   "$SCRIPT_DIR/../ops/check-backup-freshness.sh" --max-age-hours "${BACKUP_MAX_AGE_HOURS:-26}"
   check_chatbot_config
   log "Validaciones OK"
+}
+
+# Issue #849. `docker compose up -d` recrea un contenedor cuando cambia la
+# DEFINICIÓN de su servicio, nunca cuando cambia el CONTENIDO de un archivo
+# bind-mounteado. El Caddyfile entra por `./Caddyfile:/etc/caddy/Caddyfile:ro`
+# y Caddy lo compila UNA sola vez, al arrancar: un `git pull` que trae una ruta
+# nueva no llega al borde hasta que alguien recrea el contenedor a mano.
+#
+# Medido contra `caddy:2.8-alpine` real, leyendo la config ACTIVA por la API de
+# administración y pidiendo la ruta por HTTP:
+#
+#   host con el Caddyfile nuevo   -> 0 rutas /health/ready activas, HTTP 404
+#   docker compose up -d          -> 0 rutas activas, HTTP 404 (no se recreó)
+#   up -d --force-recreate caddy  -> 1 ruta activa, HTTP 200
+#
+# En el incidente el contenedor llevaba 46 h sirviendo la configuración de hace
+# 46 h y `/health/ready` caía en el catch-all del frontend, devolviendo el 404
+# HTML de Next.js al monitor externo.
+
+# Valida el Caddyfile VERSIONADO antes de activar nada. Corre a través de
+# Compose, no con un `docker run` suelto, porque el Caddyfile interpola
+# `{$DOMINIO}` y `{$ACME_EMAIL}` del entorno del proceso y esas variables las
+# aporta el servicio `caddy` (docker-compose.prod.yml): validado fuera de
+# Compose, el archivo se vería como si esos hosts estuvieran vacíos.
+#
+# `run --rm --no-deps` usa un contenedor descartable: no toca al que está
+# sirviendo ni arranca dependencias. Un Caddyfile inválido aborta ACÁ, antes de
+# que se recree nada.
+validar_caddyfile() {
+  log "Validación: Caddyfile versionado (contenedor descartable, no activa nada)"
+  if ! docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps \
+      --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile; then
+    die "$(printf '%s\n' \
+      "el Caddyfile versionado no valida; no se recrea el borde público." \
+      "       El detalle está arriba. El contenedor que está sirviendo NO se" \
+      "       tocó: el sitio sigue en línea con la configuración anterior.")"
+  fi
+}
+
+# Recrea SOLO caddy para que vuelva a compilar el Caddyfile del host.
+#
+# `--no-deps` es obligatorio: sin él, Compose arrastra a `frontend` (y por su
+# `depends_on`, al resto) a una recreación que este refresco no necesita.
+#
+# NUNCA `-v`, `--renew-anon-volumes` ni `down`: `caddy_data` guarda los
+# certificados de Let's Encrypt y su emisión tiene límite semanal, así que
+# perderlos deja el sitio sin certificado válido por días
+# (docker-compose.prod.yml, junto a los volúmenes nombrados).
+refrescar_caddy() {
+  log "Refrescando el borde público: recreación acotada de caddy"
+  docker compose "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps caddy
+  esperar_servicio_saludable caddy "$(printf '%s\n' \
+    "       Sin caddy sano no hay borde público: el sitio entero queda" \
+    "       inalcanzable aunque backend y frontend estén corriendo.")"
+}
+
+# Prueba `/health/ready` POR EL BORDE, que es lo que consume el monitor
+# externo. `do_checks` ya lo probaba dentro del contenedor backend
+# (127.0.0.1:8000), lo cual esquiva Caddy por completo -- por eso el deploy del
+# incidente quedó en verde con el borde sirviendo una configuración vieja.
+#
+# Se sondea desde el contenedor backend (tiene python) hacia el servicio
+# `caddy` por la red interna de Compose: sin DNS público y sin certificado
+# válido para ese nombre, de ahí el `server_hostname` explícito y la
+# verificación desactivada. Acá NO se está probando TLS, se está probando el
+# enrutamiento.
+#
+# El bloque del sitio es `{$DOMINIO}`, así que la petición tiene que presentar
+# ese SNI y ese Host o Caddy no matchea el sitio y la prueba mediría otra cosa.
+#
+# Exigir JSON, no solo un 200: cuando la ruta del backend no está en la config
+# activa, la petición cae en el catch-all del frontend y Next.js contesta su
+# propia página de error -- que puede ser un 200 perfectamente legible para un
+# chequeo que solo mire el código de estado.
+verificar_readiness_publica() {
+  load_dominio
+  [ -n "${DOMINIO:-}" ] || die "$(printf '%s\n' \
+    "falta DOMINIO para probar /health/ready por el borde público." \
+    "       Es la misma variable que ${STACK_DIR}/.env ya le da a caddy" \
+    "       (docker-compose.prod.yml): sin ella no hay Host que presentar.")"
+  log "Validación: /health/ready por el borde público (a través de Caddy)"
+  if ! docker compose "${COMPOSE_FILES[@]}" exec -T -e DOMINIO="$DOMINIO" backend python -c '
+import json, os, socket, ssl, sys
+dominio = os.environ["DOMINIO"]
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+with socket.create_connection(("caddy", 443), timeout=10) as raw:
+    with ctx.wrap_socket(raw, server_hostname=dominio) as sock:
+        sock.sendall(
+            f"GET /health/ready HTTP/1.1\r\nHost: {dominio}\r\n"
+            "Connection: close\r\n\r\n".encode()
+        )
+        datos = b""
+        while True:
+            trozo = sock.recv(4096)
+            if not trozo:
+                break
+            datos += trozo
+cabecera, _, cuerpo = datos.partition(b"\r\n\r\n")
+estado = cabecera.split(b"\r\n", 1)[0].decode(errors="replace")
+if " 200 " not in estado:
+    raise SystemExit(f"/health/ready por el borde respondió {estado!r}")
+texto = cuerpo.decode(errors="replace").strip()
+if texto[:1] not in "{[":
+    raise SystemExit(f"/health/ready por el borde devolvió HTML del frontend, no JSON: {texto[:120]!r}")
+json.loads(texto)
+'; then
+    die "$(printf '%s\n' \
+      "/health/ready no responde JSON por el borde público." \
+      "       El detalle está arriba. Si devolvió HTML, la ruta del backend no" \
+      "       está en la configuración ACTIVA de Caddy y la petición cayó en el" \
+      "       catch-all del frontend: el monitor externo estaría leyendo un 404" \
+      "       de Next.js como si fuera un sitio sano. Revisá:" \
+      "         docker compose ${COMPOSE_FILES[*]} logs caddy")"
+  fi
 }
 
 # Issue #791, punto 3. `docker compose ps -a` de la línea anterior solo
@@ -101,9 +231,13 @@ else: raise SystemExit('/docs responde en producción')"
 # -- solo por salir --, así que sin este candado un contenedor enfermo podía
 # quedar así indefinidamente sin que nada lo notara.
 check_celery() {
+  local consecuencia
+  consecuencia="$(printf '%s\n' \
+    "       Sin worker/beat sanos, los avisos de vencimiento, de mora y las" \
+    "       bandejas de salida de correo quedan sin procesar en silencio.")"
   log "Validación: salud de celery-worker y celery-beat"
-  esperar_celery_saludable celery-worker
-  esperar_celery_saludable celery-beat
+  esperar_servicio_saludable celery-worker "$consecuencia"
+  esperar_servicio_saludable celery-beat "$consecuencia"
   # Round-trip real, no solo el `Health` cacheado de Docker (que puede tener
   # hasta un `interval` de atraso): un ping de control disparado ACÁ, desde
   # el mismo contenedor backend que encola las tareas reales, prueba que el
@@ -132,6 +266,11 @@ check_celery() {
 # contestar el ping), así que una sola lectura fallaría en CADA deploy sano.
 # Servicio ausente (nunca llegó a crearse) da `Health` vacío -> mismo
 # camino de falla que "unhealthy", no un pase silencioso.
+#
+# El segundo argumento es la CONSECUENCIA que se imprime al abortar: qué queda
+# roto sin ese servicio. Lo aporta cada llamador porque no es la misma para
+# celery (tareas asíncronas mudas) que para caddy (el sitio entero fuera de
+# línea), y un mensaje genérico no le sirve a nadie a las tres de la mañana.
 #
 # SIN filtro posicional de servicio (`ps --format json <servicio>`): no es
 # un contrato estable entre versiones de Compose, y agregarlo suma un
@@ -169,12 +308,12 @@ check_celery() {
 # cara de perder en silencio si alguien la "simplifica" a `in` en vez de
 # `==` -- que es exactamente lo que pasó una vez, sin que ningún test lo
 # notara.
-esperar_celery_saludable() {
-  local servicio="$1" intentos=0
-  local max_intentos="${CELERY_HEALTH_MAX_INTENTOS:-30}"
-  local intervalo="${CELERY_HEALTH_INTERVALO_SEGUNDOS:-5}"
+esperar_servicio_saludable() {
+  local servicio="$1" consecuencia="$2" intentos=0
+  local max_intentos="${SERVICIO_HEALTH_MAX_INTENTOS:-30}"
+  local intervalo="${SERVICIO_HEALTH_INTERVALO_SEGUNDOS:-5}"
   local salud=""
-  command -v python3 >/dev/null 2>&1 || die "falta python3 para verificar la salud de celery"
+  command -v python3 >/dev/null 2>&1 || die "falta python3 para verificar la salud de $servicio"
   # `while [ cond ]` (no `[ cond ] && break`): con `set -e`, un `&&` a nivel
   # de sentencia tumba el script entero apenas la condición izquierda es
   # falsa -- el mismo motivo por el que `check_chatbot_config` arma `exigir`
@@ -239,8 +378,7 @@ else:
   die "$(printf '%s\n' \
     "$servicio no reportó healthcheck 'healthy' tras $((max_intentos * intervalo))s" \
     "       (último estado: '${salud:-sin healthcheck o el servicio no está corriendo}')." \
-    "       Sin worker/beat sanos, los avisos de vencimiento, de mora y las" \
-    "       bandejas de salida de correo quedan sin procesar en silencio." \
+    "$consecuencia" \
     "       Revisá:" \
     "         docker compose ${COMPOSE_FILES[*]} ps -a" \
     "         docker compose ${COMPOSE_FILES[*]} logs $servicio")"
@@ -300,7 +438,9 @@ case "$cmd" in
     cd "$STACK_DIR"
     log "Desplegando imágenes con SHA ${IMAGE_TAG}"
     docker compose "${COMPOSE_FILES[@]}" pull
+    validar_caddyfile
     docker compose "${COMPOSE_FILES[@]}" up -d
+    refrescar_caddy
     do_checks
     "$SCRIPT_DIR/../ops/record-release.sh"
     ;;

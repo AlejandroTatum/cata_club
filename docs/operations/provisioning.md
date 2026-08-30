@@ -32,8 +32,44 @@ pre-deploy (`backup-db.sh`) mientras la base todavía corre con el esquema
 anterior — las migraciones Alembic se ejecutan en cada arranque del backend y
 no existen down-migrations, así que ese dump es el único camino de vuelta de
 datos. Después vuelve a ejecutar el preflight, descarga esa imagen configurada,
-arranca el stack, valida health/readiness y registra la clase de migración y la
-fecha en un registro por SHA y en `current.env`.
+arranca el stack, refresca el borde público, valida health/readiness y registra
+la clase de migración y la fecha en un registro por SHA y en `current.env`. Ese
+registro lleva **exactamente una** `IMAGE_REFERENCE`: la del servicio `backend`,
+resuelta desde `config --format json`. `rollback-release.sh` lo lee como
+autoritativo, así que un release que no se pueda identificar con una sola
+referencia aborta sin dejar registro.
+
+### Refresco del borde público (Caddy) en cada deploy
+
+`docker compose up -d` recrea un contenedor cuando cambia la **definición** de
+su servicio, nunca cuando cambia el **contenido** de un archivo bind-mounteado.
+El `Caddyfile` del host entra por `./Caddyfile:/etc/caddy/Caddyfile:ro` y Caddy
+lo compila una sola vez, al arrancar: sin una recreación explícita, un `git
+pull` que trae una ruta nueva no llega al borde y el contenedor sigue sirviendo
+la configuración con la que arrancó.
+
+Por eso `deploy.sh` hace, en este orden:
+
+1. **Valida** el `Caddyfile` versionado en un contenedor descartable
+   (`compose run --rm --no-deps --entrypoint caddy caddy validate`). Va por
+   Compose para que el archivo se valide con el mismo `DOMINIO`/`ACME_EMAIL`
+   que interpola en producción. Un archivo inválido aborta antes de recrear
+   nada: el borde que está sirviendo no se toca.
+2. **Recrea solo caddy** (`up -d --force-recreate --no-deps caddy`). `--no-deps`
+   es obligatorio: db, redis, backend, frontend y los servicios de Celery **no**
+   se reinician por este refresco. Nunca se usa `down`, `-v` ni
+   `--renew-anon-volumes`, así que `caddy_data`, `caddy_config` y los
+   certificados de Let's Encrypt sobreviven — su emisión tiene límite semanal.
+3. **Espera** el healthcheck de `caddy` (`healthy`), o aborta.
+4. **Verifica `/health/ready` a través del borde**, no solo dentro del
+   contenedor backend, y exige **JSON**. Cuando la ruta del backend no está en
+   la configuración activa, la petición cae en el catch-all del frontend y
+   Next.js devuelve HTML: un chequeo que solo mirara el código de estado daría
+   verde con el borde desactualizado. La sonda sale del contenedor backend hacia
+   el servicio `caddy` presentando `DOMINIO` como SNI y Host, porque el bloque
+   del sitio es `{$DOMINIO}`; `DOMINIO` se lee del mismo `.env` que `IMAGE_TAG`.
+
+El paso 4 corre también con `./scripts/deploy/deploy.sh checks`.
 
 En el **primer aprovisionamiento** la base nunca arrancó: no hay nada que
 respaldar, el backup pre-deploy se omite con un aviso y la verificación de
