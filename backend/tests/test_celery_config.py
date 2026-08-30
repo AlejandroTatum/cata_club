@@ -11,7 +11,6 @@ import ast
 import inspect
 import re
 import uuid as uuid_mod
-from pathlib import Path
 
 from celery.app.trace import build_tracer
 from celery.backends.cache import CacheBackend
@@ -22,10 +21,7 @@ from app.soporte_transversal.resiliencia import (
     CELERY_LIMITE_BLANDO_SEGUNDOS,
     CELERY_LIMITE_DURO_SEGUNDOS,
 )
-
-_DIRECTORIO_DE_TAREAS = (
-    Path(__file__).resolve().parent.parent / "app" / "infraestructura" / "tareas"
-)
+from tests.arnes_celery_tareas import archivos_de_tareas, kwargs_de_decoradores_de_tarea
 
 
 def test_limites_de_tiempo_vienen_de_resiliencia_py():
@@ -159,50 +155,22 @@ def test_una_corrida_real_no_escribe_nada_en_el_backend():
     )
 
 
-def _kwargs_de_decoradores_de_tarea(ruta: Path):
-    """(nombre_de_la_funcion, linea, {kwarg: nodo}) por cada función decorada
-    con `@celery_app.task(...)` en el archivo.
-
-    Se camina el AST y no se importa el módulo porque lo que interesa es lo que
-    está ESCRITO en cada decorador, incluidas las tareas que ningún test
-    importa. Mismo recorrido que `test_celery_tope_de_reintentos.py`, pero acá
-    hacen falta los valores y no solo las claves.
-    """
-    arbol = ast.parse(ruta.read_text(encoding="utf-8"))
-    for nodo in ast.walk(arbol):
-        if not isinstance(nodo, ast.FunctionDef):
-            continue
-        for decorador in nodo.decorator_list:
-            if not isinstance(decorador, ast.Call):
-                continue
-            objetivo = decorador.func
-            if not (
-                isinstance(objetivo, ast.Attribute)
-                and objetivo.attr == "task"
-                and isinstance(objetivo.value, ast.Name)
-                and objetivo.value.id == "celery_app"
-            ):
-                continue
-            valores = {
-                kw.arg: kw.value for kw in decorador.keywords if kw.arg is not None
-            }
-            yield nodo.name, decorador.lineno, valores
-
-
 def test_ninguna_tarea_reactiva_su_resultado_por_su_cuenta():
     """`ignore_result=False` en un decorador vuelve a escribir en Redis para
     esa tarea. Es una salida de emergencia legítima —por eso se conserva el
     backend configurado—, pero tiene que costar un diff visible y no colarse
     de a una. Hoy no hay ninguna, y este candado obliga a que agregarla sea
     deliberado.
+
+    El recorrido del AST (`kwargs_de_decoradores_de_tarea`) es el mismo que
+    usa `test_celery_tope_de_reintentos.py` -- vive en
+    `tests/arnes_celery_tareas.py` para no repetirlo con otro nombre de
+    variable.
     """
     reactivadas = []
 
-    archivos = sorted(_DIRECTORIO_DE_TAREAS.glob("*_tareas.py"))
-    assert archivos, f"No se encontró ninguna tarea en {_DIRECTORIO_DE_TAREAS}"
-
-    for ruta in archivos:
-        for nombre, linea, valores in _kwargs_de_decoradores_de_tarea(ruta):
+    for ruta in archivos_de_tareas():
+        for nombre, linea, valores in kwargs_de_decoradores_de_tarea(ruta):
             nodo_valor = valores.get("ignore_result")
             if isinstance(nodo_valor, ast.Constant) and nodo_valor.value is False:
                 reactivadas.append(f"{ruta.name}:{linea} {nombre}()")
