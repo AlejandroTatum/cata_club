@@ -1,6 +1,7 @@
 """Focused contracts for production release controls."""
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -371,7 +372,15 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
     """Deploy fixture: stack, backups, releases and a docker stub that logs argv."""
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nSMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n")
+    # `DOMINIO` está en el `.env` del host real (docker-compose.prod.yml se lo
+    # exige a `caddy` con `:?`); la sonda del borde lo lee de ahí igual que
+    # `IMAGE_TAG`. `DOMINIO_INDEXABLE` va también, para fijar que el patrón de
+    # `load_dominio` no se lo lleve por delante.
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef1\nDOMINIO=staging.example.test\n"
+        "DOMINIO_INDEXABLE=cataclub.example.test\n"
+        "SMTP_HOST=smtp.example.test\nSMTP_PORT=2587\nSMTP_STARTTLS=true\n"
+    )
     backups = tmp_path / "backups"
     backups.mkdir()
     records = tmp_path / "releases"
@@ -385,7 +394,7 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
             # Issue #791: `do_checks` ya NO filtra por servicio en el argv --
             # ese filtro posicional no es un contrato estable entre
             # versiones de Compose (ver comentario junto a
-            # `esperar_celery_saludable` en deploy.sh). Pide SIEMPRE el
+            # `esperar_servicio_saludable` en deploy.sh). Pide SIEMPRE el
             # listado completo (`ps --format json`, sin nombre de servicio)
             # y filtra del lado de Python por el campo `Service`. Este case
             # tiene que ir ANTES del `--format json` genérico de más abajo
@@ -429,6 +438,15 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
             '        objeto=\'{"Service":"celery-beat","State":"\'"${CELERY_BEAT_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
             '        registros="$registros$objeto\n"\n'
             '      fi\n'
+            # Issue #849: `refrescar_caddy` espera el healthcheck de caddy con
+            # el MISMO poller que celery, así que el servicio tiene que
+            # aparecer en este listado. Mismo idioma `${VAR-default}`:
+            # `CADDY_STATE=""` simula el contenedor que nunca llegó a crearse.
+            '      if [ -n "${CADDY_STATE-running}" ]; then\n'
+            '        salud="${CADDY_HEALTH-healthy}"\n'
+            '        objeto=\'{"Service":"caddy","State":"\'"${CADDY_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
+            '        registros="$registros$objeto\n"\n'
+            '      fi\n'
             '      if [ "${PS_JSON_SHAPE:-lines}" = "array" ]; then\n'
             '        contenido="$(printf \'%s\' "$registros" | sed \'/^$/d\' | paste -sd, -)"\n'
             '        printf \'[%s]\\n\' "$contenido"\n'
@@ -438,6 +456,21 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
             '    fi ;;\n'
             '  *" --format json "*) printf "%s\\n" "{\\\"services\\\":{\\\"backend\\\":{\\\"image\\\":\\\"registry.example/cata-backend:${IMAGE_TAG}\\\"}}}" ;;\n'
             '  *" --images backend "*) if [ "${REALISTIC_COMPOSE_OUTPUT:-0}" = "1" ]; then printf "%s\\n" "postgres:16" "redis:7" "registry.example/cata-backend:${IMAGE_TAG}"; else echo "registry.example/cata-backend:${IMAGE_TAG}"; if [ "${MULTI_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-backend:${IMAGE_TAG}"; elif [ "${AMBIGUOUS_IMAGE_OUTPUT:-0}" = "1" ]; then echo "registry.example/cata-frontend:${IMAGE_TAG}"; fi; fi ;;\n'
+        # `caddy validate` en un contenedor descartable (issue #849).
+        # `CADDY_VALIDATE_FAILS=1` reproduce un Caddyfile inválido: el deploy
+        # tiene que morir ACÁ, con el borde viejo todavía sirviendo.
+        '  *" --entrypoint caddy "*) if [ "${CADDY_VALIDATE_FAILS:-0}" = "1" ]; then\n'
+        '      echo "Error: adapting config using caddyfile: /etc/caddy/Caddyfile" >&2; exit 1\n'
+        '    fi ;;\n'
+        # Sonda de `/health/ready` POR EL BORDE, que corre dentro del
+        # contenedor backend. "borde" solo aparece en ese fragmento de python,
+        # así que alcanza para distinguirlo del readiness interno.
+        # `CADDY_SIRVE_HTML=1` reproduce el incidente: la ruta del backend no
+        # está en la configuración activa y contesta el 404 HTML de Next.js.
+        '  *borde*) if [ "${CADDY_SIRVE_HTML:-0}" = "1" ]; then\n'
+        '      echo "/health/ready por el borde devolvió HTML del frontend, no JSON" >&2; exit 1\n'
+        '    fi\n'
+        '    echo \'{"estado": "listo"}\' ;;\n'
         # El smoke check del chatbot corre DENTRO del contenedor backend
         # (issue #766). `CHATBOT_CHECK_EXIT` reproduce sus tres códigos de
         # salida reales: 0 configurada/ausente, 1 incompleta, 2 ausente con
@@ -474,11 +507,11 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
         "BACKUP_AGE_RECIPIENTS": DESTINATARIO_DE_PRUEBA,
         # Hermético: nunca mirar el /etc real de la máquina que corre la suite.
         "BACKUP_AGE_RECIPIENTS_FILE": str(tmp_path / "no-existe" / "recipients.txt"),
-        # Poll de salud de celery al mínimo en la suite: la pila del stub
-        # responde en el primer intento (o falla de entrada), así que no hay
-        # motivo para que un test real espere el `intervalo` de producción.
-        "CELERY_HEALTH_MAX_INTENTOS": "1",
-        "CELERY_HEALTH_INTERVALO_SEGUNDOS": "0",
+        # Poll de salud al mínimo en la suite: la pila del stub responde en el
+        # primer intento (o falla de entrada), así que no hay motivo para que
+        # un test real espere el `intervalo` de producción.
+        "SERVICIO_HEALTH_MAX_INTENTOS": "1",
+        "SERVICIO_HEALTH_INTERVALO_SEGUNDOS": "0",
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
     return env, backups, docker_log
@@ -1235,18 +1268,8 @@ def test_record_release_writes_auditable_current_record_without_credentials(tmp_
     stack.mkdir()
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    # Stub de UNA línea a propósito, y es la excepción de esta suite.
-    # `record-release.sh:23-31` todavía parsea `config --images backend` con el
-    # mismo case defectuoso que este fix saca del preflight, así que contra la
-    # salida real escribiría `IMAGE_REFERENCE=postgres:16-alpine\nredis:...` en
-    # un registro que `rollback-release.sh:24` lee como autoritativo. Ese
-    # defecto queda FUERA del alcance del issue #846 y se sigue en #847; este
-    # test mide lo suyo (que el registro no filtre credenciales) sin fingir que
-    # aquel está arreglado.
     (bin_dir / "docker").write_text(
-        "#!/usr/bin/env bash\n"
-        'case " $* " in *" --images backend "*) echo registry.example/cata-backend:${IMAGE_TAG};; esac\n'
-        "exit 0\n"
+        "#!/usr/bin/env bash\n" + _CASE_IMAGEN_BACKEND + "exit 0\n"
     )
     (bin_dir / "docker").chmod(0o755)
 
@@ -1271,6 +1294,148 @@ def test_record_release_writes_auditable_current_record_without_credentials(tmp_
     assert (records / "abcdef1.env").exists()
     assert "PASSWORD" not in content
     assert "TOKEN" not in content
+
+
+# --- Resolución de la imagen backend al registrar el release (issue #847) ----
+# Mismo defecto que el issue #846 cerró en el preflight, en el último script de
+# la cadena: `config --images backend` expande el grafo de dependencias, así que
+# la referencia que se anotaba en el registro traía postgres y redis además de
+# la imagen desplegada. El `case` viejo ACEPTABA esa salida (`*$'\n'*` estaba en
+# el arm que pasa), y `rollback-release.sh:24` lee ese registro como
+# autoritativo.
+_CASE_RECORD_RELEASE = (
+    'case " $* " in\n'
+    '  *" --format json "*) printf \'%s\\n\' "$COMPOSE_JSON" ;;\n'
+    '  *" --images backend "*) printf \'%s\\n\' "postgres:16-alpine" "redis:7-alpine" '
+    '"registry.example/cata-backend:${IMAGE_TAG}" ;;\n'
+    "esac\n"
+)
+
+
+def _entorno_record_release(
+    tmp_path: Path,
+    *,
+    compose_json: str = COMPOSE_JSON_BACKEND_VALIDO,
+    image_tag: str = "abcdef1",
+) -> tuple[dict[str, str], Path]:
+    """Entorno hermético para `record-release.sh`: stack vacío, directorio de
+    registros propio y un `docker` que miente con la salida REAL de Compose."""
+    records = tmp_path / "releases"
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n" + _CASE_RECORD_RELEASE + "exit 0\n"
+    )
+    (bin_dir / "docker").chmod(0o755)
+    env = {
+        "IMAGE_TAG": image_tag,
+        "MIGRATION_COMPATIBILITY": "backward-compatible",
+        "RELEASE_RECORD_DIR": str(records),
+        "STACK_DIR": str(stack),
+        "COMPOSE_JSON": compose_json,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    return env, records
+
+
+def _lineas_de_referencia(registro: Path) -> list[str]:
+    return [
+        linea
+        for linea in registro.read_text().splitlines()
+        if linea.startswith("IMAGE_REFERENCE=")
+    ]
+
+
+def test_record_release_anota_una_sola_imagen_backend_con_salida_de_dependencias(tmp_path):
+    """Reproduce el registro roto del issue #847: contra la salida real de
+    `config --images backend`, el registro quedaba con `IMAGE_REFERENCE=` seguido
+    de postgres y redis en líneas sueltas, y `rollback-release.sh` lo lee como si
+    fuera la imagen desplegada."""
+    env, records = _entorno_record_release(tmp_path)
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _lineas_de_referencia(records / "current.env") == [
+        "IMAGE_REFERENCE=registry.example/cata-backend:abcdef1"
+    ]
+
+
+def test_el_registro_de_release_lleva_exactamente_una_linea_de_imagen(tmp_path):
+    """El registro por SHA y `current.env` son el MISMO contenido: los dos
+    tienen que traer una sola `IMAGE_REFERENCE=`, no una y dos líneas sueltas
+    detrás."""
+    env, records = _entorno_record_release(tmp_path)
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    esperado = ["IMAGE_REFERENCE=registry.example/cata-backend:abcdef1"]
+    assert _lineas_de_referencia(records / "current.env") == esperado
+    assert _lineas_de_referencia(records / "abcdef1.env") == esperado
+
+
+def test_el_registro_de_release_sigue_siendo_un_archivo_de_entorno(tmp_path):
+    """`rollback-release.sh` lo lee como `KEY=VALUE`. Una referencia multilínea
+    metía `redis:7-alpine` como si fuera una línea del registro: no parsea, y
+    lo que sigue después de ella tampoco."""
+    env, records = _entorno_record_release(tmp_path)
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lineas = [
+        linea for linea in (records / "current.env").read_text().splitlines() if linea.strip()
+    ]
+    assert lineas, "el registro quedó vacío"
+    for linea in lineas:
+        assert re.match(r"^[A-Z_]+=", linea), f"línea que no es KEY=VALUE: {linea!r}"
+    claves = [linea.split("=", 1)[0] for linea in lineas]
+    assert claves == ["IMAGE_TAG", "IMAGE_REFERENCE", "MIGRATION_COMPATIBILITY", "RECORDED_AT"]
+
+
+@pytest.mark.parametrize(
+    "compose_json",
+    [
+        pytest.param(
+            '{"services":{"backend":{"image":"registry.example/cata-backend:abcdef1'
+            '\\nregistry.example/cata-frontend:abcdef1"}}}',
+            id="referencia-multilinea",
+        ),
+        pytest.param('{"services":{"db":{"image":"postgres:16-alpine"}}}', id="sin-backend"),
+        pytest.param('{"services":{"backend":{}}}', id="sin-clave-image"),
+        pytest.param('{"services":{"backend":{"image":""}}}', id="imagen-vacia"),
+        pytest.param("esto-no-es-json{{{", id="json-invalido"),
+    ],
+)
+def test_record_release_falla_cerrado_y_no_deja_registro(tmp_path, compose_json):
+    """Un release que no se puede identificar no se anota ni a medias: la
+    resolución corre ANTES del `mkdir`, así que el directorio de registros ni
+    siquiera llega a existir."""
+    env, records = _entorno_record_release(tmp_path, compose_json=compose_json)
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 1
+    assert "no resolvió exactamente una imagen para backend" in result.stderr
+    assert not records.exists(), "quedó un registro de un release que no se pudo identificar"
+
+
+def test_record_release_rechaza_una_imagen_que_no_usa_el_image_tag_pedido(tmp_path):
+    """El bloque multilínea terminaba en `:abcdef1`, así que la comparación de
+    tag lo daba por bueno. Con una sola referencia, un tag distinto se ve."""
+    env, records = _entorno_record_release(
+        tmp_path,
+        compose_json='{"services":{"backend":{"image":"registry.example/cata-backend:deadbee"}}}',
+    )
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 1
+    assert "no usa IMAGE_TAG=abcdef1" in result.stderr
+    assert not records.exists(), "quedó un registro con una imagen de otro SHA"
 
 
 def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):
@@ -1717,7 +1882,7 @@ def test_deploy_pasa_si_celery_worker_y_beat_estan_sanos_y_el_round_trip_respond
     estable entre versiones de Compose) -- el filtro por `Service` ocurre
     del lado de Python, invisible en el log del stub. Lo que este test
     puede observar desde el argv es que la llamada se repite una vez por
-    servicio (`esperar_celery_saludable` corre para celery-worker y para
+    servicio (`esperar_servicio_saludable` corre para celery-worker y para
     celery-beat)."""
     env, _, docker_log = _deploy_env(tmp_path, db_running=True)
 
@@ -1801,14 +1966,21 @@ def test_deploy_falla_cerrado_si_ps_devuelve_basura_no_json(tmp_path):
     Compose completamente inesperada, o `ps` fallando de una forma que no
     es un `returncode` distinto de 0). El parser tiene que interpretarlo
     como salud vacía y abortar -- nunca reventar python3 ni, mucho menos,
-    dejar pasar el deploy en silencio."""
+    dejar pasar el deploy en silencio.
+
+    La basura rompe TODAS las lecturas de `ps`, y desde el issue #849 la
+    primera del deploy es la de `caddy` (`refrescar_caddy` corre antes de
+    `do_checks`). Es el mismo parser y el mismo camino fail-closed, así que el
+    candado se afirma por la FORMA del mensaje y no por el nombre del servicio
+    que resultó morir primero."""
     env, _, _ = _deploy_env(tmp_path, db_running=True)
     env["PS_JSON_GARBAGE"] = "1"
 
     result = run_script("scripts/deploy/deploy.sh", env=env)
 
     assert result.returncode != 0, result.stdout
-    assert "celery" in result.stderr.lower()
+    assert "no reportó healthcheck 'healthy'" in result.stderr
+    assert "sin healthcheck o el servicio no está corriendo" in result.stderr
 
 
 # ─── Regla ante más de un registro para el mismo servicio ─────────────────
@@ -1853,3 +2025,203 @@ def test_deploy_falla_si_una_replica_de_celery_worker_no_reporta_salud(tmp_path)
 
     assert result.returncode != 0, result.stdout
     assert "celery-worker" in result.stderr
+
+
+# --- Refresco del borde público en cada deploy (issue #849) ------------------
+# `docker compose up -d` a secas solo recrea un contenedor cuando cambia la
+# DEFINICIÓN de su servicio, nunca cuando cambia el CONTENIDO de un archivo
+# bind-mounteado. El Caddyfile entra por `./Caddyfile:/etc/caddy/Caddyfile:ro`
+# y Caddy lo compila UNA sola vez, al arrancar: un `git pull` que trae una ruta
+# nueva no llega al borde hasta que alguien recrea el contenedor a mano.
+#
+# En el incidente, el contenedor llevaba 46 h arriba sirviendo la configuración
+# de hace 46 h, y `/health/ready` caía en el catch-all del frontend devolviendo
+# el 404 HTML de Next.js. El deploy quedó en verde porque `do_checks` prueba la
+# readiness DENTRO del contenedor backend (127.0.0.1:8000), sin pasar por Caddy.
+
+
+def _invocaciones_docker(docker_log: Path) -> list[str]:
+    return docker_log.read_text().splitlines()
+
+
+def test_el_deploy_recrea_caddy_para_que_relea_el_caddyfile(tmp_path):
+    """Sin una recreación ACOTADA a caddy, el borde sigue sirviendo la
+    configuración con la que arrancó y el deploy no lo nota."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    recreaciones = [
+        linea for linea in _invocaciones_docker(docker_log) if "--force-recreate" in linea
+    ]
+    assert recreaciones == [
+        "compose -f docker-compose.yml -f docker-compose.prod.yml "
+        "up -d --force-recreate --no-deps caddy"
+    ], recreaciones
+
+
+def _releases_registrados(env: dict[str, str]) -> list[str]:
+    directorio = Path(env["RELEASE_RECORD_DIR"])
+    return sorted(p.name for p in directorio.glob("*")) if directorio.exists() else []
+
+
+def test_el_deploy_valida_el_caddyfile_con_el_entorno_que_le_da_compose(tmp_path):
+    """El Caddyfile interpola `{$DOMINIO}` y `{$ACME_EMAIL}`, que aporta el
+    servicio `caddy` (docker-compose.prod.yml). Validado con un `docker run`
+    suelto, esos hosts se verían vacíos y la prueba no diría nada del archivo
+    que se va a activar: tiene que ir por `compose run`, con `--no-deps` para
+    no arrastrar dependencias y `--rm` para no dejar nada corriendo."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    validaciones = [
+        linea for linea in _invocaciones_docker(docker_log) if "caddy validate" in linea
+    ]
+    assert validaciones == [
+        "compose -f docker-compose.yml -f docker-compose.prod.yml "
+        "run --rm --no-deps --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile"
+    ], validaciones
+
+
+def test_la_validacion_del_caddyfile_precede_a_cualquier_activacion(tmp_path):
+    """Un archivo inválido tiene que morir con el borde viejo todavía
+    sirviendo, no a mitad de camino."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lineas = _invocaciones_docker(docker_log)
+    validacion = [i for i, l in enumerate(lineas) if "caddy validate" in l]
+    activacion = [i for i, l in enumerate(lineas) if " up -d" in l]
+    assert validacion, "el deploy nunca validó el Caddyfile"
+    assert activacion, "el deploy nunca levantó el stack"
+    assert validacion[0] < activacion[0], (
+        "el Caddyfile se valida DESPUÉS de activar: un archivo roto ya rompió el borde"
+    )
+
+
+def test_un_caddyfile_invalido_aborta_el_deploy_sin_recrear_ni_registrar(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=False)
+    env["CADDY_VALIDATE_FAILS"] = "1"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "Caddyfile" in result.stderr
+    lineas = _invocaciones_docker(docker_log)
+    assert not [l for l in lineas if " up -d" in l], "activó el stack con un Caddyfile roto"
+    assert not [l for l in lineas if "--force-recreate" in l], "recreó el borde con un Caddyfile roto"
+    assert _releases_registrados(env) == []
+
+
+def test_la_recreacion_del_borde_no_reinicia_el_resto_del_stack(tmp_path):
+    """`--no-deps` acotado a `caddy`: sin él, Compose arrastra a `frontend` y,
+    por su `depends_on`, al resto. Recrear la base o el backend por un cambio
+    de configuración del borde es una interrupción que este refresco no
+    necesita."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    recreaciones = [l for l in _invocaciones_docker(docker_log) if "--force-recreate" in l]
+    assert len(recreaciones) == 1, recreaciones
+    assert recreaciones[0].endswith("--no-deps caddy"), recreaciones[0]
+    for servicio in ("db", "redis", "backend", "frontend", "celery-worker", "celery-beat"):
+        assert servicio not in recreaciones[0], (
+            f"la recreación del borde alcanza a {servicio}: {recreaciones[0]!r}"
+        )
+
+
+def test_el_refresco_del_borde_conserva_los_volumenes_de_caddy(tmp_path):
+    """`caddy_data` guarda los certificados de Let's Encrypt y su emisión tiene
+    límite semanal: borrarlos deja el sitio sin certificado válido por días.
+    Ni `down`, ni `-v`, ni `--renew-anon-volumes` en ninguna invocación."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for linea in _invocaciones_docker(docker_log):
+        assert "--renew-anon-volumes" not in linea, linea
+        assert not re.search(r"(?:^|\s)down(?:\s|$)", linea), linea
+        assert not re.search(r"(?:^|\s)-v(?:\s|$)", linea), linea
+
+
+def test_el_deploy_falla_si_caddy_no_llega_a_estar_saludable(tmp_path):
+    """Recrear el borde y no verificarlo sería peor que no recrearlo: el sitio
+    quedaría caído con el deploy en verde."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CADDY_HEALTH"] = "unhealthy"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "caddy no reportó healthcheck 'healthy'" in result.stderr
+    assert "borde público" in result.stderr
+    assert _releases_registrados(env) == []
+
+
+def test_el_deploy_falla_si_caddy_no_llego_a_crearse(tmp_path):
+    """Servicio ausente del listado: `Health` vacío es el mismo camino de falla
+    que 'unhealthy', nunca un pase silencioso."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CADDY_STATE"] = ""
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "caddy no reportó healthcheck 'healthy'" in result.stderr
+    assert _releases_registrados(env) == []
+
+
+def test_el_deploy_prueba_readiness_por_el_borde_y_no_solo_por_dentro(tmp_path):
+    """La sonda interna (`127.0.0.1:8000` dentro del backend) esquiva Caddy: es
+    exactamente la razón por la que el deploy del incidente quedó en verde con
+    el borde sirviendo una configuración de 46 h. La prueba tiene que salir por
+    el borde y presentar el `DOMINIO` del bloque del sitio."""
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    # El argv de la sonda trae el fuente de python con saltos de línea, así que
+    # el log la parte en varias líneas: se identifica por su primera.
+    sondas = [l for l in _invocaciones_docker(docker_log) if "exec -T -e DOMINIO=" in l]
+    assert len(sondas) == 1, sondas
+    assert sondas[0].rstrip().endswith(
+        "exec -T -e DOMINIO=staging.example.test backend python -c"
+    ), sondas[0]
+    assert '("caddy", 443)' in docker_log.read_text(), "la sonda no sale por el borde"
+
+
+def test_un_health_ready_que_devuelve_html_aborta_el_deploy_sin_registrar(tmp_path):
+    """El incidente exacto: la ruta del backend no está en la configuración
+    ACTIVA, la petición cae en el catch-all del frontend y Next.js contesta
+    HTML. Un chequeo que solo mirara el código de estado lo daría por bueno."""
+    env, _, _ = _deploy_env(tmp_path, db_running=True)
+    env["CADDY_SIRVE_HTML"] = "1"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "/health/ready no responde JSON por el borde público" in result.stderr
+    assert _releases_registrados(env) == []
+
+
+def test_el_subcomando_checks_tambien_prueba_el_borde_publico(tmp_path):
+    """`checks` es el diagnóstico que se corre a mano cuando algo huele mal.
+    Si no probara el borde, seguiría dando verde con el sitio caído."""
+    env, backups, _ = _deploy_env(tmp_path, db_running=True)
+    env["CADDY_SIRVE_HTML"] = "1"
+    # `checks` no toma backup: el preflight exige uno fresco ya existente.
+    (backups / "cataclub_today.dump.age").write_text("dump")
+
+    result = run_script("scripts/deploy/deploy.sh", "checks", env=env)
+
+    assert result.returncode != 0, result.stdout
+    assert "/health/ready no responde JSON por el borde público" in result.stderr

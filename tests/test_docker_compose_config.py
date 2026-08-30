@@ -833,6 +833,41 @@ def test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness():
     )
 
 
+# Todos los matchers de `handle` del archivo, en orden. Se usa para contar
+# cuántas sondas de readiness hay declaradas, no solo cuál es la primera.
+_MATCHERS_HANDLE = re.compile(r"^\s*handle\s+(?P<matcher>[^\s{]+)\s*\{", re.MULTILINE)
+
+
+def test_el_caddyfile_declara_una_sola_sonda_de_readiness_y_ninguna_bajo_api():
+    """El deploy refresca el borde y prueba `/health/ready` a través de Caddy
+    (issue #849). Cuando esa prueba falla, la salida fácil es abrirle otra ruta
+    al backend -- `/api/v1/health/ready` fue la propuesta -- para que la sonda
+    "encuentre" la respuesta en algún lado.
+
+    No hace falta ninguna ruta nueva: la que existe es correcta y lo que fallaba
+    era que Caddy compila su Caddyfile una sola vez, al arrancar, y `up -d` no
+    recreaba el contenedor porque la DEFINICIÓN del servicio no había cambiado.
+    Duplicar la sonda ensancharía el borde público sin arreglar nada, y dejaría
+    dos rutas que pueden divergir.
+    """
+    contenido = (RAIZ / "Caddyfile").read_text()
+
+    assert "/api/v1/health/ready" not in contenido, (
+        "el Caddyfile declara /api/v1/health/ready: el borde no necesita una "
+        "segunda sonda, necesita releer su configuración en cada deploy"
+    )
+
+    de_readiness = [
+        m.group("matcher")
+        for m in _MATCHERS_HANDLE.finditer(contenido)
+        if "health" in m.group("matcher")
+    ]
+    assert de_readiness == ["/health/ready"], (
+        "el backend tiene que asomar por UNA sola sonda de readiness; matchers "
+        f"de health encontrados: {de_readiness!r}"
+    )
+
+
 # APIs de navegador que la app NO usa y que este borde público tiene que
 # negar. Verificado leyendo frontend/src, no copiado de una plantilla:
 # `navigator.*` no aparece ni una vez fuera de los tests, el mapa de la

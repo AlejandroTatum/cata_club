@@ -98,10 +98,26 @@ export MIGRATION_COMPATIBILITY=<none|backward-compatible|manual-review-required>
 ```
 
 `deploy.sh` toma el backup pre-deploy cifrado, repite preflight, valida el
-manifiesto, hace `pull`, recrea los siete servicios, prueba health/readiness,
+manifiesto, hace `pull`, valida el `Caddyfile`, recrea los siete servicios,
+refresca el borde público, prueba health/readiness,
 backup y registra el release. No saltes los scripts con un `compose pull/up` manual.
 En primer aprovisionamiento tolera la ausencia de dump; después exige frescura
 (RPO por defecto: 26 h).
+
+El **refresco del borde** es un paso propio porque `up -d` no recrea `caddy`
+cuando solo cambia el contenido del `Caddyfile` bind-mounteado, y Caddy compila
+ese archivo una sola vez al arrancar: sin esto, el checkout nuevo del host queda
+sin activar y el borde sigue sirviendo la configuración vieja. El deploy valida
+el `Caddyfile` a través de Compose (para que tenga `DOMINIO`/`ACME_EMAIL`),
+recrea **solo** `caddy` con `--force-recreate --no-deps` —db, redis, backend,
+frontend y Celery no se reinician—, espera su healthcheck y verifica que
+`/health/ready` devuelva **JSON** pasando por el borde. Nunca usa `down`, `-v`
+ni `--renew-anon-volumes`: `caddy_data`, `caddy_config` y los certificados TLS
+se conservan. Si el `Caddyfile` no valida, el deploy aborta antes de tocar el
+contenedor que está sirviendo.
+
+`current.env` queda con **una sola** `IMAGE_REFERENCE`, la del servicio
+`backend`; si aparece más de una línea, no despliegues y revisá el registro.
 
 ## Postchecks y Beat
 
