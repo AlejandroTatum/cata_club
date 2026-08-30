@@ -48,6 +48,35 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Redis acá NO es un caché: es el broker de Celery, y la cola entera vive
+    # en su memoria. Las tres banderas atacan las dos formas en que esa cola
+    # se perdía sin que nada avisara.
+    #
+    # `--appendonly yes` + el volumen de abajo: sin AOF, Redis solo persiste
+    # por snapshots RDB periódicos, así que un reinicio entre dos snapshots
+    # (el `up -d` de un deploy, un reboot del droplet) borra lo encolado. La
+    # falla es silenciosa: la API ya devolvió 200 y el correo nunca sale.
+    #
+    # `--maxmemory 48mb` queda deliberadamente POR DEBAJO del `mem_limit: 64m`
+    # de `docker-compose.prod.yml`. El default de Redis es crecer sin límite:
+    # se pasa del cgroup y lo mata el kernel por OOM, que no negocia ni
+    # persiste nada de lo que estuviera en vuelo. Con el techo propio 16m más
+    # abajo, el que reacciona primero es Redis, dentro de su proceso.
+    #
+    # `--maxmemory-policy noeviction` es la decisión que no se puede aflojar:
+    # NUNCA `allkeys-lru` ni ninguna otra política de desalojo. Todas cumplen
+    # el techo descartando claves, y en un broker esas claves son tareas
+    # encoladas -- se tiran en silencio, que es peor que el problema que este
+    # bloque viene a resolver. `noeviction` rechaza la escritura con un error
+    # visible: encolar falla ruidosamente en vez de aceptar una tarea que
+    # nadie va a ejecutar. Fijado en `tests/test_docker_compose_config.py`.
+    #
+    # El healthcheck de abajo no se ve afectado por el techo: `redis-cli ping`
+    # es un proceso aparte y `PING` no es un comando denyoom, así que sigue
+    # respondiendo aunque Redis esté rechazando escrituras.
+    command: redis-server --appendonly yes --maxmemory 48mb --maxmemory-policy noeviction
+    volumes:
+      - cataclub_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -253,3 +282,6 @@ services:
 
 volumes:
   cataclub_db_data:
+  # La cola de Celery (ver el bloque `redis`). El overlay de QA lo reemplaza
+  # por un tmpfs para que su stack siga siendo desechable.
+  cataclub_redis_data:
