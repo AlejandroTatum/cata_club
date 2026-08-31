@@ -285,6 +285,29 @@ def test_rechazo_sin_evidencia_de_5xx_no_es_terminal(monkeypatch, excepcion):
     assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 0
 
 
+def test_recipients_que_no_es_un_mapa_no_es_terminal(monkeypatch):
+    """`recipients` con una forma que no es un mapa tampoco se clasifica.
+
+    `smtplib` siempre arma un dict, así que esto es defensa en profundidad y
+    no un bug vivo. Lo que se protege es DÓNDE ocurriría el error: la
+    clasificación corre DENTRO del `except`, y un `AttributeError` ahí no lo
+    atrapa nadie -- sale como error no manejado y aborta el lote nocturno,
+    que es exactamente lo que este PR existe para evitar.
+
+    El payload lleva un 550 a propósito: si la forma llegara a leerse, sería
+    terminal. Que salga `ServicioNoDisponible` prueba que lo que decide es la
+    guarda de tipo y no la lista vacía."""
+    excepcion = smtplib.SMTPRecipientsRefused(
+        {"user@example.com": (550, "no such user")}
+    )
+    excepcion.recipients = [("user@example.com", (550, "no such user"))]
+
+    excepcion_dominio = _levantar(monkeypatch, excepcion)
+
+    assert not isinstance(excepcion_dominio, DestinatarioRechazadoPermanentemente)
+    assert notificaciones_servicio_mod._circuito_smtp.estado == "cerrado"
+
+
 _FALLOS_QUE_NO_SON_DE_UNA_DIRECCION = [
     # El remitente rechazado es configuración (SPF/DKIM, cuenta suspendida):
     # global, no de una dirección. Sin cambios respecto de antes del #837.

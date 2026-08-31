@@ -10,6 +10,7 @@ El módulo es puro Python stdlib; no añade dependencias externas.
 """
 import logging
 import smtplib
+from collections.abc import Mapping
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -71,15 +72,19 @@ def _es_rechazo_permanente_de_destinatario(
     Fail closed en las tres formas de duda, porque el error caro es el
     contrario -- descartar para siempre un aviso que sí se podía entregar:
 
-      - `recipients` vacío o ausente: no hay ningún código que leer.
+      - `recipients` vacío, ausente, o con una forma que no es un mapa: no
+        hay ningún código que leer.
       - un código ilegible (no entero, tupla mal formada): no se adivina.
       - un 4xx, o una mezcla de 4xx y 5xx: mientras UNA dirección todavía
         pueda aceptar el mensaje, el rechazo no es terminal.
 
     En cualquiera de esos casos el llamador recibe el `ServicioNoDisponible`
     de siempre y el fallo sigue siendo visible y reintentable."""
+    # La guarda de tipo importa por DÓNDE corre esto: dentro del `except` de
+    # `enviar_correo`. Un `AttributeError` acá no lo atrapa nadie y aborta el
+    # lote entero, que es el fallo que el #837 vino a eliminar.
     destinatarios = getattr(exc, "recipients", None) or {}
-    if not destinatarios:
+    if not isinstance(destinatarios, Mapping) or not destinatarios:
         return False
     for respuesta in destinatarios.values():
         codigo = _codigo_de_respuesta(respuesta)
