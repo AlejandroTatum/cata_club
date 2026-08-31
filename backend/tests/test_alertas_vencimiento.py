@@ -608,3 +608,15 @@ def test_representante_recibe_una_sola_notificacion_en_reintento(
         Notificacion.persona_id == representante.id
     ).count()
     assert total_rep == 1
+
+
+def test_retirada_no_recibe_alerta_de_vencimiento(db_session, sesion_inyectada, monkeypatch):
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    persona = _crear_persona(db_session, cedula_valida(118))
+    persona.activo = False
+    _crear_usuario(db_session, persona, "retirada-vencimiento@cataclub.test")
+    _crear_membresia_con_pago(db_session, persona, VENCE)
+
+    resultado = alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    assert resultado["total_alertas"] == 0

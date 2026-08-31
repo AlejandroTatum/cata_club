@@ -143,6 +143,7 @@ MENSAJE_MEMBRESIA_SUSPENDIDA = (
     "Esta membresía está suspendida; reactívela antes de registrar un pago "
     "o aplicar un beneficio."
 )
+MENSAJE_PERSONA_RETIRO = "Esta persona fue retirada y no puede recibir operaciones financieras."
 MENSAJE_FECHA_EFECTIVA_FUTURA = (
     "La fecha efectiva no puede ser una fecha futura."
 )
@@ -444,6 +445,13 @@ class PagoServicio:
         self.repo_tipo = TipoMembresiaRepositorio(db)
         self.repo_historial_estado = HistorialEstadoMembresiaRepositorio(db)
 
+    def _exigir_membresia_financieramente_operativa(self, membresia: Membresia) -> None:
+        persona = self.repo_persona.obtener_por_id(membresia.persona_id)
+        if persona is None or not persona.activo:
+            raise OperacionInvalida(MENSAJE_PERSONA_RETIRO)
+        if membresia.estado == EstadoMembresia.SUSPENDIDA:
+            raise OperacionInvalida(MENSAJE_MEMBRESIA_SUSPENDIDA)
+
     def registrar_pago(
         self,
         datos: PagoCreateDTO,
@@ -539,8 +547,7 @@ class PagoServicio:
         # tampoco puede recibir un pago que compraría cobertura sobre un
         # período que la propia suspensión declaró "no se cobra". Debe
         # reactivarse primero (`PagoServicio.reactivar_membresia`).
-        if membresia.estado == EstadoMembresia.SUSPENDIDA:
-            raise OperacionInvalida(MENSAJE_MEMBRESIA_SUSPENDIDA)
+        self._exigir_membresia_financieramente_operativa(membresia)
 
         if self.repo.existe_pendiente_para_membresia(datos.membresia_id):
             raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
@@ -892,6 +899,8 @@ class PagoServicio:
            corrección de hoy sobre un valor ya stale.
         """
         membresia = self.repo_membresia.obtener_por_id(membresia_id)
+        if membresia is not None and not membresia.persona.activo:
+            return 0
         ultimo_fin = self._fecha_fin_maxima_combinada(membresia_id)
         fecha_reactivacion = self.repo_historial_estado.fecha_efectiva_ultima_reactivacion(
             membresia_id,
@@ -942,7 +951,7 @@ class PagoServicio:
             ultimo_fin = _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
             resultado.append({
                 "membresia_id": membresia_id,
-                "meses_adeudados": self._calcular_meses_adeudados_desde_datos(
+                "meses_adeudados": 0 if not membresia.persona.activo else self._calcular_meses_adeudados_desde_datos(
                     estado=membresia.estado,
                     ultimo_fin=ultimo_fin,
                     fecha_reactivacion=reactivaciones.get(membresia_id),
@@ -1217,6 +1226,8 @@ class PagoServicio:
 
         if not datos.motivo.strip():
             raise OperacionInvalida("Debe indicar el motivo de la regularización.")
+
+        self._exigir_membresia_financieramente_operativa(membresia)
 
         precio = membresia.monto_aplicado
         if precio > 0 and datos.monto % precio != 0:
@@ -1610,8 +1621,7 @@ class PagoServicio:
         # la membresía -- si "suspender bloquea nuevos pagos", también debe
         # bloquear el único otro camino que produce cobertura sin pago, o el
         # gate de `registrar_pago` sería un agujero con nombre distinto.
-        if membresia.estado == EstadoMembresia.SUSPENDIDA:
-            raise OperacionInvalida(MENSAJE_MEMBRESIA_SUSPENDIDA)
+        self._exigir_membresia_financieramente_operativa(membresia)
 
         precio_mensual = membresia.monto_aplicado
         meses = datos.meses
@@ -1973,6 +1983,12 @@ class PagoServicio:
         # TRANSFERENCIA + sin voucher). El chequeo va ACÁ, antes de tocar el
         # pago, para que un motivo faltante lo rechace limpio (400) sin
         # dejar ningún efecto secundario a medias.
+        if datos.estado_pago == EstadoPago.APROBADO:
+            membresia = self.repo_membresia.obtener_por_id(pago.membresia_id)
+            if membresia is None:
+                raise EntidadNoEncontrada(f"Membresía con id {pago.membresia_id} no encontrada")
+            self._exigir_membresia_financieramente_operativa(membresia)
+
         requiere_motivo_excepcion = (
             datos.estado_pago == EstadoPago.APROBADO
             and pago.tipo_pago == TipoPago.TRANSFERENCIA

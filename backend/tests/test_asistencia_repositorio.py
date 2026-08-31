@@ -10,11 +10,11 @@ from datetime import date, time
 from sqlalchemy import func, select
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia
+from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, TipoModalidad
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import (
-    AlumnoHorario, Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, Persona,
-    SesionAsistencia,
+    AlumnoHorario, Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, Membresia,
+    Persona, SesionAsistencia, TipoMembresia,
 )
 from app.infraestructura.repositorios.asistencia_repositorio import (
     AlumnoHorarioRepositorio, AsistenciaRepositorio, SesionAsistenciaRepositorio,
@@ -61,6 +61,40 @@ def test_listar_por_horario_ordena_por_apellidos_y_nombres(db_session):
     assert [a.persona.apellidos for a in asignaciones] == [
         "Alvarez", "Mendoza", "Zambrano",
     ]
+
+
+def test_roster_excluye_suspendida_y_la_reincorpora_al_reactivar(db_session):
+    horario = _crear_horario(db_session)
+    activa = _crear_persona(db_session, cedula_valida(520), "Ada", "Activa")
+    suspendida = _crear_persona(db_session, cedula_valida(521), "Susi", "Suspendida")
+    tipo = TipoMembresia(categoria="Mensual", precio=35, modalidad=TipoModalidad.MENSUAL)
+    db_session.add_all([
+        tipo,
+        AlumnoHorario(persona_id=activa.id, horario_id=horario.id),
+        AlumnoHorario(persona_id=suspendida.id, horario_id=horario.id),
+    ])
+    db_session.flush()
+    membresia = Membresia(
+        estado=EstadoMembresia.SUSPENDIDA,
+        monto_aplicado=35,
+        fecha_activacion=date(2026, 1, 1),
+        persona_id=suspendida.id,
+        tipo_membresia_id=tipo.id,
+    )
+    db_session.add(membresia)
+    db_session.commit()
+
+    repo = AlumnoHorarioRepositorio(db_session)
+    assert [fila.persona_id for fila in repo.listar_por_horario(horario.id)] == [activa.id]
+    assert repo.contar_por_horario(horario.id) == 1
+    assert [fila.persona_id for fila in repo.listar_activos_de_todos_los_horarios()] == [activa.id]
+
+    membresia.estado = EstadoMembresia.ACTIVA
+    db_session.commit()
+
+    assert {fila.persona_id for fila in repo.listar_por_horario(horario.id)} == {activa.id, suspendida.id}
+    assert repo.contar_por_horario(horario.id) == 2
+    assert {fila.persona_id for fila in repo.listar_activos_de_todos_los_horarios()} == {activa.id, suspendida.id}
 
 
 def test_listar_por_horario_desempata_por_id_de_asignacion(db_session):

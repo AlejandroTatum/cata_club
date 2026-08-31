@@ -55,7 +55,11 @@ class MembresiaRepositorio:
         `monto_aplicado`, no `persona`/`tipo_membresia` precargados."""
         if not membresia_ids:
             return []
-        stmt = select(Membresia).where(Membresia.id.in_(membresia_ids))
+        stmt = (
+            select(Membresia)
+            .options(joinedload(Membresia.persona))
+            .where(Membresia.id.in_(membresia_ids))
+        )
         return list(self.db.execute(stmt).scalars().all())
 
     def obtener_por_id_con_bloqueo(self, membresia_id: int) -> Optional[Membresia]:
