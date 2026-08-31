@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, or_, select
 
 from app.dominio.modelos import RecuperacionOutbox
+from app.infraestructura.repositorios import outbox_auditoria_entrega as auditoria
 
 
 MAX_ATTEMPTS = 6
@@ -49,6 +50,9 @@ class RecuperacionOutboxRepositorio:
         )
         event.claimed_at = None
         event.last_error_redacted = f"{type(error).__name__}: delivery failed"
+        # Un fallo TAMBIÉN es un desenlace: la marca va acá y no en el
+        # llamador para que no exista un camino que la olvide (issue #839).
+        auditoria.marcar_entrega_resuelta(event)
 
     def mark_sent(self, event):
         event.status, event.sent_at, event.claimed_at = (
@@ -56,3 +60,4 @@ class RecuperacionOutboxRepositorio:
             datetime.now(timezone.utc),
             None,
         )
+        auditoria.marcar_entrega_resuelta(event)
