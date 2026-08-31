@@ -69,7 +69,12 @@ MODO="subir"
 ARTEFACTO=""
 case "${1:-}" in
   --check-config) MODO="verificar-config" ;;
-  "") fatal "uso: upload-b2.sh <artefacto.dump.age> | --check-config" ;;
+  --check-receipt)
+    MODO="verificar-recibo"
+    ARTEFACTO="${2:-}"
+    [ "$#" -eq 2 ] || fatal "uso: upload-b2.sh --check-receipt <artefacto.dump.age>"
+    ;;
+  "") fatal "uso: upload-b2.sh <artefacto.dump.age> | --check-config | --check-receipt <artefacto.dump.age>" ;;
   -*) fatal "argumento desconocido: $1" ;;
   *) ARTEFACTO="$1" ;;
 esac
@@ -140,12 +145,12 @@ if [ "${#faltantes[@]}" -gt 0 ]; then
 fi
 
 command -v sha256sum >/dev/null 2>&1 || fatal "falta 'sha256sum'; no se puede verificar la replica"
-command -v "$AWS_BIN" >/dev/null 2>&1 \
-  || fatal "$(printf '%s\n' \
-    "no se encontro el cliente S3 (${AWS_BIN})." \
-    "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
 
 if [ "$MODO" = "verificar-config" ]; then
+  command -v "$AWS_BIN" >/dev/null 2>&1 \
+    || fatal "$(printf '%s\n' \
+      "no se encontro el cliente S3 (${AWS_BIN})." \
+      "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
   # Verificacion sin red y sin credenciales al aire: solo dice que lo que el
   # cron va a encontrar a las 03:30 esta completo. `install-cron` la usa para
   # no instalar un cron cuya replica falla todas las noches.
@@ -168,6 +173,29 @@ esac
 [ -f "$ARTEFACTO" ] || fatal "no existe o no es un archivo regular: ${ARTEFACTO}"
 [ -r "$ARTEFACTO" ] || fatal "no se puede leer: ${ARTEFACTO}"
 [ -s "$ARTEFACTO" ] || fatal "el artefacto esta vacio: ${ARTEFACTO}"
+
+NOMBRE="$(basename "$ARTEFACTO")"
+TAMANO_LOCAL="$(wc -c < "$ARTEFACTO" | tr -d ' ')"
+SHA_LOCAL="$(sha256sum "$ARTEFACTO" | cut -d' ' -f1)"
+RECIBO="${ARTEFACTO}.b2-receipt"
+
+if [ "$MODO" = "verificar-recibo" ]; then
+  # El chequeo de frescura reutiliza este parser de configuración: si B2 está
+  # apagado, conserva explícitamente el contrato local; si está activo, exige la
+  # evidencia publicada por este script después de la verificación remota.
+  [ -f "$RECIBO" ] || fatal_operativo "no existe el recibo B2 para ${NOMBRE}"
+  esperado="$(printf 'artifact=%s\nsha256=%s\nsize=%s' "$NOMBRE" "$SHA_LOCAL" "$TAMANO_LOCAL")"
+  actual="$(cat "$RECIBO")"
+  [ "$actual" = "$esperado" ] \
+    || fatal_operativo "el recibo B2 no coincide exactamente con ${NOMBRE}"
+  log "Recibo B2 verificado para ${NOMBRE}"
+  exit 0
+fi
+
+command -v "$AWS_BIN" >/dev/null 2>&1 \
+  || fatal "$(printf '%s\n' \
+    "no se encontro el cliente S3 (${AWS_BIN})." \
+    "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
 
 # --- Un entorno que no es produccion no escribe en el bucket de produccion ---
 # El error caro es silencioso en la direccion peligrosa: un staging apuntado al
@@ -223,12 +251,8 @@ aws_b2() {
 }
 
 # --- Subida ------------------------------------------------------------------
-NOMBRE="$(basename "$ARTEFACTO")"
 PREFIJO_LIMPIO="${PREFIJO#/}"
 CLAVE="${PREFIJO_LIMPIO%/}/${NOMBRE}"
-
-TAMANO_LOCAL="$(wc -c < "$ARTEFACTO" | tr -d ' ')"
-SHA_LOCAL="$(sha256sum "$ARTEFACTO" | cut -d' ' -f1)"
 
 log "Replicando ${NOMBRE} (${TAMANO_LOCAL} bytes) hacia s3://${BUCKET}/${CLAVE}"
 
@@ -290,5 +314,14 @@ case "$listado" in
       "       direccionable ahi: es como se lo encuentra el dia del desastre.")" ;;
 esac
 
+# El recibo no contiene endpoint ni credenciales: liga solo el nombre, tamaño y
+# hash del artefacto local a las tres evidencias remotas de arriba. Se publica por
+# rename en el mismo directorio, y únicamente después de put + HEAD + listado.
+# Una falla previa no puede crearlo ni adelantarlo.
+RECIBO_TMP="${RECIBO}.tmp.$$"
+printf 'artifact=%s\nsha256=%s\nsize=%s\n' "$NOMBRE" "$SHA_LOCAL" "$TAMANO_LOCAL" > "$RECIBO_TMP"
+mv -f "$RECIBO_TMP" "$RECIBO"
+
 log "Replica verificada: s3://${BUCKET}/${CLAVE} (${TAMANO_LOCAL} bytes, sha256 ${SHA_LOCAL})"
+log "Recibo B2 publicado: ${NOMBRE}"
 log "La retencion e inmutabilidad de ese objeto son configuracion del bucket (Object Lock + lifecycle)"

@@ -399,10 +399,14 @@ sudo install -o $(id -un) -g $(id -gn) -m 640 /dev/null /var/log/cataclub-backup
 
 Al final de cada corrida invoca `scripts/backup/upload-b2.sh`, que replica ese
 mismo artefacto **ya cifrado** a un object store S3-compatible y verifica el
-objeto remoto. Con la réplica desactivada (el default) es un no-op y nada
-cambia. Con la réplica activada, una subida o una verificación fallida hace
-fallar la corrida entera: un backup que no salió del host no protege de la
-pérdida del host. El artefacto local se conserva en cualquier caso.
+objeto remoto. Solo entonces publica atómicamente un recibo no secreto ligado al
+nombre, tamaño y SHA del dump. A las 07:00 la frescura exige ese recibo cuando
+B2 está activado; ausente, viejo o discordante bloquea el `&&` del heartbeat.
+Con la réplica desactivada (el default) queda explícito el contrato local. Una
+subida o verificación fallida hace fallar la corrida entera y no crea ni avanza
+el recibo; el artefacto local se conserva en cualquier caso. El restore remoto
+es un drill/gate separado: no entra en el cron ni lleva una identidad privada age
+al host.
 
 La retención remota y la inmutabilidad (Object Lock, lifecycle) son
 configuración del bucket y se administran en el proveedor, no desde acá — el

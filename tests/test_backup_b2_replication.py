@@ -218,7 +218,9 @@ def _argv(tmp_path: Path) -> str:
 
 
 def _artefactos(tmp_path: Path) -> list[str]:
-    return sorted(p.name for p in (tmp_path / "backups").iterdir())
+    return sorted(
+        p.name for p in (tmp_path / "backups").iterdir() if not p.name.endswith(".b2-receipt")
+    )
 
 
 # --- Réplica desactivada -----------------------------------------------------
@@ -508,6 +510,39 @@ def test_sube_el_artefacto_y_lo_verifica_contra_el_objeto_remoto(tmp_path):
 
     # La retención local no cambia: replicar no borra nada del disco.
     assert artefacto.read_bytes() == contenido
+
+
+def test_publica_un_recibo_atomico_solo_despues_de_verificar_la_replica(tmp_path):
+    artefacto = _artefacto_cifrado(tmp_path, b"age-encryption.org/v1\nrecibo")
+
+    resultado = run_script(
+        "scripts/backup/upload-b2.sh", str(artefacto), env=_entorno_b2(tmp_path)
+    )
+
+    recibo = artefacto.with_name(f"{artefacto.name}.b2-receipt")
+    assert resultado.returncode == 0, resultado.stderr
+    assert recibo.read_text() == (
+        f"artifact={artefacto.name}\n"
+        f"sha256={hashlib.sha256(artefacto.read_bytes()).hexdigest()}\n"
+        f"size={artefacto.stat().st_size}\n"
+    )
+    assert not recibo.with_name(f"{recibo.name}.tmp").exists()
+
+
+@pytest.mark.parametrize(
+    "failure", ["FAKE_AWS_PUT_RC", "FAKE_AWS_HEAD_RC", "FAKE_AWS_LIST_RC"]
+)
+def test_ninguna_falla_de_replicacion_crea_o_avanza_el_recibo(tmp_path, failure):
+    artefacto = _artefacto_cifrado(tmp_path)
+
+    resultado = run_script(
+        "scripts/backup/upload-b2.sh",
+        str(artefacto),
+        env=_entorno_b2(tmp_path, **{failure: "1"}),
+    )
+
+    assert resultado.returncode != 0
+    assert not artefacto.with_name(f"{artefacto.name}.b2-receipt").exists()
 
 
 def test_la_falla_de_la_subida_aborta_antes_de_verificar(tmp_path):
