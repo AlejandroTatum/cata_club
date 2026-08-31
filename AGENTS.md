@@ -23,6 +23,20 @@ worktree.
 - Never commit, push, publish, or change production configuration from an agent
   task without the repository workflow and explicit authorization.
 
+## Pi delivery standing authorization
+
+For user-authorized implementation work in Pi, that authorization covers the
+end-to-end delivery workflow in `CLAUDE.md`: use an isolated worktree and branch
+with one writer/integrator, run applicable focused and canonical validation,
+commit conventionally, push, and open a PR. Squash-merge only when all required
+CI is green, the PR is mergeable against fresh `main`, and post-merge `main` CI
+is green; then delete the local branch and worktree and prune worktrees.
+
+This standing authorization never permits force-pushes, red or pending CI
+merges, direct `main` commits, production deployment or configuration changes,
+destructive actions, scope expansion, or bypassing human or product decisions.
+If validation or CI fails, stop safely and report it rather than delivering.
+
 ## Validation
 
 - `make test` runs backend, frontend, and selected integration gates. It does
