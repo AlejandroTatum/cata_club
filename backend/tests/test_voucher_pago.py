@@ -109,7 +109,7 @@ def test_subir_voucher_jpg_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
     # pública que devolvió (acá, simuló) el SDK.
     from app.dominio.modelos import Pago
     fila = db_session.get(Pago, pago["id"])
-    assert fila.voucher_url == f"voucher-pago-{pago['id']:08d}"
+    assert fila.voucher_url.startswith(f"voucher-pago-{pago['id']:08d}-v1-")
     assert fila.voucher_url != _FAKE_URL_JPG
     assert not fila.voucher_url.startswith("http")
 

@@ -1,5 +1,6 @@
 import calendar
 import logging
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, date, timezone
 from decimal import Decimal
@@ -2440,7 +2441,7 @@ class PagoServicio:
         # mano en la transacción de un llamador -- si este método alguna vez
         # necesita componerse con una escritura previa, la salida es esa, no
         # correr de lugar el `rollback()`.
-        public_id = f"voucher-pago-{pago_id:08d}"
+        public_id = f"voucher-pago-{pago_id:08d}-v1-{uuid4().hex}"
         self.db.rollback()
 
         from app.infraestructura.cloudinary_cliente import subir_voucher_pago
@@ -2467,62 +2468,66 @@ class PagoServicio:
         # exactamente lo mismo que ya respondían los chequeos #2 y #3 (404 y
         # 400, mismos mensajes); lo único nuevo es la ventana, no la respuesta.
         #
-        # Qué deja atrás una caída entre la subida y este commit. El
-        # `public_id` es DETERMINISTA, pero eso NO significa lo mismo en los
-        # dos caminos de rechazo, así que va por separado:
-        #
-        #   - Pago que sigue existiendo (rama 400, y también un corte de
-        #     proceso): Cloudinary queda con un objeto en
-        #     `voucher-pago-{id:08d}` que ninguna fila referencia
-        #     (`voucher_url` sigue en NULL si no había voucher previo). Es
-        #     RECUPERABLE: el próximo intento sobre ese mismo pago sube al
-        #     mismo destino y lo pisa.
-        #   - Pago que ya NO existe (rama 404): el id no se reutiliza, así que
-        #     nadie va a volver a subir a ese `public_id` ni a leerlo. Ese
-        #     objeto queda huérfano PARA SIEMPRE. Acá no se compensa con un
-        #     `destroy()`: el borrado tendría que vivir en las dos ramas para
-        #     ser una política y no un parche, y en la rama 400 borrar sería
-        #     PEOR -- si el pago ya tenía un voucher, `voucher_url` apunta a
-        #     ese mismo `public_id` determinista, y el `destroy()` le sacaría a
-        #     la fila superviviente el objeto que todavía dice tener. Limpiar
-        #     el huérfano del 404 pide un barrido aparte, fuera del #813.
-        #
-        # VENTANA CONOCIDA Y NO CERRADA (misma causa, otra consecuencia):
-        # `subir_voucher_pago` escribe con `overwrite=True, invalidate=True`
-        # sobre ese `public_id` determinista, y lo hace ANTES de esta
-        # relectura. Precondición: un voucher PREVIO más una validación
-        # concurrente. Si el pago ya tenía el voucher A, su dueño sube el B y
-        # un administrador valida dentro de la ventana, la petición se rechaza
-        # con el 400 de abajo -- pero B YA pisó a A en Cloudinary, mientras la
-        # fila sigue describiendo a A (`voucher_formato` y
-        # `voucher_fecha_carga` viejos). Los metadatos guardados dejan de
-        # corresponder al objeto guardado. Sin voucher previo no hay nada que
-        # pisar y el problema no existe. Cerrarla exige un `public_id` con
-        # nonce y un swap posterior al commit: cambio de diseño que excede el
-        # issue #813 y que además obliga a decidir quién borra al perdedor.
-        pago = self.repo.obtener_por_id(pago_id)
+        # Every candidate is immutable and uploaded with overwrite=False. A
+        # rejected recheck can therefore delete only that candidate safely. An
+        # uncertain commit or post-commit verification leaves it orphaned rather
+        # than risking evidence already referenced by the payment.
+        pago = self.db.query(Pago).filter(Pago.id == pago_id).with_for_update().one_or_none()
         if not pago:
+            self.db.rollback()
+            self._limpiar_voucher_huerfano(public_id, content_type)
             raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
         if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
+            self.db.rollback()
+            self._limpiar_voucher_huerfano(public_id, content_type)
             raise OperacionInvalida(
                 "Solo se puede adjuntar voucher a un pago pendiente de validación"
             )
 
-        # Se persiste el public_id, NO una URL: el voucher se sube como
-        # `type="authenticated"` (hallazgo de privacidad "voucher no
-        # enumerable"), así que la URL que devuelve el SDK no sirve para
-        # nada sin firmar. La URL de entrega se genera fresca en cada
-        # lectura autorizada -- ver `_url_entrega_voucher` /
-        # `cloudinary_cliente.resolver_url_entrega` -- para que nunca quede
-        # una firma vieja atascada en la fila.
-        # voucher_formato: guardamos el content_type exacto para distinguir
-        # jpg/png/pdf al derivar el `resource_type` de la firma y al
-        # renderizar el voucher en el frontend.
+        voucher_anterior = pago.voucher_url
+        formato_anterior = pago.voucher_formato
         pago.voucher_url = public_id
         pago.voucher_formato = content_type
         pago.voucher_fecha_carga = datetime.now(timezone.utc)
+        try:
+            self.db.commit()
+            self.db.refresh(pago)
+        except Exception:
+            # A failed commit or refresh is ambiguous: preserve the candidate.
+            self.db.rollback()
+            raise
 
-        return self.repo.guardar_cambios(pago)
+        # Cache the only lazy relationship the response reads, then detach the
+        # confirmed result before releasing the verification transaction.
+        _ = pago.comprobante
+        self.db.expunge(pago)
+        borrar_anterior = False
+        try:
+            if (
+                voucher_anterior
+                and formato_anterior in TIPOS_MIME_PERMITIDOS_VOUCHER
+                and not voucher_anterior.startswith("http")
+                and voucher_anterior != public_id
+            ):
+                vigente = self.db.query(Pago).filter(Pago.id == pago_id).populate_existing().one_or_none()
+                borrar_anterior = vigente is not None and vigente.voucher_url != voucher_anterior
+        except Exception:
+            # A post-commit read that cannot be confirmed leaves an orphan.
+            borrar_anterior = False
+        finally:
+            self.db.rollback()
+        if borrar_anterior:
+            self._limpiar_voucher_huerfano(voucher_anterior, formato_anterior)
+        return pago
+
+    def _limpiar_voucher_huerfano(self, public_id: str, content_type: str) -> None:
+        """Best effort only: cleanup failures must not discard payment evidence."""
+        from app.infraestructura.cloudinary_cliente import eliminar_voucher_pago
+
+        try:
+            eliminar_voucher_pago(nombre_publico=public_id, content_type=content_type)
+        except Exception:
+            logger.warning("No se pudo limpiar un voucher huérfano (public_id=%s)", public_id)
 
     # --- Disparo asíncrono del comprobante PDF -------------------------------
     def _disparar_generacion_comprobante_pdf(self, pago_id: int) -> None:

@@ -137,6 +137,28 @@ def test_contenido_vacio_sigue_siendo_value_error():
         cc.subir_pdf_membresia(b"", "pdf-vacio")
 
 
+def test_voucher_usa_upload_inmutable_sin_overwrite():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+        _subir_voucher()
+
+    _, kwargs = mock_upload.call_args
+    assert kwargs["type"] == "authenticated"
+    assert kwargs["overwrite"] is False
+
+
+def test_eliminar_voucher_usa_tipo_y_recurso_correspondientes():
+    with _parchear_destroy() as mock_destroy:
+        cc.eliminar_voucher_pago("voucher-jpg", "image/jpeg")
+        cc.eliminar_voucher_pago("voucher-pdf", "application/pdf")
+
+    primera, segunda = mock_destroy.call_args_list
+    assert primera.kwargs["resource_type"] == "image"
+    assert segunda.kwargs["resource_type"] == "raw"
+    assert primera.kwargs["type"] == segunda.kwargs["type"] == "authenticated"
+    assert primera.kwargs["timeout"].total == segunda.kwargs["timeout"].total == 8.0
+
+
 def test_mime_no_soportado_sigue_siendo_value_error():
     with pytest.raises(ValueError):
         cc.subir_voucher_pago(b"x", "voucher-x", "application/zip", 1)

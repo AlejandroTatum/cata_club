@@ -184,8 +184,8 @@ def test_la_subida_del_voucher_no_retiene_una_conexion_del_pool(monkeypatch):
         )
         # La segunda mitad del contrato: soltar la conexión no puede costar
         # el resultado. El `public_id` determinista queda persistido igual.
-        assert resultado["voucher_url"] == f"voucher-pago-{pago_id:08d}"
-        assert _voucher_persistido(pago_id) == f"voucher-pago-{pago_id:08d}"
+        assert resultado["voucher_url"].startswith(f"voucher-pago-{pago_id:08d}-v1-")
+        assert _voucher_persistido(pago_id) == resultado["voucher_url"]
         # Y el objeto devuelto tiene que servirle al DTO de respuesta sin
         # despertar un SELECT sorpresa en el hilo del event loop (#826).
         assert not resultado["expirado"], (
@@ -284,7 +284,7 @@ def test_tres_subidas_concurrentes_no_agotan_un_pool_de_una_sola_conexion(monkey
             "quedando con su conexión mientras habla con Cloudinary (#813)"
         )
         for (_, _, _, pago_id), resultado in zip(escenarios, resultados):
-            assert resultado["voucher_url"] == f"voucher-pago-{pago_id:08d}"
+            assert resultado["voucher_url"].startswith(f"voucher-pago-{pago_id:08d}-v1-")
     finally:
         barrera.abort()
         for hilo in hilos:
@@ -363,6 +363,7 @@ def test_un_pago_validado_durante_la_subida_no_recibe_el_voucher(monkeypatch):
     mismo mensaje -- porque el estado del pago es el mismo; lo único que
     cambió es CUÁNDO se lo mira."""
     persona_id, membresia_id, tipo_id, pago_id = _crear_pago_pendiente_real(1230)
+    eliminados = []
 
     def _aprobar_durante_la_subida(**_kwargs):
         intruso = Session(bind=motor_aplicacion)
@@ -377,6 +378,10 @@ def test_un_pago_validado_durante_la_subida_no_recibe_el_voucher(monkeypatch):
         "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
         _aprobar_durante_la_subida,
     )
+    monkeypatch.setattr(
+        "app.infraestructura.cloudinary_cliente.eliminar_voucher_pago",
+        lambda **kwargs: eliminados.append(kwargs["nombre_publico"]),
+    )
 
     sesion = SessionLocal()
     try:
@@ -384,6 +389,85 @@ def test_un_pago_validado_durante_la_subida_no_recibe_el_voucher(monkeypatch):
             _adjuntar(sesion, pago_id, persona_id)
         assert "pendiente" in str(error.value).lower()
         assert _voucher_persistido(pago_id) is None
+        assert len(eliminados) == 1
+        assert eliminados[0].startswith(f"voucher-pago-{pago_id:08d}-v1-")
+    finally:
+        sesion.close()
+        _limpiar_grafo(
+            persona_ids=[persona_id], membresia_ids=[membresia_id], tipo_ids=[tipo_id],
+        )
+
+
+def test_dos_reemplazos_concurrentes_solo_el_public_id_final_permanece_vigente(monkeypatch):
+    """Dos intentos nunca comparten objeto, y la limpieza no toca al ganador."""
+    persona_id, membresia_id, tipo_id, pago_id = _crear_pago_pendiente_real(1235)
+    preparacion = Session(bind=motor_aplicacion)
+    barrera = threading.Barrier(2)
+    subidos, eliminados, resultados = [], [], [{}, {}]
+    try:
+        pago = preparacion.get(Pago, pago_id)
+        pago.voucher_url = "voucher-anterior"
+        pago.voucher_formato = "image/jpeg"
+        preparacion.commit()
+
+        def _subir_concurrente(**kwargs):
+            subidos.append(kwargs["nombre_publico"])
+            barrera.wait(timeout=ESPERA_MAXIMA_SEGUNDOS)
+            return "voucher-fake"
+
+        monkeypatch.setattr(
+            "app.infraestructura.cloudinary_cliente.subir_voucher_pago", _subir_concurrente,
+        )
+        monkeypatch.setattr(
+            "app.infraestructura.cloudinary_cliente.eliminar_voucher_pago",
+            lambda **kwargs: eliminados.append(kwargs["nombre_publico"]),
+        )
+
+        def _intentar(indice):
+            sesion = SessionLocal()
+            try:
+                resultados[indice]["voucher"] = _adjuntar(sesion, pago_id, persona_id).voucher_url
+            except BaseException as error:  # noqa: BLE001 -- se reporta en el principal
+                resultados[indice]["error"] = error
+            finally:
+                sesion.close()
+
+        hilos = [threading.Thread(target=_intentar, args=(i,), daemon=True) for i in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join(timeout=ESPERA_MAXIMA_SEGUNDOS)
+        assert all(not hilo.is_alive() for hilo in hilos)
+        assert all("error" not in resultado for resultado in resultados)
+        vigente = _voucher_persistido(pago_id)
+        assert len(set(subidos)) == 2
+        assert vigente in subidos
+        assert vigente not in eliminados
+        assert set(eliminados) == ({"voucher-anterior"} | (set(subidos) - {vigente}))
+    finally:
+        preparacion.close()
+        _limpiar_grafo(
+            persona_ids=[persona_id], membresia_ids=[membresia_id], tipo_ids=[tipo_id],
+        )
+
+
+def test_commit_ambiguo_prefiere_huerfano_a_borrar_el_candidato(monkeypatch):
+    """Si el commit pudo haber llegado al servidor, el candidato se conserva."""
+    persona_id, membresia_id, tipo_id, pago_id = _crear_pago_pendiente_real(1238)
+    eliminados = []
+    monkeypatch.setattr(
+        "app.infraestructura.cloudinary_cliente.subir_voucher_pago", lambda **_kwargs: "voucher-fake",
+    )
+    monkeypatch.setattr(
+        "app.infraestructura.cloudinary_cliente.eliminar_voucher_pago",
+        lambda **kwargs: eliminados.append(kwargs["nombre_publico"]),
+    )
+    sesion = SessionLocal()
+    try:
+        monkeypatch.setattr(sesion, "commit", lambda: (_ for _ in ()).throw(RuntimeError("ambiguous")))
+        with pytest.raises(RuntimeError, match="ambiguous"):
+            _adjuntar(sesion, pago_id, persona_id)
+        assert eliminados == []
     finally:
         sesion.close()
         _limpiar_grafo(
@@ -412,6 +496,10 @@ def test_un_pago_borrado_durante_la_subida_no_explota_con_un_500(monkeypatch):
     monkeypatch.setattr(
         "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
         _borrar_durante_la_subida,
+    )
+    monkeypatch.setattr(
+        "app.infraestructura.cloudinary_cliente.eliminar_voucher_pago",
+        lambda **_kwargs: None,
     )
 
     sesion = SessionLocal()
