@@ -24,7 +24,10 @@ from sqlalchemy.orm import joinedload
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
-from app.dominio.excepciones import ServicioNoDisponible
+from app.dominio.excepciones import (
+    DestinatarioRechazadoPermanentemente,
+    ServicioNoDisponible,
+)
 from app.dominio.modelos import Pago, Membresia, Persona, Notificacion, Rol, Usuario
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoRol
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
@@ -57,6 +60,17 @@ DIAS_MORA_MIN_DIA_8 = 8
 DIAS_MORA_MAX_DIA_8 = 14  # tope: respeta el silencio del día 15 (issue #285)
 
 
+def _auditoria_de_rechazo(exc: DestinatarioRechazadoPermanentemente) -> str:
+    """Texto que se persiste en `Notificacion.last_error_redacted`.
+
+    `detalle_tecnico` es el código y la frase del proveedor, ya redactados por
+    `notificaciones_servicio._redactar_detalle_sensible` (un mensaje SMTP
+    puede repetir el usuario o la contraseña del relay). Si por lo que sea
+    viniera vacío se guarda el mensaje: quedarse sin rastro sería peor que
+    guardar poco."""
+    return (exc.detalle_tecnico or exc.mensaje)[:Notificacion.ULTIMO_ERROR_MAX]
+
+
 @celery_app.task(
     name="app.infraestructura.tareas.alertas_tareas.alertar_vencimientos_hoy_mas_5",
     bind=True,
@@ -81,6 +95,12 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
     fecha_objetivo = hoy + timedelta(days=DIAS_ANTICIPACION_VENCIMIENTO)
 
     alertas_enviadas: list[dict] = []
+    # Destinatarios cuyo CORREO fue rechazado de forma definitiva (issue
+    # #837). Su aviso in-app sí se emitió -- por eso también cuentan en
+    # `alertas_enviadas`: el correo es un canal, la alerta es la fila. Esta
+    # lista existe para que la corrida no diga "todo bien" cuando hay
+    # direcciones que hay que corregir a mano.
+    rechazos_permanentes: list[dict] = []
 
     with SessionLocal() as db:
         stmt = (
@@ -123,11 +143,25 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
                 # de la ventana escaneada por el lote, no la fecha de vencimiento
                 # de ninguna membresía en particular.
                 _disparar_notificacion_vencimiento(db, persona, membresia, pago, pago.fecha_fin)
-                alertas_enviadas.append({
+            except DestinatarioRechazadoPermanentemente as exc:
+                # Issue #837. Una dirección rechazada con un 5xx no va a
+                # existir dentro de 60 segundos: reprogramar el lote entero
+                # solo garantiza volver a chocar contra ella y, agotados los
+                # reintentos, perder el aviso de TODOS los demás. La
+                # notificación in-app de este destinatario ya quedó
+                # commiteada con su auditoría (ver
+                # `_disparar_notificacion_vencimiento`), así que el lote sigue
+                # con el siguiente. Este `except` va ANTES del de abajo a
+                # propósito: `DestinatarioRechazadoPermanentemente` es
+                # subclase de `ServicioNoDisponible`.
+                logger.warning(
+                    "Correo rechazado de forma permanente (pago_id=%s): %s; "
+                    "el lote continúa",
+                    pago.id, exc.detalle_tecnico,
+                )
+                rechazos_permanentes.append({
                     "pago_id": pago.id,
-                    "membresia_id": membresia.id,
                     "persona_id": persona.id,
-                    "vence": pago.fecha_fin.isoformat(),
                 })
             except ServicioNoDisponible as exc:
                 # Decisión B del diseño: el circuito SMTP ABIERTO hace fallar
@@ -154,15 +188,30 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
                 )
                 raise
 
+            # Fuera del `try`: se llega acá tanto por un envío exitoso como
+            # por un rechazo permanente, y en los dos casos el aviso in-app
+            # quedó emitido. Los caminos que abortan el lote (reintento
+            # global, error inesperado) levantan antes de esta línea.
+            alertas_enviadas.append({
+                "pago_id": pago.id,
+                "membresia_id": membresia.id,
+                "persona_id": persona.id,
+                "vence": pago.fecha_fin.isoformat(),
+            })
+
     logger.info(
-        "Alertas vencimiento %s -> %d notificaciones enviadas",
+        "Alertas vencimiento %s -> %d notificaciones enviadas "
+        "(%d con correo rechazado de forma permanente)",
         fecha_objetivo.isoformat(),
         len(alertas_enviadas),
+        len(rechazos_permanentes),
     )
     return {
         "fecha_objetivo": fecha_objetivo.isoformat(),
         "total_alertas": len(alertas_enviadas),
         "alertas": alertas_enviadas,
+        "total_rechazos_permanentes": len(rechazos_permanentes),
+        "rechazos_permanentes": rechazos_permanentes,
     }
 
 
@@ -204,7 +253,17 @@ def _disparar_notificacion_vencimiento(
     Así la fila commiteada significa "en-app registrado Y correo enviado" en
     vez de solo "en-app registrado" -- se acepta una ventana de milisegundos
     de duplicado ante una caída justo después del envío, a cambio de eliminar
-    la pérdida silenciosa y permanente de la alerta."""
+    la pérdida silenciosa y permanente de la alerta.
+
+    Excepción a esa regla (issue #837): un rechazo DEFINITIVO de la dirección
+    (5xx por destinatario) sí commitea la fila, con
+    `last_error_redacted` cargado. El motivo es que la regla de arriba existe
+    para no dar por avisada a una familia cuando el correo todavía puede
+    salir en un reintento; con un 5xx no hay reintento posible, y no
+    commitear dejaría a esa familia sin NINGÚN aviso -- ni correo ni in-app --
+    justo en el caso en el que el otro canal es lo único que queda. La
+    excepción se re-lanza después del commit para que el lote pueda seguir con
+    el destinatario siguiente."""
     alumno_pendiente = not _ya_notificado(db, persona.id, pago.id)
     representante_pendiente = bool(persona.representante_id) and not _ya_notificado(
         db, persona.representante_id, pago.id
@@ -214,14 +273,16 @@ def _disparar_notificacion_vencimiento(
         return  # ya procesado por completo en un intento anterior
 
     filas_pendientes: list[Notificacion] = []
+    rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
     if alumno_pendiente:
-        filas_pendientes.append(Notificacion(
+        fila_alumno = Notificacion(
             tipo=TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO,
             mensaje=f"Su membresía vence el {vence.strftime('%d/%m/%Y')}.",
             persona_id=persona.id,
             entidad_relacionada_id=pago.id,
-        ))
+        )
+        filas_pendientes.append(fila_alumno)
 
         if persona.usuario:
             try:
@@ -240,6 +301,16 @@ def _disparar_notificacion_vencimiento(
                 logger.warning(
                     "SMTP no configurado — email no enviado para persona_id=%s", persona.id
                 )
+            except DestinatarioRechazadoPermanentemente as exc:
+                # Issue #837: el correo NO va a llegar a esa dirección, ni
+                # ahora ni reintentando. La notificación in-app, en cambio, sí
+                # tiene que existir -- es el otro canal, el que la familia ve
+                # al entrar -- y el rechazo queda en la misma fila para que
+                # alguien pueda corregir la dirección. Se re-lanza recién
+                # DESPUÉS del commit de abajo, para que el lote solo siga de
+                # largo sobre un episodio ya registrado.
+                rechazo_terminal = exc
+                fila_alumno.last_error_redacted = _auditoria_de_rechazo(exc)
         else:
             logger.warning(
                 "persona_id=%s no tiene usuario vinculado — email omitido", persona.id
@@ -260,6 +331,13 @@ def _disparar_notificacion_vencimiento(
     with SessionLocal() as db_escritura:
         db_escritura.add_all(filas_pendientes)
         db_escritura.commit()
+
+    # Recién acá, con las filas y su auditoría ya commiteadas (issue #837).
+    # El orden importa: el llamador solo debe enterarse del rechazo cuando el
+    # episodio ya quedó registrado, porque a partir de ese aviso el lote sigue
+    # con el destinatario siguiente y nadie más va a volver sobre este.
+    if rechazo_terminal is not None:
+        raise rechazo_terminal
 
 
 def _rango_dia_club(hoy: date) -> tuple[datetime, datetime]:
@@ -284,7 +362,12 @@ def _disparar_notificacion_mora(
     sobre la sesión externa, envío sin transacción, y commit corto recién cuando
     el envío tuvo éxito o no aplica. `RuntimeError` (SMTP no configurado) se
     loguea y se sigue; `ServicioNoDisponible` (circuito SMTP abierto) propaga
-    para que el lote reintente con el countdown del circuito."""
+    para que el lote reintente con el countdown del circuito.
+
+    `DestinatarioRechazadoPermanentemente` (issue #837) es el tercer caso:
+    commitea las filas con la auditoría del rechazo y recién ahí propaga, para
+    que el lote siga con la familia siguiente en vez de reintentar contra una
+    dirección que no existe."""
     alumno_pendiente = not _ya_notificado(db, persona.id, pago_id, tipo)
     representante_pendiente = bool(persona.representante_id) and not _ya_notificado(
         db, persona.representante_id, pago_id, tipo
@@ -306,14 +389,16 @@ def _disparar_notificacion_mora(
         )
 
     filas_pendientes: list[Notificacion] = []
+    rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
     if alumno_pendiente:
-        filas_pendientes.append(Notificacion(
+        fila_alumno = Notificacion(
             tipo=tipo,
             mensaje=mensaje,
             persona_id=persona.id,
             entidad_relacionada_id=pago_id,
-        ))
+        )
+        filas_pendientes.append(fila_alumno)
 
         if persona.usuario:
             try:
@@ -328,6 +413,10 @@ def _disparar_notificacion_mora(
                 logger.warning(
                     "SMTP no configurado — email no enviado para persona_id=%s", persona.id
                 )
+            except DestinatarioRechazadoPermanentemente as exc:
+                # Mismo criterio que en la rama de vencimiento (issue #837).
+                rechazo_terminal = exc
+                fila_alumno.last_error_redacted = _auditoria_de_rechazo(exc)
         else:
             logger.warning(
                 "persona_id=%s no tiene usuario vinculado — email omitido", persona.id
@@ -345,6 +434,9 @@ def _disparar_notificacion_mora(
     with SessionLocal() as db_escritura:
         db_escritura.add_all(filas_pendientes)
         db_escritura.commit()
+
+    if rechazo_terminal is not None:
+        raise rechazo_terminal
 
     return True
 
@@ -405,6 +497,7 @@ def _disparar_resumen_admin(
         mensaje=resumen,
         persona_id=admin_persona.id,
     )
+    rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
     try:
         from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
@@ -419,10 +512,21 @@ def _disparar_resumen_admin(
             "SMTP no configurado — email de resumen no enviado para admin persona_id=%s",
             admin_persona.id,
         )
+    except DestinatarioRechazadoPermanentemente as exc:
+        # Mismo criterio que las dos ramas de familia (issue #837): la
+        # dirección de ESTE administrador no acepta correo, el resumen in-app
+        # igual se crea con la auditoría del rechazo, y el rechazo se propaga
+        # después del commit para que el lote siga con el administrador
+        # siguiente.
+        rechazo_terminal = exc
+        fila.last_error_redacted = _auditoria_de_rechazo(exc)
 
     with SessionLocal() as db_escritura:
         db_escritura.add(fila)
         db_escritura.commit()
+
+    if rechazo_terminal is not None:
+        raise rechazo_terminal
 
     return True
 
@@ -451,6 +555,11 @@ def alertar_mora_diaria(self) -> dict:
     hoy = hoy_club()
     avisos_familia: list[dict] = []
     resumen_admin_enviado = False
+    # Correos rechazados de forma definitiva, de familia o de administrador
+    # (issue #837). El aviso in-app de cada uno sí se emitió; esta lista
+    # existe para que la corrida no informe una entrega limpia cuando hay
+    # direcciones que hay que corregir a mano.
+    rechazos_permanentes: list[dict] = []
 
     with SessionLocal() as db:
         # Último pago APROBADO por membresía (su id y su fecha_fin), resolviendo
@@ -517,6 +626,25 @@ def alertar_mora_diaria(self) -> dict:
                 enviado = _disparar_notificacion_mora(
                     db, persona, pago_id, ultima_fecha_fin, tipo
                 )
+            except DestinatarioRechazadoPermanentemente as exc:
+                # Issue #837, mismo criterio que el lote de vencimientos. El
+                # aviso in-app de esta familia ya quedó commiteado con su
+                # auditoría, así que `enviado = True`: la familia figura en el
+                # resumen al administrador -- la mora es real aunque el correo
+                # haya rebotado -- y el lote sigue con la familia siguiente.
+                # Va ANTES del `except` de abajo:
+                # `DestinatarioRechazadoPermanentemente` es subclase de
+                # `ServicioNoDisponible`.
+                logger.warning(
+                    "Correo de mora rechazado de forma permanente (pago_id=%s): "
+                    "%s; el lote continúa",
+                    pago_id, exc.detalle_tecnico,
+                )
+                rechazos_permanentes.append({
+                    "pago_id": pago_id,
+                    "persona_id": persona.id,
+                })
+                enviado = True
             except ServicioNoDisponible as exc:
                 logger.warning(
                     "Circuito SMTP abierto durante el lote de mora (pago_id=%s); "
@@ -548,6 +676,20 @@ def alertar_mora_diaria(self) -> dict:
                 try:
                     if _disparar_resumen_admin(db, admin_usuario, resumen, inicio_dia, fin_dia):
                         resumen_admin_enviado = True
+                except DestinatarioRechazadoPermanentemente as exc:
+                    # Issue #837: la dirección de ESTE administrador no acepta
+                    # correo. Su resumen in-app ya quedó commiteado con la
+                    # auditoría del rechazo, así que se sigue con el
+                    # administrador siguiente en vez de reprogramar el lote.
+                    logger.warning(
+                        "Correo del resumen de mora rechazado de forma permanente "
+                        "para admin persona_id=%s: %s; el lote continúa",
+                        admin_usuario.persona_id, exc.detalle_tecnico,
+                    )
+                    rechazos_permanentes.append({
+                        "admin_persona_id": admin_usuario.persona_id,
+                    })
+                    resumen_admin_enviado = True
                 except ServicioNoDisponible as exc:
                     logger.warning(
                         "Circuito SMTP abierto enviando resumen de mora a admin "
@@ -563,12 +705,16 @@ def alertar_mora_diaria(self) -> dict:
                     raise
 
     logger.info(
-        "Mora %s -> %d avisos de familia (resumen admin: %s)",
+        "Mora %s -> %d avisos de familia (resumen admin: %s, "
+        "%d correos rechazados de forma permanente)",
         hoy.isoformat(), len(avisos_familia), resumen_admin_enviado,
+        len(rechazos_permanentes),
     )
     return {
         "fecha": hoy.isoformat(),
         "total_avisos_familia": len(avisos_familia),
         "resumen_admin_enviado": resumen_admin_enviado,
         "avisos": avisos_familia,
+        "total_rechazos_permanentes": len(rechazos_permanentes),
+        "rechazos_permanentes": rechazos_permanentes,
     }

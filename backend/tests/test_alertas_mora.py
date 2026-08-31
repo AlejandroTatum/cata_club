@@ -39,6 +39,7 @@ from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
 from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
 from app.soporte_transversal.tiempo import ZONA_HORARIA_CLUB
+from tests.smtp_falso import configurar_smtp_falso
 
 
 HOY = date(2029, 6, 15)
@@ -461,6 +462,128 @@ def test_circuito_smtp_abierto_reintenta_con_cooldown(
     _, kwargs = mock_retry.call_args
     assert kwargs["countdown"] == CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
     assert isinstance(kwargs["exc"], ServicioNoDisponible)
+
+
+# --- Issue #837: un correo rechazado de forma permanente no mata el lote ----
+# Igual que en `test_alertas_vencimiento.py`, estos tests doblan `smtplib.SMTP`
+# (ver `tests/smtp_falso.py`) en vez de `enviar_correo`: declaran el CÓDIGO
+# SMTP crudo y dejan correr el clasificador real.
+
+def test_lote_de_mora_sigue_cuando_una_familia_tiene_el_correo_rechazado(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Tres familias en mora; la del medio tiene una dirección que el
+    proveedor rechaza con 550. Antes, ese rechazo llegaba al handler como
+    "circuito abierto", el lote se reprogramaba entero y el reintento volvía a
+    chocar contra la misma dirección. Ahora se atiende a las tres."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumnos: list[Persona] = []
+    correos: list[str] = []
+    for indice in range(3):
+        alumno = _crear_persona(db_session, cedula_valida(230 + indice))
+        correo = f"mora{indice}@cataclub.test"
+        _crear_usuario(db_session, alumno, correo)
+        _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
+        alumnos.append(alumno)
+        correos.append(correo)
+    registro = configurar_smtp_falso(
+        monkeypatch, rechazos={correos[1]: (550, "buzón inexistente")},
+    )
+    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
+    monkeypatch.setattr(alertas_mod.alertar_mora_diaria, "retry", mock_retry)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert sorted(registro.enviados) == sorted([correos[0], correos[2]])
+    assert mock_retry.call_count == 0
+    # La familia rechazada sigue contando como avisada: su aviso in-app se
+    # emitió, y su mora es real -- por eso también tiene que seguir figurando
+    # en el resumen que ve el administrador.
+    assert resultado["total_avisos_familia"] == 3
+    assert resultado["total_rechazos_permanentes"] == 1
+
+    for alumno in alumnos:
+        assert _notificaciones_de_familia(
+            db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+        ) == 1
+
+    fila_rechazada = (
+        db_session.query(Notificacion)
+        .filter(
+            Notificacion.tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1,
+            Notificacion.persona_id == alumnos[1].id,
+        )
+        .one()
+    )
+    assert fila_rechazada.last_error_redacted is not None
+    assert "550" in fila_rechazada.last_error_redacted
+
+
+def test_resumen_admin_sigue_con_el_otro_admin_si_uno_es_rechazado(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Tercer lote de la tarea: el resumen diario a los administradores. Con
+    dos administradores y la dirección del primero rechazada con 550, el
+    segundo igual recibe su resumen y el primero conserva el suyo in-app con
+    la auditoría del rechazo."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(233))
+    _crear_usuario(db_session, alumno, "alumno233@cataclub.test")
+    _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
+    correo_rechazado = "admin234@cataclub.test"
+    correo_bueno = "admin235@cataclub.test"
+    admin_rechazado, _ = _crear_admin(db_session, cedula_valida(234), correo_rechazado)
+    admin_bueno, _ = _crear_admin(db_session, cedula_valida(235), correo_bueno)
+    registro = configurar_smtp_falso(
+        monkeypatch, rechazos={correo_rechazado: (550, "buzón inexistente")},
+    )
+    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
+    monkeypatch.setattr(alertas_mod.alertar_mora_diaria, "retry", mock_retry)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert mock_retry.call_count == 0
+    assert correo_bueno in registro.enviados
+    assert correo_rechazado not in registro.enviados
+    assert resultado["resumen_admin_enviado"] is True
+    assert resultado["total_rechazos_permanentes"] == 1
+
+    resumenes = {
+        fila.persona_id: fila
+        for fila in db_session.query(Notificacion).filter(
+            Notificacion.tipo == TipoNotificacion.RESUMEN_MORA_ADMIN
+        )
+    }
+    assert set(resumenes) == {admin_rechazado.id, admin_bueno.id}
+    assert "550" in resumenes[admin_rechazado.id].last_error_redacted
+    assert resumenes[admin_bueno.id].last_error_redacted is None
+
+
+def test_lote_de_mora_aborta_con_cooldown_si_el_fallo_es_global(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Contracara: un fallo de transporte no es de una dirección, así que la
+    política vieja sigue igual -- el lote se reprograma con el cooldown del
+    circuito y no queda ninguna fila."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(236))
+    _crear_usuario(db_session, alumno, "alumno236@cataclub.test")
+    _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
+    configurar_smtp_falso(
+        monkeypatch, fallo_de_transporte=OSError("el relay no contesta"),
+    )
+    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
+    monkeypatch.setattr(alertas_mod.alertar_mora_diaria, "retry", mock_retry)
+
+    with pytest.raises(CeleryRetry):
+        alertas_mod.alertar_mora_diaria()
+
+    assert mock_retry.call_count == 1
+    _, kwargs = mock_retry.call_args
+    assert kwargs["countdown"] == CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 0
 
 
 # --- Recuperación de corrida perdida (issue #791, punto 2) -----------------

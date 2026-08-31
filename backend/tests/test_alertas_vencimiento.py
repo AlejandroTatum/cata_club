@@ -33,6 +33,7 @@ from app.dominio.excepciones import ServicioNoDisponible
 from app.dominio.modelos import Membresia, Notificacion, Pago, Persona, TipoMembresia, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
+from tests.smtp_falso import configurar_smtp_falso
 
 
 HOY = date(2029, 6, 15)
@@ -218,7 +219,19 @@ def test_notificacion_guarda_entidad_relacionada_id_del_pago(
     assert fila.entidad_relacionada_id == pago.id
 
 
-def test_fallo_de_envio_no_deja_fila_marcada(db_session, sesion_inyectada, monkeypatch):
+def test_fallo_global_de_envio_no_deja_fila_marcada(db_session, sesion_inyectada, monkeypatch):
+    """Orden envío-antes-de-commit para el fallo GLOBAL/reintentable: si el
+    correo todavía puede salir en un reintento, no se commitea una fila que
+    diría "ya avisado" y dejaría a la familia sin aviso para siempre.
+
+    El nombre dice ahora "global" porque desde el issue #837 la regla dejó de
+    ser universal: un rechazo DEFINITIVO de la dirección (5xx por
+    destinatario) sí commitea la fila -- ahí no hay reintento que pueda
+    salvar el correo, y no commitear dejaría a esa familia sin NINGÚN canal.
+    Ese caso lo fija `test_lote_de_tres_sigue_cuando_el_del_medio_es_
+    rechazado_permanentemente`. Este test conserva sus asserts intactos: sobre
+    un `ConnectionError` (transporte) la tarea sigue levantando y sin dejar
+    filas."""
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
     persona = _crear_persona(db_session, cedula_valida(111))
     _crear_usuario(db_session, persona, "alumno012@cataclub.test")
@@ -467,6 +480,115 @@ def test_el_aviso_nombra_la_fecha_real_de_vencimiento_no_el_borde_de_la_ventana(
     cuerpo = llamadas[0]["cuerpo_texto"]
     assert fecha_real in cuerpo
     assert fecha_borde_ventana not in cuerpo
+
+
+# --- Issue #837: un destinatario rechazado de forma permanente no mata el
+# lote ------------------------------------------------------------------------
+# Estos dos tests NO usan `_mock_envio`: doblan `smtplib.SMTP` (ver
+# `tests/smtp_falso.py`) para que corra el clasificador real de
+# `notificaciones_servicio`. Lo que se declara acá es el CÓDIGO SMTP crudo, no
+# la excepción de dominio ya elegida -- si la traducción se rompiera, estos
+# tests lo verían.
+
+def _sembrar_lote_de_tres(db) -> tuple[list[Persona], list[str], list[int]]:
+    personas: list[Persona] = []
+    correos: list[str] = []
+    pagos: list[int] = []
+    for indice in range(3):
+        persona = _crear_persona(db, cedula_valida(130 + indice))
+        correo = f"lote{indice}@cataclub.test"
+        _crear_usuario(db, persona, correo)
+        _, pago = _crear_membresia_con_pago(db, persona, VENCE)
+        personas.append(persona)
+        correos.append(correo)
+        pagos.append(pago.id)
+    return personas, correos, pagos
+
+
+def test_lote_de_tres_sigue_cuando_el_del_medio_es_rechazado_permanentemente(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Verificación del issue #837, textual: un lote de 3 destinatarios donde
+    el segundo devuelve `SMTPRecipientsRefused` con un 5xx.
+
+    Antes: `enviar_correo` traducía ese rechazo a `ServicioNoDisponible`, el
+    handler del lote lo leía como "circuito abierto" y abortaba con
+    `self.retry` -- se enviaba 1 solo correo, el reintento chocaba contra la
+    misma dirección mala y a los 3 intentos el lote del día moría entero.
+
+    Ahora: el 5xx por destinatario es terminal, el lote sigue con el
+    siguiente, la notificación in-app del rechazado igual se crea y el fallo
+    queda registrado en la fila."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    personas, correos, pagos = _sembrar_lote_de_tres(db_session)
+    rechazado_pago_id = pagos[1]
+    registro = configurar_smtp_falso(
+        monkeypatch, rechazos={correos[1]: (550, "buzón inexistente")},
+    )
+    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
+    monkeypatch.setattr(alertas_mod.alertar_vencimientos_hoy_mas_5, "retry", mock_retry)
+
+    resultado = alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    # Los otros dos destinatarios se atendieron; el rechazado no se reintenta.
+    assert sorted(registro.enviados) == sorted([correos[0], correos[2]])
+    assert mock_retry.call_count == 0, (
+        "un rechazo permanente de UNA dirección no puede reprogramar el lote "
+        "entero: el reintento choca contra la misma dirección"
+    )
+    # Los tres avisos se emitieron (el correo es un canal, la alerta es la
+    # fila in-app), y el rechazo del tercero queda visible en el resumen de
+    # la corrida en vez de perderse en el log.
+    assert resultado["total_alertas"] == 3
+    assert resultado["total_rechazos_permanentes"] == 1
+    assert resultado["rechazos_permanentes"] == [
+        {"pago_id": rechazado_pago_id, "persona_id": personas[1].id},
+    ]
+
+    # La notificación in-app existe para los TRES, incluido el rechazado: el
+    # correo es un canal, no la notificación.
+    filas = {
+        fila.persona_id: fila
+        for fila in db_session.query(Notificacion).filter(
+            Notificacion.persona_id.in_([p.id for p in personas])
+        )
+    }
+    assert set(filas) == {p.id for p in personas}
+
+    # Auditoría durable del que falló, y SOLO del que falló.
+    rechazada = filas[personas[1].id]
+    assert rechazada.last_error_redacted is not None
+    assert "550" in rechazada.last_error_redacted
+    assert filas[personas[0].id].last_error_redacted is None
+    assert filas[personas[2].id].last_error_redacted is None
+
+
+def test_lote_de_tres_aborta_con_cooldown_si_el_fallo_es_global(
+    db_session, sesion_inyectada, monkeypatch
+):
+    """Contracara del test de arriba: un fallo de TRANSPORTE (el relay no
+    contesta) no es de un destinatario, así que la política vieja se conserva
+    intacta -- el lote se reprograma con el cooldown del circuito y no queda
+    ninguna fila commiteada."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    personas, _correos, _pagos = _sembrar_lote_de_tres(db_session)
+    configurar_smtp_falso(
+        monkeypatch, fallo_de_transporte=OSError("el relay no contesta"),
+    )
+    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
+    monkeypatch.setattr(alertas_mod.alertar_vencimientos_hoy_mas_5, "retry", mock_retry)
+
+    with pytest.raises(CeleryRetry):
+        alertas_mod.alertar_vencimientos_hoy_mas_5()
+
+    assert mock_retry.call_count == 1
+    _, kwargs = mock_retry.call_args
+    assert kwargs["countdown"] == CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
+    assert isinstance(kwargs["exc"], ServicioNoDisponible)
+    total = db_session.query(Notificacion).filter(
+        Notificacion.persona_id.in_([p.id for p in personas])
+    ).count()
+    assert total == 0
 
 
 def test_representante_recibe_una_sola_notificacion_en_reintento(

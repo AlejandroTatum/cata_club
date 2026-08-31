@@ -1885,6 +1885,10 @@ class Notificacion(Base):
     # DESPUÉS de que el rechazo del pago ya estaba commiteado en Postgres).
     MENSAJE_MAX = 500
 
+    # Ancho de `last_error_redacted` (ver más abajo). Mismo valor que en las
+    # tres tablas de outbox, que guardan el mismo tipo de texto.
+    ULTIMO_ERROR_MAX = 500
+
     id: Mapped[int] = mapped_column(primary_key=True)
     tipo: Mapped[TipoNotificacion] = mapped_column(SAEnum(TipoNotificacion))
     mensaje: Mapped[str] = mapped_column(String(MENSAJE_MAX))
@@ -1895,6 +1899,27 @@ class Notificacion(Base):
     # según `tipo` -- mantenerlo simple evita una jerarquía de tablas.
     entidad_relacionada_id: Mapped[Optional[int]] = mapped_column(nullable=True)
     enrollment_outbox_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    # Auditoría del canal de correo (issue #837). NULL es el caso normal:
+    # o el correo salió, o no había a quién escribirle. Se llena cuando el
+    # proveedor rechazó la dirección de forma DEFINITIVA (5xx por
+    # destinatario) y por eso el aviso por correo nunca va a llegar aunque
+    # esta notificación in-app exista. Sin esta columna ese episodio no
+    # dejaba ningún rastro consultable: la ruta de alertas no tiene outbox
+    # (las tres colas durables del club son de recuperación, verificación e
+    # inscripción) y el log del worker no es una fuente de verdad -- rota.
+    #
+    # Por qué acá y no en una tabla nueva: la fila de `notificacion` YA
+    # identifica el episodio completo -- a quién (`persona_id`), por qué
+    # (`tipo`) y sobre qué (`entidad_relacionada_id` = el pago) -- y desde
+    # el issue #837 existe incluso cuando el correo fue rechazado. Una
+    # cuarta cola durable sería un refactor de dominio, no una auditoría.
+    # Mismo nombre que en las tres tablas de outbox (`RecuperacionOutbox`,
+    # `VerificacionCorreoOutbox`, `EnrollmentNotificacionOutbox`): el texto
+    # entra ya redactado por
+    # `notificaciones_servicio._redactar_detalle_sensible`, nunca crudo.
+    last_error_redacted: Mapped[Optional[str]] = mapped_column(
+        String(ULTIMO_ERROR_MAX), nullable=True
+    )
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
     persona: Mapped["Persona"] = relationship(back_populates="notificaciones")

@@ -84,6 +84,34 @@ class ServicioNoDisponible(ErrorDominio):
     pass
 
 
+class DestinatarioRechazadoPermanentemente(ServicioNoDisponible):
+    """El proveedor rechazó de forma DEFINITIVA a UNA dirección concreta, y
+    solo a esa (issue #837): un 5xx por destinatario ("no such user"), no una
+    caída del proveedor ni un problema del mensaje.
+
+    Existe porque el llamador necesita distinguir dos cosas que hasta ahora
+    llegaban con el mismo tipo. Un lote nocturno que lee un rechazo de
+    dirección como "el servicio no está disponible" aborta la corrida entera,
+    reintenta contra la MISMA dirección mala y, agotados los reintentos,
+    pierde el aviso de todos los demás destinatarios. Un rechazo terminal es
+    lo contrario de reintentable: la dirección no va a existir en 60
+    segundos.
+
+    Es SUBCLASE de `ServicioNoDisponible` a propósito, no un tipo hermano.
+    Así, todo `except ServicioNoDisponible` que ya existía sigue capturando
+    esto exactamente como antes -- el peor caso de olvidar el nuevo `except`
+    es el comportamiento de HOY (reintentar), nunca una excepción sin
+    capturar que voltee una tarea. También conserva el 503 del manejador
+    global de `main.py`, que resuelve por MRO. Quien quiera discriminar pone
+    este `except` ANTES del genérico; los tres sitios que lo hacen viven en
+    `alertas_tareas.py`.
+
+    `detalle_tecnico` lleva el código y el texto del proveedor ya redactados
+    (`notificaciones_servicio._redactar_detalle_sensible`), que es lo que se
+    persiste como auditoría."""
+    pass
+
+
 class ConflictoConcurrencia(ErrorDominio):
     """Dos operaciones concurrentes compitieron por la misma fila y el
     `lock_timeout` de Postgres venció esperando su turno (-> HTTP 409, issue
