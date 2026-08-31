@@ -278,7 +278,7 @@ def subir_voucher_pago(
             "type": "authenticated",
             "public_id": nombre_publico,
             "folder": settings.cloudinary_carpeta_vouchers,
-            "overwrite": True,
+            "overwrite": False,
             "invalidate": True,
             "format": "pdf",
         }
@@ -291,7 +291,7 @@ def subir_voucher_pago(
             "type": "authenticated",
             "public_id": nombre_publico,
             "folder": settings.cloudinary_carpeta_vouchers,
-            "overwrite": True,
+            "overwrite": False,
             "invalidate": True,
         }
     else:
@@ -300,6 +300,17 @@ def subir_voucher_pago(
     return _subir(
         contenido, upload_kwargs,
         f"voucher de pago (pago_id={pago_id}, public_id={nombre_publico})",
+    )
+
+
+def eliminar_voucher_pago(nombre_publico: str, content_type: str) -> None:
+    """Best-effort deletion of a committed replacement's former voucher."""
+    eliminar_logo_sponsor(
+        nombre_publico,
+        carpeta=settings.cloudinary_carpeta_vouchers,
+        resource_type="raw" if content_type == "application/pdf" else "image",
+        tipo="authenticated",
+        descripcion="voucher",
     )
 
 
@@ -400,7 +411,14 @@ _MENSAJE_BORRADO_NO_DISPONIBLE = (
 )
 
 
-def eliminar_logo_sponsor(nombre_publico: str) -> None:
+def eliminar_logo_sponsor(
+    nombre_publico: str,
+    *,
+    carpeta: str = "cataclub/sponsors",
+    resource_type: str = "image",
+    tipo: str = "upload",
+    descripcion: str = "logo de patrocinador",
+) -> None:
     """Retira un logo público; la fila se borra solo si el proveedor responde.
 
     Única llamada de red del módulo que no pasa por `_subir()`, y por eso la
@@ -429,7 +447,7 @@ def eliminar_logo_sponsor(nombre_publico: str) -> None:
 
     try:
         cloudinary.uploader.destroy(
-            f"cataclub/sponsors/{nombre_publico}", resource_type="image", type="upload",
+            f"{carpeta}/{nombre_publico}", resource_type=resource_type, type=tipo,
             invalidate=True, timeout=_timeout_cloudinary(),
         )
     except Exception as exc:
@@ -440,10 +458,10 @@ def eliminar_logo_sponsor(nombre_publico: str) -> None:
         # completo, cuya última línea es `Tipo: str(exc)` sin pasar por
         # `_redactar_detalle_sensible`: redactar solo `detalle_tecnico` no
         # sirve de nada si el traceback ya copió la credencial al log.
-        logger.error("Fallo eliminando logo de patrocinador de Cloudinary: %s", detalle)
+        logger.error("Fallo eliminando %s de Cloudinary: %s", descripcion, detalle)
         raise ServicioNoDisponible(
             _MENSAJE_BORRADO_NO_DISPONIBLE,
-            detalle_tecnico=f"Error eliminando logo sponsor {nombre_publico}: {detalle}",
+            detalle_tecnico=f"Error eliminando {descripcion}: {detalle}",
             seguro_mostrar=True,
         ) from exc
 
