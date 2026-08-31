@@ -449,6 +449,18 @@ def test_la_redelivery_repetida_termina_y_no_reenvia_sin_techo(
     assert guardada.claimed_at is None
     assert guardada.last_error_redacted == "TopeDeEntregasAlcanzado: delivery failed"
 
+    # Lo que el runbook depende de que sea cierto. `requeue` resuelve el
+    # marcador, así que la fila que MÁS duplicó es justo la que desaparece de
+    # la consulta de ventana abierta. Se la busca por estas dos señales, y
+    # `docs/operations/entrega-de-correo.md` dice explícitamente que la
+    # primera consulta no la devuelve.
+    assert not auditoria.entrega_previa_sin_resolver(guardada), (
+        "topar el techo BORRA la firma de la ventana; el runbook avisa de esto"
+    )
+    assert guardada.entregas_intentadas > guardada.attempts, (
+        "la señal que sí queda: más pasos por SMTP que reclamos del outbox"
+    )
+
 
 def test_el_techo_de_entregas_deja_lugar_al_camino_sano():
     """El techo NO puede morder el camino normal. Cada uno de los
@@ -499,4 +511,45 @@ def test_los_dos_contadores_no_se_pisan(cola, db_session, smtp, monkeypatch):
     assert tras_la_redelivery.attempts == 1
     assert tras_la_redelivery.entregas_intentadas == 2, (
         "el paso de envío sí se cuenta, que es lo que acota el duplicado"
+    )
+
+
+# ─── 11. Todo desenlace terminal resuelve su marcador ───────────────────────
+def test_la_fila_que_vence_con_una_entrega_abierta_no_queda_como_ventana(
+    cola, db_session, smtp, monkeypatch
+):
+    """Hay un tercer desenlace terminal, aparte de `mark_sent` y de `requeue`:
+    la fila despierta con la solicitud ya vencida (o sin usuario) y se cierra
+    en `AGOTADO` ahí mismo. Nadie va a reintentarla nunca más.
+
+    Ese camino tiene que resolver el marcador igual que los otros dos. Si no
+    lo hiciera, una fila que inició una entrega, perdió su worker y venció
+    antes de la redelivery quedaría para siempre con `entrega_iniciada_at`
+    posterior a `entrega_resuelta_at` -- y la consulta de duplicado probable
+    de `docs/operations/entrega-de-correo.md` la devolvería como una ventana
+    abierta que ya nunca se va a cerrar. Un falso positivo permanente sobre
+    una fila muerta le cuesta al operador justo cuando está buscando la viva.
+    """
+    _, fila = _sembrar(cola, db_session)
+    _reclamar(cola, db_session)
+    _matar_antes_de_marcar_enviada(cola, monkeypatch)
+    _procesar_muriendo(cola, db_session, fila.id)
+
+    abierta = _releer(cola, db_session, fila.id)
+    assert auditoria.entrega_previa_sin_resolver(abierta), (
+        "el caso arranca con una entrega iniciada y sin desenlace"
+    )
+    abierta.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    resultado = cola.procesar(fila.id)
+
+    assert resultado["agotado"] is True
+    guardada = _releer(cola, db_session, fila.id)
+    assert guardada.status == "AGOTADO"
+    assert len(arnes.envios(smtp)) == 1, "la fila vencida no vuelve a enviar"
+    assert guardada.entrega_iniciada_at is not None, "el rastro de la entrega queda"
+    assert guardada.entrega_resuelta_at is not None
+    assert not auditoria.entrega_previa_sin_resolver(guardada), (
+        "un desenlace terminal no puede seguir leyéndose como ventana abierta"
     )

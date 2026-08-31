@@ -87,7 +87,7 @@ Tres columnas por cola (`recuperacion_outbox` y
 | --- | --- | --- |
 | `entregas_intentadas` | commit **antes** de `sendmail` | veces que se llegó al paso de envío |
 | `entrega_iniciada_at` | commit **antes** de `sendmail` | cuándo empezó la última de esas entregas |
-| `entrega_resuelta_at` | con `mark_sent()` o con `requeue()` | cuándo se registró su desenlace |
+| `entrega_resuelta_at` | en todo desenlace terminal: `mark_sent()`, `requeue()`, y el `AGOTADO` de la fila vencida | cuándo se registró su desenlace |
 
 El marcador va **antes** del envío porque es la única posición que sirve: un
 rastro escrito después se pierde en la misma ventana que vendría a
@@ -101,10 +101,14 @@ marcador no puede perder correo.
 
 ## Cómo se ve un duplicado probable
 
-Cuando alguien reporta dos correos iguales, hay dos lugares donde mirar.
+Cuando alguien reporta dos correos iguales, el orden es: primero la fila,
+después el registro. En la fila son **dos consultas, no una**, y hay que
+correr las dos: el peor caso —la fila que más veces duplicó— NO aparece en la
+primera.
 
-**En la fila.** Una entrega **iniciada y nunca resuelta** es la firma exacta
-de la ventana:
+### 1. La ventana abierta (el duplicado en curso)
+
+Una entrega **iniciada y nunca resuelta** es la firma exacta de la ventana:
 
 ```sql
 SELECT id, usuario_id, status, attempts, entregas_intentadas,
@@ -114,10 +118,51 @@ WHERE entrega_iniciada_at IS NOT NULL
   AND (entrega_resuelta_at IS NULL OR entrega_resuelta_at < entrega_iniciada_at);
 ```
 
-`entregas_intentadas > attempts` es la otra señal, y apunta derecho a la
-redelivery del broker: hubo más pasos por SMTP que reclamos del outbox.
+Devuelve las filas que llegaron al envío y cuyo desenlace nadie alcanzó a
+registrar. La misma consulta sirve sobre `verificacion_correo_outbox`
+cambiando el `FROM`.
 
-**En el registro.** La entrega siguiente lo avisa antes de mandar:
+### 2. Las filas que tocaron el techo, que la consulta 1 NO devuelve
+
+Esto hay que saberlo antes de concluir nada, porque la fila ausente es justo
+la que más duplicó. Al llegar a `MAX_ENTREGAS_INICIADAS` la entrega no se
+cierra a mano: devuelve la fila al outbox con `requeue`, y `requeue` —igual
+que `mark_sent`— **resuelve el marcador**. Eso es correcto como registro de
+estado: la fila dejó de estar en entrega, y dejarla marcada como abierta
+afirmaría una ventana que ya no existe. Pero el efecto es que ocho
+duplicados seguidos terminan con la firma de la ventana **borrada**, y quien
+mire solo la consulta 1 va a ver limpio el caso más grave.
+
+Esas filas se buscan por lo que sí les queda:
+
+```sql
+SELECT id, usuario_id, status, attempts, entregas_intentadas,
+       entrega_iniciada_at, entrega_resuelta_at, last_error_redacted
+FROM recuperacion_outbox
+WHERE last_error_redacted = 'TopeDeEntregasAlcanzado: delivery failed'
+   OR entregas_intentadas > attempts;
+```
+
+Las dos condiciones van juntas porque dicen cosas distintas. La primera es
+exacta: ese texto lo escribe **solo** el techo, y significa que el reenvío se
+detuvo porque se acabó el margen y no por un fallo de SMTP. La segunda es más
+ancha —hubo más pasos por SMTP que reclamos del outbox— y apunta derecho a la
+redelivery del broker: encuentra también las filas que duplicaron sin llegar
+a ocho y las que ya cerraron como `ENVIADO`.
+
+En una frase: **la consulta 1 es el duplicado que está pasando; la consulta 2
+es el que ya pasó.** Una fila de la 1 tiene una entrega abierta ahora mismo;
+una de la 2 duplicó y ya no está duplicando. Un reporte de dos correos
+iguales que no devuelve nada en la 1 todavía puede estar entero en la 2.
+
+Lo que la consulta 1 **no** devuelve por diseño, y no hay que ir a buscar:
+una fila terminal que venció con una entrega abierta. Ese camino también
+resuelve su marcador, justamente para no quedar como una ventana que ya nunca
+se va a cerrar.
+
+### 3. En el registro
+
+La entrega siguiente lo avisa antes de mandar:
 
 ```
 Recuperación posible DUPLICADO: la fila 412 ya había iniciado una entrega el
@@ -138,9 +183,8 @@ Recuperación alcanzó el techo de 8 entregas iniciadas: fila 412 del usuario
 Ese mensaje no es sobre el correo: es sobre el worker. Ocho muertes seguidas
 entregando la misma fila no es un fallo del proveedor, es un proceso que se
 está cayendo —OOM, `SIGKILL`, un límite duro de Celery— y hay que mirarlo
-ahí. La fila además queda con `last_error_redacted =
-'TopeDeEntregasAlcanzado: delivery failed'`, que es la marca durable de que
-el reenvío se detuvo por el techo y no por SMTP.
+ahí. Si el registro ya rotó, la marca durable de ese mismo hecho es el
+`last_error_redacted` de la consulta 2.
 
 ## El límite que queda
 

@@ -146,6 +146,13 @@ def entregar_fila(
         if not destinatario or vencida:
             motivo = "la solicitud venció" if destinatario else "el usuario ya no existe"
             usuario_id = evento.usuario_id  # antes del commit: después expira
+            # Este `AGOTADO` no pasa por `mark_sent` ni por `requeue`, que es
+            # donde vive `marcar_entrega_resuelta`. Sin esta línea, una fila
+            # que inició una entrega, perdió su worker y venció antes de la
+            # redelivery quedaría para siempre con la entrega iniciada y sin
+            # desenlace -- leyéndose como ventana abierta en una fila que ya
+            # es terminal y que nadie va a reintentar.
+            auditoria.marcar_entrega_resuelta(evento)
             evento.status = "AGOTADO"
             db.commit()
             logger.error(
