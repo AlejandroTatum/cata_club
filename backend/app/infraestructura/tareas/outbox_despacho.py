@@ -10,6 +10,20 @@ lo único que cambia entre ellas es QUÉ se manda y a quién.
 Esa mecánica vivía escrita de nuevo en cada módulo de tareas. Acá vive una
 sola vez, parametrizada por lo que de verdad difiere.
 
+GARANTÍA DE ENTREGA: AT-LEAST-ONCE, nunca exactly-once
+------------------------------------------------------
+Una entrega toca dos sistemas que NO comparten transacción: el proveedor
+SMTP y Postgres. No hay commit de dos fases entre ellos, así que entre que
+`sendmail` vuelve y que el `mark_sent()` se commitea existe una ventana en la
+que el worker puede morir con el correo ya entregado y la base sin saberlo.
+Esa ventana no se cierra: se elige de qué lado caer, y el club elige que un
+enlace de acceso llegue dos veces antes que no llegar (issue #839).
+
+Lo que sí se hace con el duplicado: acotarlo y hacerlo visible. Ver
+`app/infraestructura/repositorios/outbox_auditoria_entrega.py` para el
+mecanismo, y `docs/operations/entrega-de-correo.md` para lo que un operador
+necesita saber cuando alguien reporta dos correos iguales.
+
 Sobre `abrir_sesion`: se recibe como parámetro y no se importa `SessionLocal`
 acá a propósito. Cada módulo de tareas pasa el `SessionLocal` de SU módulo, y
 lo resuelve en el momento de la llamada -- que es lo que permite que los tests
@@ -22,6 +36,7 @@ from typing import Callable, Optional
 
 from sqlalchemy import delete, func, or_, select
 
+from app.infraestructura.repositorios import outbox_auditoria_entrega as auditoria
 from app.soporte_transversal.configuracion import settings
 
 
@@ -112,6 +127,14 @@ def entregar_fila(
     cuando el motivo de la fila ya no existe -- una cuenta que se verificó por
     otra vía entre el encolado y el despacho. La fila se cierra como enviada:
     dejarla viva la haría reintentar para siempre.
+
+    La entrega es AT-LEAST-ONCE (ver el encabezado del módulo). El marcador
+    de auditoría se commitea ANTES de `entregar`, y esa es la única posición
+    que sirve: escrito después, se pierde en la misma ventana que viene a
+    documentar. Ese commit NO da la fila por enviada -- `status` sigue
+    `ENVIANDO` y `sent_at` sigue nulo --, así que una muerte entre el
+    marcador y el envío deja la fila exactamente como estaba para el
+    reintento, y no puede perder correo.
     """
     with abrir_sesion() as db:
         evento = db.get(modelo, evento_id)
@@ -123,6 +146,13 @@ def entregar_fila(
         if not destinatario or vencida:
             motivo = "la solicitud venció" if destinatario else "el usuario ya no existe"
             usuario_id = evento.usuario_id  # antes del commit: después expira
+            # Este `AGOTADO` no pasa por `mark_sent` ni por `requeue`, que es
+            # donde vive `marcar_entrega_resuelta`. Sin esta línea, una fila
+            # que inició una entrega, perdió su worker y venció antes de la
+            # redelivery quedaría para siempre con la entrega iniciada y sin
+            # desenlace -- leyéndose como ventana abierta en una fila que ya
+            # es terminal y que nadie va a reintentar.
+            auditoria.marcar_entrega_resuelta(evento)
             evento.status = "AGOTADO"
             db.commit()
             logger.error(
@@ -135,6 +165,51 @@ def entregar_fila(
             repositorio(db).mark_sent(evento)
             db.commit()
             return {"evento_id": evento_id, "enviado": False, "omitido_por_estado": True}
+
+        if auditoria.tope_de_entregas_alcanzado(evento):
+            # Techo del duplicado (issue #839). Se llega acá solo por
+            # redelivery del broker: `task_acks_late` republica el MISMO
+            # mensaje cuando el worker muere, sin pasar por `claim_pending`,
+            # que es el único que gasta `attempts`. Sin este corte, un worker
+            # que muere siempre en el mismo punto reenvía sin fin y `AGOTADO`
+            # nunca llega.
+            #
+            # La fila se devuelve al outbox por el camino de siempre en vez de
+            # cerrarse acá: `requeue` la deja `PENDIENTE` con backoff (o
+            # `AGOTADO` en el último intento), y eso corta la ráfaga en seco
+            # porque la redelivery siguiente ya no la encuentra `ENVIANDO`.
+            repositorio(db).requeue(evento, auditoria.TopeDeEntregasAlcanzado())
+            agotado = evento.status == "AGOTADO"
+            entregas, usuario_id = evento.entregas_intentadas, evento.usuario_id
+            db.commit()
+            logger.error(
+                "%s alcanzó el techo de %s entregas iniciadas: fila %s del "
+                "usuario %s, NO se manda de nuevo; revisá por qué el worker "
+                "muere entregando esta fila",
+                etiqueta, entregas, evento_id, usuario_id,
+            )
+            return {
+                "evento_id": evento_id,
+                "enviado": False,
+                "agotado": agotado,
+                "tope_de_entregas": True,
+            }
+
+        duplicado_probable = auditoria.entrega_previa_sin_resolver(evento)
+        entrega_previa = evento.entrega_iniciada_at
+        auditoria.marcar_entrega_iniciada(evento)
+        db.commit()
+        if duplicado_probable:
+            # Se entrega IGUAL: el contrato es at-least-once y este aviso
+            # sirve para diagnosticar el duplicado, no para suprimirlo.
+            # Suprimir exigiría saber si el envío anterior llegó, y eso es
+            # exactamente lo que la ventana no deja saber.
+            logger.warning(
+                "%s posible DUPLICADO: la fila %s ya había iniciado una "
+                "entrega el %s que nunca registró su desenlace; se entrega "
+                "igual (at-least-once)",
+                etiqueta, evento_id, entrega_previa,
+            )
 
         try:
             entregar(destinatario)

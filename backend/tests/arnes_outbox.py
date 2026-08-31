@@ -111,3 +111,17 @@ def texto_plano(mensaje) -> str:
 def sendmail_de(smtp_cls):
     """El mock de `sendmail`, para afirmar que NO se llamó."""
     return smtp_cls.return_value.__enter__.return_value.sendmail
+
+
+def envios(smtp_cls) -> list:
+    """TODOS los `sendmail` que hubo, en orden de salida.
+
+    Existe aparte de `mensaje_enviado` y NO lo afloja: aquel afirma que hubo
+    exactamente uno, que es justo lo que el resto de las suites quiere
+    custodiar. Pero un arnés que hard-asertea "un solo envío" no puede
+    OBSERVAR un segundo, y el duplicado es precisamente el hecho que la
+    entrega at-least-once tiene que poder mostrar (issue #839). Bajarle la
+    afirmación a `mensaje_enviado` dejaría a las demás suites sin su candado;
+    este helper mira lo mismo sin tocarlo.
+    """
+    return list(smtp_cls.return_value.__enter__.return_value.sendmail.call_args_list)

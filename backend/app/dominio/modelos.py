@@ -2053,6 +2053,23 @@ class InscripcionIdempotencia(Base):
 
 
 class RecuperacionOutbox(Base):
+    """Intención durable de mandarle a una cuenta su enlace de recuperación.
+
+    La entrega es AT-LEAST-ONCE, no exactly-once, y la fila lo refleja
+    (issue #839). SMTP y Postgres no comparten transacción: entre que el
+    correo sale y que `sent_at` se commitea hay una ventana en la que el
+    worker puede morir con el enlace ya entregado y la base sin saberlo. El
+    reintento vuelve a mandar, y eso es lo elegido: perder un enlace de
+    recuperación deja a alguien sin poder entrar a su cuenta; recibirlo dos
+    veces, no.
+
+    `attempts` y `entregas_intentadas` NO son el mismo número y no hay que
+    confundirlos: el primero cuenta reclamos del outbox y gobierna el backoff
+    y el `AGOTADO` terminal; el segundo cuenta veces que se llegó al paso de
+    envío -- incluidas las redeliveries del broker, que no pasan por ningún
+    reclamo -- y es lo que le pone techo al duplicado.
+    """
+
     __tablename__ = "recuperacion_outbox"
     __table_args__ = (
         Index("ix_recuperacion_outbox_pending_next", "status", "next_attempt_at"),
@@ -2085,6 +2102,17 @@ class RecuperacionOutbox(Base):
         String(500), nullable=True
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Auditoría del paso de entrega (issue #839). Ver
+    # `app/infraestructura/repositorios/outbox_auditoria_entrega.py`.
+    entregas_intentadas: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, default=0
+    )
+    entrega_iniciada_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    entrega_resuelta_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     usuario: Mapped["Usuario"] = relationship()
 
 
@@ -2097,6 +2125,13 @@ class VerificacionCorreoOutbox(Base):
     duplicación que se desincroniza sola. Lo que se persiste es a QUIÉN hay
     que escribirle y hasta cuándo vale el intento; el token se acuña recién
     en el momento del envío y nunca toca la base.
+
+    La entrega es AT-LEAST-ONCE, igual que la de `RecuperacionOutbox` y por
+    el mismo motivo (issue #839): SMTP y Postgres no comparten transacción,
+    así que un worker que muere entre el envío y su commit hace que el
+    reintento vuelva a mandar. `entregas_intentadas`, `entrega_iniciada_at` y
+    `entrega_resuelta_at` no evitan ese duplicado -- nada puede --: le ponen
+    techo y lo dejan diagnosticable.
     """
 
     __tablename__ = "verificacion_correo_outbox"
@@ -2131,4 +2166,15 @@ class VerificacionCorreoOutbox(Base):
         String(500), nullable=True
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Auditoría del paso de entrega (issue #839). Ver
+    # `app/infraestructura/repositorios/outbox_auditoria_entrega.py`.
+    entregas_intentadas: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, default=0
+    )
+    entrega_iniciada_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    entrega_resuelta_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     usuario: Mapped["Usuario"] = relationship()
