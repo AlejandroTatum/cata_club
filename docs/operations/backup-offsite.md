@@ -161,16 +161,19 @@ El paso 4 prueba, además, que la identidad guardada sigue siendo la correcta y
 sigue siendo legible. Una clave que nadie ejercitó es una clave que no se sabe
 si existe: conviene correrlo periódicamente, no solo el día del desastre.
 
-## Lo que esta pieza todavía NO cubre
+## Recibo y monitoreo de la réplica
 
-**El monitoreo externo no observa la réplica.** Si la subida falla,
-`backup-db.sh` sale distinto de cero a las 03:30, pero el artefacto local queda
-escrito y fresco; el chequeo de las 07:00 (`check-backup-freshness.sh`) mira el
-disco local, lo ve fresco y **pingea el heartbeat igual**. El monitor externo se
-queda en verde con la réplica muerta.
+Después de `put`, `HEAD` (tamaño/SHA) y listado remoto exitosos,
+`upload-b2.sh` publica atómicamente junto al dump un recibo no secreto con su
+nombre, tamaño y SHA-256. No se crea ni avanza ante ningún fallo de la réplica.
 
-Hoy la evidencia está solo en `BACKUP_CRON_LOG`. Cerrar eso pide que la señal
-de frescura contemple el estado de la réplica, y no es parte de este cambio.
+Con B2 activado, el chequeo de las 07:00 exige que ese recibo sea reciente y
+coincida exactamente con el dump reciente; si falta, está viejo o discrepa,
+`check-backup-freshness.sh` falla y el `&&` no pingea el heartbeat. Con B2
+apagado, el chequeo declara y conserva el contrato local.
+
+El restore remoto sigue siendo un drill/gate separado de #791: se hace en un
+entorno desechable fuera del cron y sin copiar la identidad privada age al host.
 
 ## Referencias
 

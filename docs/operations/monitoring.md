@@ -88,15 +88,15 @@ hacer con ellas.
    completo, incluido el de restauración, está en
    [`backup-offsite.md`](backup-offsite.md).
 
-   **Salvedad conocida:** el heartbeat de las 07:00 mira el disco local. Si la
-   réplica falla, el backup de las 03:30 sale distinto de cero pero el
-   artefacto local queda fresco, así que el ping sale igual y el monitor
-   externo se queda en verde. La evidencia queda solo en `BACKUP_CRON_LOG`.
-4. **Pendiente.** Probar restore en un entorno desechable antes de declarar
-   recuperabilidad. Con artefactos cifrados hace falta la identidad privada:
-   `restore-check.sh <dump>.dump.age --identity <archivo>`. Probarlo **también**
-   verifica que la identidad guardada sea la correcta y siga siendo legible —
-   una clave que nadie ejercitó es una clave que no se sabe si existe.
+   Con B2 activado, el uploader publica un recibo no secreto y atómico solo
+   después de `put` + `HEAD` (tamaño/SHA) + listado remoto. A las 07:00 la
+   frescura exige que ese recibo sea reciente y coincida exactamente con el
+   dump; si falta, está viejo o discrepa, el `&&` no pingea. Con B2 apagado se
+   conserva explícitamente el contrato local.
+4. **Pendiente, drill/gate separado de #791.** Probar restore remoto en un
+   entorno desechable antes de declarar recuperabilidad. No entra en el cron
+   ni copia la identidad privada age al host: se ejecuta fuera del droplet con
+   `restore-check.sh <dump>.dump.age --identity <archivo>`.
 
 No instalar un monitor dentro del mismo host como sustituto del control externo:
 una caída completa lo silenciaría junto con la aplicación. Por eso los dos
