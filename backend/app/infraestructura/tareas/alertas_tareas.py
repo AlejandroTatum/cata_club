@@ -127,6 +127,7 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
                 Pago.fecha_fin >= hoy,
                 Pago.fecha_fin <= fecha_objetivo,
                 Membresia.estado == EstadoMembresia.ACTIVA,
+                    Persona.activo.is_(True),
             )
         )
         # `.unique()` es defensiva, no obligatoria para una relación a-uno:
@@ -599,6 +600,7 @@ def alertar_mora_diaria(self) -> dict:
                 # seguía matcheando `ultima_fecha_fin < hoy` y recibía el
                 # correo de mora de todos modos.
                 Membresia.estado != EstadoMembresia.SUSPENDIDA,
+                Persona.activo.is_(True),
                 ultimo_pago.c.rn == 1,
                 ultimo_pago.c.ultima_fecha_fin < hoy,
             )

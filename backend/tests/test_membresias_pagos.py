@@ -1,4 +1,7 @@
+from datetime import date
+
 from app.dominio.cedula import cedula_valida
+from app.dominio.modelos import Pago, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -887,3 +890,61 @@ def test_obtener_membresia_stranger_no_puede_acceder(client_sin_permisos, client
     assert resp.status_code == 403
     # El mensaje de error no debe filtrar el id de la membresia
     assert str(membresia["id"]) not in resp.json()["detail"]
+
+
+def test_retirada_bloquea_aprobacion_y_pago_nuevo_pero_permite_rechazo(client, db_session):
+    persona = _crear_persona(client, cedula=cedula_valida(445))
+    tipo = _crear_tipo_membresia(client)
+    membresia = client.post("/api/v1/membresias/", json={
+        "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+        "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+    }).json()
+    pago = client.post("/api/v1/membresias/pagos", json={
+        "meses": 1, "tipo_pago": "EFECTIVO", "persona_id": persona["id"],
+        "membresia_id": membresia["id"],
+    }).json()
+    db_session.get(Persona, persona["id"]).activo = False
+    db_session.commit()
+
+    aprobado = client.patch(f"/api/v1/membresias/pagos/{pago['id']}/validar", json={"estado_pago": "APROBADO"})
+    rechazado = client.patch(f"/api/v1/membresias/pagos/{pago['id']}/validar", json={
+        "estado_pago": "RECHAZADO", "motivo_rechazo": "Retiro confirmado",
+    })
+    nuevo = client.post("/api/v1/membresias/pagos", json={
+        "meses": 1, "tipo_pago": "EFECTIVO", "persona_id": persona["id"],
+        "membresia_id": membresia["id"],
+    })
+
+    assert aprobado.status_code == 400
+    assert rechazado.status_code == 200
+    assert rechazado.json()["estadoPago"] == "RECHAZADO"
+    assert nuevo.status_code == 400
+
+
+def test_retirada_tiene_deuda_individual_y_bulk_en_cero(client, db_session):
+    persona = _crear_persona(client, cedula=cedula_valida(446))
+    tipo = _crear_tipo_membresia(client)
+    membresia = client.post("/api/v1/membresias/", json={
+        "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+        "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+    }).json()
+    pago = client.post("/api/v1/membresias/pagos", json={
+        "meses": 1, "tipo_pago": "EFECTIVO", "persona_id": persona["id"],
+        "membresia_id": membresia["id"],
+    }).json()
+    assert client.patch(
+        f"/api/v1/membresias/pagos/{pago['id']}/validar", json={"estado_pago": "APROBADO"},
+    ).status_code == 200
+    db_session.get(Pago, pago["id"]).fecha_fin = date(2020, 1, 1)
+    db_session.get(Persona, persona["id"]).activo = False
+    db_session.commit()
+
+    individual = client.get(f"/api/v1/membresias/{membresia['id']}/deuda")
+    bulk = client.get(f"/api/v1/membresias/deuda/bulk?membresia_ids={membresia['id']}")
+    regularizacion = client.post(f"/api/v1/membresias/{membresia['id']}/regularizar-deuda", json={
+        "monto": "35.00", "fecha_inicio": "2020-01-01", "fecha_fin": "2020-02-01", "motivo": "Cierre",
+    })
+
+    assert individual.json()["mesesAdeudados"] == 0
+    assert bulk.json()[0]["mesesAdeudados"] == 0
+    assert regularizacion.status_code == 400

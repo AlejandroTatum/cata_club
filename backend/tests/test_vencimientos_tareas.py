@@ -179,3 +179,16 @@ def test_marca_vencida_caso_inverso_pago_reciente_vencido(db_session, monkeypatc
     db_session.refresh(membresia)
     assert membresia.estado == EstadoMembresia.VENCIDA
 
+
+def test_retirada_no_pasa_de_activa_a_vencida(db_session, monkeypatch):
+    hoy = date(2029, 6, 15)
+    persona, membresia = _crear_persona_y_membresia(db_session, EstadoMembresia.ACTIVA)
+    persona.activo = False
+    _agregar_pago(db_session, membresia, persona, EstadoPago.APROBADO, date(2029, 6, 10))
+
+    resultado = _run_task(db_session, monkeypatch, hoy)
+
+    assert resultado["total_vencidas"] == 0
+    db_session.refresh(membresia)
+    assert membresia.estado == EstadoMembresia.ACTIVA
+

@@ -733,3 +733,15 @@ def test_dia_1_y_dia_8_son_tipos_distintos():
     assert TipoNotificacion.MIEMBRESIA_MORA_DIA_1 != TipoNotificacion.MIEMBRESIA_MORA_DIA_8
     assert TipoNotificacion.MIEMBRESIA_MORA_DIA_1 != TipoNotificacion.RESUMEN_MORA_ADMIN
     assert TipoNotificacion.MIEMBRESIA_MORA_DIA_8 != TipoNotificacion.RESUMEN_MORA_ADMIN
+
+
+def test_retirada_no_recibe_alerta_de_mora(db_session, sesion_inyectada, monkeypatch):
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    persona = _crear_persona(db_session, cedula_valida(225))
+    persona.activo = False
+    _crear_usuario(db_session, persona, "retirada-mora@cataclub.test")
+    _crear_membresia_con_pago(db_session, persona, HOY - timedelta(days=1))
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["total_avisos_familia"] == 0

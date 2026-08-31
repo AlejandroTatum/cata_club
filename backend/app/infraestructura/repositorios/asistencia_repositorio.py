@@ -1,14 +1,24 @@
 from datetime import date
 from typing import Optional, List
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import (
-    Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, AlumnoHorario, Persona,
-    SesionAsistencia,
+    Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, AlumnoHorario, Membresia,
+    Persona, SesionAsistencia,
 )
+from app.dominio.enums import EstadoMembresia
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
+
+
+def _condiciones_persona_operativa():
+    """Criterio único del roster: persona activa sin membresía suspendida."""
+    suspendida = select(Membresia.id).where(
+        Membresia.persona_id == Persona.id,
+        Membresia.estado == EstadoMembresia.SUSPENDIDA,
+    )
+    return Persona.activo.is_(True), ~exists(suspendida)
 
 
 class HorarioRepositorio:
@@ -406,10 +416,7 @@ class AlumnoHorarioRepositorio:
             select(AlumnoHorario)
             .options(joinedload(AlumnoHorario.persona))
             .join(Persona, Persona.id == AlumnoHorario.persona_id)
-            # Baja lógica: es la nómina OPERATIVA de la clase (la hoja de
-            # asistencia del entrenador). Alguien que ya no está en el club no
-            # puede figurar como presente ni ausente de una clase de hoy.
-            .where(AlumnoHorario.horario_id == horario_id, Persona.activo.is_(True))
+            .where(AlumnoHorario.horario_id == horario_id, *_condiciones_persona_operativa())
             # Se lee como la nómina de la clase: por apellidos y nombres del
             # alumno, con el id de la asignación de desempate para que el
             # orden sea TOTAL y no dependa del motor. Ese orden total es
@@ -432,7 +439,7 @@ class AlumnoHorarioRepositorio:
             select(AlumnoHorario)
             .options(joinedload(AlumnoHorario.persona), joinedload(AlumnoHorario.horario))
             .join(Persona, Persona.id == AlumnoHorario.persona_id)
-            .where(Persona.activo.is_(True))
+            .where(*_condiciones_persona_operativa())
         )
         return list(self.db.execute(stmt).scalars().unique().all())
 
@@ -444,7 +451,7 @@ class AlumnoHorarioRepositorio:
             select(func.count())
             .select_from(AlumnoHorario)
             .join(Persona, Persona.id == AlumnoHorario.persona_id)
-            .where(AlumnoHorario.horario_id == horario_id, Persona.activo.is_(True))
+            .where(AlumnoHorario.horario_id == horario_id, *_condiciones_persona_operativa())
         )
         return self.db.execute(stmt).scalar_one()
 

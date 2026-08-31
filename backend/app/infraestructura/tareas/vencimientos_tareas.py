@@ -29,7 +29,7 @@ from sqlalchemy import select, func
 
 from app.infraestructura.db import SessionLocal
 from app.infraestructura.tareas.celery_app import celery_app
-from app.dominio.modelos import Membresia, Pago
+from app.dominio.modelos import Membresia, Pago, Persona
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.soporte_transversal.tiempo import hoy_club
 
@@ -83,8 +83,10 @@ def marcar_membresias_vencidas(self) -> dict:
         stmt = (
             select(Membresia)
             .join(ultimo_fin, ultimo_fin.c.membresia_id == Membresia.id)
+                .join(Persona, Persona.id == Membresia.persona_id)
             .where(
                 Membresia.estado == EstadoMembresia.ACTIVA,
+                    Persona.activo.is_(True),
                 ultimo_fin.c.ultima_fecha_fin < hoy,
             )
         )
