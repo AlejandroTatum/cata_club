@@ -13,7 +13,10 @@ import pytest
 from sqlalchemy import select
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.excepciones import ServicioNoDisponible
+from app.dominio.excepciones import (
+    DestinatarioRechazadoPermanentemente,
+    ServicioNoDisponible,
+)
 from app.infraestructura import notificaciones_servicio as notificaciones_servicio_mod
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.soporte_transversal.configuracion import settings
@@ -169,7 +172,12 @@ def test_fallo_smtp_redacta_credenciales_de_log_y_detalle(monkeypatch, caplog):
 
 
 _RECHAZOS_DE_DESTINATARIO = [
+    # 5xx por destinatario: TERMINAL desde el issue #837 (ver el bloque de
+    # tests de abajo). Sigue sin contar contra el circuito, que es lo que
+    # fija este test.
     smtplib.SMTPRecipientsRefused({"user@example.com": (550, "buzón inexistente")}),
+    # 4xx por destinatario: transitorio, sigue siendo global/reintentable.
+    smtplib.SMTPRecipientsRefused({"user@example.com": (450, "buzón ocupado")}),
     smtplib.SMTPSenderRefused(501, "remitente rechazado", "no-reply@cataclub.com"),
     smtplib.SMTPDataError(554, "contenido rechazado"),
 ]
@@ -178,13 +186,19 @@ _RECHAZOS_DE_DESTINATARIO = [
 @pytest.mark.parametrize(
     "excepcion",
     _RECHAZOS_DE_DESTINATARIO,
-    ids=[type(e).__name__ for e in _RECHAZOS_DE_DESTINATARIO],
+    ids=["RecipientsRefused5xx", "RecipientsRefused4xx", "SenderRefused", "DataError"],
 )
 def test_destinatario_rechazado_no_abre_el_circuito(monkeypatch, excepcion):
     """Un rechazo de ESTE mensaje puntual (destinatario, remitente o datos)
-    se sigue traduciendo a `ServicioNoDisponible`, pero NO cuenta contra el
-    circuito: tres direcciones malas en un mismo lote no deben abrirlo para
-    todos los destinatarios siguientes (Decisión D del diseño)."""
+    NO cuenta contra el circuito: tres direcciones malas en un mismo lote no
+    deben abrirlo para todos los destinatarios siguientes (Decisión D del
+    diseño).
+
+    Lo que se afirma acá es el efecto sobre el CIRCUITO, y por eso el
+    `pytest.raises` es `ServicioNoDisponible` para los cuatro casos: el
+    rechazo terminal del issue #837 sale como
+    `DestinatarioRechazadoPermanentemente`, que es subclase suya. Cuál de los
+    dos tipos sale exactamente lo fijan los tests del bloque siguiente."""
     _configurar_smtp(monkeypatch)
 
     with patch(
@@ -199,6 +213,170 @@ def test_destinatario_rechazado_no_abre_el_circuito(monkeypatch, excepcion):
 
     assert notificaciones_servicio_mod._circuito_smtp.estado == "cerrado"
     assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 0
+
+
+# ---------------------------------------------------------------------------
+# Taxonomía de fallos SMTP (issue #837): qué es TERMINAL para una dirección y
+# qué sigue siendo global/reintentable.
+# ---------------------------------------------------------------------------
+def _levantar(monkeypatch, excepcion):
+    """Corre `enviar_correo` con `smtplib.SMTP` fallando así y devuelve la
+    excepción de dominio resultante."""
+    _configurar_smtp(monkeypatch)
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP",
+        side_effect=excepcion,
+    ):
+        with pytest.raises(ServicioNoDisponible) as error:
+            ServicioNotificaciones().enviar_correo("user@example.com", "Asunto", "cuerpo")
+    return error.value
+
+
+def test_rechazo_5xx_de_destinatario_es_terminal(monkeypatch):
+    """El único caso terminal nuevo: el servidor dice 5xx para ESA dirección
+    (RFC 5321: 5yz es un fallo permanente). Reintentarla es garantía de
+    volver a fallar, así que el llamador tiene que poder distinguirla."""
+    excepcion = _levantar(
+        monkeypatch,
+        smtplib.SMTPRecipientsRefused({"user@example.com": (550, "no such user")}),
+    )
+
+    assert isinstance(excepcion, DestinatarioRechazadoPermanentemente)
+    # El detalle es lo que se persiste como auditoría: sin el código, "550"
+    # (esa dirección no existe) sería indistinguible de "el buzón estaba
+    # lleno".
+    assert "550" in excepcion.detalle_tecnico
+    assert "user@example.com" in excepcion.detalle_tecnico
+    assert notificaciones_servicio_mod._circuito_smtp.estado == "cerrado"
+
+
+_RECHAZOS_NO_TERMINALES = [
+    # 4xx: transitorio (buzón lleno, greylisting, rate limit).
+    smtplib.SMTPRecipientsRefused({"user@example.com": (450, "mailbox busy")}),
+    # Mezcla: mientras UNA dirección todavía pueda aceptar el mensaje, el
+    # rechazo no es definitivo.
+    smtplib.SMTPRecipientsRefused({
+        "user@example.com": (550, "no such user"),
+        "otro@example.com": (451, "intentá más tarde"),
+    }),
+    # Código ilegible: string en vez de entero. No se adivina.
+    smtplib.SMTPRecipientsRefused({"user@example.com": ("550", "no such user")}),
+    # Forma inesperada: sin tupla `(codigo, mensaje)`.
+    smtplib.SMTPRecipientsRefused({"user@example.com": ()}),
+    # Sin destinatarios: no hay ningún código que leer.
+    smtplib.SMTPRecipientsRefused({}),
+]
+
+
+@pytest.mark.parametrize(
+    "excepcion",
+    _RECHAZOS_NO_TERMINALES,
+    ids=["4xx", "mezcla_5xx_y_4xx", "codigo_no_entero", "tupla_vacia", "sin_destinatarios"],
+)
+def test_rechazo_sin_evidencia_de_5xx_no_es_terminal(monkeypatch, excepcion):
+    """Fail closed: descartar para siempre un aviso que sí se podía entregar
+    es más caro que reintentar de más. Ante un 4xx, una mezcla o cualquier
+    forma que no se pueda leer, sale el `ServicioNoDisponible` de siempre --
+    reintentable, visible, y sin tocar el circuito."""
+    excepcion_dominio = _levantar(monkeypatch, excepcion)
+
+    assert not isinstance(excepcion_dominio, DestinatarioRechazadoPermanentemente)
+    assert notificaciones_servicio_mod._circuito_smtp.estado == "cerrado"
+    assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 0
+
+
+def test_recipients_que_no_es_un_mapa_no_es_terminal(monkeypatch):
+    """`recipients` con una forma que no es un mapa tampoco se clasifica.
+
+    `smtplib` siempre arma un dict, así que esto es defensa en profundidad y
+    no un bug vivo. Lo que se protege es DÓNDE ocurriría el error: la
+    clasificación corre DENTRO del `except`, y un `AttributeError` ahí no lo
+    atrapa nadie -- sale como error no manejado y aborta el lote nocturno,
+    que es exactamente lo que este PR existe para evitar.
+
+    El payload lleva un 550 a propósito: si la forma llegara a leerse, sería
+    terminal. Que salga `ServicioNoDisponible` prueba que lo que decide es la
+    guarda de tipo y no la lista vacía."""
+    excepcion = smtplib.SMTPRecipientsRefused(
+        {"user@example.com": (550, "no such user")}
+    )
+    excepcion.recipients = [("user@example.com", (550, "no such user"))]
+
+    excepcion_dominio = _levantar(monkeypatch, excepcion)
+
+    assert not isinstance(excepcion_dominio, DestinatarioRechazadoPermanentemente)
+    assert notificaciones_servicio_mod._circuito_smtp.estado == "cerrado"
+
+
+_FALLOS_QUE_NO_SON_DE_UNA_DIRECCION = [
+    # El remitente rechazado es configuración (SPF/DKIM, cuenta suspendida):
+    # global, no de una dirección. Sin cambios respecto de antes del #837.
+    smtplib.SMTPSenderRefused(550, "remitente rechazado", "no-reply@cataclub.com"),
+    # Un error de datos puede ser transitorio o global; nunca es "esa
+    # dirección no existe".
+    smtplib.SMTPDataError(554, "contenido rechazado"),
+]
+
+
+@pytest.mark.parametrize(
+    "excepcion",
+    _FALLOS_QUE_NO_SON_DE_UNA_DIRECCION,
+    ids=["SenderRefused_5xx", "DataError_5xx"],
+)
+def test_remitente_y_datos_no_son_rechazos_de_destinatario(monkeypatch, excepcion):
+    """Un 5xx NO alcanza por sí solo para declarar terminal: tiene que ser un
+    5xx POR DESTINATARIO. Estos dos traen un 5xx y siguen saliendo como
+    `ServicioNoDisponible` -- si el remitente está mal, la culpa no es de la
+    dirección de nadie y descartarle el aviso sería descartárselo a todo el
+    club."""
+    excepcion_dominio = _levantar(monkeypatch, excepcion)
+
+    assert not isinstance(excepcion_dominio, DestinatarioRechazadoPermanentemente)
+
+
+def test_fallo_de_transporte_no_es_rechazo_de_destinatario(monkeypatch):
+    """El transporte sigue siendo global y sigue contando contra el circuito;
+    el issue #837 no lo toca."""
+    excepcion_dominio = _levantar(monkeypatch, socket.timeout("sin respuesta"))
+
+    assert not isinstance(excepcion_dominio, DestinatarioRechazadoPermanentemente)
+    assert notificaciones_servicio_mod._circuito_smtp.fallos_consecutivos == 1
+
+
+def test_circuito_abierto_no_es_rechazo_de_destinatario(monkeypatch):
+    """Con el circuito ABIERTO el envío falla sin abrir el socket: el
+    proveedor está caído, ninguna dirección fue rechazada, y confundirlos
+    haría que un corte del relay descarte avisos para siempre."""
+    _configurar_smtp(monkeypatch)
+    for _ in range(CIRCUITO_SMTP_UMBRAL_FALLOS):
+        notificaciones_servicio_mod._circuito_smtp.registrar_fallo()
+
+    with pytest.raises(ServicioNoDisponible) as error:
+        ServicioNotificaciones().enviar_correo("user@example.com", "Asunto", "cuerpo")
+
+    assert not isinstance(error.value, DestinatarioRechazadoPermanentemente)
+
+
+def test_rechazo_terminal_redacta_credenciales_en_el_detalle(monkeypatch):
+    """El `detalle_tecnico` de un rechazo terminal se PERSISTE
+    (`Notificacion.last_error_redacted`), así que pasa por la misma redacción
+    que el log: una frase del proveedor puede repetir las credenciales del
+    relay, y una fila en la base dura más que un log."""
+    _configurar_smtp(monkeypatch)
+    secreto = "smtp-password-no-registrar"
+    monkeypatch.setattr(settings, "smtp_user", "smtp-user-no-registrar")
+    monkeypatch.setattr(settings, "smtp_password", secreto)
+
+    excepcion = _levantar(
+        monkeypatch,
+        smtplib.SMTPRecipientsRefused(
+            {"user@example.com": (550, f"rejected for {secreto}")}
+        ),
+    )
+
+    assert isinstance(excepcion, DestinatarioRechazadoPermanentemente)
+    assert secreto not in excepcion.detalle_tecnico
+    assert "[REDACTED]" in excepcion.detalle_tecnico
 
 
 # --- Guardia estructural: mismo patrón que

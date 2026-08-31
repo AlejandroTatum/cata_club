@@ -10,11 +10,15 @@ El módulo es puro Python stdlib; no añade dependencias externas.
 """
 import logging
 import smtplib
+from collections.abc import Mapping
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
-from app.dominio.excepciones import ServicioNoDisponible
+from app.dominio.excepciones import (
+    DestinatarioRechazadoPermanentemente,
+    ServicioNoDisponible,
+)
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
@@ -35,6 +39,73 @@ def _redactar_detalle_sensible(detalle: str) -> str:
         if valor:
             detalle = detalle.replace(valor, "[REDACTED]")
     return detalle
+
+
+# Primer dígito de la respuesta SMTP con el que el servidor declara un fallo
+# PERMANENTE (RFC 5321 §4.2.1: "5yz -- Permanent Negative Completion reply").
+# Un 4yz es transitorio (buzón lleno, greylisting, rate limit) y por eso NO
+# entra acá: reintentarlo puede funcionar, y esa es exactamente la diferencia
+# que el issue #837 necesita poder leer.
+_RANGO_5XX = range(500, 600)
+
+
+def _codigo_de_respuesta(respuesta) -> Optional[int]:
+    """Extrae el código numérico de un valor de `SMTPRecipientsRefused.
+    recipients`, que `smtplib` arma como `(codigo, mensaje)`.
+
+    Devuelve `None` ante cualquier forma inesperada -- una tupla vacía, un
+    código que no es entero, un valor que ni siquiera es tupla. Sin código no
+    hay evidencia, y sin evidencia no se declara nada terminal (ver
+    `_es_rechazo_permanente_de_destinatario`)."""
+    if isinstance(respuesta, (tuple, list)) and respuesta:
+        codigo = respuesta[0]
+        if isinstance(codigo, int) and not isinstance(codigo, bool):
+            return codigo
+    return None
+
+
+def _es_rechazo_permanente_de_destinatario(
+    exc: smtplib.SMTPRecipientsRefused,
+) -> bool:
+    """¿Este rechazo es atribuible a las DIRECCIONES y es definitivo?
+
+    Fail closed en las tres formas de duda, porque el error caro es el
+    contrario -- descartar para siempre un aviso que sí se podía entregar:
+
+      - `recipients` vacío, ausente, o con una forma que no es un mapa: no
+        hay ningún código que leer.
+      - un código ilegible (no entero, tupla mal formada): no se adivina.
+      - un 4xx, o una mezcla de 4xx y 5xx: mientras UNA dirección todavía
+        pueda aceptar el mensaje, el rechazo no es terminal.
+
+    En cualquiera de esos casos el llamador recibe el `ServicioNoDisponible`
+    de siempre y el fallo sigue siendo visible y reintentable."""
+    # La guarda de tipo importa por DÓNDE corre esto: dentro del `except` de
+    # `enviar_correo`. Un `AttributeError` acá no lo atrapa nadie y aborta el
+    # lote entero, que es el fallo que el #837 vino a eliminar.
+    destinatarios = getattr(exc, "recipients", None) or {}
+    if not isinstance(destinatarios, Mapping) or not destinatarios:
+        return False
+    for respuesta in destinatarios.values():
+        codigo = _codigo_de_respuesta(respuesta)
+        if codigo is None or codigo not in _RANGO_5XX:
+            return False
+    return True
+
+
+def _resumir_rechazo(exc: smtplib.SMTPRecipientsRefused) -> str:
+    """Texto de auditoría del rechazo: dirección, código y frase del
+    proveedor. Es lo único que queda del episodio una vez que el lote
+    siguió de largo, así que conserva el código -- "550" es lo que
+    distingue "esa dirección no existe" de "el buzón estaba lleno"."""
+    partes = []
+    for direccion, respuesta in (getattr(exc, "recipients", None) or {}).items():
+        codigo = _codigo_de_respuesta(respuesta)
+        detalle = respuesta[1] if isinstance(respuesta, (tuple, list)) and len(respuesta) > 1 else ""
+        if isinstance(detalle, bytes):
+            detalle = detalle.decode("utf-8", "replace")
+        partes.append(f"{direccion}: {codigo} {detalle}".strip())
+    return "; ".join(partes) or str(exc)
 
 
 # Circuit breaker en proceso (degradacion-controlada, slice 3): instancia a
@@ -85,7 +156,18 @@ class ServicioNotificaciones:
         se traduce a `ServicioNoDisponible`, pero NO cuenta: el circuito mide
         la salud del proveedor, no la calidad de los datos de un mensaje --
         de lo contrario tres direcciones malas en un mismo lote abrirían el
-        circuito para todos los destinatarios siguientes."""
+        circuito para todos los destinatarios siguientes.
+
+        Dentro de esos rechazos hay UNA subclase que además es TERMINAL
+        (issue #837): un `SMTPRecipientsRefused` en el que todas las
+        direcciones traen un código 5xx. Esa sale como
+        `DestinatarioRechazadoPermanentemente` (subclase de
+        `ServicioNoDisponible`) para que un lote pueda seguir con el
+        destinatario siguiente en vez de reintentar contra una dirección que
+        no va a existir. Un 4xx, una mezcla, un código ilegible, un remitente
+        rechazado o un error de datos siguen saliendo como
+        `ServicioNoDisponible` -- reintentables y globales, igual que antes.
+        Nada de esto cambia el circuito."""
         if not self._host:
             raise RuntimeError(
                 "SMTP_HOST no está configurado: no se puede enviar correo real. "
@@ -112,12 +194,35 @@ class ServicioNotificaciones:
                 if self._user:
                     server.login(self._user, self._password)
                 server.sendmail(self._from, destinatario, msg.as_string())
+        except smtplib.SMTPRecipientsRefused as exc:
+            # Rechazo de ESTE mensaje puntual: no cuenta contra el circuito
+            # (Decisión D, sin cambios). Lo que sí se distingue ahora es si el
+            # rechazo es DEFINITIVO para esa dirección (5xx por destinatario):
+            # en ese caso reintentarlo es garantía de volver a fallar, y el
+            # llamador necesita poder seguir con el destinatario siguiente en
+            # vez de abortar el lote (issue #837).
+            if _es_rechazo_permanente_de_destinatario(exc):
+                detalle = _redactar_detalle_sensible(_resumir_rechazo(exc))
+                logger.warning(
+                    "Destinatario rechazado de forma permanente por SMTP: %s (%s)",
+                    destinatario, detalle,
+                )
+                raise DestinatarioRechazadoPermanentemente(
+                    f"Destinatario rechazado por el servidor SMTP: {destinatario}",
+                    detalle,
+                ) from exc
+            raise ServicioNoDisponible(
+                f"Destinatario rechazado por el servidor SMTP: {destinatario}"
+            ) from exc
         except (
-            smtplib.SMTPRecipientsRefused,
             smtplib.SMTPSenderRefused,
             smtplib.SMTPDataError,
         ) as exc:
-            # Rechazo de ESTE mensaje puntual: no cuenta contra el circuito.
+            # Sin cambios: un remitente rechazado es casi siempre configuración
+            # (SPF/DKIM, cuenta suspendida) y un error de datos puede ser
+            # transitorio o global. Ninguno de los dos es "esta dirección no
+            # existe", así que ninguno se declara terminal ni cuenta contra el
+            # circuito.
             raise ServicioNoDisponible(
                 f"Destinatario rechazado por el servidor SMTP: {destinatario}"
             ) from exc
