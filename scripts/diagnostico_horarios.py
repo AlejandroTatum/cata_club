@@ -93,6 +93,7 @@ import re
 import subprocess
 import sys
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlparse
 
 CLASE_DERIVA = "revision_drift"
@@ -103,11 +104,6 @@ CLASE_AUTORIDAD_ESTATICA = "static_schedule_authority"
 
 # El orden del glosario del docstring. `resumen` las lista SIEMPRE todas, aun
 # en cero, para que la forma de la salida no dependa de los hallazgos.
-#
-# `static_schedule_authority` se declara acá con su detector todavía sin
-# implementar: su cero NO significa "no hay lista estática sirviendo", sino
-# "este slice no lo mira". Se declara igual para que la forma del reporte no
-# cambie cuando llegue el detector.
 CLASES = (
     CLASE_DERIVA,
     CLASE_REVISION_INDETERMINADA,
@@ -135,11 +131,25 @@ _DETALLE_SHA_AUSENTE = (
     "revisión no se puede determinar desde acá."
 )
 
+# Lo que se reporta como `observado` cuando la fuente no dejó nada que leer:
+# no respondió, tardó de más, no devolvió JSON o devolvió una forma inválida.
+# Es deliberadamente distinto de "0 categorías", que sí es una respuesta y
+# significa que el club no publicó horarios. Una sola constante para que las
+# dos lecturas no puedan divergir en el texto y terminar leyéndose como casos
+# distintos.
+OBSERVADO_SIN_RESPUESTA = "sin respuesta utilizable"
+
 # El catálogo dinámico, por las dos bocas que lo sirven. El BFF de Next es lo
 # que consume la landing; el backend directo permite distinguir "el backend no
 # publica nada" de "el BFF no lo está pasando".
 URL_CATALOGO_BFF = "http://localhost:3000/api/schedules"
 URL_CATALOGO_BACKEND = "http://127.0.0.1:8000/api/v1/asistencias/horarios-publicos"
+
+_RAIZ_REPO = Path(__file__).resolve().parent.parent
+# Siempre relativa en la salida: el contrato de redacción prohíbe rutas
+# absolutas, que además delatan el layout de la máquina del operador.
+RUTA_RELATIVA_CONOCIMIENTO = "backend/app/servicios_negocio/conocimiento_club.json"
+RUTA_CONOCIMIENTO_CLUB = _RAIZ_REPO / RUTA_RELATIVA_CONOCIMIENTO
 
 # Espejo de DAY_LABELS y VALID_TIME (schedule-data.ts). Ver la advertencia
 # sobre el espejo en el docstring del módulo.
@@ -147,6 +157,13 @@ DIAS_RENDERIZABLES = frozenset(
     {"LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"}
 )
 _PATRON_HORA = re.compile(r"^\d{2}:\d{2}$")
+
+# Dónde sigue mandando la lista estática. #789 la sacó SOLO de la landing.
+_SUPERFICIES_ESTATICAS = (
+    "el prompt del chatbot (backend/app/servicios_negocio/conocimiento_club.py:85,161)",
+    "la página /ayuda (frontend/src/app/ayuda/faq-content.ts:88, FAQ_SCHEDULES)",
+)
+
 
 def validar_url_loopback(url: str) -> None:
     """Levanta RuntimeError si `url` no es http(s) contra loopback.
@@ -370,6 +387,47 @@ def observar_catalogo(url: str) -> dict:
     return {"url": url, "error": None, **resumir_catalogo(payload)}
 
 
+def observar_horarios_estaticos(ruta: Path | str) -> dict:
+    """¿Queda una lista estática de horarios sirviendo alguna superficie?
+
+    Lectura de archivo del repo, sin red. Un archivo ausente o sin `horarios`
+    NO es un error: significa que la migración de #789 se completó y no hay
+    autoridad estática que reportar."""
+    observacion = {
+        "ruta": RUTA_RELATIVA_CONOCIMIENTO,
+        "entradas": 0,
+        "categorias": [],
+        "error": None,
+    }
+    ruta = Path(ruta)
+    if not ruta.exists():
+        return observacion
+    try:
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        # Solo el NOMBRE de la excepción: el texto de un OSError incluye la
+        # ruta absoluta, que el contrato de redacción prohíbe emitir.
+        return {
+            **observacion,
+            "entradas": None,
+            "categorias": None,
+            "error": (
+                f"no se pudo leer {RUTA_RELATIVA_CONOCIMIENTO}: {type(exc).__name__}"
+            ),
+        }
+    horarios = datos.get("horarios") if isinstance(datos, dict) else None
+    if not isinstance(horarios, list):
+        return observacion
+    etiquetas = sorted(
+        {
+            horario["categoria"]
+            for horario in horarios
+            if isinstance(horario, dict) and isinstance(horario.get("categoria"), str)
+        }
+    )
+    return {**observacion, "entradas": len(horarios), "categorias": etiquetas}
+
+
 def observar() -> dict:
     """Recolecta los dos ejes. TODO el I/O del módulo vive acá y en los
     colectores; las decisiones de más abajo son puras."""
@@ -378,6 +436,7 @@ def observar() -> dict:
         "catalogo": {
             "bff": observar_catalogo(URL_CATALOGO_BFF),
             "backend": observar_catalogo(URL_CATALOGO_BACKEND),
+            "estaticos": observar_horarios_estaticos(RUTA_CONOCIMIENTO_CLUB),
         },
     }
 
@@ -408,7 +467,7 @@ def detectar_hallazgos_de_revision(observacion: dict) -> list[dict]:
                 CLASE_REVISION_INDETERMINADA,
                 fuente_servida,
                 "un SHA de commit",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error_sha_servido"],
             )
         )
@@ -430,7 +489,7 @@ def detectar_hallazgos_de_revision(observacion: dict) -> list[dict]:
                 CLASE_REVISION_INDETERMINADA,
                 fuente_esperada,
                 f"el SHA de {observacion['referencia_esperada']}",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error_sha_esperado"],
             )
         )
@@ -473,7 +532,7 @@ def detectar_hallazgos_de_catalogo(observacion: dict) -> list[dict]:
                 CLASE_FUENTE_INDISPONIBLE,
                 fuente,
                 "un catálogo de horarios con la forma publicada",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error"],
             )
         ]
@@ -530,6 +589,40 @@ def _frase_bloques(totales: int) -> str:
     return f"{totales} bloques renderizables"
 
 
+def detectar_hallazgos_estaticos(observacion: dict) -> list[dict]:
+    """Decisión PURA sobre la lista estática de horarios."""
+    fuente = f"estático {observacion['ruta']}"
+
+    if observacion["error"] is not None:
+        return [
+            _hallazgo(
+                CLASE_FUENTE_INDISPONIBLE,
+                fuente,
+                "el catálogo estático legible",
+                OBSERVADO_SIN_RESPUESTA,
+                observacion["error"],
+            )
+        ]
+
+    if not observacion["entradas"]:
+        return []
+
+    return [
+        _hallazgo(
+            CLASE_AUTORIDAD_ESTATICA,
+            fuente,
+            "ninguna lista estática de horarios sirviendo una superficie",
+            f"{observacion['entradas']} entradas en horarios[]",
+            "Todavía manda en: "
+            + "; ".join(_SUPERFICIES_ESTATICAS)
+            + ". #789 sacó la lista estática SOLO de la landing. Si estos "
+            "horarios contradicen al catálogo dinámico, esas dos superficies "
+            "muestran lo viejo. Esto se REPORTA, no se repara: completar la "
+            "migración es #789, y #899 lo excluye de sus objetivos.",
+        )
+    ]
+
+
 def construir_diagnostico(observacion: dict) -> dict:
     """Reporte completo de los dos ejes. `resumen` lista SIEMPRE las cinco
     clases, incluso en cero, para que la forma de la salida no dependa de los
@@ -538,7 +631,8 @@ def construir_diagnostico(observacion: dict) -> dict:
     hallazgos = sorted(
         detectar_hallazgos_de_revision(observacion["revision"])
         + detectar_hallazgos_de_catalogo(catalogo["bff"])
-        + detectar_hallazgos_de_catalogo(catalogo["backend"]),
+        + detectar_hallazgos_de_catalogo(catalogo["backend"])
+        + detectar_hallazgos_estaticos(catalogo["estaticos"]),
         key=_clave_de_orden,
     )
     return {
@@ -559,7 +653,7 @@ def formatear_json(diagnostico: dict) -> str:
 
 def _linea_de_catalogo(observacion: dict) -> str:
     if observacion["error"] is not None:
-        return f"  {observacion['url']}: sin respuesta utilizable"
+        return f"  {observacion['url']}: {OBSERVADO_SIN_RESPUESTA}"
     return (
         f"  {observacion['url']}: {observacion['total_categorias']} categorías, "
         f"{observacion['categorias_renderizables']} renderizables"
@@ -569,6 +663,7 @@ def _linea_de_catalogo(observacion: dict) -> str:
 def formatear_texto(diagnostico: dict) -> str:
     revision = diagnostico["revision"]
     catalogo = diagnostico["catalogo"]
+    estaticos = catalogo["estaticos"]
     lineas = [
         "Diagnóstico de horarios (issue #899)",
         "",
@@ -580,6 +675,12 @@ def formatear_texto(diagnostico: dict) -> str:
         "CATÁLOGO",
         _linea_de_catalogo(catalogo["bff"]),
         _linea_de_catalogo(catalogo["backend"]),
+        f"  {estaticos['ruta']}: "
+        + (
+            OBSERVADO_SIN_RESPUESTA
+            if estaticos["error"] is not None
+            else f"{estaticos['entradas']} entradas estáticas en horarios[]"
+        ),
         "",
         "RESUMEN",
     ]

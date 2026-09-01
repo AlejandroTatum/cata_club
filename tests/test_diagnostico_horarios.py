@@ -10,7 +10,10 @@ fixtures de `conftest.py`, nada más que el módulo bajo prueba. Se invoca con
 (ver `make test-diagnostico-horarios`).
 
 Todos los bordes de red y git están mockeados: esta suite prueba la decisión
-del diagnóstico y su cableado, no que el stack local esté levantado.
+del diagnóstico y su cableado, no que el stack local esté levantado. La única
+excepción deliberada es `conocimiento_club.json`, que se lee de verdad desde
+el repo — es un archivo versionado, y leerlo real es lo que hace que el
+candado de `static_schedule_authority` detecte si esa lista cambia.
 """
 
 import json
@@ -44,7 +47,7 @@ def _observacion(**overrides) -> dict:
     return base
 
 
-def _todo(revision=None, bff=None, backend=None) -> dict:
+def _todo(revision=None, bff=None, backend=None, estaticos=None) -> dict:
     """Observación completa de los dos ejes, toda sana salvo lo que el test
     reemplace explícitamente."""
     return {
@@ -55,6 +58,16 @@ def _todo(revision=None, bff=None, backend=None) -> dict:
                 backend
                 if backend is not None
                 else _obs_catalogo([CATEGORIA_OK], url=diag.URL_CATALOGO_BACKEND)
+            ),
+            "estaticos": (
+                estaticos
+                if estaticos is not None
+                else {
+                    "ruta": diag.RUTA_RELATIVA_CONOCIMIENTO,
+                    "entradas": 0,
+                    "categorias": [],
+                    "error": None,
+                }
             ),
         },
     }
@@ -488,6 +501,49 @@ def test_obtener_catalogo_con_forma_invalida_levanta_error_sin_devolver_vacio():
             raise AssertionError("se esperaba RuntimeError ante una forma inválida")
 
 
+# ─── static_schedule_authority — los sobrevivientes de #789 ────────────────
+
+
+def test_horarios_estaticos_presentes_son_static_schedule_authority():
+    observacion = {
+        "ruta": diag.RUTA_RELATIVA_CONOCIMIENTO,
+        "entradas": 5,
+        "categorias": ["Formativo", "Infantil"],
+        "error": None,
+    }
+    hallazgos = diag.detectar_hallazgos_estaticos(observacion)
+    assert [h["clase"] for h in hallazgos] == [diag.CLASE_AUTORIDAD_ESTATICA]
+    assert "5" in hallazgos[0]["observado"]
+    assert "chatbot" in hallazgos[0]["detalle"]
+    assert "/ayuda" in hallazgos[0]["detalle"]
+
+
+def test_sin_entradas_estaticas_no_hay_hallazgo():
+    """Si algún día se completa la migración de #789 el hallazgo desaparece
+    solo, sin tocar este código."""
+    observacion = {"ruta": diag.RUTA_RELATIVA_CONOCIMIENTO, "entradas": 0, "categorias": [], "error": None}
+    assert diag.detectar_hallazgos_estaticos(observacion) == []
+
+
+def test_el_diagnostico_no_repara_los_horarios_estaticos():
+    """#899 excluye hacer la migración de #789: esto REPORTA, no arregla."""
+    contenido_antes = Path(diag.RUTA_CONOCIMIENTO_CLUB).read_bytes()
+    diag.observar_horarios_estaticos(diag.RUTA_CONOCIMIENTO_CLUB)
+    assert Path(diag.RUTA_CONOCIMIENTO_CLUB).read_bytes() == contenido_antes
+
+
+def test_observar_horarios_estaticos_lee_el_archivo_real_del_repo():
+    observacion = diag.observar_horarios_estaticos(diag.RUTA_CONOCIMIENTO_CLUB)
+    assert observacion["error"] is None
+    assert observacion["entradas"] == 5
+    assert observacion["ruta"] == diag.RUTA_RELATIVA_CONOCIMIENTO
+
+
+def test_la_ruta_estatica_del_reporte_es_relativa_al_repo():
+    """Contrato de redacción: nunca rutas absolutas en la salida."""
+    assert not diag.RUTA_RELATIVA_CONOCIMIENTO.startswith("/")
+
+
 def test_las_dos_bocas_del_catalogo_se_reportan_por_separado():
     """El backend puede publicar bien y el BFF no estar pasándolo (o al
     revés). Cada boca es su propia fuente, así que la divergencia se ve sin
@@ -498,3 +554,16 @@ def test_las_dos_bocas_del_catalogo_se_reportan_por_separado():
     assert diagnostico["resumen"][diag.CLASE_DATOS_FALTANTES] == 1
     assert diag.URL_CATALOGO_BACKEND in diagnostico["hallazgos"][0]["fuente"]
     assert diag.URL_CATALOGO_BFF not in diagnostico["hallazgos"][0]["fuente"]
+
+
+def test_el_reporte_no_emite_rutas_absolutas():
+    """Contrato de redacción, verificado sobre el JSON entero."""
+    salida = diag.formatear_json(
+        diag.construir_diagnostico(
+            _todo(
+                estaticos=diag.observar_horarios_estaticos(diag.RUTA_CONOCIMIENTO_CLUB)
+            )
+        )
+    )
+    assert str(diag._RAIZ_REPO) not in salida
+    assert "/home/" not in salida
