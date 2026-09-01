@@ -3216,7 +3216,9 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     const row = await findAccountRow();
     fireEvent.click(getRowButton(row, /^pagos/i));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/inactivo\/archivado/i)).toBeInTheDocument();
+    const archivedNotice = within(dialog).getByText(/inactivo\/archivado/i);
+        expect(archivedNotice).toBeInTheDocument();
+        expect(archivedNotice.tagName).toBe("OUTPUT");
     expect(within(dialog).getByText(/historial de pagos/i)).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda|suspender|reactivar|cambiar plan/i })).not.toBeInTheDocument();
   });

@@ -237,35 +237,31 @@ function parseDateStringLocal(dateStr: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function isOperationalStudent(student: MemberAccount["estudiantes"][number]): boolean {
+  return student.activo;
+}
+
+function hasOperationalStudent(account: MemberAccount): boolean {
+  return account.estudiantes.length === 0 || account.estudiantes.some(isOperationalStudent);
+}
+
+function isPendingOperationalPayment(student: MemberAccount["estudiantes"][number]): boolean {
+  return student.membresia?.estado !== "suspendida" && student.ultimoPago?.estado === "pendiente_validacion";
+}
+
 /**
  * Build aggregate statistics from the member accounts list.
  */
 export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
-  let totalStudents = 0;
-  let activeMemberships = 0;
-  let pendingPayments = 0;
-  let sinDatosEmergencia = 0;
-
-  for (const account of accounts) {
-    if (account.sinDatosEmergencia && (account.estudiantes.length === 0 || account.estudiantes.some((s) => s.activo))) {
-      sinDatosEmergencia++;
-    }
-    for (const estudiante of account.estudiantes) {
-      if (!estudiante.activo) continue;
-      totalStudents++;
-      if (estudiante.membresia?.estado === "activa") activeMemberships++;
-      if (estudiante.membresia?.estado !== "suspendida" && estudiante.ultimoPago?.estado === "pendiente_validacion") {
-        pendingPayments++;
-      }
-    }
-  }
-
+  const operationalStudents = accounts.flatMap((account) => account.estudiantes).filter(isOperationalStudent);
   return {
     totalAccounts: accounts.length,
-    totalStudents,
-    activeMemberships,
-    pendingPayments,
-    sinDatosEmergencia,
+    totalStudents: operationalStudents.length,
+    activeMemberships: operationalStudents.filter((student) => student.membresia?.estado === "activa").length,
+    pendingPayments: operationalStudents.filter(isPendingOperationalPayment).length,
+    sinDatosEmergencia: accounts.filter(
+      (account) => account.sinDatosEmergencia && hasOperationalStudent(account),
+    ).length,
   };
 }
 

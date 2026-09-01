@@ -63,7 +63,7 @@ export default function StudentMembershipActions({
   if (!student.activo) {
     return (
       <>
-        <p role="status" className="text-xs text-ink-3">Inactivo/Archivado: historial disponible, acciones deshabilitadas.</p>
+        <output className="text-xs text-ink-3">Inactivo/Archivado: historial disponible, acciones deshabilitadas.</output>
         <PaymentHistorySection personaId={personaId} />
       </>
     );

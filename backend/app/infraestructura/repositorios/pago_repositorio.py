@@ -33,6 +33,16 @@ def _rango_fecha_registro(fecha_inicio: Optional[date], fecha_fin: Optional[date
     return rango_de_dias_club(fecha_inicio, fecha_fin)
 
 
+def _aplicar_filtro_operativo(stmt):
+    return stmt.where(or_(
+        Pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION,
+        and_(
+            Pago.persona.has(Persona.activo.is_(True)),
+            Pago.membresia.has(Membresia.estado != EstadoMembresia.SUSPENDIDA),
+        ),
+    ))
+
+
 class PagoRepositorio:
     def __init__(self, db: Session):
         self.db = db
@@ -96,13 +106,7 @@ class PagoRepositorio:
         if estado_pago is not None:
             stmt = stmt.where(Pago.estado_pago == estado_pago)
         if operational_only:
-            stmt = stmt.where(or_(
-                Pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION,
-                and_(
-                    Pago.persona.has(Persona.activo.is_(True)),
-                    Pago.membresia.has(Membresia.estado != EstadoMembresia.SUSPENDIDA),
-                ),
-            ))
+            stmt = _aplicar_filtro_operativo(stmt)
         inicio, fin = _rango_fecha_registro(fecha_inicio, fecha_fin)
         if inicio is not None:
             stmt = stmt.where(Pago.fecha_registro >= inicio)
@@ -137,13 +141,7 @@ class PagoRepositorio:
         if estado_pago is not None:
             stmt = stmt.where(Pago.estado_pago == estado_pago)
         if operational_only:
-            stmt = stmt.where(or_(
-                Pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION,
-                and_(
-                    Pago.persona.has(Persona.activo.is_(True)),
-                    Pago.membresia.has(Membresia.estado != EstadoMembresia.SUSPENDIDA),
-                ),
-            ))
+            stmt = _aplicar_filtro_operativo(stmt)
         inicio, fin = _rango_fecha_registro(fecha_inicio, fecha_fin)
         if inicio is not None:
             stmt = stmt.where(Pago.fecha_registro >= inicio)
