@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { landingConfig, type LandingSchedule } from "@/app/landing/landing-config";
+import { landingConfig } from "@/app/landing/landing-config";
+import type { LandingSchedule } from "@/app/landing/schedule-data";
 import {
   barGeometry,
   closedWeekdayGap,

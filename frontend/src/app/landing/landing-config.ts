@@ -1,19 +1,9 @@
+import type { LandingSchedule, LandingScheduleSlot } from "./schedule-data";
+
 export interface LandingStat {
   /** The figure exactly as it must appear. Rendered as text and never animated. */
   value: string;
   label: string;
-}
-
-export interface LandingScheduleSlot {
-  hours: string;
-  days: string;
-  on: "week" | "sat";
-}
-
-export interface LandingSchedule {
-  category: string;
-  audience?: string;
-  slots: LandingScheduleSlot[];
 }
 
 export interface LandingContact {

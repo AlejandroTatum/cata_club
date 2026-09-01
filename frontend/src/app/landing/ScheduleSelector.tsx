@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
-import type { LandingSchedule } from "./landing-config";
+import type { LandingSchedule } from "./schedule-data";
 import { barGeometry, deriveDayRange, type DayRange } from "./schedule-timeline";
 
 const CATEGORY_COLORS = [
