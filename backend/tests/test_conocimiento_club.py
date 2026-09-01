@@ -71,6 +71,7 @@ class TestArchivoCanonico:
             "horarios",
             "faq",
             "atajos",
+            "glosario",  # snapshot fijado del glosario canónico (issue #903)
         }
 
     def test_lista_las_cinco_categorias_que_el_club_entrena(self, conocimiento):
