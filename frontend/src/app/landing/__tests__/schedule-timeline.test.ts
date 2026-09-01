@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { landingConfig } from "@/app/landing/landing-config";
 import type { LandingSchedule } from "@/app/landing/schedule-data";
 import {
   barGeometry,
@@ -8,6 +7,36 @@ import {
   formatClock,
   parseClockRange,
 } from "@/app/landing/schedule-timeline";
+
+/**
+ * A local fixture, not the club's schedules — those are managed in the app and
+ * reach the landing through `GET /api/schedules` (issue #789). Every function
+ * here is pure over the catalog it is handed, so the cases it must survive are
+ * stated right where they are asserted: a morning block, a midday closure,
+ * back-to-back evening blocks, and a Saturday-only category.
+ */
+const PUBLISHED: LandingSchedule[] = [
+  {
+    category: "Mañana",
+    audience: "Mayores de 18 años",
+    slots: [{ hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" }],
+  },
+  {
+    category: "Tarde",
+    slots: [{ hours: "15:00 – 16:00", days: "Lunes a Viernes", on: "week" }],
+  },
+  {
+    category: "Noche",
+    slots: [
+      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
+      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
+    ],
+  },
+  {
+    category: "Sabatino",
+    slots: [{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }],
+  },
+];
 
 describe("parseClockRange", (): void => {
   it("parses a zero-padded HH:MM – HH:MM block into minutes", (): void => {
@@ -36,17 +65,17 @@ describe("formatClock", (): void => {
 
 describe("deriveDayRange", (): void => {
   it("spans the earliest start and latest end across every slot, not just the first of each category", (): void => {
-    expect(deriveDayRange(landingConfig.schedules)).toEqual({ start: 480, end: 1275, span: 795 });
+    expect(deriveDayRange(PUBLISHED)).toEqual({ start: 480, end: 1275, span: 795 });
   });
 
-  it("derives the same opening from a single multi-slot category", (): void => {
-    const onlyAdultos = landingConfig.schedules.filter((schedule): boolean => schedule.category === "Adultos");
-    expect(deriveDayRange(onlyAdultos)).toEqual({ start: 480, end: 1275, span: 795 });
+  it("spans both slots of a single multi-slot category", (): void => {
+    const onlyNoche = PUBLISHED.filter((schedule): boolean => schedule.category === "Noche");
+    expect(deriveDayRange(onlyNoche)).toEqual({ start: 1080, end: 1275, span: 195 });
   });
 
   it("derives a Saturday-only day range", (): void => {
-    const onlyJuegoLibre = landingConfig.schedules.filter((schedule): boolean => schedule.category === "Juego Libre");
-    expect(deriveDayRange(onlyJuegoLibre)).toEqual({ start: 900, end: 1080, span: 180 });
+    const onlySaturday = PUBLISHED.filter((schedule): boolean => schedule.category === "Sabatino");
+    expect(deriveDayRange(onlySaturday)).toEqual({ start: 900, end: 1080, span: 180 });
   });
 
   it("returns a zero range instead of infinities for an empty schedule set", (): void => {
@@ -55,14 +84,14 @@ describe("deriveDayRange", (): void => {
 });
 
 describe("barGeometry", (): void => {
-  const range = deriveDayRange(landingConfig.schedules);
+  const range = deriveDayRange(PUBLISHED);
 
-  it("places the Adultos morning block at the very start of the shared scale", (): void => {
+  it("places a morning block at the very start of the shared scale", (): void => {
     expect(barGeometry("08:00 – 09:15", range).left).toBeCloseTo(0, 5);
     expect(barGeometry("08:00 – 09:15", range).width).toBeCloseTo((75 / 795) * 100, 5);
   });
 
-  it("places the Adultos evening block at the far end of the scale", (): void => {
+  it("places the latest evening block at the far end of the scale", (): void => {
     const geometry = barGeometry("20:00 – 21:15", range);
     expect(geometry.left).toBeCloseTo((1200 - 480) / 795 * 100, 5);
     expect(geometry.width).toBeCloseTo((75 / 795) * 100, 5);
@@ -77,8 +106,8 @@ describe("barGeometry", (): void => {
 
 describe("data-driven day groups", (): void => {
   it("keeps every published slot inside the shared scale derived from the same data", (): void => {
-    const range = deriveDayRange(landingConfig.schedules);
-    landingConfig.schedules.forEach((schedule): void => {
+    const range = deriveDayRange(PUBLISHED);
+    PUBLISHED.forEach((schedule): void => {
       schedule.slots.forEach((slot): void => {
         const geometry = barGeometry(slot.hours, range);
         expect(geometry.left).toBeGreaterThanOrEqual(0);
@@ -92,11 +121,11 @@ describe("data-driven day groups", (): void => {
 
 describe("closedWeekdayGap", (): void => {
   it("finds the midday closure between the morning and afternoon weekday blocks", (): void => {
-    expect(closedWeekdayGap(landingConfig.schedules)).toEqual({ start: 555, end: 900 });
+    expect(closedWeekdayGap(PUBLISHED)).toEqual({ start: 555, end: 900 });
   });
 
   it("ignores Saturday-only slots when measuring the weekday gap", (): void => {
-    const schedules = landingConfig.schedules.filter((schedule): boolean => schedule.slots.some((slot): boolean => slot.on === "week"));
+    const schedules = PUBLISHED.filter((schedule): boolean => schedule.slots.some((slot): boolean => slot.on === "week"));
     expect(closedWeekdayGap(schedules)).toEqual({ start: 555, end: 900 });
   });
 

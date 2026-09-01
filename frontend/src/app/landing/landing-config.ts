@@ -1,3 +1,15 @@
+/**
+ * The landing's constants of record: the founding date, the contact channels,
+ * and the figures derived from them.
+ *
+ * What is deliberately NOT here, since issue #789: the club's schedules. They
+ * are managed inside the app and published through `GET /api/schedules`, so
+ * this module cannot restate them — a copy here is one the club cannot edit,
+ * and it goes stale in silence. The schedule vocabulary and its mapper live in
+ * `schedule-data.ts`; `landing-config-no-schedule-list.test.ts` guards this
+ * file's bytes against the list coming back.
+ */
+
 import type { LandingSchedule, LandingScheduleSlot } from "./schedule-data";
 
 export interface LandingStat {
@@ -10,11 +22,9 @@ export interface LandingContact {
   whatsapp: string[];
   facebook: string;
   instagram: string;
-  hours: string;
 }
 
 export interface LandingConfig {
-  schedules: LandingSchedule[];
   contact: LandingContact;
 }
 
@@ -84,13 +94,18 @@ function lastDayOfWeek(slots: LandingScheduleSlot[]): string {
 }
 
 /**
- * Public attention hours, derived from the published training schedule so the
- * card can never advertise a narrower window than the club actually opens.
+ * Public attention hours, derived from the schedules the caller hands over —
+ * the live catalog from `GET /api/schedules` (see `LandingPage`) — so the
+ * contact card can never advertise a window the club is not actually open.
  *
- * Iterates every slot of every category — not just the first slot per
- * category — so a category with more than one time block (e.g. Adultos'
- * morning session, Competitivo's Saturday session) can move the derived
- * opening time or extend the day range on its own.
+ * Pure: it holds no schedule of its own and is called with data, not at module
+ * load. Iterates every slot of every category — not just the first slot per
+ * category — so a category with more than one time block (a morning session, a
+ * Saturday session) can move the derived opening time or extend the day range
+ * on its own.
+ *
+ * An empty catalog yields no window. The caller decides what to say then; it
+ * must not render this.
  */
 export function deriveContactHours(schedules: LandingSchedule[]): string {
   const allSlots = schedules.flatMap((schedule): LandingScheduleSlot[] => schedule.slots);
@@ -113,51 +128,16 @@ export function deriveContactHours(schedules: LandingSchedule[]): string {
   return `Lun – ${lastDay} · ${opensAt} – ${closesAt}`;
 }
 
-const schedules: LandingSchedule[] = [
-  {
-    category: "Formativo",
-    audience: "5 a 10 años",
-    slots: [{ hours: "15:00 – 16:00", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Infantil",
-    audience: "8 a 12 años",
-    slots: [{ hours: "16:00 – 17:00", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Juvenil",
-    audience: "Mayores de 12 años",
-    slots: [{ hours: "17:00 – 18:00", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Competitivo",
-    audience: "Selección",
-    slots: [
-      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
-      { hours: "18:00 – 20:00", days: "Sábado", on: "sat" },
-    ],
-  },
-  {
-    category: "Adultos",
-    audience: "Mayores de 18 años",
-    slots: [
-      { hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" },
-      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
-    ],
-  },
-  {
-    category: "Juego Libre",
-    audience: "Abierto a todos",
-    slots: [{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }],
-  },
-];
-
 export const landingConfig: LandingConfig = {
-  schedules,
   contact: {
     whatsapp: ["0994219619", "0990288152"],
     facebook: "https://www.facebook.com/share/1FN5DkgzXG/",
     instagram: "https://www.instagram.com/cataclub_tenis_de_mesa",
-    hours: deriveContactHours(schedules),
+    // No `hours` here on purpose (#789). It used to be
+    // `deriveContactHours(schedules)`, evaluated at module load against a list
+    // compiled into the bundle: the club could publish a new block and this
+    // card would keep promising the old closing time. The contact card now
+    // derives it from the catalog it fetched, and says so honestly when there
+    // is none.
   },
 };
