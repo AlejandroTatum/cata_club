@@ -7,36 +7,17 @@ import {
   formatClock,
   parseClockRange,
 } from "@/app/landing/schedule-timeline";
+import { category, publishedCatalog, satSlot, weekSlot } from "./schedule-fixtures";
 
 /**
- * A local fixture, not the club's schedules — those are managed in the app and
- * reach the landing through `GET /api/schedules` (issue #789). Every function
- * here is pure over the catalog it is handed, so the cases it must survive are
- * stated right where they are asserted: a morning block, a midday closure,
- * back-to-back evening blocks, and a Saturday-only category.
+ * A stand-in catalog, not the club's schedules — those are managed in the app
+ * and reach the landing through `GET /api/schedules` (issue #789). Every
+ * function here is pure over the catalog it is handed, and the builders spell
+ * out the cases it must survive: a morning block, a midday closure,
+ * back-to-back evening blocks, and a Saturday-only category. They are shared
+ * with `landing-config.test.ts`, which needs the same shapes.
  */
-const PUBLISHED: LandingSchedule[] = [
-  {
-    category: "Mañana",
-    audience: "Mayores de 18 años",
-    slots: [{ hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Tarde",
-    slots: [{ hours: "15:00 – 16:00", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Noche",
-    slots: [
-      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
-      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
-    ],
-  },
-  {
-    category: "Sabatino",
-    slots: [{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }],
-  },
-];
+const PUBLISHED: LandingSchedule[] = publishedCatalog();
 
 describe("parseClockRange", (): void => {
   it("parses a zero-padded HH:MM – HH:MM block into minutes", (): void => {
@@ -131,16 +112,14 @@ describe("closedWeekdayGap", (): void => {
 
   it("returns null when no weekday gap exceeds sixty minutes", (): void => {
     const backToBack: LandingSchedule[] = [
-      { category: "A", audience: "x", slots: [{ hours: "09:00 – 10:00", days: "Lunes a Viernes", on: "week" }] },
-      { category: "B", audience: "x", slots: [{ hours: "10:30 – 11:30", days: "Lunes a Viernes", on: "week" }] },
+      category("A", [weekSlot("09:00 – 10:00")], "x"),
+      category("B", [weekSlot("10:30 – 11:30")], "x"),
     ];
     expect(closedWeekdayGap(backToBack)).toBeNull();
   });
 
   it("returns null when there are no weekday slots at all", (): void => {
-    const saturdayOnly: LandingSchedule[] = [
-      { category: "A", audience: "x", slots: [{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }] },
-    ];
+    const saturdayOnly: LandingSchedule[] = [category("A", [satSlot("15:00 – 18:00")], "x")];
     expect(closedWeekdayGap(saturdayOnly)).toBeNull();
   });
 });

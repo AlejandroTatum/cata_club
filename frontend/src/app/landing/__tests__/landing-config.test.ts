@@ -9,36 +9,18 @@ import {
   yearsSinceFounding,
 } from "@/app/landing/landing-config";
 import type { LandingSchedule } from "@/app/landing/schedule-data";
+import { category, publishedCatalog, satSlot } from "./schedule-fixtures";
 
 /**
- * A local fixture, not the club's schedules — those live in the app and reach
- * the page through `GET /api/schedules` (issue #789). `deriveContactHours` is
- * a pure function over whatever catalog it is handed, so its tests state the
- * inputs they need and nothing more. Importing a shared list back in would be
- * the second copy this issue removed.
+ * A stand-in catalog, not the club's schedules — those live in the app and
+ * reach the page through `GET /api/schedules` (issue #789).
+ * `deriveContactHours` is a pure function over whatever catalog it is handed,
+ * so its tests state the input they need and nothing more. The builders live
+ * in `schedule-fixtures.ts` because `schedule-timeline.test.ts` needs the same
+ * shapes; importing the club's real list back in would be the second copy this
+ * issue removed.
  */
-const PUBLISHED: LandingSchedule[] = [
-  {
-    category: "Mañana",
-    audience: "Mayores de 18 años",
-    slots: [{ hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Tarde",
-    slots: [{ hours: "15:00 – 16:00", days: "Lunes a Viernes", on: "week" }],
-  },
-  {
-    category: "Noche",
-    slots: [
-      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
-      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
-    ],
-  },
-  {
-    category: "Sabatino",
-    slots: [{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }],
-  },
-];
+const PUBLISHED: LandingSchedule[] = publishedCatalog();
 
 describe("toWhatsAppNumber", (): void => {
   it("converts an Ecuadorian mobile number to its international form", (): void => {
@@ -171,9 +153,7 @@ describe("deriveContactHours", (): void => {
   });
 
   it("reaches Sunday when the club publishes a Sunday slot", (): void => {
-    const sunday: LandingSchedule[] = [
-      { category: "Dominical", slots: [{ hours: "09:00 – 11:00", days: "Domingo", on: "sat" }] },
-    ];
+    const sunday: LandingSchedule[] = [category("Dominical", [satSlot("09:00 – 11:00", "Domingo")])];
 
     expect(deriveContactHours(sunday)).toBe("Lun – Dom · 09:00 – 11:00");
   });
