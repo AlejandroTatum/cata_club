@@ -53,6 +53,15 @@ interface LegalDocumentPageProps {
  * headings are anchored by the face and by the space above them instead — and
  * the space is asymmetric on purpose, roughly two to one, so a heading reads
  * as belonging to what follows it rather than floating between two blocks.
+ *
+ * ## The main landmark (#820)
+ *
+ * This page reaches the user through no shell: the root layout's wrapper is
+ * deliberately NOT a `<main>` (see `lib/__tests__/main-landmark.test.ts`, the
+ * closed set of files allowed to declare one), and the institutional bar above
+ * the document is a banner, not content. So the document column is the
+ * landmark — it keeps the `contenido` id it already had, now on an element
+ * that means where the content begins.
  */
 export default function LegalDocumentPage({ title, blocks }: LegalDocumentPageProps): React.ReactElement {
   return (
@@ -63,7 +72,7 @@ export default function LegalDocumentPage({ title, blocks }: LegalDocumentPagePr
      * element's own font size, so pinning it to the body step is what makes the
      * measure the article's measure rather than the browser default's.
      */
-    <div id="contenido" className="mx-auto w-full max-w-measure text-base py-8 sm:py-12">
+    <main id="contenido" className="mx-auto w-full max-w-measure text-base py-8 sm:py-12">
       {/*
        * No `focus-visible:*` utilities here. `globals.css:330-344` gives every
        * `a[href]` outside the landing the two-tone coal + ball ring from a
@@ -75,7 +84,14 @@ export default function LegalDocumentPage({ title, blocks }: LegalDocumentPagePr
       <Link href="/" className="mb-10 inline-flex text-sm font-semibold text-cata-red-dark underline-offset-4 hover:underline">
         Volver a Cata Club
       </Link>
-      <header className="border-b border-cata-border pb-8">
+      {/**
+       * A DIV, not a `<header>`. The sticky bar `Header` draws on the three
+       * legal routes (`InstitutionalHeader`) is the page's ONE banner; a
+       * `<header>` here became a second banner, and someone navigating by
+       * banner landed on document metadata instead of the site's navigation.
+       * The block keeps every class — it is a heading group, not a landmark.
+       */}
+      <div className="border-b border-cata-border pb-8">
         {/*
          * The landing's eyebrow, transcribed: a 2px red rule, a gap, then an
          * uppercase wide-tracked label. `cata-red` is the rule because a rule
@@ -103,7 +119,7 @@ export default function LegalDocumentPage({ title, blocks }: LegalDocumentPagePr
             <dd className="mt-1 text-sm font-semibold text-cata-text">27 de agosto de 2026</dd>
           </div>
         </dl>
-      </header>
+      </div>
       {/*
        * `leading-prose` (1.55) is the step the config names for exactly this —
        * "long-form paragraph: help text, legal copy, empty-state prose". The
@@ -129,6 +145,6 @@ export default function LegalDocumentPage({ title, blocks }: LegalDocumentPagePr
           <Link href="/permiso-imagen-fetm">Permiso público de imagen FETM</Link>
         </div>
       </nav>
-    </div>
+    </main>
   );
 }

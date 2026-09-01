@@ -271,6 +271,32 @@ describe("AuthShell — the two halves share one vertical axis", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The dark rail's contents live in landmarks (#820). The way back, the brand
+// cluster and the copyright used to sit outside every region a screen-reader
+// user can jump to; they now ride in a named banner and a named contentinfo.
+// The names are Spanish, like every user-facing label in the product
+// ("Navegación principal", "Datos del club").
+// ---------------------------------------------------------------------------
+
+describe("AuthShell — the dark rail's contents live in landmarks", () => {
+  it("holds the way back and the brand cluster in a named banner", () => {
+    renderShell();
+
+    const banner = screen.getByRole("banner", { name: "Marca de Cata Club" });
+    expect(banner).toContainElement(screen.getByRole("link", { name: /volver al inicio/i }));
+    expect(banner).toContainElement(screen.getByTestId("auth-brand-cluster"));
+  });
+
+  it("holds the copyright in a named contentinfo, outside the banner", () => {
+    renderShell();
+
+    const line = screen.getByText(/© 2026 Cata Club/);
+    expect(screen.getByRole("contentinfo", { name: "Derechos de autor" })).toContainElement(line);
+    expect(screen.getByRole("banner", { name: "Marca de Cata Club" })).not.toContainElement(line);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The frozen measure (#42).
 //
 // The brand block did not grow with the panel. Both caps that could have held

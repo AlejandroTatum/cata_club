@@ -27,9 +27,15 @@
  * (`AppShell.test.tsx`, `AuthShell.test.tsx`, `LandingPage.test.tsx`).
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+import LegalDocumentPage from "@/app/terminos/LegalDocumentPage";
+import { InstitutionalHeader } from "@/components/Header";
+import { heading, paragraph } from "@/app/terminos/legal-content";
 
 const SRC = join(__dirname, "..", "..");
 
@@ -45,6 +51,11 @@ const SHELLS: readonly string[] = [
   "components/auth/AuthShell.tsx",
   // The public landing.
   "app/landing/LandingPage.tsx",
+  // The three public legal documents (/terminos, /privacidad,
+  // /permiso-imagen-fetm). They also reach the user through no shell — the
+  // institutional bar above them is a banner, not a shell — so the document
+  // page draws the landmark its own column sets in (#820).
+  "app/terminos/LegalDocumentPage.tsx",
   // The public routes that reach the user through no shell at all: they used
   // to borrow the root layout's landmark, which is precisely the wrapper that
   // stopped being one.
@@ -109,5 +120,49 @@ describe("the main landmark belongs to a shell, and only to a shell", () => {
       .map(({ path }) => path);
 
     expect(twice).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the source rule above cannot see: what a legal page renders TOGETHER.
+// The closed list proves `LegalDocumentPage` may declare the landmark; only a
+// render proves the document draws one `main`, no second banner beside the
+// institutional bar, and that the bar is named so the regions are
+// distinguishable (#820). `react-dom/server` keeps it cheap: no browser, no
+// provider. The auth-context mock answers the bar's session slot; the image
+// mock keeps Next's picture out of a markup assertion.
+// ---------------------------------------------------------------------------
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ isAuthenticated: false, session: null, isLoading: false, logout: () => {} }),
+}));
+
+vi.mock("next/image", async () => {
+  const { createElement: el } = await import("react");
+  return {
+    __esModule: true,
+    default: (props: { src?: string }) => el("img", { alt: "", src: props.src }),
+  };
+});
+
+describe("the legal documents render the landmarks they claim", () => {
+  const page = createElement(LegalDocumentPage, {
+    title: "Documento de prueba",
+    blocks: [heading("Un encabezado"), paragraph("Cuerpo del documento.")],
+  });
+
+  it("renders the document column as one main, carrying the contenido id", () => {
+    const html = renderToStaticMarkup(page);
+    expect(html.match(/<main\b/g)).toHaveLength(1);
+    expect(html).toContain('<main id="contenido"');
+  });
+
+  it("draws no second banner beside the institutional bar", () => {
+    expect(renderToStaticMarkup(page)).not.toContain("<header");
+  });
+
+  it("names the banner the sticky institutional bar draws", () => {
+    const html = renderToStaticMarkup(createElement(InstitutionalHeader));
+    expect(html).toContain('<header aria-label="Cabecera del sitio"');
   });
 });
