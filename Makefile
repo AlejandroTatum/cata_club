@@ -1,6 +1,6 @@
 .PHONY: help dev dev-backend dev-frontend test test-backend test-backend-preflight \
        test-root ci-backend test-frontend test-compose test-qa-guard \
-       test-qa-recovery-delivery \
+       test-qa-recovery-delivery test-diagnostico-horarios \
        lint lint-backend lint-frontend typecheck build build-frontend \
        install install-backend install-frontend \
        docker-up docker-down docker-build \
@@ -93,6 +93,12 @@ test-qa-guard: ## Test the qa-up build-SHA guard script
 
 test-qa-recovery-delivery: ## Test the QA Mailpit recovery-delivery smoke
 	cd backend && uv run pytest ../tests/test_qa_verify_recovery_delivery.py -v
+
+# Mismo patrón que `test-qa-guard` (issue #899,
+# scripts/diagnostico_horarios.py). Testea el diagnóstico, que es distinto de
+# CORRERLO: el diagnóstico consulta el stack local, esta suite no toca la red.
+test-diagnostico-horarios: ## Test the schedules revision diagnostic script
+	cd backend && uv run pytest ../tests/test_diagnostico_horarios.py -v
 
 # ─── Linting ────────────────────────────────────────────────────────────────
 lint: lint-backend lint-frontend ## Lint both projects
