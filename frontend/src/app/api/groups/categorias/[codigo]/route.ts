@@ -25,6 +25,7 @@ interface ActualizarCategoriaBody {
   hora_inicio?: unknown;
   hora_fin?: unknown;
   dias?: unknown;
+  edades?: unknown;
 }
 
 export async function PUT(
@@ -43,6 +44,12 @@ export async function PUT(
     ["hora_inicio", "hora_inicio"],
     ["hora_fin", "hora_fin"],
     ["dias", "dias"],
+    // #789 — the ages label. Present-vs-absent is load-bearing here: an
+    // OMITTED `edades` leaves the stored label untouched (`exclude_unset` in
+    // `actualizar_categoria`), while a present one — including `""` from an
+    // emptied input — is how the label gets CLEARED. So the `!== undefined`
+    // test below is the whole contract: `""` must survive it.
+    ["edades", "edades"],
   ];
   const payload: Record<string, unknown> = {};
   for (const [key, field] of UPDATABLE_FIELDS) {

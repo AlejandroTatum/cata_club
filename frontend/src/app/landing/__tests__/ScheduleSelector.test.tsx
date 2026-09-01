@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { LandingSchedule } from "@/app/landing/landing-config";
+import type { LandingSchedule } from "@/app/landing/schedule-data";
 import ScheduleSelector from "@/app/landing/ScheduleSelector";
 
 const landingCss = (): string =>

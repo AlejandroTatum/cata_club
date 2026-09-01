@@ -1,4 +1,4 @@
-import type { LandingSchedule } from "./landing-config";
+import type { LandingSchedule } from "./schedule-data";
 
 /** A start/end pair measured in minutes from midnight. */
 export interface ClockRange {

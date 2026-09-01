@@ -36,11 +36,11 @@ const LUN_VIE = ["lun", "mar", "mie", "jue", "vie"];
 const LUN_SAB = [...LUN_VIE, "sab"];
 
 const CATALOGO = [
-  { codigo: "FORMATIVO", label: "Formativo", horaInicio: "15:00", horaFin: "16:00", dias: LUN_VIE },
-  { codigo: "INFANTIL", label: "Infantil", horaInicio: "16:00", horaFin: "17:00", dias: LUN_VIE },
-  { codigo: "JUVENIL", label: "Juvenil", horaInicio: "17:00", horaFin: "18:00", dias: LUN_VIE },
-  { codigo: "COMPETITIVO", label: "Competitivo", horaInicio: "18:00", horaFin: "20:00", dias: LUN_SAB },
-  { codigo: "ADULTOS", label: "Adultos", horaInicio: "20:00", horaFin: "21:15", dias: LUN_VIE },
+  { codigo: "FORMATIVO", label: "Formativo", horaInicio: "15:00", horaFin: "16:00", dias: LUN_VIE, edades: "5 a 10 años" },
+  { codigo: "INFANTIL", label: "Infantil", horaInicio: "16:00", horaFin: "17:00", dias: LUN_VIE, edades: "11 a 13 años" },
+  { codigo: "JUVENIL", label: "Juvenil", horaInicio: "17:00", horaFin: "18:00", dias: LUN_VIE, edades: "14 a 17 años" },
+  { codigo: "COMPETITIVO", label: "Competitivo", horaInicio: "18:00", horaFin: "20:00", dias: LUN_SAB, edades: "Selección" },
+  { codigo: "ADULTOS", label: "Adultos", horaInicio: "20:00", horaFin: "21:15", dias: LUN_VIE, edades: null },
 ];
 
 beforeEach(() => {
@@ -64,9 +64,12 @@ describe("cargarCategorias", () => {
       horaInicio: "15:00",
       horaFin: "16:00",
       dias: LUN_VIE_BACKEND,
+      edades: "5 a 10 años",
     });
   });
 
+  // #789 — the ages label is optional: a categoría without one is valid, and
+  // the catalog says so with `null` rather than dropping the key.
   it("gives ADULTOS the confirmed 20:00-21:15 Lun-Vie schedule (seed-data correction)", async () => {
     const categorias = await cargarCategorias();
     expect(categorias.ADULTOS).toEqual({
@@ -74,6 +77,7 @@ describe("cargarCategorias", () => {
       horaInicio: "20:00",
       horaFin: "21:15",
       dias: LUN_VIE_BACKEND,
+      edades: null,
     });
   });
 
@@ -84,16 +88,17 @@ describe("cargarCategorias", () => {
       horaInicio: "18:00",
       horaFin: "20:00",
       dias: LUN_SAB_BACKEND,
+      edades: "Selección",
     });
   });
 
   it("keeps a catalog entry whose código isn't one of the 5 original categorías (M1: the set is open)", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      okResponse([...CATALOGO, { codigo: "BEGINNERS", label: "Principiantes", horaInicio: "00:00", horaFin: "01:00", dias: [] }]),
+      okResponse([...CATALOGO, { codigo: "BEGINNERS", label: "Principiantes", horaInicio: "00:00", horaFin: "01:00", dias: [], edades: null }]),
     );
     const categorias = await cargarCategorias();
     expect(Object.keys(categorias).sort()).toEqual([...CATEGORIAS_FIJAS, "BEGINNERS"].sort());
-    expect(categorias.BEGINNERS).toEqual({ label: "Principiantes", horaInicio: "00:00", horaFin: "01:00", dias: [] });
+    expect(categorias.BEGINNERS).toEqual({ label: "Principiantes", horaInicio: "00:00", horaFin: "01:00", dias: [], edades: null });
   });
 });
 

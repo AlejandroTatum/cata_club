@@ -50,6 +50,21 @@ def test_dias_permitidos_otras_categorias_no_incluyen_sabado(db_session):
     assert _dias(repo.obtener_por_codigo("ADULTOS")) == LUN_VIE
 
 
+def test_categorias_semilla_tienen_la_etiqueta_de_edades_del_club(db_session):
+    """Candado del backfill de `edades` (migración `d4c7e1b09a35`): las 5
+    categorías sembradas quedan con la MISMA etiqueta que ya publica
+    `conocimiento_club.json`. La columna es nueva y nullable, así que sin
+    backfill estas filas saldrían con `NULL` y el catálogo público perdería
+    un dato que el club ya venía publicando."""
+    repo = CategoriaRepositorio(db_session)
+
+    assert repo.obtener_por_codigo("FORMATIVO").edades == "5 a 10 años"
+    assert repo.obtener_por_codigo("INFANTIL").edades == "8 a 12 años"
+    assert repo.obtener_por_codigo("JUVENIL").edades == "Mayores de 12 años"
+    assert repo.obtener_por_codigo("COMPETITIVO").edades == "Selección"
+    assert repo.obtener_por_codigo("ADULTOS").edades == "Mayores de 18 años"
+
+
 def test_obtener_por_codigo_desconocido_retorna_none(db_session):
     repo = CategoriaRepositorio(db_session)
     assert repo.obtener_por_codigo("NO_EXISTE") is None

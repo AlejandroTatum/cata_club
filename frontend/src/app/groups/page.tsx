@@ -246,6 +246,12 @@ interface HorarioFormData {
   nombre: string;
   horaInicio: string;
   horaFin: string;
+  /**
+   * The optional ages label (#789), always a string here even for a categoría
+   * that has none — `""` is what an empty text input holds, and it is also
+   * what CLEARS a stored label on save (the backend normalises blank to NULL).
+   */
+  edades: string;
 }
 
 /** One día-group row pending deletion after student-safety check, awaiting user confirmation. */
@@ -285,6 +291,7 @@ const EMPTY_FORM: HorarioFormData = {
   nombre: "",
   horaInicio: "",
   horaFin: "",
+  edades: "",
 };
 
 export default function GroupsPage(): React.ReactElement {
@@ -303,6 +310,12 @@ export default function GroupsPage(): React.ReactElement {
    *  (or while the catalog is still loading). */
   function categoriaLabel(categoria: string): string {
     return categorias[categoria as Categoria]?.label ?? categoria;
+  }
+
+  /** The categoría's ages label (#789) as the form holds it: `""` both for a
+   *  categoría that publishes none and while the catalog is still loading. */
+  function categoriaEdades(categoria: string): string {
+    return categorias[categoria as Categoria]?.edades ?? "";
   }
 
   /** Card title, e.g. "Formativo · 15:00 — 16:00", used for accessible names. */
@@ -480,6 +493,7 @@ export default function GroupsPage(): React.ReactElement {
       nombre: categoriaLabel(group.categoria),
       horaInicio: group.horaInicio,
       horaFin: group.horaFin,
+      edades: categoriaEdades(group.categoria),
     });
     setSelectedDias(new Set(group.rows.map((row) => row.diaSemana)));
   }
@@ -539,14 +553,20 @@ export default function GroupsPage(): React.ReactElement {
     setFormError(null);
     const nombre = formData.nombre.trim();
     const dias = Array.from(selectedDias);
+    // `edades` goes as typed, blanks included: this is a full editor, so
+    // ALWAYS sending it is what lets an emptied input clear a stored label
+    // (an omitted field would leave it untouched — `exclude_unset`). The
+    // trimming/blank-to-NULL normalisation lives in one place only, the
+    // backend's `AsistenciaServicio._normalizar_edades`.
+    const edades = formData.edades;
     try {
       if (editingGroup) {
         await actualizarCategoria(editingGroup.categoria, {
-          nombre, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
+          nombre, edades, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
         });
       } else {
         await crearCategoria({
-          nombre, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
+          nombre, edades, hora_inicio: formData.horaInicio, hora_fin: formData.horaFin, dias,
         });
       }
       const message = editingGroup ? "Categoría actualizada correctamente." : "Categoría creada correctamente.";
@@ -710,6 +730,29 @@ export default function GroupsPage(): React.ReactElement {
               onChange={(e) => setFormData((prev) => ({ ...prev, nombre: e.target.value }))}
               placeholder="Ej: Preinfantil"
               required
+            />
+          </div>
+          {/*
+            Edades (#789) — orientation copy for the public board, never a
+            rule: no age is validated against it, so the field is optional and
+            a categoría without one saves exactly like any other. `maxLength`
+            matches the column (50). Marked with "(opcional)" rather than left
+            unmarked, the same minority-marking this product uses elsewhere:
+            on this form every other field is required, so the absence of an
+            asterisk is not by itself a statement.
+          */}
+          <div className="sm:col-span-2">
+            <label htmlFor="categoria-edades" className="mb-1 block text-xs font-semibold text-ink-2">
+              Edades <span className="font-normal text-ink-3">(opcional)</span>
+            </label>
+            <input
+              id="categoria-edades"
+              type="text"
+              className="input-field w-full"
+              value={formData.edades}
+              onChange={(e) => setFormData((prev) => ({ ...prev, edades: e.target.value }))}
+              placeholder="Ej: 5 a 10 años"
+              maxLength={50}
             />
           </div>
           <div>
