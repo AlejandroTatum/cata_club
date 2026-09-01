@@ -45,6 +45,17 @@ function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
 
+function routeForSession(session: import("@/services/auth").AuthSession): string {
+  const activation = session as import("@/services/auth").AuthSession & {
+    correoVerificado?: boolean;
+    altaPresencialCompletada?: boolean;
+  };
+  // Missing fields are the explicit legacy compatibility path from the BFF.
+  return activation.correoVerificado !== false && activation.altaPresencialCompletada !== false
+    ? getDefaultRoute(session.user.role)
+    : "/login/activacion";
+}
+
 /** Written once because two fields point at it through `aria-describedby`. */
 const CREDENTIALS_ERROR_ID = "credentials-error";
 
@@ -194,7 +205,7 @@ function LoginPageContent(): React.ReactElement {
   // below owns the (delayed) redirect instead.
   useEffect((): void => {
     if (!isLoading && isAuthenticated && session && !welcome) {
-      router.replace(getDefaultRoute(session.user.role));
+      router.replace(routeForSession(session));
     }
   }, [isLoading, isAuthenticated, session, welcome, router]);
 
@@ -269,8 +280,7 @@ function LoginPageContent(): React.ReactElement {
       description: "Su sesión quedó iniciada. Le llevamos a su panel.",
     });
 
-    setWelcome({ route: getDefaultRoute(result.session.user.role) });
-  }
+    setWelcome({ route: routeForSession(result.session) });  }
 
   // Show loading during session hydration, and keep showing it while an
   // already-authenticated user is mid-redirect — otherwise the form paints

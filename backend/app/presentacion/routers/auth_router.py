@@ -110,6 +110,9 @@ async def obtener_perfil(
         "foto_url": usuario.persona.foto_url,
         "fecha_nacimiento": usuario.persona.fecha_nacimiento,
         "correo_verificado": usuario.correo_verificado,
+        "alta_presencial_completada": GestorAutenticacion.alta_presencial_completada(
+            db, usuario.persona_id,
+        ),
     }
 
 

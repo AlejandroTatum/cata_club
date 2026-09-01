@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isProtectedPath, hasPlausibleAccessToken } from "../middleware-utils";
+import { isProtectedPath, hasPlausibleAccessToken, hasPendingActivation } from "../middleware-utils";
 
 // ---------------------------------------------------------------------------
 // isProtectedPath
@@ -54,6 +54,21 @@ describe("isProtectedPath", () => {
     // naive string prefix.
     expect(isProtectedPath("/students")).toBe(false);
     expect(isProtectedPath("/dashboardish")).toBe(false);
+  });
+});
+
+describe("hasPendingActivation", () => {
+  it("recognizes an explicit pending activation claim", () => {
+    const payload = btoa(JSON.stringify({ activacion_completa: false }));
+    expect(hasPendingActivation(`header.${payload}.signature`)).toBe(true);
+  });
+
+  it("does not gate legacy tokens without the claim", () => {
+    expect(hasPendingActivation("header.payload.signature")).toBe(false);
+  });
+
+  it("does not trust malformed payloads", () => {
+    expect(hasPendingActivation("header.not-json.signature")).toBe(false);
   });
 });
 

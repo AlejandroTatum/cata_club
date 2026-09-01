@@ -59,6 +59,9 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # callarse (y dejar que el representante descubra el requisito recién al
     # intentar agregar a un hijo) o suponer.
     correo_verificado: bool = True
+    # Derivado de la primera membresía ACTIVA (o su historial), no del
+    # estado operativo actual: una membresía vencida no revoca este hito.
+    alta_presencial_completada: bool = False
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:

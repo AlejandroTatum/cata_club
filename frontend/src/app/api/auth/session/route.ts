@@ -6,6 +6,7 @@ import {
   backendRefresh,
   buildSession,
   clearAuthCookies,
+  hasPendingActivationToken,
   isNearExpiry,
   setAuthCookies,
 } from "@/lib/server/auth";
@@ -100,6 +101,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
     clearAuthCookies(refusal);
     return refusal;
+  }
+
+  // A pending token may become complete after the club activates a
+  // membership. Refresh once the authoritative `/auth/me` answer says the
+  // hito is complete, so the Edge guard receives the new coarse hint too.
+  if (
+    !refreshedAccessToken &&
+    activeAccessToken &&
+    hasPendingActivationToken(activeAccessToken) &&
+    built.session.correoVerificado &&
+    built.session.altaPresencialCompletada &&
+    refreshCookie
+  ) {
+    const refreshResult = await backendRefresh(refreshCookie);
+    if (refreshResult.ok) refreshedAccessToken = refreshResult.data.access_token;
   }
 
   const response = NextResponse.json(built.session, { status: 200 });

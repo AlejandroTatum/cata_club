@@ -21,6 +21,7 @@ import {
   backendRefresh,
   backendLogout,
   buildSession,
+  hasPendingActivationToken,
   decodeJwtExpiry,
   isNearExpiry,
   setAuthCookies,
@@ -615,6 +616,38 @@ describe("buildSession", () => {
     expect(JSON.stringify(session)).not.toMatch(/token/i);
   });
 
+  it("carries both activation states through the token-free session", () => {
+    const session = sessionFrom({
+      correo: "pendiente@cataclub.com",
+      personaId: 14,
+      nombres: "Paula",
+      apellidos: "Vera",
+      roles: ["ALUMNO"],
+      correoVerificado: false,
+      altaPresencialCompletada: false,
+    });
+
+    expect(session).toMatchObject({
+      correoVerificado: false,
+      altaPresencialCompletada: false,
+    });
+  });
+
+  it("keeps legacy backend responses explicitly compatible", () => {
+    const session = sessionFrom({
+      correo: "legado@cataclub.com",
+      personaId: 15,
+      nombres: "Luis",
+      apellidos: "Vera",
+      roles: ["ALUMNO"],
+    });
+
+    expect(session).toMatchObject({
+      correoVerificado: true,
+      altaPresencialCompletada: true,
+    });
+  });
+
   it("builds an estudiante session with the extra discriminated fields", () => {
     const session = sessionFrom({
       correo: "alumno@cataclub.com",
@@ -740,6 +773,18 @@ describe("decodeJwtExpiry / isNearExpiry", () => {
 
   it("is near expiry when the token is already expired", () => {
     expect(isNearExpiry(makeJwt(-60), 300)).toBe(true);
+  });
+});
+
+describe("hasPendingActivationToken", () => {
+  it("recognizes an explicit pending activation claim", () => {
+    expect(hasPendingActivationToken(`header.${base64Url(JSON.stringify({ activacion_completa: false }))}.signature`)).toBe(true);
+  });
+
+  it("does not classify complete, legacy, or malformed tokens as pending", () => {
+    expect(hasPendingActivationToken(`header.${base64Url(JSON.stringify({ activacion_completa: true }))}.signature`)).toBe(false);
+    expect(hasPendingActivationToken(`header.${base64Url(JSON.stringify({}))}.signature`)).toBe(false);
+    expect(hasPendingActivationToken("not-a-jwt")).toBe(false);
   });
 });
 

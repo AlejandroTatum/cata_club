@@ -131,6 +131,20 @@ function base64UrlDecode(segment: string): string | null {
 }
 
 /** Decode a JWT's `exp` claim (seconds since epoch), without verifying its signature. Returns null if malformed. */
+export function hasPendingActivationToken(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  const payloadJson = base64UrlDecode(parts[1]);
+  if (!payloadJson) return false;
+  try {
+    const payload: unknown = JSON.parse(payloadJson);
+    return typeof payload === "object" && payload !== null &&
+      (payload as Record<string, unknown>).activacion_completa === false;
+  } catch {
+    return false;
+  }
+}
+
 export function decodeJwtExpiry(token: string): number | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
@@ -182,6 +196,9 @@ export interface BackendMeResponse {
   nombres: string;
   apellidos: string;
   roles: string[];
+  /** Activation facts from `/auth/me`; optional for explicit legacy compatibility. */
+  correoVerificado?: boolean;
+  altaPresencialCompletada?: boolean;
   // Not validated in `isBackendMeResponse` below, same as `telefono` /
   // `fechaCreacion` — this interface only names the subset of
   // `/auth/me`'s real response the client actually reads. `buildSession`
@@ -223,7 +240,9 @@ function isBackendMeResponse(value: unknown): value is BackendMeResponse {
     (typeof v.personaId === "string" || typeof v.personaId === "number") &&
     typeof v.nombres === "string" &&
     typeof v.apellidos === "string" &&
-    Array.isArray(v.roles) && v.roles.every((r) => typeof r === "string")
+    Array.isArray(v.roles) && v.roles.every((r) => typeof r === "string") &&
+    (v.correoVerificado === undefined || typeof v.correoVerificado === "boolean") &&
+    (v.altaPresencialCompletada === undefined || typeof v.altaPresencialCompletada === "boolean")
   );
 }
 
@@ -721,6 +740,8 @@ export interface ServerSession {
    * rail, which is why it must not be allowed to disagree with `user.role`.
    */
   roles: string[];
+  correoVerificado: boolean;
+  altaPresencialCompletada: boolean;
   loggedInAt: string;
 }
 
@@ -761,6 +782,10 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
     session: {
       user,
       roles: me.roles,
+      // Missing fields are an explicit compatibility path for a BFF talking to
+      // a pre-#858 backend. The current backend always sends both booleans.
+      correoVerificado: me.correoVerificado ?? true,
+      altaPresencialCompletada: me.altaPresencialCompletada ?? true,
       loggedInAt: new Date().toISOString(),
     },
   };
