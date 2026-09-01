@@ -45,8 +45,13 @@ class PublicScheduleBlockDTO(ResponseBase, BaseModel):
 
 
 class PublicScheduleCategoryDTO(ResponseBase, BaseModel):
-    """A public category grouped into its published time blocks."""
+    """A public category grouped into its published time blocks.
+
+    `ages` is an optional orientation label ("5 a 10 años", "Selección"),
+    not a rule: no age is validated against it. `None` means the category
+    publishes no age label, which is a legitimate state."""
     category: str
+    ages: str | None = None
     blocks: list[PublicScheduleBlockDTO]
 
 
@@ -55,6 +60,9 @@ class CategoriaResponseDTO(ResponseBase, BaseModel):
     de espejarla a mano (ver `frontend/src/services/categorias.ts`)."""
     codigo: str
     label: str
+    # Etiqueta de edades opcional (ver `CategoriaHorario.edades`): texto de
+    # orientación para la cartelera, nunca una validación de edad.
+    edades: Optional[str] = None
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana]
@@ -71,8 +79,14 @@ class CategoriaCreateDTO(BaseModel):
     (`AsistenciaServicio._generar_codigo`) para que el admin nunca tipee un
     código con espacios/acentos -- es la FK de
     `horario_entrenamiento.categoria`, así que tiene que ser estable y
-    válido como identificador."""
+    válido como identificador.
+
+    `edades` es opcional: una categoría puede no publicar etiqueta de
+    edades. El texto en blanco se guarda como NULL (ver
+    `AsistenciaServicio._normalizar_edades`), así que "sin etiqueta" tiene
+    una sola representación en la base."""
     nombre: str = Field(min_length=1, max_length=50)
+    edades: Optional[str] = Field(default=None, max_length=50)
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana] = Field(min_length=1)
@@ -83,8 +97,14 @@ class CategoriaUpdateDTO(BaseModel):
     el conjunto completo de días permitidos (no es un delta) --
     `AsistenciaServicio.actualizar_categoria` calcula qué día agregar y
     cuál quitar comparando contra los días actuales, y aplica ambos + el
-    re-derive de horas en una sola transacción."""
+    re-derive de horas en una sola transacción.
+
+    `edades` se distingue de los demás opcionales: mandarla en `null` NO es
+    "no la mandé", es "borrá la etiqueta". Esa diferencia se resuelve con
+    `exclude_unset` en `actualizar_categoria` (el campo solo se toca si vino
+    en el payload), que es también lo que permite limpiarla."""
     nombre: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    edades: Optional[str] = Field(default=None, max_length=50)
     hora_inicio: Optional[time] = None
     hora_fin: Optional[time] = None
     dias: Optional[list[DiaSemana]] = Field(default=None, min_length=1)

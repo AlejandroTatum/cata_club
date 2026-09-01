@@ -21,8 +21,12 @@ def test_public_schedule_catalog_groups_ordered_blocks_without_internal_fields(
 ):
     adultos = CategoriaHorario(
         codigo="public-adultos", label="Public Adultos", hora_inicio=time(8), hora_fin=time(9, 15),
+        edades="Mayores de 18 años",
         dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.VIERNES)],
     )
+    # Sin `edades`: una categoría puede no publicar etiqueta de edades, y el
+    # catálogo público tiene que seguir devolviéndola (con `ages: null`) en
+    # vez de omitirla o de inventar un texto.
     formativo = CategoriaHorario(
         codigo="public-formativo", label="Public Formativo", hora_inicio=time(15), hora_fin=time(16),
         dias_permitidos=[
@@ -41,12 +45,14 @@ def test_public_schedule_catalog_groups_ordered_blocks_without_internal_fields(
     assert public_items == [
         {
             "category": "Public Adultos",
+            "ages": "Mayores de 18 años",
             "blocks": [{"days": ["VIERNES"], "startTime": "08:00", "endTime": "09:15"}],
         },
         {
             "category": "Public Formativo",
+            "ages": None,
             "blocks": [{"days": ["LUNES", "MIERCOLES"], "startTime": "15:00", "endTime": "16:00"}],
         },
     ]
     assert [item["category"] for item in body] == sorted(item["category"] for item in body)
-    assert all(set(item) == {"category", "blocks"} for item in body)
+    assert all(set(item) == {"category", "ages", "blocks"} for item in body)

@@ -1422,6 +1422,16 @@ class CategoriaHorario(Base):
     `label`, nunca `codigo`. `label` es único en la base (red de
     seguridad; el servicio ya rechaza el duplicado con un mensaje legible
     antes de llegar acá) -- ver migración `f1a2b3c4d5e6`.
+
+    `edades` es la etiqueta de edades que el club publica junto al horario
+    ("5 a 10 años", "Selección"). Es TEXTO DE ORIENTACIÓN, no una regla:
+    nada valida la edad de un alumno contra ella al asignarle un horario
+    (ver `rango_edad` en docs/product) -- solo se muestra. Nullable a
+    propósito: una categoría sin etiqueta es un estado real ("no se publica
+    ninguna"), no un dato faltante, así que NULL no introduce un tercer
+    estado ambiguo. El servicio normaliza el texto en blanco a NULL para que
+    "sin etiqueta" tenga UNA sola representación (ver
+    `AsistenciaServicio._normalizar_edades`).
     """
     __tablename__ = "categoria_horario"
     __table_args__ = (
@@ -1429,6 +1439,7 @@ class CategoriaHorario(Base):
     )
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     label: Mapped[str] = mapped_column(String(50))
+    edades: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
 

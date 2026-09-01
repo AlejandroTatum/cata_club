@@ -65,6 +65,7 @@ def listar_horarios_publicos(db: Session = Depends(obtener_sesion)):
     return [
         PublicScheduleCategoryDTO(
             category=categoria.label,
+            ages=categoria.edades,
             blocks=[
                 PublicScheduleBlockDTO(
                     days=sorted(categoria.dias, key=lambda dia: list(DiaSemana).index(dia)),

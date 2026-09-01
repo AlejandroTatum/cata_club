@@ -141,10 +141,21 @@ class AsistenciaServicio:
     @staticmethod
     def _a_categoria_dto(c: CategoriaHorario) -> CategoriaResponseDTO:
         return CategoriaResponseDTO(
-            codigo=c.codigo, label=c.label,
+            codigo=c.codigo, label=c.label, edades=c.edades,
             hora_inicio=c.hora_inicio, hora_fin=c.hora_fin,
             dias=[d.dia_semana for d in c.dias_permitidos],
         )
+
+    @staticmethod
+    def _normalizar_edades(valor: Optional[str]) -> Optional[str]:
+        """Recorta la etiqueta de edades y colapsa el texto en blanco a
+        NULL. "Sin etiqueta" tiene que tener UNA sola representación en la
+        base: si `''` y NULL convivieran, cada lector tendría que chequear
+        las dos para saber si hay algo que mostrar."""
+        if valor is None:
+            return None
+        recortado = valor.strip()
+        return recortado or None
 
     def _generar_codigo(self, nombre: str) -> str:
         """Deriva un `codigo` único a partir de `nombre`. Estable: se llama
@@ -184,6 +195,7 @@ class AsistenciaServicio:
         codigo = self._generar_codigo(nombre)
         categoria = CategoriaHorario(
             codigo=codigo, label=nombre,
+            edades=self._normalizar_edades(datos.edades),
             hora_inicio=datos.hora_inicio, hora_fin=datos.hora_fin,
         )
         categoria.dias_permitidos = [CategoriaHorarioDia(dia_semana=d) for d in dias]
@@ -295,6 +307,12 @@ class AsistenciaServicio:
         ]
 
         categoria.label = nombre
+        # `edades` solo se toca si vino en el payload: un `null` explícito
+        # BORRA la etiqueta, mientras que omitir el campo la deja intacta
+        # (por eso se consulta `update_data`, que ya es `exclude_unset`, y
+        # no `datos.edades is not None`).
+        if "edades" in update_data:
+            categoria.edades = self._normalizar_edades(datos.edades)
         categoria.hora_inicio = nueva_hora_inicio
         categoria.hora_fin = nueva_hora_fin
         categoria.dias_permitidos = [
