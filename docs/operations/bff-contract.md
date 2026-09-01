@@ -181,6 +181,97 @@ una deriva y esconder la siguiente:
   gate rojo, con el mensaje de que hay que borrarla. El inventario no
   sobrevive a su propia deriva.
 
+## Los campos obligatorios
+
+No se intenta leer el cuerpo de un type guard arbitrario. Se declara la tabla
+explícita `CAMPOS_OBLIGATORIOS`, con la misma convención que `USOS_BACKEND` en
+el gate del glosario (#903): cada fila dice qué campo exige un validador del BFF
+y en qué DTO de Pydantic tiene que existir. El ejemplar es `isPublicSchedules`
+(`frontend/src/app/api/schedules/route.ts:7`), cuyo comentario de las líneas
+13-17 —«anything else here means the upstream shape moved, and the landing must
+not render a guess at it»— es exactamente el razonamiento que la tabla mecaniza.
+
+Cubre `isBackendLoginResponse`, `isBackendMeResponse`, `isBackendRefreshResponse`
+(`lib/server/auth.ts:225,235,249`), `isBackendEnrollmentResponse`
+(`lib/server/enrollment-adapter.ts:144`), `isBackendChatbotResponse`
+(`app/api/chatbot/route.ts:64`) e `isPublicSchedules`.
+
+Se verifican dos cosas por fila, y la segunda es la que atrapa un bug real:
+
+1. **Que el campo exista** en el DTO, comparando por nombre Python.
+2. **Que la convención del nombre sea la correcta.** `ResponseBase`
+   (`schemas/base.py:45`) trae un `alias_generator` snake→camel y FastAPI
+   serializa por alias, pero **sólo cuando la ruta declara `response_model=`**.
+   Las dos condiciones son necesarias, y las tres combinaciones que importan
+   existen de verdad:
+
+| Ruta | ¿`response_model=`? | ¿hereda `ResponseBase`? | Viaja |
+| --- | --- | --- | --- |
+| `/auth/me` | sí | sí | `personaId` |
+| `/enrollment/` | sí | no (`EnrollmentResponseDTO(BaseModel)`) | `persona_id` |
+| `/auth/login`, `/auth/refresh` | no | sí | `access_token` |
+
+Que `/login` y `/refresh` devuelven el dict OAuth2 crudo lo dice el propio
+backend, en el docstring de `InvalidarSesionesResponseDTO`
+(`auth_schemas.py:171-173`), y el frontend lo repite en `auth.ts:190-194`.
+
+### El peligro que este gate ya atrapó: `response_model=` en `/login`
+
+Esta comprobación no es hipotética. Se probó contra el código real y encontró un
+peligro latente que hoy nada más detendría.
+
+**La mutación.** Agregarle a `/login` el `response_model` que hoy no tiene:
+
+```diff
+-@router.post("/login")
++@router.post("/login", response_model=LoginResponseDTO)
+```
+
+Es un cambio que parece una mejora. `LoginResponseDTO` ya existe, ya describe
+exactamente lo que la ruta devuelve, y declararlo es lo que hacen casi todas las
+demás rutas del proyecto. Un revisor lo aprobaría sin dudar: agrega tipado y
+documentación en Swagger, y no toca ninguna línea de lógica.
+
+**Lo que rompe.** `LoginResponseDTO` hereda `ResponseBase`, así que en cuanto la
+ruta declara `response_model=`, FastAPI serializa por alias y los tres campos
+salen camelizados:
+
+| Antes | Después |
+| --- | --- |
+| `access_token` | `accessToken` |
+| `refresh_token` | `refreshToken` |
+| `token_type` | `tokenType` |
+
+`isBackendLoginResponse` (`lib/server/auth.ts:225`) exige `access_token` y
+`refresh_token` en snake_case. Con la respuesta camelizada el validador devuelve
+`false`, el login falla como `invalid_response` y **nadie puede entrar a la
+aplicación**. No es una degradación parcial: es la autenticación entera.
+
+**Por qué nada lo habría visto.** El backend sigue coherente consigo mismo y sus
+tests pasan: devuelve lo que su DTO declara. El frontend sigue coherente consigo
+mismo y sus tests pasan: los fixtures están escritos en snake_case, que es lo que
+la ruta devolvía cuando se escribieron. La incompatibilidad vive **entre** los
+dos, exactamente donde ninguna de las dos suites mira, y el tipo de TypeScript no
+puede verla porque del otro lado hay Python. Se descubre abriendo la pantalla de
+login — en staging si hay suerte, en producción si no.
+
+**Por qué el gate sí lo ve.** Porque no compara nombres contra nombres, sino el
+nombre que el BFF exige contra la **convención en la que ese campo viaja**, y esa
+convención la deriva de las dos condiciones de arriba leídas del código: si la
+ruta declara `response_model=` y si el DTO hereda `ResponseBase`. La mutación
+cambia la primera, el gate lo nota y pone **tres tests en rojo** —uno por campo—
+nombrando la ruta, el validador y el campo:
+
+```
+AssertionError: /auth/login: `isBackendLoginResponse` exige `access_token` pero el campo viaja camelizado
+AssertionError: /auth/login: `isBackendLoginResponse` exige `refresh_token` pero el campo viaja camelizado
+AssertionError: /auth/login: `isBackendLoginResponse` exige `token_type` pero el campo viaja camelizado
+```
+
+El arreglo correcto, si alguien quiere ese `response_model`, es declararlo **y**
+actualizar el validador del BFF a los nombres camelizados. El gate no prohíbe el
+cambio: obliga a hacer las dos mitades juntas.
+
 ## Alcance y continuación
 
 Es continuación explícita del gate del glosario:
@@ -196,10 +287,6 @@ Lo que este gate **no** verifica es la *copy* visible de un estado: que
 `EstadoPago.RECHAZADO` se muestre con determinado texto y tono es el gate del
 glosario y el issue hijo de frontend, no éste. Acá se compara el conjunto de
 valores, no cómo se dibujan.
-
-Los **campos obligatorios** de cada DTO —qué campo exige cada validador del BFF
-y en qué convención de nombres viaja— son el PR siguiente del mismo issue #900 y
-todavía no se verifican.
 
 ## Cómo se corre
 
