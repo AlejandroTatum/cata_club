@@ -88,4 +88,21 @@ describe("buildPaymentValidationRequest", () => {
     const request = buildPaymentValidationRequest(pago, "Sofia Martinez", membresia, tipo);
     expect(request.responsablePagoName).toBeUndefined();
   });
+
+  // Issue #935: SUSPENDIDA (backend since #400) and REGULARIZACION (backend
+  // since #284) were missing from this adapter's own unions, so a payment
+  // tied to either indexed its lookup table to `undefined`.
+  it("reads a SUSPENDIDA membresía as its own status, not undefined nor vencida", () => {
+    const suspendida: BackendMembresia = { ...membresia, estado: "SUSPENDIDA" };
+    const request = buildPaymentValidationRequest(pago, "Sofia Martinez", suspendida, tipo);
+    expect(request.currentMembershipStatus).toBe("suspendida");
+  });
+
+  it("labels a REGULARIZACION payment distinctly from Efectivo and Transferencia", () => {
+    const regularizacion: BackendPagoCore = { ...pago, tipoPago: "REGULARIZACION" };
+    const request = buildPaymentValidationRequest(regularizacion, "Sofia Martinez", membresia, tipo);
+    expect(request.paymentMethod).toBe("Regularización");
+    expect(request.paymentMethod).not.toBe("Efectivo");
+    expect(request.paymentMethod).not.toBe("Transferencia");
+  });
 });

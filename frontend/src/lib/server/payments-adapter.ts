@@ -20,7 +20,9 @@ import { backendFetchAuthed } from "@/lib/server/backend-client";
 import { formatDateRange } from "@/lib/format-utils";
 
 export type BackendEstadoPago = "APROBADO" | "PENDIENTE_VALIDACION" | "RECHAZADO";
-export type BackendTipoPago = "EFECTIVO" | "TRANSFERENCIA";
+// REGULARIZACION (issue #935, backend since #284): bookkeeping-only, never
+// registered through the payment form — see PagoServicio.regularizar_deuda.
+export type BackendTipoPago = "EFECTIVO" | "TRANSFERENCIA" | "REGULARIZACION";
 
 // Re-exported for backward compatibility — moved to lib/membership-status.ts
 // so client components (e.g. src/app/profile/page.tsx) don't have to import
@@ -31,6 +33,7 @@ export { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoMembresia };
 const PAYMENT_METHOD_BY_TIPO_PAGO: Record<BackendTipoPago, string> = {
   EFECTIVO: "Efectivo",
   TRANSFERENCIA: "Transferencia",
+  REGULARIZACION: "Regularización",
 };
 
 function proofFileType(voucherFormato?: string | null): ProofFileType {

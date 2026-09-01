@@ -16,6 +16,7 @@ import {
   MAX_MESES_COBERTURA,
   MENSAJE_MESES_MAXIMO_EXCEDIDO,
   excedeMesesMaximo,
+  TIPO_PAGO_LABEL,
   type PagoStatusFilter,
 } from "../payments-utils";
 import type { PagoPersona } from "@/services/api";
@@ -125,6 +126,16 @@ describe("getEmptyStateMessage", () => {
 
   it.each(cases)("returns correct message for %s", (filter, expected) => {
     expect(getEmptyStateMessage(filter)).toBe(expected);
+  });
+});
+
+describe("TIPO_PAGO_LABEL", () => {
+  // Issue #935: REGULARIZACION (backend since #284) was missing here, so a
+  // regularization payment's method rendered as `undefined` in the history.
+  it('labels REGULARIZACION as "Regularización", distinct from Efectivo and Transferencia', () => {
+    expect(TIPO_PAGO_LABEL.REGULARIZACION).toBe("Regularización");
+    expect(TIPO_PAGO_LABEL.REGULARIZACION).not.toBe(TIPO_PAGO_LABEL.EFECTIVO);
+    expect(TIPO_PAGO_LABEL.REGULARIZACION).not.toBe(TIPO_PAGO_LABEL.TRANSFERENCIA);
   });
 });
 

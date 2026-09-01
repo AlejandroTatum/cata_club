@@ -6,15 +6,20 @@
  */
 import type { MembershipStatus } from "@/services/api";
 
-export type BackendEstadoMembresia = "INACTIVA" | "ACTIVA" | "VENCIDA";
+export type BackendEstadoMembresia = "INACTIVA" | "ACTIVA" | "VENCIDA" | "SUSPENDIDA";
 
 // PaymentValidationRequest.currentMembershipStatus has no "inactiva" value.
 // INACTIVA (membership created, never had an approved payment) reads
 // closest to "vencida" (needs a payment to become current).
+//
+// SUSPENDIDA (issue #935, backend since #400) keeps its own status here —
+// it does not accumulate debt while it lasts, so folding it into "vencida"
+// would misdescribe a membership that owes nothing.
 export const MEMBERSHIP_STATUS_BY_ESTADO: Record<BackendEstadoMembresia, MembershipStatus> = {
   ACTIVA: "activa",
   VENCIDA: "vencida",
   INACTIVA: "vencida",
+  SUSPENDIDA: "suspendida",
 };
 
 /**

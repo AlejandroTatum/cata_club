@@ -54,6 +54,7 @@ export function sortPagosByDate(pagos: PagoPersona[]): PagoPersona[] {
 export const TIPO_PAGO_LABEL: Record<PagoPersona["tipoPago"], string> = {
   EFECTIVO: "Efectivo",
   TRANSFERENCIA: "Transferencia",
+  REGULARIZACION: "Regularización",
 };
 
 /**
