@@ -59,6 +59,28 @@ case "$IMAGE_REFERENCE" in
   *) die "la imagen backend configurada no usa IMAGE_TAG=${IMAGE_TAG}" ;;
 esac
 
+[ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env para persistir IMAGE_TAG=${IMAGE_TAG}"
+persist_project_env() {
+  local tmp
+  tmp="$(mktemp "$STACK_DIR/.env.release.XXXXXX")" \
+    || die "no se pudo preparar ${STACK_DIR}/.env para persistir IMAGE_TAG=${IMAGE_TAG}"
+  trap 'rm -f "$tmp"' EXIT
+  awk -v tag="$IMAGE_TAG" '
+    BEGIN { found = 0 }
+    /^IMAGE_TAG=/ {
+      if (!found) { print "IMAGE_TAG=" tag; found = 1 }
+      next
+    }
+    { print }
+    END { if (!found) print "IMAGE_TAG=" tag }
+  ' "$STACK_DIR/.env" > "$tmp" \
+    || die "no se pudo escribir ${STACK_DIR}/.env para persistir IMAGE_TAG=${IMAGE_TAG}"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$STACK_DIR/.env"
+  trap - EXIT
+}
+persist_project_env
+
 mkdir -p "$RELEASE_RECORD_DIR"
 [ -d "$RELEASE_RECORD_DIR" ] || die "RELEASE_RECORD_DIR no es un directorio: $RELEASE_RECORD_DIR"
 tmp="$(mktemp "$RELEASE_RECORD_DIR/.release.XXXXXX")"

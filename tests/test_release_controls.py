@@ -26,10 +26,19 @@ URL_DE_HEARTBEAT_DE_PRUEBA = "https://heartbeat.invalid/ping/TOKEN-DE-PRUEBA"
 
 
 def run_script(script: str, *args: str, env: dict[str, str] | None = None):
+    entorno = {**os.environ, **(env or {})}
+    stack_dir = entorno.get("STACK_DIR")
+    if stack_dir:
+        primer_bin = entorno.get("PATH", os.environ["PATH"]).split(":", 1)[0]
+        if not (Path(primer_bin) / "git").exists():
+            git_bin = Path(stack_dir) / ".test-git-bin"
+            git_bin.mkdir(exist_ok=True)
+            _stub_git(git_bin, entorno.get("IMAGE_TAG", "abcdef1"))
+            entorno["PATH"] = f"{git_bin}:{entorno['PATH']}"
     return subprocess.run(
         ["bash", str(ROOT / script), *args],
         cwd=ROOT,
-        env={**os.environ, **(env or {})},
+        env=entorno,
         capture_output=True,
         text=True,
     )
@@ -121,6 +130,29 @@ def _smtp_preflight_env(
         "SMTP_PREFLIGHT_MODE": mode,
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
     }
+
+
+def _stub_git(bin_dir: Path, head: str = "abcdef1") -> None:
+    stub = bin_dir / "git"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-C" ]; then shift 2; fi\n'
+        'if [ "${1:-}" = "rev-parse" ]; then printf "%s\\n" "${TEST_GIT_HEAD:-' + head + '}"; exit 0; fi\n'
+        "exit 1\n"
+    )
+    stub.chmod(0o755)
+
+
+def test_preflight_rejects_a_checkout_head_different_from_image_tag(tmp_path):
+    env = _smtp_preflight_env(tmp_path)
+    _stub_git(Path(env["PATH"].split(":", 1)[0]))
+    env["TEST_GIT_HEAD"] = "deadbee"
+
+    result = run_script("scripts/ops/preflight-production.sh", env=env)
+
+    assert result.returncode != 0
+    assert "Git HEAD" in result.stderr
+    assert "IMAGE_TAG" in result.stderr
 
 
 def test_preflight_smtp_starttls_succeeds_without_authentication(tmp_path):
@@ -418,10 +450,12 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
             '    if [ "${PS_JSON_GARBAGE:-0}" = "1" ]; then\n'
             '      printf \'%s\' \'esto-no-es-json{{{\'\n'
             '    else\n'
-            '      registros=""\n'
+            '      backend_image="registry.example/cata-backend:${RUNTIME_IMAGE_TAG:-$IMAGE_TAG}"\n'
+            '      frontend_image="registry.example/cata-frontend:${RUNTIME_IMAGE_TAG:-$IMAGE_TAG}"\n'
+            '      registros="{\\"Service\\":\\"backend\\",\\"Image\\":\\"$backend_image\\"}\n{\\"Service\\":\\"frontend\\",\\"Image\\":\\"$frontend_image\\"}\n"\n'
             '      if [ -n "${CELERY_WORKER_STATE-running}" ]; then\n'
             '        salud="${CELERY_WORKER_HEALTH-healthy}"\n'
-            '        objeto=\'{"Service":"celery-worker","State":"\'"${CELERY_WORKER_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
+            '        objeto=\'{"Service":"celery-worker","Image":"\'"$backend_image"\'","State":"\'"${CELERY_WORKER_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
             '        registros="$registros$objeto\n"\n'
             # Segundo registro para celery-worker (issue #791, dureza del
             # candado ante réplicas): SOLO se agrega si la variable está
@@ -429,13 +463,13 @@ def _deploy_env(tmp_path, db_running: bool) -> tuple[dict[str, str], Path, Path]
             # `-n`/`:-`. Simula lo que produciría `deploy.replicas: 2`: dos
             # contenedores con el mismo `Service` y salud distinta.
             '        if [ "${CELERY_WORKER_REPLICA_HEALTH+seteada}" = "seteada" ]; then\n'
-            '          objeto2=\'{"Service":"celery-worker","State":"running","Health":"\'"${CELERY_WORKER_REPLICA_HEALTH}"\'"}\'\n'
+            '          objeto2=\'{"Service":"celery-worker","Image":"\'"$backend_image"\'","State":"running","Health":"\'"${CELERY_WORKER_REPLICA_HEALTH}"\'"}\'\n'
             '          registros="$registros$objeto2\n"\n'
             '        fi\n'
             '      fi\n'
             '      if [ -n "${CELERY_BEAT_STATE-running}" ]; then\n'
             '        salud="${CELERY_BEAT_HEALTH-healthy}"\n'
-            '        objeto=\'{"Service":"celery-beat","State":"\'"${CELERY_BEAT_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
+            '        objeto=\'{"Service":"celery-beat","Image":"\'"$backend_image"\'","State":"\'"${CELERY_BEAT_STATE-running}"\'","Health":"\'"$salud"\'"}\'\n'
             '        registros="$registros$objeto\n"\n'
             '      fi\n'
             # Issue #849: `refrescar_caddy` espera el healthcheck de caddy con
@@ -544,6 +578,31 @@ def test_first_deploy_passes_without_any_previous_backup(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "no hay nada que respaldar" in result.stdout
     assert not list(backups.glob("*.dump"))
+
+
+def test_deploy_rejects_runtime_images_that_do_not_match_the_intended_sha(tmp_path):
+    env, _, _ = _deploy_env(tmp_path, db_running=False)
+    env["RUNTIME_IMAGE_TAG"] = "deadbee"
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0
+    assert "runtime" in (result.stdout + result.stderr).lower()
+    assert not Path(env["RELEASE_RECORD_DIR"]).exists()
+
+
+def test_deploy_rejects_a_stale_project_env_before_touching_the_backup(tmp_path):
+    env, _, docker_log = _deploy_env(tmp_path, db_running=True)
+    stack = Path(env["STACK_DIR"])
+    stack.joinpath(".env").write_text(
+        stack.joinpath(".env").read_text().replace("IMAGE_TAG=abcdef1", "IMAGE_TAG=deadbee")
+    )
+
+    result = run_script("scripts/deploy/deploy.sh", env=env)
+
+    assert result.returncode != 0
+    assert ".env" in result.stderr
+    assert not docker_log.exists() or "pg_dump" not in docker_log.read_text()
 
 
 def test_deploy_resolves_single_backend_image_when_compose_emits_multiple_lines(tmp_path):
@@ -1279,10 +1338,24 @@ def test_preflight_fails_closed_when_db_is_down_but_a_release_was_already_record
     assert "primer aprovisionamiento" not in result.stderr
 
 
+def test_record_release_persists_the_image_tag_to_the_project_env(tmp_path):
+    env, records = _entorno_record_release(tmp_path)
+    stack = Path(env["STACK_DIR"])
+    (stack / ".env").write_text("IMAGE_TAG=stale\nOTHER=value\n")
+
+    result = run_script("scripts/ops/record-release.sh", env=env)
+
+    assert result.returncode == 0, result.stderr
+    assert "IMAGE_TAG=abcdef1" in (stack / ".env").read_text()
+    assert "IMAGE_TAG=stale" not in (stack / ".env").read_text()
+    assert (records / "current.env").read_text().startswith("IMAGE_TAG=abcdef1\n")
+
+
 def test_record_release_writes_auditable_current_record_without_credentials(tmp_path):
     records = tmp_path / "releases"
     stack = tmp_path / "stack"
     stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
@@ -1340,6 +1413,7 @@ def _entorno_record_release(
     records = tmp_path / "releases"
     stack = tmp_path / "stack"
     stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\n")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(
@@ -1453,6 +1527,40 @@ def test_record_release_rechaza_una_imagen_que_no_usa_el_image_tag_pedido(tmp_pa
     assert result.returncode == 1
     assert "no usa IMAGE_TAG=abcdef1" in result.stderr
     assert not records.exists(), "quedó un registro con una imagen de otro SHA"
+
+
+def test_rollback_persists_the_target_sha_to_env_and_current_ledger(tmp_path):
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nOTHER=value\n")
+    records = tmp_path / "releases"
+    records.mkdir()
+    (records / "current.env").write_text(
+        "IMAGE_TAG=abcdef1\nMIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+    (records / "deadbee.env").write_text(
+        "IMAGE_TAG=deadbee\nIMAGE_REFERENCE=registry.example/backend:deadbee\n"
+        "MIGRATION_COMPATIBILITY=backward-compatible\n"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "docker").chmod(0o755)
+
+    result = run_script(
+        "scripts/ops/rollback-release.sh",
+        "deadbee",
+        "--confirm-rollback",
+        env={
+            "STACK_DIR": str(stack),
+            "RELEASE_RECORD_DIR": str(records),
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "IMAGE_TAG=deadbee" in (stack / ".env").read_text()
+    assert "IMAGE_TAG=deadbee" in (records / "current.env").read_text()
 
 
 def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):

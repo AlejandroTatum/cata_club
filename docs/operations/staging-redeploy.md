@@ -31,8 +31,9 @@
 
 2. El host debe tener Docker + Compose, el checkout en `/opt/cata-club` en el
    SHA aprobado, `.env` local no versionado y `CORS_ORIGENES`/`DOMINIO` de staging.
-   Detente si el checkout está sucio, falta `.env`, el SHA no coincide o Compose
-   no puede renderizarse. Nunca pegues secretos en comandos, issues o este archivo.
+   El `IMAGE_TAG` del `.env` debe ser exactamente `git rev-parse HEAD`; el
+   detente si el checkout está sucio; el preflight aborta si el checkout o el
+   `.env` están obsoletos. Nunca pegues secretos en comandos, issues o este archivo.
 
 3. Antes de migrar, confirma que existe un backup cifrado reciente y que ya pasó
    el restore-check en un entorno desechable. La identidad privada permanece en
@@ -99,8 +100,10 @@ export MIGRATION_COMPATIBILITY=<none|backward-compatible|manual-review-required>
 
 `deploy.sh` toma el backup pre-deploy cifrado, repite preflight, valida el
 manifiesto, hace `pull`, valida el `Caddyfile`, recrea los siete servicios,
-refresca el borde público, prueba health/readiness,
-backup y registra el release. No saltes los scripts con un `compose pull/up` manual.
+refresca el borde público, verifica que las imágenes runtime coincidan con
+`HEAD`, prueba health/readiness y registra el release. Al registrar, escribe
+el mismo SHA en `.env` y `current.env`, y vuelve a comprobar la alineación.
+No saltes los scripts con un `compose pull/up` manual.
 En primer aprovisionamiento tolera la ausencia de dump; después exige frescura
 (RPO por defecto: 26 h).
 
@@ -118,6 +121,16 @@ contenedor que está sirviendo.
 
 `current.env` queda con **una sola** `IMAGE_REFERENCE`, la del servicio
 `backend`; si aparece más de una línea, no despliegues y revisá el registro.
+
+### Checkout o `.env` obsoletos
+
+Si el preflight informa que `Git HEAD` no coincide con `IMAGE_TAG`, no lo
+fuerces ni ejecutes Compose manualmente. En el checkout remoto, revisa el
+estado y actualiza únicamente al commit aprobado (`git fetch origin main` y
+`git switch --detach <SHA-aprobado>`). Después corrige el archivo local sin
+secretos: `sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<SHA-aprobado>/" .env`, vuelve a
+ejecutar el preflight y confirma que `.env` y `git rev-parse HEAD` impriman el
+mismo SHA. Si no puedes demostrar esa igualdad, detente y conserva los logs.
 
 ## Postchecks y Beat
 

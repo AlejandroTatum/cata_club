@@ -18,6 +18,15 @@ CURRENT_RELEASE_RECORD="$RELEASE_RECORD_DIR/current.env"
 
 [ -d "$STACK_DIR" ] || die "STACK_DIR no existe: $STACK_DIR"
 [ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env"
+if [ -z "$IMAGE_TAG" ]; then
+  IMAGE_TAG="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
+  export IMAGE_TAG
+fi
+ENV_IMAGE_TAG="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
+[ "$ENV_IMAGE_TAG" = "$IMAGE_TAG" ] \
+  || die "${STACK_DIR}/.env IMAGE_TAG=${ENV_IMAGE_TAG:-vacío} no coincide con IMAGE_TAG=${IMAGE_TAG}"
+CHECKOUT_HEAD="$(git -C "$STACK_DIR" rev-parse --verify HEAD 2>/dev/null)" || die "no se pudo leer Git HEAD del checkout en ${STACK_DIR}"
+[ "$CHECKOUT_HEAD" = "$IMAGE_TAG" ] || die "Git HEAD=${CHECKOUT_HEAD} no coincide con IMAGE_TAG=${IMAGE_TAG}"
 stack_value() {
       local key="$1"
       if [ "${!key+x}" = x ]; then printf '%s' "${!key}"; else sed -n "s/^${key}=//p" "$STACK_DIR/.env" | tail -1; fi
@@ -36,6 +45,8 @@ stack_value() {
       command -v getent >/dev/null 2>&1 || die "falta getent para resolver SMTP_HOST"
       command -v timeout >/dev/null 2>&1 || die "falta timeout para limitar el preflight SMTP"
       getent ahosts "$host" >/dev/null 2>&1 || die "falló la resolución DNS del endpoint SMTP configurado"
+      # shellcheck disable=SC2016
+      # $1/$2 intentionally expand in the child bash -c.
       timeout "${timeout_seconds}s" bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" || die "falló o expiró la conexión TCP al endpoint SMTP configurado"
       case "${starttls:-true}" in
         true|TRUE|1|yes|YES) command -v openssl >/dev/null 2>&1 || die "falta openssl para comprobar STARTTLS SMTP"; timeout "${timeout_seconds}s" openssl s_client -starttls smtp -connect "${host}:${port}" -servername "$host" -brief </dev/null >/dev/null 2>&1 || die "falló o expiró el handshake STARTTLS del endpoint SMTP configurado" ;;

@@ -12,32 +12,46 @@ un archivo `.env` junto a los archivos Compose. Los defaults son
 `RELEASE_RECORD_DIR=/var/lib/cata-club/releases`; se pueden reemplazar con
 variables de entorno. Ningún script crea credenciales ni las imprime.
 
-Antes de un release, fijar un `IMAGE_TAG` hexadecimal inmutable y declarar el
-resultado de la revisión de migraciones:
+Antes de un release, el checkout y `IMAGE_TAG` deben apuntar al mismo commit
+completo. Fija el tag desde el checkout (nunca desde un valor copiado de un
+runbook) y declara el resultado de la revisión de migraciones:
 
 ```bash
-export IMAGE_TAG=<sha-de-imagen>
+export IMAGE_TAG="$(git rev-parse HEAD)"
 export MIGRATION_COMPATIBILITY=none  # o backward-compatible
 ./scripts/ops/preflight-production.sh
 ./scripts/deploy/deploy.sh
 ```
 
-`preflight-production.sh` solo lee la configuración: exige `.env`, valida el
-render de Compose, deriva la imagen del servicio `backend` y comprueba que Docker
-esté disponible y que el backup lógico esté dentro del RPO. El registro (GHCR
-actualmente) y el repositorio de imagen son una decisión del proyecto en
-`docker-compose.yml`, no una constante de los scripts; la imagen resuelta queda
-en el registro de release junto con el SHA. `deploy.sh` primero toma un backup
-pre-deploy (`backup-db.sh`) mientras la base todavía corre con el esquema
-anterior — las migraciones Alembic se ejecutan en cada arranque del backend y
-no existen down-migrations, así que ese dump es el único camino de vuelta de
-datos. Después vuelve a ejecutar el preflight, descarga esa imagen configurada,
-arranca el stack, refresca el borde público, valida health/readiness y registra
-la clase de migración y la fecha en un registro por SHA y en `current.env`. Ese
-registro lleva **exactamente una** `IMAGE_REFERENCE`: la del servicio `backend`,
-resuelta desde `config --format json`. `rollback-release.sh` lo lee como
-autoritativo, así que un release que no se pueda identificar con una sola
-referencia aborta sin dejar registro.
+`preflight-production.sh` solo lee la configuración: exige `.env`, comprueba que
+`git rev-parse HEAD` sea exactamente `IMAGE_TAG`, valida el render de Compose,
+deriva la imagen del servicio `backend` y comprueba que Docker esté disponible y
+que el backup lógico esté dentro del RPO. El registro (GHCR actualmente) y el
+repositorio de imagen son una decisión del proyecto en `docker-compose.yml`, no
+una constante de los scripts; la imagen resuelta queda en el registro de release
+junto con el SHA. `deploy.sh` primero toma un backup pre-deploy (`backup-db.sh`)
+mientras la base todavía corre con el esquema anterior — las migraciones Alembic
+se ejecutan en cada arranque del backend y no existen down-migrations, así que
+ese dump es el único camino de vuelta de datos. Después vuelve a ejecutar el
+preflight, descarga esa imagen configurada, arranca el stack, comprueba que el
+runtime coincida con `HEAD`, refresca el borde público, valida health/readiness y
+registra la clase de migración y la fecha en un registro por SHA y en
+`current.env`. Al registrar, persiste el mismo `IMAGE_TAG` en el `.env` del
+proyecto y verifica `runtime = HEAD = IMAGE_TAG = ledger`; un desvío aborta sin
+considerarse un release válido. Ese registro lleva **exactamente una**
+`IMAGE_REFERENCE`: la del servicio `backend`, resuelta desde `config --format
+json`. `rollback-release.sh` también actualiza `.env` al SHA registrado que
+restaura.
+
+### Remediar un checkout o `.env` obsoleto
+
+Si el preflight falla por desalineación, detente: no ejecutes `pull/up` manual ni
+edites el ledger. Verifica el SHA aprobado con `git fetch origin main`, vuelve al
+commit exacto con `git switch --detach <SHA-aprobado>`, y actualiza solo el tag
+del archivo local: `sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<SHA-aprobado>/" .env`.
+Confirma que `git rev-parse HEAD` y `sed -n 's/^IMAGE_TAG=//p' .env` impriman el
+mismo SHA y repite el preflight. Si el checkout está sucio, el commit no tiene CI
+exitoso o no puedes demostrar la igualdad, conserva los logs y escala el caso.
 
 ### Refresco del borde público (Caddy) en cada deploy
 
