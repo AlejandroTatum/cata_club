@@ -294,6 +294,119 @@ const EMPTY_FORM: HorarioFormData = {
   edades: "",
 };
 
+/**
+ * The club's training window and its día cap, MIRRORED from the backend
+ * (issue #861). Source of truth: `backend/app/dominio/reglas_negocio.py`
+ * (`HORA_MINIMA_ENTRENAMIENTO`, `HORA_MAXIMA_ENTRENAMIENTO`,
+ * `MAXIMO_DIAS_POR_CATEGORIA`), enforced by
+ * `AsistenciaServicio._validar_ventana_de_entrenamiento` /
+ * `_validar_tope_de_dias` on create AND edit.
+ *
+ * The duplication across languages is deliberate and it is not a shortcut
+ * around a shared module: there is no build step that can hand a Python
+ * constant to this bundle, and the alternative — asking the server what the
+ * limits are before drawing the form — would trade a two-line mirror for a
+ * round trip on every open. What the mirror buys is that the admin learns
+ * about a 02:00 franja while the field is still under the cursor, instead of
+ * after a rejected save.
+ *
+ * The mirror is FEEDBACK, never the enforcement. Any caller that skips this
+ * form (the API directly, a future screen) is still refused by the backend,
+ * so a drift here can only ever make the screen more permissive than the
+ * server — which shows up as the server's own message in `formError`, not as
+ * a bad row in the database. If these values ever move, the Python side is
+ * what moves first.
+ *
+ * Kept as "HH:MM" strings, the exact shape an `<input type="time">` holds, so
+ * the comparisons below are plain lexicographic ones on zero-padded 24h time —
+ * no parsing, no timezone, no `Date`.
+ */
+const HORA_MINIMA_ENTRENAMIENTO = "06:00";
+const HORA_MAXIMA_ENTRENAMIENTO = "22:00";
+const MAXIMO_DIAS_POR_CATEGORIA = 6;
+
+/**
+ * Ids for the categoría form's per-field error slots.
+ *
+ * `-error` suffix, matching every other per-field mark in the app
+ * (`email-error` on `/login`, `tipo-sangre-error-${personaId}` in
+ * `MedicalRecordEditor`). The form is a singleton on this screen — at most one
+ * accordion panel is open — so the ids need no instance suffix.
+ *
+ * `FRANJA_ERROR_ID` is the odd one out: it belongs to the PAIR of time inputs
+ * rather than to either of them (see `validarCategoria`).
+ */
+const NOMBRE_ERROR_ID = "categoria-nombre-error";
+const HORA_INICIO_ERROR_ID = "categoria-hora-inicio-error";
+const HORA_FIN_ERROR_ID = "categoria-hora-fin-error";
+const FRANJA_ERROR_ID = "categoria-franja-error";
+const DIAS_ERROR_ID = "categoria-dias-error";
+
+/** Shared class for every per-field message on this form — same as `/login`'s. */
+const FIELD_ERROR_CLASSES = "mt-1 text-xs font-semibold text-state-bad";
+
+/**
+ * One entry per field the categoría form can mark. Empty object = valid.
+ *
+ * `franja` has no input of its own on purpose: "la hora de inicio debe ser
+ * anterior a la hora de fin" is a fact about the two together, and neither
+ * one is the wrong one. `/login` reaches for the same shape when the server
+ * rejects a credentials PAIR — one message, both controls pointing at it.
+ */
+interface CategoriaFieldErrors {
+  nombre?: string;
+  horaInicio?: string;
+  horaFin?: string;
+  franja?: string;
+  dias?: string;
+}
+
+/** Whether an "HH:MM" value falls inside the club's window. Borders INCLUSIVE:
+ *  a categoría starting 06:00 sharp or ending 22:00 sharp trains inside it. */
+function dentroDeLaVentana(hora: string): boolean {
+  return hora >= HORA_MINIMA_ENTRENAMIENTO && hora <= HORA_MAXIMA_ENTRENAMIENTO;
+}
+
+/**
+ * The client mirror of the backend's categoría rules, field by field.
+ *
+ * Messages are the backend's own, verbatim, so the admin reads the same
+ * sentence whether this function caught it or `AsistenciaServicio` did — a
+ * value the client waves through (a franja the mirror somehow missed) must
+ * not come back phrased differently just because it took the long way.
+ *
+ * The pair check runs only once BOTH hours are present and inside the window:
+ * telling someone their 23:00–22:30 franja is "inverted" on top of being
+ * outside the club's hours is two complaints for one typo, and the second one
+ * disappears the moment they fix the first.
+ */
+function validarCategoria(
+  form: HorarioFormData,
+  cantidadDeDias: number,
+): CategoriaFieldErrors {
+  const errores: CategoriaFieldErrors = {};
+  const fueraDeVentana = `Los entrenamientos deben programarse entre las ${HORA_MINIMA_ENTRENAMIENTO} y las ${HORA_MAXIMA_ENTRENAMIENTO}.`;
+
+  if (!form.nombre.trim()) errores.nombre = "Ingrese un nombre para la categoría.";
+
+  if (!form.horaInicio) errores.horaInicio = "Ingrese la hora de inicio.";
+  else if (!dentroDeLaVentana(form.horaInicio)) errores.horaInicio = fueraDeVentana;
+
+  if (!form.horaFin) errores.horaFin = "Ingrese la hora de fin.";
+  else if (!dentroDeLaVentana(form.horaFin)) errores.horaFin = fueraDeVentana;
+
+  if (!errores.horaInicio && !errores.horaFin && form.horaInicio >= form.horaFin) {
+    errores.franja = "La hora de inicio debe ser anterior a la hora de fin.";
+  }
+
+  if (cantidadDeDias === 0) errores.dias = "Seleccione al menos un día.";
+  else if (cantidadDeDias > MAXIMO_DIAS_POR_CATEGORIA) {
+    errores.dias = `Una categoría no puede entrenar más de ${MAXIMO_DIAS_POR_CATEGORIA} días.`;
+  }
+
+  return errores;
+}
+
 export default function GroupsPage(): React.ReactElement {
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [allStudents, setAllStudents] = useState<StudentRef[]>([]);
@@ -332,7 +445,15 @@ export default function GroupsPage(): React.ReactElement {
   const [formData, setFormData] = useState<HorarioFormData>(EMPTY_FORM);
   const [selectedDias, setSelectedDias] = useState<Set<string>>(new Set());
   const [formSubmitting, setFormSubmitting] = useState(false);
+  /**
+   * The shared banner. SERVER errors only since #861 — a 400 the client had no
+   * way to predict (a duplicate nombre, a día with real Asistencia history)
+   * still needs somewhere to land, and it belongs to the whole form because
+   * the server does not say which field it is about. Everything the client
+   * can decide for itself goes to `fieldErrors` instead.
+   */
   const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<CategoriaFieldErrors>({});
   const [pendingDeletions, setPendingDeletions] = useState<PendingDayDeletion[] | null>(null);
   // Distinguishes which flow populated `pendingDeletions`, so the shared
   // confirmation dialog's copy and cancel behavior can differ: "days" comes
@@ -476,6 +597,7 @@ export default function GroupsPage(): React.ReactElement {
     setFormData(EMPTY_FORM);
     setSelectedDias(new Set());
     setFormError(null);
+    setFieldErrors({});
     setExpandedGroup({ key: NEW_GROUP_KEY, tab: "editar" });
   }
 
@@ -484,6 +606,7 @@ export default function GroupsPage(): React.ReactElement {
   function selectEditingGroup(group: HorarioGroup | null): void {
     setEditingGroup(group);
     setFormError(null);
+    setFieldErrors({});
     if (group === null) {
       setFormData(EMPTY_FORM);
       setSelectedDias(new Set());
@@ -527,6 +650,7 @@ export default function GroupsPage(): React.ReactElement {
     setFormData(EMPTY_FORM);
     setSelectedDias(new Set());
     setFormError(null);
+    setFieldErrors({});
     roster.reset();
   }
 
@@ -591,23 +715,18 @@ export default function GroupsPage(): React.ReactElement {
    * is the one place that has to warn about it up front. A día with real
    * `Asistencia` history is a different, harder case: the backend refuses
    * the whole edit for that (no history is ever deleted, see
-   * docs/archive/fixes/24-abm-categorias.md), surfaced as `formError` like any other
-   * validation failure.
+   * docs/archive/fixes/24-abm-categorias.md), surfaced as `formError` — the
+   * banner is for what only the server can know. What the client CAN decide
+   * (#861: the training window, the día cap, an inverted franja, a missing
+   * required field) is marked on the field it is about instead.
    */
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (!formData.nombre.trim()) {
-      setFormError("Ingrese un nombre para la categoría.");
-      return;
-    }
-    if (!formData.horaInicio || !formData.horaFin) {
-      setFormError("Ingrese la hora de inicio y de fin.");
-      return;
-    }
-    if (selectedDias.size === 0) {
-      setFormError("Seleccione al menos un día.");
-      return;
-    }
+    // Recomputed from scratch on every submit, so a mark never outlives what
+    // it described: fixing the field and pressing "Guardar" again clears it.
+    const errores = validarCategoria(formData, selectedDias.size);
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) return;
     setFormError(null);
 
     if (editingGroup) {
@@ -717,7 +836,18 @@ export default function GroupsPage(): React.ReactElement {
         {formError && (
           <div className="alert-error mb-4" role="alert">{formError}</div>
         )}
-        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/*
+          `noValidate` (#861): without it the browser's own constraint
+          validation refuses to submit while any `required` field below is
+          empty, so `handleSubmit` never runs and NONE of this form's messages
+          — the ones it has carried since v6 included — ever reach a real
+          screen. They only ever appeared under jsdom, which does not enforce
+          constraint validation, which is exactly why the suite never noticed.
+          The `required`/`min`/`max` attributes stay: they are what the
+          picker and assistive tech read. `/login` (issue #51) carries the
+          same attribute for the same reason.
+        */}
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" noValidate>
           <div className="sm:col-span-2">
             <label htmlFor="categoria-nombre" className="mb-1 block text-xs font-semibold text-ink-2">
               Nombre <span aria-hidden="true" className="text-state-bad">*</span>
@@ -725,12 +855,19 @@ export default function GroupsPage(): React.ReactElement {
             <input
               id="categoria-nombre"
               type="text"
-              className="input-field w-full"
+              className={`input-field w-full ${fieldErrors.nombre ? "border-state-bad" : ""}`}
               value={formData.nombre}
               onChange={(e) => setFormData((prev) => ({ ...prev, nombre: e.target.value }))}
               placeholder="Ej: Preinfantil"
               required
+              aria-invalid={fieldErrors.nombre ? true : undefined}
+              aria-describedby={fieldErrors.nombre ? NOMBRE_ERROR_ID : undefined}
             />
+            {fieldErrors.nombre && (
+              <p id={NOMBRE_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
+                {fieldErrors.nombre}
+              </p>
+            )}
           </div>
           {/*
             Edades (#789) — orientation copy for the public board, never a
@@ -755,6 +892,13 @@ export default function GroupsPage(): React.ReactElement {
               maxLength={50}
             />
           </div>
+          {/*
+            `min`/`max` (#861) bound the picker's own spinner and tell
+            assistive tech the range, but they are NOT the check: a browser
+            does not refuse a typed out-of-range value without form-level
+            handling, and jsdom ignores them entirely. `validarCategoria` is
+            the one that decides, and the backend decides after it.
+          */}
           <div>
             <label htmlFor="categoria-hora-inicio" className="mb-1 block text-xs font-semibold text-ink-2">
               Hora de inicio <span aria-hidden="true" className="text-state-bad">*</span>
@@ -762,11 +906,22 @@ export default function GroupsPage(): React.ReactElement {
             <input
               id="categoria-hora-inicio"
               type="time"
-              className="input-field w-full"
+              className={`input-field w-full ${fieldErrors.horaInicio || fieldErrors.franja ? "border-state-bad" : ""}`}
               value={formData.horaInicio}
               onChange={(e) => setFormData((prev) => ({ ...prev, horaInicio: e.target.value }))}
               required
+              min={HORA_MINIMA_ENTRENAMIENTO}
+              max={HORA_MAXIMA_ENTRENAMIENTO}
+              aria-invalid={fieldErrors.horaInicio || fieldErrors.franja ? true : undefined}
+              aria-describedby={
+                fieldErrors.horaInicio ? HORA_INICIO_ERROR_ID : fieldErrors.franja ? FRANJA_ERROR_ID : undefined
+              }
             />
+            {fieldErrors.horaInicio && (
+              <p id={HORA_INICIO_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
+                {fieldErrors.horaInicio}
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="categoria-hora-fin" className="mb-1 block text-xs font-semibold text-ink-2">
@@ -775,13 +930,54 @@ export default function GroupsPage(): React.ReactElement {
             <input
               id="categoria-hora-fin"
               type="time"
-              className="input-field w-full"
+              className={`input-field w-full ${fieldErrors.horaFin || fieldErrors.franja ? "border-state-bad" : ""}`}
               value={formData.horaFin}
               onChange={(e) => setFormData((prev) => ({ ...prev, horaFin: e.target.value }))}
               required
+              min={HORA_MINIMA_ENTRENAMIENTO}
+              max={HORA_MAXIMA_ENTRENAMIENTO}
+              aria-invalid={fieldErrors.horaFin || fieldErrors.franja ? true : undefined}
+              aria-describedby={
+                fieldErrors.horaFin ? HORA_FIN_ERROR_ID : fieldErrors.franja ? FRANJA_ERROR_ID : undefined
+              }
             />
+            {fieldErrors.horaFin && (
+              <p id={HORA_FIN_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
+                {fieldErrors.horaFin}
+              </p>
+            )}
           </div>
-          <fieldset className="sm:col-span-2 lg:col-span-4" aria-required="true">
+          {/*
+            The inverted-franja message gets its own full-width row instead of
+            hanging under "Hora de fin": it describes BOTH inputs, and at
+            `lg` those are quarter-width columns where this sentence would
+            wrap to four lines under one of the two fields it accuses.
+          */}
+          {fieldErrors.franja && (
+            <p
+              id={FRANJA_ERROR_ID}
+              role="alert"
+              className={`sm:col-span-2 lg:col-span-4 ${FIELD_ERROR_CLASSES}`}
+            >
+              {fieldErrors.franja}
+            </p>
+          )}
+          {/*
+            First fieldset-level error mark in this app (#861): the día cap is
+            about the SET of checkboxes, not any single one, so there is no
+            input to hang it on. It follows the same contract every per-field
+            mark here does — `aria-invalid` + `aria-describedby` on the
+            control, the message as a `role="alert"` paragraph — with the
+            `<fieldset>` (already `role="group"` via `aria-required`) standing
+            in for the input. If a second one ever appears, this is the shape
+            to copy.
+          */}
+          <fieldset
+            className="sm:col-span-2 lg:col-span-4"
+            aria-required="true"
+            aria-invalid={fieldErrors.dias ? true : undefined}
+            aria-describedby={fieldErrors.dias ? DIAS_ERROR_ID : undefined}
+          >
             <legend className="mb-1 block text-xs font-semibold text-ink-2">
               Días de la semana <span aria-hidden="true" className="text-state-bad">*</span>
             </legend>
@@ -797,6 +993,11 @@ export default function GroupsPage(): React.ReactElement {
                 </label>
               ))}
             </div>
+            {fieldErrors.dias && (
+              <p id={DIAS_ERROR_ID} role="alert" className={FIELD_ERROR_CLASSES}>
+                {fieldErrors.dias}
+              </p>
+            )}
           </fieldset>
           <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={formSubmitting}>
