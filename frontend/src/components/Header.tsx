@@ -258,12 +258,17 @@ function InstitutionalAccountMobile({ onNavigate }: { onNavigate: () => void }):
   );
 }
 
-function InstitutionalHeader(): React.ReactElement {
+export function InstitutionalHeader(): React.ReactElement {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback((): void => setMenuOpen(false), []);
 
+  // Named: on the three legal routes this banner shares the page with the
+  // document's own `main` and its two navs (#820), and an unnamed banner is
+  // the one region a screen-reader user cannot tell apart. The name is
+  // Spanish, like every user-facing label in the product. Exported so
+  // `lib/__tests__/main-landmark.test.ts` can pin the name.
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-cata-dark/95 backdrop-blur-md">
+    <header aria-label="Cabecera del sitio" className="sticky top-0 z-50 border-b border-white/10 bg-cata-dark/95 backdrop-blur-md">
       <nav
         aria-label="Navegación principal"
         className="mx-auto flex max-w-8xl items-center justify-between px-4 py-3 sm:px-8 lg:px-12"

@@ -304,6 +304,16 @@ export default function AuthShell({
          * WCAG 2.2 SC 2.5.8's 24×24 target the old link only just reached
          * (measured 101.8 × 19.5 before the hit area was padded out).
          */}
+        {/*
+         * The rail's contents live in landmarks (#820): the way back and the
+         * brand cluster sat loose in the composition, outside every region a
+         * screen-reader user can jump to. The header spans the two upper grid
+         * rows and re-runs them as `[1fr_auto]` with the panel's own gaps, so
+         * the geometry the axis tests pin is unchanged — only the semantics
+         * are new. The accessible names are Spanish, like every user-facing
+         * label in the product ("Navegación principal", "Datos del club").
+         */}
+        <header aria-label="Marca de Cata Club" className="row-span-2 grid grid-rows-[1fr_auto] gap-8 split:gap-10">
         <BackLink href={backHref} tone="coal" className="relative z-[1] justify-self-start" />
 
         {/*
@@ -462,13 +472,21 @@ export default function AuthShell({
             <small className={`text-xs ${ON_COAL_MUTED}`}>años formando deportistas</small>
           </p>
         </div>
+        </header>
 
+        {/**
+         * The copyright gets the matching contentinfo landmark, and the
+         * footer is a one-cell grid so the line keeps the `self-end` floor
+         * placement the panel's lower rail gave it.
+         */}
+        <footer aria-label="Derechos de autor" className="grid">
         {/* `.copy` — the prototype says 12px; `xs` renders it at 12.5px, the
             nearest step. Alone at the foot so it weighs the same as the exit
             link above and the middle row stays on the page's axis. */}
         <p className={`relative z-[1] self-end text-xs ${ON_COAL_MUTED}`}>
           © 2026 Cata Club — Tenis de Mesa
         </p>
+        </footer>
       </div>
 
       {/*
