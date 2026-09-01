@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth-cookies";
-import { isProtectedPath, hasPlausibleAccessToken } from "@/lib/middleware-utils";
+import { isProtectedPath, hasPendingActivation, hasPlausibleAccessToken } from "@/lib/middleware-utils";
 
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
@@ -28,6 +28,10 @@ export function middleware(request: NextRequest): NextResponse {
   const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   if (!hasPlausibleAccessToken(token)) {
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (hasPendingActivation(token)) {
+    return NextResponse.redirect(new URL("/login/activacion", request.url));
   }
 
   return NextResponse.next();
