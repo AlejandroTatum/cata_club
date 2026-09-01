@@ -535,6 +535,12 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     descuento: { id: 3, nombre: "Beca 100%", porcentaje: "100.00", monto: null, activo: true },
   };
 
+  const BENEFICIO_FIJO = {
+    ...BENEFICIO_PARCIAL,
+    id: 3,
+    descuento: { id: 4, nombre: "Beneficio fijo", porcentaje: null, monto: "10.00", activo: true },
+  };
+
   it("shows nothing when the persona has no active benefit", async () => {
     render(<StudentPaymentsPage />);
 
@@ -555,6 +561,43 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     // RenewPaymentForm sigue siendo el formulario (no es 100%).
     fireEvent.click(screen.getByRole("button", { name: /registrar un pago/i }));
     expect(await screen.findByText(/total estimado: \$12,50/i)).toBeInTheDocument();
+  });
+
+  it("applies a fixed benefit once across one- and two-month estimates", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, montoAplicado: "80.00" } },
+    });
+    mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_FIJO);
+
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    expect(await screen.findByText(/total estimado: \$70,00/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /un mes más/i }));
+    expect(await screen.findByText(/total estimado: \$150,00/i)).toBeInTheDocument();
+  });
+
+  it("applies a fixed benefit in the representative flow", async () => {
+    mockUseAuth.mockReturnValue(authSession("representante"));
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      self: null,
+      representados: [{
+        ...SELF,
+        personaId: "42",
+        nombres: "Sofía",
+        apellidos: "Vera",
+        membership: { ...SELF.membership!, montoAplicado: "80.00" },
+      }],
+      membershipPlans: [],
+    });
+    mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_FIJO);
+
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago de sofía/i }));
+    expect(await screen.findByText(/total estimado: \$70,00/i)).toBeInTheDocument();
   });
 
   it("replaces the payment form with ApplyBenefitForm when the benefit is 100%, with no monto or voucher field", async () => {
