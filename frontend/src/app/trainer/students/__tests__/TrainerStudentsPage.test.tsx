@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import TrainerStudentsPage from "@/app/trainer/students/page";
 import { canAccess } from "@/lib/auth-utils";
+import { ICON } from "@/lib/icon-size";
 import type { AlumnoHorario, FichaEmergencia } from "@/services/api";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -226,6 +227,53 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     await waitFor(() => expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(3));
     expect(mockFetchFichaEmergencia).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * Issue #857: el botón consulta una ficha, no avisa de un peligro, y
+   * `/members` ya resuelve la misma acción con `Stethoscope`. El glifo es lo
+   * que vuelve reconocible a una funcionalidad entre pantallas, así que se
+   * fija acá y no en la prosa.
+   *
+   * La clase se afirma en la forma que emite lucide: `AlertTriangle` es un
+   * alias de `TriangleAlert` y renderiza `lucide-triangle-alert`. Buscar
+   * `.lucide-alert-triangle` no encontraría nada ni antes ni después del
+   * cambio, y la negativa pasaría sin morder.
+   */
+  it("marca la ficha médica con el estetoscopio de Administración, no con un triángulo de advertencia (issue #857)", async () => {
+    render(<TrainerStudentsPage />);
+
+    const diego = await screen.findByTestId("student-row-3");
+    const ficha = within(diego).getByRole("button", {
+      name: "Ficha médica de Diego Mendoza",
+    });
+
+    expect(ficha.querySelector(".lucide-stethoscope")).not.toBeNull();
+    expect(ficha.querySelector(".lucide-triangle-alert")).toBeNull();
+
+    // El glifo cambia; el tamaño y el grosor que manda el sistema, no.
+    const glifo = ficha.querySelector("svg");
+    expect(glifo).toHaveAttribute("width", String(ICON.base));
+    expect(glifo).toHaveAttribute("stroke-width", "1.5");
+    expect(glifo).toHaveAttribute("aria-hidden", "true");
+  });
+
+  /*
+   * Triangulación de #857: el cambio es del botón del renglón y de nada más.
+   * `EmergencyCardDialog` sigue encabezando la ficha con `AlertTriangle`
+   * porque ahí el triángulo sí anuncia una urgencia — y ese archivo queda
+   * fuera del alcance de este issue.
+   */
+  it("deja intacto el triángulo de advertencia que encabeza la ficha abierta", async () => {
+    render(<TrainerStudentsPage />);
+
+    const diego = await screen.findByTestId("student-row-3");
+    fireEvent.click(
+      within(diego).getByRole("button", { name: "Ficha médica de Diego Mendoza" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelector(".lucide-triangle-alert")).not.toBeNull();
   });
 
   it("abre Horario con todas las ventanas y restaura el foco al cerrar", async () => {

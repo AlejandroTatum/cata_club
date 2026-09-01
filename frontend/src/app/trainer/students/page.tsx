@@ -40,7 +40,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BookUser, SearchX } from "lucide-react";
+import { BookUser, SearchX, Stethoscope } from "lucide-react";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -209,9 +209,12 @@ export default function TrainerStudentsPage(): React.ReactElement {
 
                       {/*
                        * La única acción del renglón, con el mismo alto de pulgar
-                       * y el mismo glifo que el disparador del asistente: es la
-                       * misma tarjeta, y aprenderla dos veces sería cobrarle al
-                       * entrenador la misma lección dos veces.
+                       * y el mismo glifo que la ficha médica de Administración
+                       * (`/members`): es la misma tarjeta, y aprenderla dos
+                       * veces sería cobrarle al entrenador la misma lección dos
+                       * veces. `Stethoscope` y no `AlertTriangle` porque el
+                       * botón consulta una ficha, no anuncia un peligro (issue
+                       * #857).
                        */}
                       <button
                             type="button"
@@ -219,7 +222,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                             aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
                             className="flex h-11 flex-none items-center justify-center gap-2 rounded-ctl px-3 text-sm font-semibold text-state-bad transition-colors hover:bg-state-bad-bg"
                           >
-                            <AlertTriangle size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
+                            <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
                             Ficha médica
                           </button>
                           <button
