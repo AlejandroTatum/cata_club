@@ -345,15 +345,19 @@ def test_crear_categoria_acepta_la_hora_de_cierre_exacta(db_session):
 def test_crear_categoria_rechaza_empezar_antes_de_la_apertura(db_session):
     servicio = AsistenciaServicio(db_session)
 
+    inicio, fin = time(5, 59), time(7, 0)
+
     with pytest.raises(OperacionInvalida):
-        _alta(servicio, hora_inicio=time(5, 59), hora_fin=time(7, 0))
+        _alta(servicio, hora_inicio=inicio, hora_fin=fin)
 
 
 def test_crear_categoria_rechaza_terminar_despues_del_cierre(db_session):
     servicio = AsistenciaServicio(db_session)
 
+    inicio, fin = time(21, 0), time(22, 1)
+
     with pytest.raises(OperacionInvalida):
-        _alta(servicio, hora_inicio=time(21, 0), hora_fin=time(22, 1))
+        _alta(servicio, hora_inicio=inicio, hora_fin=fin)
 
 
 def test_crear_categoria_acepta_seis_dias(db_session):
@@ -403,19 +407,19 @@ def test_actualizar_categoria_acepta_la_hora_de_cierre_exacta(db_session):
 def test_actualizar_categoria_rechaza_empezar_antes_de_la_apertura(db_session):
     servicio, codigo = _con_categoria(db_session)
 
+    cambio = CategoriaUpdateDTO(hora_inicio=time(5, 59), hora_fin=time(10, 0))
+
     with pytest.raises(OperacionInvalida):
-        servicio.actualizar_categoria(codigo, CategoriaUpdateDTO(
-            hora_inicio=time(5, 59), hora_fin=time(10, 0),
-        ))
+        servicio.actualizar_categoria(codigo, cambio)
 
 
 def test_actualizar_categoria_rechaza_terminar_despues_del_cierre(db_session):
     servicio, codigo = _con_categoria(db_session)
 
+    cambio = CategoriaUpdateDTO(hora_inicio=time(21, 0), hora_fin=time(22, 1))
+
     with pytest.raises(OperacionInvalida):
-        servicio.actualizar_categoria(codigo, CategoriaUpdateDTO(
-            hora_inicio=time(21, 0), hora_fin=time(22, 1),
-        ))
+        servicio.actualizar_categoria(codigo, cambio)
 
 
 def test_actualizar_categoria_acepta_seis_dias(db_session):
@@ -431,8 +435,10 @@ def test_actualizar_categoria_acepta_seis_dias(db_session):
 def test_actualizar_categoria_rechaza_los_siete_dias(db_session):
     servicio, codigo = _con_categoria(db_session)
 
+    cambio = CategoriaUpdateDTO(dias=_TODOS_LOS_DIAS)
+
     with pytest.raises(OperacionInvalida):
-        servicio.actualizar_categoria(codigo, CategoriaUpdateDTO(dias=_TODOS_LOS_DIAS))
+        servicio.actualizar_categoria(codigo, cambio)
 
 
 def test_actualizar_categoria_rechaza_renombrar_una_franja_legada(db_session):
@@ -444,8 +450,10 @@ def test_actualizar_categoria_rechaza_renombrar_una_franja_legada(db_session):
     servicio = AsistenciaServicio(db_session)
     _categoria_legada(db_session)
 
+    cambio = CategoriaUpdateDTO(nombre="Legada A")
+
     with pytest.raises(OperacionInvalida):
-        servicio.actualizar_categoria("LEGADA", CategoriaUpdateDTO(nombre="Legada A"))
+        servicio.actualizar_categoria("LEGADA", cambio)
 
 
 # --- Etiqueta de edades (opcional) ----------------------------------------
