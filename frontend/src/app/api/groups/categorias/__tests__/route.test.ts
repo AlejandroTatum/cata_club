@@ -46,6 +46,25 @@ function forwardedBody(callIndex = 0): Record<string, unknown> {
   return JSON.parse(String(init?.body));
 }
 
+/** The categoría the backend echoes back on a successful create. */
+function categoriaCreada(edades: string | null): Record<string, unknown> {
+  return {
+    codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00",
+    horaFin: "16:00:00", dias: ["LUNES"], edades,
+  };
+}
+
+/**
+ * Stubs one 201 create reply and drives POST with `body`. Builds the call
+ * only: every assertion stays in the test that owns it, so a failure reports
+ * that case's line rather than this helper's.
+ */
+async function postCategoria(body: unknown, edadesEco: string | null = null): Promise<Response> {
+  vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(categoriaCreada(edadesEco), 201));
+  const access = makeJwt(3600);
+  return POST(postRequest(body, `${ACCESS_TOKEN_COOKIE}=${access}`));
+}
+
 beforeEach(() => {
   vi.spyOn(global, "fetch");
   process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
@@ -120,21 +139,13 @@ describe("POST /api/groups/categorias", () => {
   // #789 — the optional ages label. It is orientation copy for the public
   // board, never a rule, so a categoría created without one is valid.
   it("forwards edades when the admin typed an ages label", async () => {
-    const creada = { codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00", horaFin: "16:00:00", dias: ["LUNES"], edades: "5 a 10 años" };
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creada, 201));
-
-    const access = makeJwt(3600);
-    await POST(postRequest({ ...validBody, edades: "5 a 10 años" }, `${ACCESS_TOKEN_COOKIE}=${access}`));
+    await postCategoria({ ...validBody, edades: "5 a 10 años" }, "5 a 10 años");
 
     expect(forwardedBody()).toEqual({ ...validBody, edades: "5 a 10 años" });
   });
 
   it("creates without edades when the field is absent (the label is optional)", async () => {
-    const creada = { codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00", horaFin: "16:00:00", dias: ["LUNES"], edades: null };
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creada, 201));
-
-    const access = makeJwt(3600);
-    const response = await POST(postRequest(validBody, `${ACCESS_TOKEN_COOKIE}=${access}`));
+    const response = await postCategoria(validBody);
 
     expect(forwardedBody()).toEqual(validBody);
     expect(forwardedBody()).not.toHaveProperty("edades");
@@ -142,11 +153,7 @@ describe("POST /api/groups/categorias", () => {
   });
 
   it("does not forward a non-string edades — the allowlist stayed an allowlist", async () => {
-    const creada = { codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00", horaFin: "16:00:00", dias: ["LUNES"], edades: null };
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creada, 201));
-
-    const access = makeJwt(3600);
-    await POST(postRequest({ ...validBody, edades: 12, apodo: "x" }, `${ACCESS_TOKEN_COOKIE}=${access}`));
+    await postCategoria({ ...validBody, edades: 12, apodo: "x" });
 
     expect(forwardedBody()).toEqual(validBody);
   });

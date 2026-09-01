@@ -248,6 +248,21 @@ describe("GroupsPage — optional edades label on the categoría form (#789)", (
     await screen.findByRole("heading", { name: "Editar categoría" });
   }
 
+  /** Types `value` into the open form's Edades input. */
+  function typeEdades(value: string): void {
+    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value } });
+  }
+
+  /** Submits the open create form. */
+  function submitCreate(): void {
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+  }
+
+  /** Submits the open edit form. */
+  function submitEdit(): void {
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+  }
+
   it("offers an Edades input that is NOT required, capped at the column's 50 chars", async () => {
     await openCreateFormAndFillRequired();
 
@@ -262,20 +277,17 @@ describe("GroupsPage — optional edades label on the categoría form (#789)", (
   it("creates a categoría with the ages label the admin typed", async () => {
     await openCreateFormAndFillRequired();
 
-    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value: "5 a 10 años" } });
-    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+    typeEdades("5 a 10 años");
+    submitCreate();
 
-    await waitFor(() => {
-      expect(mockCrearCategoria).toHaveBeenCalledWith(
-        expect.objectContaining({ nombre: "Preinfantil", edades: "5 a 10 años" }),
-      );
-    });
+    await waitFor(() => expect(mockCrearCategoria)
+      .toHaveBeenCalledWith(expect.objectContaining({ nombre: "Preinfantil", edades: "5 a 10 años" })));
   });
 
   it("creates a categoría with no ages label at all — the field never blocks the save", async () => {
     await openCreateFormAndFillRequired();
 
-    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+    submitCreate();
 
     await waitFor(() => expect(mockCrearCategoria).toHaveBeenCalledTimes(1));
     expect(mockCrearCategoria).toHaveBeenCalledWith(expect.objectContaining({ edades: "" }));
@@ -290,29 +302,21 @@ describe("GroupsPage — optional edades label on the categoría form (#789)", (
 
     expect(screen.getByLabelText(/^Edades/)).toHaveValue("Selección");
 
-    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value: "14 a 17 años" } });
-    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    typeEdades("14 a 17 años");
+    submitEdit();
 
-    await waitFor(() => {
-      expect(mockActualizarCategoria).toHaveBeenCalledWith(
-        "COMPETITIVO",
-        expect.objectContaining({ edades: "14 a 17 años" }),
-      );
-    });
+    await waitFor(() => expect(mockActualizarCategoria)
+      .toHaveBeenCalledWith("COMPETITIVO", expect.objectContaining({ edades: "14 a 17 años" })));
   });
 
   it("clears the label by emptying the input — the update still SENDS edades", async () => {
     await openEditForm();
 
-    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    typeEdades("");
+    submitEdit();
 
-    await waitFor(() => {
-      expect(mockActualizarCategoria).toHaveBeenCalledWith(
-        "COMPETITIVO",
-        expect.objectContaining({ edades: "" }),
-      );
-    });
+    await waitFor(() => expect(mockActualizarCategoria)
+      .toHaveBeenCalledWith("COMPETITIVO", expect.objectContaining({ edades: "" })));
   });
 
   it("opens a categoría whose label is null with an empty input, without crashing", async () => {
@@ -321,14 +325,10 @@ describe("GroupsPage — optional edades label on the categoría form (#789)", (
 
     expect(screen.getByLabelText(/^Edades/)).toHaveValue("");
 
-    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    submitEdit();
 
-    await waitFor(() => {
-      expect(mockActualizarCategoria).toHaveBeenCalledWith(
-        "ADULTOS",
-        expect.objectContaining({ edades: "" }),
-      );
-    });
+    await waitFor(() => expect(mockActualizarCategoria)
+      .toHaveBeenCalledWith("ADULTOS", expect.objectContaining({ edades: "" })));
   });
 });
 
