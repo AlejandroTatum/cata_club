@@ -247,15 +247,14 @@ export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
   let sinDatosEmergencia = 0;
 
   for (const account of accounts) {
-    if (account.sinDatosEmergencia) {
+    if (account.sinDatosEmergencia && (account.estudiantes.length === 0 || account.estudiantes.some((s) => s.activo))) {
       sinDatosEmergencia++;
     }
     for (const estudiante of account.estudiantes) {
+      if (!estudiante.activo) continue;
       totalStudents++;
-      if (estudiante.membresia?.estado === "activa") {
-        activeMemberships++;
-      }
-      if (estudiante.ultimoPago?.estado === "pendiente_validacion") {
+      if (estudiante.membresia?.estado === "activa") activeMemberships++;
+      if (estudiante.membresia?.estado !== "suspendida" && estudiante.ultimoPago?.estado === "pendiente_validacion") {
         pendingPayments++;
       }
     }
@@ -371,9 +370,11 @@ export function accountMatchesFlag(
     case "all":
       return true;
     case "vencida":
-      return account.estudiantes.some((s) => s.membresia?.estado === "vencida");
+      return account.estudiantes.some((s) => s.activo && s.membresia?.estado === "vencida");
     case "pendiente":
-      return account.estudiantes.some((s) => s.ultimoPago?.estado === "pendiente_validacion");
+      return account.estudiantes.some((s) =>
+        s.activo && s.membresia?.estado !== "suspendida" && s.ultimoPago?.estado === "pendiente_validacion",
+      );
     /*
      * Issue #730. Reads the SAME field the "Sin datos de emergencia" stat
      * tile counts (`buildMemberStats`), so the tile and the chip can never
@@ -388,7 +389,8 @@ export function accountMatchesFlag(
      * land on a worklist of people to go chase.
      */
     case "sin-emergencia":
-      return account.sinDatosEmergencia === true;
+      return (account.estudiantes.length === 0 || account.estudiantes.some((s) => s.activo))
+        && account.sinDatosEmergencia === true;
   }
 }
 

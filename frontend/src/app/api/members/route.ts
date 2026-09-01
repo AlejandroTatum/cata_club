@@ -19,6 +19,7 @@ import { readsAsVencida } from "@/lib/membership-status";
 import {
   buildMemberAccounts,
   resolveMembresiaParaPersona,
+  selectMembresiaParaPersona,
   type BackendPersonaFull,
   type DeudaBulkItem,
 } from "@/lib/server/members-adapter";
@@ -107,9 +108,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    */
   const membresiaByPersona = new Map<number, BackendMembresia>();
   for (const [personaId, items] of membresiasByPersona) {
-    // An ACTIVA membership is the one worth showing; otherwise the first
-    // row, so a VENCIDA still reads as a lapsed member rather than as none.
-    membresiaByPersona.set(personaId, items.find((m) => m.estado === "ACTIVA") ?? items[0]);
+    const seleccionada = selectMembresiaParaPersona(items);
+    if (seleccionada) membresiaByPersona.set(personaId, seleccionada);
   }
 
   const tipoById = new Map(tipos.map((tipo) => [tipo.id, tipo]));

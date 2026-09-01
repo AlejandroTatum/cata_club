@@ -3207,6 +3207,20 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
     expect(await within(dialog).findByRole("button", { name: /crear membresía/i })).toBeInTheDocument();
   });
 
+  it("keeps an archived student visible with payment history but no mutators", async () => {
+    mockFetchMembers.mockResolvedValue({ accounts: [{
+      ...ACCOUNT,
+      estudiantes: [{ ...ACCOUNT.estudiantes[0], activo: false, membresia: { id: 42, estado: "vencida", monto: 85 } }],
+    }] });
+    render(<ToastProvider><MembersPage /></ToastProvider>);
+    const row = await findAccountRow();
+    fireEvent.click(getRowButton(row, /^pagos/i));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/inactivo\/archivado/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/historial de pagos/i)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /crear membresía|registrar pago|regularizar deuda|suspender|reactivar|cambiar plan/i })).not.toBeInTheDocument();
+  });
+
   it("keeps Editar focused on account editing, without duplicated student actions", async () => {
     render(
       <ToastProvider>

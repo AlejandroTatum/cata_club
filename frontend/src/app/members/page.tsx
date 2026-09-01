@@ -243,7 +243,7 @@ function StudentEditPanel({ student }: StudentRowProps): React.ReactElement {
           <dt className="text-ink-3">Estado</dt>
           <dd className="mt-1">
             <Badge tone={student.activo ? "ok" : "bad"}>
-              {student.activo ? "Activo" : "Inactivo"}
+              {student.activo ? "Activo" : "Inactivo/Archivado"}
             </Badge>
           </dd>
         </div>

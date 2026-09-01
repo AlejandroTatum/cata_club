@@ -171,3 +171,18 @@ def test_total_alumnos_es_el_denominador_y_total_personas_cuenta_a_todos(
     assert stats["totalPersonas"] == 4
     assert stats["totalAlumnos"] == 2
     assert stats["activeMemberships"] == 1
+
+
+def test_dashboard_excludes_archived_and_does_not_regularize_paused(client, db_session):
+    archived = _crear_alumno(db_session, cedula_valida(211), "archived@cataclub.test")
+    paused = _crear_alumno(db_session, cedula_valida(212), "paused@cataclub.test")
+    _crear_membresia(db_session, archived, EstadoMembresia.ACTIVA)
+    _crear_membresia(db_session, paused, EstadoMembresia.SUSPENDIDA)
+    archived.activo = False
+    db_session.commit()
+
+    stats = _stats(client)
+    assert stats["totalPersonas"] == 1
+    assert stats["totalAlumnos"] == 1
+    assert stats["activeMemberships"] == 0
+    assert stats["personasSinMembresia"] == 0

@@ -1,7 +1,8 @@
 from datetime import date
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.modelos import Pago, Persona
+from app.dominio.enums import EstadoMembresia
+from app.dominio.modelos import Membresia, Pago, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -271,6 +272,28 @@ def test_listar_pagos_incluye_nombre_de_persona(client):
     assert len(body["items"]) == 1
     assert body["items"][0]["personaNombreCompleto"] == "Ana Torres"
     assert body["items"][0]["estadoPago"] == "PENDIENTE_VALIDACION"
+
+
+def test_cola_excluye_pendientes_archivados_y_pausados(client, db_session):
+    personas = [_crear_persona(client, cedula_valida(301)), _crear_persona(client, cedula_valida(302))]
+    membresias = []
+    for persona in personas:
+        tipo = _crear_tipo_membresia(client)
+        membresias.append(client.post("/api/v1/membresias/", json={
+            "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+            "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+        }).json())
+        client.post("/api/v1/membresias/pagos", json={
+            "meses": 1, "tipo_pago": "EFECTIVO", "fecha_inicio": "2026-07-01",
+            "fecha_fin": "2026-07-31", "persona_id": persona["id"], "membresia_id": membresias[-1]["id"],
+        })
+    db_session.get(Persona, personas[0]["id"]).activo = False
+    db_session.get(Membresia, membresias[1]["id"]).estado = EstadoMembresia.SUSPENDIDA
+    db_session.commit()
+
+    body = client.get("/api/v1/membresias/pagos").json()
+    assert body["items"] == []
+    assert body["total"] == 0
 
 
 def test_listar_pagos_filtra_por_estado(client):

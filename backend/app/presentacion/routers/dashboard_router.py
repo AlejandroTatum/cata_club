@@ -30,7 +30,8 @@ _WEEKDAY_MAP = {
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardStatsDTO:
-    total_personas = db.query(func.count(Persona.id)).scalar() or 0
+    persona_activa = Persona.activo.is_(True)
+    total_personas = db.query(func.count(Persona.id)).filter(persona_activa).scalar() or 0
 
     # Población que puede tener membresía: alumnos. Con Usuario, el rol ALUMNO
     # decide; SIN Usuario también es alumno (un menor representado sin
@@ -42,18 +43,25 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
         Usuario.roles.any(Rol.tipo_rol == TipoRol.ALUMNO)
     ) | ~Persona.usuario.has()
 
-    total_alumnos = db.query(func.count(Persona.id)).filter(es_alumno).scalar() or 0
+    total_alumnos = db.query(func.count(Persona.id)).filter(persona_activa, es_alumno).scalar() or 0
 
     active_memberships = (
         db.query(func.count(Membresia.id))
-        .filter(Membresia.estado == EstadoMembresia.ACTIVA)
+        .join(Persona, Membresia.persona_id == Persona.id)
+        .filter(persona_activa, Membresia.estado == EstadoMembresia.ACTIVA)
         .scalar()
         or 0
     )
 
     pending_payments = (
         db.query(func.count(Pago.id))
-        .filter(Pago.estado_pago == EstadoPago.PENDIENTE_VALIDACION)
+        .join(Persona, Pago.persona_id == Persona.id)
+        .join(Membresia, Pago.membresia_id == Membresia.id)
+        .filter(
+            persona_activa,
+            Membresia.estado != EstadoMembresia.SUSPENDIDA,
+            Pago.estado_pago == EstadoPago.PENDIENTE_VALIDACION,
+        )
         .scalar()
         or 0
     )
@@ -71,8 +79,10 @@ async def dashboard_stats(db: Session = Depends(obtener_sesion)) -> DashboardSta
     personas_sin_membresia = (
         db.query(func.count(Persona.id))
         .filter(
+            persona_activa,
             es_alumno,
             ~Persona.membresias.any(Membresia.estado == EstadoMembresia.ACTIVA),
+            ~Persona.membresias.any(Membresia.estado == EstadoMembresia.SUSPENDIDA),
         )
         .scalar()
         or 0

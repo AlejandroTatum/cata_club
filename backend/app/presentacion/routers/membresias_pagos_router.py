@@ -195,7 +195,9 @@ def listar_pagos(
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
 ):
-    items, total = PagoServicio(db).listar_pagos(estado_pago=estado_pago, skip=skip, limit=limit)
+    items, total = PagoServicio(db).listar_pagos(
+        estado_pago=estado_pago, skip=skip, limit=limit, operational_only=True,
+    )
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 

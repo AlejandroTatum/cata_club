@@ -39,6 +39,7 @@ const persona = {
   telefono: "0999999003",
   fechaNacimiento: "1995-01-01",
   representanteId: null,
+  activo: false,
 };
 
 const pago = {
@@ -90,7 +91,7 @@ describe("GET /api/members", () => {
 
     expect(response.status).toBe(200);
     expect(body.accounts).toHaveLength(1);
-    expect(body.accounts[0]).toMatchObject({ id: "3", role: "representante" });
+    expect(body.accounts[0]).toMatchObject({ id: "3", role: "representante", estudiantes: [{ activo: false }] });
     expect(body.personasCapped).toBe(false);
   });
 

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildMemberAccounts, type BackendPersonaFull } from "../members-adapter";
+import { buildMemberAccounts, selectMembresiaParaPersona, type BackendPersonaFull } from "../members-adapter";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "../payments-adapter";
 
 const admin: BackendPersonaFull = {
@@ -14,6 +14,7 @@ const admin: BackendPersonaFull = {
   telefono: "0999999999",
   fechaNacimiento: "1990-01-01",
   representanteId: null,
+  activo: true,
 };
 
 const parent: BackendPersonaFull = {
@@ -23,6 +24,7 @@ const parent: BackendPersonaFull = {
   telefono: "0999999002",
   fechaNacimiento: "1980-01-01",
   representanteId: null,
+  activo: true,
 };
 
 const child: BackendPersonaFull = {
@@ -32,6 +34,7 @@ const child: BackendPersonaFull = {
   telefono: "0999999003",
   fechaNacimiento: "2014-01-01",
   representanteId: 2,
+  activo: true,
 };
 
 const pago: BackendPagoListItem = {
@@ -355,5 +358,22 @@ describe("buildMemberAccounts", () => {
       const student = accounts.find((a) => a.id === "3")?.estudiantes[0];
       expect(student?.membresia?.montoAdeudado).toBeUndefined();
     });
+  });
+
+  it("propagates Persona.activo and selects active, then suspended, then stable history", () => {
+    const historica = { ...membresia, id: 101, estado: "VENCIDA" as const };
+    const suspendida = { ...membresia, id: 102, estado: "SUSPENDIDA" as never };
+    expect(selectMembresiaParaPersona([historica, suspendida, membresia])?.id).toBe(100);
+    expect(selectMembresiaParaPersona([historica, suspendida])?.id).toBe(102);
+    expect(selectMembresiaParaPersona([historica, { ...historica, id: 99 }])?.id).toBe(101);
+
+    const accounts = buildMemberAccounts(
+      [{ ...child, activo: false }],
+      new Map([[3, { ...pago, membresiaId: historica.id }]]),
+      new Map([[historica.id, historica]]),
+      new Map([[3, membresia]]),
+      new Map([[5, tipo]]),
+    );
+    expect(accounts[0].estudiantes[0]).toMatchObject({ activo: false, membresia: { id: membresia.id } });
   });
 });

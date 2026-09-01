@@ -71,6 +71,30 @@ describe("buildMemberStats", () => {
     expect(stats.pendingPayments).toBe(3);
   });
 
+  it("excludes archived and suspended students from operational metrics and chips", () => {
+    const active = MOCK_MEMBER_ACCOUNTS[0];
+    const archived = {
+      ...active,
+      id: "archived",
+      estudiantes: [{ ...active.estudiantes[0], activo: false }],
+    };
+    const paused = {
+      ...active,
+      id: "paused",
+      estudiantes: [{
+        ...active.estudiantes[0],
+        activo: true,
+        membresia: { ...active.estudiantes[0].membresia!, estado: "suspendida" as const },
+        ultimoPago: { ...active.estudiantes[0].ultimoPago!, estado: "pendiente_validacion" as const },
+      }],
+    };
+    const stats = buildMemberStats([active, archived, paused]);
+    expect(stats.totalStudents).toBe(2);
+    expect(stats.pendingPayments).toBe(0);
+    expect(accountMatchesFlag(archived, "vencida")).toBe(false);
+    expect(accountMatchesFlag(paused, "pendiente")).toBe(false);
+  });
+
   it("handles accounts with empty estudiantes arrays", () => {
     const accounts: MemberAccount[] = [
       {

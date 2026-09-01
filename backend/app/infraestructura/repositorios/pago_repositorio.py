@@ -1,10 +1,10 @@
 from datetime import date
 from typing import Optional
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada, CorreccionPago
-from app.dominio.enums import EstadoPago
+from app.dominio.modelos import Pago, ComprobantePago, CoberturaBonificada, CorreccionPago, Membresia, Persona
+from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.soporte_transversal.bloqueo_fila import obtener_con_bloqueo_y_timeout
 from app.soporte_transversal.tiempo import rango_de_dias_club
 
@@ -86,6 +86,7 @@ class PagoRepositorio:
         limit: int = 50,
         fecha_inicio: Optional[date] = None,
         fecha_fin: Optional[date] = None,
+        operational_only: bool = False,
     ) -> list[Pago]:
         """Lista pagos para la cola de validación del Administrador.
         `joinedload(Pago.persona)` evita el problema N+1: el servicio necesita
@@ -94,6 +95,14 @@ class PagoRepositorio:
         stmt = select(Pago).options(joinedload(Pago.persona))
         if estado_pago is not None:
             stmt = stmt.where(Pago.estado_pago == estado_pago)
+        if operational_only:
+            stmt = stmt.where(or_(
+                Pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION,
+                and_(
+                    Pago.persona.has(Persona.activo.is_(True)),
+                    Pago.membresia.has(Membresia.estado != EstadoMembresia.SUSPENDIDA),
+                ),
+            ))
         inicio, fin = _rango_fecha_registro(fecha_inicio, fecha_fin)
         if inicio is not None:
             stmt = stmt.where(Pago.fecha_registro >= inicio)
@@ -120,12 +129,21 @@ class PagoRepositorio:
         estado_pago: Optional[EstadoPago] = None,
         fecha_inicio: Optional[date] = None,
         fecha_fin: Optional[date] = None,
+        operational_only: bool = False,
     ) -> int:
         """Cuenta el total de pagos (opcionalmente filtrados por estado y/o rango de fecha_registro)."""
         from sqlalchemy import func
         stmt = select(func.count()).select_from(Pago)
         if estado_pago is not None:
             stmt = stmt.where(Pago.estado_pago == estado_pago)
+        if operational_only:
+            stmt = stmt.where(or_(
+                Pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION,
+                and_(
+                    Pago.persona.has(Persona.activo.is_(True)),
+                    Pago.membresia.has(Membresia.estado != EstadoMembresia.SUSPENDIDA),
+                ),
+            ))
         inicio, fin = _rango_fecha_registro(fecha_inicio, fecha_fin)
         if inicio is not None:
             stmt = stmt.where(Pago.fecha_registro >= inicio)
