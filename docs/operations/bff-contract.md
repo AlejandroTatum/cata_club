@@ -96,17 +96,110 @@ comparten ruta). El BFF consume 78 de esas 90 desde 108 sitios de llamada. Las
 hay dos tests que lo demuestran. El contrato protege lo que está en uso; no
 congela la API.
 
-## Alcance y continuación
+## Los enums compartidos
 
-Este gate verifica **rutas**. Los enums compartidos y los campos obligatorios de
-los DTO son el PR hermano del mismo issue y no se comprueban acá.
+Las rutas coinciden; lo que viaja por ellas es otro contrato. Los **14** enums de
+`backend/app/dominio/enums.py` no tienen todos la misma relación con el frontend,
+y un gate que asumiera una sola se equivocaría en la mayoría. Se declaran cuatro:
+
+| Relación | Qué significa | Qué se compara |
+| --- | --- | --- |
+| (a) Identidad | Una unión de TypeScript nombra los mismos valores en mayúsculas | El conjunto de valores, en las dos direcciones |
+| (b) Traducción | Un `Record<>` los lleva 1:1 a códigos de la aplicación | El conjunto de **claves** y el de **valores** del mapa, más que el inverso sea el inverso |
+| (c) Muchos a uno | El pliegue es una decisión documentada, no una deriva | Sólo las claves; exigir valores distintos denunciaría la decisión |
+| (d) Excluido / sin contraparte | La fuente de verdad no es el enum, o nada cruza el límite | Nada, pero el motivo se escribe y se verifica |
+
+Todo enum cae en **exactamente una**. Un enum nuevo sin clasificar pone el gate
+en rojo: esa es la parte que no envejece.
+
+| # | Enum del backend | Relación | Declaración de TypeScript | Estado |
+| --- | --- | --- | --- | --- |
+| 1 | `TipoRol` | (a) + (b) | `BackendTipoRol` (`types/domain.ts:216`) + `USER_ROLE_BY_BACKEND_ROLE` (`lib/auth-utils.ts:421`) + `BACKEND_ROLE_TO_USER_ROLE` (`lib/server/auth.ts:661`) | verificado |
+| 2 | `TipoSangre` | (a) | `TipoSangre` (`types/domain.ts:204`) | verificado |
+| 3 | `TipoNotificacion` | (a) | `TipoNotificacion` (`types/domain.ts:381`) | verificado (además por `tipo-notificacion-parity.test.ts`) |
+| 4 | `EstadoPago` | (a) | `BackendEstadoPago` (`lib/server/payments-adapter.ts:22`) y `EstadoPago` (`lib/status-badges.ts:25`) | verificado (las dos declaraciones) |
+| 5 | `TipoPago` | (a) | `BackendTipoPago` (`lib/server/payments-adapter.ts:23`) | verificado, con **1 divergencia inventariada** |
+| 6 | `EstadoMembresia` | (a) + (c) | `BackendEstadoMembresia` (`lib/membership-status.ts:9`) + `MEMBERSHIP_STATUS_BY_ESTADO` (`:14`) | verificado, con **1 divergencia inventariada** |
+| 7 | `DiaSemana` | (a) + (b) | `BackendDiaSemana` (`lib/server/attendance-adapter.ts:25`) → `DiaSemana` (`types/domain.ts:191`) | verificado |
+| 8 | `EstadoAsistencia` | (a) + (b) | `BackendEstadoAsistencia` (`attendance-adapter.ts:26`) → `EstadoAsistencia` (`types/domain.ts:319`) | verificado |
+| 9 | `Categoria` | (d) excluido | `export type Categoria = string` (`services/categorias.ts:32`) | **excluido con motivo** |
+| 10 | `TipoManoDominante` | (d) sin contraparte | — | en la lista justificada |
+| 11 | `TipoModalidad` | (d) sin contraparte | — | en la lista justificada |
+| 12 | `TipoEscuela` | (d) sin contraparte | — | en la lista justificada |
+| 13 | `NivelTecnicoAlumno` | (d) sin contraparte | — | en la lista justificada |
+| 14 | `EfectoCoberturaCorreccion` | (d) sin contraparte | — | en la lista justificada |
+
+`Categoria` se excluye por el mismo criterio —y sobre el mismo enum— con que
+`backend/tests/test_drift_enums_postgres.py:70` lo excluye en
+`_ENUMS_SIN_COLUMNA_POSTGRES`: la tabla `categoria_horario` es la fuente de
+verdad (`enums.py:56-65`), y `services/categorias.ts:32` declara `string` **a
+propósito** para que un código que un admin agrega sin deploy no se descarte en
+silencio. Exigir una biyección ahí congelaría justo lo que se decidió no
+congelar.
+
+### Los dos mapas de rol
+
+`TipoRol` es el caso que más se parece al bug que originó
+`tipo-notificacion-parity.test.ts`. Hay **dos** mapas a mano, en dos archivos,
+que hoy dicen lo mismo — y no están tipados igual:
+
+- `USER_ROLE_BY_BACKEND_ROLE` es `Record<BackendTipoRol, UserRole>`. TypeScript
+  no compila un `Record` parcial: agregar un rol a la unión **rompe el build**
+  de ese archivo, que es el aviso.
+- `BACKEND_ROLE_TO_USER_ROLE` es `Record<string, UserRole>`, exhaustivo sobre
+  nada. El mismo rol nuevo compila sin ruido, sale `undefined` en
+  `lib/server/auth.ts:717` y lo descarta el `.filter` de la línea siguiente.
+
+O sea: un rol agregado al backend **detiene el build por el camino del cliente y
+desaparece callado por el del servidor**. Verificar el conjunto de claves contra
+el enum de Python es exactamente lo que el tipo `Record<string, …>` no puede
+verificar. El gate además compara los dos mapas entre sí, porque son dos copias
+a mano de la misma tabla y nada en el sistema de tipos las relaciona.
+
+`"unsupported"` (`types/domain.ts:48`) no participa: no es un rol que el backend
+emita, es el centinela que devuelve `resolveSessionRole` (`lib/server/auth.ts:723`)
+cuando ningún rol conocido matcheó.
+
+## Divergencias inventariadas (sin corregir — issue [#935](https://github.com/AlejandroTatum/cata_club/issues/935))
+
+Una biyección estricta se pone **roja hoy** por dos valores. Este PR los
+**inventaría, no los arregla**: cerrarlos obliga a elegir un tono de badge y una
+etiqueta visible, y eso es una decisión de producto que un PR de tests no toma.
+
+| # | Enum | Valor | Lo agregó | El frontend declara | Destino |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `EstadoMembresia` | `SUSPENDIDA` (`enums.py:39`) | issue [#400](https://github.com/AlejandroTatum/cata_club/issues/400) | sólo `"INACTIVA" \| "ACTIVA" \| "VENCIDA"` (`lib/membership-status.ts:9`) | issue #935 |
+| 2 | `TipoPago` | `REGULARIZACION` (`enums.py:91`) | issue [#284](https://github.com/AlejandroTatum/cata_club/issues/284) | sólo `"EFECTIVO" \| "TRANSFERENCIA"` (`lib/server/payments-adapter.ts:23`) | issue #935 |
+
+La exención es **por valor, nunca por enum**. Es la diferencia entre inventariar
+una deriva y esconder la siguiente:
+
+- `SUSPENDIDA` está exenta, así que el gate está verde hoy.
+- Un tercer valor en **ese mismo enum** lo pone rojo igual. Hay un test que lo
+  demuestra, y es el más importante de este contrato.
+- Una exención que ya no tapa nada —porque alguien cerró #935— también pone el
+  gate rojo, con el mensaje de que hay que borrarla. El inventario no
+  sobrevive a su propia deriva.
+
+## Alcance y continuación
 
 Es continuación explícita del gate del glosario:
 [`glossary-contract.md`](glossary-contract.md) declara en la fila 5 de sus
 divergencias inventariadas que las superficies de badges (`status-badges.ts`,
 `membership-status.ts`) «no están cubiertas por este gate» y quedan para un
 issue hijo del frontend. Este contrato extiende esa cobertura por el lado de las
-rutas en vez de duplicarla.
+rutas en vez de duplicarla — y ahora también por el de los enums: las dos
+superficies que esa fila 5 nombra son, exactamente, las filas 4 y 6 de la tabla
+de enums de más arriba.
+
+Lo que este gate **no** verifica es la *copy* visible de un estado: que
+`EstadoPago.RECHAZADO` se muestre con determinado texto y tono es el gate del
+glosario y el issue hijo de frontend, no éste. Acá se compara el conjunto de
+valores, no cómo se dibujan.
+
+Los **campos obligatorios** de cada DTO —qué campo exige cada validador del BFF
+y en qué convención de nombres viaja— son el PR siguiente del mismo issue #900 y
+todavía no se verifican.
 
 ## Cómo se corre
 
