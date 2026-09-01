@@ -1551,7 +1551,10 @@ export interface PagoPersona {
   monto: string;
   motivoRechazo: string | null;
   estadoPago: "PENDIENTE_VALIDACION" | "APROBADO" | "RECHAZADO";
-  tipoPago: "EFECTIVO" | "TRANSFERENCIA";
+  // REGULARIZACION (issue #935, backend since #284): bookkeeping-only, an
+  // admin-run debt regularization that lands directly on the persona's own
+  // payment history.
+  tipoPago: "EFECTIVO" | "TRANSFERENCIA" | "REGULARIZACION";
   fechaRegistro: string;
   fechaValidacion: string | null;
   fechaInicio: string;

@@ -160,26 +160,25 @@ a mano de la misma tabla y nada en el sistema de tipos las relaciona.
 emita, es el centinela que devuelve `resolveSessionRole` (`lib/server/auth.ts:723`)
 cuando ningún rol conocido matcheó.
 
-## Divergencias inventariadas (sin corregir — issue [#935](https://github.com/AlejandroTatum/cata_club/issues/935))
+## Divergencias inventariadas (ninguna — issue [#935](https://github.com/AlejandroTatum/cata_club/issues/935) las cerró)
 
-Una biyección estricta se pone **roja hoy** por dos valores. Este PR los
-**inventaría, no los arregla**: cerrarlos obliga a elegir un tono de badge y una
-etiqueta visible, y eso es una decisión de producto que un PR de tests no toma.
+El gate encontró dos valores que ponían roja una biyección estricta:
+`EstadoMembresia.SUSPENDIDA` (agregado en issue
+[#400](https://github.com/AlejandroTatum/cata_club/issues/400), declarado en
+`lib/membership-status.ts:9`) y `TipoPago.REGULARIZACION` (agregado en issue
+[#284](https://github.com/AlejandroTatum/cata_club/issues/284), declarado en
+`lib/server/payments-adapter.ts:23`). Issue #935 los **corrigió, no los
+inventarió**: el frontend ya declara los dos valores, con su tono de badge y
+su etiqueta visible decididos, así que `DIVERGENCIAS_INVENTARIADAS` quedó
+vacío y el gate está verde sin ninguna excepción.
 
-| # | Enum | Valor | Lo agregó | El frontend declara | Destino |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `EstadoMembresia` | `SUSPENDIDA` (`enums.py:39`) | issue [#400](https://github.com/AlejandroTatum/cata_club/issues/400) | sólo `"INACTIVA" \| "ACTIVA" \| "VENCIDA"` (`lib/membership-status.ts:9`) | issue #935 |
-| 2 | `TipoPago` | `REGULARIZACION` (`enums.py:91`) | issue [#284](https://github.com/AlejandroTatum/cata_club/issues/284) | sólo `"EFECTIVO" \| "TRANSFERENCIA"` (`lib/server/payments-adapter.ts:23`) | issue #935 |
-
-La exención es **por valor, nunca por enum**. Es la diferencia entre inventariar
-una deriva y esconder la siguiente:
-
-- `SUSPENDIDA` está exenta, así que el gate está verde hoy.
-- Un tercer valor en **ese mismo enum** lo pone rojo igual. Hay un test que lo
-  demuestra, y es el más importante de este contrato.
-- Una exención que ya no tapa nada —porque alguien cerró #935— también pone el
-  gate rojo, con el mensaje de que hay que borrarla. El inventario no
-  sobrevive a su propia deriva.
+El mecanismo de inventario sigue existiendo para la próxima deriva. La
+exención es **por valor, nunca por enum**, para que un tercer valor en el
+mismo enum siga poniendo el gate rojo, y hay un test que lo demuestra —
+`test_una_deriva_nueva_en_estado_membresia_pone_el_gate_rojo_sin_exencion`,
+el más importante de este contrato. Una exención que ya no tapa nada también
+pone el gate rojo, con el mensaje de que hay que borrarla: el inventario no
+sobrevive a su propia deriva.
 
 ## Los campos obligatorios
 

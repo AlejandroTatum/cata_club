@@ -76,15 +76,17 @@ export const PAGOS_ESTADO_OPTIONS: { value: "" | EstadoPago; label: string }[] =
 /**
  * Membership status — same treatment, one declaration.
  *
- * `suspendida` keeps the `bad` tone it had as `badge-error`. Amber would read
- * better to me, but re-toning a state is a meaning change and this is a
- * consistency pass: the job is to stop the same state rendering four ways, not
- * to re-decide what the state means.
+ * `suspendida` used to keep the `bad` tone it had as `badge-error`, same as
+ * `vencida` — deferred on purpose by the consistency pass that wrote this
+ * file. Issue #935 makes that call: `suspendida` is operative but on hold,
+ * not owing money, so it gets the existing `warn` (amber) token instead —
+ * the same one `pendiente` already uses — rather than reading as one more
+ * flavour of `vencida`.
  */
 export const MEMBERSHIP_STATUS_TONES: Record<MembershipStatus, BadgeTone> = {
   activa: "ok",
   vencida: "bad",
-  suspendida: "bad",
+  suspendida: "warn",
 };
 
 export const MEMBERSHIP_STATUS_LABELS: Record<MembershipStatus, string> = {
