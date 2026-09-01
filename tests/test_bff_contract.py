@@ -16,11 +16,12 @@ consume tiene que estar declarada por algún router. La segunda compara **lo que
 viaja por esas rutas**: los enums compartidos y los campos que los validadores
 del BFF exigen de cada DTO.
 
-Las dos derivas vivas que la biyección de enums encuentra hoy se **inventarían**
-(`DIVERGENCIAS_INVENTARIADAS`, issue #935), no se arreglan: cerrarlas obliga a
-elegir un tono de badge y una etiqueta visible, y eso es una decisión de
-producto. La exención es por VALOR y nunca por enum, para que la deriva
-siguiente en el mismo enum siga poniendo el gate en rojo.
+Las dos derivas que la biyección de enums encontró (issue #935: `SUSPENDIDA`
+en `EstadoMembresia`, `REGULARIZACION` en `TipoPago`) están corregidas — el
+frontend ya declara los dos valores y `DIVERGENCIAS_INVENTARIADAS` quedó
+vacío. La mecánica del inventario sigue acá: la exención es por VALOR y nunca
+por enum, para que una deriva futura en el mismo enum siga poniendo el gate en
+rojo.
 """
 
 import re
@@ -516,8 +517,16 @@ CENTINELA_DE_ROL = "unsupported"
 # no tiene valor `"inactiva"`, y una membresía creada sin ningún pago aprobado
 # se lee como `"vencida"`. Por eso acá se verifica el conjunto de CLAVES y NO
 # se exige que los valores sean distintos: exigirlo denunciaría la decisión.
+# `SUSPENDIDA` (issue #935) no se pliega: tiene su propio código de pantalla,
+# porque no acumula deuda mientras dura y confundirla con `"vencida"` sería
+# incorrecto.
 PLIEGUE_MEMBRESIA = ("lib/membership-status.ts", "MEMBERSHIP_STATUS_BY_ESTADO", "BackendEstadoMembresia")
-PLIEGUE_ESPERADO = {"INACTIVA": "vencida", "VENCIDA": "vencida", "ACTIVA": "activa"}
+PLIEGUE_ESPERADO = {
+    "INACTIVA": "vencida",
+    "VENCIDA": "vencida",
+    "ACTIVA": "activa",
+    "SUSPENDIDA": "suspendida",
+}
 
 # Todo `Record<>` que este gate lee, aplanado. Sólo se usa para medir el piso
 # del parser de mapas: si la regex se rompe, el total cae y se denuncia.
@@ -553,15 +562,12 @@ ENUMS_SIN_CONTRAPARTE = {
 
 CLASIFICADOS = {par.enum for par in PARES_DE_ENUM} | set(ENUMS_SIN_CONTRAPARTE) | set(ENUMS_EXCLUIDOS)
 
-# Las derivas vivas al abrir el PR. Se INVENTARÍAN, no se arreglan: cerrar
-# cualquiera de las dos obliga a elegir un tono de badge y una etiqueta
-# visible, y eso es una decisión de producto que un PR de tests no toma.
-# La exención es por VALOR: exentar el enum entero escondería la deriva
-# siguiente, que es exactamente lo que este gate existe para no dejar pasar.
-DIVERGENCIAS_INVENTARIADAS = (
-    Divergencia("EstadoMembresia", "SUSPENDIDA", "#400", "#935"),
-    Divergencia("TipoPago", "REGULARIZACION", "#284", "#935"),
-)
+# Vacío: issue #935 corrigió las dos derivas que este inventario contenía
+# (`EstadoMembresia.SUSPENDIDA`, `TipoPago.REGULARIZACION`) en vez de
+# eximirlas, así que la biyección de enums vuelve a ser estricta sin
+# excepciones. La tabla se deja declarada (y no se borra el mecanismo) para
+# que una deriva futura tenga dónde inventariarse sin reinventar el gate.
+DIVERGENCIAS_INVENTARIADAS: tuple[Divergencia, ...] = ()
 
 _CLASE_PY = re.compile(r"^class (\w+)\(([^)]*)\):", re.M)
 _MIEMBRO_ENUM = re.compile(r'^    ([A-Z][A-Z0-9_]*)\s*=\s*"([^"\n]+)"', re.M)
@@ -966,7 +972,8 @@ class TestElGateDeEnumsNoEsVacio:
         with pytest.raises(AssertionError, match="no emite.*INVENTADA"):
             verificar_biyeccion("X", {"ACTIVA"}, {"ACTIVA", "INVENTADA"})
 
-    def test_la_deriva_inventariada_no_pone_el_gate_rojo(self, fuente_enums):
+    def test_estado_membresia_pasa_sin_ninguna_exencion(self, fuente_enums):
+        """Issue #935 cerró la única deriva de este enum: el inventario ya no le debe nada."""
         verificar_biyeccion(
             "EstadoMembresia",
             valores_de_enum(fuente_enums, "EstadoMembresia"),
@@ -974,11 +981,12 @@ class TestElGateDeEnumsNoEsVacio:
             exentos_de("EstadoMembresia"),
         )
 
-    def test_una_tercera_deriva_en_un_enum_inventariado_igual_pone_el_gate_rojo(self, fuente_enums):
-        """La prueba de que el inventario es ANGOSTO: exenta `SUSPENDIDA`, no el enum."""
+    def test_una_deriva_nueva_en_estado_membresia_pone_el_gate_rojo_sin_exencion(self, fuente_enums):
+        """La prueba de que la biyección sigue estricta con el inventario vacío (issue #935)."""
         backend = valores_de_enum(fuente_enums, "EstadoMembresia") | {"CONGELADA"}
         frontend = literales_de_union(leer_ts("lib/membership-status.ts"), "BackendEstadoMembresia")
         exentos = exentos_de("EstadoMembresia")
+        assert not exentos, "el inventario debería estar vacío tras #935"
         with pytest.raises(AssertionError, match="CONGELADA"):
             verificar_biyeccion("EstadoMembresia", backend, frontend, exentos)
 
