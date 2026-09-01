@@ -1,0 +1,168 @@
+name: E2E Live (QA stack)
+
+# Los `*.live.spec.ts` atraviesan el backend real: piden el stack de QA entero
+# (Postgres sembrado con el dataset grande, Redis, Mailpit, celery-worker y el
+# frontend ya construido). Eso cuesta ~20 minutos de reloj, así que NO entra en
+# `ci.yml` -- ningún PR puede pagarlo en cada push. Vive acá, programado, para
+# que la señal exista igual sin frenar el trabajo diario.
+#
+# El contrato de este archivo está bajo candado en `tests/test_e2e_live_workflow.py`
+# y el runbook es `docs/operations/e2e-live-ci.md`.
+on:
+  # Diario a las 06:17 UTC = 01:17 en Ecuador (UTC-5), o sea la madrugada
+  # local: nadie está mirando QA a mano ni pusheando a main, así que el SHA
+  # que se construye no cambia debajo de la corrida.
+  #
+  # El minuto :17 no es decorativo. GitHub encola en la misma tanda cada
+  # workflow programado del minuto en punto y la retrasa cuando hay carga, así
+  # que `0 6 * * *` es la peor franja posible para un job que ya tarda 20
+  # minutos.
+  schedule:
+    - cron: "17 6 * * *"
+
+  # Disparo manual: sirve para verificar un candidato de release ANTES de
+  # etiquetarlo, que es el caso que motivó el issue #901.
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: >-
+          Commit a probar. Debe ser main o un descendiente suyo (un candidato de
+          release, por ejemplo). `make qa-up` corre scripts/qa_verify_build_sha.py
+          sin guarda y ese script solo acepta el SHA servido si es igual a
+          origin/main o lo contiene entero; una rama divergida cae ahí, no acá.
+          Vacío = la rama por defecto.
+        required: false
+        type: string
+
+  # Reusable: un flujo de release puede llamar a este mismo job en vez de
+  # copiarse los pasos. Mismo input, misma restricción de SHA. Sin bloque de
+  # credenciales heredadas a propósito -- ver el comentario de `permissions`.
+  workflow_call:
+    inputs:
+      sha:
+        description: "Commit a probar; main o un descendiente suyo. Vacío = la rama por defecto."
+        required: false
+        type: string
+
+# Alcance mínimo, declarado a nivel de workflow porque hay un solo job: leer el
+# código para el checkout y nada más. No publica imágenes, no comenta PRs, no
+# escribe releases.
+#
+# Y no declara NINGUNA credencial del repositorio, que es la mitad del punto:
+# el stack de QA se autoabastece. `Makefile:188` genera `JWT_SECRET_KEY` con
+# `openssl rand -hex 32` en cada invocación (el entorno es desechable, no hay
+# sesión que preservar entre corridas) y `docker-compose.qa.yml:75-85` fija el
+# SMTP a literales apuntando al Mailpit de la red de Compose, para que QA no
+# pueda heredar el proveedor de correo de nadie. Un token acá sería permiso
+# pedido de más; `tests/test_e2e_live_workflow.py` lo mantiene en cero.
+permissions:
+  contents: read
+
+# Una sola corrida a la vez. `cancel-in-progress: false` es deliberado: cancelar
+# a mitad de camino deja contenedores, volúmenes y puertos de un stack a medio
+# construir, y la corrida que entra encima se los encuentra ocupados. Conviene
+# esperar a que la anterior termine su teardown.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  e2e-live:
+    name: QA stack + live specs
+    runs-on: ubuntu-latest
+    # Build en frío de la imagen del backend, `next build` completo, espera de
+    # healthchecks, seed del dataset grande y el smoke de recuperación con su
+    # timeout de 30s: ~15-25 minutos ANTES del primer test. 60 deja margen para
+    # la suite sin heredar el default de 360, que no es una red de seguridad
+    # sino seis horas de runner tomado.
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Vacío en `schedule` (no hay `inputs`), así que cae en la rama que
+          # disparó: main.
+          ref: ${{ inputs.sha || github.ref }}
+          # `make qa-up` corre `git fetch origin main` y después
+          # `scripts/qa_verify_build_sha.py`, que decide con
+          # `git merge-base --is-ancestor`. Con el checkout somero por defecto
+          # (`fetch-depth: 1`) no hay ancestros que recorrer y el guard corta la
+          # corrida aunque el SHA sea perfectamente válido.
+          fetch-depth: 0
+
+      # Pineada al SHA del commit y no al tag: `v4` es móvil y su dueño lo
+      # puede reapuntar a otro código sin que este archivo cambie. Mismo
+      # criterio que `ci.yml:86` con `astral-sh/setup-uv`.
+      #
+      # Solo esta. Las tres `actions/*` de abajo quedan en su tag a propósito:
+      # son de GitHub, o sea el mismo proveedor que ya ejecuta el runner, así
+      # que pinearlas no reduce a quién le estamos confiando el job -- solo
+      # agrega un bump manual por cada parche de la propia plataforma. La
+      # asimetría es la misma que en `ci.yml`.
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        # Sin `version:`: la acción lee `packageManager` de
+        # frontend/package.json, misma fuente de verdad que `ci.yml`.
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # Playwright corre en el runner (no dentro de un contenedor) y apunta al
+      # frontend del stack por `PLAYWRIGHT_BASE_URL`, así que sus dependencias
+      # de Node y el navegador tienen que estar acá antes de `make qa-live`.
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        working-directory: frontend
+        run: pnpm exec playwright install chromium
+
+      # Los dos targets, verbatim. El issue pide REUTILIZAR los comandos
+      # canónicos, no reimplementarlos: `qa-up` encadena el build con
+      # `BUILD_SHA`, el seed grande, el guard de SHA del issue #350 y el smoke
+      # de entrega a Mailpit del #530. Un `docker compose up` inline acá se
+      # saltearía las cuatro verificaciones y nadie lo notaría.
+      - name: Bring up the QA stack
+        run: make qa-up
+
+      - name: Run live E2E specs
+        run: make qa-live
+
+      # Diagnóstico ACOTADO: 200 líneas por servicio, no el log entero. Con
+      # `-f` seguido el paso colgaría hasta el timeout del job. `|| true`
+      # porque este paso no debe reemplazar el error real -- el job ya está
+      # rojo por el paso que falló, y un diagnóstico que falla solo taparía la
+      # causa.
+      - name: Dump bounded QA logs (on failure)
+        if: failure()
+        run: |
+          docker compose -p cataclub-qa ps -a || true
+          docker compose -p cataclub-qa logs --tail=200 --no-color || true
+
+      # SOLO el reporte HTML. `frontend/test-results/` queda afuera a
+      # propósito: `frontend/playwright.config.ts:37,53` combina `retries: 1`
+      # bajo CI con `trace: "on-first-retry"`, así que cada test que falla
+      # escribe un trazo con los encabezados `Cookie`/`Set-Cookie` de la sesión
+      # que usó. El token es efímero por construcción, pero un artefacto vive 7
+      # días y lo descarga cualquiera con acceso de lectura al repo. Mismo
+      # criterio que `ci.yml:253-259`, que es la única política de artefactos
+      # que este repo tiene.
+      - name: Upload Playwright Report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-live
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      # `if: always()` y no `failure()`: el stack queda arriba también cuando la
+      # suite pasa. Mismo patrón que `ci.yml:535-537`. `qa-down` evalúa
+      # `QA_JWT_SECRET_KEY` con `openssl`, que ubuntu-latest trae de fábrica.
+      - name: Tear down
+        if: always()
+        run: make qa-down
