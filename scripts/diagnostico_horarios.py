@@ -131,6 +131,14 @@ _DETALLE_SHA_AUSENTE = (
     "revisión no se puede determinar desde acá."
 )
 
+# Lo que se reporta como `observado` cuando la fuente no dejó nada que leer:
+# no respondió, tardó de más, no devolvió JSON o devolvió una forma inválida.
+# Es deliberadamente distinto de "0 categorías", que sí es una respuesta y
+# significa que el club no publicó horarios. Una sola constante para que las
+# dos lecturas no puedan divergir en el texto y terminar leyéndose como casos
+# distintos.
+OBSERVADO_SIN_RESPUESTA = "sin respuesta utilizable"
+
 # El catálogo dinámico, por las dos bocas que lo sirven. El BFF de Next es lo
 # que consume la landing; el backend directo permite distinguir "el backend no
 # publica nada" de "el BFF no lo está pasando".
@@ -459,7 +467,7 @@ def detectar_hallazgos_de_revision(observacion: dict) -> list[dict]:
                 CLASE_REVISION_INDETERMINADA,
                 fuente_servida,
                 "un SHA de commit",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error_sha_servido"],
             )
         )
@@ -481,7 +489,7 @@ def detectar_hallazgos_de_revision(observacion: dict) -> list[dict]:
                 CLASE_REVISION_INDETERMINADA,
                 fuente_esperada,
                 f"el SHA de {observacion['referencia_esperada']}",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error_sha_esperado"],
             )
         )
@@ -524,7 +532,7 @@ def detectar_hallazgos_de_catalogo(observacion: dict) -> list[dict]:
                 CLASE_FUENTE_INDISPONIBLE,
                 fuente,
                 "un catálogo de horarios con la forma publicada",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error"],
             )
         ]
@@ -591,7 +599,7 @@ def detectar_hallazgos_estaticos(observacion: dict) -> list[dict]:
                 CLASE_FUENTE_INDISPONIBLE,
                 fuente,
                 "el catálogo estático legible",
-                "sin respuesta utilizable",
+                OBSERVADO_SIN_RESPUESTA,
                 observacion["error"],
             )
         ]
@@ -645,7 +653,7 @@ def formatear_json(diagnostico: dict) -> str:
 
 def _linea_de_catalogo(observacion: dict) -> str:
     if observacion["error"] is not None:
-        return f"  {observacion['url']}: sin respuesta utilizable"
+        return f"  {observacion['url']}: {OBSERVADO_SIN_RESPUESTA}"
     return (
         f"  {observacion['url']}: {observacion['total_categorias']} categorías, "
         f"{observacion['categorias_renderizables']} renderizables"
@@ -669,7 +677,7 @@ def formatear_texto(diagnostico: dict) -> str:
         _linea_de_catalogo(catalogo["backend"]),
         f"  {estaticos['ruta']}: "
         + (
-            "sin respuesta utilizable"
+            OBSERVADO_SIN_RESPUESTA
             if estaticos["error"] is not None
             else f"{estaticos['entradas']} entradas estáticas en horarios[]"
         ),
