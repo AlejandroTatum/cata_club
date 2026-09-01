@@ -35,15 +35,12 @@
  *     (login credentials), not every Persona has one (a managed child may
  *     have no login), and there's no bulk lookup. `MemberAccount.email`/
  *     `MemberStudentSummary.email` are optional and simply omitted here.
- *  3. No endpoint exposes a readable account active/inactive flag (only
- *     `PATCH /personas/{id}/cuenta/estado`, write-only). `activo` defaults
- *     to `true` for every student built here.
- *  4. No endpoint lists `Membresia`/`Pago` by `persona_id` directly — this
+ *  3. No endpoint lists `Membresia`/`Pago` by `persona_id` directly — this
  *     reuses the admin payment queue (`GET /membresias/pagos`, the same
  *     endpoint payments-adapter.ts consumes) and takes each persona's most
  *     recent payment as their current membership signal.
  *
- * Issue #362 closed a fifth gap: there was no bulk "who has a ficha médica"
+ * Issue #362 closed a fourth gap: there was no bulk "who has a ficha médica"
  * signal, so `sinDatosEmergencia` (below) always read `false`. `GET
  * /fichas-medicas/existe` now answers that in one query — see
  * `personaIdsConFicha` below and `backend/app/presentacion/routers/ficha_medica_router.py`.
@@ -89,6 +86,8 @@ export interface BackendPersonaFull {
   telefono: string;
   fechaNacimiento: string;
   representanteId: number | null;
+  /** `Persona.activo`, supplied by the admin personas listing. */
+  activo?: boolean;
   /** Profile photo URL (Cloudinary). Absent/null until someone uploads one. */
   fotoUrl?: string | null;
 }
@@ -131,13 +130,19 @@ function buildMembershipTypeLabel(tipo: BackendTipoMembresia | undefined): strin
  * screen show them as having none, while their own student portal said
  * "Membresía activa".
  */
+export function selectMembresiaParaPersona(items: BackendMembresia[]): BackendMembresia | undefined {
+  return items.find((m) => m.estado === "ACTIVA")
+    ?? items.find((m) => (m.estado as string) === "SUSPENDIDA")
+    ?? [...items].sort((a, b) => b.id - a.id)[0];
+}
+
 export function resolveMembresiaParaPersona(
   personaId: number,
   pago: BackendPagoListItem | undefined,
   membresiaById: Map<number, BackendMembresia>,
   membresiaByPersona: Map<number, BackendMembresia>,
 ): BackendMembresia | undefined {
-  return (pago ? membresiaById.get(pago.membresiaId) : undefined) ?? membresiaByPersona.get(personaId);
+  return membresiaByPersona.get(personaId) ?? (pago ? membresiaById.get(pago.membresiaId) : undefined);
 }
 
 function buildMemberStudentSummary(
@@ -187,12 +192,14 @@ function buildMemberStudentSummary(
     cedula: persona.cedula ?? undefined,
     telefono: persona.telefono,
     fechaNacimiento: persona.fechaNacimiento,
-    activo: true, // gap #3 above — no readable account-active flag exists via any GET endpoint
+    activo: persona.activo ?? false,
     membresia: membresia
       ? {
           id: membresia.id,
           tipo: buildMembershipTypeLabel(tipo),
-          estado: MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado] as EstadoMembresia,
+          estado: ((membresia.estado as string) === "SUSPENDIDA"
+            ? "suspendida"
+            : MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado]) as EstadoMembresia,
           // No pago, no paid period: empty strings, which
           // `formatMembershipPeriod` already renders as nothing rather than as
           // an invented range.

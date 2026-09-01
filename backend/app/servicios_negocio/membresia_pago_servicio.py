@@ -1876,6 +1876,7 @@ class PagoServicio:
         limit: int = 50,
         fecha_inicio: date | None = None,
         fecha_fin: date | None = None,
+        operational_only: bool = False,
     ) -> tuple[list[PagoListItemDTO], int]:
         """Cola de validación (Administrador) y reporte de pagos. Construye
         PagoListItemDTO a mano (en vez de from_attributes directo) porque
@@ -1884,9 +1885,12 @@ class PagoServicio:
         queries)."""
         pagos = self.repo.listar(
             estado_pago=estado_pago, skip=skip, limit=limit,
-            fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+            fecha_inicio=fecha_inicio, fecha_fin=fecha_fin, operational_only=operational_only,
         )
-        total = self.repo.contar(estado_pago=estado_pago, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin)
+        total = self.repo.contar(
+            estado_pago=estado_pago, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+            operational_only=operational_only,
+        )
         items = [
             PagoListItemDTO(
                 id=p.id,

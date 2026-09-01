@@ -540,6 +540,15 @@ def test_reporte_pagos_filtra_por_estado(client):
     assert body[0]["estadoPago"] == "APROBADO"
 
 
+def test_reporte_pagos_conserva_historia_de_persona_archivada(client, db_session):
+    pago = _crear_pago(client, cedula_valida(590), estado_pago="APROBADO")
+    db_session.get(Persona, pago["personaId"]).activo = False
+    db_session.commit()
+
+    assert any(item["id"] == pago["id"] for item in client.get("/api/v1/membresias/pagos/reportes").json())
+    assert client.get("/api/v1/membresias/pagos/reportes/pdf").status_code == 200
+
+
 def test_reporte_pagos_filtra_por_periodo(client):
     _crear_pago(client, cedula_valida(557))
 

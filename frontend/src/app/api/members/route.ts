@@ -19,6 +19,7 @@ import { readsAsVencida } from "@/lib/membership-status";
 import {
   buildMemberAccounts,
   resolveMembresiaParaPersona,
+  selectMembresiaParaPersona,
   type BackendPersonaFull,
   type DeudaBulkItem,
 } from "@/lib/server/members-adapter";
@@ -30,6 +31,77 @@ const MEMBRESIAS_PAGE_LIMIT = 200;
 const PAGOS_PAGE_LIMIT = 200;
 
 type PaginatedPersonas = PaginatedPage<BackendPersonaFull>;
+type MembershipMaps = {
+  byId: Map<number, BackendMembresia>;
+  byPersona: Map<number, BackendMembresia>;
+};
+type BackendDeudaBulkItem = {
+  membresiaId: number;
+  mesesAdeudados: number;
+  montoMensual: string;
+};
+
+function latestPaymentsByPersona(pagos: BackendPagoListItem[]): Map<number, BackendPagoListItem> {
+  const latest = new Map<number, BackendPagoListItem>();
+  for (const pago of pagos) {
+    const current = latest.get(pago.personaId);
+    if (!current || new Date(pago.fechaRegistro) > new Date(current.fechaRegistro)) {
+      latest.set(pago.personaId, pago);
+    }
+  }
+  return latest;
+}
+
+function membershipMaps(membresias: BackendMembresia[]): MembershipMaps {
+  const byId = new Map<number, BackendMembresia>();
+  const grouped = new Map<number, BackendMembresia[]>();
+  for (const membresia of membresias) {
+    byId.set(membresia.id, membresia);
+    if (membresia.personaId === undefined) continue;
+    const list = grouped.get(membresia.personaId) ?? [];
+    list.push(membresia);
+    grouped.set(membresia.personaId, list);
+  }
+  const byPersona = new Map<number, BackendMembresia>();
+  for (const [personaId, items] of grouped) {
+    const selected = selectMembresiaParaPersona(items);
+    if (selected) byPersona.set(personaId, selected);
+  }
+  return { byId, byPersona };
+}
+
+async function fetchMedicalRecordIds(
+  request: NextRequest,
+  personas: BackendPersonaFull[],
+): Promise<Set<number>> {
+  const query = personas.map((persona) => `persona_ids=${persona.id}`).join("&");
+  const result = await backendFetchAuthed(request, `/fichas-medicas/existe?${query}`);
+  if (!result.ok || !result.response.ok) return new Set();
+  const body = (await result.response.json()) as { personaIdsConFicha?: number[] };
+  return new Set(body.personaIdsConFicha ?? []);
+}
+
+async function fetchDebtByMembership(
+  request: NextRequest,
+  personas: BackendPersonaFull[],
+  latest: Map<number, BackendPagoListItem>,
+  maps: MembershipMaps,
+): Promise<Map<number, DeudaBulkItem>> {
+  const ids = new Set<number>();
+  for (const persona of personas) {
+    const membresia = resolveMembresiaParaPersona(persona.id, latest.get(persona.id), maps.byId, maps.byPersona);
+    if (membresia && readsAsVencida(membresia.estado)) ids.add(membresia.id);
+  }
+  if (!ids.size) return new Map();
+  const query = Array.from(ids, (id) => `membresia_ids=${id}`).join("&");
+  const result = await backendFetchAuthed(request, `/membresias/deuda/bulk?${query}`);
+  if (!result.ok || !result.response.ok) return new Map();
+  const items = (await result.response.json()) as BackendDeudaBulkItem[];
+  return new Map(items.map((item) => [item.membresiaId, {
+    mesesAdeudados: item.mesesAdeudados,
+    montoMensual: Number(item.montoMensual),
+  }]));
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   /*
@@ -67,14 +139,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pagos: BackendPagoListItem[] = pagosFetch.ok ? pagosFetch.items : [];
   const tipos: BackendTipoMembresia[] =
     tiposResult.ok && tiposResult.response.ok ? await tiposResult.response.json() : [];
-
-  const latestPagoByPersona = new Map<number, BackendPagoListItem>();
-  for (const pago of pagos) {
-    const current = latestPagoByPersona.get(pago.personaId);
-    if (!current || new Date(pago.fechaRegistro) > new Date(current.fechaRegistro)) {
-      latestPagoByPersona.set(pago.personaId, pago);
-    }
-  }
+  const latestPagoByPersona = latestPaymentsByPersona(pagos);
 
   /*
    * Memberships are resolved from `GET /membresias/`, paged in full (see
@@ -88,16 +153,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    */
   const membresiasDegraded = !membresiasFetch.ok;
   const membresias: BackendMembresia[] = membresiasFetch.ok ? membresiasFetch.items : [];
-
-  const membresiaById = new Map<number, BackendMembresia>();
-  const membresiasByPersona = new Map<number, BackendMembresia[]>();
-  for (const membresia of membresias) {
-    membresiaById.set(membresia.id, membresia);
-    if (membresia.personaId === undefined) continue;
-    const list = membresiasByPersona.get(membresia.personaId) ?? [];
-    list.push(membresia);
-    membresiasByPersona.set(membresia.personaId, list);
-  }
+  const { byId: membresiaById, byPersona: membresiaByPersona } = membershipMaps(membresias);
 
   /*
    * A membership can exist with no payment behind it — three personas in the
@@ -105,14 +161,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * chain above cannot see them at all. This is the fallback
    * `buildMemberStudentSummary` reaches for in that case.
    */
-  const membresiaByPersona = new Map<number, BackendMembresia>();
-  for (const [personaId, items] of membresiasByPersona) {
-    // An ACTIVA membership is the one worth showing; otherwise the first
-    // row, so a VENCIDA still reads as a lapsed member rather than as none.
-    membresiaByPersona.set(personaId, items.find((m) => m.estado === "ACTIVA") ?? items[0]);
-  }
-
-  const tipoById = new Map(tipos.map((tipo) => [tipo.id, tipo]));
 
   /*
    * Issue #362: "who has a ficha médica" — a fifth backend call, and
@@ -129,13 +177,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * above: a failed lookup degrades to "nobody has a ficha médica" rather
    * than failing the whole page.
    */
-  const personaIdsQuery = personasBody.items.map((p) => `persona_ids=${p.id}`).join("&");
-  const fichasFetch = await backendFetchAuthed(request, `/fichas-medicas/existe?${personaIdsQuery}`);
-  const personaIdsConFicha = new Set<number>(
-    fichasFetch.ok && fichasFetch.response.ok
-      ? ((await fichasFetch.response.json()) as { personaIdsConFicha?: number[] }).personaIdsConFicha ?? []
-      : [],
-  );
+  const personaIdsConFicha = await fetchMedicalRecordIds(request, personasBody.items);
 
   /*
    * Issue #326: overdue amount + months for the memberships the admin reads
@@ -159,39 +201,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * than failing the whole page — never fetched at all when nobody is
    * VENCIDA, so the common case adds zero extra backend calls.
    */
-  const membresiaIdsVencidas = new Set<number>();
-  for (const persona of personasBody.items) {
-    const membresia = resolveMembresiaParaPersona(
-      persona.id,
-      latestPagoByPersona.get(persona.id),
-      membresiaById,
-      membresiaByPersona,
-    );
-    if (membresia && readsAsVencida(membresia.estado)) membresiaIdsVencidas.add(membresia.id);
-  }
-
-  const deudaByMembresiaId = new Map<number, DeudaBulkItem>();
-  if (membresiaIdsVencidas.size > 0) {
-    const membresiaIdsQuery = Array.from(membresiaIdsVencidas, (id) => `membresia_ids=${id}`).join("&");
-    const deudaFetch = await backendFetchAuthed(request, `/membresias/deuda/bulk?${membresiaIdsQuery}`);
-    if (deudaFetch.ok && deudaFetch.response.ok) {
-      type BackendDeudaBulkItem = { membresiaId: number; mesesAdeudados: number; montoMensual: string };
-      const items = (await deudaFetch.response.json()) as BackendDeudaBulkItem[];
-      for (const item of items) {
-        deudaByMembresiaId.set(item.membresiaId, {
-          mesesAdeudados: item.mesesAdeudados,
-          montoMensual: Number(item.montoMensual),
-        });
-      }
-    }
-  }
+  const deudaByMembresiaId = await fetchDebtByMembership(
+    request,
+    personasBody.items,
+    latestPagoByPersona,
+    { byId: membresiaById, byPersona: membresiaByPersona },
+  );
 
   const accounts = buildMemberAccounts(
     personasBody.items,
     latestPagoByPersona,
     membresiaById,
     membresiaByPersona,
-    tipoById,
+    new Map(tipos.map((tipo) => [tipo.id, tipo])),
     personaIdsConFicha,
     deudaByMembresiaId,
   );

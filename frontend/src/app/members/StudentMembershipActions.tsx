@@ -60,6 +60,14 @@ export default function StudentMembershipActions({
   onMembresiaChanged,
 }: StudentMembershipActionsProps): React.ReactElement {
   const membresia = student.membresia;
+  if (!student.activo) {
+    return (
+      <>
+        <output className="text-xs text-ink-3">Inactivo/Archivado: historial disponible, acciones deshabilitadas.</output>
+        <PaymentHistorySection personaId={personaId} />
+      </>
+    );
+  }
   const debtKnown = membresia?.mesesAdeudados !== undefined;
   const hasDebt = debtKnown && (membresia?.mesesAdeudados ?? 0) > 0;
   /*
