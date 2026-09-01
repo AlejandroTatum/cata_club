@@ -1,13 +1,14 @@
 """
-Diagnóstico de solo lectura de la superficie de horarios (issue #899) — eje
-REVISIÓN: responde "¿qué código está corriendo?" y nada más.
+Diagnóstico de solo lectura de la superficie de horarios (issue #899).
 
-Este archivo es la primera mitad del diagnóstico. La segunda (eje CATÁLOGO:
-`missing_dynamic_data`, `dynamic_source_unavailable`,
-`static_schedule_authority`) llega en el PR encadenado, junto con el runbook
-`docs/operations/diagnostico-horarios.md`. Los dos ejes son independientes a
-propósito: "qué código corre" y "qué datos sirve" son preguntas distintas, y
-mezclarlas manda al operador a mirar el lugar equivocado.
+Separa dos preguntas independientes a propósito, porque mezclarlas manda al
+operador a mirar el lugar equivocado:
+
+  EJE REVISIÓN   ¿qué código está corriendo?
+  EJE CATÁLOGO   ¿qué datos sirve ese código, y llegan a la pantalla?
+
+El runbook de interpretación y escalamiento vive en
+`docs/operations/diagnostico-horarios.md`.
 
 Stdlib puro — corre con `python3` sin dependencias de terceros ni la venv del
 backend, igual que `scripts/qa_verify_build_sha.py`. Uso:
@@ -38,23 +39,57 @@ GARANTÍAS DE ESTE ARCHIVO:
 
 QUÉ SIGNIFICA CADA CLASE:
 
-  revision_drift        El SHA servido difiere de la revisión esperada. Se
-                        puede determinar la revisión, y está mal.
-  revision_unavailable  La revisión NO se pudo determinar: `sha: "unknown"`,
-                        el endpoint no respondió, o falta el campo. No es
-                        deriva. La distinción "no sé" contra "sé, y está mal"
-                        es el valor entero de este diagnóstico; un inventario
-                        que no puede decir "no sé" termina adivinando.
+  revision_drift             El SHA servido difiere de la revisión esperada.
+                             Se puede determinar la revisión, y está mal.
+  revision_unavailable       La revisión NO se pudo determinar: `sha:
+                             "unknown"`, el endpoint no respondió, o falta el
+                             campo. No es deriva. La distinción "no sé" contra
+                             "sé, y está mal" es el valor entero de este
+                             diagnóstico; un inventario que no puede decir "no
+                             sé" termina adivinando.
+  missing_dynamic_data       La fuente contestó bien y el catálogo está vacío,
+                             o una categoría no llega entera a la pantalla.
+  dynamic_source_unavailable La fuente no contestó, tardó de más, no devolvió
+                             JSON, o devolvió una forma inválida. Un 502 de
+                             `isPublicSchedules` es ESTO, nunca datos
+                             faltantes: significa "no sé qué hay", no "no hay
+                             nada" — el mismo error que llamarle deriva a un
+                             `unknown`, en el otro eje.
+  static_schedule_authority  Una lista ESTÁTICA de horarios todavía sirve una
+                             superficie. Se REPORTA, no se repara: completar
+                             esa migración es #789, y #899 la excluye de sus
+                             objetivos.
 
-La comparación es por IGUALDAD, no por ancestría: el objeto del SHA servido
-puede no existir en el clon local (se construyó en CI), así que `git
-merge-base` no es una pregunta que se pueda contestar acá.
+La comparación de revisión es por IGUALDAD, no por ancestría: el objeto del
+SHA servido puede no existir en el clon local (se construyó en CI), así que
+`git merge-base` no es una pregunta que se pueda contestar acá.
+
+ESPEJO DEL MAPPER — la advertencia importante de este archivo:
+
+    `bloque_renderizable` y `categoria_renderizable` son una reimplementación
+    en Python de `mapBlock`/`mapPublicSchedules`
+    (`frontend/src/app/landing/schedule-data.ts`), y
+    `catalogo_tiene_forma_valida` lo es de `isPublicSchedules`
+    (`frontend/src/app/api/schedules/route.ts`).
+
+    Hacen falta porque el mapper DESCARTA EN SILENCIO: un bloque con un día
+    fuera de `DAY_LABELS`, con `days` vacío o con una hora que no matchea
+    /^\\d{2}:\\d{2}$/ desaparece sin error, y si una categoría se queda sin
+    bloques, desaparece entera. La respuesta HTTP se ve impecable mientras la
+    pantalla muestra menos categorías. Un diagnóstico que solo compare
+    payloads reportaría "todo alineado" justo cuando falta algo.
+
+    Al ser un espejo, PUEDE QUEDAR DESACTUALIZADO si cambia el TypeScript.
+    Se declara acá a propósito: un espejo con su salvedad escrita es más
+    honesto que un verde falso. Si los criterios de la landing cambian, este
+    módulo se actualiza con ellos.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import urllib.request
@@ -62,6 +97,24 @@ from urllib.parse import urlparse
 
 CLASE_DERIVA = "revision_drift"
 CLASE_REVISION_INDETERMINADA = "revision_unavailable"
+CLASE_DATOS_FALTANTES = "missing_dynamic_data"
+CLASE_FUENTE_INDISPONIBLE = "dynamic_source_unavailable"
+CLASE_AUTORIDAD_ESTATICA = "static_schedule_authority"
+
+# El orden del glosario del docstring. `resumen` las lista SIEMPRE todas, aun
+# en cero, para que la forma de la salida no dependa de los hallazgos.
+#
+# `static_schedule_authority` se declara acá con su detector todavía sin
+# implementar: su cero NO significa "no hay lista estática sirviendo", sino
+# "este slice no lo mira". Se declara igual para que la forma del reporte no
+# cambie cuando llegue el detector.
+CLASES = (
+    CLASE_DERIVA,
+    CLASE_REVISION_INDETERMINADA,
+    CLASE_DATOS_FALTANTES,
+    CLASE_FUENTE_INDISPONIBLE,
+    CLASE_AUTORIDAD_ESTATICA,
+)
 
 ANFITRIONES_LOOPBACK_PERMITIDOS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -82,6 +135,18 @@ _DETALLE_SHA_AUSENTE = (
     "revisión no se puede determinar desde acá."
 )
 
+# El catálogo dinámico, por las dos bocas que lo sirven. El BFF de Next es lo
+# que consume la landing; el backend directo permite distinguir "el backend no
+# publica nada" de "el BFF no lo está pasando".
+URL_CATALOGO_BFF = "http://localhost:3000/api/schedules"
+URL_CATALOGO_BACKEND = "http://127.0.0.1:8000/api/v1/asistencias/horarios-publicos"
+
+# Espejo de DAY_LABELS y VALID_TIME (schedule-data.ts). Ver la advertencia
+# sobre el espejo en el docstring del módulo.
+DIAS_RENDERIZABLES = frozenset(
+    {"LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO", "DOMINGO"}
+)
+_PATRON_HORA = re.compile(r"^\d{2}:\d{2}$")
 
 def validar_url_loopback(url: str) -> None:
     """Levanta RuntimeError si `url` no es http(s) contra loopback.
@@ -175,6 +240,148 @@ def observar_revision() -> dict:
     }
 
 
+def bloque_renderizable(bloque: object) -> bool:
+    """Espejo de `mapBlock`: ¿la landing conserva este bloque?
+
+    Cada rechazo de acá es un bloque que desaparece de la pantalla SIN error
+    en ninguna capa. Ver la advertencia sobre el espejo en el docstring."""
+    if not isinstance(bloque, dict):
+        return False
+    dias = bloque.get("days")
+    if not isinstance(dias, list) or not dias:
+        return False
+    if not all(isinstance(dia, str) and dia in DIAS_RENDERIZABLES for dia in dias):
+        return False
+    inicio, fin = bloque.get("startTime"), bloque.get("endTime")
+    if not isinstance(inicio, str) or not isinstance(fin, str):
+        return False
+    return bool(_PATRON_HORA.match(inicio)) and bool(_PATRON_HORA.match(fin))
+
+
+def _etiqueta_de(entrada: object) -> str | None:
+    """Etiqueta de la categoría ya normalizada, o None si la landing la
+    descartaría (`category` no string o en blanco)."""
+    if not isinstance(entrada, dict):
+        return None
+    etiqueta = entrada.get("category")
+    if not isinstance(etiqueta, str) or not etiqueta.strip():
+        return None
+    return etiqueta.strip()
+
+
+def _bloques_de(entrada: object) -> list:
+    bloques = entrada.get("blocks") if isinstance(entrada, dict) else None
+    return bloques if isinstance(bloques, list) else []
+
+
+def categoria_renderizable(entrada: object) -> bool:
+    """Espejo de `mapPublicSchedules`: una categoría sin NINGÚN bloque
+    renderizable se descarta entera (`slots.length === 0`)."""
+    if _etiqueta_de(entrada) is None:
+        return False
+    return any(bloque_renderizable(bloque) for bloque in _bloques_de(entrada))
+
+
+def catalogo_tiene_forma_valida(payload: object) -> bool:
+    """Espejo de `isPublicSchedules` (route.ts). Es TODO-O-NADA: si esto da
+    False, el BFF responde 502 y no se sirve NI UNA categoría.
+
+    Es deliberadamente más permisivo que el mapper —acepta `days` vacío y
+    cualquier string como hora—, y esa diferencia es justamente el hueco por
+    donde pasa el descarte silencioso."""
+    if not isinstance(payload, list):
+        return False
+    for categoria in payload:
+        if not isinstance(categoria, dict):
+            return False
+        if not isinstance(categoria.get("category"), str):
+            return False
+        if not isinstance(categoria.get("blocks"), list):
+            return False
+        # `ages` es opcional (PublicScheduleCategoryDTO, #913): string, o
+        # ausente/null cuando la categoría no publica etiqueta de edad.
+        edades = categoria.get("ages")
+        if edades is not None and not isinstance(edades, str):
+            return False
+        for bloque in categoria["blocks"]:
+            if not isinstance(bloque, dict):
+                return False
+            dias = bloque.get("days")
+            if not isinstance(dias, list) or not all(isinstance(d, str) for d in dias):
+                return False
+            if not isinstance(bloque.get("startTime"), str):
+                return False
+            if not isinstance(bloque.get("endTime"), str):
+                return False
+    return True
+
+
+def resumir_catalogo(payload: object) -> dict:
+    """Resumen redactado del catálogo: solo etiquetas y conteos, nunca el
+    payload crudo. Ordenado por etiqueta para que la salida sea determinista."""
+    categorias = []
+    for entrada in payload if isinstance(payload, list) else []:
+        etiqueta = _etiqueta_de(entrada)
+        bloques = _bloques_de(entrada)
+        renderizables = sum(1 for bloque in bloques if bloque_renderizable(bloque))
+        categorias.append(
+            {
+                "etiqueta": etiqueta if etiqueta is not None else "(sin etiqueta)",
+                "bloques": len(bloques),
+                "bloques_renderizables": renderizables,
+                "renderizable": etiqueta is not None and renderizables > 0,
+            }
+        )
+    categorias.sort(key=lambda categoria: categoria["etiqueta"])
+    return {
+        "categorias": categorias,
+        "total_categorias": len(categorias),
+        "categorias_renderizables": sum(1 for c in categorias if c["renderizable"]),
+    }
+
+
+def obtener_catalogo(url: str) -> list:
+    """Catálogo público de `url`, ya validado contra la forma publicada.
+
+    Una forma inválida levanta RuntimeError en vez de devolver una lista
+    vacía: "no sé qué hay" no puede colapsar a "no hay nada"."""
+    payload = consultar_json(url)
+    if not catalogo_tiene_forma_valida(payload):
+        raise RuntimeError(
+            f"{url} no devolvió la forma esperada de horarios públicos "
+            "(mismo criterio que `isPublicSchedules`, que ante esto responde 502)"
+        )
+    return payload
+
+
+def observar_catalogo(url: str) -> dict:
+    """Observa una boca del catálogo. Nunca lanza: una fuente caída es un
+    hallazgo del reporte, no un crash."""
+    try:
+        payload = obtener_catalogo(url)
+    except RuntimeError as exc:
+        return {
+            "url": url,
+            "error": str(exc),
+            "categorias": None,
+            "total_categorias": None,
+            "categorias_renderizables": None,
+        }
+    return {"url": url, "error": None, **resumir_catalogo(payload)}
+
+
+def observar() -> dict:
+    """Recolecta los dos ejes. TODO el I/O del módulo vive acá y en los
+    colectores; las decisiones de más abajo son puras."""
+    return {
+        "revision": observar_revision(),
+        "catalogo": {
+            "bff": observar_catalogo(URL_CATALOGO_BFF),
+            "backend": observar_catalogo(URL_CATALOGO_BACKEND),
+        },
+    }
+
+
 def _hallazgo(clase: str, fuente: str, esperado: str, observado: str, detalle: str) -> dict:
     return {
         "clase": clase,
@@ -242,21 +449,106 @@ def detectar_hallazgos_de_revision(observacion: dict) -> list[dict]:
             )
         )
 
-    return sorted(hallazgos, key=lambda h: (h["clase"], h["fuente"], h["observado"]))
+    return sorted(hallazgos, key=_clave_de_orden)
+
+
+def _clave_de_orden(hallazgo: dict) -> tuple[str, str, str]:
+    """Orden estable de los hallazgos: sin esto, dos corridas equivalentes
+    podrían diferir solo en el orden y romper el determinismo."""
+    return (hallazgo["clase"], hallazgo["fuente"], hallazgo["observado"])
+
+
+def detectar_hallazgos_de_catalogo(observacion: dict) -> list[dict]:
+    """Decisión PURA sobre una boca del catálogo ya observada.
+
+    La distinción que importa: una fuente que no contestó (o contestó una
+    forma inválida) es `dynamic_source_unavailable`, no datos faltantes. Un
+    catálogo VACÍO PERO VÁLIDO sí es `missing_dynamic_data`: ahí el endpoint
+    contestó perfecto y lo que falta son los datos."""
+    fuente = f"catálogo {observacion['url']}"
+
+    if observacion["error"] is not None:
+        return [
+            _hallazgo(
+                CLASE_FUENTE_INDISPONIBLE,
+                fuente,
+                "un catálogo de horarios con la forma publicada",
+                "sin respuesta utilizable",
+                observacion["error"],
+            )
+        ]
+
+    if observacion["total_categorias"] == 0:
+        return [
+            _hallazgo(
+                CLASE_DATOS_FALTANTES,
+                fuente,
+                "al menos una categoría publicada",
+                "0 categorías",
+                "La fuente contestó bien y el catálogo está vacío: es un "
+                "problema de datos, no de disponibilidad. El club no tiene "
+                "horarios cargados, o no están publicados.",
+            )
+        ]
+
+    hallazgos = []
+    for categoria in observacion["categorias"]:
+        renderizables = categoria["bloques_renderizables"]
+        totales = categoria["bloques"]
+        if categoria["renderizable"] and renderizables == totales:
+            continue
+        observado = f"«{categoria['etiqueta']}»: {renderizables} de {_frase_bloques(totales)}"
+        if categoria["renderizable"]:
+            detalle = (
+                "La categoría se muestra INCOMPLETA: `mapBlock` descarta en "
+                "silencio los bloques con un día fuera de DAY_LABELS, con "
+                "`days` vacío o con horas que no matchean /^\\d{2}:\\d{2}$/."
+            )
+        else:
+            detalle = (
+                "La categoría DESAPARECE entera de la pantalla: "
+                "`mapPublicSchedules` descarta toda categoría que se quede sin "
+                "bloques renderizables. La respuesta HTTP se ve sana igual."
+            )
+        hallazgos.append(
+            _hallazgo(
+                CLASE_DATOS_FALTANTES,
+                fuente,
+                f"«{categoria['etiqueta']}» con {_frase_bloques(totales)}",
+                observado,
+                detalle,
+            )
+        )
+    return sorted(hallazgos, key=_clave_de_orden)
+
+
+def _frase_bloques(totales: int) -> str:
+    """Concuerda el número con el sustantivo: este texto lo lee una persona
+    operando bajo presión, no una máquina."""
+    if totales == 1:
+        return "1 bloque renderizable"
+    return f"{totales} bloques renderizables"
 
 
 def construir_diagnostico(observacion: dict) -> dict:
-    """Reporte completo. `resumen` lista SIEMPRE las dos clases, incluso en
-    cero, para que la forma de la salida no dependa de los hallazgos."""
-    hallazgos = detectar_hallazgos_de_revision(observacion)
+    """Reporte completo de los dos ejes. `resumen` lista SIEMPRE las cinco
+    clases, incluso en cero, para que la forma de la salida no dependa de los
+    hallazgos."""
+    catalogo = observacion["catalogo"]
+    hallazgos = sorted(
+        detectar_hallazgos_de_revision(observacion["revision"])
+        + detectar_hallazgos_de_catalogo(catalogo["bff"])
+        + detectar_hallazgos_de_catalogo(catalogo["backend"]),
+        key=_clave_de_orden,
+    )
     return {
         "issue": 899,
-        "eje": "revision",
-        "revision": observacion,
+        "ejes": ["revision", "catalogo"],
+        "revision": observacion["revision"],
+        "catalogo": catalogo,
         "hallazgos": hallazgos,
         "resumen": {
-            clase: sum(1 for h in hallazgos if h["clase"] == clase)
-            for clase in (CLASE_DERIVA, CLASE_REVISION_INDETERMINADA)
+            clase: sum(1 for h in hallazgos if h["clase"] == clase) for clase in CLASES
         },
     }
 
@@ -265,18 +557,34 @@ def formatear_json(diagnostico: dict) -> str:
     return json.dumps(diagnostico, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+def _linea_de_catalogo(observacion: dict) -> str:
+    if observacion["error"] is not None:
+        return f"  {observacion['url']}: sin respuesta utilizable"
+    return (
+        f"  {observacion['url']}: {observacion['total_categorias']} categorías, "
+        f"{observacion['categorias_renderizables']} renderizables"
+    )
+
+
 def formatear_texto(diagnostico: dict) -> str:
     revision = diagnostico["revision"]
+    catalogo = diagnostico["catalogo"]
     lineas = [
-        "Diagnóstico de horarios — eje revisión (issue #899)",
+        "Diagnóstico de horarios (issue #899)",
         "",
+        "REVISIÓN",
         f"  esperado ({revision['referencia_esperada']}): {revision['sha_esperado'] or '-'}",
         f"  servido  ({revision['url_salud']}): {revision['sha_servido'] or '-'}",
         f"  HEAD local (contexto): {revision['sha_head_local'] or '-'}",
         "",
+        "CATÁLOGO",
+        _linea_de_catalogo(catalogo["bff"]),
+        _linea_de_catalogo(catalogo["backend"]),
+        "",
+        "RESUMEN",
     ]
-    for clase, cantidad in sorted(diagnostico["resumen"].items()):
-        lineas.append(f"{clase}: {cantidad}")
+    for clase in CLASES:
+        lineas.append(f"  {clase}: {diagnostico['resumen'][clase]}")
     lineas.append("")
     for hallazgo in diagnostico["hallazgos"]:
         lineas += [
@@ -286,12 +594,13 @@ def formatear_texto(diagnostico: dict) -> str:
             f"  detalle: {hallazgo['detalle']}",
         ]
     if not diagnostico["hallazgos"]:
-        lineas.append("Sin hallazgos en el eje revisión.")
+        lineas.append("Sin hallazgos.")
     lineas += [
         "",
-        "AVISO: este eje NO dice nada sobre los datos que sirve esa revisión.",
-        "Un catálogo de horarios vacío con la revisión correcta es otro",
-        "problema, con sus propias clases de hallazgo.",
+        "AVISO: las categorías 'renderizables' se cuentan con un ESPEJO en",
+        "Python de mapBlock/mapPublicSchedules (schedule-data.ts). Si ese",
+        "TypeScript cambia y este módulo no, el conteo queda desactualizado.",
+        "Ver docs/operations/diagnostico-horarios.md para interpretar y escalar.",
     ]
     return "\n".join(lineas)
 
@@ -300,15 +609,16 @@ def main(argv: list[str] | None = None) -> int:
     # Código de salida SIEMPRE 0: esto es un inventario, no un gate.
     parser = argparse.ArgumentParser(
         description=(
-            "Diagnóstico de solo lectura del eje revisión de la superficie de "
-            f"horarios (issue #899). Siempre consulta {URL_SALUD_FRONTEND}, la "
-            "URL loopback fija. No escribe ni repara nada."
+            "Diagnóstico de solo lectura de la superficie de horarios "
+            "(issue #899): distingue una revisión desplegada distinta de la "
+            "esperada de un catálogo dinámico vacío o incompleto. Solo "
+            "consulta URLs loopback fijas. No escribe ni repara nada."
         )
     )
     parser.add_argument("--json", action="store_true", help="Salida en JSON.")
     args = parser.parse_args(argv)
 
-    diagnostico = construir_diagnostico(observar_revision())
+    diagnostico = construir_diagnostico(observar())
     print(formatear_json(diagnostico) if args.json else formatear_texto(diagnostico))
     return 0
 
