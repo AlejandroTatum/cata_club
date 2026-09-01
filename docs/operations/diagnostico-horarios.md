@@ -108,19 +108,24 @@ puedas distinguir "el backend no publica" de "el BFF no lo está pasando".
 
 ### `static_schedule_authority`
 
-Todavía existe una lista **estática** de horarios sirviendo superficies reales:
-`backend/app/servicios_negocio/conocimiento_club.json`, leída por el prompt del
-chatbot (`conocimiento_club.py`) y por la página `/ayuda`
+Esta clase detecta si sigue existiendo una lista **estática** de horarios
+sirviendo alguna superficie real: `backend/app/servicios_negocio/conocimiento_club.json`,
+leída por el prompt del chatbot (`conocimiento_club.py`) y por la página `/ayuda`
 (`faq-content.ts`, `FAQ_SCHEDULES`).
 
-#789 quitó la lista estática **solo de la landing**. Si esos horarios contradicen al
-catálogo dinámico, esas dos superficies muestran lo viejo aunque la landing esté
-perfecta — y es una explicación muy frecuente de "la app me dice dos cosas
-distintas".
+Ambas migraciones ya están cerradas. #789 quitó la lista estática de la landing.
+La del chatbot y la de `/ayuda` las quitó #926, resuelto por el PR #928. #899
+(detectar drift de horarios) también está cerrado.
 
-**Se reporta, no se repara.** Completar esa migración es trabajo de #789 y #899 lo
-excluye explícitamente de sus objetivos. No edites ese archivo como parte de un
-diagnóstico.
+El detector se mantiene igual porque su valor no era señalar un pendiente
+conocido, sino poder detectar una **regresión**: si alguien reintroduce una
+lista estática en cualquiera de esas superficies, o agrega una nueva, esta
+clase la vuelve a encontrar.
+
+**Se reporta, no se repara.** Si esta clase da un positivo, no edites
+`conocimiento_club.json` como parte de un diagnóstico — eso indica que la
+migración cerrada se rompió, y corregirlo es un cambio de código con su propio
+issue, no un paso del procedimiento de diagnóstico.
 
 ## Salvedad del espejo
 
