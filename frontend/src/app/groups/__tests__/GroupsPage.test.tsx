@@ -82,13 +82,16 @@ const mockSearchStudents = vi.fn();
 // `dias` here is the BFF route's actual wire shape (frontend `DiaSemana`
 // codes) — `cargarCategorias` converts it back to the backend day format
 // this page's checkboxes/labels use, same as before.
+// `edades` (#789) is the optional ages label the catalog carries alongside the
+// label — ADULTOS deliberately has none, so every screen that reads it is
+// exercised against a categoría with no label too.
 const LUN_VIE_DIAS = ["lun", "mar", "mie", "jue", "vie"];
 const DEFAULT_CATEGORIA_CATALOG = [
-  { codigo: "FORMATIVO", label: "Formativo", horaInicio: "15:00", horaFin: "16:00", dias: LUN_VIE_DIAS },
-  { codigo: "INFANTIL", label: "Infantil", horaInicio: "16:00", horaFin: "17:00", dias: LUN_VIE_DIAS },
-  { codigo: "JUVENIL", label: "Juvenil", horaInicio: "17:00", horaFin: "18:00", dias: LUN_VIE_DIAS },
-  { codigo: "COMPETITIVO", label: "Competitivo", horaInicio: "18:00", horaFin: "20:00", dias: [...LUN_VIE_DIAS, "sab"] },
-  { codigo: "ADULTOS", label: "Adultos", horaInicio: "20:00", horaFin: "21:15", dias: LUN_VIE_DIAS },
+  { codigo: "FORMATIVO", label: "Formativo", horaInicio: "15:00", horaFin: "16:00", dias: LUN_VIE_DIAS, edades: "5 a 10 años" },
+  { codigo: "INFANTIL", label: "Infantil", horaInicio: "16:00", horaFin: "17:00", dias: LUN_VIE_DIAS, edades: "11 a 13 años" },
+  { codigo: "JUVENIL", label: "Juvenil", horaInicio: "17:00", horaFin: "18:00", dias: LUN_VIE_DIAS, edades: "14 a 17 años" },
+  { codigo: "COMPETITIVO", label: "Competitivo", horaInicio: "18:00", horaFin: "20:00", dias: [...LUN_VIE_DIAS, "sab"], edades: "Selección" },
+  { codigo: "ADULTOS", label: "Adultos", horaInicio: "20:00", horaFin: "21:15", dias: LUN_VIE_DIAS, edades: null },
 ];
 const mockFetchCategoriasCatalogo = vi.fn().mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
 
@@ -192,6 +195,140 @@ describe("GroupsPage — categoría form is typed input, not a locked catalog se
     for (const dia of ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]) {
       expect(screen.getByLabelText(dia)).toBeInTheDocument();
     }
+  });
+});
+
+/**
+ * #789 — the optional "Edades" label on the categoría ABM form.
+ *
+ * The label is orientation copy for the public board ("5 a 10 años"), never a
+ * rule: no age is validated against it, so a categoría without one is valid
+ * and must stay saveable. The form is a full editor, so it always SENDS the
+ * field — that is what lets an emptied input clear an existing label. The
+ * value goes to the backend as typed; `AsistenciaServicio._normalizar_edades`
+ * is the single normaliser that collapses blank to NULL.
+ */
+describe("GroupsPage — optional edades label on the categoría form (#789)", () => {
+  const GROUP_ROWS = [
+    { id: 301, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+  ];
+  const ADULTOS_ROWS = [
+    { id: 401, diaSemana: "LUNES", horaInicio: "20:00", horaFin: "21:15", categoria: "ADULTOS" },
+  ];
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockCrearCategoria.mockReset();
+    mockActualizarCategoria.mockReset();
+    mockFetchAlumnosPorHorario.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue(GROUP_ROWS);
+    mockCrearCategoria.mockResolvedValue({});
+    mockActualizarCategoria.mockResolvedValue({});
+    mockFetchAlumnosPorHorario.mockResolvedValue([]);
+  });
+
+  /** Opens "Nueva categoría" and fills every REQUIRED field, leaving edades untouched. */
+  async function openCreateFormAndFillRequired(): Promise<void> {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    await screen.findByRole("heading", { name: "Nueva categoría" });
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+  }
+
+  async function openEditForm(): Promise<void> {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getAllByRole("button", { name: /^editar /i })[0]);
+    await screen.findByRole("heading", { name: "Editar categoría" });
+  }
+
+  it("offers an Edades input that is NOT required, capped at the column's 50 chars", async () => {
+    await openCreateFormAndFillRequired();
+
+    const edades = screen.getByLabelText(/^Edades/);
+    expect(edades).toBeInTheDocument();
+    expect(edades).not.toBeRequired();
+    expect(edades).toHaveAttribute("maxLength", "50");
+    // Orientation copy, not a rule — the placeholder shows the expected shape.
+    expect(edades).toHaveAttribute("placeholder", "Ej: 5 a 10 años");
+  });
+
+  it("creates a categoría with the ages label the admin typed", async () => {
+    await openCreateFormAndFillRequired();
+
+    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value: "5 a 10 años" } });
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() => {
+      expect(mockCrearCategoria).toHaveBeenCalledWith(
+        expect.objectContaining({ nombre: "Preinfantil", edades: "5 a 10 años" }),
+      );
+    });
+  });
+
+  it("creates a categoría with no ages label at all — the field never blocks the save", async () => {
+    await openCreateFormAndFillRequired();
+
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await waitFor(() => expect(mockCrearCategoria).toHaveBeenCalledTimes(1));
+    expect(mockCrearCategoria).toHaveBeenCalledWith(expect.objectContaining({ edades: "" }));
+    // The save went through: no client-side validation message stopped it, and
+    // the form closed on success instead of staying open with an error.
+    expect(await screen.findByText("Categoría creada correctamente.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Ingrese /)).not.toBeInTheDocument();
+  });
+
+  it("pre-fills the edit form with the categoría's current ages label and saves an edited one", async () => {
+    await openEditForm();
+
+    expect(screen.getByLabelText(/^Edades/)).toHaveValue("Selección");
+
+    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value: "14 a 17 años" } });
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "COMPETITIVO",
+        expect.objectContaining({ edades: "14 a 17 años" }),
+      );
+    });
+  });
+
+  it("clears the label by emptying the input — the update still SENDS edades", async () => {
+    await openEditForm();
+
+    fireEvent.change(screen.getByLabelText(/^Edades/), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "COMPETITIVO",
+        expect.objectContaining({ edades: "" }),
+      );
+    });
+  });
+
+  it("opens a categoría whose label is null with an empty input, without crashing", async () => {
+    mockFetchHorarios.mockResolvedValue(ADULTOS_ROWS);
+    await openEditForm();
+
+    expect(screen.getByLabelText(/^Edades/)).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "ADULTOS",
+        expect.objectContaining({ edades: "" }),
+      );
+    });
   });
 });
 
@@ -1469,8 +1606,10 @@ describe("GroupsPage — sin selector de entrenador (issue #13)", () => {
     fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
 
     await waitFor(() => {
+      // `edades` rides along on every save (#789) — the form is a full editor,
+      // so it always sends the field; untouched, that is the empty string.
       expect(mockCrearCategoria).toHaveBeenCalledWith({
-        nombre: "Preinfantil", hora_inicio: "15:00", hora_fin: "16:00", dias: ["LUNES"],
+        nombre: "Preinfantil", edades: "", hora_inicio: "15:00", hora_fin: "16:00", dias: ["LUNES"],
       });
     });
   });

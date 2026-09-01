@@ -47,6 +47,12 @@ export interface CategoriaInfo {
    * lookups in `groups-page-utils.ts` working unchanged.
    */
   dias: string[];
+  /**
+   * Optional ages label (#789), e.g. "5 a 10 años" — orientation copy for the
+   * board, NOT a rule: no age is ever validated against it, and a categoría
+   * with `null` here is a perfectly normal categoría, not an incomplete one.
+   */
+  edades: string | null;
 }
 
 /**
@@ -85,6 +91,7 @@ export async function cargarCategorias(): Promise<Partial<Record<Categoria, Cate
       horaInicio: entrada.horaInicio,
       horaFin: entrada.horaFin,
       dias: entrada.dias.map((dia) => DIA_FRONTEND_TO_BACKEND[dia]),
+      edades: entrada.edades ?? null,
     };
   }
   return categorias;

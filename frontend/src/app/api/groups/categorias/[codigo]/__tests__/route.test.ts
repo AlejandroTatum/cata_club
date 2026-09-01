@@ -107,6 +107,46 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
     expect(forwardedBody()).toEqual({ nombre: "Preinfantil A" });
   });
 
+  // #789 — the optional ages label. The categoría form is a full editor, so it
+  // always sends `edades`; an emptied input therefore arrives as `""`, which
+  // the backend normalises to NULL (`AsistenciaServicio._normalizar_edades`).
+  // That is the only way to CLEAR a label, so `""` must survive the allowlist.
+  it("forwards edades when the admin sets an ages label", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ codigo: "PREINFANTIL" }));
+
+    const access = makeJwt(3600);
+    await PUT(
+      putRequest({ nombre: "Preinfantil", edades: "5 a 10 años" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { codigo: "PREINFANTIL" } },
+    );
+
+    expect(forwardedBody()).toEqual({ nombre: "Preinfantil", edades: "5 a 10 años" });
+  });
+
+  it("forwards an emptied edades as \"\" so the label can be cleared", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ codigo: "PREINFANTIL" }));
+
+    const access = makeJwt(3600);
+    await PUT(
+      putRequest({ nombre: "Preinfantil", edades: "" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { codigo: "PREINFANTIL" } },
+    );
+
+    expect(forwardedBody()).toEqual({ nombre: "Preinfantil", edades: "" });
+  });
+
+  it("still drops unknown sibling fields alongside edades", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ codigo: "PREINFANTIL" }));
+
+    const access = makeJwt(3600);
+    await PUT(
+      putRequest({ edades: "Selección", codigo: "OTRO", apodo: "x" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: { codigo: "PREINFANTIL" } },
+    );
+
+    expect(forwardedBody()).toEqual({ edades: "Selección" });
+  });
+
   it("returns 400 when the payload carries no updatable field", async () => {
     const access = makeJwt(3600);
     const response = await PUT(putRequest({}, `${ACCESS_TOKEN_COOKIE}=${access}`), {

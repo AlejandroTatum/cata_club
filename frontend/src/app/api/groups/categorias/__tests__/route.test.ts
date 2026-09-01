@@ -117,6 +117,40 @@ describe("POST /api/groups/categorias", () => {
     expect(forwardedBody()).toEqual(validBody);
   });
 
+  // #789 — the optional ages label. It is orientation copy for the public
+  // board, never a rule, so a categoría created without one is valid.
+  it("forwards edades when the admin typed an ages label", async () => {
+    const creada = { codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00", horaFin: "16:00:00", dias: ["LUNES"], edades: "5 a 10 años" };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creada, 201));
+
+    const access = makeJwt(3600);
+    await POST(postRequest({ ...validBody, edades: "5 a 10 años" }, `${ACCESS_TOKEN_COOKIE}=${access}`));
+
+    expect(forwardedBody()).toEqual({ ...validBody, edades: "5 a 10 años" });
+  });
+
+  it("creates without edades when the field is absent (the label is optional)", async () => {
+    const creada = { codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00", horaFin: "16:00:00", dias: ["LUNES"], edades: null };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creada, 201));
+
+    const access = makeJwt(3600);
+    const response = await POST(postRequest(validBody, `${ACCESS_TOKEN_COOKIE}=${access}`));
+
+    expect(forwardedBody()).toEqual(validBody);
+    expect(forwardedBody()).not.toHaveProperty("edades");
+    expect(response.status).toBe(201);
+  });
+
+  it("does not forward a non-string edades — the allowlist stayed an allowlist", async () => {
+    const creada = { codigo: "PREINFANTIL", label: "Preinfantil", horaInicio: "15:00:00", horaFin: "16:00:00", dias: ["LUNES"], edades: null };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(creada, 201));
+
+    const access = makeJwt(3600);
+    await POST(postRequest({ ...validBody, edades: 12, apodo: "x" }, `${ACCESS_TOKEN_COOKIE}=${access}`));
+
+    expect(forwardedBody()).toEqual(validBody);
+  });
+
   it("propagates backend errors", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: 'Ya existe una categoría llamada "Preinfantil".' }, 400));
 

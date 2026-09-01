@@ -703,6 +703,10 @@ export interface CategoriaCatalogEntry {
   horaInicio: string;
   horaFin: string;
   dias: DiaSemana[];
+  /** Optional ages label (#789), e.g. "5 a 10 años" — orientation copy for the
+   *  board, never a rule. `null` when the categoría publishes none, which the
+   *  route normalises so absent and cleared look the same here. */
+  edades: string | null;
 }
 
 /** Fetch the live categoria catalog (hours/label/allowed días per categoria). */
@@ -907,6 +911,8 @@ export interface CategoriaGrupo {
   horaInicio: string;
   horaFin: string;
   dias: string[];
+  /** Optional ages label (#789) — `null` when the categoría publishes none. */
+  edades?: string | null;
 }
 
 /**
@@ -920,6 +926,10 @@ export interface CrearCategoriaDTO {
   hora_inicio: string;
   hora_fin: string;
   dias: string[];
+  /** Optional ages label (#789). Sent as typed — the backend
+   *  (`AsistenciaServicio._normalizar_edades`) is the single normaliser that
+   *  trims it and stores blank as NULL. */
+  edades?: string;
 }
 
 /** `dias`, if present, REPLACES the categoria's whole day-set (not a delta)
@@ -929,6 +939,9 @@ export interface ActualizarCategoriaDTO {
   hora_inicio?: string;
   hora_fin?: string;
   dias?: string[];
+  /** Optional ages label (#789). OMIT it to leave the stored label untouched;
+   *  send `""` to CLEAR it (the backend normalises blank to NULL). */
+  edades?: string;
 }
 
 /** Create a categoria AND a horario per día marked, in one atomic operation
