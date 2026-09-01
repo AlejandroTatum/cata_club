@@ -265,8 +265,25 @@ class GestorAutenticacion:
 
         # `/auth/me` is the deliberately limited status surface for pending
         # accounts; logout must remain available so the user can leave it.
+        # Carve-out de autoservicio de seguridad (#858): listar las propias
+        # sesiones e invalidar las OTRAS son superficies propio-via-`sub` al
+        # nivel de logout (test_guardia_autorizacion_rutas.py, balde 2) -- la
+        # identidad sale del `sub` del JWT, así que un pendiente solo toca SU
+        # epoch: son justo el botón con el que protege una cuenta recién
+        # creada. Los módulos del club siguen bloqueados.
+        # Carve-out de auto-servicio familiar (#790): el gate de #858 bloquea
+        # los módulos del club, pero el router de `/personas` ya impone sus
+        # propios checks granulares de ownership/verificación -- la familia
+        # que se autoinscribió no puede quedar varada sin ver a su propio
+        # representado ni completar la vinculación tras verificar.
         ruta = request.url.path.rstrip("/")
-        es_superficie_limitada = ruta.endswith("/auth/me") or ruta.endswith("/auth/logout")
+        es_superficie_limitada = (
+            ruta.endswith("/auth/me")
+            or ruta.endswith("/auth/logout")
+            or ruta.endswith("/auth/me/sesiones")
+            or ruta.endswith("/auth/sesiones/invalidar")
+            or ruta.startswith("/api/v1/personas")
+        )
         if not es_superficie_limitada and not GestorAutenticacion.puede_acceder_modulos(db, usuario):
             raise PermisosInsuficientes(
                 "Su cuenta aún no está habilitada para acceder a este módulo.",

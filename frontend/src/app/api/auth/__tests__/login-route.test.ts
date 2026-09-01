@@ -101,6 +101,8 @@ describe("POST /api/auth/login", () => {
     expect(json).toEqual({
       user: { id: "1", name: "Ana Torres", email: "admin@cataclub.com", role: "admin", representanteId: null, fotoUrl: null },
       roles: ["ADMINISTRADOR"],
+      correoVerificado: true,
+      altaPresencialCompletada: true,
       loggedInAt: expect.any(String),
     });
   });
