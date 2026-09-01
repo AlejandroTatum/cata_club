@@ -23,6 +23,7 @@ interface CrearCategoriaBody {
   hora_inicio?: unknown;
   hora_fin?: unknown;
   dias?: unknown;
+  edades?: unknown;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -42,15 +43,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return badRequestResponse("Complete el nombre, la franja y al menos un día.");
   }
 
+  // `edades` (#789) is the only optional field of the create DTO: a categoría
+  // with no ages label is valid, so an absent one is left out of the payload
+  // entirely rather than sent as null. Type-checked like every other field —
+  // this stays an allowlist, not a passthrough.
+  const payload: Record<string, unknown> = {
+    nombre: body.nombre,
+    hora_inicio: body.hora_inicio,
+    hora_fin: body.hora_fin,
+    dias: body.dias,
+  };
+  if (typeof body.edades === "string") payload.edades = body.edades;
+
   return proxyToBackend("/asistencias/categorias", {
     method: "POST",
     accessToken,
     successStatus: 201,
-    body: {
-      nombre: body.nombre,
-      hora_inicio: body.hora_inicio,
-      hora_fin: body.hora_fin,
-      dias: body.dias,
-    },
+    body: payload,
   });
 }

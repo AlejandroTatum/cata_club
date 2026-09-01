@@ -53,6 +53,19 @@ function forwardedBody(callIndex = 0): Record<string, unknown> {
   return JSON.parse(String(init?.body));
 }
 
+/**
+ * Stubs one OK backend reply and drives PUT with `body` for PREINFANTIL.
+ * Builds the call only: every assertion stays in the test that owns it, so a
+ * failure reports that case's line rather than this helper's.
+ */
+async function putCategoria(body: unknown): Promise<Response> {
+  vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ codigo: "PREINFANTIL" }));
+  const access = makeJwt(3600);
+  return PUT(putRequest(body, `${ACCESS_TOKEN_COOKIE}=${access}`), {
+    params: { codigo: "PREINFANTIL" },
+  });
+}
+
 beforeEach(() => {
   vi.spyOn(global, "fetch");
   process.env.BACKEND_API_URL = "http://localhost:8000/api/v1";
@@ -105,6 +118,28 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
     });
 
     expect(forwardedBody()).toEqual({ nombre: "Preinfantil A" });
+  });
+
+  // #789 — the optional ages label. The categoría form is a full editor, so it
+  // always sends `edades`; an emptied input therefore arrives as `""`, which
+  // the backend normalises to NULL (`AsistenciaServicio._normalizar_edades`).
+  // That is the only way to CLEAR a label, so `""` must survive the allowlist.
+  it("forwards edades when the admin sets an ages label", async () => {
+    await putCategoria({ nombre: "Preinfantil", edades: "5 a 10 años" });
+
+    expect(forwardedBody()).toEqual({ nombre: "Preinfantil", edades: "5 a 10 años" });
+  });
+
+  it("forwards an emptied edades as \"\" so the label can be cleared", async () => {
+    await putCategoria({ nombre: "Preinfantil", edades: "" });
+
+    expect(forwardedBody()).toEqual({ nombre: "Preinfantil", edades: "" });
+  });
+
+  it("still drops unknown sibling fields alongside edades", async () => {
+    await putCategoria({ edades: "Selección", codigo: "OTRO", apodo: "x" });
+
+    expect(forwardedBody()).toEqual({ edades: "Selección" });
   });
 
   it("returns 400 when the payload carries no updatable field", async () => {

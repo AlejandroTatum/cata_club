@@ -37,6 +37,7 @@ const categoriaFormativo = {
   horaInicio: "15:00:00",
   horaFin: "16:00:00",
   dias: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"],
+  edades: "5 a 10 años",
 };
 
 const categoriaCompetitivo = {
@@ -45,6 +46,7 @@ const categoriaCompetitivo = {
   horaInicio: "18:00:00",
   horaFin: "20:00:00",
   dias: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"],
+  edades: null,
 };
 
 beforeEach(() => {
@@ -93,6 +95,7 @@ describe("GET /api/attendance/categories", () => {
         horaInicio: "15:00",
         horaFin: "16:00",
         dias: ["lun", "mar", "mie", "jue", "vie"],
+        edades: "5 a 10 años",
       },
       {
         codigo: "COMPETITIVO",
@@ -100,8 +103,25 @@ describe("GET /api/attendance/categories", () => {
         horaInicio: "18:00",
         horaFin: "20:00",
         dias: ["lun", "mar", "mie", "jue", "vie", "sab"],
+        edades: null,
       },
     ]);
+  });
+
+  // `edades` is optional end to end (#789): a categoría without an ages label
+  // is a legitimate state, and the DTO may omit the key entirely rather than
+  // send an explicit null. Both collapse to `null` here so every catalog entry
+  // has the same shape — consumers never have to tell "absent" from "cleared".
+  it("carries a missing edades through as null (triangulation on the optional label)", async () => {
+    const { edades: _omitted, ...sinEdades } = categoriaFormativo;
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([sinEdades]));
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body[0]).toHaveProperty("edades", null);
   });
 
   it("propagates the backend's status and message when /asistencias/categorias fails", async () => {

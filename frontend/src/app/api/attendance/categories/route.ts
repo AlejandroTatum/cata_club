@@ -29,6 +29,8 @@ interface BackendCategoria {
   horaInicio: string; // "HH:MM:SS"
   horaFin: string;
   dias: BackendDiaSemana[];
+  /** Optional ages label (#789), `null` when the categoría publishes none. */
+  edades?: string | null;
 }
 
 /** The frontend-shaped categoria catalog entry this route returns. */
@@ -38,6 +40,13 @@ export interface CategoriaCatalogEntry {
   horaInicio: string;
   horaFin: string;
   dias: DiaSemana[];
+  /**
+   * Orientation copy for the board ("5 a 10 años"), never a rule — no age is
+   * validated against it, so `null` is a legitimate value and not a gap to
+   * fill in. Absent and explicitly-null both collapse to `null` so every entry
+   * carries the same shape and consumers never have to tell the two apart.
+   */
+  edades: string | null;
 }
 
 function buildCategoriaEntry(categoria: BackendCategoria): CategoriaCatalogEntry {
@@ -47,6 +56,7 @@ function buildCategoriaEntry(categoria: BackendCategoria): CategoriaCatalogEntry
     horaInicio: trimSeconds(categoria.horaInicio),
     horaFin: trimSeconds(categoria.horaFin),
     dias: categoria.dias.map((dia) => DIA_SEMANA_BACKEND_TO_FRONTEND[dia]),
+    edades: categoria.edades ?? null,
   };
 }
 
