@@ -6,24 +6,13 @@ import { useRouter } from "next/navigation";
 import { Check, CircleAlert, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { reenviarVerificacionCorreo } from "@/services/api";
-import type { AuthSession } from "@/services/auth";
 import { getDefaultRoute } from "@/lib/auth-utils";
+import { activationPendingReasons, type ActivationSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
 import AuthShell, { AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
 import { Button, buttonClasses } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 
-type ActivationSession = AuthSession & {
-  correoVerificado?: boolean;
-  altaPresencialCompletada?: boolean;
-};
-
-export function activationPendingReasons(session: ActivationSession): string[] {
-  const reasons: string[] = [];
-  if (session.correoVerificado === false) reasons.push("correo");
-  if (session.altaPresencialCompletada === false) reasons.push("inscripcion");
-  return reasons;
-}
 
 function ActivationCheck({ label, complete }: { label: string; complete: boolean }): React.ReactElement {
   return (
