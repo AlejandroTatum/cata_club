@@ -69,3 +69,22 @@ export function hasPlausibleAccessToken(cookieValue: string | undefined | null):
   const segments = cookieValue.split(".");
   return segments.length === 3 && segments.every((segment) => segment.length > 0);
 }
+
+/**
+ * Coarse edge hint for pending accounts. Only an explicit false claim redirects;
+ * legacy tokens and malformed payloads remain on the normal server-validation
+ * path, so this helper never becomes an authorization boundary.
+ */
+export function hasPendingActivation(cookieValue: string | undefined | null): boolean {
+  if (!hasPlausibleAccessToken(cookieValue) || !cookieValue) return false;
+  try {
+    const segments = cookieValue.split(".");
+    const payload = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const decoded: unknown = JSON.parse(atob(padded));
+    return typeof decoded === "object" && decoded !== null &&
+      (decoded as Record<string, unknown>).activacion_completa === false;
+  } catch {
+    return false;
+  }
+}
