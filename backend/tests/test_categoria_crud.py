@@ -285,6 +285,177 @@ def test_eliminar_categoria_codigo_inexistente(db_session):
         servicio.eliminar_categoria("NOEXISTE")
 
 
+# --- Ventana horaria y tope de días (issue #861) ---------------------------
+# El club abre a las 06:00 y cierra a las 22:00, y ninguna categoría entrena
+# los siete días. Ambos límites valen igual al crear que al editar: hasta el
+# issue #861 el único candado de la franja era que el inicio fuera anterior
+# al fin, así que un entrenamiento a las 03:00 se guardaba sin protestar.
+#
+# Los bordes se prueban de los dos lados a propósito. El tope de seis días no
+# es un número redondo: Competitivo entrena de lunes a sábado, así que un
+# `< 6` en vez de un `<= 6` dejaría a la categoría insignia del club sin
+# poder guardarse.
+_TODOS_LOS_DIAS = list(DiaSemana)
+_LUNES_A_SABADO = _TODOS_LOS_DIAS[:6]
+
+
+def _alta(servicio, hora_inicio=time(9, 0), hora_fin=time(10, 0), dias=(DiaSemana.LUNES,)):
+    """Alta con franja y días válidos: cada prueba de borde sobreescribe solo
+    el valor que está poniendo a prueba."""
+    return servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=hora_inicio, hora_fin=hora_fin, dias=list(dias),
+    ))
+
+
+def _con_categoria(db_session):
+    """Servicio + el código de una categoría ya válida, para probar la edición."""
+    servicio = AsistenciaServicio(db_session)
+    return servicio, _alta(servicio).codigo
+
+
+def _categoria_legada(db_session):
+    """Fila con una franja anterior a la ventana del issue #861. Se inserta
+    directo contra la base porque el alta ya no la aceptaría, que es
+    exactamente la situación que la edición tiene que contemplar."""
+    fila = CategoriaHorario(
+        codigo="LEGADA", label="Legada", hora_inicio=time(5, 0), hora_fin=time(6, 30),
+    )
+    fila.dias_permitidos = [CategoriaHorarioDia(dia_semana=DiaSemana.LUNES)]
+    db_session.add(fila)
+    db_session.flush()
+    return fila
+
+
+def test_crear_categoria_acepta_la_hora_de_apertura_exacta(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = _alta(servicio, hora_inicio=time(6, 0), hora_fin=time(7, 0))
+
+    assert categoria.hora_inicio == time(6, 0)
+
+
+def test_crear_categoria_acepta_la_hora_de_cierre_exacta(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = _alta(servicio, hora_inicio=time(21, 0), hora_fin=time(22, 0))
+
+    assert categoria.hora_fin == time(22, 0)
+
+
+def test_crear_categoria_rechaza_empezar_antes_de_la_apertura(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    inicio, fin = time(5, 59), time(7, 0)
+
+    with pytest.raises(OperacionInvalida):
+        _alta(servicio, hora_inicio=inicio, hora_fin=fin)
+
+
+def test_crear_categoria_rechaza_terminar_despues_del_cierre(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    inicio, fin = time(21, 0), time(22, 1)
+
+    with pytest.raises(OperacionInvalida):
+        _alta(servicio, hora_inicio=inicio, hora_fin=fin)
+
+
+def test_crear_categoria_acepta_seis_dias(db_session):
+    """Competitivo entrena de lunes a sábado: el tope no puede ser cinco."""
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = _alta(servicio, dias=_LUNES_A_SABADO)
+
+    assert len(categoria.dias) == 6
+
+
+def test_crear_categoria_rechaza_los_siete_dias(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    with pytest.raises(OperacionInvalida):
+        _alta(servicio, dias=_TODOS_LOS_DIAS)
+
+
+def test_crear_categoria_acepta_un_solo_dia(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = _alta(servicio, dias=[DiaSemana.MARTES])
+
+    assert categoria.dias == [DiaSemana.MARTES]
+
+
+def test_actualizar_categoria_acepta_la_hora_de_apertura_exacta(db_session):
+    servicio, codigo = _con_categoria(db_session)
+
+    actualizada = servicio.actualizar_categoria(codigo, CategoriaUpdateDTO(
+        hora_inicio=time(6, 0), hora_fin=time(7, 0),
+    ))
+
+    assert actualizada.hora_inicio == time(6, 0)
+
+
+def test_actualizar_categoria_acepta_la_hora_de_cierre_exacta(db_session):
+    servicio, codigo = _con_categoria(db_session)
+
+    actualizada = servicio.actualizar_categoria(codigo, CategoriaUpdateDTO(
+        hora_inicio=time(21, 0), hora_fin=time(22, 0),
+    ))
+
+    assert actualizada.hora_fin == time(22, 0)
+
+
+def test_actualizar_categoria_rechaza_empezar_antes_de_la_apertura(db_session):
+    servicio, codigo = _con_categoria(db_session)
+
+    cambio = CategoriaUpdateDTO(hora_inicio=time(5, 59), hora_fin=time(10, 0))
+
+    with pytest.raises(OperacionInvalida):
+        servicio.actualizar_categoria(codigo, cambio)
+
+
+def test_actualizar_categoria_rechaza_terminar_despues_del_cierre(db_session):
+    servicio, codigo = _con_categoria(db_session)
+
+    cambio = CategoriaUpdateDTO(hora_inicio=time(21, 0), hora_fin=time(22, 1))
+
+    with pytest.raises(OperacionInvalida):
+        servicio.actualizar_categoria(codigo, cambio)
+
+
+def test_actualizar_categoria_acepta_seis_dias(db_session):
+    servicio, codigo = _con_categoria(db_session)
+
+    actualizada = servicio.actualizar_categoria(
+        codigo, CategoriaUpdateDTO(dias=_LUNES_A_SABADO),
+    )
+
+    assert len(actualizada.dias) == 6
+
+
+def test_actualizar_categoria_rechaza_los_siete_dias(db_session):
+    servicio, codigo = _con_categoria(db_session)
+
+    cambio = CategoriaUpdateDTO(dias=_TODOS_LOS_DIAS)
+
+    with pytest.raises(OperacionInvalida):
+        servicio.actualizar_categoria(codigo, cambio)
+
+
+def test_actualizar_categoria_rechaza_renombrar_una_franja_legada(db_session):
+    """La ventana se valida contra el par FUSIONADO (lo que llega en el
+    cuerpo o, si falta, lo guardado). Consecuencia buscada: una fila anterior
+    a esta regla no se puede renombrar sin corregir también su franja. Desde
+    el formulario no se nota -- siempre manda las dos horas -- y a cambio
+    ninguna edición deja viva una franja fuera de la ventana."""
+    servicio = AsistenciaServicio(db_session)
+    _categoria_legada(db_session)
+
+    cambio = CategoriaUpdateDTO(nombre="Legada A")
+
+    with pytest.raises(OperacionInvalida):
+        servicio.actualizar_categoria("LEGADA", cambio)
+
+
 # --- Etiqueta de edades (opcional) ----------------------------------------
 # `edades` es un texto de orientación que el club ya publicaba fuera de la
 # base ("5 a 10 años", "Selección"). Es OPCIONAL: una categoría sin etiqueta
