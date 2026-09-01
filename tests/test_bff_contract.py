@@ -12,10 +12,9 @@ routers y los handlers como texto, igual que `tests/test_glossary_contract.py`
 lee el glosario y que `tipo-notificacion-parity.test.ts` lee el enum.
 
 El archivo tiene dos mitades. La primera compara **rutas**: toda ruta que el BFF
-consume tiene que estar declarada por algún router. La segunda compara **los
-enums compartidos**: qué relación tiene cada uno con el frontend y si los dos
-lados nombran los mismos valores. Los campos obligatorios de cada DTO son el PR
-siguiente del mismo issue y no se verifican acá.
+consume tiene que estar declarada por algún router. La segunda compara **lo que
+viaja por esas rutas**: los enums compartidos y los campos que los validadores
+del BFF exigen de cada DTO.
 
 Las dos derivas vivas que la biyección de enums encuentra hoy se **inventarían**
 (`DIVERGENCIAS_INVENTARIADAS`, issue #935), no se arreglan: cerrarlas obliga a
@@ -419,6 +418,7 @@ class TestContratoDocumentado:
 # en rojo: esa es la parte que no envejece.
 
 ENUMS = RAIZ / "backend" / "app" / "dominio" / "enums.py"
+ESQUEMAS = RAIZ / "backend" / "app" / "presentacion" / "schemas"
 FRONTEND = RAIZ / "frontend" / "src"
 
 
@@ -565,12 +565,14 @@ DIVERGENCIAS_INVENTARIADAS = (
 
 _CLASE_PY = re.compile(r"^class (\w+)\(([^)]*)\):", re.M)
 _MIEMBRO_ENUM = re.compile(r'^    ([A-Z][A-Z0-9_]*)\s*=\s*"([^"\n]+)"', re.M)
+_CAMPO_DTO = re.compile(r"^    (\w+)\s*:", re.M)
 _DOCSTRING_PY = re.compile(r'"""[\s\S]*?"""')
 # Los comentarios de TypeScript citan texto entre comillas (`domain.ts:396` cita
 # «"your payment of $X was approved"`). Sin sacarlos, esa prosa entraría como un
 # valor de la unión.
 _COMENTARIO_TS = re.compile(r"//[^\n]*|/\*[\s\S]*?\*/")
 _ENTRADA_MAPA = re.compile(r'^\s*([A-Za-z_]\w*)\s*:\s*"([^"\n]+)"', re.M)
+_CAMEL = re.compile(r"(?<=[a-z0-9])([A-Z])")
 
 
 def cuerpo_de_clase(fuente: str, nombre: str) -> str:
@@ -762,15 +764,195 @@ class TestClasificacionDeEnums:
         assert "NIVEL 1" in valores_de_enum(fuente_enums, "NivelTecnicoAlumno")
 
 
-# Pisos del parser del lado de los enums, con el mismo criterio que `PISOS`:
-# holgados respecto de lo medido, para denunciar una regex rota y no para
-# congelar el inventario.
+# ---------------------------------------------------------------------------
+# Campos obligatorios del contrato
+# ---------------------------------------------------------------------------
+#
+# No se intenta leer el cuerpo de un type guard arbitrario: se declara la tabla
+# explícita, como `USOS_BACKEND` en el gate del glosario (#903). Cada fila dice
+# qué campo exige un validador del BFF y en qué DTO de Pydantic tiene que
+# existir. El ejemplar es `isPublicSchedules`
+# (`frontend/src/app/api/schedules/route.ts:7`), cuyo comentario de las líneas
+# 13-17 -- «anything else here means the upstream shape moved, and the landing
+# must not render a guess at it» -- es exactamente el razonamiento que esta
+# tabla mecaniza.
+#
+# Se verifican dos cosas por fila:
+#
+#   1. Que el campo exista en el DTO, comparando por nombre Python.
+#   2. Que la CONVENCIÓN del nombre sea la correcta. `ResponseBase`
+#      (`schemas/base.py:45`) trae un `alias_generator` snake→camel y FastAPI
+#      serializa por alias, pero sólo cuando la ruta declara `response_model=`.
+#      Las dos condiciones son necesarias, y las cuatro combinaciones existen
+#      de verdad acá: `/auth/me` declara response_model y hereda ResponseBase
+#      (viaja `personaId`); `/enrollment/` declara response_model y NO hereda
+#      (viaja `persona_id`); `/auth/login` y `/auth/refresh` no declaran
+#      response_model y devuelven el dict crudo del servicio (viaja
+#      `access_token`), como dice el docstring de `InvalidarSesionesResponseDTO`
+#      en `auth_schemas.py:171-173`.
+#
+# Sin la comprobación 2, agregarle `response_model=LoginResponseDTO` a `/login`
+# convertiría `access_token` en `accessToken` y rompería la sesión sin que nada
+# se ponga rojo.
+
+
+class Campo(NamedTuple):
+    """Un campo que un validador del BFF exige, y el DTO del backend que lo emite."""
+
+    ruta: str
+    campo: str
+    dto: str
+    esquema: str
+    router: str
+    decorador: str
+    validador: str
+
+
+_LOGIN = ("LoginResponseDTO", "auth_schemas.py", "auth_router.py")
+_ME = ("UsuarioMeResponseDTO", "auth_schemas.py", "auth_router.py")
+_ALTA = ("EnrollmentResponseDTO", "enrollment_schemas.py", "enrollment_router.py")
+_HORARIOS = ("asistencia_schemas.py", "asistencias_router.py", "/horarios-publicos", "isPublicSchedules")
+
+CAMPOS_OBLIGATORIOS = (
+    Campo("/auth/login", "access_token", *_LOGIN, "/login", "isBackendLoginResponse"),
+    Campo("/auth/login", "refresh_token", *_LOGIN, "/login", "isBackendLoginResponse"),
+    Campo("/auth/login", "token_type", *_LOGIN, "/login", "isBackendLoginResponse"),
+    Campo("/auth/refresh", "access_token", *_LOGIN, "/refresh", "isBackendRefreshResponse"),
+    Campo("/auth/refresh", "token_type", *_LOGIN, "/refresh", "isBackendRefreshResponse"),
+    Campo("/auth/me", "correo", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "personaId", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "nombres", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "apellidos", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "roles", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "correoVerificado", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "altaPresencialCompletada", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/enrollment/", "access_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
+    Campo("/enrollment/", "refresh_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
+    Campo("/enrollment/", "persona_id", *_ALTA, "/", "isBackendEnrollmentResponse"),
+    Campo("/chatbot/consultar", "respuesta", "ChatbotRespuestaDTO", "chatbot_schemas.py",
+          "chatbot_router.py", "/consultar", "isBackendChatbotResponse"),
+    Campo("/asistencias/horarios-publicos", "category", "PublicScheduleCategoryDTO", *_HORARIOS),
+    Campo("/asistencias/horarios-publicos", "ages", "PublicScheduleCategoryDTO", *_HORARIOS),
+    Campo("/asistencias/horarios-publicos", "blocks", "PublicScheduleCategoryDTO", *_HORARIOS),
+    Campo("/asistencias/horarios-publicos", "days", "PublicScheduleBlockDTO", *_HORARIOS),
+    Campo("/asistencias/horarios-publicos", "startTime", "PublicScheduleBlockDTO", *_HORARIOS),
+    Campo("/asistencias/horarios-publicos", "endTime", "PublicScheduleBlockDTO", *_HORARIOS),
+)
+
+# Pisos del parser del lado de los enums y los DTO, con el mismo criterio que
+# `PISOS`: holgados respecto de lo medido, para denunciar una regex rota y no
+# para congelar el inventario.
 PISOS_DE_ENUM = {
     "backend:enums": 12,
     "backend:valores": 55,
     "ts:literales": 35,
     "ts:entradas-de-mapa": 25,
+    "backend:campos-de-dto": 15,
+    "campos:discriminantes": 10,
 }
+
+
+def campos_de_dto(fuente: str, dto: str) -> set[str]:
+    """Los nombres Python de los campos que declara un DTO de Pydantic."""
+    return set(_CAMPO_DTO.findall(cuerpo_de_clase(fuente, dto)))
+
+
+def hereda_response_base(fuente: str, dto: str) -> bool:
+    """Si el DTO trae el `alias_generator` snake→camel de `schemas/base.py`."""
+    clase = re.search(rf"^class {re.escape(dto)}\(([^)]*)\):", fuente, re.M)
+    return clase is not None and "ResponseBase" in clase.group(1)
+
+
+def declara_response_model(fuente: str, ruta: str) -> bool:
+    """Si el decorador de esa ruta declara `response_model=`.
+
+    Se lee la lista de argumentos completa balanceando paréntesis: varios
+    decoradores la parten en varias líneas (`/horarios-publicos`, `/`).
+    """
+    for decorador in _DECORADOR.finditer(fuente):
+        argumentos = _lista_de_parametros(fuente, decorador.end() - 1)
+        literal = _LITERAL.search(argumentos)
+        if literal is not None and literal.group("ruta") == ruta:
+            return "response_model=" in argumentos
+    return False
+
+
+def a_snake(nombre: str) -> str:
+    """El nombre Python de un campo, venga en camelCase o ya en snake_case."""
+    return _CAMEL.sub(r"_\1", nombre).lower()
+
+
+def viaja_camelizado(campo: Campo) -> bool:
+    """Si el nombre de ese campo llega camelizado a la respuesta. Ver el bloque de arriba."""
+    router = (ROUTERS / campo.router).read_text(encoding="utf-8")
+    esquema = (ESQUEMAS / campo.esquema).read_text(encoding="utf-8")
+    return declara_response_model(router, campo.decorador) and hereda_response_base(esquema, campo.dto)
+
+
+def verificar_campo_declarado(campo: Campo, declarados: set[str]) -> None:
+    """El gate de campos: lo que el BFF exige tiene que existir en el DTO."""
+    assert declarados, f"{campo.dto}: no se leyó ningún campo"
+    assert a_snake(campo.campo) in declarados, (
+        f"{campo.ruta}: `{campo.validador}` exige `{campo.campo}` y `{campo.dto}` "
+        f"no lo declara (declara {sorted(declarados)})"
+    )
+
+
+def discrimina_convencion(nombre: str) -> bool:
+    """Si el nombre distingue camelCase de snake_case. `respuesta` es idéntico en las dos."""
+    return "_" in nombre or _CAMEL.search(nombre) is not None
+
+
+def verificar_convencion(campo: Campo, camelizado: bool) -> None:
+    """El nombre que exige el BFF tiene que estar en la convención en que viaja."""
+    if not discrimina_convencion(campo.campo):
+        return
+    esperado_camel = _CAMEL.search(campo.campo) is not None
+    assert esperado_camel == camelizado, (
+        f"{campo.ruta}: `{campo.validador}` exige `{campo.campo}` "
+        f"pero el campo viaja {'camelizado' if camelizado else 'en snake_case'}"
+    )
+
+
+IDS_DE_CAMPO = [f"{c.ruta}-{c.campo}" for c in CAMPOS_OBLIGATORIOS]
+
+
+@pytest.fixture(scope="module")
+def esquemas() -> dict[str, str]:
+    return {archivo.name: archivo.read_text(encoding="utf-8") for archivo in ESQUEMAS.glob("*.py")}
+
+
+class TestCamposObligatorios:
+    @pytest.mark.parametrize("campo", CAMPOS_OBLIGATORIOS, ids=IDS_DE_CAMPO)
+    def test_el_campo_existe_en_el_dto_del_backend(self, campo, esquemas):
+        verificar_campo_declarado(campo, campos_de_dto(esquemas[campo.esquema], campo.dto))
+
+    @pytest.mark.parametrize("campo", CAMPOS_OBLIGATORIOS, ids=IDS_DE_CAMPO)
+    def test_el_nombre_esta_en_la_convencion_en_la_que_viaja(self, campo):
+        verificar_convencion(campo, viaja_camelizado(campo))
+
+    def test_toda_ruta_de_la_tabla_es_una_ruta_que_el_bff_consume(self, consumos):
+        consumidas = {ruta for ruta, _ in consumos}
+        fuera = sorted({c.ruta for c in CAMPOS_OBLIGATORIOS} - consumidas)
+        assert not fuera, f"campos declarados sobre rutas que el BFF no consume: {fuera}"
+
+    def test_el_contrato_documenta_el_peligro_que_este_gate_atrapo(self):
+        """El `response_model=` en `/login` es la razón de ser de la comprobación de convención."""
+        contrato = CONTRATO.read_text(encoding="utf-8")
+        for evidencia in ("response_model=LoginResponseDTO", "accessToken", "isBackendLoginResponse"):
+            assert evidencia in contrato, f"el peligro documentado no cita {evidencia}"
+
+    def test_las_cuatro_combinaciones_de_serializacion_estan_representadas(self):
+        combinaciones = {
+            (declara_response_model((ROUTERS / c.router).read_text(encoding="utf-8"), c.decorador),
+             hereda_response_base((ESQUEMAS / c.esquema).read_text(encoding="utf-8"), c.dto))
+            for c in CAMPOS_OBLIGATORIOS
+        }
+        faltantes = sorted({(True, True), (True, False), (False, True)} - combinaciones)
+        assert not faltantes, (
+            "la tabla dejó de cubrir alguna combinación de (response_model, ResponseBase), "
+            f"que es lo que le da sentido a la comprobación de convención: faltan {faltantes}"
+        )
 
 
 class TestElGateDeEnumsNoEsVacio:
@@ -796,8 +978,9 @@ class TestElGateDeEnumsNoEsVacio:
         """La prueba de que el inventario es ANGOSTO: exenta `SUSPENDIDA`, no el enum."""
         backend = valores_de_enum(fuente_enums, "EstadoMembresia") | {"CONGELADA"}
         frontend = literales_de_union(leer_ts("lib/membership-status.ts"), "BackendEstadoMembresia")
+        exentos = exentos_de("EstadoMembresia")
         with pytest.raises(AssertionError, match="CONGELADA"):
-            verificar_biyeccion("EstadoMembresia", backend, frontend, exentos_de("EstadoMembresia"))
+            verificar_biyeccion("EstadoMembresia", backend, frontend, exentos)
 
     def test_ninguna_exencion_cubre_un_enum_entero(self, fuente_enums):
         anchas = [d.enum for d in DIVERGENCIAS_INVENTARIADAS
@@ -840,6 +1023,25 @@ class TestElGateDeEnumsNoEsVacio:
     def test_un_parser_de_uniones_roto_no_lee_ningun_literal(self):
         assert literales_de_union('export type X = "A" | "B"\n', "X") == set()
 
+    def test_un_campo_que_el_dto_no_declara_pone_el_gate_rojo(self):
+        campo = CAMPOS_OBLIGATORIOS[0]._replace(campo="campoInventado")
+        with pytest.raises(AssertionError, match="campoInventado"):
+            verificar_campo_declarado(campo, {"access_token"})
+
+    def test_un_dto_sin_ningun_campo_leido_pone_el_gate_rojo(self):
+        with pytest.raises(AssertionError, match="ningún campo"):
+            verificar_campo_declarado(CAMPOS_OBLIGATORIOS[0], set())
+
+    def test_un_nombre_camelizado_donde_el_campo_viaja_en_snake_pone_el_gate_rojo(self):
+        campo = CAMPOS_OBLIGATORIOS[0]._replace(campo="personaId")
+        with pytest.raises(AssertionError, match="snake_case"):
+            verificar_convencion(campo, camelizado=False)
+
+    def test_un_nombre_en_snake_donde_el_campo_viaja_camelizado_pone_el_gate_rojo(self):
+        campo = CAMPOS_OBLIGATORIOS[0]._replace(campo="persona_id")
+        with pytest.raises(AssertionError, match="camelizado"):
+            verificar_convencion(campo, camelizado=True)
+
     def test_el_contrato_documenta_las_cuatro_relaciones_y_los_catorce_enums(self, fuente_enums):
         contrato = CONTRATO.read_text(encoding="utf-8")
         assert "Divergencias inventariadas" in contrato, "falta la tabla de divergencias"
@@ -857,13 +1059,13 @@ class TestElGateDeEnumsNoEsVacio:
         for evidencia in ("categoria_horario", "test_drift_enums_postgres.py"):
             assert evidencia in contrato, f"la exclusión de Categoria no cita {evidencia}"
 
-    def test_ninguna_superficie_de_enums_cae_por_debajo_de_su_piso(self, fuente_enums):
-        medido = conteo_de_enums(fuente_enums)
+    def test_ninguna_superficie_de_enums_cae_por_debajo_de_su_piso(self, fuente_enums, esquemas):
+        medido = conteo_de_enums(fuente_enums, esquemas)
         flojas = {n: medido[n] for n, piso in PISOS_DE_ENUM.items() if medido[n] < piso}
         assert not flojas, f"parser roto o superficie perdida: {flojas} (pisos {PISOS_DE_ENUM})"
 
 
-def conteo_de_enums(fuente_enums: str) -> dict[str, int]:
+def conteo_de_enums(fuente_enums: str, esquemas: dict[str, str]) -> dict[str, int]:
     """Lo extraído por cada parser de esta mitad del gate, por separado."""
     declarados = enums_declarados(fuente_enums)
     return {
@@ -871,4 +1073,7 @@ def conteo_de_enums(fuente_enums: str) -> dict[str, int]:
         "backend:valores": sum(len(valores_de_enum(fuente_enums, n)) for n in declarados),
         "ts:literales": sum(len(literales_de_union(leer_ts(p.archivo), p.declaracion)) for p in PARES_DE_ENUM),
         "ts:entradas-de-mapa": sum(len(pares_de_mapa(leer_ts(a), m)) for a, m in TODOS_LOS_MAPAS),
+        "backend:campos-de-dto": len({(c.dto, campo) for c in CAMPOS_OBLIGATORIOS
+                                      for campo in campos_de_dto(esquemas[c.esquema], c.dto)}),
+        "campos:discriminantes": sum(1 for c in CAMPOS_OBLIGATORIOS if discrimina_convencion(c.campo)),
     }
