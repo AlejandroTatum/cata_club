@@ -294,7 +294,13 @@ describe("GroupsPage — optional edades label on the categoría form (#789)", (
     // The save went through: no client-side validation message stopped it, and
     // the form closed on success instead of staying open with an error.
     expect(await screen.findByText("Categoría creada correctamente.")).toBeInTheDocument();
-    expect(screen.queryByText(/^Ingrese /)).not.toBeInTheDocument();
+    // Was `queryByText(/^Ingrese /)`, retired deliberately in #861: that regex
+    // was coupled to the shape of copy this form no longer owns exclusively —
+    // it never saw "Seleccione al menos un día." and it would not have seen
+    // the window/día-cap messages either, so a copy edit could have quietly
+    // left it guarding nothing. "No client validation fired" is now a fact
+    // about the controls, not about a string prefix.
+    expect(document.querySelectorAll("[aria-invalid='true']")).toHaveLength(0);
   });
 
   it("pre-fills the edit form with the categoría's current ages label and saves an edited one", async () => {
@@ -1664,5 +1670,199 @@ describe("GroupsPage — categoria catalog fetch failure does not blank the page
 
     const card = screen.getAllByTestId("horario-card")[0];
     expect(card).toHaveTextContent("FORMATIVO");
+  });
+});
+
+/**
+ * #861 — the club's training window (06:00–22:00, inclusive borders) and the
+ * six-día cap, mirrored on the form and shown PER FIELD.
+ *
+ * Two separate things are under test here and they must not be confused:
+ *
+ *  1. The form now reaches its own validation at all. It had no `noValidate`,
+ *     so the three `required` inputs made the browser block submit before
+ *     `handleSubmit` ever ran — every client message this page has shipped
+ *     since v6 was reachable only under jsdom, which does not enforce
+ *     constraint validation. `/login` (issue #51) already carries
+ *     `noValidate` for exactly this reason.
+ *
+ *  2. Where the message lands. #51 retired `/login`'s `.alert-error` banner in
+ *     favour of per-field marks; this form gets the same move. The banner
+ *     stays for SERVER errors — a 400 the client could not have predicted
+ *     still needs somewhere to land — so the assertions below check the
+ *     control's own `aria-describedby`/`aria-invalid` wiring, not the banner.
+ *
+ * The backend (#933) remains authoritative: these checks are feedback, and a
+ * caller that skips the form is still refused by `AsistenciaServicio`.
+ */
+describe("GroupsPage — per-field mirror of the training window and día cap (#861)", () => {
+  const FUERA_DE_VENTANA = "Los entrenamientos deben programarse entre las 06:00 y las 22:00.";
+  const FRANJA_INVERTIDA = "La hora de inicio debe ser anterior a la hora de fin.";
+  const TOPE_DE_DIAS = "Una categoría no puede entrenar más de 6 días.";
+  const SEIS_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockCrearCategoria.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue([]);
+    mockCrearCategoria.mockResolvedValue({});
+  });
+
+  async function openCreateForm(): Promise<void> {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    await screen.findByRole("heading", { name: "Nueva categoría" });
+  }
+
+  /** Fills every field of the open create form and submits it. */
+  function submitWith(horaInicio: string, horaFin: string, dias: readonly string[]): void {
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Preinfantil" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: horaInicio } });
+    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: horaFin } });
+    for (const dia of dias) fireEvent.click(screen.getByRole("checkbox", { name: dia }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+  }
+
+  /** The message is on screen AND the control points at it — the wiring, not the class. */
+  async function expectMarked(control: HTMLElement, message: string): Promise<void> {
+    const alert = await screen.findByText(message);
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(control).toHaveAttribute("aria-describedby", alert.id);
+    expect(control).toHaveAttribute("aria-invalid", "true");
+  }
+
+  const horaInicio = (): HTMLElement => screen.getByLabelText(/^Hora de inicio/);
+  const horaFin = (): HTMLElement => screen.getByLabelText(/^Hora de fin/);
+  const diasFieldset = (): HTMLElement => screen.getByRole("group", { name: /^Días de la semana/ });
+
+  it("submits through its own validation instead of letting the browser block it", async () => {
+    await openCreateForm();
+
+    const form = screen.getByRole("button", { name: /crear categoría/i }).closest("form");
+    expect(form).toBeInstanceOf(HTMLFormElement);
+    expect((form as HTMLFormElement).noValidate).toBe(true);
+  });
+
+  it("bounds both time inputs to the club's window in the picker itself", async () => {
+    await openCreateForm();
+
+    for (const input of [horaInicio(), horaFin()]) {
+      expect(input).toHaveAttribute("min", "06:00");
+      expect(input).toHaveAttribute("max", "22:00");
+    }
+  });
+
+  it("marks the nombre input itself when it is left empty", async () => {
+    await openCreateForm();
+
+    fireEvent.change(horaInicio(), { target: { value: "15:00" } });
+    fireEvent.change(horaFin(), { target: { value: "16:00" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await expectMarked(screen.getByLabelText(/^Nombre/), "Ingrese un nombre para la categoría.");
+    expect(mockCrearCategoria).not.toHaveBeenCalled();
+  });
+
+  it("marks EACH empty time input on its own, not the pair with one message", async () => {
+    await openCreateForm();
+
+    submitWith("", "", ["Lunes"]);
+
+    await expectMarked(horaInicio(), "Ingrese la hora de inicio.");
+    await expectMarked(horaFin(), "Ingrese la hora de fin.");
+  });
+
+  it("rejects a start one minute before the club opens", async () => {
+    await openCreateForm();
+
+    submitWith("05:59", "20:00", ["Lunes"]);
+
+    await expectMarked(horaInicio(), FUERA_DE_VENTANA);
+    expect(mockCrearCategoria).not.toHaveBeenCalled();
+  });
+
+  it("rejects an end one minute after the club closes", async () => {
+    await openCreateForm();
+
+    submitWith("20:00", "22:01", ["Lunes"]);
+
+    await expectMarked(horaFin(), FUERA_DE_VENTANA);
+    expect(mockCrearCategoria).not.toHaveBeenCalled();
+  });
+
+  it("accepts the window's own borders — 06:00 and 22:00 are inside", async () => {
+    await openCreateForm();
+
+    submitWith("06:00", "22:00", ["Lunes"]);
+
+    await waitFor(() => expect(mockCrearCategoria).toHaveBeenCalledWith(
+      expect.objectContaining({ hora_inicio: "06:00", hora_fin: "22:00" }),
+    ));
+  });
+
+  it("describes an inverted franja from BOTH time inputs — the fault is the pair's", async () => {
+    await openCreateForm();
+
+    submitWith("20:00", "18:00", ["Lunes"]);
+
+    await expectMarked(horaInicio(), FRANJA_INVERTIDA);
+    expect(horaFin()).toHaveAttribute("aria-describedby", screen.getByText(FRANJA_INVERTIDA).id);
+  });
+
+  it("rejects the full week on the fieldset that groups the checkboxes", async () => {
+    await openCreateForm();
+
+    submitWith("15:00", "16:00", [...SEIS_DIAS, "Domingo"]);
+
+    await expectMarked(diasFieldset(), TOPE_DE_DIAS);
+    expect(mockCrearCategoria).not.toHaveBeenCalled();
+  });
+
+  it("marks the fieldset when no día is ticked at all", async () => {
+    await openCreateForm();
+
+    submitWith("15:00", "16:00", []);
+
+    await expectMarked(diasFieldset(), "Seleccione al menos un día.");
+    expect(mockCrearCategoria).not.toHaveBeenCalled();
+  });
+
+  it("accepts the six días Competitivo actually trains", async () => {
+    await openCreateForm();
+
+    submitWith("18:00", "20:00", SEIS_DIAS);
+
+    await waitFor(() => expect(mockCrearCategoria).toHaveBeenCalledWith(
+      expect.objectContaining({ dias: expect.arrayContaining(["LUNES", "SABADO"]) }),
+    ));
+  });
+
+  // Deliberately leaves a SECOND field wrong, so the form stays open on the
+  // resubmit: a mark that vanished because the whole form did proves nothing.
+  it("clears a field's mark once the admin fixes what it complained about", async () => {
+    await openCreateForm();
+    submitWith("05:00", "20:00", []);
+    await expectMarked(horaInicio(), FUERA_DE_VENTANA);
+
+    fireEvent.change(horaInicio(), { target: { value: "15:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await expectMarked(diasFieldset(), "Seleccione al menos un día.");
+    expect(horaInicio()).not.toHaveAttribute("aria-invalid");
+    expect(horaInicio()).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("keeps the shared banner for a server error the client could not predict", async () => {
+    mockCrearCategoria.mockRejectedValue(new ApiClientError("Ya existe una categoría con ese nombre.", 400));
+    await openCreateForm();
+
+    submitWith("15:00", "16:00", ["Lunes"]);
+
+    const banner = await screen.findByText("Ya existe una categoría con ese nombre.");
+    expect(banner).toHaveClass("alert-error");
   });
 });
