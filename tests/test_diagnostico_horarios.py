@@ -1,6 +1,7 @@
 """
 Tests de `scripts/diagnostico_horarios.py` — el diagnóstico de solo lectura
-del eje REVISIÓN de la superficie de horarios (issue #899).
+de la superficie de horarios (issue #899), sobre sus dos ejes: REVISIÓN (qué
+código corre) y CATÁLOGO (qué datos sirve y si llegan a la pantalla).
 
 Corre FUERA de `backend/tests/` a propósito, por la misma razón que
 `test_qa_verify_build_sha.py`: sin Postgres, sin `TEST_DATABASE_URL`, sin
@@ -8,7 +9,7 @@ fixtures de `conftest.py`, nada más que el módulo bajo prueba. Se invoca con
 `cd backend && uv run pytest ../tests/test_diagnostico_horarios.py`
 (ver `make test-diagnostico-horarios`).
 
-Todos los bordes están mockeados (red y git): esta suite prueba la decisión
+Todos los bordes de red y git están mockeados: esta suite prueba la decisión
 del diagnóstico y su cableado, no que el stack local esté levantado.
 """
 
@@ -41,6 +42,22 @@ def _observacion(**overrides) -> dict:
     }
     base.update(overrides)
     return base
+
+
+def _todo(revision=None, bff=None, backend=None) -> dict:
+    """Observación completa de los dos ejes, toda sana salvo lo que el test
+    reemplace explícitamente."""
+    return {
+        "revision": revision if revision is not None else _observacion(),
+        "catalogo": {
+            "bff": bff if bff is not None else _obs_catalogo([CATEGORIA_OK]),
+            "backend": (
+                backend
+                if backend is not None
+                else _obs_catalogo([CATEGORIA_OK], url=diag.URL_CATALOGO_BACKEND)
+            ),
+        },
+    }
 
 
 # ─── detectar_hallazgos_de_revision() — pura, sin I/O ───────────────────────
@@ -234,16 +251,24 @@ def test_observar_revision_captura_los_errores_sin_lanzar():
 # ─── Determinismo y forma de la salida ──────────────────────────────────────
 
 
-def test_el_resumen_lista_siempre_las_dos_clases_aunque_esten_en_cero():
-    resumen = diag.construir_diagnostico(_observacion())["resumen"]
-    assert resumen == {diag.CLASE_DERIVA: 0, diag.CLASE_REVISION_INDETERMINADA: 0}
+def test_el_resumen_lista_siempre_las_cinco_clases_aunque_esten_en_cero():
+    """La forma de la salida no depende de los hallazgos: un consumidor del
+    `--json` puede leer `resumen[clase]` sin chequear si la clave existe."""
+    resumen = diag.construir_diagnostico(_todo())["resumen"]
+    assert resumen == {
+        diag.CLASE_DERIVA: 0,
+        diag.CLASE_REVISION_INDETERMINADA: 0,
+        diag.CLASE_DATOS_FALTANTES: 0,
+        diag.CLASE_FUENTE_INDISPONIBLE: 0,
+        diag.CLASE_AUTORIDAD_ESTATICA: 0,
+    }
 
 
 def test_dos_corridas_con_la_misma_entrada_producen_salida_identica():
     """Determinismo: sin timestamps ni duraciones en el cuerpo, dos corridas
     equivalentes son byte a byte iguales."""
-    primera = diag.construir_diagnostico(_observacion(sha_servido="bbbb222"))
-    segunda = diag.construir_diagnostico(_observacion(sha_servido="bbbb222"))
+    primera = diag.construir_diagnostico(_todo(revision=_observacion(sha_servido="bbbb222")))
+    segunda = diag.construir_diagnostico(_todo(revision=_observacion(sha_servido="bbbb222")))
     assert diag.formatear_texto(primera) == diag.formatear_texto(segunda)
     assert diag.formatear_json(primera) == diag.formatear_json(segunda)
 
@@ -265,7 +290,7 @@ def test_los_hallazgos_salen_ordenados_de_forma_estable():
 
 
 def test_main_sale_en_cero_cuando_no_hay_hallazgos(capsys):
-    with patch.object(diag, "observar_revision", return_value=_observacion()):
+    with patch.object(diag, "observar", return_value=_todo()):
         assert diag.main([]) == 0
     assert "Sin hallazgos" in capsys.readouterr().out
 
@@ -273,7 +298,7 @@ def test_main_sale_en_cero_cuando_no_hay_hallazgos(capsys):
 def test_main_sale_en_cero_aunque_haya_deriva(capsys):
     """Un hallazgo ES la salida esperada de un inventario, no una falla de
     proceso: el código de salida no cambia."""
-    with patch.object(diag, "observar_revision", return_value=_observacion(sha_servido="bbbb222")):
+    with patch.object(diag, "observar", return_value=_todo(revision=_observacion(sha_servido="bbbb222"))):
         assert diag.main([]) == 0
     salida = capsys.readouterr().out
     assert diag.CLASE_DERIVA in salida
@@ -281,16 +306,21 @@ def test_main_sale_en_cero_aunque_haya_deriva(capsys):
 
 
 def test_main_sale_en_cero_aunque_toda_la_recoleccion_falle(capsys):
+    """Con el stack entero abajo el diagnóstico igual entrega un reporte: los
+    dos ejes reportan sus fuentes caídas y el proceso sale en 0."""
     with (
         patch.object(diag, "obtener_sha_servido", side_effect=RuntimeError("frontend caído")),
         patch.object(diag, "obtener_sha_git", side_effect=RuntimeError("git falló")),
+        patch.object(diag, "obtener_catalogo", side_effect=RuntimeError("catálogo caído")),
     ):
         assert diag.main([]) == 0
-    assert diag.CLASE_REVISION_INDETERMINADA in capsys.readouterr().out
+    salida = capsys.readouterr().out
+    assert diag.CLASE_REVISION_INDETERMINADA in salida
+    assert diag.CLASE_FUENTE_INDISPONIBLE in salida
 
 
 def test_main_json_emite_json_parseable_con_las_claves_del_reporte(capsys):
-    with patch.object(diag, "observar_revision", return_value=_observacion(sha_servido="bbbb222")):
+    with patch.object(diag, "observar", return_value=_todo(revision=_observacion(sha_servido="bbbb222"))):
         assert diag.main(["--json"]) == 0
     reporte = json.loads(capsys.readouterr().out)
     assert reporte["issue"] == 899
@@ -299,13 +329,18 @@ def test_main_json_emite_json_parseable_con_las_claves_del_reporte(capsys):
     assert reporte["hallazgos"][0]["observado"] == "bbbb222"
 
 
-def test_main_no_toma_la_url_de_argv():
-    """S5144: la URL no es configurable por CLI. `main` siempre consulta la
-    constante del módulo, sin importar qué se le pase en argv."""
-    with patch.object(diag, "obtener_sha_servido", return_value="aaaa111") as mock_obtener:
-        with patch.object(diag, "obtener_sha_git", return_value="aaaa111"):
-            diag.main([])
-    mock_obtener.assert_called_once_with(diag.URL_SALUD_FRONTEND)
+def test_main_no_toma_ninguna_url_de_argv():
+    """S5144: ninguna URL es configurable por CLI. `main` siempre consulta las
+    constantes del módulo, sin importar qué se le pase en argv."""
+    with (
+        patch.object(diag, "obtener_sha_servido", return_value="aaaa111") as mock_sha,
+        patch.object(diag, "obtener_sha_git", return_value="aaaa111"),
+        patch.object(diag, "obtener_catalogo", return_value=[CATEGORIA_OK]) as mock_catalogo,
+    ):
+        diag.main([])
+    mock_sha.assert_called_once_with(diag.URL_SALUD_FRONTEND)
+    urls_consultadas = [llamada.args[0] for llamada in mock_catalogo.call_args_list]
+    assert urls_consultadas == [diag.URL_CATALOGO_BFF, diag.URL_CATALOGO_BACKEND]
 
 
 def test_obtener_sha_git_no_hace_fetch():
@@ -317,3 +352,149 @@ def test_obtener_sha_git_no_hace_fetch():
         diag.obtener_sha_git("origin/main")
     for llamada in mock_run.call_args_list:
         assert "fetch" not in llamada.args[0]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# EJE CATÁLOGO (issue #899, PR 2)
+# ════════════════════════════════════════════════════════════════════════════
+
+BLOQUE_OK = {"days": ["LUNES", "MIERCOLES"], "startTime": "15:00", "endTime": "16:00"}
+CATEGORIA_OK = {"category": "Formativo", "ages": "5 a 10 años", "blocks": [BLOQUE_OK]}
+
+
+def _obs_catalogo(payload, url=None) -> dict:
+    """Observación de un catálogo sano, resumida por el código de producción
+    para no duplicar acá la forma del resumen."""
+    return {
+        "url": url or diag.URL_CATALOGO_BFF,
+        "error": None,
+        **diag.resumir_catalogo(payload),
+    }
+
+
+def _obs_catalogo_caido(error, url=None) -> dict:
+    return {
+        "url": url or diag.URL_CATALOGO_BFF,
+        "error": error,
+        "categorias": None,
+        "total_categorias": None,
+        "categorias_renderizables": None,
+    }
+
+
+# ─── Espejo de mapBlock/mapPublicSchedules (schedule-data.ts) ───────────────
+
+
+def test_bloque_valido_es_renderizable():
+    assert diag.bloque_renderizable(BLOQUE_OK) is True
+
+
+def test_bloque_con_dia_desconocido_no_es_renderizable():
+    """`mapBlock` descarta el bloque entero si un día no está en DAY_LABELS."""
+    assert diag.bloque_renderizable({**BLOQUE_OK, "days": ["LUNES", "FUNDAY"]}) is False
+
+
+def test_bloque_sin_dias_no_es_renderizable():
+    assert diag.bloque_renderizable({**BLOQUE_OK, "days": []}) is False
+
+
+def test_bloque_con_hora_mal_formada_no_es_renderizable():
+    """VALID_TIME es /^\\d{2}:\\d{2}$/: "9:00" no pasa, "09:00" sí."""
+    assert diag.bloque_renderizable({**BLOQUE_OK, "startTime": "9:00"}) is False
+    assert diag.bloque_renderizable({**BLOQUE_OK, "startTime": "09:00"}) is True
+
+
+def test_categoria_con_etiqueta_en_blanco_no_es_renderizable():
+    assert diag.categoria_renderizable({**CATEGORIA_OK, "category": "   "}) is False
+
+
+def test_categoria_sin_bloques_renderizables_no_es_renderizable():
+    assert diag.categoria_renderizable({**CATEGORIA_OK, "blocks": [{"days": [], "startTime": "x", "endTime": "y"}]}) is False
+
+
+# ─── Espejo de isPublicSchedules (route.ts) — la compuerta todo-o-nada ──────
+
+
+def test_un_catalogo_bien_formado_pasa_la_compuerta_del_bff():
+    assert diag.catalogo_tiene_forma_valida([CATEGORIA_OK]) is True
+
+
+def test_un_bloque_sin_starttime_invalida_todo_el_catalogo():
+    """`isPublicSchedules` es todo-o-nada: un bloque malo hace que el BFF
+    devuelva 502 y NO se sirva ninguna categoría."""
+    roto = {"category": "Infantil", "blocks": [{"days": ["LUNES"], "endTime": "16:00"}]}
+    assert diag.catalogo_tiene_forma_valida([CATEGORIA_OK, roto]) is False
+
+
+# ─── EL MODO SILENCIOSO: pasa la compuerta, el mapper igual lo descarta ─────
+
+
+def test_un_catalogo_que_pasa_la_compuerta_del_bff_puede_no_renderizar_nada():
+    """El hallazgo de más valor de #899: `isPublicSchedules` acepta days=[] y
+    cualquier formato de hora, pero `mapBlock` los descarta sin avisar. El
+    payload HTTP se ve sano y la landing no muestra la categoría."""
+    payload = [{"category": "Infantil", "blocks": [{"days": [], "startTime": "9:00", "endTime": "10"}]}]
+    assert diag.catalogo_tiene_forma_valida(payload) is True
+
+    hallazgos = diag.detectar_hallazgos_de_catalogo(_obs_catalogo(payload))
+    assert [h["clase"] for h in hallazgos] == [diag.CLASE_DATOS_FALTANTES]
+    assert "Infantil" in hallazgos[0]["observado"]
+
+
+def test_categoria_que_pierde_algunos_bloques_se_reporta_como_incompleta():
+    payload = [{"category": "Formativo", "blocks": [BLOQUE_OK, {"days": ["FUNDAY"], "startTime": "15:00", "endTime": "16:00"}]}]
+    hallazgos = diag.detectar_hallazgos_de_catalogo(_obs_catalogo(payload))
+    assert [h["clase"] for h in hallazgos] == [diag.CLASE_DATOS_FALTANTES]
+    assert "1 de 2" in hallazgos[0]["observado"]
+
+
+# ─── missing_dynamic_data contra dynamic_source_unavailable ────────────────
+
+
+def test_catalogo_sano_no_reporta_hallazgos():
+    assert diag.detectar_hallazgos_de_catalogo(_obs_catalogo([CATEGORIA_OK])) == []
+
+
+def test_catalogo_vacio_pero_valido_es_missing_dynamic_data():
+    """Vacío-pero-válido NO es una fuente caída: el endpoint contestó bien."""
+    hallazgos = diag.detectar_hallazgos_de_catalogo(_obs_catalogo([]))
+    assert [h["clase"] for h in hallazgos] == [diag.CLASE_DATOS_FALTANTES]
+    assert hallazgos[0]["observado"] == "0 categorías"
+
+
+def test_endpoint_inalcanzable_es_dynamic_source_unavailable():
+    hallazgos = diag.detectar_hallazgos_de_catalogo(_obs_catalogo_caido("Connection refused"))
+    assert [h["clase"] for h in hallazgos] == [diag.CLASE_FUENTE_INDISPONIBLE]
+
+
+def test_forma_invalida_es_dynamic_source_unavailable_y_nunca_missing_data():
+    """Un 502 de `isPublicSchedules` significa "no sé qué hay", no "no hay
+    nada". Confundirlos es el mismo error que llamar deriva a un `unknown`."""
+    hallazgos = diag.detectar_hallazgos_de_catalogo(
+        _obs_catalogo_caido("la respuesta no tiene la forma de PublicScheduleCategoryDTO")
+    )
+    assert [h["clase"] for h in hallazgos] == [diag.CLASE_FUENTE_INDISPONIBLE]
+    assert diag.CLASE_DATOS_FALTANTES not in {h["clase"] for h in hallazgos}
+
+
+def test_obtener_catalogo_con_forma_invalida_levanta_error_sin_devolver_vacio():
+    cuerpo = b'[{"category": "Infantil", "blocks": [{"days": ["LUNES"]}]}]'
+    with patch("urllib.request.urlopen", return_value=_RespuestaFalsa(cuerpo)):
+        try:
+            diag.obtener_catalogo(diag.URL_CATALOGO_BFF)
+        except RuntimeError as exc:
+            assert "forma" in str(exc)
+        else:
+            raise AssertionError("se esperaba RuntimeError ante una forma inválida")
+
+
+def test_las_dos_bocas_del_catalogo_se_reportan_por_separado():
+    """El backend puede publicar bien y el BFF no estar pasándolo (o al
+    revés). Cada boca es su propia fuente, así que la divergencia se ve sin
+    inventar una clase para ella."""
+    diagnostico = diag.construir_diagnostico(
+        _todo(backend=_obs_catalogo([], url=diag.URL_CATALOGO_BACKEND))
+    )
+    assert diagnostico["resumen"][diag.CLASE_DATOS_FALTANTES] == 1
+    assert diag.URL_CATALOGO_BACKEND in diagnostico["hallazgos"][0]["fuente"]
+    assert diag.URL_CATALOGO_BFF not in diagnostico["hallazgos"][0]["fuente"]
