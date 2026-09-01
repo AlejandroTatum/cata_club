@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activationPendingReasons } from "../page";
+import { activationPendingReasons } from "../activation-reasons";
 
 const session = (
   correoVerificado: boolean,
