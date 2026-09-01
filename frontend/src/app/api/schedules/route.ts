@@ -8,8 +8,14 @@ function isPublicSchedules(value: unknown): boolean {
   if (!Array.isArray(value)) return false;
   return value.every((category) => {
     if (typeof category !== "object" || category === null) return false;
-    const { category: label, blocks } = category as { category?: unknown; blocks?: unknown };
+    const { category: label, ages, blocks } = category as { category?: unknown; ages?: unknown; blocks?: unknown };
     if (typeof label !== "string" || !Array.isArray(blocks)) return false;
+    // `ages` is the backend's optional orientation label
+    // (`PublicScheduleCategoryDTO`, #913): a string, or null/absent when the
+    // category publishes none. Named explicitly rather than tolerated by
+    // omission — anything else here means the upstream shape moved, and the
+    // landing must not render a guess at it.
+    if (ages !== undefined && ages !== null && typeof ages !== "string") return false;
     return blocks.every((block) => {
       if (typeof block !== "object" || block === null) return false;
       const { days, startTime, endTime } = block as {

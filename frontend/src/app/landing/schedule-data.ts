@@ -1,4 +1,28 @@
-import type { LandingSchedule } from "./landing-config";
+/**
+ * The landing's schedule vocabulary lives here, with the mapper that produces
+ * it — issue #789. It used to live in `landing-config.ts`, beside a
+ * hand-written list of the club's categories; the club manages its schedules
+ * inside the app now, so `GET /api/schedules` is the only source and this
+ * module is the only place that says what one looks like.
+ */
+
+/** One published time block of a category, ready to render. */
+export interface LandingScheduleSlot {
+  hours: string;
+  days: string;
+  on: "week" | "sat";
+}
+
+export interface LandingSchedule {
+  category: string;
+  /**
+   * The club's orientation label for the category ("5 a 10 años",
+   * "Selección") — copy, never a rule: no age is validated against it. Absent
+   * when the category publishes none, which is a legitimate state.
+   */
+  audience?: string;
+  slots: LandingScheduleSlot[];
+}
 
 export interface PublicScheduleBlockPayload {
   days: string[];
@@ -8,6 +32,8 @@ export interface PublicScheduleBlockPayload {
 
 export interface PublicSchedulePayload {
   category: string;
+  /** Optional in the backend's `PublicScheduleCategoryDTO` (#913). */
+  ages?: string | null;
   blocks: PublicScheduleBlockPayload[];
 }
 
@@ -30,7 +56,18 @@ function joinLabels(labels: string[]): string {
   return `${labels.slice(0, -1).join(", ")} y ${labels[labels.length - 1]}`;
 }
 
-function mapBlock(block: unknown): LandingSchedule["slots"][number] | null {
+/**
+ * The category's age label, or nothing. A blank string and a value that is not
+ * text both mean "no label": the landing renders the Edad fact conditionally,
+ * and an empty or malformed one must disappear rather than show as a gap.
+ */
+function mapAudience(ages: unknown): string | undefined {
+  if (typeof ages !== "string") return undefined;
+  const label = ages.trim();
+  return label.length > 0 ? label : undefined;
+}
+
+function mapBlock(block: unknown): LandingScheduleSlot | null {
   if (typeof block !== "object" || block === null) return null;
   const candidate = block as Partial<PublicScheduleBlockPayload>;
   if (!Array.isArray(candidate.days) || candidate.days.length === 0) return null;
@@ -51,7 +88,11 @@ export function mapPublicSchedules(payload: unknown): LandingSchedule[] {
     if (typeof entry !== "object" || entry === null) return [];
     const candidate = entry as Partial<PublicSchedulePayload>;
     if (typeof candidate.category !== "string" || !candidate.category.trim() || !Array.isArray(candidate.blocks)) return [];
-    const slots = candidate.blocks.map(mapBlock).filter((slot): slot is LandingSchedule["slots"][number] => slot !== null);
-    return slots.length > 0 ? [{ category: candidate.category.trim(), slots }] : [];
+    const slots = candidate.blocks.map(mapBlock).filter((slot): slot is LandingScheduleSlot => slot !== null);
+    if (slots.length === 0) return [];
+    const audience = mapAudience(candidate.ages);
+    // Spread rather than `audience: undefined`: an absent label leaves the key
+    // absent, so nothing downstream has to tell "no label" from "not mapped".
+    return [{ category: candidate.category.trim(), ...(audience === undefined ? {} : { audience }), slots }];
   });
 }

@@ -37,6 +37,48 @@ describe("GET /api/schedules", () => {
     expect(await response.json()).toEqual([]);
   });
 
+  /**
+   * `ages` is the optional orientation label the backend's
+   * `PublicScheduleCategoryDTO` publishes (#913). The landing derives its
+   * category "Edad" fact from it, so a validator that dropped or rejected it
+   * would silently take the label away from every visitor.
+   */
+  it("passes the optional age label through untouched", async () => {
+    const upstream = [
+      { category: "Formativo", ages: "5 a 10 años", blocks: [{ days: ["LUNES"], startTime: "15:00", endTime: "16:00" }] },
+      { category: "Juego Libre", ages: null, blocks: [{ days: ["SABADO"], startTime: "15:00", endTime: "18:00" }] },
+    ];
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify(upstream), { status: 200 }));
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(upstream);
+  });
+
+  it("still accepts a category that publishes no age label at all", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify([{ category: "Adultos", blocks: [] }]), { status: 200 }),
+    );
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects an age label that is not text", async () => {
+    // Tolerating `ages` is not the same as tolerating anything: the contract
+    // says string or null, and a number here means the upstream shape moved.
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify([{ category: "Adultos", ages: 18, blocks: [] }]), { status: 200 }),
+    );
+
+    const response = await GET();
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ message: "La respuesta de horarios no es válida." });
+  });
+
   it("maps an upstream failure to a degraded response", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 
