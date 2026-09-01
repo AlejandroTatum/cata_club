@@ -8,6 +8,19 @@ import {
   toWhatsAppNumber,
   yearsSinceFounding,
 } from "@/app/landing/landing-config";
+import type { LandingSchedule } from "@/app/landing/schedule-data";
+import { category, publishedCatalog, satSlot } from "./schedule-fixtures";
+
+/**
+ * A stand-in catalog, not the club's schedules — those live in the app and
+ * reach the page through `GET /api/schedules` (issue #789).
+ * `deriveContactHours` is a pure function over whatever catalog it is handed,
+ * so its tests state the input they need and nothing more. The builders live
+ * in `schedule-fixtures.ts` because `schedule-timeline.test.ts` needs the same
+ * shapes; importing the club's real list back in would be the second copy this
+ * issue removed.
+ */
+const PUBLISHED: LandingSchedule[] = publishedCatalog();
 
 describe("toWhatsAppNumber", (): void => {
   it("converts an Ecuadorian mobile number to its international form", (): void => {
@@ -114,12 +127,12 @@ describe("buildLandingStats", (): void => {
 });
 
 describe("deriveContactHours", (): void => {
-  it("spans the earliest start and the latest end across every slot, including the Adultos morning block", (): void => {
-    expect(deriveContactHours(landingConfig.schedules)).toBe("Lun – Sáb · 08:00 – 21:15");
+  it("spans the earliest start and the latest end across every slot, morning block included", (): void => {
+    expect(deriveContactHours(PUBLISHED)).toBe("Lun – Sáb · 08:00 – 21:15");
   });
 
   it("stops at Friday when no slot runs on Saturday", (): void => {
-    const weekdaysOnly = landingConfig.schedules.map((schedule): typeof schedule => ({
+    const weekdaysOnly = PUBLISHED.map((schedule): LandingSchedule => ({
       ...schedule,
       slots: schedule.slots.map((slot): typeof slot => ({ ...slot, on: "week", days: "Lunes a Viernes" })),
     }));
@@ -128,58 +141,43 @@ describe("deriveContactHours", (): void => {
   });
 
   it("spans every slot of a single multi-slot category, not just its first one", (): void => {
-    const onlyAdultos = landingConfig.schedules.filter((schedule): boolean => schedule.category === "Adultos");
+    const onlyNoche = PUBLISHED.filter((schedule): boolean => schedule.category === "Noche");
 
-    expect(deriveContactHours(onlyAdultos)).toBe("Lun – Vie · 08:00 – 21:15");
+    expect(deriveContactHours(onlyNoche)).toBe("Lun – Vie · 18:00 – 21:15");
   });
 
   it("extends the day range to Saturday from a Saturday-only category with no weekday slot", (): void => {
-    const onlyJuegoLibre = landingConfig.schedules.filter((schedule): boolean => schedule.category === "Juego Libre");
+    const onlySaturday = PUBLISHED.filter((schedule): boolean => schedule.category === "Sabatino");
 
-    expect(deriveContactHours(onlyJuegoLibre)).toBe("Lun – Sáb · 15:00 – 18:00");
+    expect(deriveContactHours(onlySaturday)).toBe("Lun – Sáb · 15:00 – 18:00");
+  });
+
+  it("reaches Sunday when the club publishes a Sunday slot", (): void => {
+    const sunday: LandingSchedule[] = [category("Dominical", [satSlot("09:00 – 11:00", "Domingo")])];
+
+    expect(deriveContactHours(sunday)).toBe("Lun – Dom · 09:00 – 11:00");
+  });
+
+  /**
+   * The contact card calls this with whatever `GET /api/schedules` returned,
+   * and an empty catalog is a legitimate answer. The function must not throw
+   * or fabricate a window — the caller decides what to say instead (see
+   * `LandingPage`'s status copy).
+   */
+  it("states no window at all when there is nothing published", (): void => {
+    expect(deriveContactHours([])).toBe("Lun – Vie ·  – ");
   });
 });
 
 describe("landingConfig", (): void => {
-  it("publishes contact hours derived from the schedule, not a placeholder", (): void => {
-    expect(landingConfig.contact.hours).toBe(deriveContactHours(landingConfig.schedules));
-  });
-});
-
-describe("landingConfig.schedules", (): void => {
-  it("lists six categories in the approved prototype order", (): void => {
-    expect(landingConfig.schedules.map((schedule): string => schedule.category)).toEqual([
-      "Formativo",
-      "Infantil",
-      "Juvenil",
-      "Competitivo",
-      "Adultos",
-      "Juego Libre",
-    ]);
-  });
-
-  it("gives Adultos both a weekday morning and a weekday evening slot", (): void => {
-    const adultos = landingConfig.schedules.find((schedule): boolean => schedule.category === "Adultos");
-
-    expect(adultos?.slots).toEqual([
-      { hours: "08:00 – 09:15", days: "Lunes a Viernes", on: "week" },
-      { hours: "20:00 – 21:15", days: "Lunes a Viernes", on: "week" },
-    ]);
-  });
-
-  it("gives Competitivo both a weekday slot and a Saturday slot at the same hours", (): void => {
-    const competitivo = landingConfig.schedules.find((schedule): boolean => schedule.category === "Competitivo");
-
-    expect(competitivo?.slots).toEqual([
-      { hours: "18:00 – 20:00", days: "Lunes a Viernes", on: "week" },
-      { hours: "18:00 – 20:00", days: "Sábado", on: "sat" },
-    ]);
-  });
-
-  it("adds Juego Libre as a new Saturday-only category open to everyone", (): void => {
-    const juegoLibre = landingConfig.schedules.find((schedule): boolean => schedule.category === "Juego Libre");
-
-    expect(juegoLibre?.audience).toBe("Abierto a todos");
-    expect(juegoLibre?.slots).toEqual([{ hours: "15:00 – 18:00", days: "Sábado", on: "sat" }]);
+  /**
+   * Issue #789: the club's schedules are managed in the app, so this module
+   * no longer states them — not as a list, and not as a range frozen at
+   * module load. `landing-config-no-schedule-list.test.ts` guards the source
+   * itself; this only pins what the module is still for.
+   */
+  it("carries the contact channels and nothing about schedules", (): void => {
+    expect(Object.keys(landingConfig)).toEqual(["contact"]);
+    expect(Object.keys(landingConfig.contact)).toEqual(["whatsapp", "facebook", "instagram"]);
   });
 });
