@@ -21,6 +21,7 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import TrainerStudentsPage from "@/app/trainer/students/page";
 import { canAccess } from "@/lib/auth-utils";
 import { ICON } from "@/lib/icon-size";
+import { buttonSkin } from "@/components/ui/Button";
 import type { AlumnoHorario, FichaEmergencia } from "@/services/api";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -256,6 +257,57 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
     expect(glifo).toHaveAttribute("width", String(ICON.base));
     expect(glifo).toHaveAttribute("stroke-width", "1.5");
     expect(glifo).toHaveAttribute("aria-hidden", "true");
+  });
+
+  /*
+   * Issue #911: #857 cambió el glifo y dejó el color. Un botón rojo dice
+   * "peligro" con la misma fuerza con la que lo decía el triángulo, así que
+   * la mitad del arreglo seguía sin hacerse.
+   *
+   * La piel se afirma contra `buttonSkin("secondary")` —la fuente de verdad
+   * del sistema— y no contra una copia de sus clases: si mañana el secundario
+   * cambia de relleno, esta prueba lo sigue en vez de fijar el valor viejo.
+   * Lo que sí se escribe literal es la negativa: `text-state-bad` es la clase
+   * que este issue vino a sacar, y tiene que morder por nombre.
+   */
+  it("viste la ficha médica con el secundario del sistema, no con el rojo de peligro (issue #911)", async () => {
+    render(<TrainerStudentsPage />);
+
+    const diego = await screen.findByTestId("student-row-3");
+    const ficha = within(diego).getByRole("button", {
+      name: "Ficha médica de Diego Mendoza",
+    });
+
+    for (const clase of buttonSkin("secondary").split(" ")) {
+      expect(ficha).toHaveClass(clase);
+    }
+    expect(ficha.className).not.toContain("state-bad");
+
+    // El alto sale del sistema (`h-ctl`), no de un número elegido a mano.
+    expect(ficha).toHaveClass("h-ctl");
+  });
+
+  /*
+   * El resto del patrón de `/members`: el foco se pone en el disparador ANTES
+   * de abrir. Un toque en el celular no enfoca el botón, así que la trampa de
+   * foco guardaría `body` como origen y al cerrar la ficha el entrenador
+   * quedaría al principio de la página, no en el renglón que estaba mirando.
+   */
+  it("devuelve el foco al renglón al cerrar la ficha, aunque el toque no lo haya enfocado (issue #911)", async () => {
+    render(<TrainerStudentsPage />);
+
+    const diego = await screen.findByTestId("student-row-3");
+    const trigger = within(diego).getByRole("button", {
+      name: "Ficha médica de Diego Mendoza",
+    });
+
+    expect(trigger).not.toHaveFocus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar" }));
+
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   /*

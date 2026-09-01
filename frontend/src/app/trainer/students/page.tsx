@@ -46,6 +46,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import {
   BackLink,
+  Button,
   EmptyState,
   ErrorState,
   FilterPanel,
@@ -208,23 +209,37 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       </span>
 
                       {/*
-                       * La única acción del renglón, con el mismo alto de pulgar
-                       * y el mismo glifo que la ficha médica de Administración
-                       * (`/members`): es la misma tarjeta, y aprenderla dos
-                       * veces sería cobrarle al entrenador la misma lección dos
-                       * veces. `Stethoscope` y no `AlertTriangle` porque el
-                       * botón consulta una ficha, no anuncia un peligro (issue
-                       * #857).
+                       * La única acción del renglón, y la MISMA que la ficha
+                       * médica de Administración (`/members`): es la misma
+                       * tarjeta, y aprenderla dos veces sería cobrarle al
+                       * entrenador la misma lección dos veces. `Stethoscope` y
+                       * no `AlertTriangle` porque el botón consulta una ficha,
+                       * no anuncia un peligro (issue #857).
+                       *
+                       * El botón entero es el de `MedicalRecordAccessButton`,
+                       * no una copia de sus clases: `Button` secundario y el
+                       * foco puesto en el disparador antes de abrir, porque un
+                       * toque en el celular no enfoca nada y la trampa de foco
+                       * de la ficha guardaría `body` como origen — al cerrar,
+                       * el entrenador volvería al principio de la página en vez
+                       * del renglón que estaba mirando. Lo que cambia respecto
+                       * de `/members` es la densidad: este renglón es una lista
+                       * de pulgar, no una celda de tabla, así que `md` (h-ctl,
+                       * `text-sm`) con `ICON.base` — los dos escalones que van
+                       * juntos — en lugar de `sm` con `ICON.sm` (issue #911).
                        */}
-                      <button
-                            type="button"
-                            onClick={() => setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })}
-                            aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
-                            className="flex h-11 flex-none items-center justify-center gap-2 rounded-ctl px-3 text-sm font-semibold text-state-bad transition-colors hover:bg-state-bad-bg"
-                          >
-                            <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
-                            Ficha médica
-                          </button>
+                      <Button
+                        variant="secondary"
+                        className="flex-none"
+                        onClick={(event) => {
+                          event.currentTarget.focus();
+                          setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto });
+                        }}
+                        aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
+                      >
+                        <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
+                        Ficha médica
+                      </Button>
                           <button
                             type="button"
                             onClick={() => setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })}
