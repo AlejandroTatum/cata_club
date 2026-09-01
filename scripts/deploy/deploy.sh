@@ -24,6 +24,18 @@ load_image_tag() {
   fi
 }
 
+verify_checkout_head() {
+  local checkout_head stack_image_tag
+  [ -f "$STACK_DIR/.env" ] || die "falta ${STACK_DIR}/.env"
+  stack_image_tag="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
+  [ "$stack_image_tag" = "$IMAGE_TAG" ] \
+    || die "${STACK_DIR}/.env IMAGE_TAG=${stack_image_tag:-vacío} no coincide con IMAGE_TAG=${IMAGE_TAG}"
+  checkout_head="$(git -C "$STACK_DIR" rev-parse --verify HEAD 2>/dev/null)" \
+    || die "no se pudo leer Git HEAD del checkout en ${STACK_DIR}"
+  [ "$checkout_head" = "$IMAGE_TAG" ] \
+    || die "Git HEAD=${checkout_head} no coincide con IMAGE_TAG=${IMAGE_TAG}"
+}
+
 # Mismo idioma que `load_image_tag`. El contenedor backend NO recibe `DOMINIO`
 # (solo lo declara el servicio `caddy` en docker-compose.prod.yml), y la sonda
 # del borde lo necesita para presentar el SNI y el Host del bloque `{$DOMINIO}`
@@ -104,6 +116,64 @@ pre_deploy_backup() {
   fi
   log "Backup pre-deploy: dump lógico antes de migrar"
   "$SCRIPT_DIR/../backup/backup-db.sh"
+}
+
+verificar_runtime_sha() {
+  local salida
+  salida="$(docker compose "${COMPOSE_FILES[@]}" ps --format json)" \
+    || die "no se pudo leer el runtime para verificar IMAGE_TAG=${IMAGE_TAG}"
+  if ! printf '%s\n' "$salida" | python3 -c '
+import json, sys
+
+esperado = sys.argv[1]
+bruto = sys.stdin.read().strip()
+registros = []
+try:
+    datos = json.loads(bruto) if bruto else []
+except json.JSONDecodeError:
+    datos = None
+if isinstance(datos, list):
+    registros = [item for item in datos if isinstance(item, dict)]
+elif isinstance(datos, dict):
+    registros = [datos]
+elif datos is None:
+    for linea in bruto.splitlines():
+        try:
+            item = json.loads(linea)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            registros.append(item)
+requeridos = {"backend", "celery-worker", "celery-beat", "frontend"}
+encontrados = {str(item.get("Service")): item for item in registros}
+faltantes = sorted(requeridos - encontrados.keys())
+incorrectos = sorted(
+    servicio for servicio in requeridos & encontrados.keys()
+    if not str(encontrados[servicio].get("Image", "")).endswith(":" + esperado)
+)
+if faltantes or incorrectos:
+    partes = []
+    if faltantes:
+        partes.append("faltan servicios: " + ",".join(faltantes))
+    if incorrectos:
+        partes.append("servicios con imagen distinta: " + ",".join(incorrectos))
+    print("; ".join(partes), file=sys.stderr)
+    raise SystemExit(1)
+' "$IMAGE_TAG"; then
+    die "runtime no coincide con IMAGE_TAG=${IMAGE_TAG} (se esperaba HEAD=${IMAGE_TAG})"
+  fi
+  log "Runtime alineado con Git HEAD=${IMAGE_TAG}: backend, worker, beat y frontend"
+}
+
+verificar_release_persistido() {
+  local env_tag ledger_tag
+  env_tag="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
+  ledger_tag="$(sed -n 's/^IMAGE_TAG=//p' "$RELEASE_RECORD_DIR/current.env" | head -1)"
+  [ "$env_tag" = "$IMAGE_TAG" ] \
+    || die "${STACK_DIR}/.env no quedó alineado: IMAGE_TAG=${env_tag:-vacío}, esperado ${IMAGE_TAG}"
+  [ "$ledger_tag" = "$IMAGE_TAG" ] \
+    || die "ledger de release no quedó alineado: IMAGE_TAG=${ledger_tag:-vacío}, esperado ${IMAGE_TAG}"
+  log "Alineación verificada: runtime = Git HEAD = IMAGE_TAG = ledger = ${IMAGE_TAG}"
 }
 
 do_checks() {
@@ -455,6 +525,7 @@ check_chatbot_config() {
 case "$cmd" in
   deploy)
     load_image_tag
+    verify_checkout_head
     pre_deploy_backup
     "$SCRIPT_DIR/../ops/preflight-production.sh"
     check_remote_image
@@ -464,11 +535,14 @@ case "$cmd" in
     validar_caddyfile
     docker compose "${COMPOSE_FILES[@]}" up -d
     refrescar_caddy
+    verificar_runtime_sha
     do_checks
     "$SCRIPT_DIR/../ops/record-release.sh"
+    verificar_release_persistido
     ;;
   checks)
     load_image_tag
+    verify_checkout_head
     "$SCRIPT_DIR/../ops/preflight-production.sh"
     do_checks
     ;;

@@ -28,9 +28,31 @@ case "$CURRENT_COMPATIBILITY" in
   *) die "registro de release inválido; no se ejecuta ningún cambio" ;;
 esac
 [ -f "$TARGET_RECORD" ] || die "el SHA objetivo no tiene un registro local; no se ejecuta ningún cambio"
+[ "$(sed -n 's/^IMAGE_TAG=//p' "$TARGET_RECORD" | head -1)" = "$TARGET_TAG" ] \
+  || die "el registro del SHA objetivo no está alineado; no se ejecuta ningún cambio"
 [ -d "$STACK_DIR" ] || die "STACK_DIR no existe: $STACK_DIR"
 [ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env"
 command -v docker >/dev/null 2>&1 || die "docker no está disponible"
+
+persist_project_env() {
+  local tmp
+  tmp="$(mktemp "$STACK_DIR/.env.rollback.XXXXXX")" \
+    || die "no se pudo preparar ${STACK_DIR}/.env para persistir IMAGE_TAG=${TARGET_TAG}"
+  trap 'rm -f "$tmp"' EXIT
+  awk -v tag="$TARGET_TAG" '
+    BEGIN { found = 0 }
+    /^IMAGE_TAG=/ {
+      if (!found) { print "IMAGE_TAG=" tag; found = 1 }
+      next
+    }
+    { print }
+    END { if (!found) print "IMAGE_TAG=" tag }
+  ' "$STACK_DIR/.env" > "$tmp" \
+    || die "no se pudo escribir ${STACK_DIR}/.env para persistir IMAGE_TAG=${TARGET_TAG}"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$STACK_DIR/.env"
+  trap - EXIT
+}
 
 log "Rollback de aplicación a ${TARGET_TAG}; no se ejecutará alembic downgrade"
 (
@@ -38,6 +60,7 @@ log "Rollback de aplicación a ${TARGET_TAG}; no se ejecutará alembic downgrade
   IMAGE_TAG="$TARGET_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
   IMAGE_TAG="$TARGET_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 )
+persist_project_env
 cp "$TARGET_RECORD" "$CURRENT_RECORD"
 chmod 600 "$CURRENT_RECORD"
 log "Rollback de aplicación completado. Registrar/validar el estado antes de otro cambio."

@@ -18,6 +18,15 @@ CURRENT_RELEASE_RECORD="$RELEASE_RECORD_DIR/current.env"
 
 [ -d "$STACK_DIR" ] || die "STACK_DIR no existe: $STACK_DIR"
 [ -f "$STACK_DIR/.env" ] || die "falta $STACK_DIR/.env"
+if [ -z "$IMAGE_TAG" ]; then
+  IMAGE_TAG="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
+  export IMAGE_TAG
+fi
+ENV_IMAGE_TAG="$(sed -n 's/^IMAGE_TAG=//p' "$STACK_DIR/.env" | head -1)"
+[ "$ENV_IMAGE_TAG" = "$IMAGE_TAG" ] \
+  || die "${STACK_DIR}/.env IMAGE_TAG=${ENV_IMAGE_TAG:-vacío} no coincide con IMAGE_TAG=${IMAGE_TAG}"
+CHECKOUT_HEAD="$(git -C "$STACK_DIR" rev-parse --verify HEAD 2>/dev/null)" || die "no se pudo leer Git HEAD del checkout en ${STACK_DIR}"
+[ "$CHECKOUT_HEAD" = "$IMAGE_TAG" ] || die "Git HEAD=${CHECKOUT_HEAD} no coincide con IMAGE_TAG=${IMAGE_TAG}"
 stack_value() {
       local key="$1"
       if [ "${!key+x}" = x ]; then printf '%s' "${!key}"; else sed -n "s/^${key}=//p" "$STACK_DIR/.env" | tail -1; fi
