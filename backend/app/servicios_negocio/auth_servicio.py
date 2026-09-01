@@ -473,7 +473,13 @@ class AuthServicio:
             raise CredencialesInvalidas("Refresh token inválido o expirado")
 
         roles_actuales = [rol.tipo_rol.value for rol in usuario.roles]
-        claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles_actuales}
+        activacion_completa = GestorAutenticacion.puede_acceder_modulos(self.db, usuario)
+        claims = {
+            "sub": usuario.correo,
+            "persona_id": usuario.persona_id,
+            "roles": roles_actuales,
+            "activacion_completa": activacion_completa,
+        }
         # `sid` se arrastra del refresh en vez de abrirse de nuevo: refrescar
         # es el mismo equipo continuando la misma sesión, no una sesión nueva.
         # Sin esto, el primer refresh dejaría al usuario sin poder reconocer su
@@ -549,10 +555,22 @@ class AuthServicio:
         habría dejado de ser observacional.
         """
         roles = [rol.tipo_rol.value for rol in usuario.roles]
-        claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles}
+        activacion_completa = GestorAutenticacion.puede_acceder_modulos(self.db, usuario)
+        claims = {
+            "sub": usuario.correo,
+            "persona_id": usuario.persona_id,
+            "roles": roles,
+            "activacion_completa": activacion_completa,
+        }
         # El refresh token no necesita roles (solo sirve para pedir un nuevo
-        # access token; los roles se releyan del usuario en cada refresh).
-        refresh_claims = {"sub": usuario.correo, "persona_id": usuario.persona_id}
+        # access token; los roles se releyan del usuario en cada refresh),
+        # pero sí lleva el estado para que el guard de borde pueda reconocer
+        # una cuenta pendiente sin validar el JWT en Edge.
+        refresh_claims = {
+            "sub": usuario.correo,
+            "persona_id": usuario.persona_id,
+            "activacion_completa": activacion_completa,
+        }
         if sesion_id is not None:
             claims["sid"] = sesion_id
             # También en el refresh: sin esto, el primer refresh perdería la

@@ -3,12 +3,15 @@ from typing import Optional, TYPE_CHECKING
 
 import jwt
 from passlib.context import CryptContext
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.soporte_transversal.configuracion import settings
-from app.dominio.excepciones import CredencialesInvalidas
+from app.dominio.enums import EstadoMembresia, TipoRol
+from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
+from app.dominio.modelos import HistorialEstadoMembresia, Membresia
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 
@@ -21,6 +24,46 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 class GestorAutenticacion:
     """Encapsula el hashing de contraseñas y la emisión/validación de JWT."""
+
+    @staticmethod
+    def alta_presencial_completada(db: Session, persona_id: int) -> bool:
+        """Deriva el hito histórico de la primera membresía ACTIVA.
+
+        No usa el estado operativo actual como única fuente: una membresía
+        VENCIDA o SUSPENDIDA ya demuestra que estuvo activa, y las
+        transiciones históricas hacia ACTIVA conservan el hecho aunque la
+        fila hoy tenga otro estado. Una INACTIVA sola nunca habilita.
+        """
+        estado_habilitante = (
+            EstadoMembresia.ACTIVA,
+            EstadoMembresia.VENCIDA,
+            EstadoMembresia.SUSPENDIDA,
+        )
+        if db.query(Membresia.id).filter(
+            Membresia.persona_id == persona_id,
+            Membresia.estado.in_(estado_habilitante),
+        ).first() is not None:
+            return True
+
+        return db.query(HistorialEstadoMembresia.id).join(
+            Membresia, Membresia.id == HistorialEstadoMembresia.membresia_id,
+        ).filter(
+            Membresia.persona_id == persona_id,
+            or_(
+                HistorialEstadoMembresia.estado_nuevo == EstadoMembresia.ACTIVA,
+                HistorialEstadoMembresia.estado_anterior == EstadoMembresia.ACTIVA,
+            ),
+        ).first() is not None
+
+    @staticmethod
+    def puede_acceder_modulos(db: Session, usuario: "Usuario") -> bool:
+        """Aplica el gate solo a cuentas públicas, nunca a admin/trainer."""
+        roles = {rol.tipo_rol for rol in usuario.roles}
+        if TipoRol.ADMINISTRADOR in roles or TipoRol.ENTRENADOR in roles:
+            return True
+        return usuario.correo_verificado and GestorAutenticacion.alta_presencial_completada(
+            db, usuario.persona_id,
+        )
 
     @staticmethod
     def obtener_hash_contrasenia(contrasenia: str) -> str:
@@ -183,6 +226,7 @@ class GestorAutenticacion:
 
     @staticmethod
     def decodificar_token(
+        request: Request,
         token: str = Depends(oauth2_scheme),
         db: Session = Depends(obtener_sesion),
     ) -> dict:
@@ -218,4 +262,30 @@ class GestorAutenticacion:
         usuario = UsuarioRepositorio(db).obtener_por_correo(payload.get("sub"))
         if not usuario or not GestorAutenticacion.sesion_vigente(payload.get("sver"), usuario):
             raise CredencialesInvalidas("Token inválido o expirado")
+
+        # `/auth/me` is the deliberately limited status surface for pending
+        # accounts; logout must remain available so the user can leave it.
+        # Carve-out de autoservicio de seguridad (#858): listar las propias
+        # sesiones e invalidar las OTRAS son superficies propio-via-`sub` al
+        # nivel de logout (test_guardia_autorizacion_rutas.py, balde 2) -- la
+        # identidad sale del `sub` del JWT, así que un pendiente solo toca SU
+        # epoch: son justo el botón con el que protege una cuenta recién
+        # creada. Los módulos del club siguen bloqueados.
+        # Carve-out de auto-servicio familiar (#790): el gate de #858 bloquea
+        # los módulos del club, pero el router de `/personas` ya impone sus
+        # propios checks granulares de ownership/verificación -- la familia
+        # que se autoinscribió no puede quedar varada sin ver a su propio
+        # representado ni completar la vinculación tras verificar.
+        ruta = request.url.path.rstrip("/")
+        es_superficie_limitada = (
+            ruta.endswith("/auth/me")
+            or ruta.endswith("/auth/logout")
+            or ruta.endswith("/auth/me/sesiones")
+            or ruta.endswith("/auth/sesiones/invalidar")
+            or ruta.startswith("/api/v1/personas")
+        )
+        if not es_superficie_limitada and not GestorAutenticacion.puede_acceder_modulos(db, usuario):
+            raise PermisosInsuficientes(
+                "Su cuenta aún no está habilitada para acceder a este módulo.",
+            )
         return payload
