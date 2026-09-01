@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-location";
-import { landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
+import { deriveContactHours, landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
 import { barGeometry, deriveDayRange } from "@/app/landing/schedule-timeline";
@@ -45,14 +45,40 @@ interface MockedMediaQueryList extends MediaQueryList {
   removeEventListener: ReturnType<typeof vi.fn>;
 }
 
+/**
+ * The published catalog exactly as `GET /api/schedules` hands it over — the
+ * only source the page has for schedules (issue #789). `ages` is the optional
+ * orientation label the backend added in #913; `Juego Libre` deliberately
+ * publishes none, because a category without an age label is a legitimate
+ * state and the page must render it without inventing one.
+ */
 const publicSchedulePayload = [
-  { category: "Formativo", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "15:00", endTime: "16:00" }] },
-  { category: "Infantil", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "16:00", endTime: "17:00" }] },
-  { category: "Juvenil", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "17:00", endTime: "18:00" }] },
-  { category: "Competitivo", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "18:00", endTime: "20:00" }, { days: ["SABADO"], startTime: "18:00", endTime: "20:00" }] },
-  { category: "Adultos", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "08:00", endTime: "09:15" }, { days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "20:00", endTime: "21:15" }] },
-  { category: "Juego Libre", blocks: [{ days: ["SABADO"], startTime: "15:00", endTime: "18:00" }] },
+  { category: "Formativo", ages: "5 a 10 años", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "15:00", endTime: "16:00" }] },
+  { category: "Infantil", ages: "8 a 12 años", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "16:00", endTime: "17:00" }] },
+  { category: "Juvenil", ages: "Mayores de 12 años", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "17:00", endTime: "18:00" }] },
+  { category: "Competitivo", ages: "Selección", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "18:00", endTime: "20:00" }, { days: ["SABADO"], startTime: "18:00", endTime: "20:00" }] },
+  { category: "Adultos", ages: "Mayores de 18 años", blocks: [{ days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "08:00", endTime: "09:15" }, { days: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"], startTime: "20:00", endTime: "21:15" }] },
+  { category: "Juego Libre", ages: null, blocks: [{ days: ["SABADO"], startTime: "15:00", endTime: "18:00" }] },
 ];
+
+/**
+ * What the page itself derives from that payload. Every expectation below is
+ * read from here rather than from a second list written out by hand: the
+ * point of #789 is that there is exactly one statement of the club's
+ * schedules, and a test carrying its own copy would quietly reintroduce it.
+ */
+const PUBLISHED = mapPublicSchedules(publicSchedulePayload);
+
+function scheduleFetchCalls(): unknown[] {
+  return vi.mocked(globalThis.fetch).mock.calls.filter(([input]): boolean =>
+    String(input).includes("/api/schedules"));
+}
+
+/** The contact card's `Horario` row — label and value, whatever it says. */
+function contactHoursRow(): HTMLElement {
+  const card = screen.getByRole("heading", { name: "Información de contacto" }).closest("aside");
+  return within(card as HTMLElement).getByText("Horario").closest("p") as HTMLElement;
+}
 
 describe("LandingPage", (): void => {
   let reducedMotion = true;
@@ -142,10 +168,138 @@ describe("LandingPage", (): void => {
       it("renders client-pending values from the centralized config", async (): Promise<void> => {
     render(<LandingPage />);
 
-    await waitFor((): void => { expect(screen.getByText(landingConfig.schedules[0].slots[0].hours)).toBeInTheDocument(); });
-    expect(screen.getByText(landingConfig.contact.hours)).toBeInTheDocument();
+    await waitFor((): void => { expect(screen.getByText(PUBLISHED[0].slots[0].hours)).toBeInTheDocument(); });
+    expect(within(contactHoursRow()).getByText(deriveContactHours(PUBLISHED))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
+  });
+
+  /**
+   * Issue #789. The club edits its schedules in the app; the section and the
+   * contact card are two views of that same published catalog. Before this,
+   * the card advertised a range derived at build time from a hand-written
+   * list nobody could edit, so the club could publish a new evening block and
+   * the card would keep promising the old closing time forever.
+   */
+  describe("the published catalog is the page's only schedule source (issue #789)", (): void => {
+    it("derives the contact card's opening hours from the schedules it just fetched", async (): Promise<void> => {
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(within(contactHoursRow()).getByText(deriveContactHours(PUBLISHED))).toBeInTheDocument();
+      });
+      // Not a coincidence of the fixture: the range spans the earliest start
+      // and the latest end of everything the API published, Saturday included.
+      expect(contactHoursRow()).toHaveTextContent("Lun – Sáb · 08:00 – 21:15");
+      // A settled row states hours; it is not a live region announcing them.
+      expect(contactHoursRow()).not.toHaveAttribute("role", "status");
+    });
+
+    it("asks the API for the catalog exactly once for the whole page", async (): Promise<void> => {
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(within(contactHoursRow()).getByText(deriveContactHours(PUBLISHED))).toBeInTheDocument();
+      });
+      // Two fetches would be two answers, and two chances to disagree — the
+      // divergence this issue closes. One request feeds both views.
+      expect(scheduleFetchCalls()).toHaveLength(1);
+    });
+
+    it("moves the contact hours when the club publishes a different catalog", async (): Promise<void> => {
+      vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+        const url = String(input);
+        return Promise.resolve({
+          ok: true,
+          json: async (): Promise<unknown> => url.includes("/api/schedules")
+            ? [{ category: "Nocturno", ages: null, blocks: [{ days: ["LUNES", "MIERCOLES"], startTime: "19:00", endTime: "22:30" }] }]
+            : [],
+        });
+      }));
+
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(contactHoursRow()).toHaveTextContent("Lun – Vie · 19:00 – 22:30");
+      });
+      expect(contactHoursRow()).not.toHaveTextContent("08:00");
+    });
+
+    it("shows the age label only for the categories that publish one", async (): Promise<void> => {
+      render(<LandingPage />);
+
+      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      await waitFor((): void => { expect(within(section).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
+      const panel = screen.getByRole("tabpanel");
+
+      fireEvent.click(within(section).getByRole("tab", { name: /formativo/i }));
+      expect(within(panel).getByText("Edad")).toBeInTheDocument();
+      expect(within(panel).getByText("5 a 10 años")).toBeInTheDocument();
+
+      // `ages: null` is a legitimate state: the fact disappears, and nothing
+      // is invented to fill it.
+      fireEvent.click(within(section).getByRole("tab", { name: /juego libre/i }));
+      expect(within(panel).queryByText("Edad")).not.toBeInTheDocument();
+    });
+
+    it("says the club has published nothing yet, in both views, when the catalog is empty", async (): Promise<void> => {
+      vi.stubGlobal("fetch", vi.fn((): Promise<{ ok: boolean; json: () => Promise<unknown> }> =>
+        Promise.resolve({ ok: true, json: async (): Promise<unknown> => [] })));
+
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(contactHoursRow()).toHaveTextContent("Aún no hay horarios publicados.");
+      });
+      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      expect(within(section).getByRole("status")).toHaveTextContent("Aún no hay horarios publicados.");
+      // The row keeps its label and becomes a live region, so the visitor is
+      // told what happened instead of reading a range nobody published.
+      expect(contactHoursRow()).toHaveAttribute("role", "status");
+      expect(contactHoursRow()).toHaveTextContent("Horario");
+      expect(within(section).queryByRole("tablist")).not.toBeInTheDocument();
+    });
+
+    it("says the hours could not be loaded, in both views, when the BFF degrades to 503", async (): Promise<void> => {
+      vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; status?: number; json: () => Promise<unknown> }> => {
+        const url = String(input);
+        if (url.includes("/api/schedules")) {
+          return Promise.resolve({ ok: false, status: 503, json: async (): Promise<unknown> => ({ message: "No se pudieron cargar los horarios." }) });
+        }
+        return Promise.resolve({ ok: true, json: async (): Promise<unknown> => [] });
+      }));
+
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(contactHoursRow()).toHaveTextContent("No se pudieron cargar los horarios.");
+      });
+      const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
+      expect(within(section).getByRole("status")).toHaveTextContent("No se pudieron cargar los horarios.");
+      expect(contactHoursRow()).toHaveAttribute("role", "status");
+    });
+
+    it("invents no hours when the catalog arrives malformed", async (): Promise<void> => {
+      vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+        const url = String(input);
+        return Promise.resolve({
+          ok: true,
+          json: async (): Promise<unknown> => url.includes("/api/schedules")
+            ? [{ category: "Roto", blocks: [{ days: ["UNKNOWN"], startTime: "x", endTime: "y" }] }]
+            : [],
+        });
+      }));
+
+      render(<LandingPage />);
+
+      await waitFor((): void => {
+        expect(contactHoursRow()).toHaveTextContent("Aún no hay horarios publicados.");
+      });
+      // Nothing survived mapping, so nothing is stated: no range, no leftover
+      // category name from a list that no longer exists.
+      expect(contactHoursRow()).not.toHaveTextContent(/\d{1,2}:\d{2}/);
+      expect(screen.queryByRole("tablist", { name: "Categorías" })).not.toBeInTheDocument();
+    });
   });
 
   it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
@@ -202,9 +356,9 @@ describe("LandingPage", (): void => {
     await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
     const tablist = within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" });
     const tabs = within(tablist).getAllByRole("tab");
-    expect(tabs).toHaveLength(landingConfig.schedules.length);
+    expect(tabs).toHaveLength(PUBLISHED.length);
 
-    landingConfig.schedules.forEach((schedule, index): void => {
+    PUBLISHED.forEach((schedule, index): void => {
       expect(tabs[index]).toHaveTextContent(schedule.category);
       // One line per DISTINCT band, compacted to "HH:MM–HH:MM".
       schedule.slots.forEach((slot): void => {
@@ -1057,7 +1211,23 @@ describe("LandingPage", (): void => {
       expect(html).toMatch(/FORMANDO/);
       expect(html).toContain("Misión y Visión");
       expect(html).toContain("Horarios");
-      expect(html).toContain(landingConfig.contact.hours);
+      /*
+       * This assertion used to read `landingConfig.contact.hours`: a range
+       * computed at module load from a schedule list compiled into the
+       * bundle. Issue #789 deleted that list — the club's schedules live in
+       * the app and reach this page through `GET /api/schedules`, and that
+       * fetch is an effect, which server rendering never runs.
+       *
+       * So the assertion changes, deliberately, to the thing that must still
+       * hold for a visitor whose JavaScript never runs: the `Horario` row is
+       * server-rendered, labelled, and honest about what it is waiting for.
+       * Weakening it to "the row exists" would let a blank value ship; asking
+       * for a range would be asking the server to state hours it has not
+       * fetched. The label and the status sit adjacent in the markup, so
+       * neither can be satisfied without the other.
+       */
+      expect(html).toContain("<strong>Horario</strong><span>Cargando horarios…</span>");
+      expect(html).not.toMatch(/<strong>Horario<\/strong><span>\s*<\/span>/);
       GALLERY_PHOTOS.forEach((photo): void => {
         expect(html).not.toContain(photo.caption);
       });
