@@ -285,6 +285,125 @@ def test_eliminar_categoria_codigo_inexistente(db_session):
         servicio.eliminar_categoria("NOEXISTE")
 
 
+# --- Etiqueta de edades (opcional) ----------------------------------------
+# `edades` es un texto de orientación que el club ya publicaba fuera de la
+# base ("5 a 10 años", "Selección"). Es OPCIONAL: una categoría sin etiqueta
+# es un estado legítimo, no un dato faltante. Por eso NULL y `""` no pueden
+# convivir -- hay una sola representación de "sin etiqueta", y es NULL.
+def test_crear_categoria_guarda_la_etiqueta_de_edades(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], edades="6 a 9 años",
+    ))
+
+    assert categoria.edades == "6 a 9 años"
+    assert db_session.get(CategoriaHorario, "PREINFANTIL").edades == "6 a 9 años"
+
+
+def test_crear_categoria_sin_edades_la_deja_en_null(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    assert categoria.edades is None
+    assert db_session.get(CategoriaHorario, "PREINFANTIL").edades is None
+
+
+def test_crear_categoria_con_edades_en_blanco_guarda_null_no_cadena_vacia(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], edades="   ",
+    ))
+
+    assert categoria.edades is None
+    assert db_session.get(CategoriaHorario, "PREINFANTIL").edades is None
+
+
+def test_crear_categoria_recorta_los_espacios_de_edades(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], edades="  6 a 9 años  ",
+    ))
+
+    assert categoria.edades == "6 a 9 años"
+
+
+def test_actualizar_categoria_asigna_la_etiqueta_de_edades(db_session):
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    categoria = servicio.actualizar_categoria("PREINFANTIL", CategoriaUpdateDTO(edades="6 a 9 años"))
+
+    assert categoria.edades == "6 a 9 años"
+    assert db_session.get(CategoriaHorario, "PREINFANTIL").edades == "6 a 9 años"
+
+
+def test_actualizar_categoria_con_edades_null_borra_la_etiqueta(db_session):
+    """`edades: null` EXPLÍCITO limpia la etiqueta. Se distingue de "no vino
+    el campo" con `exclude_unset`, igual que el resto del PUT parcial."""
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], edades="6 a 9 años",
+    ))
+
+    categoria = servicio.actualizar_categoria("PREINFANTIL", CategoriaUpdateDTO(edades=None))
+
+    assert categoria.edades is None
+    assert db_session.get(CategoriaHorario, "PREINFANTIL").edades is None
+
+
+def test_actualizar_categoria_sin_mandar_edades_no_la_toca(db_session):
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], edades="6 a 9 años",
+    ))
+
+    categoria = servicio.actualizar_categoria("PREINFANTIL", CategoriaUpdateDTO(nombre="Preinfantil A"))
+
+    assert categoria.label == "Preinfantil A"
+    assert categoria.edades == "6 a 9 años"
+
+
+def test_actualizar_categoria_con_edades_en_blanco_borra_la_etiqueta(db_session):
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], edades="6 a 9 años",
+    ))
+
+    categoria = servicio.actualizar_categoria("PREINFANTIL", CategoriaUpdateDTO(edades="   "))
+
+    assert categoria.edades is None
+
+
+def test_actualizar_solo_edades_no_es_un_put_vacio(db_session):
+    """`edades` sola alcanza para que el PUT tenga contenido: sin esto
+    caería en "No se proporcionaron campos para actualizar"."""
+    servicio = AsistenciaServicio(db_session)
+    servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    categoria = servicio.actualizar_categoria("PREINFANTIL", CategoriaUpdateDTO(edades="6 a 9 años"))
+
+    assert categoria.edades == "6 a 9 años"
+
+
 # --- Endpoints HTTP: alta/edición/baja, ADMIN-only ------------------------
 def test_post_categorias_crea_y_devuelve_201(client):
     resp = client.post("/api/v1/asistencias/categorias", json={
@@ -319,6 +438,53 @@ def test_put_categorias_actualiza(client):
 
     assert resp.status_code == 200
     assert resp.json()["label"] == "Preinfantil A"
+
+
+def test_post_categorias_devuelve_edades_con_la_clave_edades(client):
+    """La clave de red la fija el `alias_generator` de `ResponseBase`, así que
+    se verifica contra la respuesta real y no se asume."""
+    resp = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"], "edades": "6 a 9 años",
+    })
+
+    assert resp.status_code == 201
+    assert resp.json()["edades"] == "6 a 9 años"
+
+
+def test_post_categorias_sin_edades_devuelve_null(client):
+    resp = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"],
+    })
+
+    assert resp.status_code == 201
+    assert resp.json()["edades"] is None
+
+
+def test_put_categorias_limpia_edades_con_null_explicito(client):
+    creada = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"], "edades": "6 a 9 años",
+    }).json()
+
+    resp = client.put(f"/api/v1/asistencias/categorias/{creada['codigo']}", json={"edades": None})
+
+    assert resp.status_code == 200
+    assert resp.json()["edades"] is None
+
+
+def test_get_categorias_expone_edades(client):
+    client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"], "edades": "6 a 9 años",
+    })
+
+    body = client.get("/api/v1/asistencias/categorias").json()
+
+    por_codigo = {c["codigo"]: c for c in body}
+    assert por_codigo["PREINFANTIL"]["edades"] == "6 a 9 años"
+    assert por_codigo["FORMATIVO"]["edades"] == "5 a 10 años"
 
 
 def test_delete_categorias_borra(client):
