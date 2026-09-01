@@ -13,7 +13,10 @@ from app.dominio.modelos import (
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
-from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
+from app.dominio.reglas_negocio import (
+    HORA_MAXIMA_ENTRENAMIENTO, HORA_MINIMA_ENTRENAMIENTO,
+    LIMITE_CORRECCION_ASISTENCIA_DIAS, MAXIMO_DIAS_POR_CATEGORIA,
+)
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
@@ -175,6 +178,36 @@ class AsistenciaServicio:
             sufijo += 1
         return codigo
 
+    @staticmethod
+    def _validar_ventana_de_entrenamiento(hora_inicio: time, hora_fin: time) -> None:
+        """La franja tiene que caer ENTERA dentro del horario del predio
+        (issue #861). Bordes inclusivos: arrancar 06:00 en punto o terminar
+        22:00 en punto es entrenar adentro, no afuera.
+
+        Se valida acá y no con un `Field` de Pydantic porque el mensaje que
+        Pydantic genera viene en inglés, y `error-message.ts` descarta todo
+        texto que no reconozca como escrito para un socio: el admin leería
+        una frase enlatada en vez del motivo real de su rechazo."""
+        dentro = (
+            HORA_MINIMA_ENTRENAMIENTO <= hora_inicio <= HORA_MAXIMA_ENTRENAMIENTO
+            and HORA_MINIMA_ENTRENAMIENTO <= hora_fin <= HORA_MAXIMA_ENTRENAMIENTO
+        )
+        if not dentro:
+            raise OperacionInvalida(
+                "Los entrenamientos deben programarse entre las "
+                f"{HORA_MINIMA_ENTRENAMIENTO:%H:%M} y las {HORA_MAXIMA_ENTRENAMIENTO:%H:%M}."
+            )
+
+    @staticmethod
+    def _validar_tope_de_dias(cantidad: int) -> None:
+        """El piso (al menos un día) ya lo exigen el schema y
+        `actualizar_categoria`; acá solo se agrega el techo, para no
+        reescribir una regla que ya está dicha en otro lado."""
+        if cantidad > MAXIMO_DIAS_POR_CATEGORIA:
+            raise OperacionInvalida(
+                f"Una categoría no puede entrenar más de {MAXIMO_DIAS_POR_CATEGORIA} días."
+            )
+
     def crear_categoria(self, datos: CategoriaCreateDTO) -> CategoriaResponseDTO:
         """Alta atómica (docs/archive/fixes/24-abm-categorias.md, pedido del dueño):
         una sola operación crea la categoria, sus días permitidos y un
@@ -186,11 +219,15 @@ class AsistenciaServicio:
             raise OperacionInvalida(f'Ya existe una categoría llamada "{nombre}".')
         if datos.hora_inicio >= datos.hora_fin:
             raise OperacionInvalida("La hora de inicio debe ser anterior a la hora de fin.")
+        self._validar_ventana_de_entrenamiento(datos.hora_inicio, datos.hora_fin)
 
         # Dedupe si el mismo día viene repetido en el payload -- no debería
         # pasar desde el formulario (casillas = un Set), pero un llamado
         # directo a la API sí podría mandarlo dos veces.
         dias = list(dict.fromkeys(datos.dias))
+        # El techo se cuenta DESPUÉS del dedupe: un cuerpo que repite el
+        # lunes siete veces pide un solo día, no siete.
+        self._validar_tope_de_dias(len(dias))
 
         codigo = self._generar_codigo(nombre)
         categoria = CategoriaHorario(
@@ -236,6 +273,14 @@ class AsistenciaServicio:
         nueva_hora_fin = datos.hora_fin if datos.hora_fin is not None else categoria.hora_fin
         if nueva_hora_inicio >= nueva_hora_fin:
             raise OperacionInvalida("La hora de inicio debe ser anterior a la hora de fin.")
+        # La ventana se valida contra el par FUSIONADO, siempre: el resultado
+        # de la edición es lo que queda guardado, así que una hora que el
+        # cuerpo no manda igual tiene que dar una franja válida al combinarse
+        # con la guardada. Consecuencia buscada: una fila anterior a esta
+        # regla no se puede renombrar sin corregir también su franja -- desde
+        # el formulario no se nota (siempre manda las dos horas) y a cambio
+        # ninguna edición deja viva una franja fuera de la ventana.
+        self._validar_ventana_de_entrenamiento(nueva_hora_inicio, nueva_hora_fin)
 
         if datos.nombre is not None:
             nombre = datos.nombre.strip()
@@ -250,6 +295,9 @@ class AsistenciaServicio:
         dias_nuevos = set(datos.dias) if datos.dias is not None else dias_actuales
         if not dias_nuevos:
             raise OperacionInvalida("Una categoría necesita al menos un día.")
+        # `dias_nuevos` ya es un conjunto: igual que en el alta, el techo se
+        # cuenta sobre los días distintos, no sobre lo que trajo el cuerpo.
+        self._validar_tope_de_dias(len(dias_nuevos))
 
         dias_a_agregar = dias_nuevos - dias_actuales
         dias_a_quitar = dias_actuales - dias_nuevos
