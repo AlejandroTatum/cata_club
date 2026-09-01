@@ -129,3 +129,45 @@ Entonces, después de mergear:
 Si la primera corrida nocturna sale roja, es señal real: son los primeros live
 specs que corren contra un stack levantado desde cero en un runner limpio, y
 cualquier dependencia implícita del entorno local aparece justo ahí.
+
+### Estado a la fecha (2026-09-01)
+
+El PR #939 ya está mergeado en `main` (`6eab598`), así que el workflow ya vive
+en la rama por defecto. Eso resuelve la condición de arranque, pero no el
+criterio de cierre del issue #901: a esta fecha no existe todavía **ninguna
+corrida verde de ningún tipo**.
+
+| Tipo de corrida | Cantidad hasta hoy | Resultado |
+| --- | --- | --- |
+| Programada (`schedule:`) | 0 | ninguna corrida todavía |
+| Manual (`workflow_dispatch:`) | 1 (id `33562412916`, 2026-09-01T21:41:13Z) | FAILURE |
+
+Detalle por paso de esa única corrida manual:
+
+- `Bring up the QA stack` — success
+- `Run live E2E specs` — **FAILURE**
+- `Dump bounded QA logs (on failure)` — success
+- `Upload Playwright Report (on failure)` — success
+- `Tear down` — success
+
+Lectura correcta: la infraestructura del workflow funcionó de punta a punta —
+el stack levantó, el volcado acotado de logs corrió, el reporte de Playwright
+se subió y el teardown limpió sin dejar nada colgado. Lo que falló fueron los
+specs en vivo, no el mecanismo que los corre.
+
+La causa identificada es el issue #940, "el administrador sembrado queda
+atrapado en la compuerta de activación": el admin sembrado aterriza en
+`/login/activacion` en lugar del dashboard. #940 está **abierto** y es el
+bloqueo actual para que cualquier spec en vivo pase.
+
+**Criterio real de cierre de #901**, que a esta fecha sigue sin cumplirse:
+
+1. Corregir #940.
+2. Obtener **una corrida manual en verde**.
+3. Obtener **dos corridas programadas consecutivas en verde**.
+
+Las tres condiciones son necesarias. #901 no se cierra por tener el workflow
+mergeado ni por la corrida manual roja ya registrada: a la fecha de este
+documento no existe ninguna corrida verde de ningún tipo, y esta sección
+existe para que una auditoría futura no marque #901 como hecho antes de que
+esas tres condiciones se cumplan.
