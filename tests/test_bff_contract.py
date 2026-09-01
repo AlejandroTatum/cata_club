@@ -1,4 +1,4 @@
-"""El contrato de rutas entre el BFF de Next y los routers de FastAPI (issue #900).
+"""El contrato entre el BFF de Next y los routers de FastAPI (issue #900).
 
 El BFF nunca escribe `/api/v1`: ese tramo vive en `BACKEND_API_URL`
 (`frontend/src/lib/server/auth.ts`). Cada handler pasa una ruta **relativa** a
@@ -11,12 +11,22 @@ levanta el frontend: la suite de raíz corre sin bloque `env:` en CI. Lee los
 routers y los handlers como texto, igual que `tests/test_glossary_contract.py`
 lee el glosario y que `tipo-notificacion-parity.test.ts` lee el enum.
 
-Alcance: **rutas**. Los enums y los campos obligatorios del contrato son el
-issue hermano (PR 2) y no se verifican acá.
+El archivo tiene dos mitades. La primera compara **rutas**: toda ruta que el BFF
+consume tiene que estar declarada por algún router. La segunda compara **los
+enums compartidos**: qué relación tiene cada uno con el frontend y si los dos
+lados nombran los mismos valores. Los campos obligatorios de cada DTO son el PR
+siguiente del mismo issue y no se verifican acá.
+
+Las dos derivas vivas que la biyección de enums encuentra hoy se **inventarían**
+(`DIVERGENCIAS_INVENTARIADAS`, issue #935), no se arreglan: cerrarlas obliga a
+elegir un tono de badge y una etiqueta visible, y eso es una decisión de
+producto. La exención es por VALOR y nunca por enum, para que la deriva
+siguiente en el mismo enum siga poniendo el gate en rojo.
 """
 
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -385,5 +395,480 @@ class TestContratoDocumentado:
 
     def test_el_contrato_declara_de_que_gate_es_continuacion(self):
         contrato = CONTRATO.read_text(encoding="utf-8")
-        assert "glossary-contract.md" in contrato
-        assert "#903" in contrato and "#900" in contrato
+        assert "glossary-contract.md" in contrato, "no se cita el gate del glosario"
+        assert "#903" in contrato, "no se cita el issue del gate del glosario"
+        assert "#900" in contrato, "no se cita el issue de este gate"
+
+
+# ===========================================================================
+# Enums compartidos y campos obligatorios (PR 2 del issue #900)
+# ===========================================================================
+#
+# Las rutas coinciden; lo que viaja por ellas es otro contrato. Los enums de
+# `backend/app/dominio/enums.py` NO tienen todos la misma relación con el
+# frontend, y un gate que asumiera una sola se equivocaría en la mayoría. Se
+# declaran cuatro relaciones, explícitas:
+#
+#   (a) Identidad     — una unión de TypeScript nombra los mismos valores.
+#   (b) Traducción    — un `Record<>` los lleva 1:1 a códigos de la aplicación.
+#   (c) Muchos a uno  — el pliegue es una decisión documentada, no una deriva.
+#   (d) Excluido / sin contraparte — la fuente de verdad no es el enum, o no
+#       hay nada del otro lado del límite que lo consuma.
+#
+# Todo enum cae en exactamente una. Un enum nuevo sin clasificar pone el gate
+# en rojo: esa es la parte que no envejece.
+
+ENUMS = RAIZ / "backend" / "app" / "dominio" / "enums.py"
+FRONTEND = RAIZ / "frontend" / "src"
+
+
+class ParDeEnum(NamedTuple):
+    """(a) Un enum del backend y la declaración de TS que nombra sus mismos valores."""
+
+    enum: str
+    archivo: str
+    declaracion: str
+
+
+class MapaTraducido(NamedTuple):
+    """(b) El par de `Record<>` que traduce un enum a códigos de la aplicación.
+
+    Acá la biyección no es contra una unión con los valores del backend sino
+    sobre el CONJUNTO DE CLAVES y el CONJUNTO DE VALORES del mapa: el frontend
+    nunca ve `"LUNES"`, ve `"lun"`.
+    """
+
+    enum: str
+    archivo: str
+    mapa: str
+    inverso: str
+    union: str
+    archivo_union: str
+
+
+class Divergencia(NamedTuple):
+    """Una deriva ya inventariada: valor exacto, quién lo agregó, quién la arregla."""
+
+    enum: str
+    valor: str
+    origen: str
+    seguimiento: str
+
+
+PARES_DE_ENUM = (
+    ParDeEnum("TipoRol", "types/domain.ts", "BackendTipoRol"),
+    ParDeEnum("TipoSangre", "types/domain.ts", "TipoSangre"),
+    ParDeEnum("TipoNotificacion", "types/domain.ts", "TipoNotificacion"),
+    ParDeEnum("EstadoPago", "lib/server/payments-adapter.ts", "BackendEstadoPago"),
+    ParDeEnum("EstadoPago", "lib/status-badges.ts", "EstadoPago"),
+    ParDeEnum("TipoPago", "lib/server/payments-adapter.ts", "BackendTipoPago"),
+    ParDeEnum("EstadoMembresia", "lib/membership-status.ts", "BackendEstadoMembresia"),
+    ParDeEnum("DiaSemana", "lib/server/attendance-adapter.ts", "BackendDiaSemana"),
+    ParDeEnum("EstadoAsistencia", "lib/server/attendance-adapter.ts", "BackendEstadoAsistencia"),
+)
+
+MAPAS_TRADUCIDOS = (
+    MapaTraducido(
+        "DiaSemana", "lib/server/attendance-adapter.ts",
+        "DIA_SEMANA_BACKEND_TO_FRONTEND", "DIA_SEMANA_FRONTEND_TO_BACKEND",
+        "DiaSemana", "types/domain.ts",
+    ),
+    MapaTraducido(
+        "EstadoAsistencia", "lib/server/attendance-adapter.ts",
+        "ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND", "ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND",
+        "EstadoAsistencia", "types/domain.ts",
+    ),
+)
+
+# (b) `TipoRol` es identidad Y traducción a la vez, igual que `DiaSemana`: la
+# unión `BackendTipoRol` nombra sus valores y DOS mapas los llevan a `UserRole`.
+# Los dos mapas dicen hoy lo mismo, pero no están tipados igual, y esa
+# diferencia es la que este gate cubre:
+#
+#   `USER_ROLE_BY_BACKEND_ROLE` es `Record<BackendTipoRol, UserRole>`: agregar
+#   un rol a la unión rompe la compilación de ese archivo, que es el aviso.
+#   `BACKEND_ROLE_TO_USER_ROLE` es `Record<string, UserRole>`, exhaustivo sobre
+#   nada: el mismo rol nuevo compila sin ruido, sale `undefined` en
+#   `lib/server/auth.ts:717` y lo descarta el `.filter` de la línea siguiente.
+#
+# O sea: un rol agregado al backend detiene el build por el camino del cliente
+# y desaparece callado por el del servidor. Es la misma forma de falla que
+# motivó `tipo-notificacion-parity.test.ts` -- un `Record<>` que parece
+# exhaustivo y está indexado demasiado flojo para serlo. Verificar el conjunto
+# de claves acá es justamente lo que su tipo no puede verificar.
+#
+# Además se comparan los dos mapas entre sí: son dos copias a mano de la misma
+# tabla y nada en el sistema de tipos las relaciona.
+MAPAS_DE_ROL = (
+    ("lib/auth-utils.ts", "USER_ROLE_BY_BACKEND_ROLE", "BackendTipoRol"),
+    ("lib/server/auth.ts", "BACKEND_ROLE_TO_USER_ROLE", "string"),
+)
+
+# `"unsupported"` no es un rol que el backend emita: es el centinela que
+# devuelve `resolveSessionRole` (`lib/server/auth.ts:723`) cuando ningún rol
+# conocido matcheó. No participa de la biyección contra `TipoRol`; se nombra
+# acá en vez de quedar fuera por omisión.
+CENTINELA_DE_ROL = "unsupported"
+
+# (c) `MEMBERSHIP_STATUS_BY_ESTADO` (`lib/membership-status.ts:14`) pliega dos
+# estados del backend en un solo código de pantalla. Está documentado en las
+# líneas 11-13 de ese archivo: `PaymentValidationRequest.currentMembershipStatus`
+# no tiene valor `"inactiva"`, y una membresía creada sin ningún pago aprobado
+# se lee como `"vencida"`. Por eso acá se verifica el conjunto de CLAVES y NO
+# se exige que los valores sean distintos: exigirlo denunciaría la decisión.
+PLIEGUE_MEMBRESIA = ("lib/membership-status.ts", "MEMBERSHIP_STATUS_BY_ESTADO", "BackendEstadoMembresia")
+PLIEGUE_ESPERADO = {"INACTIVA": "vencida", "VENCIDA": "vencida", "ACTIVA": "activa"}
+
+# Todo `Record<>` que este gate lee, aplanado. Sólo se usa para medir el piso
+# del parser de mapas: si la regex se rompe, el total cae y se denuncia.
+TODOS_LOS_MAPAS = (
+    *[(m.archivo, m.mapa) for m in MAPAS_TRADUCIDOS],
+    *[(m.archivo, m.inverso) for m in MAPAS_TRADUCIDOS],
+    *[(archivo, mapa) for archivo, mapa, _ in MAPAS_DE_ROL],
+    PLIEGUE_MEMBRESIA[:2],
+)
+
+# (d) Excluido: la fuente de verdad no es el enum. Mismo criterio -- y mismo
+# enum -- que `backend/tests/test_drift_enums_postgres.py:70` excluye con
+# `_ENUMS_SIN_COLUMNA_POSTGRES = {"Categoria"}`.
+ENUMS_EXCLUIDOS = {
+    "Categoria": (
+        "la tabla `categoria_horario` es la fuente de verdad (enums.py:56-65), no el enum. "
+        "`services/categorias.ts:32` declara `export type Categoria = string` A PROPÓSITO: "
+        "una unión cerrada volvería a descartar en silencio los códigos que un admin agrega "
+        "sin deploy. Una biyección acá exigiría congelar justo lo que se decidió no congelar."
+    ),
+}
+
+# (d) Sin contraparte: nada cruza el límite. Se nombran uno por uno en vez de
+# dejarlos fuera por omisión -- si mañana alguno se expone al BFF, agregarlo a
+# `PARES_DE_ENUM` es un cambio visible en el diff, y borrarlo de acá también.
+ENUMS_SIN_CONTRAPARTE = {
+    "TipoManoDominante": "sólo entra por `EnrollmentAntecedentesDTO`; ninguna pantalla lo declara",
+    "TipoModalidad": "modalidad del plan; el BFF no la tipa",
+    "TipoEscuela": "dato de la institución; no viaja tipado al frontend",
+    "NivelTecnicoAlumno": "sólo entra por `EnrollmentAntecedentesDTO`; sus valores llevan un espacio",
+    "EfectoCoberturaCorreccion": "rastro de auditoría de `PagoServicio.corregir_pago`; no sale a pantalla",
+}
+
+CLASIFICADOS = {par.enum for par in PARES_DE_ENUM} | set(ENUMS_SIN_CONTRAPARTE) | set(ENUMS_EXCLUIDOS)
+
+# Las derivas vivas al abrir el PR. Se INVENTARÍAN, no se arreglan: cerrar
+# cualquiera de las dos obliga a elegir un tono de badge y una etiqueta
+# visible, y eso es una decisión de producto que un PR de tests no toma.
+# La exención es por VALOR: exentar el enum entero escondería la deriva
+# siguiente, que es exactamente lo que este gate existe para no dejar pasar.
+DIVERGENCIAS_INVENTARIADAS = (
+    Divergencia("EstadoMembresia", "SUSPENDIDA", "#400", "#935"),
+    Divergencia("TipoPago", "REGULARIZACION", "#284", "#935"),
+)
+
+_CLASE_PY = re.compile(r"^class (\w+)\(([^)]*)\):", re.M)
+_MIEMBRO_ENUM = re.compile(r'^    ([A-Z][A-Z0-9_]*)\s*=\s*"([^"\n]+)"', re.M)
+_DOCSTRING_PY = re.compile(r'"""[\s\S]*?"""')
+# Los comentarios de TypeScript citan texto entre comillas (`domain.ts:396` cita
+# «"your payment of $X was approved"`). Sin sacarlos, esa prosa entraría como un
+# valor de la unión.
+_COMENTARIO_TS = re.compile(r"//[^\n]*|/\*[\s\S]*?\*/")
+_ENTRADA_MAPA = re.compile(r'^\s*([A-Za-z_]\w*)\s*:\s*"([^"\n]+)"', re.M)
+
+
+def cuerpo_de_clase(fuente: str, nombre: str) -> str:
+    """El cuerpo de una clase de Python: sin su docstring y hasta la clase siguiente.
+
+    El docstring se saca porque su prosa imita la forma de un miembro: la línea
+    `conserva: es la "necesidad ya establecida..."` de `EnrollmentFichaMedicaDTO`
+    entraría como un campo llamado `conserva`.
+    """
+    apertura = re.search(rf"^class {re.escape(nombre)}\(", fuente, re.M)
+    if apertura is None:
+        return ""
+    resto = fuente[apertura.end() :]
+    corte = re.search(r"^class \w", resto, re.M)
+    return _DOCSTRING_PY.sub("", resto[: corte.start()] if corte else resto)
+
+
+def valores_de_enum(fuente: str, nombre: str) -> set[str]:
+    """Los valores (no los nombres) de un enum del backend.
+
+    El valor se lee con `[^"\\n]+` y no con `[A-Z][A-Z0-9_]*`: los diez de
+    `NivelTecnicoAlumno` llevan un espacio (`"NIVEL 1"`), y la regex más
+    estrecha de `tipo-notificacion-parity.test.ts` los perdería en silencio.
+    """
+    return {valor for _, valor in _MIEMBRO_ENUM.findall(cuerpo_de_clase(fuente, nombre))}
+
+
+def enums_declarados(fuente: str) -> set[str]:
+    """Todo `class X(str, enum.Enum)` del módulo de enums."""
+    return {nombre for nombre, bases in _CLASE_PY.findall(fuente) if "enum.Enum" in bases}
+
+
+def literales_de_union(fuente: str, nombre: str) -> set[str]:
+    """Los literales de `export type X = "A" | "B";`."""
+    union = re.search(rf"export type {re.escape(nombre)} =([^;]*);", _COMENTARIO_TS.sub("", fuente))
+    return set(re.findall(r'"([^"\n]+)"', union.group(1))) if union else set()
+
+
+def _declaracion_de_mapa(fuente: str, nombre: str) -> re.Match[str] | None:
+    """El `const X: <tipo> = { … }` de un mapa, exportado o no.
+
+    El `export` es opcional a propósito: los dos mapas de rol
+    (`USER_ROLE_BY_BACKEND_ROLE`, `BACKEND_ROLE_TO_USER_ROLE`) son privados de
+    su módulo, y exigir `export` los dejaría fuera del gate en silencio.
+    """
+    patron = rf"(?:export )?const {re.escape(nombre)}\s*:([^=]*)=\s*\{{([^}}]*)\}}"
+    return re.search(patron, _COMENTARIO_TS.sub("", fuente))
+
+
+def pares_de_mapa(fuente: str, nombre: str) -> list[tuple[str, str]]:
+    """Las entradas `CLAVE: "valor"` de un `const X: Record<…> = {…}`."""
+    mapa = _declaracion_de_mapa(fuente, nombre)
+    return _ENTRADA_MAPA.findall(mapa.group(2)) if mapa else []
+
+
+def tipo_de_clave(fuente: str, nombre: str) -> str:
+    """El tipo con el que un `Record<…>` indexa: lo que decide si TypeScript exige todas.
+
+    `Record<BackendTipoRol, …>` no compila incompleto; `Record<string, …>` es
+    exhaustivo sobre nada y acepta que falte cualquier clave.
+    """
+    mapa = _declaracion_de_mapa(fuente, nombre)
+    clave = re.search(r"Record<\s*([^,<>]+),", mapa.group(1)) if mapa else None
+    return clave.group(1).strip() if clave else ""
+
+
+def exentos_de(enum: str) -> frozenset[str]:
+    """Los valores de un enum que el inventario de divergencias deja pasar."""
+    return frozenset(d.valor for d in DIVERGENCIAS_INVENTARIADAS if d.enum == enum)
+
+
+def verificar_biyeccion(nombre: str, backend: set[str], frontend: set[str], exentos=frozenset()) -> None:
+    """El gate de enums: los dos lados nombran exactamente los mismos valores.
+
+    Falla en las dos direcciones y nombra los valores. Cualquiera de los dos
+    conjuntos vacío también falla: sin eso una regex rota dejaría el gate verde
+    por no haber comparado nada.
+    """
+    assert backend, f"{nombre}: no se leyó ningún valor del lado del backend"
+    assert frontend, f"{nombre}: no se leyó ningún valor del lado del frontend"
+    faltan = sorted(backend - frontend - exentos)
+    sobran = sorted(frontend - backend - exentos)
+    assert not faltan, f"{nombre}: el backend emite valores que el frontend no declara: {faltan}"
+    assert not sobran, f"{nombre}: el frontend declara valores que el backend no emite: {sobran}"
+
+
+def leer_ts(ruta: str) -> str:
+    return (FRONTEND / ruta).read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def fuente_enums() -> str:
+    return ENUMS.read_text(encoding="utf-8")
+
+
+IDS_DE_PAR = [f"{par.enum}-{par.declaracion}" for par in PARES_DE_ENUM]
+IDS_DE_MAPA = [mapa.enum for mapa in MAPAS_TRADUCIDOS]
+
+
+class TestBiyeccionDeEnums:
+    """(a) Identidad: la unión de TypeScript nombra los valores del backend."""
+
+    @pytest.mark.parametrize("par", PARES_DE_ENUM, ids=IDS_DE_PAR)
+    def test_los_dos_lados_nombran_los_mismos_valores(self, par, fuente_enums):
+        verificar_biyeccion(
+            par.enum,
+            valores_de_enum(fuente_enums, par.enum),
+            literales_de_union(leer_ts(par.archivo), par.declaracion),
+            exentos_de(par.enum),
+        )
+
+
+class TestEnumsTraducidos:
+    """(b) El `Record<>` es la biyección: se verifica por clave y por valor."""
+
+    @pytest.mark.parametrize("mapa", MAPAS_TRADUCIDOS, ids=IDS_DE_MAPA)
+    def test_las_claves_del_mapa_son_los_valores_del_backend(self, mapa, fuente_enums):
+        pares = pares_de_mapa(leer_ts(mapa.archivo), mapa.mapa)
+        verificar_biyeccion(mapa.mapa, valores_de_enum(fuente_enums, mapa.enum), {c for c, _ in pares})
+
+    @pytest.mark.parametrize("mapa", MAPAS_TRADUCIDOS, ids=IDS_DE_MAPA)
+    def test_los_valores_del_mapa_son_los_de_la_union_de_la_aplicacion(self, mapa):
+        pares = pares_de_mapa(leer_ts(mapa.archivo), mapa.mapa)
+        union = literales_de_union(leer_ts(mapa.archivo_union), mapa.union)
+        verificar_biyeccion(mapa.union, {v for _, v in pares}, union)
+
+    @pytest.mark.parametrize("mapa", MAPAS_TRADUCIDOS, ids=IDS_DE_MAPA)
+    def test_el_mapa_inverso_es_el_inverso(self, mapa):
+        fuente = leer_ts(mapa.archivo)
+        directo = pares_de_mapa(fuente, mapa.mapa)
+        assert directo, f"{mapa.mapa}: no se leyó ninguna entrada"
+        assert sorted((v, c) for c, v in directo) == sorted(pares_de_mapa(fuente, mapa.inverso))
+
+
+class TestMapasDeRol:
+    """(b) `TipoRol`: dos mapas a mano, uno de ellos indexado demasiado flojo."""
+
+    @pytest.mark.parametrize(("archivo", "mapa", "clave"), MAPAS_DE_ROL, ids=[m[1] for m in MAPAS_DE_ROL])
+    def test_el_mapa_cubre_todos_los_roles_del_backend(self, archivo, mapa, clave, fuente_enums):
+        claves = {c for c, _ in pares_de_mapa(leer_ts(archivo), mapa)}
+        verificar_biyeccion(mapa, valores_de_enum(fuente_enums, "TipoRol"), claves, exentos_de("TipoRol"))
+
+    @pytest.mark.parametrize(("archivo", "mapa", "clave"), MAPAS_DE_ROL, ids=[m[1] for m in MAPAS_DE_ROL])
+    def test_los_valores_del_mapa_son_roles_de_la_aplicacion(self, archivo, mapa, clave):
+        valores = {v for _, v in pares_de_mapa(leer_ts(archivo), mapa)}
+        union = literales_de_union(leer_ts("types/domain.ts"), "UserRole") - {CENTINELA_DE_ROL}
+        verificar_biyeccion(mapa, union, valores)
+
+    @pytest.mark.parametrize(("archivo", "mapa", "clave"), MAPAS_DE_ROL, ids=[m[1] for m in MAPAS_DE_ROL])
+    def test_el_tipo_de_clave_declarado_sigue_siendo_el_que_dice_la_tabla(self, archivo, mapa, clave):
+        assert tipo_de_clave(leer_ts(archivo), mapa) == clave
+
+    def test_los_dos_mapas_de_rol_dicen_exactamente_lo_mismo(self):
+        primero, segundo = (dict(pares_de_mapa(leer_ts(archivo), mapa)) for archivo, mapa, _ in MAPAS_DE_ROL)
+        assert primero, "no se leyó ninguna entrada del primer mapa de rol"
+        assert primero == segundo, f"las dos copias a mano divergieron: {primero} vs {segundo}"
+
+
+class TestPliegueDeMembresia:
+    """(c) `EstadoMembresia` pliega a propósito: se verifican las claves, no la inyectividad."""
+
+    def test_el_mapa_cubre_toda_la_union_del_backend(self):
+        archivo, mapa, union = PLIEGUE_MEMBRESIA
+        claves = {c for c, _ in pares_de_mapa(leer_ts(archivo), mapa)}
+        verificar_biyeccion(mapa, literales_de_union(leer_ts(archivo), union), claves)
+
+    def test_el_pliegue_a_vencida_es_exactamente_el_documentado(self):
+        archivo, mapa, _ = PLIEGUE_MEMBRESIA
+        assert dict(pares_de_mapa(leer_ts(archivo), mapa)) == PLIEGUE_ESPERADO
+
+
+class TestClasificacionDeEnums:
+    """El guardián del guardián: ningún enum queda fuera de las cuatro relaciones."""
+
+    def test_todo_enum_del_backend_esta_clasificado(self, fuente_enums):
+        sin_clasificar = sorted(enums_declarados(fuente_enums) - CLASIFICADOS)
+        assert not sin_clasificar, f"enums sin relación declarada con el frontend: {sin_clasificar}"
+
+    def test_ninguna_clasificacion_nombra_un_enum_que_ya_no_existe(self, fuente_enums):
+        fantasmas = sorted(CLASIFICADOS - enums_declarados(fuente_enums))
+        assert not fantasmas, f"clasificados pero ya no declarados en enums.py: {fantasmas}"
+
+    def test_ningun_enum_cae_en_dos_categorias_a_la_vez(self):
+        cubiertos = [par.enum for par in PARES_DE_ENUM]
+        aparte = set(ENUMS_SIN_CONTRAPARTE) | set(ENUMS_EXCLUIDOS)
+        assert not aparte & set(cubiertos), f"clasificado dos veces: {sorted(aparte & set(cubiertos))}"
+
+    def test_los_valores_con_espacio_no_se_pierden_al_leerlos(self, fuente_enums):
+        assert "NIVEL 1" in valores_de_enum(fuente_enums, "NivelTecnicoAlumno")
+
+
+# Pisos del parser del lado de los enums, con el mismo criterio que `PISOS`:
+# holgados respecto de lo medido, para denunciar una regex rota y no para
+# congelar el inventario.
+PISOS_DE_ENUM = {
+    "backend:enums": 12,
+    "backend:valores": 55,
+    "ts:literales": 35,
+    "ts:entradas-de-mapa": 25,
+}
+
+
+class TestElGateDeEnumsNoEsVacio:
+    """Las triangulaciones del PR 2, como regresión permanente."""
+
+    def test_un_valor_del_backend_sin_literal_en_ts_pone_el_gate_rojo(self):
+        with pytest.raises(AssertionError, match="INVENTADA"):
+            verificar_biyeccion("X", {"ACTIVA", "INVENTADA"}, {"ACTIVA"})
+
+    def test_un_literal_de_ts_que_el_backend_no_emite_pone_el_gate_rojo(self):
+        with pytest.raises(AssertionError, match="no emite.*INVENTADA"):
+            verificar_biyeccion("X", {"ACTIVA"}, {"ACTIVA", "INVENTADA"})
+
+    def test_la_deriva_inventariada_no_pone_el_gate_rojo(self, fuente_enums):
+        verificar_biyeccion(
+            "EstadoMembresia",
+            valores_de_enum(fuente_enums, "EstadoMembresia"),
+            literales_de_union(leer_ts("lib/membership-status.ts"), "BackendEstadoMembresia"),
+            exentos_de("EstadoMembresia"),
+        )
+
+    def test_una_tercera_deriva_en_un_enum_inventariado_igual_pone_el_gate_rojo(self, fuente_enums):
+        """La prueba de que el inventario es ANGOSTO: exenta `SUSPENDIDA`, no el enum."""
+        backend = valores_de_enum(fuente_enums, "EstadoMembresia") | {"CONGELADA"}
+        frontend = literales_de_union(leer_ts("lib/membership-status.ts"), "BackendEstadoMembresia")
+        with pytest.raises(AssertionError, match="CONGELADA"):
+            verificar_biyeccion("EstadoMembresia", backend, frontend, exentos_de("EstadoMembresia"))
+
+    def test_ninguna_exencion_cubre_un_enum_entero(self, fuente_enums):
+        anchas = [d.enum for d in DIVERGENCIAS_INVENTARIADAS
+                  if exentos_de(d.enum) >= valores_de_enum(fuente_enums, d.enum)]
+        assert not anchas, f"exenciones que taparían la deriva siguiente: {anchas}"
+
+    @pytest.mark.parametrize("par", PARES_DE_ENUM, ids=IDS_DE_PAR)
+    def test_ninguna_exencion_sobrevive_a_su_deriva(self, par, fuente_enums):
+        backend = valores_de_enum(fuente_enums, par.enum)
+        frontend = literales_de_union(leer_ts(par.archivo), par.declaracion)
+        obsoletas = sorted(exentos_de(par.enum) & backend & frontend)
+        assert not obsoletas, f"{par.enum}: exención sin deriva que tapar, hay que borrarla: {obsoletas}"
+
+    @pytest.mark.parametrize("par", PARES_DE_ENUM, ids=IDS_DE_PAR)
+    def test_ninguna_exencion_nombra_un_valor_que_no_existe(self, par, fuente_enums):
+        backend = valores_de_enum(fuente_enums, par.enum)
+        frontend = literales_de_union(leer_ts(par.archivo), par.declaracion)
+        fantasmas = sorted(exentos_de(par.enum) - backend - frontend)
+        assert not fantasmas, f"{par.enum}: se exenta un valor que ningún lado declara: {fantasmas}"
+
+    def test_un_conjunto_de_valores_del_backend_vacio_falla(self):
+        with pytest.raises(AssertionError, match="lado del backend"):
+            verificar_biyeccion("X", set(), {"ACTIVA"})
+
+    def test_un_conjunto_de_literales_de_ts_vacio_falla(self):
+        with pytest.raises(AssertionError, match="lado del frontend"):
+            verificar_biyeccion("X", {"ACTIVA"}, set())
+
+    def test_vaciar_la_tabla_de_pares_deja_enums_sin_clasificar(self, fuente_enums):
+        """El equivalente del piso para la tabla: sin pares, la clasificación se pone roja."""
+        aparte = set(ENUMS_SIN_CONTRAPARTE) | set(ENUMS_EXCLUIDOS)
+        assert enums_declarados(fuente_enums) - aparte, (
+            "sin `PARES_DE_ENUM` no quedarían enums sin clasificar, "
+            "así que vaciar la tabla no pondría el gate en rojo"
+        )
+
+    def test_un_parser_de_enums_roto_no_lee_ningun_valor(self):
+        assert valores_de_enum('class X(str, enum.Enum):\n    A: "A"\n', "X") == set()
+
+    def test_un_parser_de_uniones_roto_no_lee_ningun_literal(self):
+        assert literales_de_union('export type X = "A" | "B"\n', "X") == set()
+
+    def test_el_contrato_documenta_las_cuatro_relaciones_y_los_catorce_enums(self, fuente_enums):
+        contrato = CONTRATO.read_text(encoding="utf-8")
+        assert "Divergencias inventariadas" in contrato, "falta la tabla de divergencias"
+        for enum in sorted(enums_declarados(fuente_enums)):
+            assert f"`{enum}`" in contrato, f"el contrato no nombra el enum {enum}"
+
+    @pytest.mark.parametrize("divergencia", DIVERGENCIAS_INVENTARIADAS, ids=[d.valor for d in DIVERGENCIAS_INVENTARIADAS])
+    def test_cada_divergencia_esta_documentada_con_su_origen_y_su_destino(self, divergencia):
+        contrato = CONTRATO.read_text(encoding="utf-8")
+        for evidencia in (divergencia.valor, divergencia.origen, divergencia.seguimiento):
+            assert evidencia in contrato, f"la divergencia {divergencia.valor} no cita {evidencia}"
+
+    def test_el_contrato_justifica_el_enum_excluido(self):
+        contrato = CONTRATO.read_text(encoding="utf-8")
+        for evidencia in ("categoria_horario", "test_drift_enums_postgres.py"):
+            assert evidencia in contrato, f"la exclusión de Categoria no cita {evidencia}"
+
+    def test_ninguna_superficie_de_enums_cae_por_debajo_de_su_piso(self, fuente_enums):
+        medido = conteo_de_enums(fuente_enums)
+        flojas = {n: medido[n] for n, piso in PISOS_DE_ENUM.items() if medido[n] < piso}
+        assert not flojas, f"parser roto o superficie perdida: {flojas} (pisos {PISOS_DE_ENUM})"
+
+
+def conteo_de_enums(fuente_enums: str) -> dict[str, int]:
+    """Lo extraído por cada parser de esta mitad del gate, por separado."""
+    declarados = enums_declarados(fuente_enums)
+    return {
+        "backend:enums": len(declarados),
+        "backend:valores": sum(len(valores_de_enum(fuente_enums, n)) for n in declarados),
+        "ts:literales": sum(len(literales_de_union(leer_ts(p.archivo), p.declaracion)) for p in PARES_DE_ENUM),
+        "ts:entradas-de-mapa": sum(len(pares_de_mapa(leer_ts(a), m)) for a, m in TODOS_LOS_MAPAS),
+    }
