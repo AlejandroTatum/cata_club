@@ -808,13 +808,14 @@ function RenewPaymentForm({
   autoOpen,
   studentName,
   /**
-   * The active benefit's percentage, or `null` — issue #400 slice 06. Only
+   * The active benefit's percentage or fixed amount — issue #400 slice 06. Only
    * feeds the CLIENT-SIDE preview total (`estimateTotal`); the request this
    * form sends never carries it, same as it never carried `monto`. A 100%
    * benefit never reaches this component: `PaymentsContent` renders
    * `ApplyBenefitForm` instead in that case.
    */
   beneficioPorcentaje,
+  beneficioMonto,
   onRegistered,
 }: {
   membership: MembershipSummary;
@@ -824,6 +825,7 @@ function RenewPaymentForm({
   autoOpen: boolean;
   studentName: string | null;
   beneficioPorcentaje: number | null;
+  beneficioMonto: number | null;
   onRegistered: () => void;
 }): React.ReactElement {
   /** Issue #400: a discrete month count, never a typed monto. */
@@ -836,7 +838,7 @@ function RenewPaymentForm({
 
   const monthlyPrice = Number(membership.montoAplicado ?? "") || 0;
   /** What the checkpoint shows BEFORE confirming — a preview, not the authoritative total (see `estimateTotal`). */
-  const estimatedTotal = estimateTotal(monthlyPrice, months, beneficioPorcentaje);
+  const estimatedTotal = estimateTotal(monthlyPrice, months, beneficioPorcentaje, beneficioMonto);
 
   /**
    * Coverage resumes where the paid period ends, not today — otherwise a family
@@ -1375,6 +1377,7 @@ function PaymentOrBenefitForm({
    */
   isFullBenefit: boolean;
   beneficioPorcentaje: number | null;
+  beneficioMonto: number | null;
 }): React.ReactElement {
   if (isFullBenefit) {
     return <ApplyBenefitForm {...common} />;
@@ -1967,6 +1970,8 @@ function PaymentsContent({
 
   const beneficioPorcentaje =
     beneficio?.descuento.porcentaje != null ? Number(beneficio.descuento.porcentaje) : null;
+  const beneficioMonto =
+    beneficio?.descuento.monto != null ? Number(beneficio.descuento.monto) : null;
   /**
    * A 100% PERCENTAGE benefit swaps the payment form for `ApplyBenefitForm`
    * (no monto, no tipoPago, no voucher — a 100% benefit never creates a
@@ -2216,6 +2221,7 @@ function PaymentsContent({
             studentName={studentName}
             isFullBenefit={isFullBenefit}
             beneficioPorcentaje={beneficioPorcentaje}
+            beneficioMonto={beneficioMonto}
             onRegistered={handleRegistered}
           />
         ) : (

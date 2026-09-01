@@ -450,6 +450,17 @@ describe("estimateTotal", () => {
     expect(estimateTotal(35, 1, 50)).toBe(17.5);
   });
 
+  it("applies a fixed benefit once per payment, including multiple months", () => {
+    expect(estimateTotal(80, 1, null, 10)).toBe(70);
+    expect(estimateTotal(80, 2, null, 10)).toBe(150);
+  });
+
+  it("floors a fixed benefit at zero and ignores missing or zero values", () => {
+    expect(estimateTotal(5, 1, null, 10)).toBe(0);
+    expect(estimateTotal(80, 1, null, 0)).toBe(80);
+    expect(estimateTotal(80, 1, null, null)).toBe(80);
+  });
+
   it("rounds to the cent", () => {
     // 33.33 repeating -- would show a fraction of a cent without rounding.
     expect(estimateTotal(30, 1, 33.33)).toBe(20);
