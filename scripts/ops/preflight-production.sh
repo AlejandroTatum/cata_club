@@ -45,6 +45,8 @@ stack_value() {
       command -v getent >/dev/null 2>&1 || die "falta getent para resolver SMTP_HOST"
       command -v timeout >/dev/null 2>&1 || die "falta timeout para limitar el preflight SMTP"
       getent ahosts "$host" >/dev/null 2>&1 || die "falló la resolución DNS del endpoint SMTP configurado"
+      # shellcheck disable=SC2016
+      # $1/$2 intentionally expand in the child bash -c.
       timeout "${timeout_seconds}s" bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" || die "falló o expiró la conexión TCP al endpoint SMTP configurado"
       case "${starttls:-true}" in
         true|TRUE|1|yes|YES) command -v openssl >/dev/null 2>&1 || die "falta openssl para comprobar STARTTLS SMTP"; timeout "${timeout_seconds}s" openssl s_client -starttls smtp -connect "${host}:${port}" -servername "$host" -brief </dev/null >/dev/null 2>&1 || die "falló o expiró el handshake STARTTLS del endpoint SMTP configurado" ;;
