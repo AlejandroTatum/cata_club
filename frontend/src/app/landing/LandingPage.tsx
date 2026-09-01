@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -25,9 +25,9 @@ import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
-import { buildLandingStats, landingConfig, toWhatsAppLink } from "./landing-config";
+import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
 import { EDITORIAL_MEDIA_SIZES, MAP_INSET_SIZES } from "./landing-image-sizes";
-import { mapPublicSchedules } from "./schedule-data";
+import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
 interface SectionHeaderProps {
@@ -70,6 +70,71 @@ const ENROLL_HREF = "/student/enroll";
  * for anything at all.
  */
 const CREST_SRC = "/brand/cata-club-crest-256.png";
+
+/**
+ * The published schedule catalog as this page sees it. `loading` is also what
+ * server rendering produces, since the request below lives in an effect that
+ * never runs there.
+ */
+type SchedulesState =
+  | { kind: "loading" }
+  | { kind: "ready"; schedules: LandingSchedule[] }
+  | { kind: "empty" }
+  | { kind: "error" };
+
+/**
+ * The landing's own status copy for the catalog. The schedule section and the
+ * contact card's `Horario` row both read it from here, so a visitor is never
+ * told two different things about the same missing data. There is no fourth
+ * case: when the club has published nothing, the page says so — it does not
+ * fall back to hours nobody confirmed.
+ */
+const SCHEDULE_STATUS: Record<Exclude<SchedulesState["kind"], "ready">, string> = {
+  loading: "Cargando horarios…",
+  empty: "Aún no hay horarios publicados.",
+  error: "No se pudieron cargar los horarios.",
+};
+
+const SchedulesContext = createContext<SchedulesState>({ kind: "loading" });
+
+/**
+ * One request to `GET /api/schedules` for the whole page — issue #789.
+ *
+ * The club manages its schedules inside the app, so that catalog is the only
+ * source of truth for them: the schedule section and the contact card's
+ * opening hours are two views of one answer. Fetching it once per view would
+ * give the same page two chances to disagree with itself, which is the
+ * divergence this issue closed.
+ *
+ * It is provided through context rather than passed down from `LandingPage`
+ * so that only the two views re-render when the answer arrives. `children` is
+ * built by `LandingPage`, which never re-renders, so React skips the rest of
+ * the tree — including `LandingMotionLoader`, whose runtime must load exactly
+ * once.
+ */
+function PublicSchedules({ children }: { children: React.ReactNode }): React.ReactElement {
+  const [state, setState] = useState<SchedulesState>({ kind: "loading" });
+
+  useEffect((): (() => void) => {
+    let cancelled = false;
+    fetch("/api/schedules", { cache: "no-store" })
+      .then((response): Promise<unknown> => {
+        if (!response.ok) throw new Error("schedules unavailable");
+        return response.json();
+      })
+      .then((payload: unknown): void => {
+        if (cancelled) return;
+        const schedules = mapPublicSchedules(payload);
+        setState(schedules.length > 0 ? { kind: "ready", schedules } : { kind: "empty" });
+      })
+      .catch((): void => {
+        if (!cancelled) setState({ kind: "error" });
+      });
+    return (): void => { cancelled = true; };
+  }, []);
+
+  return <SchedulesContext.Provider value={state}>{children}</SchedulesContext.Provider>;
+}
 
 function Stars(): React.ReactElement {
   return (
@@ -286,42 +351,30 @@ function Motto(): React.ReactElement {
 }
 
 function Schedule(): React.ReactElement {
-  const [state, setState] = useState<{ kind: "loading" } | { kind: "ready"; schedules: typeof landingConfig.schedules } | { kind: "empty" } | { kind: "error" }>({ kind: "loading" });
-
-  useEffect((): (() => void) => {
-    let cancelled = false;
-    fetch("/api/schedules", { cache: "no-store" })
-      .then((response): Promise<unknown> => {
-        if (!response.ok) throw new Error("schedules unavailable");
-        return response.json();
-      })
-      .then((payload: unknown): void => {
-        if (cancelled) return;
-        const schedules = mapPublicSchedules(payload);
-        setState(schedules.length > 0 ? { kind: "ready", schedules } : { kind: "empty" });
-      })
-      .catch((): void => {
-        if (!cancelled) setState({ kind: "error" });
-      });
-    return (): void => { cancelled = true; };
-  }, []);
-
-  const status = state.kind === "loading"
-    ? "Cargando horarios…"
-    : state.kind === "empty"
-      ? "Aún no hay horarios publicados."
-      : "No se pudieron cargar los horarios.";
+  const state = useContext(SchedulesContext);
 
   return (
     <section className="landing-section landing-schedule" id="horarios" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Entrenamientos" title="Elija una categoría" />
-      {state.kind === "ready" ? <ScheduleSelector schedules={state.schedules} /> : <p className="landing-schedule-status" role="status">{status}</p>}
+      {state.kind === "ready"
+        ? <ScheduleSelector schedules={state.schedules} />
+        : <p className="landing-schedule-status" role="status">{SCHEDULE_STATUS[state.kind]}</p>}
     </section>
   );
 }
 
 function Location(): React.ReactElement {
   const { contact } = landingConfig;
+  const state = useContext(SchedulesContext);
+  /**
+   * Derived from the very catalog the schedule section above renders (#789),
+   * never from a second range maintained by hand. Until it arrives — and if it
+   * never does: nothing published, the request failed, or JavaScript never ran
+   * at all — the row says which of those happened, in the same words the
+   * section uses. It never guesses a window.
+   */
+  const settled = state.kind === "ready";
+  const hours = settled ? deriveContactHours(state.schedules) : SCHEDULE_STATUS[state.kind];
   return (
     <section className="landing-section landing-location" id="contacto" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Visítanos" title="Cómo llegar" />
@@ -361,7 +414,9 @@ function Location(): React.ReactElement {
           </p>
           <p><Facebook className="landing-icon-facebook" aria-hidden="true" /><strong>Facebook</strong><a href={contact.facebook} target="_blank" rel="noreferrer">Cata Club Loja</a></p>
           <p><Instagram className="landing-icon-instagram" aria-hidden="true" /><strong>Instagram</strong><a href={contact.instagram} target="_blank" rel="noreferrer">@cataclub_tenis_de_mesa</a></p>
-          <p><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{contact.hours}</span></p>
+          {/* A live region only while it is unsettled, so the visitor hears
+              what happened; once it states real hours it is ordinary copy. */}
+          <p role={settled ? undefined : "status"}><CalendarDays aria-hidden="true" /><strong>Horario</strong><span>{hours}</span></p>
           <a className="landing-button landing-button-outline" href={clubOpenStreetMapUrl()} target="_blank" rel="noreferrer">
             <Navigation aria-hidden="true" /> Cómo llegar
           </a>
@@ -430,9 +485,14 @@ export default function LandingPage(): React.ReactElement {
        * contentinfo, and folding them into "principal" would make the skip link
        * land inside the region it exists to skip past.
        */}
-      <main>
-        <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Location />
-      </main>
+      {/* `Schedule` and `Location` are the two views of the published catalog
+          (#789); the provider fetches it once and renders no DOM of its own,
+          so the landmark structure below is exactly what it was. */}
+      <PublicSchedules>
+        <main>
+          <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Location />
+        </main>
+      </PublicSchedules>
       {/* The sponsor strip sits between the page's main landmark and the footer:
           it is neither primary content nor site chrome. */}
       <Sponsors />
