@@ -13,13 +13,18 @@ validador -- no `Field(pattern=...)` -- para poder distinguir en castellano
 "no tiene el largo correcto" de "ese número no es válido": son dos errores
 y se corrigen distinto.
 """
-from typing import Annotated
+from typing import Annotated, Optional
 
 from pydantic import AfterValidator
 
 from app.dominio.cedula import es_cedula_valida
 from app.dominio.enums import TipoSangre
-from app.dominio.telefono import es_telefono_valido, normalizar_telefono
+from app.dominio.telefono import (
+    MENSAJE_TELEFONO_EMERGENCIA_IGUAL,
+    es_telefono_valido,
+    normalizar_telefono,
+    telefonos_coinciden,
+)
 
 
 # `isascii()` antes de `isdigit()`, igual que en `dominio/cedula.py` y
@@ -85,6 +90,23 @@ def _validar_apellido(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El apellido es obligatorio.")
     return valor
+
+
+def validar_telefono_emergencia_distinto(
+    telefono_personal: Optional[str], telefono_emergencia: Optional[str],
+) -> None:
+    """Cross-check de DTO compartido por `EnrollmentCreateDTO`,
+    `RepresentadoCreateDTO` y `AdminCrearCuentaDTO` (issue #860): un contacto
+    de emergencia pierde su función si es el mismo número que el personal.
+
+    Ambos valores ya llegan normalizados por `TelefonoValidado`
+    (`AfterValidator` corre antes que un `model_validator(mode="after")`),
+    así que la comparación de `telefonos_coinciden` alcanza; no hace falta
+    normalizar de nuevo acá. No dispara si cualquiera de los dos está
+    ausente: el teléfono personal es opcional en algunos caminos, y esta
+    regla nunca lo vuelve obligatorio."""
+    if telefonos_coinciden(telefono_personal, telefono_emergencia):
+        raise ValueError(MENSAJE_TELEFONO_EMERGENCIA_IGUAL)
 
 
 CedulaValidada = Annotated[str, AfterValidator(_validar_cedula)]

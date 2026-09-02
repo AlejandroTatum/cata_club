@@ -123,7 +123,7 @@ describe("validateCrearCuentaForm — ficha médica (#643)", () => {
     form({
       tipoSangre: "O_POSITIVO",
       contactoEmergencia: "Ana Pérez",
-      telefonoEmergencia: "0991234567",
+      telefonoEmergencia: "0987654321",
       ...overrides,
     });
 
@@ -144,6 +144,28 @@ describe("validateCrearCuentaForm — ficha médica (#643)", () => {
   it("rejects a malformed emergency phone", () => {
     expect(validateCrearCuentaForm(withMedical({ telefonoEmergencia: "123" })).join(" "))
       .toMatch(/El teléfono de emergencia debe ser un celular/);
+  });
+
+  /**
+   * Issue #860: the emergency phone must differ from the account's own —
+   * otherwise the contact of emergency cannot reach anyone the account
+   * holder cannot reach themselves.
+   */
+  describe("telefonoEmergencia must differ from telefono (#860)", () => {
+    const MENSAJE = "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
+
+    it.each([
+      ["the exact same number", form().telefono],
+      ["the +593 form of the same number", "+593991234567"],
+      ["the 593 form of the same number (no plus sign)", "593991234567"],
+    ])("rejects %s as equivalent to the account's own (telefono is 0991234567)", (_description, telefonoEmergencia) => {
+      expect(validateCrearCuentaForm(withMedical({ telefonoEmergencia }))).toContain(MENSAJE);
+    });
+
+    it("accepts a different valid emergency phone", () => {
+      expect(validateCrearCuentaForm(withMedical({ telefonoEmergencia: "0987654321" })))
+        .not.toContain(MENSAJE);
+    });
   });
 
   it("keeps alergias and condicionesSalud optional inside a complete record", () => {
@@ -185,7 +207,7 @@ describe("validateCrearCuentaForm — ficha médica obligatoria para alumnos (#7
         alumno({
           tipoSangre: "O_POSITIVO",
           contactoEmergencia: "Ana Pérez",
-          telefonoEmergencia: "0991234567",
+          telefonoEmergencia: "0987654321",
         }),
       ),
     ).toEqual([]);

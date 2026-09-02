@@ -182,6 +182,33 @@ describe("validateAddDependentStep — health step", () => {
       .toContain("El teléfono de emergencia es obligatorio.");
   });
 
+  /**
+   * Issue #860: the emergency phone must differ from the dependent's own —
+   * otherwise the contact of emergency cannot reach anyone the dependent
+   * cannot reach themselves.
+   */
+  describe("telefonoEmergencia must differ from telefono (#860)", () => {
+    const MENSAJE = "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
+
+    it.each([
+      ["the exact same number", "0991234567", "0991234567"],
+      ["the +593 form of the same number", "0991234567", "+593991234567"],
+      ["the 593 form of the same number (no plus sign)", "0991234567", "593991234567"],
+    ])("rejects %s as equivalent to the dependent's own", (_description, telefono, telefonoEmergencia) => {
+      expect(validateAddDependentStep("health", validForm({ telefono, telefonoEmergencia })))
+        .toContain(MENSAJE);
+    });
+
+    it("accepts a different valid emergency phone", () => {
+      expect(
+        validateAddDependentStep(
+          "health",
+          validForm({ telefono: "0991234567", telefonoEmergencia: "0987654321" }),
+        ),
+      ).not.toContain(MENSAJE);
+    });
+  });
+
   it("enfermedades and alergias are optional", () => {
     expect(validateAddDependentStep("health", validForm({ enfermedades: "", alergias: "" })))
       .toEqual([]);

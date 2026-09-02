@@ -35,7 +35,9 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     contraseniaRepresentante: "password8",
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
     contactoEmergencia: "María Pérez",
-    telefonoEmergencia: "0991234567",
+    // Issue #860: has to differ from `telefono` above — see the same note in
+    // validateEnrollStep.test.ts's `validForm`.
+    telefonoEmergencia: "0987654321",
     ...overrides,
   };
 }
@@ -184,6 +186,43 @@ describe("validateEnrollFields", () => {
     expect(errors.telefonoEmergencia).toBeUndefined();
     expect(errors.alergias).toBeUndefined();
     expect(errors.condicionesSalud).toBeUndefined();
+  });
+
+  /**
+   * Issue #860: the emergency phone must differ from the student's own —
+   * otherwise the contact of emergency cannot reach anyone the student
+   * cannot reach themselves. The message lands on `telefonoEmergencia`,
+   * the field the visitor is actually looking at.
+   */
+  describe("telefonoEmergencia must differ from telefono (#860)", () => {
+    it.each([
+      ["the exact same number", "0991234567", "0991234567"],
+      ["the +593 form of the same number", "0991234567", "+593991234567"],
+      ["the 593 form of the same number (no plus sign)", "0991234567", "593991234567"],
+    ])("rejects %s, keyed to telefonoEmergencia", (_description, telefono, telefonoEmergencia) => {
+      const errors = validateEnrollFields("health", validForm({ telefono, telefonoEmergencia }));
+      expect(errors.telefonoEmergencia).toBe(
+        "El teléfono de emergencia debe ser diferente del teléfono del estudiante.",
+      );
+    });
+
+    it("accepts a different valid emergency phone", () => {
+      const errors = validateEnrollFields(
+        "health",
+        validForm({ telefono: "0991234567", telefonoEmergencia: "0987654321" }),
+      );
+      expect(errors.telefonoEmergencia).toBeUndefined();
+    });
+
+    it("still reports a malformed number first, even when it happens to differ from telefono", () => {
+      // `phoneRule` is chained BEFORE this rule: a malformed value never
+      // reaches the equality check.
+      const errors = validateEnrollFields(
+        "health",
+        validForm({ telefono: "0991234567", telefonoEmergencia: "123" }),
+      );
+      expect(errors.telefonoEmergencia).toMatch(/celular.*fijo/);
+    });
   });
 });
 

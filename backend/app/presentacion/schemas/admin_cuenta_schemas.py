@@ -13,7 +13,11 @@ from app.presentacion.schemas.enrollment_schemas import (
     MENSAJE_FICHA_MEDICA_OBLIGATORIA,
     EnrollmentFichaMedicaDTO,
 )
-from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
+from app.presentacion.schemas.validadores import (
+    CedulaValidada,
+    TelefonoValidado,
+    validar_telefono_emergencia_distinto,
+)
 
 # Issue #730. De los cuatro `tipo_cuenta` que este endpoint acuña, sólo estos
 # dos entrenan. Un ENTRENADOR o un REPRESENTANTE no pisa la cancha como
@@ -59,4 +63,14 @@ class AdminCrearCuentaDTO(BaseModel):
     def _ficha_medica_obligatoria_para_alumnos(self) -> "AdminCrearCuentaDTO":
         if self.tipo_cuenta in TIPOS_CUENTA_ALUMNO and self.ficha_medica is None:
             raise ValueError(MENSAJE_FICHA_MEDICA_OBLIGATORIA)
+        return self
+
+    @model_validator(mode="after")
+    def _telefono_emergencia_distinto_del_personal(self) -> "AdminCrearCuentaDTO":
+        """Issue #860. La persona acuñada puede no ser un alumno (ver la
+        lista `TIPOS_CUENTA_ALUMNO` de arriba) y aun así traer una ficha
+        médica opcional -- la comparación corre igual cuando la ficha vino,
+        sin condicionarla al `tipo_cuenta`."""
+        if self.ficha_medica is not None:
+            validar_telefono_emergencia_distinto(self.telefono, self.ficha_medica.telefono_emergencia)
         return self

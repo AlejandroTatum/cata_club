@@ -362,6 +362,59 @@ describe("EnrollPage — error prevention on the student step", () => {
 });
 
 /**
+ * Issue #860: the emergency phone must differ from the student's own — a
+ * contact of emergency that repeats the student's number cannot reach anyone
+ * the student cannot already reach themselves.
+ */
+describe("EnrollPage — el teléfono de emergencia no puede repetir el del estudiante (#860)", () => {
+  function goToHealthStep(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ })); // type -> personal
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ })); // personal -> health
+  }
+
+  it.each([
+    ["the exact same local number", "0991234567"],
+    ["the equivalent +593 form of the same number", "+593991234567"],
+  ])("rejects %s beside 'Teléfono de emergencia' and keeps 'Siguiente' disabled", (_description, valor) => {
+    render(<EnrollPage />);
+    goToHealthStep();
+
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    const telefonoEmergencia = screen.getByLabelText(/teléfono de emergencia/i);
+    fireEvent.change(telefonoEmergencia, { target: { value: valor } });
+    fireEvent.blur(telefonoEmergencia);
+
+    expect(
+      screen.getByText("El teléfono de emergencia debe ser diferente del teléfono del estudiante."),
+    ).toBeInTheDocument();
+    expect(telefonoEmergencia).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+  });
+
+  it("enables 'Siguiente' once the emergency phone is a different valid number", () => {
+    render(<EnrollPage />);
+    goToHealthStep();
+
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
+    expect(
+      screen.queryByText("El teléfono de emergencia debe ser diferente del teléfono del estudiante."),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
  * Task 2 (QA cycle 2026-08-12): a duplicate-identity 400 used to leave the
  * visitor on the summary with only the generic message — no indication of
  * which step/field to revisit. The fix flags the summary rows that hold a

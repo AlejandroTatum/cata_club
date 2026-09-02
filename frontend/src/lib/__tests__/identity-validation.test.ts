@@ -7,6 +7,8 @@ import {
   isValidEcuadorianPhone,
   phoneRule,
   normalizeEcuadorianMobile,
+  emergencyPhoneDiffersRule,
+  EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE,
   PERSON_NAME_PATTERN,
   personNameRule,
   EDAD_MINIMA_ALUMNO,
@@ -215,6 +217,35 @@ describe("teléfono", () => {
     it("isValidEcuadorianPhone/phoneRule agree with phoneError on an international value", () => {
       expect(isValidEcuadorianPhone("+593991234567")).toBe(true);
       expect(phoneRule("+593991234567", "El teléfono")).toBeNull();
+    });
+  });
+
+  describe("emergencyPhoneDiffersRule (issue #860)", () => {
+    it.each([
+      ["the exact same local value", "0993568597", "0993568597"],
+      ["the local value against its +593 form", "0993568597", "+593993568597"],
+      ["the local value against its 593 form (no plus sign)", "0993568597", "593993568597"],
+      ["two international forms of the same number", "+593993568597", "593993568597"],
+    ])("rejects when both sides are %s vs %s", (_description, emergency, personal) => {
+      expect(emergencyPhoneDiffersRule(emergency, personal)).toBe(EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE);
+    });
+
+    it("accepts two different valid numbers", () => {
+      expect(emergencyPhoneDiffersRule("0993568597", "0991234567")).toBeNull();
+    });
+
+    it("does not fire when the emergency phone is blank — that is phoneRule's job", () => {
+      expect(emergencyPhoneDiffersRule("", "0991234567")).toBeNull();
+      expect(emergencyPhoneDiffersRule("   ", "0991234567")).toBeNull();
+    });
+
+    it("does not fire when the personal phone is blank — never turns it into a requirement", () => {
+      expect(emergencyPhoneDiffersRule("0991234567", "")).toBeNull();
+      expect(emergencyPhoneDiffersRule("0991234567", "   ")).toBeNull();
+    });
+
+    it("does not fire when both are blank", () => {
+      expect(emergencyPhoneDiffersRule("", "")).toBeNull();
     });
   });
 });

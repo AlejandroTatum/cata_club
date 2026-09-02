@@ -22,6 +22,7 @@ aceptar los tres formatos y seguir almacenando uno solo.
 """
 
 import re
+from typing import Optional
 
 _LARGO_CELULAR = 10
 _PREFIJO_CELULAR = "09"
@@ -66,3 +67,29 @@ def es_telefono_valido(telefono: str) -> bool:
     if len(telefono) == _LARGO_FIJO:
         return telefono.startswith(_PREFIJO_FIJO)
     return False
+
+
+# Issue #860: un contacto de emergencia deja de cumplir su función si es el
+# mismo número que el personal del titular -- deja de ser una vía alternativa
+# para cuando esa persona no puede responder. El mensaje vive acá, junto a la
+# comparación, y lo reusan tanto los DTOs (`validadores.py`, vía
+# `ValueError`) como el servicio de ficha médica (vía `OperacionInvalida`),
+# para que el 422 de un DTO y el 400 de un bypass digan exactamente lo mismo.
+MENSAJE_TELEFONO_EMERGENCIA_IGUAL = (
+    "El teléfono de emergencia debe ser diferente del teléfono del estudiante."
+)
+
+
+def telefonos_coinciden(a: Optional[str], b: Optional[str]) -> bool:
+    """True si `a` y `b` son el MISMO teléfono ecuatoriano, comparados ya
+    normalizados: `0993568597`, `+593993568597` y `593993568597` cuentan
+    como el mismo número (issue #855, reusado acá para el #860).
+
+    Si cualquiera de los dos está ausente (`None` o `""`) no hay
+    coincidencia -- el teléfono personal es opcional en algunos caminos
+    (ver `Persona.telefono` con `""`, documentado en `_exigir_telefono_
+    valido` de `modelos.py`), y esta comparación nunca vuelve obligatorio
+    un campo que no lo es: solo compara dos valores que YA existen."""
+    if not a or not b:
+        return False
+    return normalizar_telefono(a) == normalizar_telefono(b)
