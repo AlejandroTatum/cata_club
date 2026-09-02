@@ -17,7 +17,10 @@ from sqlalchemy.orm import Session
 from app.infraestructura.db import obtener_sesion
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.notificacion_servicio import NotificacionServicio
-from app.presentacion.schemas.notificacion_schemas import NotificacionResponseDTO
+from app.presentacion.schemas.notificacion_schemas import (
+    MarcarTodasLeidasResponseDTO,
+    NotificacionResponseDTO,
+)
 from app.presentacion.schemas.base import PaginatedResponse
 
 router = APIRouter(prefix="/ranking/notificaciones", tags=["notificaciones"])
@@ -43,6 +46,23 @@ async def listar_mis_notificaciones(
     else:
         items, total = servicio.listar_propias(persona_id, skip=skip, limit=limit)
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+@router.patch(
+    "/leer-todas", response_model=MarcarTodasLeidasResponseDTO,
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+async def marcar_todas_notificaciones_leidas(
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    """Declarada ANTES que `/{notificacion_id}/leer`: es un segmento literal
+    de un solo nivel (`/leer-todas`), esa otra ruta necesita dos (`{id}` +
+    `/leer`), así que no compiten por el mismo path -- el orden se conserva
+    igual, como guardarraíl explícito contra una futura ruta de un solo
+    segmento que sí pudiera chocar."""
+    actualizadas = NotificacionServicio(db).marcar_todas_leidas(token_payload.get("persona_id"))
+    return {"actualizadas": actualizadas}
 
 
 @router.patch(
