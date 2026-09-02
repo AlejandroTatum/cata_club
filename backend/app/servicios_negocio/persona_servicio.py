@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
 from app.dominio.enums import TipoRol, TipoNotificacion
+from app.dominio.nombre_propio import nombre_completo
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida, PermisosInsuficientes,
 )
@@ -352,7 +353,7 @@ class PersonaServicio:
         posterior al hecho principal no debe deshacer ni ocultar que el hecho
         principal ya ocurrió (hallazgo en vivo, 2026-08-11: antes de este fix
         un nombre real largo hacía `DataError` acá por VARCHAR(255))."""
-        nombre = acortar_nombre_para_notificacion(f"{representado.nombres} {representado.apellidos}")
+        nombre = acortar_nombre_para_notificacion(nombre_completo(representado.nombres, representado.apellidos))
         try:
             NotificacionRepositorio(self.db).crear(Notificacion(
                 tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,

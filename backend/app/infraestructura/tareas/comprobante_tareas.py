@@ -27,6 +27,7 @@ from app.infraestructura.generador_pdf import generar_comprobante_pago_pdf
 from app.infraestructura.cloudinary_cliente import subir_pdf_membresia
 from app.dominio.modelos import Pago, ComprobantePago
 from app.dominio.enums import EstadoPago
+from app.dominio.nombre_propio import nombre_completo
 from app.dominio.excepciones import EntidadNoEncontrada
 
 
@@ -82,7 +83,7 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
 
         pdf_bytes = generar_comprobante_pago_pdf(
             pago_id=pago.id,
-            persona_nombre=f"{persona.nombres} {persona.apellidos}",
+            persona_nombre=nombre_completo(persona.nombres, persona.apellidos),
             persona_cedula=persona.cedula,
             persona_telefono=persona.telefono,
             membresia_id=membresia.id,

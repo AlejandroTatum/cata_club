@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import date
 
 from app.dominio.enums import DiaSemana
+from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
@@ -315,7 +316,7 @@ async def reporte_asistencia_pdf(
             r.fecha_entrenamiento.strftime("%d/%m/%Y"),
             f"{r.horario.dia_semana.value} {r.horario.hora_inicio.strftime('%H:%M')}"
             f"–{r.horario.hora_fin.strftime('%H:%M')}",
-            f"{r.persona.nombres} {r.persona.apellidos}",
+            nombre_completo(r.persona.nombres, r.persona.apellidos),
             r.estado.value,
         ]
         for r in registros

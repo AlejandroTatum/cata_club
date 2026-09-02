@@ -11,6 +11,8 @@ from app.presentacion.schemas.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,
+    NombrePresentado,
+    NombrePresentadoOpcional,
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
@@ -107,8 +109,8 @@ class IndependizarDTO(BaseModel):
 
 class PersonaResponseDTO(ResponseBase, BaseModel):
     id: int = Field(..., examples=[1])
-    nombres: str = Field(..., examples=["Juan Carlos"])
-    apellidos: str = Field(..., examples=["Pérez López"])
+    nombres: NombrePresentado = Field(..., examples=["Juan Carlos"])
+    apellidos: NombrePresentado = Field(..., examples=["Pérez López"])
     cedula: str = Field(..., examples=["1710034065"])
     fecha_nacimiento: date = Field(..., examples=["1990-05-14"])
     foto_url: Optional[str] = Field(default=None, examples=["https://res.cloudinary.com/..."])
@@ -133,8 +135,8 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
 class PersonaBusquedaDTO(ResponseBase, BaseModel):
     """Resultado ligero para el autocomplete de búsqueda de personas."""
     id: int
-    nombres: str
-    apellidos: str
+    nombres: NombrePresentado
+    apellidos: NombrePresentado
     foto_url: Optional[str] = None
 
     @field_serializer("foto_url")
@@ -235,7 +237,7 @@ class FichaMedicaResponseDTO(ResponseBase, BaseModel):
     persona_id: int
     enfermedades: List[EnfermedadResponseDTO] = []
     alergias: Optional[str] = None
-    contacto_emergencia: Optional[str] = None
+    contacto_emergencia: NombrePresentadoOpcional = None
     telefono_emergencia: Optional[str] = None
 
 
@@ -265,10 +267,10 @@ class FichaEmergenciaResponseDTO(ResponseBase, BaseModel):
     representante siempre debería estar presente para un menor.
     """
 
-    alumno_nombre_completo: str
+    alumno_nombre_completo: NombrePresentado
     tipo_sangre: Optional[TipoSangre] = None
     alergias: Optional[str] = None
-    contacto_emergencia: Optional[str] = None
+    contacto_emergencia: NombrePresentadoOpcional = None
     telefono_emergencia: Optional[str] = None
-    representante_nombre_completo: Optional[str] = None
+    representante_nombre_completo: NombrePresentadoOpcional = None
     representante_telefono: Optional[str] = None

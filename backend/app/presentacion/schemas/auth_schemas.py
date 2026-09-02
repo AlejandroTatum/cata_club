@@ -12,7 +12,7 @@ from typing import List, Optional
 
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.presentacion.schemas.base import ResponseBase
-from app.presentacion.schemas.validadores import CedulaValidada, TelefonoValidado
+from app.presentacion.schemas.validadores import CedulaValidada, NombrePresentado, TelefonoValidado
 
 
 class RegistroUsuarioDTO(BaseModel):
@@ -40,8 +40,8 @@ class RefreshTokenDTO(BaseModel):
 class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     correo: str
     persona_id: int
-    nombres: str
-    apellidos: str
+    nombres: NombrePresentado
+    apellidos: NombrePresentado
     roles: List[str]
     telefono: str
     fecha_creacion: datetime
@@ -118,8 +118,8 @@ class ActualizarPerfilPropioDTO(BaseModel):
 class ActualizarPerfilPropioResponseDTO(ResponseBase, BaseModel):
     correo: str
     persona_id: int
-    nombres: str
-    apellidos: str
+    nombres: NombrePresentado
+    apellidos: NombrePresentado
     roles: List[str]
     telefono: str
     fecha_creacion: datetime

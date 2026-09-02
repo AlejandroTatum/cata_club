@@ -7,6 +7,7 @@ from app.dominio.enums import (
     EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
 )
 from app.presentacion.schemas.base import ResponseBase
+from app.presentacion.schemas.validadores import NombrePresentado
 
 
 # --- TipoMembresia ---
@@ -258,7 +259,7 @@ class PagoListItemDTO(ResponseBase, BaseModel):
     fecha_inicio: date = Field(..., examples=["2024-06-01"])
     fecha_fin: date = Field(..., examples=["2024-12-31"])
     persona_id: int = Field(..., examples=[1])
-    persona_nombre_completo: str = Field(..., examples=["Juan Carlos Pérez López"])
+    persona_nombre_completo: NombrePresentado = Field(..., examples=["Juan Carlos Pérez López"])
     membresia_id: int = Field(..., examples=[1])
     voucher_url: Optional[str] = Field(default=None, examples=["https://res.cloudinary.com/..."])
     voucher_formato: Optional[str] = Field(default=None, examples=["image/jpeg"])

@@ -16,6 +16,7 @@ from app.dominio.enums import (
 )
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
+from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
     MembresiaRepositorio, TipoMembresiaRepositorio, HistorialEstadoMembresiaRepositorio,
@@ -1902,7 +1903,7 @@ class PagoServicio:
                 fecha_inicio=p.fecha_inicio,
                 fecha_fin=p.fecha_fin,
                 persona_id=p.persona_id,
-                persona_nombre_completo=f"{p.persona.nombres} {p.persona.apellidos}",
+                persona_nombre_completo=nombre_completo(p.persona.nombres, p.persona.apellidos),
                 membresia_id=p.membresia_id,
                 voucher_url=self._url_entrega_voucher(p),
                 voucher_formato=p.voucher_formato,
@@ -2244,7 +2245,7 @@ class PagoServicio:
                 # rechazo (o el detalle del beneficio) es lo que el
                 # representante necesita leer entero.
                 nombre_alumno = acortar_nombre_para_notificacion(
-                    f"{persona.nombres} {persona.apellidos}"
+                    nombre_completo(persona.nombres, persona.apellidos)
                 )
                 notif_rep = Notificacion(
                     tipo=tipo,

@@ -13,6 +13,7 @@ from app.dominio.modelos import (
 from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago
 from app.dominio.etiquetas import dia_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
+from app.dominio.nombre_propio import nombre_completo
 from app.dominio.reglas_negocio import (
     HORA_MAXIMA_ENTRENAMIENTO, HORA_MINIMA_ENTRENAMIENTO,
     LIMITE_CORRECCION_ASISTENCIA_DIAS, MAXIMO_DIAS_POR_CATEGORIA,
@@ -506,7 +507,7 @@ class AsistenciaServicio:
             datos.persona_id, datos.horario_id
         ):
             raise OperacionInvalida(
-                f"{persona.nombres} {persona.apellidos} no está en la lista de "
+                f"{nombre_completo(persona.nombres, persona.apellidos)} no está en la lista de "
                 "alumnos de ese horario.",
                 detalle_tecnico=(
                     f"sin AlumnoHorario para persona_id={datos.persona_id} "
@@ -524,7 +525,7 @@ class AsistenciaServicio:
             # el docstring de la función para el reemplazo del mecanismo
             # previo de "corrección" (issue #262, rol + 30 días).
             raise OperacionInvalida(
-                f"La asistencia de {persona.nombres} {persona.apellidos} para el "
+                f"La asistencia de {nombre_completo(persona.nombres, persona.apellidos)} para el "
                 f"{datos.fecha_entrenamiento.isoformat()} ya fue registrada. Esa "
                 "lista quedó cerrada de forma permanente y no puede volver a "
                 "tomarse.",
@@ -560,7 +561,7 @@ class AsistenciaServicio:
             # ya usa el camino no-concurrente.
             self.repo.db.rollback()
             raise OperacionInvalida(
-                f"La asistencia de {persona.nombres} {persona.apellidos} para el "
+                f"La asistencia de {nombre_completo(persona.nombres, persona.apellidos)} para el "
                 f"{datos.fecha_entrenamiento.isoformat()} ya fue registrada. Esa "
                 "lista quedó cerrada de forma permanente y no puede volver a "
                 "tomarse.",
@@ -834,7 +835,7 @@ class AsistenciaServicio:
         pendientes = [h for h in horarios_de_la_categoria if h.id not in ya_asignados]
         if not pendientes:
             raise OperacionInvalida(
-                f"{persona.nombres} {persona.apellidos} ya figura en esa categoría.",
+                f"{nombre_completo(persona.nombres, persona.apellidos)} ya figura en esa categoría.",
                 detalle_tecnico=(
                     f"persona_id={datos.persona_id} ya tiene AlumnoHorario para "
                     f"cada horario de categoria={horario.categoria}"
@@ -893,7 +894,7 @@ class AsistenciaServicio:
         return AlumnoHorarioDetalleDTO(
             id=a.id,
             persona_id=a.persona_id,
-            persona_nombre_completo=f"{a.persona.nombres} {a.persona.apellidos}",
+            persona_nombre_completo=nombre_completo(a.persona.nombres, a.persona.apellidos),
             edad=_calcular_edad(a.persona.fecha_nacimiento),
             horario_id=a.horario_id,
             horario_dia=a.horario.dia_semana,

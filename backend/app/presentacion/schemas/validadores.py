@@ -136,3 +136,17 @@ TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
+
+
+def _normalizar_si_presente(valor: Optional[str]) -> Optional[str]:
+    return normalizar_nombre_propio(valor) if valor else valor
+
+
+# Issue #875: fallback de LECTURA -- una fila legacy (escrita antes del
+# límite de escritura de arriba) todavía guarda `nombres`/`apellidos` crudos.
+# `normalizar_nombre_propio` es idempotente, así que aplicarla de nuevo sobre
+# un valor ya canónico (escrito después del límite) no cambia nada.
+# Misma regla POR CAMPO que `nombre_completo` (dominio/nombre_propio.py): un
+# campo suelto y un nombre completo arman el mismo valor para la misma fila.
+NombrePresentado = Annotated[str, AfterValidator(normalizar_nombre_propio)]
+NombrePresentadoOpcional = Annotated[Optional[str], AfterValidator(_normalizar_si_presente)]

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.dominio.enums import TipoSangre
 from app.dominio.modelos import ConsultaFichaEmergencia, FichaMedica, Enfermedades
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
+from app.dominio.nombre_propio import nombre_completo
 from app.dominio.telefono import MENSAJE_TELEFONO_EMERGENCIA_IGUAL, telefonos_coinciden
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
@@ -200,13 +201,13 @@ class FichaMedicaServicio:
         )
 
         return FichaEmergenciaResponseDTO(
-            alumno_nombre_completo=f"{persona.nombres} {persona.apellidos}",
+            alumno_nombre_completo=nombre_completo(persona.nombres, persona.apellidos),
             tipo_sangre=ficha.tipo_sangre if ficha else None,
             alergias=ficha.alergias if ficha else None,
             contacto_emergencia=ficha.contacto_emergencia if ficha else None,
             telefono_emergencia=ficha.telefono_emergencia if ficha else None,
             representante_nombre_completo=(
-                f"{representante.nombres} {representante.apellidos}" if representante else None
+                nombre_completo(representante.nombres, representante.apellidos) if representante else None
             ),
             representante_telefono=representante.telefono if representante else None,
         )

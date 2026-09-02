@@ -5,6 +5,7 @@ from typing import Optional
 from app.dominio.enums import EstadoAsistencia, DiaSemana
 from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
 from app.presentacion.schemas.base import ResponseBase
+from app.presentacion.schemas.validadores import NombrePresentado
 from app.soporte_transversal.tiempo import hoy_club
 
 
@@ -132,7 +133,7 @@ class AsistenciaResponseDTO(ResponseBase, BaseModel):
     # "revisar listas" -- ese endpoint exponía cédula/teléfono/fecha de
     # nacimiento de cualquier persona con ids secuenciales. Mismo patrón que
     # `registrado_por_nombre` (#263): se resuelve acá, nunca en el frontend.
-    persona_nombre_completo: str
+    persona_nombre_completo: NombrePresentado
     horario_id: int
     # Quién tomó la lista (#263): `registrado_por_id` es la FK a persona del
     # autor (nullable: las filas históricas no tienen autor conocido) y
@@ -235,7 +236,7 @@ class AlumnoHorarioDetalleDTO(ResponseBase, BaseModel):
     """DTO con información de persona y horario para listados."""
     id: int
     persona_id: int
-    persona_nombre_completo: str
+    persona_nombre_completo: NombrePresentado
     edad: int
     horario_id: int
     horario_dia: DiaSemana

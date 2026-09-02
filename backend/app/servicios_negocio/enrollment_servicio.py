@@ -34,6 +34,7 @@ from app.servicios_negocio.consentimiento_legal_servicio import (
     TEXTOS_LEGALES_VIGENTES,
 )
 from app.dominio.enums import TipoRol
+from app.dominio.nombre_propio import nombre_completo
 from app.soporte_transversal.tiempo import hoy_club
 from app.dominio.excepciones import EntidadDuplicada, ErrorDominio, OperacionInvalida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
@@ -493,7 +494,7 @@ class EnrollmentServicio:
         if not rol_admin:
             return
         admins = [u.persona for u in rol_admin.usuarios if u.persona]
-        nombre_alumno = acortar_nombre_para_notificacion(f"{alumno.nombres} {alumno.apellidos}")
+        nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(alumno.nombres, alumno.apellidos))
         for admin in admins:
             repo_outbox.crear(
                 admin.id,
