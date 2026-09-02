@@ -14,7 +14,7 @@ rechaza` arriba), la conversión vive en esta función aparte y la llama
 
 import pytest
 
-from app.dominio.telefono import es_telefono_valido, normalizar_telefono
+from app.dominio.telefono import es_telefono_valido, normalizar_telefono, telefonos_coinciden
 
 
 def test_celular_10_digitos_09_es_valido():
@@ -117,3 +117,38 @@ def test_normalizar_telefono(entrada, esperado):
     el mismo valor local; un fijo, otro código de país, un largo incorrecto
     o un valor con separadores se devuelven tal cual llegaron."""
     assert normalizar_telefono(entrada) == esperado
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        pytest.param("0993568597", "0993568597", id="mismo_formato_local"),
+        pytest.param("0993568597", "+593993568597", id="local_vs_593_con_signo_mas"),
+        pytest.param("0993568597", "593993568597", id="local_vs_593_sin_signo_mas"),
+        pytest.param("+593993568597", "593993568597", id="593_con_y_sin_signo_mas"),
+    ],
+)
+def test_telefonos_coinciden_reconoce_los_tres_formatos_como_el_mismo_numero(a, b):
+    """Issue #860: la comparación cruzada reusa el mapeo de #855, así que los
+    tres formatos del criterio de aceptación cuentan como un solo número."""
+    assert telefonos_coinciden(a, b) is True
+
+
+def test_telefonos_coinciden_numeros_distintos_no_coinciden():
+    assert telefonos_coinciden("0993568597", "0991234567") is False
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        pytest.param(None, "0993568597", id="a_ausente"),
+        pytest.param("0993568597", None, id="b_ausente"),
+        pytest.param("", "0993568597", id="a_vacio"),
+        pytest.param("0993568597", "", id="b_vacio"),
+        pytest.param(None, None, id="ambos_ausentes"),
+    ],
+)
+def test_telefonos_coinciden_nunca_coincide_si_falta_alguno(a, b):
+    """El teléfono personal es opcional en algunos caminos (issue #860): su
+    ausencia nunca se lee como una coincidencia."""
+    assert telefonos_coinciden(a, b) is False

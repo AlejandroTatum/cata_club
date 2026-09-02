@@ -13,6 +13,7 @@ from app.presentacion.schemas.validadores import (
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
+    validar_telefono_emergencia_distinto,
 )
 
 
@@ -57,6 +58,14 @@ class RepresentadoCreateDTO(BaseModel):
     correo: Optional[EmailStr] = None
     contrasenia: Optional[str] = Field(default=None, min_length=8)
     institucion_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _telefono_emergencia_distinto_del_personal(self) -> "RepresentadoCreateDTO":
+        """Issue #860: el teléfono personal es el del propio dependiente
+        (`telefono` arriba), no el del representante que hace el alta."""
+        if self.ficha_medica is not None:
+            validar_telefono_emergencia_distinto(self.telefono, self.ficha_medica.telefono_emergencia)
+        return self
 
 
 # --- Vinculación de representado ya existente (INS-2) -----------------------

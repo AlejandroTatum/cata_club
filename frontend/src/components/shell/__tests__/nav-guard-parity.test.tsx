@@ -172,14 +172,12 @@ function guardRolesFor(href: string): UserRole[] | null {
 
 /**
  * Every internal destination the shell puts in front of this role, including
- * the one behind the user-menu trigger — a row a person has to click twice to
- * see is still a row the product offered them.
+ * Perfil — a permanent row in the sidebar's bottom sector since issue #852,
+ * not a row hidden behind a popup a person had to open first.
  */
 function destinationsOfferedTo(role: UserRole): string[] {
   mockUseAuth.mockReturnValue(createAuthenticatedAuth(role, ROLE_UNDER_TEST[role]));
   const { container, unmount } = render(<AppShell title="Panel">{null}</AppShell>);
-
-  fireEvent.click(screen.getByRole("button", { name: `Menú de cuenta de ${ROLE_UNDER_TEST[role]}` }));
 
   const hrefs = [...container.querySelectorAll("a[href]")]
     .map((anchor) => anchor.getAttribute("href") ?? "")

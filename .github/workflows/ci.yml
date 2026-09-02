@@ -495,6 +495,42 @@ jobs:
             sleep 10
           done
 
+      - name: Verify the frontend serves the built revision
+        # Cierre del issue #927: el build-arg `BUILD_SHA` (paso de arriba) se
+        # puede borrar en un futuro PR sin que nada se rompa a simple vista --
+        # es solo un argumento de build que Docker ignora si no está. Este
+        # paso es el candado en runtime: le pregunta a la imagen YA
+        # levantada, con `docker compose exec`, y no puede mentir porque lee
+        # el mismo `/api/health` que sirve en producción. La imagen final es
+        # `node:20-alpine` sin curl (ver el healthcheck del frontend en
+        # docker-compose.yml), así que se usa el mismo idioma `node -e` que
+        # ese healthcheck ya usa.
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T -e ESPERADO="$IMAGE_TAG" frontend node -e '
+            const http = require("http");
+            const esperado = process.env.ESPERADO;
+            http.get("http://127.0.0.1:3000/api/health", (r) => {
+              let cuerpo = "";
+              r.on("data", (d) => { cuerpo += d; });
+              r.on("end", () => {
+                let sha;
+                try {
+                  sha = JSON.parse(cuerpo).sha;
+                } catch (e) {
+                  console.error("no se pudo parsear /api/health:", e.message);
+                  process.exit(1);
+                }
+                console.log(`servido=${sha} esperado=${esperado}`);
+                if (!sha || sha === "unknown" || sha !== esperado) {
+                  process.exit(1);
+                }
+              });
+            }).on("error", (e) => {
+              console.error("no se pudo consultar /api/health:", e.message);
+              process.exit(1);
+            });
+          '
+
       - name: Dump diagnostics (on failure)
         # Sin esto, un fallo de arranque en CI es una caja negra: `ps` da el
         # estado de salud de cada servicio y los logs, la razón real.

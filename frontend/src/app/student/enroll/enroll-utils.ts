@@ -10,6 +10,7 @@ import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
+  emergencyPhoneDiffersRule,
   personNameRule,
   passwordRule,
   studentBirthDateRule,
@@ -396,7 +397,12 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
-  telefonoEmergencia: (d) => phoneRule(d.telefonoEmergencia, "El teléfono de emergencia"),
+  // Issue #860: chained after `phoneRule` so a malformed number is reported
+  // first — the cross-check only makes sense once the value is itself a
+  // valid Ecuadorian phone.
+  telefonoEmergencia: (d) =>
+    phoneRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
+    emergencyPhoneDiffersRule(d.telefonoEmergencia, d.telefono),
 };
 
 const STUDENT_FIELDS: EnrollField[] = [

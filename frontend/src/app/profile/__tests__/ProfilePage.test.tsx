@@ -1691,7 +1691,11 @@ describe("ProfilePage — the redesigned account layout", () => {
     );
     await waitForStaffProfile();
 
-    fireEvent.click(screen.getByRole("button", { name: /^cerrar sesión$/i }));
+    // Scoped to the security row: since issue #852, AppShell's own sidebar
+    // also carries a permanent "Cerrar sesión" row on every screen, so the
+    // name is no longer unique to this page's content.
+    const security = screen.getByTestId("profile-column-status");
+    fireEvent.click(within(security).getByRole("button", { name: /^cerrar sesión$/i }));
 
     expect(auth.logout).toHaveBeenCalled();
   });
@@ -1853,8 +1857,14 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
    * one third of a group of three somewhere else. The word is "Cerrar sesión"
    * because "Salir" names nothing — it is the shorter word for the same act,
    * and the rule of words spends width on the truth.
+   *
+   * Since issue #852, AppShell's own sidebar carries a second, permanent
+   * "Cerrar sesión" row on every authenticated screen — that one is global
+   * chrome, reachable without opening this page at all, and coexists with
+   * this page's own Seguridad row on purpose. What this test still locks is
+   * narrower: within the page's OWN content, the action is named once.
    */
-  it("names the logout once, in Seguridad, and calls the same logout() the panel used to", async () => {
+  it("names the logout once within the page's own content, and calls the same logout() the panel used to", async () => {
     const auth = sessionForRole("admin");
     mockUseAuth.mockReturnValue(auth);
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
@@ -1865,8 +1875,11 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
     );
     await waitForStaffProfile();
 
-    // Exactly one trigger on the whole screen, by any of its old names.
-    const triggers = screen.getAllByRole("button", { name: /cerrar sesión|^salir$/i });
+    // Exactly one trigger inside the page's own content, by any of its old
+    // names — the sidebar's own row (#852) lives outside <main> and is
+    // covered separately by AppShell's own tests.
+    const main = screen.getByRole("main");
+    const triggers = within(main).getAllByRole("button", { name: /cerrar sesión|^salir$/i });
     expect(triggers).toHaveLength(1);
 
     const security = screen.getByTestId("profile-column-status");

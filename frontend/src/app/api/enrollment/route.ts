@@ -3,7 +3,7 @@ import { backendFetch, forwardedForFrom, setAuthCookies } from "@/lib/server/aut
 import { passthroughBackendError } from "@/lib/server/backend-client";
 import { buildEnrollmentCreateDTO, isBackendEnrollmentResponse } from "@/lib/server/enrollment-adapter";
 import { isSelectableBloodType, type EnrollmentRequest, type EnrollmentResponse } from "@/types/enrollment";
-import { isValidEcuadorianPhone } from "@/lib/identity-validation";
+import { isValidEcuadorianPhone, emergencyPhoneDiffersRule } from "@/lib/identity-validation";
 import { ENROLLMENT_ATTEMPT_COOKIE } from "@/lib/server/enrollment-constants";
 
 type JsonRecord = Record<string, unknown>;
@@ -151,9 +151,28 @@ function clearAttemptKey(response: NextResponse): NextResponse {
 }
 
 function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
-  if (!isRecord(value) || !isStudent(value.alumno) || !isMedicalRecord(value.fichaMedica)) return false;
+  if (!isRecord(value)) return false;
+  const alumno = value.alumno;
+  const fichaMedica = value.fichaMedica;
+  if (!isStudent(alumno) || !isMedicalRecord(fichaMedica)) return false;
   if (value.credencialesMenor !== undefined && !isCredentials(value.credencialesMenor)) return false;
   if (value.aceptaConsentimientos !== true) return false;
+  // Issue #860: mirrors the wizard's `emergencyPhoneDiffersRule` at the
+  // boundary, same as `isValidEcuadorianPhone` above does for `phoneRule` —
+  // a body that skips the wizard cannot enroll a student whose emergency
+  // contact repeats their own phone.
+  // `isMedicalRecord` returns a plain `boolean`, not a type predicate (its
+  // return type would need to widen to `EnrollmentMedicalRecord`, which this
+  // module does not import), so `fichaMedica` stays `unknown` here — cast
+  // after the check above already proved the field is a string.
+  if (
+    emergencyPhoneDiffersRule(
+      (fichaMedica as JsonRecord).telefonoEmergencia as string,
+      alumno.telefono as string,
+    ) !== null
+  ) {
+    return false;
+  }
   const hasStudentCredentials = isCredentials(value.credencialesAlumno);
   const hasRepresentative = isRepresentative(value.representante);
   return (hasStudentCredentials && value.representante === undefined) ||

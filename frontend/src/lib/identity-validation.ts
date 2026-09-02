@@ -186,6 +186,37 @@ export function phoneRule(value: string, subject: string): string | null {
   return `${subject} debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).`;
 }
 
+/**
+ * Shown when an emergency contact's phone is the same number as the
+ * student's own (issue #860) — a contact of emergency exists to reach
+ * someone ELSE when the student cannot answer, so an identical number
+ * defeats its purpose. One constant, reused by every flow's field rule
+ * below and mirrored by the backend's
+ * `presentacion/schemas/validadores.py::MENSAJE_TELEFONO_EMERGENCIA_IGUAL`
+ * so the two never drift.
+ */
+export const EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE =
+  "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
+
+/**
+ * Whether `emergencyPhone` is the same Ecuadorian number as `personalPhone`,
+ * compared on their NORMALIZED forms — `09XXXXXXXX`, `+593XXXXXXXXX` and
+ * `593XXXXXXXXX` all reduce to the same local value (issue #855's mapping,
+ * reused here for the cross-field check issue #860 asks for).
+ *
+ * Returns `null` (no error) when either side is blank: the personal phone is
+ * optional in some flows, and this rule only compares two values that BOTH
+ * exist — it never turns that optionality into a requirement.
+ */
+export function emergencyPhoneDiffersRule(emergencyPhone: string, personalPhone: string): string | null {
+  const emergency = emergencyPhone.trim();
+  const personal = personalPhone.trim();
+  if (!emergency || !personal) return null;
+  const canonicalEmergency = normalizeEcuadorianMobile(emergency.replace(PHONE_SEPARATOR_PATTERN, ""));
+  const canonicalPersonal = normalizeEcuadorianMobile(personal.replace(PHONE_SEPARATOR_PATTERN, ""));
+  return canonicalEmergency === canonicalPersonal ? EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE : null;
+}
+
 // ---------------------------------------------------------------------------
 // Person name — nombres, apellidos, and (per issue #230) the emergency
 // contact, which is a person's name and was validated as if it were not one.

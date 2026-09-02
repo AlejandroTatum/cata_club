@@ -306,6 +306,25 @@ describe("POST /api/enrollment — fichaMedica field contract", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  /**
+   * Issue #860: mirrors the wizard's `emergencyPhoneDiffersRule` at the
+   * boundary — a body that skips the wizard cannot enroll a student whose
+   * emergency contact repeats their own phone.
+   */
+  it("rejects an emergency phone equal to the student's own, with 400, without calling the backend", async () => {
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ telefonoEmergencia: validBody.alumno.telefono })));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects the +593 equivalent of the student's own phone as an emergency contact", async () => {
+    const response = await POST(enrollRequest(bodyWithFichaMedica({ telefonoEmergencia: "+593991234567" })));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("accepts every blood type that is not DESCONOCIDO", async () => {
     for (const bloodType of SELECTABLE_BLOOD_TYPES) {
       vi.mocked(global.fetch).mockClear();

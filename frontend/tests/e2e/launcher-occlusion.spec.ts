@@ -261,9 +261,6 @@ const VIEWPORTS = [
   { width: 1280, height: 720 },
 ] as const;
 
-/** The sidebar's user card, by the name a screen reader announces. */
-const ACCOUNT_MENU_TRIGGER = /Menú de cuenta/i;
-
 for (const viewport of VIEWPORTS) {
   test(`no floating element covers an interactive control on /members at ${viewport.width}x${viewport.height}`, async ({
     page,
@@ -300,29 +297,14 @@ for (const viewport of VIEWPORTS) {
       ).toEqual([]);
     }
 
-    // Every probe above ran with the screen at rest, which is how #367 shipped:
-    // the account panel only exists while it is open. Back to the top first so
-    // the sidebar footer is measured at a known offset, and `click()` is what
-    // opens it — a synthetic scroll never dismisses it, so the panel is still
-    // up when the sweep runs.
+    // #367's account panel is gone: issue #852 replaced it with permanent
+    // Perfil/Cerrar sesión rows that are always in flow, so there is no
+    // longer an "open" state whose occlusion this spec needs to sweep
+    // separately — the at-rest probes above already cover every row of the
+    // sidebar footer, opened or not.
     await page.evaluate((): void => window.scrollTo(0, 0));
-    await page.getByRole("button", { name: ACCOUNT_MENU_TRIGGER }).click();
-    await expect(page.getByRole("dialog", { name: "Menú de cuenta" })).toBeVisible();
-    await page.waitForTimeout(300);
-
-    const withAccountMenu = await page.evaluate(SWEEP_OCCLUSIONS);
-    report.push(
-      `account menu open: ${withAccountMenu.length === 0 ? "clear" : withAccountMenu
-        .map(
-          (o) =>
-            `${o.control} ${o.controlRect} centre ${o.centre} -> ${o.hit} of ${o.occluder} ${o.occluderRect}`,
-        )
-        .join(" | ")}`,
-    );
-    expect(
-      withAccountMenu,
-      `with the account menu open on /members at ${viewport.width}x${viewport.height}`,
-    ).toEqual([]);
+    await expect(page.getByRole("link", { name: "Perfil" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cerrar sesión" })).toBeVisible();
 
     await testInfo.attach(`occlusion-${viewport.width}x${viewport.height}`, {
       body: report.join("\n"),
