@@ -45,7 +45,18 @@ describe("Stepper — states", () => {
   it("paints done steps with the ok state pair", () => {
     render(<Stepper steps={STEPS} current={2} label="Pasos" />);
     expect(pillFor("Tipo")).toHaveClass("text-state-ok");
+    // #874: the fill lives on the PILL now, not only on its disc — a
+    // completed step reads as done before anyone reads the label inside it.
+    expect(pillFor("Tipo")).toHaveClass("bg-state-ok-bg");
     expect(pillFor("Tipo").querySelector("span")).toHaveClass("bg-state-ok-bg");
+  });
+
+  it("paints upcoming steps sunken, not paper (#874)", () => {
+    render(<Stepper steps={STEPS} current={1} label="Pasos" />);
+    const pending = pillFor("Estudiante");
+    expect(pending).toHaveAttribute("data-state", "upcoming");
+    expect(pending).toHaveClass("bg-sunken");
+    expect(pending.className).not.toMatch(/\bbg-paper\b/);
   });
 
   it("shows the step number on pending steps and a check on completed ones", () => {

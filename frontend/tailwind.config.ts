@@ -181,6 +181,24 @@ const config: Config = {
         /** App background behind the cards. */
         canvas: "#E8E8EE",
 
+        /**
+         * The enrollment wash — `/student/enroll` ONLY (#874).
+         *
+         * The wizard repeated `paper` for its header, its card and its
+         * stepper, so the one screen most visitors never see twice read as a
+         * single sheet of white with faint hairlines. This is not another
+         * rung of the neutral ladder: `#FFF7F7` sits at essentially the same
+         * lightness as `paper` (1.06:1 apart — the surface ladder's own
+         * `sunken`/`paper` floor is 1.09:1) and separates by WARMTH instead,
+         * a hint of the institutional red folded into white. It marks the
+         * wizard's own header/context block and nothing else — not the form
+         * card, not a status, not a second background for the whole page.
+         *
+         * Text measured on it: `ink` 16.8:1, `ink-3-strong` 5.6:1 — both
+         * comfortably AA, so the wash never has to trade legibility for tone.
+         */
+        "enroll-wash": "#FFF7F7",
+
         // Status pairs (foreground + `-bg` fill). Namespaced under `state-` so
         // `neutral` does not shadow Tailwind's built-in neutral scale.
         //

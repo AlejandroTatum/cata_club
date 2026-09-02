@@ -189,16 +189,26 @@ describe("EnrollPage — autocomplete on the representative step", () => {
 });
 
 describe("EnrollPage — choice cards", () => {
-  it("marks the selected type with the coal + ball pill, never a red one", () => {
+  /**
+   * Issue #874 moves this ONE selected state to `cata-red` — the wizard's own
+   * carve-out from "la regla del rojo único" (DESIGN.md), so the selected
+   * card's border stops competing with the primary button for the last
+   * hierarchy signal on a screen that used to read flat white-grey. The
+   * marker that reads without colour is unchanged: `aria-pressed` plus the
+   * "Seleccionado" pill, still coal with the ball dot.
+   */
+  it("marks the selected type with the red border and the coal + ball pill", () => {
     render(<EnrollPage />);
 
     const selected = screen.getByRole("button", { name: /^Jugador Me inscribo yo al club/ });
     expect(selected).toHaveAttribute("aria-pressed", "true");
-    expect(selected.className).toContain("border-coal");
-    expect(selected.className).not.toMatch(/cata-red/);
+    expect(selected.className).toContain("border-cata-red");
+    expect(selected.className).toContain("ring-cata-red");
+    expect(screen.getByText("Seleccionado").className).toContain("bg-coal");
 
     const other = screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ });
     expect(other).toHaveAttribute("aria-pressed", "false");
+    expect(other.className).not.toMatch(/cata-red/);
   });
 
   it("moves the selection when the other card is chosen", () => {
