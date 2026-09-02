@@ -94,6 +94,53 @@ class TestPersonaCreateDTO:
         assert "empezar en 09" not in mensaje
 
 
+# Issue #855: un celular autocompletado por el navegador móvil en formato
+# internacional se acepta y se normaliza al local -- probado sobre el DTO
+# que ya venía usándose para el resto de esta suite (`PersonaCreateDTO`),
+# porque `TelefonoValidado` es el mismo `Annotated` en los nueve DTOs.
+class TestNormalizacionTelefonoInternacional:
+    def _base(self, **overrides):
+        datos = dict(
+            nombres="Juana", apellidos="Pérez", cedula=CEDULA_VALIDA,
+            fecha_nacimiento=FECHA_NACIMIENTO_ADULTO, telefono=TELEFONO_VALIDO,
+        )
+        datos.update(overrides)
+        return datos
+
+    def test_acepta_prefijo_internacional_con_signo_mas_y_lo_normaliza(self):
+        persona = PersonaCreateDTO(**self._base(telefono="+593991234567"))
+        assert persona.telefono == "0991234567"
+
+    def test_acepta_prefijo_internacional_sin_signo_mas_y_lo_normaliza(self):
+        persona = PersonaCreateDTO(**self._base(telefono="593991234567"))
+        assert persona.telefono == "0991234567"
+
+    def test_local_09_sigue_almacenandose_igual(self):
+        persona = PersonaCreateDTO(**self._base(telefono="0991234567"))
+        assert persona.telefono == "0991234567"
+
+    def test_fijo_no_cambia_su_regla(self):
+        # El mapeo internacional es exclusivo de celulares -- un fijo con
+        # prefijo 593 no calza con "9" + 8 dígitos y se rechaza igual que
+        # antes, por la razón real: no es un celular ni un fijo válido tal
+        # cual llegó.
+        with pytest.raises(ValidationError):
+            PersonaCreateDTO(**self._base(telefono="+593223456"))
+
+    def test_rechaza_codigo_de_pais_distinto(self):
+        with pytest.raises(ValidationError):
+            PersonaCreateDTO(**self._base(telefono="+11234567890"))
+
+    def test_otro_dto_normaliza_igual(self):
+        # `EnrollmentAlumnoDTO` reusa el mismo `TelefonoValidado` -- una sola
+        # regla, nueve DTOs.
+        alumno = EnrollmentAlumnoDTO(
+            nombres="Luis", apellidos="Gómez", cedula=CEDULA_VALIDA,
+            fecha_nacimiento=FECHA_NACIMIENTO_ADULTO, telefono="+593991234567",
+        )
+        assert alumno.telefono == "0991234567"
+
+
 class TestRepresentadoCreateDTO:
     def _base(self, **overrides):
         datos = dict(

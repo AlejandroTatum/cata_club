@@ -12,12 +12,39 @@ Estructura (sin separadores -- ver `es_telefono_valido`):
   - Fijo: 9 dígitos, empieza en `0` (el segundo dígito es el código de
     provincia, p. ej. `02` Quito, `04` Guayaquil -- no se valida ese código
     puntual, solo el prefijo `0` y el largo).
+
+Issue #855: un navegador móvil autocompleta el celular en formato
+internacional (`+593991234567`, `593991234567`). `es_telefono_valido` sigue
+sin aceptarlos -- sigue siendo "¿esto que llegó es un teléfono ecuatoriano
+válido tal cual?" -- pero `normalizar_telefono` convierte ese formato al
+local ANTES de esa pregunta, para que quien llama (`validadores.py`) pueda
+aceptar los tres formatos y seguir almacenando uno solo.
 """
+
+import re
 
 _LARGO_CELULAR = 10
 _PREFIJO_CELULAR = "09"
 _LARGO_FIJO = 9
 _PREFIJO_FIJO = "0"
+
+# País (`593`) + troncal de celular (`9`) + 8 dígitos del abonado. El `+` es
+# opcional -- el navegador autocompleta con y sin él -- y la coincidencia
+# tiene que ser exacta: un fijo o un celular que ya está en formato local no
+# calzan y `normalizar_telefono` los deja tal cual.
+_PATRON_CELULAR_INTERNACIONAL = re.compile(r"^\+?593(9\d{8})$")
+
+
+def normalizar_telefono(telefono: str) -> str:
+    """Convierte un celular en formato internacional (`+593…`/`593…`) a su
+    forma local `09XXXXXXXX`. No toca separadores -- este módulo nunca los
+    aceptó, ni antes de esta función ni después (`test_separadores_se_
+    rechazan_no_se_descartan`) -- así que solo opera sobre la secuencia de
+    dígitos (más el `+` opcional) que ya llegó sin ellos. Un fijo, un celular
+    que ya está en formato local, o cualquier otra cosa se devuelve TAL
+    CUAL, sin normalizar."""
+    coincidencia = _PATRON_CELULAR_INTERNACIONAL.match(telefono)
+    return f"0{coincidencia.group(1)}" if coincidencia else telefono
 
 
 def es_telefono_valido(telefono: str) -> bool:
