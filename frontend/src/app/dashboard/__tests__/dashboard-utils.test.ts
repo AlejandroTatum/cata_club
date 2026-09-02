@@ -135,7 +135,6 @@ function buildRequest(overrides: Partial<PaymentValidationRequest> = {}): Paymen
     paymentMethod: "Transferencia",
     uploadedAt: new Date(2026, 6, 22, 18, 42).toISOString(),
     currentMembershipStatus: "vencida",
-    proofFileName: "comprobante.png",
     proofFileType: "image",
     validationStatus: "pendiente",
     startDate: "2026-07-01",

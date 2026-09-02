@@ -146,11 +146,11 @@ const PENDING_REQUEST: PaymentValidationRequest = {
   paymentMethod: "Transferencia",
   uploadedAt: "2026-07-01T10:00:00.000Z",
   currentMembershipStatus: "vencida",
-  proofFileName: "comprobante.pdf",
   proofFileType: "pdf",
   // The checklist keys off the attachment, so the fixture has to be honest
-  // about having one: `proofFileName` and `proofPreviewUrl` both come from the
-  // backend's `voucherUrl` (payments-adapter.ts) and cannot disagree.
+  // about having one. Issue #868 dropped `proofFileName` entirely — the UI
+  // now derives "has a proof or not" from `proofPreviewUrl` alone, never
+  // from a technical file name.
   proofPreviewUrl: "https://files.example/comprobante.pdf",
   validationStatus: "pendiente",
   startDate: "2026-07-01",
@@ -164,7 +164,6 @@ const CASH_REQUEST: PaymentValidationRequest = {
   studentName: "Sofía Vera",
   expectedAmount: 25,
   paymentMethod: "Efectivo",
-  proofFileName: "Sin comprobante adjunto",
   proofPreviewUrl: undefined,
 };
 
@@ -1281,7 +1280,6 @@ describe("PaymentsPage — la nota del checklist se pliega en sus tres variantes
   const CASH_WITH_RECEIPT: PaymentValidationRequest = {
     ...CASH_REQUEST,
     id: "req-cash-receipt",
-    proofFileName: "recibo.pdf",
     proofPreviewUrl: "https://files.example/recibo.pdf",
   };
   const TRANSFER_NO_PROOF: PaymentValidationRequest = {
@@ -1386,6 +1384,68 @@ describe("PaymentsPage — voucher preview recovery", () => {
 
     expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
     expect(screen.queryByText(/vista previa no disponible/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #868 — the proof header used to show `voucherUrl`'s last path
+// segment as a "file name". For a real signed download URL that is a long,
+// query-string-bearing technical id, never a name the payer chose, and it
+// alarmed users. The URL stays internal (only used as `src`/`href`) and
+// never renders as text or as an accessible name.
+// ---------------------------------------------------------------------------
+
+const SIGNED_VOUCHER_ID = "8f2c9a1e-91cf-4e2b-9a01-abcdef123456";
+
+function signedVoucherRequest(proofFileType: "image" | "pdf", ext: string): PaymentValidationRequest {
+  return {
+    ...PENDING_REQUEST,
+    proofFileType,
+    proofPreviewUrl: `https://storage.example.com/vouchers/${SIGNED_VOUCHER_ID}.${ext}?X-Amz-Expires=3600&X-Amz-Signature=deadbeefcafebabe`,
+  };
+}
+
+describe("PaymentsPage — el comprobante nunca expone su nombre técnico ni su URL firmada (#868)", () => {
+  it.each([
+    ["una imagen", "image", "jpg"],
+    ["un PDF", "pdf", "pdf"],
+  ] as const)("muestra «Comprobante adjunto» en vez del nombre técnico para %s", async (_label, proofFileType, ext) => {
+    mockFetchPaymentValidations.mockResolvedValue([signedVoucherRequest(proofFileType, ext)]);
+
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    expect(screen.getByText("Comprobante adjunto")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(SIGNED_VOUCHER_ID);
+    expect(document.body.textContent).not.toContain("X-Amz-Signature");
+  });
+
+  it("keeps the Ampliar/Descargar accessible names generic while the download href stays the internal URL", async () => {
+    const request = signedVoucherRequest("pdf", "pdf");
+    mockFetchPaymentValidations.mockResolvedValue([request]);
+
+    renderPage();
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+
+    expect(screen.getByRole("button", { name: "Ampliar" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Descargar" })).toHaveAttribute(
+      "href",
+      request.proofPreviewUrl,
+    );
+  });
+
+  it("does not leak the signed URL into the fullscreen viewer either", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([signedVoucherRequest("image", "jpg")]);
+
+    renderPage();
+    await openRequest("Juan Pérez");
+    fireEvent.click(await screen.findByRole("button", { name: "Ampliar" }));
+    await screen.findByRole("dialog", { name: /visor de comprobante/i });
+
+    expect(document.body.textContent).not.toContain(SIGNED_VOUCHER_ID);
+    expect(screen.getAllByText("Comprobante adjunto")).toHaveLength(2);
   });
 });
 
@@ -1895,7 +1955,7 @@ describe("PaymentsPage — panel único de validar pago (issue #510)", () => {
     await openRequest("Juan Pérez");
     await screen.findByRole("button", { name: /aprobar pago/i });
 
-    const proof = screen.getByText("comprobante.pdf").closest(".card") as HTMLElement;
+    const proof = screen.getByText("Comprobante adjunto").closest(".card") as HTMLElement;
     expect(proof).not.toBeNull();
 
     // Intentional redundancy (documented in the design artifact): the same

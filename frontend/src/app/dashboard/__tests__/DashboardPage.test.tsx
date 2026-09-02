@@ -99,7 +99,6 @@ function pendingPayment(id: string, daysAgo: number): PaymentValidationRequest {
     paymentMethod: "Transferencia",
     uploadedAt: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
     currentMembershipStatus: "vencida",
-    proofFileName: "comprobante.png",
     proofFileType: "image",
     validationStatus: "pendiente",
     startDate: "2026-07-01",

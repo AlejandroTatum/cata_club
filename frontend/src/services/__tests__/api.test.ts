@@ -86,7 +86,6 @@ function makePaymentValidation(
     paymentMethod: "Bank Transfer",
     uploadedAt: "2026-06-28T10:30:00Z",
     currentMembershipStatus: "vencida",
-    proofFileName: "comprobante.pdf",
     proofFileType: "pdf",
     validationStatus: "pendiente",
     startDate: "2026-07-01",

@@ -83,7 +83,6 @@ export interface PaymentValidationRequest {
   paymentMethod: string;
   uploadedAt: string;
   currentMembershipStatus: MembershipStatus;
-  proofFileName: string;
   proofFileType: ProofFileType;
   proofPreviewUrl?: string;
   validationStatus: ValidationStatus;

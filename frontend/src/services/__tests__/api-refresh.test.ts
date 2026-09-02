@@ -87,7 +87,6 @@ describe("401 refresh-and-retry", () => {
               paymentMethod: "x",
               uploadedAt: "x",
               currentMembershipStatus: "activa",
-              proofFileName: "x",
               proofFileType: "pdf",
               validationStatus: "validado",
             }),

@@ -182,7 +182,6 @@ describe("GET /api/payments", () => {
           paymentMethod: "Transferencia",
           uploadedAt: "2026-06-28T10:30:00Z",
           currentMembershipStatus: "vencida",
-          proofFileName: "comprobante.pdf",
           proofFileType: "pdf",
           proofPreviewUrl: "https://example.com/comprobante.pdf",
           validationStatus: "pendiente",

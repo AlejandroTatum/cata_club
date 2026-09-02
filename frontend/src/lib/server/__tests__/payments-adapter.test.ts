@@ -105,4 +105,19 @@ describe("buildPaymentValidationRequest", () => {
     expect(request.paymentMethod).not.toBe("Efectivo");
     expect(request.paymentMethod).not.toBe("Transferencia");
   });
+
+  // Issue #868: the last path segment of `voucherUrl` — a signed download URL
+  // for a real payment — is a technical id, never a name the payer chose.
+  // The adapter must not derive or expose it at all; the UI decides what to
+  // show ("Comprobante adjunto" or its absence) from `proofPreviewUrl` alone.
+  it("does not derive or expose a proofFileName from voucherUrl", () => {
+    const conVoucher: BackendPagoCore = {
+      ...pago,
+      voucherUrl:
+        "https://storage.example.com/vouchers/a1b2c3d4-e5f6.pdf?X-Amz-Expires=3600&X-Amz-Signature=deadbeef",
+      voucherFormato: "PDF",
+    };
+    const request = buildPaymentValidationRequest(conVoucher, "Sofia Martinez", membresia, tipo);
+    expect(request).not.toHaveProperty("proofFileName");
+  });
 });
