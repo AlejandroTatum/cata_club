@@ -12,17 +12,19 @@ con `joinedload` y no dispara una consulta adicional por fila (N+1).
 """
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import Optional
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import EstadoMembresia, TipoModalidad
-from app.dominio.modelos import Membresia, Persona, TipoMembresia
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago
+from app.dominio.modelos import Membresia, Pago, Persona, TipoMembresia
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 
 
-def _crear_persona(db_session, cedula: str) -> Persona:
+def _crear_persona(db_session, cedula: str, *, representante_id: Optional[int] = None) -> Persona:
     persona = Persona(
         nombres="Ana", apellidos="Torres", cedula=cedula,
         fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
+        representante_id=representante_id,
     )
     db_session.add(persona)
     db_session.flush()
@@ -37,6 +39,33 @@ def _crear_tipo_membresia(db_session) -> TipoMembresia:
     db_session.add(tipo)
     db_session.flush()
     return tipo
+
+
+def _crear_membresia_activa(
+    db_session, persona: Persona, tipo: TipoMembresia, *, fecha_activacion: datetime,
+) -> Membresia:
+    membresia = Membresia(
+        estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("30.00"),
+        fecha_activacion=fecha_activacion,
+        persona_id=persona.id, tipo_membresia_id=tipo.id,
+    )
+    db_session.add(membresia)
+    db_session.flush()
+    return membresia
+
+
+def _crear_pago_aprobado(
+    db_session, persona: Persona, membresia: Membresia, *,
+    fecha_inicio: date, fecha_fin: date,
+) -> Pago:
+    pago = Pago(
+        monto=Decimal("30.00"), estado_pago=EstadoPago.APROBADO, tipo_pago=TipoPago.EFECTIVO,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+        persona_id=persona.id, membresia_id=membresia.id,
+    )
+    db_session.add(pago)
+    db_session.flush()
+    return pago
 
 
 def _crear_membresias(db_session, cantidad: int) -> None:
@@ -143,3 +172,66 @@ def test_listar_desempata_por_id_descendente_con_igual_fecha(db_session):
     membresias = MembresiaRepositorio(db_session).listar(skip=0, limit=200)
 
     assert [m.id for m in membresias] == [m.id for m in reversed(creadas)]
+
+
+# --- `contar_membresias_activas_familia` (issue #814) ------------------------
+# Antes era `len(listar_membresias_activas_por_representante(...))`: traía
+# filas completas solo para descartarlas. Reescrito a SQL, debe seguir
+# devolviendo EXACTAMENTE lo mismo que el listado -- incluso cuando el JOIN a
+# Pago duplica una Membresia con más de un pago APROBADO solapando
+# `en_fecha`, que es justo donde un `COUNT(*)` ingenuo divergería de
+# `len(listar(...))`.
+
+def test_contar_membresias_activas_familia_coincide_con_listar_y_es_distinct(db_session):
+    tipo = _crear_tipo_membresia(db_session)
+    representante = _crear_persona(db_session, cedula_valida(400))
+    en_fecha = date(2026, 7, 15)
+
+    representados = [
+        _crear_persona(db_session, cedula_valida(401 + i), representante_id=representante.id)
+        for i in range(2)
+    ]
+    membresias_activas = [
+        _crear_membresia_activa(
+            db_session, representado, tipo,
+            fecha_activacion=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        )
+        for representado in representados
+    ]
+
+    # La primera membresía tiene DOS pagos APROBADOS que solapan `en_fecha`:
+    # el JOIN produce dos filas para la MISMA membresía. Sin DISTINCT el
+    # conteo daría 3 en vez de 2.
+    _crear_pago_aprobado(
+        db_session, representados[0], membresias_activas[0],
+        fecha_inicio=date(2026, 7, 1), fecha_fin=date(2026, 7, 31),
+    )
+    _crear_pago_aprobado(
+        db_session, representados[0], membresias_activas[0],
+        fecha_inicio=date(2026, 6, 15), fecha_fin=date(2026, 7, 20),
+    )
+    _crear_pago_aprobado(
+        db_session, representados[1], membresias_activas[1],
+        fecha_inicio=date(2026, 7, 1), fecha_fin=date(2026, 7, 31),
+    )
+
+    # Una tercera membresía del mismo representante, cuyo pago NO cubre
+    # `en_fecha`: fuera de rango, no debe contarse.
+    otro_representado = _crear_persona(db_session, cedula_valida(410), representante_id=representante.id)
+    membresia_fuera_de_rango = _crear_membresia_activa(
+        db_session, otro_representado, tipo,
+        fecha_activacion=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    _crear_pago_aprobado(
+        db_session, otro_representado, membresia_fuera_de_rango,
+        fecha_inicio=date(2026, 1, 1), fecha_fin=date(2026, 1, 31),
+    )
+    db_session.commit()
+
+    repo = MembresiaRepositorio(db_session)
+    listadas = repo.listar_membresias_activas_por_representante(representante.id, en_fecha)
+    contadas = repo.contar_membresias_activas_familia(representante.id, en_fecha)
+
+    assert len(listadas) == 2
+    assert contadas == 2
+    assert contadas == len(listadas)

@@ -127,25 +127,20 @@ class MembresiaRepositorio:
     # ------------------------------------------------------------------
     # Consultas orientadas a automatizaciones / reglas de dominio
     # ------------------------------------------------------------------
-    def listar_membresias_activas_por_representante(
-        self, representante_id: int, en_fecha: date
-    ) -> List[Membresia]:
-        """
-        Devuelve las membresías ACTIVAS de los representados por
-        `representante_id` (hijos/representados) cuya ventana de vigencia
-        cubre `en_fecha`. Se usa para:
-          - Alertas de vencimiento (granularidad: por persona)
-          - Regla Familiar E04-RF002 (contar miembros activos de la familia).
+    def _aplicar_filtro_familia_activa(self, stmt, representante_id: int, en_fecha: date):
+        """JOIN + WHERE compartidos entre `listar_membresias_activas_por_
+        representante` y `contar_membresias_activas_familia` (issue #814):
+        el mismo filtro se aplica sobre cualquier `stmt` base, para que las
+        dos lecturas nunca puedan divergir sobre qué cuenta como "activa".
 
         La vigencia se deriva del último Pago APROBADO (pago.fecha_inicio <=
         en_fecha <= pago.fecha_fin), ya que Membresia no tiene fecha_vencimiento
-        propia (decisión de diseño: reusar Pago.fecha_fin).
-        """
+        propia (decisión de diseño: reusar Pago.fecha_fin)."""
         from app.dominio.modelos import Persona, Pago
         from app.dominio.enums import EstadoPago
 
-        stmt = (
-            select(Membresia)
+        return (
+            stmt
             .join(Pago, Pago.membresia_id == Membresia.id)
             .join(Persona, Persona.id == Membresia.persona_id)
             .where(
@@ -156,14 +151,35 @@ class MembresiaRepositorio:
                 Pago.fecha_fin >= en_fecha,
             )
         )
+
+    def listar_membresias_activas_por_representante(
+        self, representante_id: int, en_fecha: date
+    ) -> List[Membresia]:
+        """
+        Devuelve las membresías ACTIVAS de los representados por
+        `representante_id` (hijos/representados) cuya ventana de vigencia
+        cubre `en_fecha`. Se usa para:
+          - Alertas de vencimiento (granularidad: por persona)
+          - Regla Familiar E04-RF002 (contar miembros activos de la familia).
+        """
+        stmt = self._aplicar_filtro_familia_activa(select(Membresia), representante_id, en_fecha)
         return list(self.db.scalars(stmt).unique().all())
 
     def contar_membresias_activas_familia(
         self, representante_id: int, en_fecha: date
     ) -> int:
-        """Atajo de `listar_membresias_activas_por_representante` que devuelve
-        solo el conteo. Útil para E04-RF002."""
-        return len(self.listar_membresias_activas_por_representante(representante_id, en_fecha))
+        """El conteo de `listar_membresias_activas_por_representante`, en SQL
+        en vez de `len(listar(...))` (issue #814): antes traía filas
+        completas -- con sus `joinedload` implícitos vía el JOIN -- solo para
+        descartarlas. `COUNT(DISTINCT id)`, no `COUNT(*)`: el JOIN a Pago
+        puede devolver más de una fila por Membresia cuando tiene varios
+        pagos APROBADOS que solapan `en_fecha` (mismo caso que
+        `listar_membresias_activas_por_representante` resuelve con
+        `.unique()`), y sin DISTINCT el conteo divergiría de `len(listar(...))`."""
+        stmt = self._aplicar_filtro_familia_activa(
+            select(func.count(func.distinct(Membresia.id))), representante_id, en_fecha,
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def listar_por_persona(self, persona_id: int) -> List[Membresia]:
         stmt = (
