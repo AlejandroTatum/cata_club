@@ -29,10 +29,22 @@ class EnrollmentNotificacionOutboxRepositorio:
             select(EnrollmentNotificacionOutbox)
             .where(
                 or_(
-                    and_(EnrollmentNotificacionOutbox.status == "PENDIENTE", EnrollmentNotificacionOutbox.next_attempt_at <= now),
-                    and_(EnrollmentNotificacionOutbox.status == "ENVIANDO", EnrollmentNotificacionOutbox.claimed_at < stale),
+                    and_(
+                        EnrollmentNotificacionOutbox.status == "PENDIENTE",
+                        EnrollmentNotificacionOutbox.attempts < MAX_ATTEMPTS,
+                        EnrollmentNotificacionOutbox.next_attempt_at <= now,
+                    ),
+                    # Sin el tope de intentos acá: una fila reclamada en su
+                    # último intento (`attempts` llega a MAX_ATTEMPTS al
+                    # reclamarla) cuyo worker muere antes de `requeue` queda
+                    # `ENVIANDO` para siempre si este branch también exige
+                    # `attempts < MAX_ATTEMPTS`. El siguiente `requeue` ya
+                    # resuelve a `AGOTADO` porque `attempts >= MAX_ATTEMPTS`.
+                    and_(
+                        EnrollmentNotificacionOutbox.status == "ENVIANDO",
+                        EnrollmentNotificacionOutbox.claimed_at < stale,
+                    ),
                 ),
-                EnrollmentNotificacionOutbox.attempts < MAX_ATTEMPTS,
             )
             .order_by(EnrollmentNotificacionOutbox.next_attempt_at, EnrollmentNotificacionOutbox.id)
             .with_for_update(skip_locked=True)
