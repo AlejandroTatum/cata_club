@@ -21,7 +21,6 @@
 
 import {
   Fragment,
-  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -40,6 +39,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleHelp,
+  LogOut,
   MoreHorizontal,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -57,10 +57,8 @@ import { isMinor } from "@/app/student/student-utils";
 import { normalizeText } from "@/app/members/members-utils";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
-import { useDismissablePopup } from "@/lib/useDismissablePopup";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
-import UserMenuDropdown from "@/components/UserMenuDropdown";
 import { openHelpChat, useHelpChatOpen } from "@/components/chatbot/help-chat-store";
 import { PageHeader } from "@/components/ui";
 
@@ -386,10 +384,6 @@ export default function AppShell({
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const paletteDialogRef = useRef<HTMLDivElement>(null);
   const paletteListId = useId();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
-  const userMenuPanelRef = useRef<HTMLDivElement>(null);
-  const userMenuId = useId();
   // The panel itself is `HelpChatDock`'s, mounted once in the root layout —
   // the shell only triggers it and reports its state.
   const chatOpen = useHelpChatOpen();
@@ -490,14 +484,6 @@ export default function AppShell({
   const activeTab = MOBILE_TABS.find(
     (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
   );
-
-  const closeUserMenu = useCallback((): void => setUserMenuOpen(false), []);
-  useDismissablePopup({
-    open: userMenuOpen,
-    onClose: closeUserMenu,
-    panelRef: userMenuPanelRef,
-    triggerRef: userMenuTriggerRef,
-  });
 
   const paletteResults = useMemo<NavLinkDef[]>(() => {
     const term = normalizeText(query);
@@ -785,7 +771,7 @@ export default function AppShell({
           })}
         </nav>
 
-        {/* `.side .foot-nav` — support entry point, then the user card. */}
+        {/* `.side .foot-nav` — support entry point, then account rows, then the user card. */}
         <div className="flex flex-col gap-2 border-t border-white/[0.08] p-2.5">
           <button
             type="button"
@@ -853,18 +839,45 @@ export default function AppShell({
           </Link>
 
           {session && (
-            <div className="flex flex-col gap-2 lg:relative">
-              <button
-                ref={userMenuTriggerRef}
-                type="button"
-                onClick={(): void => setUserMenuOpen((open) => !open)}
-                // Not `aria-haspopup="true"` — that is an alias for "menu",
-                // and this popup implements none of the menu keyboard contract.
-                aria-haspopup="dialog"
-                aria-controls={userMenuId}
-                aria-expanded={userMenuOpen}
-                aria-label={`Menú de cuenta de ${session.user.name}`}
-                className={`flex w-full items-center gap-2.5 rounded-ctl bg-white/[0.06] px-2.5 py-2 text-left transition-colors hover:bg-white/[0.1] ${
+            <Fragment>
+              {/*
+               * Perfil and Cerrar sesión (#852) used to live inside a popup
+               * only the user card below opened — nothing about the card
+               * looked interactive, and older users could not find how to
+               * log out. They are now permanent rows, right here, drawn with
+               * the same primitive as every destination above so they are
+               * pixel-consistent with the rail. A divider on the rail's own
+               * border token separates them from the help group above,
+               * exactly as the footer itself is separated from the nav.
+               */}
+              <div className="flex flex-col gap-2 border-t border-white/[0.08] pt-2">
+                {renderNavRow({ href: "/profile", label: "Perfil" })}
+                <button
+                  type="button"
+                  onClick={(): void => {
+                    logout();
+                    setSidebarOpen(false);
+                  }}
+                  title="Cerrar sesión"
+                  aria-label="Cerrar sesión"
+                  // Same row tone as every other entry, not the destructive
+                  // red: clear enough to find, not loud enough to dominate.
+                  className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES} w-full text-left`}
+                >
+                  <LogOut size={ICON.base} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                  <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Cerrar sesión</span>
+                </button>
+              </div>
+
+              {/*
+               * The account info block. It used to be the only way to reach
+               * Perfil/Cerrar sesión — a button that opened a popup — which is
+               * exactly what nobody could tell by looking at it (#852). Both
+               * destinations now live above as their own rows, so the card
+               * goes back to being what it looks like: plain account info.
+               */}
+              <div
+                className={`flex w-full items-center gap-2.5 rounded-ctl bg-white/[0.06] px-2.5 py-2 ${
                   collapsed ? "lg:justify-center lg:px-0" : ""
                 }`}
               >
@@ -891,49 +904,8 @@ export default function AppShell({
                     {getRoleLabel(session.user.role)}
                   </span>
                 </span>
-              </button>
-              {/*
-                * EL PANEL VIVE EN EL FLUJO DEL PIE, NO ENCIMA DE ÉL.
-                *
-                * Era `absolute bottom-full mb-1.5 w-full`: 86px — borde 2px,
-                * padding 12px y dos ítems de 36px — creciendo hacia arriba
-                * desde la tarjeta, a ancho completo, sobre el mismo eje donde
-                * están «Ayuda y soporte» y «Preguntas frecuentes». Medido
-                * desde el borde superior de la tarjeta cubría de −6 a −92:
-                * preguntas frecuentes (−8 a −48) entera, y 36 de los 40px de
-                * ayuda y soporte. Abrir la cuenta borraba las dos salidas de
-                * ayuda justo cuando el usuario las estaba buscando (#367).
-                *
-                * De los caminos posibles este es el único que no muda el
-                * problema de lugar. Reordenar el pie deja al panel tapando lo
-                * que quede arriba, sea lo que sea. Abrirlo hacia abajo con
-                * `top-full` lo manda fuera de la pantalla: la tarjeta es lo
-                * último del `aside` y el `aside` llega al borde inferior.
-                * Sacarlo al costado con `left-full` anda en escritorio y se va
-                * de un teléfono de 360px, porque el cajón ya ocupa 236.
-                *
-                * En flujo no hay nada que tapar: el pie crece esos 86px y el
-                * `nav` de arriba, que es `flex-1 overflow-y-auto`, cede el
-                * alto y scrollea. Y como el panel queda después del disparador
-                * tanto en el DOM como en pantalla, el orden de lectura y el de
-                * foco son el mismo de siempre: ayuda, preguntas, tarjeta, y
-                * recién ahí las opciones de la cuenta.
-                *
-                * Colapsado conserva `lg:w-56` porque en un riel de 76px las
-                * etiquetas no entran, así que ahí el panel se desborda hacia
-                * la derecha: sobre el `main`, nunca sobre un destino de la
-                * barra, que es exactamente lo que este cambio vino a evitar.
-                */}
-              {userMenuOpen && (
-                <UserMenuDropdown
-                  ref={userMenuPanelRef}
-                  id={userMenuId}
-                  onLogout={logout}
-                  onNavigate={closeUserMenu}
-                  className="w-full lg:absolute lg:bottom-0 lg:left-full lg:ml-2 lg:w-56"
-                />
-              )}
-            </div>
+              </div>
+            </Fragment>
           )}
         </div>
       </aside>

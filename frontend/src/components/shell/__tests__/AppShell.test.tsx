@@ -329,34 +329,35 @@ describe("AppShell", (): void => {
     expect(screen.getByRole("button", { name: /notificaciones/i })).toBeInTheDocument();
   });
 
-  it("does not show the account menu items until the user block is clicked", (): void => {
+  // Perfil and Cerrar sesión used to live behind a popup only the user card
+  // opened (issue #852): nothing about the card looked interactive, and
+  // older users reported not finding how to log out. Both are now permanent
+  // rows in the sidebar's bottom sector — no interaction required to see them.
+  it("shows Perfil and Cerrar sesión as permanent rows, without opening anything", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    expect(screen.queryByRole("link", { name: /Perfil/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Cerrar Sesión/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
 
-  it("opens the account menu with Perfil and Cerrar Sesión when the user block is clicked", (): void => {
-    render(<AppShell title="Dashboard">{null}</AppShell>);
-
-    fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
-
-    expect(screen.getByRole("link", { name: /Perfil/i })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("button", { name: /Cerrar Sesión/i })).toBeInTheDocument();
-  });
-
-  it("calls logout when Cerrar Sesión is clicked from the account menu", (): void => {
+  it("calls logout when Cerrar sesión is clicked, and the row stays visible", (): void => {
     const mockLogout = vi.fn();
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin", { logout: mockLogout }));
 
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Cerrar Sesión/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
-    // Menu closes itself after the click
-    expect(screen.queryByRole("button", { name: /Cerrar Sesión/i })).not.toBeInTheDocument();
+    // Unlike the retired popup, this row never unmounts itself on click.
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+  });
+
+  it("no longer offers the user card as a popup trigger", (): void => {
+    render(<AppShell title="Dashboard">{null}</AppShell>);
+
+    expect(screen.queryByRole("button", { name: /Menú de cuenta/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
   });
 
   it("opens and closes the mobile sidebar", (): void => {
@@ -936,86 +937,22 @@ describe("AppShell — Ayuda y soporte", (): void => {
 });
 
 // ---------------------------------------------------------------------------
-// Popup dismissal — the user menu had no Escape, no outside click, and
-// declared `aria-haspopup="true"` (an alias for "menu") on a non-menu popup.
-// ---------------------------------------------------------------------------
-
-describe("AppShell — user menu dismissal", (): void => {
-  beforeEach((): void => {
-    stubViewport(true);
-    mockUseAuth.mockReset();
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
-    vi.stubGlobal("localStorage", createMemoryStorage());
-  });
-
-  function openUserMenu(): HTMLElement {
-    const trigger = screen.getByRole("button", { name: /Menú de cuenta/i });
-    fireEvent.click(trigger);
-    return trigger;
-  }
-
-  it("describes the popup truthfully and wires it to the trigger", (): void => {
-    render(<AppShell title="Panel de Control">{null}</AppShell>);
-    const trigger = openUserMenu();
-
-    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
-    expect(trigger.getAttribute("aria-controls")).toBe(panel.id);
-  });
-
-  it("closes on Escape and returns focus to the trigger", (): void => {
-    render(<AppShell title="Panel de Control">{null}</AppShell>);
-    const trigger = openUserMenu();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it("closes when the pointer goes down outside the panel", (): void => {
-    render(<AppShell title="Panel de Control">{null}</AppShell>);
-    openUserMenu();
-
-    fireEvent.mouseDown(document.body);
-
-    expect(screen.queryByRole("dialog", { name: "Menú de cuenta" })).not.toBeInTheDocument();
-  });
-
-  it("stays open when the click lands inside the panel", (): void => {
-    render(<AppShell title="Panel de Control">{null}</AppShell>);
-    openUserMenu();
-
-    fireEvent.mouseDown(screen.getByRole("link", { name: /Perfil/i }));
-
-    expect(screen.getByRole("dialog", { name: "Menú de cuenta" })).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Occlusion (issue #367). The account panel was `absolute bottom-full`
-// `w-full` inside the sidebar footer: ~86px growing upward over the very axis
-// where "Ayuda y soporte" and "Preguntas frecuentes" live, covering the second
-// one whole and 36 of the first one's 40px.
-//
-// jsdom loads no stylesheet and lays nothing out, so `getBoundingClientRect`
-// is all zeros here and a geometric assertion would be vacuous — it would pass
-// against the broken build too. The lock is therefore on the property the fix
-// changes: the panel must carry no out-of-flow utility while sharing the
-// footer with those two rows. Out of flow over a shared axis IS the occlusion;
-// in flow, the footer grows and nothing gets covered.
+// Discoverability (issue #852). Perfil and Cerrar sesión used to live behind
+// a popup only the user card opened, and nothing about the card looked
+// interactive — older users could not find how to log out. Both are now
+// permanent rows in the sidebar's bottom sector, right below the help rows,
+// so nothing has to be discovered by clicking the card first.
 // ---------------------------------------------------------------------------
 
 /**
- * Utilities that take the panel off the flow and let it paint over its
+ * Utilities that take a row off the flow and let it paint over its
  * siblings. Matched after stripping Tailwind variant prefixes (`lg:`, `sm:`),
  * so the mobile drawer cannot be taken out of its flow.
  */
 const OUT_OF_FLOW_UTILITY =
   /^-?(?:absolute|fixed|sticky|inset(?:$|-)|top-|bottom-|left-|right-|start-|end-)/;
 
-describe("AppShell — el menú de cuenta no tapa las salidas de ayuda", (): void => {
+describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): void => {
   beforeEach((): void => {
     stubViewport(true);
     mockUseAuth.mockReset();
@@ -1023,72 +960,65 @@ describe("AppShell — el menú de cuenta no tapa las salidas de ayuda", (): voi
     vi.stubGlobal("localStorage", createMemoryStorage());
   });
 
-  it("floats the account popup immediately to the right of its card at desktop widths, including a collapsed sidebar", (): void => {
-        const { container } = render(<AppShell title="Panel de Control">{null}</AppShell>);
-
-        fireEvent.click(screen.getByRole("button", { name: /Colapsar menú/i }));
-        fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
-
-        const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
-        expect(panel.parentElement).toHaveClass("lg:relative");
-        expect(panel).toHaveClass("lg:absolute", "lg:bottom-0", "lg:left-full", "lg:ml-2", "lg:w-56");
-        expect(container.querySelector("aside")).toHaveClass("lg:w-[76px]");
-      });
-
-      it("keeps the account popup in flow and visible inside the mobile drawer", (): void => {
-        stubViewport(false);
-        render(<AppShell title="Panel de Control">{null}</AppShell>);
-
-        fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
-        fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
-
-        const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
-        expect(panel).toHaveClass("w-full");
-        expect(panel).not.toHaveClass("absolute", "left-full", "bottom-0", "ml-2");
-      });
-
-      it("keeps the open panel in the footer's flow instead of over its two help rows", (): void => {
+  it("shows Perfil and Cerrar sesión next to Ayuda y soporte and Preguntas frecuentes, on a plain render", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
-    fireEvent.click(screen.getByRole("button", { name: /Menú de cuenta/i }));
 
-    const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
-    const soporte = screen.getByRole("button", { name: "Ayuda y soporte" });
-    const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    expect(screen.getByRole("button", { name: "Ayuda y soporte" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Preguntas frecuentes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
+  });
 
-    // Same footer, same axis: the three of them stack in one column, so any
-    // out-of-flow panel is painted on top of the other two.
-    const foot = soporte.parentElement;
-    expect(foot).toBe(faq.parentElement);
-    expect(foot?.contains(panel)).toBe(true);
+  it("keeps every row in flow, so none of them can paint over another", (): void => {
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    for (const className of panel.className.split(/\s+/).filter(Boolean)) {
-      const utility = className.includes(":") ? "" : className;
-      expect(
-        utility,
-        `«${className}» saca el panel del flujo y lo pinta sobre las filas de ayuda`,
-      ).not.toMatch(OUT_OF_FLOW_UTILITY);
+    const rows = [
+      screen.getByRole("button", { name: "Ayuda y soporte" }),
+      screen.getByRole("link", { name: "Preguntas frecuentes" }),
+      screen.getByRole("link", { name: "Perfil" }),
+      screen.getByRole("button", { name: "Cerrar sesión" }),
+    ];
+
+    for (const row of rows) {
+      for (const className of row.className.split(/\s+/).filter(Boolean)) {
+        const utility = className.includes(":") ? "" : className;
+        expect(
+          utility,
+          `«${className}» saca la fila del flujo y la deja capaz de pintarse sobre otra`,
+        ).not.toMatch(OUT_OF_FLOW_UTILITY);
+      }
     }
   });
 
-  it("keeps both help rows before the panel, and the panel right after its trigger", (): void => {
+  it("keeps the reading order: ayuda, preguntas, perfil, cerrar sesión", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
-    const trigger = screen.getByRole("button", { name: /Menú de cuenta/i });
-    fireEvent.click(trigger);
 
-    const panel = screen.getByRole("dialog", { name: "Menú de cuenta" });
+    const soporte = screen.getByRole("button", { name: "Ayuda y soporte" });
+    const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    const perfil = screen.getByRole("link", { name: "Perfil" });
+    const cerrarSesion = screen.getByRole("button", { name: "Cerrar sesión" });
 
-    // Guards the fix from being "solved" by shuffling the footer: reading
-    // order stays help → FAQ → card → its own options, which is also the tab
-    // order, so nothing is reordered for a screen reader or a keyboard user.
-    for (const before of [
-      screen.getByRole("button", { name: "Ayuda y soporte" }),
-      screen.getByRole("link", { name: "Preguntas frecuentes" }),
-      trigger,
-    ]) {
+    // Guards the fix from being "solved" by shuffling the footer: this is
+    // also the tab order, so nothing gets reordered for a keyboard user.
+    for (const [before, after] of [
+      [soporte, faq],
+      [faq, perfil],
+      [perfil, cerrarSesion],
+    ] as const) {
       expect(
-        before.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
+        before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
+  });
+
+  it("also offers both rows inside the mobile drawer", (): void => {
+    stubViewport(false);
+    render(<AppShell title="Panel de Control">{null}</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: MOBILE_NAV_TRIGGER }));
+
+    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
 });
 
