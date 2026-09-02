@@ -10,11 +10,31 @@
  * `numeric-input.ts` stays framework-agnostic (no React import, easy to
  * unit-test in isolation); this hook is the one place that wires its pure
  * functions to input events and `aria-live` state.
+ *
+ * ## Normalizing before the cap (issue #855)
+ *
+ * A celular autofilled by a mobile browser in international format
+ * (`+593991234567`, 13 characters) used to reach `capDigits`/
+ * `filterNumericInput` BEFORE anything converted it to the local
+ * `09XXXXXXXX` it should become — so the 10-digit cap truncated it instead
+ * of the international prefix ever getting a chance to resolve. Every path
+ * that can hand this hook a whole value (`handleChange`'s onChange
+ * backstop, `handlePaste`, and `handleKeyDown`'s next-value check) runs it
+ * through `normalizeEcuadorianMobile` FIRST, and only for `mode === "phone"`
+ * — `identity-validation.ts`'s own contract already returns a non-matching
+ * value untouched, so a local number (with or without separators) or a
+ * cédula/amount value is never rewritten by this step.
  */
 
 import { useState } from "react";
 import type { KeyboardEvent, ClipboardEvent } from "react";
 import { capDigits, filterNumericInput, isAllowedChar, type NumericFieldMode } from "./numeric-input";
+import { normalizeEcuadorianMobile } from "./identity-validation";
+
+/** `normalizeEcuadorianMobile` only applies to `phone` — every other mode passes `raw` through untouched. */
+function normalizePhone(mode: NumericFieldMode, raw: string): string {
+  return mode === "phone" ? normalizeEcuadorianMobile(raw) : raw;
+}
 
 export interface NumericFieldMasking {
   /** True when the last keystroke/paste/change was truncated by the mode's cap — drive an `aria-live` warning from this, never a silent drop. */
@@ -67,7 +87,10 @@ export function useNumericFieldMasking(
       onChange(raw);
       return;
     }
-    const result = options?.fullFilterOnChange ? filterNumericInput(mode, raw) : capDigits(mode, raw);
+    const normalized = normalizePhone(mode, raw);
+    const result = options?.fullFilterOnChange
+      ? filterNumericInput(mode, normalized)
+      : capDigits(mode, normalized);
     setLimitReached(result.limitReached);
     onChange(result.value);
   }
@@ -92,7 +115,7 @@ export function useNumericFieldMasking(
     const start = input.selectionStart ?? input.value.length;
     const end = input.selectionEnd ?? input.value.length;
     const nextRaw = input.value.slice(0, start) + e.key + input.value.slice(end);
-    const result = filterNumericInput(mode, nextRaw);
+    const result = filterNumericInput(mode, normalizePhone(mode, nextRaw));
     if (result.limitReached) {
       e.preventDefault();
       setLimitReached(true);
@@ -107,7 +130,7 @@ export function useNumericFieldMasking(
     const start = input.selectionStart ?? input.value.length;
     const end = input.selectionEnd ?? input.value.length;
     const nextRaw = input.value.slice(0, start) + pasted + input.value.slice(end);
-    const result = filterNumericInput(mode, nextRaw);
+    const result = filterNumericInput(mode, normalizePhone(mode, nextRaw));
     setLimitReached(result.limitReached);
     onChange(result.value);
   }

@@ -226,6 +226,27 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
       ),
     );
   });
+
+  // Issue #855: an autofilled +593 mobile is normalized to the local form
+  // BEFORE it lands in state, so what `actualizarFichaMedica` saves is
+  // already `09XXXXXXXX` — no extra step needed at save time.
+  it("normalizes an autofilled +593 emergency phone and saves the local value", async () => {
+    render(<MedicalRecordEditor personaId={7} />);
+    await fillBloodType();
+    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+      target: { value: "+593991234567" },
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia").value).toBe("0991234567");
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mockActualizarFichaMedica).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ telefonoEmergencia: "0991234567" }),
+      ),
+    );
+  });
 });
 
 /**

@@ -25,7 +25,7 @@ import AppShell from "@/components/shell/AppShell";
 import { BackLink, Button, Stepper, buttonClasses, cn } from "@/components/ui";
 import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
-import { WizardInput, WizardNavigation, example } from "@/components/wizard-fields";
+import { WizardInput, WizardNavigation, example, PHONE_HINT } from "@/components/wizard-fields";
 import { crearCuentaAdmin, searchStudents, fetchInstituciones, type Institucion } from "@/services/api";
 import {
   GraduationCap,
@@ -532,6 +532,7 @@ function CrearCuentaContent(): React.ReactElement {
           minLength={7}
           inputMode="tel"
           numericMode="phone"
+          hint={PHONE_HINT}
         />
 
         </div>
@@ -746,6 +747,7 @@ function CrearCuentaContent(): React.ReactElement {
             minLength={7}
             inputMode="tel"
             numericMode="phone"
+            hint={PHONE_HINT}
           />
         </div>
       </div>

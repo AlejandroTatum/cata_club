@@ -45,6 +45,15 @@ describe("isAllowedChar", () => {
     expect(isAllowedChar("phone", "(")).toBe(true);
     expect(isAllowedChar("phone", ")")).toBe(true);
   });
+
+  it("allows + for phone — an autofilled/typed +593 needs it before normalization runs (issue #855)", () => {
+    expect(isAllowedChar("phone", "+")).toBe(true);
+  });
+
+  it("still rejects + for cedula and amount", () => {
+    expect(isAllowedChar("cedula", "+")).toBe(false);
+    expect(isAllowedChar("amount", "+")).toBe(false);
+  });
 });
 
 describe("NUMERIC_FIELD_MAX_DIGITS", () => {

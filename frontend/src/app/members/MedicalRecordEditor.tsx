@@ -8,7 +8,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { Badge, Button, DataBox, ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
-import { phoneRule } from "@/lib/identity-validation";
+import { phoneRule, PHONE_FORMAT_HINT } from "@/lib/identity-validation";
 import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
 import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 
@@ -563,7 +563,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
                 ? `telefono-error-${personaId}`
                 : telefonoEmergenciaMasking.limitReached
                   ? `telefono-limit-${personaId}`
-                  : undefined
+                  : `telefono-hint-${personaId}`
             }
             className={`input-field w-full ${fieldErrors.telefonoEmergencia ? "border-state-bad" : ""}`}
           />
@@ -575,16 +575,18 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             >
               {fieldErrors.telefonoEmergencia}
             </p>
+          ) : telefonoEmergenciaMasking.limitReached ? (
+            <p
+              id={`telefono-limit-${personaId}`}
+              aria-live="polite"
+              className="mt-1 text-xs font-semibold text-state-warn"
+            >
+              {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
+            </p>
           ) : (
-            telefonoEmergenciaMasking.limitReached && (
-              <p
-                id={`telefono-limit-${personaId}`}
-                aria-live="polite"
-                className="mt-1 text-xs font-semibold text-state-warn"
-              >
-                {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
-              </p>
-            )
+            <p id={`telefono-hint-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
+              {PHONE_FORMAT_HINT}
+            </p>
           )}
         </div>
       </div>

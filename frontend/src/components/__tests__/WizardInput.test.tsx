@@ -198,6 +198,54 @@ describe("WizardInput — the digit cap warns instead of silently truncating", (
   });
 });
 
+/**
+ * Issue #855: a mobile browser autofills the teléfono field in international
+ * format. The wizard's form state (and, from there, the payload sent to the
+ * BFF/API — `buildEnrollmentCreateDTO`, `crear-cuenta-utils.ts`) is exactly
+ * whatever value `onChange` receives here, so proving `onChange` receives
+ * the normalized `09XXXXXXXX` proves the payload does too — this field is
+ * shared by every wizard/editor that collects a teléfono.
+ */
+describe("WizardInput — numericMode='phone' normalizes an international celular before the cap (issue #855)", () => {
+  it("normalizes an autofilled +593 value instead of truncating it", () => {
+    const { input, onChange } = renderPhone();
+    fireEvent.change(input, { target: { value: "+593991234567" } });
+    expect(onChange).toHaveBeenCalledWith("0991234567");
+    expect(screen.queryByText(/alcanzó el máximo/i)).not.toBeInTheDocument();
+  });
+
+  it("normalizes an autofilled 593 value with no plus sign", () => {
+    const { input, onChange } = renderPhone();
+    fireEvent.change(input, { target: { value: "593991234567" } });
+    expect(onChange).toHaveBeenCalledWith("0991234567");
+  });
+
+  function paste(input: HTMLInputElement, text: string) {
+    return fireEvent.paste(input, { clipboardData: { getData: () => text } });
+  }
+
+  it("normalizes a pasted international value with the typing separators an autofill can include", () => {
+    const { input, onChange } = renderPhone();
+    paste(input, "+593 99 123 4567");
+    expect(onChange).toHaveBeenCalledWith("0991234567");
+  });
+
+  it("shows the accepted-formats hint next to the field", () => {
+    render(
+      <WizardInput
+        idPrefix="t2"
+        label="Teléfono"
+        value=""
+        onChange={vi.fn()}
+        disabled={false}
+        numericMode="phone"
+        hint="Celular: 09XXXXXXXX (también acepta +593… o 593…). Fijo: 0, código de área y 7 dígitos."
+      />,
+    );
+    expect(screen.getByText(/también acepta \+593/i)).toBeInTheDocument();
+  });
+});
+
 describe("WizardInput — the onChange backstop caps digits but never strips letters", () => {
   // This is the load-bearing case for V01 (enroll-qa.spec.ts): a value
   // assigned in one shot — as Playwright's `.fill()` does — must reach

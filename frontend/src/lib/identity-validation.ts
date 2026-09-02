@@ -120,10 +120,49 @@ const MOBILE_PATTERN = /^09\d{8}$/;
 /** Fijo: `0` + 1-digit area code + 7-digit subscriber number = 9 digits total. */
 const LANDLINE_PATTERN = /^0\d{8}$/;
 
+/**
+ * Ecuador's country code (`593`) plus the mobile trunk digit (`9`) plus the
+ * 8-digit subscriber number — matched AFTER `PHONE_SEPARATOR_PATTERN` has
+ * already stripped the typing separators, so `"+593 99 123 4567"` and
+ * `"593-99-123-4567"` calzan igual que `"+593991234567"`. The leading `+` is
+ * optional and is the only character this pattern itself has to account for.
+ */
+const INTERNATIONAL_MOBILE_PATTERN = /^\+?593(9\d{8})$/;
+
 export type PhoneErrorReason = "invalid-chars" | "invalid-number";
 
-export function phoneError(value: string): PhoneErrorReason | null {
+/**
+ * Converts a celular autocompletado/tipeado en formato internacional
+ * (`+593991234567`, `593991234567`, con o sin los separadores permitidos) a
+ * su forma local canónica `09XXXXXXXX` (issue #855). Un fijo, un celular que
+ * ya está en formato local, o cualquier valor que no calce EXACTAMENTE con
+ * el prefijo internacional de celular se devuelve TAL CUAL llegó — sin
+ * tocar sus separadores ni sus caracteres — porque el mapeo es exclusivo de
+ * celulares y esta función también corre en cada tecleo (`use-numeric-field-
+ * masking.ts`), donde reescribir un valor que no calza le movería el piso a
+ * quien está tipeando un número local con guiones o espacios.
+ */
+export function normalizeEcuadorianMobile(value: string): string {
   const stripped = value.replace(PHONE_SEPARATOR_PATTERN, "");
+  const match = INTERNATIONAL_MOBILE_PATTERN.exec(stripped);
+  return match ? `0${match[1]}` : value;
+}
+
+/**
+ * The accepted formats, shown next to every phone field so an autofilled
+ * `+593…` isn't a mystery rejection (issue #855). One constant, reused by
+ * every wizard/editor that collects a phone number — see `PHONE_HINT` in
+ * `wizard-fields.tsx`.
+ */
+export const PHONE_FORMAT_HINT =
+  "Celular: 09XXXXXXXX (también acepta +593… o 593…). Fijo: 0, código de área y 7 dígitos.";
+
+export function phoneError(value: string): PhoneErrorReason | null {
+  // Normalize BEFORE the separator strip below: an international mobile
+  // number is converted to its local form first, so the digit/pattern check
+  // that follows sees `09XXXXXXXX` instead of rejecting the `+`/country
+  // code outright.
+  const stripped = normalizeEcuadorianMobile(value).replace(PHONE_SEPARATOR_PATTERN, "");
   if (!/^\d+$/.test(stripped)) return "invalid-chars";
   return MOBILE_PATTERN.test(stripped) || LANDLINE_PATTERN.test(stripped) ? null : "invalid-number";
 }
