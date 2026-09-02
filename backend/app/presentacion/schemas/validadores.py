@@ -19,6 +19,7 @@ from pydantic import AfterValidator
 
 from app.dominio.cedula import es_cedula_valida
 from app.dominio.enums import TipoSangre
+from app.dominio.nombre_propio import normalizar_nombre_propio
 from app.dominio.telefono import (
     MENSAJE_TELEFONO_EMERGENCIA_IGUAL,
     es_telefono_valido,
@@ -83,13 +84,24 @@ def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:
 def _validar_nombre(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El nombre es obligatorio.")
-    return valor
+    return normalizar_nombre_propio(valor)
 
 
 def _validar_apellido(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El apellido es obligatorio.")
-    return valor
+    return normalizar_nombre_propio(valor)
+
+
+# Issue #875: `contacto_emergencia` (el NOMBRE de a quién llamar) es la
+# misma clase de dato que `nombres`/`apellidos`, así que se normaliza igual.
+# A diferencia de esos dos, acá `None`/vacío es legítimo ("todavía no se
+# cargó") -- por eso este validador tolera ambos en vez de rechazarlos; el
+# `Optional[...]` en el tipo hace que `None` ni siquiera lo alcance.
+def _validar_contacto_emergencia(valor: str) -> str:
+    if not valor.strip():
+        return valor
+    return normalizar_nombre_propio(valor)
 
 
 def validar_telefono_emergencia_distinto(
@@ -123,3 +135,4 @@ TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 # de una constraint de `Field`.
 NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
+ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]

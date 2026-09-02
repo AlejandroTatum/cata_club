@@ -10,6 +10,7 @@ from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
 from app.presentacion.schemas.validadores import (
     ApellidoValidado,
     CedulaValidada,
+    ContactoEmergenciaValidado,
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
@@ -29,8 +30,8 @@ class InstitucionResponseDTO(ResponseBase, InstitucionCreateDTO):
 
 # --- Persona ---
 class PersonaCreateDTO(BaseModel):
-    nombres: str = Field(..., min_length=1, max_length=100)
-    apellidos: str = Field(..., min_length=1, max_length=100)
+    nombres: NombreValidado = Field(..., max_length=100)
+    apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     foto_url: Optional[str] = None
@@ -49,8 +50,8 @@ class RepresentadoCreateDTO(BaseModel):
     Si se proporcionan `correo` y `contrasenia`, se crea también un
     Usuario con rol ALUMNO para el menor (Opción B: menores con cuenta).
     Si se omiten, solo se crea la Persona (comportamiento anterior)."""
-    nombres: str = Field(..., min_length=1, max_length=100)
-    apellidos: str = Field(..., min_length=1, max_length=100)
+    nombres: NombreValidado = Field(..., max_length=100)
+    apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
@@ -186,7 +187,7 @@ class FichaMedicaCreateDTO(BaseModel):
     persona_id: int
     enfermedades: List[str] = Field(default_factory=list)  # nombres de enfermedades, opcional
     alergias: Optional[str] = Field(default=None, max_length=255)
-    contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
+    contacto_emergencia: Optional[ContactoEmergenciaValidado] = Field(default=None, max_length=150)
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
 
@@ -212,7 +213,7 @@ class FichaMedicaUpdateDTO(BaseModel):
     tipo_sangre: Optional[TipoSangreValidado] = None
     enfermedades: Optional[List[str]] = None
     alergias: Optional[str] = Field(default=None, max_length=255)
-    contacto_emergencia: Optional[str] = Field(default=None, max_length=150)
+    contacto_emergencia: Optional[ContactoEmergenciaValidado] = Field(default=None, max_length=150)
     telefono_emergencia: Optional[TelefonoValidado] = Field(default=None, max_length=32)
 
     @model_validator(mode="after")

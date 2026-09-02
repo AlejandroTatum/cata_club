@@ -548,6 +548,11 @@ class PersonaServicio:
     def reporte_nuevos_por_periodo(self, fecha_inicio, fecha_fin) -> list[Persona]:
         return self.repo.listar_nuevas_por_periodo(fecha_inicio, fecha_fin)
 
+    def contar_nuevas_por_periodo(self, fecha_inicio, fecha_fin) -> int:
+        """Total del mismo filtro que `reporte_nuevos_por_periodo`, para el
+        tope del reporte (issue #812)."""
+        return self.repo.contar_nuevas_por_periodo(fecha_inicio, fecha_fin)
+
     def buscar_por_nombre(
         self, q: str, rol: str | None = None, skip: int = 0, limit: int = 20
     ) -> list[Persona]:

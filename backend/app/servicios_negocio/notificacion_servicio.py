@@ -55,10 +55,11 @@ class NotificacionServicio:
         total = self.repo.contar_por_persona(persona_id)
         return items, total
 
-    def listar_para_persona_y_hijos(
-        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
-    ) -> tuple[list[Notificacion], int]:
-        """Para representantes: incluye notificaciones propias y de sus hijos.
+    def _resolver_ids_autorizados(self, persona_id: int) -> list[int]:
+        """Persona propia + sus dependientes ACTIVOS -- el mismo alcance que
+        ve el feed paginado del representante. Extraído para que
+        `listar_para_persona_y_hijos` y `marcar_todas_leidas` (issue #859)
+        nunca puedan divergir sobre a quién representa `persona_id`.
 
         Baja lógica: los dependientes salen de
         `PersonaRepositorio.listar_representados`, que filtra por `activo`, y
@@ -75,11 +76,19 @@ class NotificacionServicio:
         )
         persona = self.db.get(Persona, persona_id)
         if not persona:
-            return [], 0
+            return []
         hijos_ids = [
             h.id for h in PersonaRepositorio(self.db).listar_representados(persona_id)
         ]
-        todos_ids = [persona_id] + hijos_ids
+        return [persona_id] + hijos_ids
+
+    def listar_para_persona_y_hijos(
+        self, persona_id: int, skip: int = 0, limit: Optional[int] = None
+    ) -> tuple[list[Notificacion], int]:
+        """Para representantes: incluye notificaciones propias y de sus hijos."""
+        todos_ids = self._resolver_ids_autorizados(persona_id)
+        if not todos_ids:
+            return [], 0
         query = (
             self.db.query(Notificacion)
             .filter(Notificacion.persona_id.in_(todos_ids))
@@ -95,6 +104,18 @@ class NotificacionServicio:
             .scalar()
         )
         return items, total
+
+    def marcar_todas_leidas(self, persona_id: int) -> int:
+        """Marca como leídas TODAS las notificaciones pendientes que
+        `persona_id` está autorizado a ver -- las propias y, si tiene
+        dependientes, las de sus dependientes activos (issue #859). El
+        alcance se resuelve acá, en el backend, con el mismo criterio que
+        `listar_para_persona_y_hijos`: nunca a partir de ids que mande el
+        cliente."""
+        ids_autorizados = self._resolver_ids_autorizados(persona_id)
+        if not ids_autorizados:
+            return 0
+        return self.repo.marcar_todas_leidas(ids_autorizados)
 
     def marcar_leida(self, notificacion_id: int, persona_id: int) -> Notificacion:
         notificacion = self.db.get(Notificacion, notificacion_id)

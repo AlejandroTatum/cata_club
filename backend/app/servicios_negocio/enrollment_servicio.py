@@ -489,7 +489,7 @@ class EnrollmentServicio:
         inscripción, la fila sigue PENDIENTE y el beat la entrega cuando
         vuelva."""
         repo_outbox = EnrollmentNotificacionOutboxRepositorio(self.db)
-        rol_admin = self.repo_rol.obtener_por_tipo(TipoRol.ADMINISTRADOR)
+        rol_admin = self.repo_rol.obtener_por_tipo_con_usuarios(TipoRol.ADMINISTRADOR)
         if not rol_admin:
             return
         admins = [u.persona for u in rol_admin.usuarios if u.persona]

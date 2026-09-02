@@ -1,7 +1,7 @@
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.modelos import Rol
+from app.dominio.modelos import Rol, Usuario
 from app.dominio.enums import TipoRol
 
 
@@ -11,6 +11,23 @@ class RolRepositorio:
 
     def obtener_por_tipo(self, tipo_rol: TipoRol) -> Optional[Rol]:
         return self.db.query(Rol).filter(Rol.tipo_rol == tipo_rol).first()
+
+    def obtener_por_tipo_con_usuarios(self, tipo_rol: TipoRol) -> Optional[Rol]:
+        """Precarga `usuarios` y `persona` en una sola consulta (issue #810).
+
+        NO se fusiona con `obtener_por_tipo`: ese otro método también lo usa
+        `obtener_o_crear` con CUALQUIER `TipoRol` -- incluido ALUMNO, dentro
+        de la propia inscripción pública (`enrollment_servicio.py:427`) --
+        y ahí un `joinedload(Rol.usuarios)` convertiría un chequeo liviano
+        de existencia en un JOIN contra todo el alumnado. Este método queda
+        reservado a quien sí necesita recorrer la colección completa y lo
+        hace sobre un rol chico (el aviso a administradores)."""
+        return (
+            self.db.query(Rol)
+            .options(joinedload(Rol.usuarios).joinedload(Usuario.persona))
+            .filter(Rol.tipo_rol == tipo_rol)
+            .first()
+        )
 
     def bloquear_por_tipo(self, tipo_rol: TipoRol) -> Optional[Rol]:
         """`SELECT ... FOR UPDATE` sobre la fila del catálogo `rol` (issue #8).

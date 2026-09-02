@@ -32,6 +32,12 @@ export interface NotificationBellProps {
   notificaciones: Notificacion[];
   loadError: boolean;
   onMarkRead: (id: number) => void;
+  /** Marks every pending notification read (issue #859). */
+  onMarkAllRead: () => void;
+  /** `true` while the "marcar todas" request is in flight — disables the button. */
+  marcandoTodas: boolean;
+  /** `true` when the last "marcar todas" attempt failed and was rolled back. */
+  errorMarcarTodas: boolean;
   /**
    * Trigger button theme. `"dark"` (default) matches `Header.tsx`'s dark
    * `bg-cata-dark/95` topbar — its original and only host until `AppShell`
@@ -51,6 +57,9 @@ export default function NotificationBell({
   notificaciones,
   loadError,
   onMarkRead,
+  onMarkAllRead,
+  marcandoTodas,
+  errorMarcarTodas,
   variant = "dark",
 }: NotificationBellProps): React.ReactElement {
   const [open, setOpen] = useState(false);
@@ -104,6 +113,29 @@ export default function NotificationBell({
               </span>
             )}
           </div>
+
+          {unreadCount > 0 && (
+            <div className="px-2 pb-1.5">
+              <button
+                type="button"
+                onClick={onMarkAllRead}
+                disabled={marcandoTodas}
+                aria-busy={marcandoTodas}
+                className="flex items-center gap-1 text-2xs tracking-flat font-semibold text-cata-text/65 transition-colors hover:text-cata-text disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CheckCheck size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                Marcar todas como leídas
+              </button>
+            </div>
+          )}
+
+          {errorMarcarTodas && (
+            // `status`/`polite`: se anuncia una vez, cuando el intento falla
+            // -- no es una alerta que interrumpa la lectura del panel.
+            <p role="status" aria-live="polite" className="px-2 pb-1.5 text-2xs text-cata-red">
+              No se pudieron marcar todas las notificaciones como leídas.
+            </p>
+          )}
 
           {loadError && notificaciones.length === 0 && (
             <p className="px-2 py-4 text-center text-xs text-ink-3">

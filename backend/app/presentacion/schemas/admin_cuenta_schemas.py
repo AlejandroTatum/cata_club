@@ -14,7 +14,9 @@ from app.presentacion.schemas.enrollment_schemas import (
     EnrollmentFichaMedicaDTO,
 )
 from app.presentacion.schemas.validadores import (
+    ApellidoValidado,
     CedulaValidada,
+    NombreValidado,
     TelefonoValidado,
     validar_telefono_emergencia_distinto,
 )
@@ -36,8 +38,8 @@ class AdminCrearCuentaDTO(BaseModel):
     tipo_cuenta: Literal["JUGADOR", "REPRESENTANTE", "MENOR", "ENTRENADOR"]
 
     # --- Datos de la Persona (comunes a todos los tipos) ---
-    nombres: str = Field(..., min_length=1, max_length=100)
-    apellidos: str = Field(..., min_length=1, max_length=100)
+    nombres: NombreValidado = Field(..., max_length=100)
+    apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)

@@ -42,6 +42,7 @@ dev = [
     # Linter. Vive en el lock, no en el PATH del desarrollador: CI corre
     # `uv sync --frozen`, así que un ruff global no estaría disponible ahí.
     "ruff>=0.15.12",
+    "import-linter>=2.14",
 ]
 
 [tool.pytest.ini_options]
@@ -57,9 +58,18 @@ fail_under = 90
 target-version = "py313"
 
 [tool.ruff.lint]
-# Set por defecto de ruff: E4 (imports, incluye E402), E7, E9 y F (pyflakes).
-# Se deja explicito para que ampliarlo sea una decision visible en el diff.
-select = ["E4", "E7", "E9", "F"]
+# Set por defecto de ruff: E4 (imports, incluye E402), E7, E9 y F (pyflakes),
+# mas C901 (complejidad ciclomatica, issue #832). Se deja explicito para que
+# ampliarlo mas alla siga siendo una decision visible en el diff.
+select = ["E4", "E7", "E9", "F", "C901"]
+
+[tool.ruff.lint.mccabe]
+# Umbral 12: deja pasar todo el codigo actual salvo ocho funciones, eximidas
+# en `[tool.ruff.lint.per-file-ignores]` como deuda declarada (#832). Un
+# umbral mas alto (p.ej. 27, el maximo actual) entraria en verde sin marcar
+# nada, pero no protege: una funcion podria crecer hasta ese techo sin que
+# el diff lo muestre.
+max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
 # Alembic escribe `op` y `sa` en cada revision desde su template. Las
@@ -70,3 +80,71 @@ select = ["E4", "E7", "E9", "F"]
 # cualquier modulo de `app.*`: settings es un singleton que lee las env vars
 # una sola vez, al importarse. Los imports tardios son el mecanismo.
 "tests/conftest.py" = ["E402"]
+# Complejidad ciclomatica por encima del umbral 12 (issue #832), deuda
+# declarada, no una exencion en blanco: el candado function-granular vive en
+# `tests/test_lint_contracts.py`, que corre ruff aislado (sin estos ignores)
+# y falla si aparece una funcion compleja nueva en estos archivos, o si
+# alguna de las de abajo deja de estar en la lista declarada. Esta lista
+# solo puede achicarse a medida que se refactoricen.
+"app/infraestructura/tareas/alertas_tareas.py" = ["C901"]  # alertar_mora_diaria: 17
+"app/servicios_negocio/admin_cuenta_servicio.py" = ["C901"]  # crear_cuenta: 15
+"app/servicios_negocio/enrollment_servicio.py" = ["C901"]  # enroll: 26
+"app/servicios_negocio/membresia_pago_servicio.py" = ["C901"]  # registrar_pago: 13, corregir_pago: 20, adjuntar_voucher: 16
+"scripts/seed_dev_base.py" = ["C901"]  # main: 28
+"scripts/seed_dev_bulk.py" = ["C901"]  # main: 27
+"tests/test_bloqueo_del_event_loop.py" = ["C901"]  # destino: 15
+
+[tool.importlinter]
+# Candado de arquitectura (issue #832): sin esto, nada impedia que la
+# direccion de los imports entre capas se acumulara sin aviso. CI corre
+# `lint-imports` (Makefile y ci.yml) despues de `ruff check`.
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "La capa de aplicacion no depende de la web"
+type = "forbidden"
+source_modules = ["app.servicios_negocio"]
+forbidden_modules = ["app.presentacion"]
+# Deuda conocida (#829): 16 imports de schemas de presentacion consumidos
+# directo desde servicios_negocio, en vez de recibir DTOs ya armados. Esta
+# lista es un piso, no una meta: solo puede achicarse a medida que #829
+# los resuelva, nunca crecer.
+ignore_imports = [
+    "app.servicios_negocio.admin_cuenta_servicio -> app.presentacion.schemas.admin_cuenta_schemas",
+    "app.servicios_negocio.auth_servicio -> app.presentacion.schemas.auth_schemas",
+    "app.servicios_negocio.enrollment_servicio -> app.presentacion.schemas.enrollment_schemas",
+    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.membresia_pago_schemas",
+    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.cobertura_bonificada_schemas",
+    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.beneficio_schemas",
+    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.descuento_schemas",
+    "app.servicios_negocio.descuento_servicio -> app.presentacion.schemas.descuento_schemas",
+    "app.servicios_negocio.geografia_servicio -> app.presentacion.schemas.geografia_schemas",
+    "app.servicios_negocio.ficha_medica_servicio -> app.presentacion.schemas.persona_schemas",
+    "app.servicios_negocio.persona_servicio -> app.presentacion.schemas.persona_schemas",
+    "app.servicios_negocio.asistencia_servicio -> app.presentacion.schemas.asistencia_schemas",
+    "app.servicios_negocio.beneficio_servicio -> app.presentacion.schemas.beneficio_schemas",
+    "app.servicios_negocio.beneficio_servicio -> app.presentacion.schemas.descuento_schemas",
+    "app.servicios_negocio.sponsor_servicio -> app.presentacion.schemas.sponsor_schemas",
+    "app.servicios_negocio.antecedentes_club_servicio -> app.presentacion.schemas.persona_schemas",
+]
+
+[[tool.importlinter.contracts]]
+name = "La infraestructura no depende de la logica de negocio"
+type = "forbidden"
+source_modules = ["app.infraestructura"]
+forbidden_modules = ["app.servicios_negocio"]
+# Deuda conocida: `alertas_tareas.py` importa dos nombres con guion bajo de
+# servicios_negocio (`acortar_nombre_para_notificacion`, `_meses_enteros_desde`).
+# Un nombre privado consumido desde otro modulo no es privado: es API publica
+# sin contrato. Esta lista tambien es un piso, no una meta.
+ignore_imports = [
+    "app.infraestructura.tareas.alertas_tareas -> app.servicios_negocio.notificacion_servicio",
+    "app.infraestructura.tareas.alertas_tareas -> app.servicios_negocio.membresia_pago_servicio",
+]
+
+[[tool.importlinter.contracts]]
+name = "El dominio no depende de ninguna otra capa"
+type = "forbidden"
+source_modules = ["app.dominio"]
+forbidden_modules = ["app.presentacion", "app.servicios_negocio", "app.infraestructura"]
+# Sin excepciones: hoy el dominio esta limpio y el candado lo mantiene asi.

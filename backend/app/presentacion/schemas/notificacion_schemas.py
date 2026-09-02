@@ -20,3 +20,10 @@ class NotificacionResponseDTO(ResponseBase, BaseModel):
     leida: bool
     fecha_creacion: datetime
     entidad_relacionada_id: Optional[int] = None
+
+
+class MarcarTodasLeidasResponseDTO(ResponseBase, BaseModel):
+    """Respuesta de `PATCH /ranking/notificaciones/leer-todas` (issue #859):
+    cuántas filas cambió el UPDATE, no las filas en sí -- el cliente ya tiene
+    su propia copia optimista de la lista."""
+    actualizadas: int

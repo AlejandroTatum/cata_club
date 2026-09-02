@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.dominio.cedula import es_cedula_valida
+from app.dominio.nombre_propio import normalizar_nombre_propio
 from app.dominio.telefono import es_telefono_valido
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
@@ -131,6 +132,17 @@ def _exigir_telefono_valido(valor: Optional[str], campo: str) -> Optional[str]:
     return valor
 
 
+def _normalizar_nombre_propio_orm(valor: Optional[str]) -> Optional[str]:
+    """Tolera `None` y `""`, igual que `_exigir_telefono_valido`: el ORM es
+    el camino que Pydantic NO cubre -- bulk, seeds y scripts -- así que la
+    normalización de #875 tiene que vivir también acá, no solo en
+    `validadores.py`. A diferencia del teléfono, no rechaza nada: solo
+    normaliza lo que ya es válido como nombre."""
+    if not valor:
+        return valor
+    return normalizar_nombre_propio(valor)
+
+
 # ---------------------------------------------------------------------------
 # Tabla de asociación Usuario <-> Rol (muchos a muchos)
 # ---------------------------------------------------------------------------
@@ -225,6 +237,15 @@ class Rol(Base):
 
 class Usuario(Base):
     __tablename__ = "usuario"
+    # Issue #827: `UsuarioRepositorio.obtener_por_correo` filtra por
+    # `func.lower(correo)`, no por `correo`. El unique implícito de la
+    # columna es un btree sensible a mayúsculas y no puede servir ese
+    # predicado -- corre en CADA petición autenticada (vía
+    # `GestorAutenticacion.decodificar_token`) y en cada login, así que el
+    # sequential scan es sobre la consulta más caliente del sistema. Ver
+    # `tests/test_indices_consultas_reales.py` para la verificación contra
+    # el catálogo real de Postgres.
+    __table_args__ = (Index("ix_usuario_correo_lower", func.lower(Column("correo"))),)
     id: Mapped[int] = mapped_column(primary_key=True)
     correo: Mapped[str] = mapped_column(String(100), unique=True)
     contrasenia: Mapped[str] = mapped_column(String(255))
@@ -576,6 +597,13 @@ class Persona(Base):
     @validates("telefono", "telefono_contacto")
     def _validar_telefonos(self, key: str, value):
         return _exigir_telefono_valido(value, key)
+
+    # Issue #875: mismo criterio que cédula/teléfono arriba -- este `@validates`
+    # cubre la asignación de atributo (constructor, `setattr`, seeds, scripts),
+    # no los caminos de bulk/Core que ya documenta el bloque de arriba.
+    @validates("nombres", "apellidos")
+    def _validar_nombres(self, key: str, value):
+        return _normalizar_nombre_propio_orm(value)
 
 
 class AntecedentesClub(Base):
@@ -1809,6 +1837,12 @@ class FichaMedica(Base):
     @validates("telefono_emergencia")
     def _validar_telefono_emergencia(self, key: str, value):
         return _exigir_telefono_valido(value, key)
+
+    # Issue #875: mismo criterio que `Persona.nombres`/`apellidos` -- el
+    # nombre de a quién llamar en una emergencia se normaliza igual.
+    @validates("contacto_emergencia")
+    def _validar_contacto_emergencia(self, key: str, value):
+        return _normalizar_nombre_propio_orm(value)
 
 
 class Enfermedades(Base):

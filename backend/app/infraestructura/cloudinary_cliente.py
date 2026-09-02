@@ -68,8 +68,9 @@ _MENSAJE_SUBIDA_NO_DISPONIBLE = (
 # instancia a nivel de módulo, compartida por TODAS las llamadas de red del
 # módulo: las subidas, que pasan por `_subir()`, y `eliminar_logo_sponsor`,
 # que llama al SDK por su cuenta (issue #838). Ver Decisión E del diseño:
-# estado en memoria + reloj monotónico + lock, sin Redis compartido -- un
-# solo proceso Uvicorn y Celery con `--concurrency=2` no lo necesitan.
+# estado en memoria + reloj monotónico + lock, sin Redis compartido -- lo que
+# sostiene esto sin estado compartido es que Uvicorn y el worker de Celery
+# corren cada uno como un solo proceso (`--concurrency=1`, docker-compose.yml).
 _circuito_cloudinary = CircuitoBreaker(
     nombre="cloudinary",
     umbral_fallos=CIRCUITO_CLOUDINARY_UMBRAL_FALLOS,
