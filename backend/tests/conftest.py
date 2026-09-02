@@ -296,6 +296,46 @@ def db_session(motor_test):
         conexion.close()
 
 
+def _sesion_con_commit_y_rollback(sesion):
+    """Override compartido de `obtener_sesion` para los fixtures `client*`:
+    refleja sobre la fixture de savepoint la misma semántica que tiene la
+    sesión en producción (issue #831 -- "los repositorios cierran la
+    transacción en lugar del caso de uso").
+
+    Antes de ceder la sesión a la petición se hace `commit()`: lo que el
+    test sembró directamente por `db_session` (fuera de un endpoint) queda
+    "ya persistido", tal como estaría en producción. Al terminar la
+    petición se hace `rollback()`; con `join_transaction_mode=
+    "create_savepoint"` (ver fixture `db_session`) ese rollback sólo
+    deshace el SAVEPOINT abierto desde el commit anterior, es decir,
+    descarta EXACTAMENTE lo que el caso de uso flusheó pero nunca comiteó
+    -- todo lo ya comiteado permanece visible (la transacción externa se
+    revierte igual en el teardown de `db_session`).
+
+    Sin esto, un `commit()` olvidado en un caso de uso multi-repositorio
+    era invisible para la suite: la fila quedaba flusheada en la misma
+    sesión que la petición y el test la veía igual que si estuviera
+    comiteada -- la suite no podía distinguir un caso de uso atómico de
+    uno que deja escrituras a medio camino.
+
+    El commit de entrada solo corre si hay algo pendiente: una transacción
+    ya abierta (`in_transaction()`, el caso de un seed sembrado con
+    `sesion.flush()` antes de la petición, como en `test_deuda_bulk.py`) o
+    un objeto todavía sin flushear (`new`/`dirty`/`deleted`, el caso de un
+    `sesion.add()` sin flush explícito). Sobre una sesión realmente limpia
+    no tiene efecto que observar, y dispararlo igual pisa el punto exacto
+    que `test_recuperacion_honesta.py` rompe a propósito con
+    `monkeypatch.setattr(db_session, "commit", ...)` para simular un fallo
+    de base -- ese commit tiene que ocurrir DENTRO del caso de uso bajo
+    prueba, no antes, en la resolución de la dependencia."""
+    if sesion.in_transaction() or sesion.new or sesion.dirty or sesion.deleted:
+        sesion.commit()
+    try:
+        yield sesion
+    finally:
+        sesion.rollback()
+
+
 @pytest.fixture()
 def client(db_session):
     """Cliente de pruebas con la sesión de BD inyectada y, por defecto,
@@ -304,7 +344,7 @@ def client(db_session):
     aparte en test_permisos.py)."""
 
     def _override_sesion():
-        yield db_session
+        yield from _sesion_con_commit_y_rollback(db_session)
 
     def _override_token():
         return {"sub": "admin@cataclub.test", "persona_id": 1, "roles": ["ADMINISTRADOR", "ENTRENADOR"]}
@@ -323,7 +363,7 @@ def client_sin_permisos(db_session):
     """Cliente autenticado pero SIN rol ADMINISTRADOR, para probar 403."""
 
     def _override_sesion():
-        yield db_session
+        yield from _sesion_con_commit_y_rollback(db_session)
 
     def _override_token():
         return {"sub": "alumno@cataclub.test", "persona_id": 1, "roles": ["ALUMNO"]}
@@ -344,7 +384,7 @@ def client_entrenador(db_session):
     hermano JSON (que sí permite ENTRENADOR)."""
 
     def _override_sesion():
-        yield db_session
+        yield from _sesion_con_commit_y_rollback(db_session)
 
     def _override_token():
         return {"sub": "entrenador@cataclub.test", "persona_id": 1, "roles": ["ENTRENADOR"]}
@@ -367,7 +407,7 @@ def client_sin_token(db_session):
     sin credenciales."""
 
     def _override_sesion():
-        yield db_session
+        yield from _sesion_con_commit_y_rollback(db_session)
 
     app.dependency_overrides[obtener_sesion] = _override_sesion
     # NO se setea override de decodificar_token: FastAPI usará el real, que
