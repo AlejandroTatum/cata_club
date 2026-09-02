@@ -282,6 +282,52 @@ describe("MembersPage — Editar member modal", () => {
     return dialog;
   }
 
+  /**
+   * Issue #856: on iPhone the header and close button rendered but the body
+   * collapsed or ran off-screen — see `NativeDialogShell.test.tsx`'s doc
+   * comment for the WebKit mechanics. `MemberEditDialog` is the third
+   * consumer of the shared `NATIVE_DIALOG_SHELL_CLASS`/`NATIVE_DIALOG_BODY_CLASS`
+   * pair but is not exported from `page.tsx`, so its own chain — from the
+   * `<dialog>` down to the scrolling body — is asserted here rather than in
+   * that file.
+   */
+  it("gives the Editar dialog the same definite-height shell/body chain as Ficha médica and Pagos", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const row = await findAccountRow();
+    const dialog = await openModalAndWaitForRoles(row);
+
+    expect(dialog).not.toHaveClass("h-fit");
+    expect(dialog).toHaveClass("flex", "flex-col", "overflow-hidden");
+
+    const body = dialog.querySelector(".overflow-y-auto") as HTMLElement;
+    expect(body).toHaveClass("flex-1", "min-h-0", "overflow-y-auto", "overscroll-contain");
+    expect(body.parentElement).toBe(dialog);
+
+    const [header] = Array.from(dialog.children) as HTMLElement[];
+    expect(header).toHaveClass("shrink-0");
+    // The footer sits after `body` among `dialog`'s children — `ConfirmDialog`
+    // (the role-change confirmation) is also a direct child, so this looks it
+    // up by position relative to `body` rather than assuming it is the last one.
+    const footer = body.nextElementSibling as HTMLElement;
+    expect(footer).toHaveClass("shrink-0");
+
+    // No intermediate wrapper between `body` and `dialog` reintroduces a
+    // second clip or an un-shrinkable flex child — same guard as the other
+    // two dialogs' shared-shell tests.
+    let node = body.parentElement;
+    while (node && node !== dialog) {
+      expect(node).not.toHaveClass("overflow-hidden");
+      if (node.classList.contains("flex-1")) {
+        expect(node).toHaveClass("min-h-0");
+      }
+      node = node.parentElement;
+    }
+  });
+
   it("gives each rendering exactly one Editar trigger, and no inline role/status controls", async () => {
     render(
       <ToastProvider>
