@@ -62,6 +62,14 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # Derivado de la primera membresía ACTIVA (o su historial), no del
     # estado operativo actual: una membresía vencida no revoca este hito.
     alta_presencial_completada: bool = False
+    # Issue #940: la DECISIÓN del gate, no un tercer hecho -- es la misma que
+    # lleva el claim del token (`GestorAutenticacion.puede_acceder_modulos`).
+    # Sin default a propósito: el router SIEMPRE la fija: un default acá
+    # sería una segunda fuente de verdad, exactamente lo que atrapaba a un
+    # admin/entrenador sin membresía en /login/activacion, porque el
+    # frontend recalculaba el gate a partir de `alta_presencial_completada`
+    # en vez de leer esta decisión.
+    activacion_completa: bool
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:

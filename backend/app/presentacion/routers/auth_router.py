@@ -113,6 +113,9 @@ async def obtener_perfil(
         "alta_presencial_completada": GestorAutenticacion.alta_presencial_completada(
             db, usuario.persona_id,
         ),
+        # Issue #940: la MISMA decisión que lleva el claim del token, para que
+        # el frontend la consuma en vez de recomputarla de los dos hechos.
+        "activacion_completa": GestorAutenticacion.puede_acceder_modulos(db, usuario),
     }
 
 

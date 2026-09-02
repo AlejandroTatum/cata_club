@@ -199,6 +199,13 @@ export interface BackendMeResponse {
   /** Activation facts from `/auth/me`; optional for explicit legacy compatibility. */
   correoVerificado?: boolean;
   altaPresencialCompletada?: boolean;
+  /**
+   * Issue #940: the gate DECISION itself (`GestorAutenticacion.
+   * puede_acceder_modulos`), the same one the login/refresh token claims
+   * carry — not re-derived from the two facts above, which stay True/False
+   * per role regardless of the decision. Optional for a pre-#940 backend.
+   */
+  activacionCompleta?: boolean;
   // Not validated in `isBackendMeResponse` below, same as `telefono` /
   // `fechaCreacion` — this interface only names the subset of
   // `/auth/me`'s real response the client actually reads. `buildSession`
@@ -242,7 +249,8 @@ function isBackendMeResponse(value: unknown): value is BackendMeResponse {
     typeof v.apellidos === "string" &&
     Array.isArray(v.roles) && v.roles.every((r) => typeof r === "string") &&
     (v.correoVerificado === undefined || typeof v.correoVerificado === "boolean") &&
-    (v.altaPresencialCompletada === undefined || typeof v.altaPresencialCompletada === "boolean")
+    (v.altaPresencialCompletada === undefined || typeof v.altaPresencialCompletada === "boolean") &&
+    (v.activacionCompleta === undefined || typeof v.activacionCompleta === "boolean")
   );
 }
 
@@ -742,6 +750,8 @@ export interface ServerSession {
   roles: string[];
   correoVerificado: boolean;
   altaPresencialCompletada: boolean;
+  /** Issue #940: the backend's gate decision — see `BackendMeResponse.activacionCompleta`. */
+  activacionCompleta: boolean;
   loggedInAt: string;
 }
 
@@ -777,15 +787,26 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
       ? { ...base, role: "estudiante", activo: true, fechaNacimiento: me.fechaNacimiento }
       : { ...base, role };
 
+  // Missing fields are an explicit compatibility path for a BFF talking to
+  // a pre-#858 backend. The current backend always sends both booleans.
+  const correoVerificado = me.correoVerificado ?? true;
+  const altaPresencialCompletada = me.altaPresencialCompletada ?? true;
+
   return {
     ok: true,
     session: {
       user,
       roles: me.roles,
-      // Missing fields are an explicit compatibility path for a BFF talking to
-      // a pre-#858 backend. The current backend always sends both booleans.
-      correoVerificado: me.correoVerificado ?? true,
-      altaPresencialCompletada: me.altaPresencialCompletada ?? true,
+      correoVerificado,
+      altaPresencialCompletada,
+      // Issue #940: consume the backend's own gate decision instead of
+      // recomputing it from the two facts above — that recomputation is
+      // exactly what trapped an admin/trainer without a membership on
+      // /login/activacion, since `puede_acceder_modulos` grants them access
+      // regardless of `altaPresencialCompletada`. A pre-#940 backend that
+      // doesn't send the decision yet falls back to the old two-fact rule,
+      // so nothing changes until it does.
+      activacionCompleta: me.activacionCompleta ?? (correoVerificado && altaPresencialCompletada),
       loggedInAt: new Date().toISOString(),
     },
   };

@@ -832,6 +832,7 @@ CAMPOS_OBLIGATORIOS = (
     Campo("/auth/me", "roles", *_ME, "/me", "isBackendMeResponse"),
     Campo("/auth/me", "correoVerificado", *_ME, "/me", "isBackendMeResponse"),
     Campo("/auth/me", "altaPresencialCompletada", *_ME, "/me", "isBackendMeResponse"),
+    Campo("/auth/me", "activacionCompleta", *_ME, "/me", "isBackendMeResponse"),
     Campo("/enrollment/", "access_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
     Campo("/enrollment/", "refresh_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
     Campo("/enrollment/", "persona_id", *_ALTA, "/", "isBackendEnrollmentResponse"),

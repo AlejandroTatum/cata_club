@@ -22,6 +22,7 @@ import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getDefaultRoute } from "@/lib/auth-utils";
+import { isActivationComplete } from "@/lib/activation-reasons";
 import type { AuthErrorKind } from "@/services/auth";
 import { STATUS_MESSAGES } from "@/lib/error-message";
 import AuthShell, {
@@ -46,14 +47,10 @@ function firstNameOf(fullName: string): string {
 }
 
 function routeForSession(session: import("@/services/auth").AuthSession): string {
-  const activation = session as import("@/services/auth").AuthSession & {
-    correoVerificado?: boolean;
-    altaPresencialCompletada?: boolean;
-  };
-  // Missing fields are the explicit legacy compatibility path from the BFF.
-  return activation.correoVerificado !== false && activation.altaPresencialCompletada !== false
-    ? getDefaultRoute(session.user.role)
-    : "/login/activacion";
+  // Issue #940: the gate decision (`isActivationComplete`) rules, not the two
+  // raw facts — an admin/trainer without a membership has `activacionCompleta
+  // === true` even though `altaPresencialCompletada` is false.
+  return isActivationComplete(session) ? getDefaultRoute(session.user.role) : "/login/activacion";
 }
 
 /** Written once because two fields point at it through `aria-describedby`. */
