@@ -19,6 +19,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import CrearCuentaPage from "@/app/admin/crear-cuenta/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import { crearCuentaAdmin, fetchInstituciones } from "@/services/api";
+import { crearCuentaFieldId } from "@/app/admin/crear-cuenta/crear-cuenta-utils";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -147,7 +149,7 @@ describe("CrearCuentaPage — el borrador sobrevive una sesión expirada (issue 
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Mateo Andres" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano Loor" } });
     fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
-    fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/), { target: { value: "1998-03-20" } });
+    fillBirthDate(crearCuentaFieldId("fechaNacimiento"), "1998-03-20");
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 

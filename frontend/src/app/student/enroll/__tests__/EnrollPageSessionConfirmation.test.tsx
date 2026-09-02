@@ -39,6 +39,8 @@ import EnrollPage from "@/app/student/enroll/page";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { enrollStudent, fetchInstituciones, fetchTarifas } from "@/services/api";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
+import { enrollFieldId } from "@/app/student/enroll/enroll-utils";
 import type { AuthSession } from "@/services/auth";
 
 // ---------------------------------------------------------------------------
@@ -152,7 +154,7 @@ async function completeEnrollment(): Promise<void> {
   fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-  fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+  fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });

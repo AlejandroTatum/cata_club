@@ -25,7 +25,7 @@ import AppShell from "@/components/shell/AppShell";
 import { BackLink, Button, Stepper, buttonClasses, cn } from "@/components/ui";
 import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
-import { WizardInput, WizardNavigation, example, PHONE_HINT } from "@/components/wizard-fields";
+import { WizardInput, BirthDateField, WizardNavigation, example, PHONE_HINT } from "@/components/wizard-fields";
 import { crearCuentaAdmin, searchStudents, fetchInstituciones, type Institucion } from "@/services/api";
 import {
   GraduationCap,
@@ -509,13 +509,12 @@ function CrearCuentaContent(): React.ReactElement {
           numericMode="cedula"
         />
 
-        <WizardInput
+        <BirthDateField
           idPrefix={CREAR_CUENTA_ID_PREFIX}
           field="fecha-nacimiento"
           label="Fecha de nacimiento"
           value={formData.fechaNacimiento}
           onChange={(v) => updateField("fechaNacimiento", v)}
-          type="date"
           disabled={submitting}
           required
         />

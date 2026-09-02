@@ -5,7 +5,7 @@
  */
 
 import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   User,
   Calendar,
@@ -22,6 +22,7 @@ import { ICON } from "@/lib/icon-size";
 import {
   calculatePersonAge,
   isPlausibleHumanAge,
+  isValidCalendarDate,
   studentBirthDateBounds,
   PHONE_FORMAT_HINT,
 } from "@/lib/identity-validation";
@@ -143,6 +144,38 @@ interface WizardInputProps {
   numericMode?: NumericFieldMode;
 }
 
+/**
+ * The `*`/`(opcional)` mark every field label carries — shared by `WizardInput`,
+ * `WizardTextarea` and `BirthDateField`'s `<legend>` so a third field never
+ * re-declares the same six lines a second time (issue #853).
+ */
+function RequiredMarker(props: { required?: boolean }): ReactElement {
+  return props.required ? (
+    <span aria-hidden="true" className="ml-1 text-state-bad">*</span>
+  ) : (
+    <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>
+  );
+}
+
+/** The error paragraph every field message renders in its `hasError` branch — shared so `BirthDateField` (issue #853) does not duplicate `WizardInput`'s. */
+function FieldErrorMessage(props: { id: string; children: ReactNode }): ReactElement {
+  return (
+    <p id={props.id} className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad">
+      <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+      {props.children}
+    </p>
+  );
+}
+
+/** The neutral hint paragraph every field message renders when there is no error — same sharing reason as `FieldErrorMessage`. */
+function FieldHintMessage(props: { id: string; children: ReactNode }): ReactElement {
+  return (
+    <p id={props.id} className="mt-field text-xs text-ink-3">
+      {props.children}
+    </p>
+  );
+}
+
 export function WizardInput(opts: WizardInputProps): ReactElement {
   const fieldId = `${opts.idPrefix}-${opts.field ?? slugifyLabel(opts.label)}`;
   const messageId = `${fieldId}-message`;
@@ -165,11 +198,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
         {opts.label}
-        {opts.required ? (
-          <>
-            <span aria-hidden="true" className="ml-1 text-state-bad">*</span>
-          </>
-        ) : <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
+        <RequiredMarker required={opts.required} />
       </label>
       <div className="relative">
         {opts.icon && (
@@ -226,10 +255,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
         )}
       </div>
       {hasError ? (
-        <p id={messageId} className="mt-field flex items-center gap-1.5 text-xs font-semibold text-state-bad">
-          <AlertTriangle size={ICON.sm} strokeWidth={2} className="shrink-0" aria-hidden="true" />
-          {opts.error}
-        </p>
+        <FieldErrorMessage id={messageId}>{opts.error}</FieldErrorMessage>
       ) : limitReached && numericMode ? (
         <p
           id={messageId}
@@ -240,11 +266,218 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           {NUMERIC_FIELD_LIMIT_MESSAGE[numericMode]}
         </p>
       ) : opts.hint ? (
-        <p id={messageId} className="mt-field text-xs text-ink-3">
-          {opts.hint}
-        </p>
+        <FieldHintMessage id={messageId}>{opts.hint}</FieldHintMessage>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Día/Mes/Año guided replacement for the birth-date `<input type="date">`
+ * (issue #853): on some mobile browsers the native picker only steps month
+ * by month, so entering a birth date a few decades back could take roughly
+ * 480 taps — desktop was never affected. The external contract stays the
+ * one `WizardInput type="date"` already had: it still emits the ISO
+ * `YYYY-MM-DD` string every caller's own validation
+ * (`studentBirthDateRule`, `crear-cuenta-utils`, `enroll-utils`) already
+ * checks, so those rules keep firing unchanged. An empty, partial, or
+ * calendrically impossible date (31/02, 30/02, 29/02 on a non-leap year)
+ * emits `""`, the same as an empty native field did.
+ *
+ * Real-date validation reuses `isValidCalendarDate` rather than a
+ * hand-rolled days-in-month table: it already round-trips the value through
+ * a component-wise `Date` construction and rejects any mismatch (Feb 31
+ * rolls over to Mar 3, which fails the check) — the safe form of the
+ * "build a `Date`, then verify it" technique, and the one this codebase's
+ * age/validity checks already rely on everywhere else.
+ */
+export interface BirthDateFieldProps {
+  idPrefix: string;
+  /** See `WizardInputProps.field`. */
+  field?: string;
+  label: string;
+  /** The ISO `YYYY-MM-DD` value, or `""` — same shape `WizardInput type="date"` used. */
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  required?: boolean;
+  icon?: ReactNode;
+  /**
+   * The same bounds `WizardInput`'s `min`/`max` carried — only shown on the
+   * year part as a guide; out-of-range is still reported by the caller's own
+   * validation, exactly as before. Nothing here clamps the typed value.
+   */
+  min?: string;
+  max?: string;
+  error?: string;
+  hint?: string;
+  onBlur?: () => void;
+}
+
+const BIRTH_DATE_MONTHS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+/**
+ * The suffix each of `BirthDateField`'s three controls appends to the
+ * field's own id. Exported so a test written against the single native
+ * `type="date"` input this replaces can address the exact control that took
+ * its place, instead of re-deriving the suffix.
+ */
+export const BIRTH_DATE_PART_SUFFIX = { day: "dia", month: "mes", year: "anio" } as const;
+
+export function birthDatePartIds(fieldId: string): Record<keyof typeof BIRTH_DATE_PART_SUFFIX, string> {
+  return {
+    day: `${fieldId}-${BIRTH_DATE_PART_SUFFIX.day}`,
+    month: `${fieldId}-${BIRTH_DATE_PART_SUFFIX.month}`,
+    year: `${fieldId}-${BIRTH_DATE_PART_SUFFIX.year}`,
+  };
+}
+
+function splitBirthDateIso(value: string): { day: string; month: string; year: string } {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return { day: "", month: "", year: "" };
+  const [, year, month, day] = match;
+  return { day, month, year };
+}
+
+function joinBirthDateParts(day: string, month: string, year: string): string {
+  if (!day || !month || year.length !== 4) return "";
+  const iso = `${year}-${month}-${day.padStart(2, "0")}`;
+  return isValidCalendarDate(iso) ? iso : "";
+}
+
+export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
+  const fieldId = `${opts.idPrefix}-${opts.field ?? slugifyLabel(opts.label)}`;
+  const messageId = `${fieldId}-message`;
+  const partIds = birthDatePartIds(fieldId);
+  const hasError = Boolean(opts.error);
+  const describedBy = opts.error || opts.hint ? messageId : undefined;
+
+  const initial = splitBirthDateIso(opts.value);
+  const [day, setDay] = useState(initial.day);
+  const [month, setMonth] = useState(initial.month);
+  const [year, setYear] = useState(initial.year);
+  const monthRef = useRef<HTMLSelectElement>(null);
+  /** What THIS field itself last reported via `onChange` — lets an external
+   *  update (a restored draft, a wizard reset) resync the three parts
+   *  without the field fighting the echo of its own emitted value. */
+  const lastEmitted = useRef(opts.value);
+
+  if (opts.value !== lastEmitted.current) {
+    const parts = splitBirthDateIso(opts.value);
+    lastEmitted.current = opts.value;
+    if (parts.day !== day) setDay(parts.day);
+    if (parts.month !== month) setMonth(parts.month);
+    if (parts.year !== year) setYear(parts.year);
+  }
+
+  function emit(nextDay: string, nextMonth: string, nextYear: string): void {
+    const iso = joinBirthDateParts(nextDay, nextMonth, nextYear);
+    lastEmitted.current = iso;
+    opts.onChange(iso);
+  }
+
+  function handleDayChange(raw: string): void {
+    const digits = raw.replace(/\D/g, "").slice(0, 2);
+    setDay(digits);
+    emit(digits, month, year);
+    // Never on backspace: this only fires from `onChange`, and deleting
+    // back to one digit never reaches length 2, so it never re-triggers.
+    if (digits.length === 2) monthRef.current?.focus();
+  }
+
+  function handleMonthChange(next: string): void {
+    setMonth(next);
+    emit(day, next, year);
+  }
+
+  function handleYearChange(raw: string): void {
+    const digits = raw.replace(/\D/g, "").slice(0, 4);
+    setYear(digits);
+    emit(day, month, digits);
+  }
+
+  return (
+    <fieldset
+      id={fieldId}
+      disabled={opts.disabled}
+      aria-required={opts.required || undefined}
+      aria-invalid={hasError || undefined}
+      aria-describedby={describedBy}
+      className="mb-4"
+    >
+      <legend className="mb-field flex items-center gap-1.5 text-sm font-semibold text-ink">
+        {opts.icon}
+        {opts.label}
+        <RequiredMarker required={opts.required} />
+      </legend>
+      <div className="grid grid-cols-[4.5rem_1fr_5.5rem] gap-2">
+        <div>
+          <label htmlFor={partIds.day} className="mb-1 block text-2xs font-semibold text-ink-3">
+            Día
+          </label>
+          <input
+            id={partIds.day}
+            type="text"
+            inputMode="numeric"
+            maxLength={2}
+            placeholder="DD"
+            autoComplete="bday-day"
+            value={day}
+            onChange={(e) => handleDayChange(e.target.value)}
+            onBlur={opts.onBlur}
+            className="input-field"
+          />
+        </div>
+        <div>
+          <label htmlFor={partIds.month} className="mb-1 block text-2xs font-semibold text-ink-3">
+            Mes
+          </label>
+          <select
+            id={partIds.month}
+            ref={monthRef}
+            autoComplete="bday-month"
+            value={month}
+            onChange={(e) => handleMonthChange(e.target.value)}
+            onBlur={opts.onBlur}
+            className="input-field"
+          >
+            <option value="">Mes</option>
+            {BIRTH_DATE_MONTHS.map((name, i) => (
+              <option key={name} value={String(i + 1).padStart(2, "0")}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={partIds.year} className="mb-1 block text-2xs font-semibold text-ink-3">
+            Año
+          </label>
+          <input
+            id={partIds.year}
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="AAAA"
+            autoComplete="bday-year"
+            min={opts.min ? opts.min.slice(0, 4) : undefined}
+            max={opts.max ? opts.max.slice(0, 4) : undefined}
+            value={year}
+            onChange={(e) => handleYearChange(e.target.value)}
+            onBlur={opts.onBlur}
+            className="input-field"
+          />
+        </div>
+      </div>
+      {hasError ? (
+        <FieldErrorMessage id={messageId}>{opts.error}</FieldErrorMessage>
+      ) : opts.hint ? (
+        <FieldHintMessage id={messageId}>{opts.hint}</FieldHintMessage>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -268,11 +501,7 @@ export function WizardTextarea(opts: WizardTextareaProps): ReactElement {
     <div className="mb-4">
       <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
         {opts.label}
-        {opts.required ? (
-          <>
-            <span aria-hidden="true" className="ml-1 text-state-bad">*</span>
-          </>
-        ) : <span className="ml-1 font-normal text-ink-3">{OPTIONAL_MARKER}</span>}
+        <RequiredMarker required={opts.required} />
       </label>
       <div className="relative">
         {opts.icon && (
@@ -370,14 +599,13 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
         pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={100} minLength={3}
       />
       <div className="grid gap-4 sm:grid-cols-2">
-        <WizardInput
+        <BirthDateField
           idPrefix={idPrefix} field="fecha-nacimiento" disabled={disabled} label="Fecha de nacimiento" value={props.fechaNacimiento}
-          onChange={props.onFechaNacimientoChange} type="date" required
+          onChange={props.onFechaNacimientoChange} required
           icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
           min={birthDateBounds.min} max={birthDateBounds.max}
           error={errors.fechaNacimiento} onBlur={() => props.onFieldBlur?.("fechaNacimiento")}
-          hint="Año completo, de 4 dígitos (por ejemplo, 2015)."
-          autoComplete="bday"
+          hint="Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015)."
         />
         <WizardInput
           idPrefix={idPrefix} field="cedula" disabled={disabled} label="Cédula de identidad" value={props.cedula}

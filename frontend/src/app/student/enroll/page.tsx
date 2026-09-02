@@ -35,6 +35,7 @@ import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import {
   WizardInput,
+  BirthDateField,
   WizardTextarea,
   PersonIdentityFields,
   EmergencyContactFields,
@@ -544,6 +545,33 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
+  /**
+   * `BirthDateField`'s guided Día/Mes/Año replacement for the representative's
+   * birth date (issue #853) — a twin of `renderField` above, kept separate
+   * because `BirthDateField`'s props are not `WizardInput`'s (no `type`,
+   * `pattern`, `numericMode`, …).
+   */
+  function renderBirthDateField(
+    field: EnrollField,
+    opts: {
+      label: string;
+      value: string;
+      onChange: (v: string) => void;
+      required?: boolean;
+    },
+  ): React.ReactElement {
+    return (
+      <BirthDateField
+        idPrefix={ENROLL_ID_PREFIX}
+        field={ENROLL_FIELD_TOKEN[field]}
+        {...opts}
+        disabled={submitting}
+        error={shownError(field)}
+        onBlur={() => markTouched(field)}
+      />
+    );
+  }
+
   function renderTextarea(field: EnrollField, opts: {
     label: string;
     value: string;
@@ -827,13 +855,11 @@ function EnrollWizard(): React.ReactElement {
           hint: CEDULA_HINT,
         })}
 
-        {renderField("fechaNacimientoRepresentante", {
+        {renderBirthDateField("fechaNacimientoRepresentante", {
           label: "Fecha de nacimiento",
           value: formData.fechaNacimientoRepresentante,
           onChange: (v) => updateField("fechaNacimientoRepresentante", v),
-          type: "date",
           required: true,
-          autoComplete: "bday",
         })}
 
         {renderField("telefonoRepresentante", {
