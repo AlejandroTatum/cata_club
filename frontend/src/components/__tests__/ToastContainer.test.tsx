@@ -158,7 +158,22 @@ describe("ToastContainer — announcement and placement", () => {
     // sat on top of the topbar's "Menú" button and notification bell.
     expect(container).toHaveClass("bottom-4");
     expect(container).not.toHaveClass("top-4");
-    expect(container).toHaveClass("sm:top-4");
+  });
+
+  it("docks below the header on desktop so it cannot cover the search box or the bell", () => {
+    renderHarness();
+    fireEvent.click(screen.getByText("Trigger error"));
+
+    const container = screen.getByRole("alert").parentElement as HTMLElement;
+
+    // `sm:top-4` sat directly over the header's search box and notification
+    // bell (issue #816) — both the 56px AppShell topbar and the sticky
+    // `Header` land inside that offset. `sm:top-[72px]` clears the tallest
+    // of the two with 16px of daylight and keeps the mobile dock untouched.
+    expect(container).not.toHaveClass("sm:top-4");
+    expect(container).toHaveClass("sm:top-[72px]");
+    expect(container).toHaveClass("bottom-4");
+    expect(container).toHaveClass("sm:bottom-auto");
   });
 });
 

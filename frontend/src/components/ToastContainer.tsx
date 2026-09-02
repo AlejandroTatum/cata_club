@@ -20,7 +20,7 @@
  * non-text control, so it may sit at 80% — 3.81:1 on that same green, above
  * the 3:1 floor for UI components.
  *
- * Two things are deliberate here:
+ * Three things are deliberate here:
  *
  * 1. The container carries NO `aria-live`. Each toast already declares
  *    `role="alert"` or `role="status"`, which ARE live regions — a live
@@ -30,6 +30,17 @@
  *    spanned a 360px phone edge to edge and covered the shell topbar's "Menú"
  *    button and notification bell — the toast auto-dismisses, the blocked
  *    navigation did not.
+ * 3. At `sm` and up it docks BELOW the header instead of flush with it.
+ *    `top-4 right-4` landed exactly on top of the header's search box and
+ *    notification bell — a 1440×900 hit-test found both fully covered for
+ *    the toast's ~5.8s lifetime, and the bell's own lower corners resolved
+ *    onto the toast's close button, so a tap meant for the bell silently
+ *    closed the toast instead (issue #816). `top-[72px]` clears the tallest
+ *    header this container is drawn under: the `AppShell` topbar is a fixed
+ *    56px (`h-14`), and the sticky `Header` is close behind it — plus 16px
+ *    of daylight so the toast never grazes either edge. It stays anchored
+ *    top-right rather than moving to the bottom on desktop too: the chatbot
+ *    launcher already lives at the bottom-right.
  */
 
 "use client";
@@ -70,7 +81,7 @@ export default function ToastContainer(): React.ReactElement | null {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex flex-col gap-2 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-4 sm:w-full sm:max-w-sm">
+    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex flex-col gap-2 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-[72px] sm:w-full sm:max-w-sm">
       {toasts.map((toast) => {
         const Icon = VARIANT_ICONS[toast.variant];
 
