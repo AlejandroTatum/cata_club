@@ -563,6 +563,24 @@ case "$cmd" in
         "         printf '%s\\n' age1... > ${BACKUP_AGE_RECIPIENTS_FILE}" \
         "       La identidad PRIVADA no va en este host.")"
     fi
+    # Un solo destinatario `age` es un solo punto de fallo sobre el histórico
+    # entero de backups (issue #791): si esa identidad privada se pierde
+    # (droplet robado, gestor de contraseñas comprometido), TODO lo cifrado
+    # con ella queda irrecuperable para siempre. Se cuenta acá, con el
+    # operador todavía en la terminal -- el mismo criterio que el resto de
+    # las compuertas de `install-cron`. `backup-db.sh` NO falla por esto: solo
+    # avisa, porque corre a las 03:30 sin nadie mirando y seguir produciendo
+    # backups (aunque sea con un solo destinatario) es mejor que dejar de
+    # producirlos.
+    destinatarios_count="$(grep -vEc '^[[:space:]]*(#|$)' "$BACKUP_AGE_RECIPIENTS_FILE" || true)"
+    if [ "${destinatarios_count:-0}" -lt 2 ]; then
+      die "$(printf '%s\n' \
+        "solo hay ${destinatarios_count:-0} destinatario(s) de cifrado en ${BACKUP_AGE_RECIPIENTS_FILE}." \
+        "       Con una sola identidad age, perderla vuelve irrecuperable TODO" \
+        "       el histórico de backups cifrado con ella. Agregá un segundo destinatario" \
+        "       (identidad PRIVADA distinta, en un gestor de contraseñas distinto):" \
+        "         printf '%s\\n' age1... >> ${BACKUP_AGE_RECIPIENTS_FILE}")"
+    fi
     command -v age >/dev/null 2>&1 || die "falta 'age' en el host (apt-get install -y age); el cron de backup no cifraría"
     # Misma compuerta para la réplica fuera del host: si está activada y le
     # falta algo, el backup de las 03:30 escribe el artefacto local y después

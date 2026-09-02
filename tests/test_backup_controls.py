@@ -324,6 +324,32 @@ def test_el_artefacto_cifrado_no_contiene_texto_plano_del_dump(tmp_path):
 
 
 @requiere_age
+def test_backup_de_produccion_avisa_con_un_solo_destinatario_pero_no_falla(tmp_path):
+    """Un solo destinatario `age` en producción es un solo punto de fallo
+    sobre el histórico entero de backups (issue #791), pero el backup de las
+    03:30 no puede dejar de producirse por esto: solo avisa, y sigue
+    cifrando y escribiendo el artefacto como siempre. El fail-closed real es
+    `deploy.sh install-cron`, con el operador todavía en la terminal.
+    """
+    _docker_que_emite_un_dump(tmp_path / "bin", MARCADOR_EN_CLARO)
+    backups = tmp_path / "backups"
+    _, destinatario = _par_de_claves_age(tmp_path)
+
+    resultado = run_script(
+        "scripts/backup/backup-db.sh",
+        env=_entorno_de_backup(
+            tmp_path, BACKUP_AGE_RECIPIENTS=destinatario, AMBIENTE="production",
+        ),
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    assert "un solo destinatario" in resultado.stdout.lower()
+    artefactos = _artefactos(backups)
+    assert artefactos, "el aviso no puede impedir que el backup se escriba"
+    assert all(n.endswith(".dump.age") for n in artefactos), artefactos
+
+
+@requiere_age
 def test_el_backup_falla_si_el_destinatario_esta_configurado_pero_age_no_existe(tmp_path):
     """Herramienta ausente es una falla, nunca una degradación a texto plano.
 
