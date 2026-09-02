@@ -275,7 +275,9 @@ describe("ChatWidget — design system", () => {
     expect(screen.getByText("CATA-BOT")).toBeInTheDocument();
     expect(screen.queryByText("Cata Club")).not.toBeInTheDocument();
     expect(screen.getByText("Responde en segundos")).toBeInTheDocument();
-    expect(container.querySelector("header")).toHaveClass("bg-white", "text-ink");
+    // #873 — coal with white text, so the header reads apart from the
+    // paper panel it sits on instead of blending into it.
+    expect(container.querySelector("header")).toHaveClass("bg-coal", "text-white");
   });
 
   it("wears the club's real logo, cropped to a circle over the disc", () => {
@@ -327,7 +329,9 @@ describe("ChatWidget — design system", () => {
     expect(userBubble.className).not.toContain("bg-cata-red");
 
     const botBubble = await screen.findByText("Claro que sí.");
-    expect(botBubble).toHaveClass("bg-state-neutral-bg");
+    // #873 — `paper` with a `line` edge, not `state-neutral-bg`: that tint
+    // measured 1.06:1 against the `canvas` history behind it, i.e. invisible.
+    expect(botBubble).toHaveClass("bg-paper", "border-line");
   });
 
   it("keeps the typing indicator's three dots still when the system asks for less motion", () => {
@@ -581,17 +585,22 @@ describe("ChatWidget — the phone sheet (#644)", () => {
 
     // The literal that shipped before #644. An exact match, not a `toContain`
     // sweep: "desktop is untouched" is only a claim worth making if a single
-    // added utility class breaks it.
+    // added utility class breaks it. The panel's own geometry is still exactly
+    // this string; only the SURFACE tokens below moved, for #873.
     expect(panel().className).toBe(
       "fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] " +
         "w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated " +
         "lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]",
     );
+    // #873 — coal, not white: a white header on a paper panel read as one
+    // surface, not two.
     expect(container.querySelector("header")?.className).toBe(
-      "flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] py-3 text-ink",
+      "flex flex-none items-center gap-[11px] border-b border-line-2 bg-coal px-[15px] py-3 text-white",
     );
+    // #873 — sunken, not transparent: an unpainted composer inherited the
+    // panel's own `paper` and blended into it exactly like the header did.
     expect(container.querySelector("form")?.className).toBe(
-      "flex flex-none items-center gap-2 border-t border-line p-3",
+      "flex flex-none items-center gap-2 border-t border-line bg-sunken p-3",
     );
     expect(container.querySelector(".overflow-y-auto")?.className).toBe(
       "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]",
@@ -707,8 +716,10 @@ describe("ChatWidget — the phone sheet (#644)", () => {
     cleanup();
     installViewport(1440, 900);
     render(<ChatWidget open onClose={vi.fn()} />);
+    // #873 — muted white on the now-coal header, not `ink-3` (which reads
+    // fine on `paper` but is close to invisible on coal).
     expect(screen.getByRole("button", { name: /cerrar cata-bot/i }).className).toContain(
-      "shrink-0 rounded-lg p-1 text-ink-3",
+      "shrink-0 rounded-lg p-1 text-white/55",
     );
   });
 

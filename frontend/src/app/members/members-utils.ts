@@ -141,7 +141,24 @@ export interface MemberAccount {
    * falsy, same as a persona the adapter never flagged.
    */
   sinDatosEmergencia?: boolean;
+  /**
+   * Issue #869: whether this Persona's `Usuario` (login credentials) is
+   * active — the SAME flag `AuthServicio.login` checks, never inferred from
+   * `Persona.activo` (the student panel's own "Estado" badge) nor from
+   * `Membresía`. `"none"` is "sin Usuario" (a represented minor with no
+   * login of their own). Optional, same omit-rather-than-invent convention
+   * as `sinDatosEmergencia` above — `getAccountStateBadge` reads a missing
+   * value as `"none"` rather than fabricating "active".
+   */
+  accountState?: AccountState;
 }
+
+/**
+ * Account-login state — `Usuario.activo`, independent of `MemberAccount.
+ * estudiantes[].activo` (`Persona.activo`, club membership) and of
+ * `Membresía`. `"none"` is the persona has no `Usuario` at all.
+ */
+export type AccountState = "active" | "inactive" | "none";
 
 /** Aggregate statistics for the members overview. */
 export interface MemberStats {
@@ -187,6 +204,27 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   aprobado: "Aprobado",
   pendiente_validacion: "Pendiente",
   rechazado: "Rechazado",
+};
+
+/**
+ * `Cuenta` badge spec (issue #869): label + tone per `AccountState`, the
+ * same pairing convention as `MEMBERSHIP_STATUS_TONE` above. Three states,
+ * three DIFFERENT words — "Activa" / "Inactiva" / "Sin cuenta" carry the
+ * distinction in the text itself, not only in `tone`, so the badge reads
+ * without colour. `inactive` reuses the tone `MemberEditDialog`'s own
+ * estado toggle already assigns a deactivated account (`bad`) — a login
+ * that was deliberately switched off, unlike `suspendida`.
+ */
+export const ACCOUNT_STATE_LABELS: Record<AccountState, string> = {
+  active: "Activa",
+  inactive: "Inactiva",
+  none: "Sin cuenta",
+};
+
+export const ACCOUNT_STATE_TONE: Record<AccountState, BadgeTone> = {
+  active: "ok",
+  inactive: "bad",
+  none: "neutral",
 };
 
 export const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
@@ -447,6 +485,21 @@ export function getAccountStatusBadge(account: MemberAccount): {
   // freshly registered account is in; a red badge told 29 of 44 accounts they
   // were broken when nothing had gone wrong.
   return { label: "Sin membresía", tone: "neutral" };
+}
+
+/**
+ * Get the `Cuenta` badge label and tone for an account (issue #869) —
+ * `getAccountStatusBadge`'s sibling, over `AccountState` instead of
+ * `Membresía`. `account.accountState` missing reads as `"none"` ("sin
+ * cuenta"), never as `"active"` — same omit-rather-than-invent convention as
+ * every other optional flag on `MemberAccount`.
+ */
+export function getAccountStateBadge(account: MemberAccount): {
+  label: string;
+  tone: BadgeTone;
+} {
+  const state = account.accountState ?? "none";
+  return { label: ACCOUNT_STATE_LABELS[state], tone: ACCOUNT_STATE_TONE[state] };
 }
 
 // ---------------------------------------------------------------------------

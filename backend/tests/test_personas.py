@@ -665,3 +665,28 @@ def test_listar_personas_acepta_el_limit_del_tope(client):
     """200 es el valor exacto que pide el BFF de la pantalla de Miembros:
     el borde tiene que seguir siendo válido."""
     assert client.get("/api/v1/personas/?limit=200").status_code == 200
+
+
+# --- `GET /personas/`: estado de la cuenta (issue #869) ---------------------
+# `cuentaActiva` es el estado del `Usuario` (el mismo flag que decide el
+# login), nunca el de `Persona.activo` (arriba) ni el de ninguna membresía.
+# Tres valores posibles: `True`/`False` cuando existe `Usuario`, `None`
+# cuando la persona no tiene ninguno ("sin cuenta").
+def test_listar_personas_expone_el_estado_de_la_cuenta(client, db_session):
+    _crear_persona_buscable(client, "Con", "CuentaActiva", cedula_valida(670))
+    _crear_persona_buscable(client, "Con", "CuentaInactiva", cedula_valida(671))
+    _crear_persona_buscable(client, "Sin", "Cuenta", cedula_valida(672))
+    activa = db_session.query(Persona).filter(Persona.cedula == cedula_valida(670)).one()
+    inactiva = db_session.query(Persona).filter(Persona.cedula == cedula_valida(671)).one()
+    sin_cuenta = db_session.query(Persona).filter(Persona.cedula == cedula_valida(672)).one()
+    db_session.add(Usuario(correo="activa869@test.com", contrasenia="hash", persona_id=activa.id, activo=True))
+    db_session.add(Usuario(correo="inactiva869@test.com", contrasenia="hash", persona_id=inactiva.id, activo=False))
+    db_session.commit()
+
+    resp = client.get("/api/v1/personas/?limit=200")
+
+    assert resp.status_code == 200
+    por_id = {p["id"]: p["cuentaActiva"] for p in resp.json()["items"]}
+    assert por_id[activa.id] is True
+    assert por_id[inactiva.id] is False
+    assert por_id[sin_cuenta.id] is None

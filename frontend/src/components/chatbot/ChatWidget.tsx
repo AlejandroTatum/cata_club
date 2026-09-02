@@ -183,6 +183,19 @@ function mensajeLimiteConsultas(segundosRestantes: number): string {
 const BUBBLE_BASE =
   "max-w-[86%] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm";
 
+/**
+ * The assistant's own surface, shared by the greeting bubble, every bot turn
+ * and the typing indicator (issue #873).
+ *
+ * It used to be `bg-state-neutral-bg` (#EFEFF2) — a status tint meant to sit
+ * ON `paper`, not to BE the surface a bubble floats over `canvas` with: the
+ * two measure 1.06:1 against each other, so the bot's own turn was reading as
+ * the same plane as the history behind it. `paper` on `canvas` is the
+ * system's own proven card-lift step (1.22:1, `color-contrast.test.ts`), and
+ * `border-line` is the hairline that draws a card's edge.
+ */
+const ASSISTANT_SURFACE = "bg-paper border border-line";
+
 /** The one failure-alert box style — shared by the generic error and the 429 lock so they read as the same kind of thing. */
 const ALERT_CLASS =
   "flex items-start gap-2 rounded-ctl border border-state-bad/25 bg-state-bad-bg px-3 py-2.5 text-xs text-state-bad";
@@ -329,10 +342,10 @@ const CARD: PanelSkin = {
     "w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated " +
     "lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]",
   header:
-    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] py-3 text-ink",
-  close: "shrink-0 rounded-lg p-1 text-ink-3 transition-colors hover:bg-paper hover:text-ink",
+    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-coal px-[15px] py-3 text-white",
+  close: "shrink-0 rounded-lg p-1 text-white/55 transition-colors hover:bg-white/10 hover:text-white",
   history: "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]",
-  form: "flex flex-none items-center gap-2 border-t border-line p-3",
+  form: "flex flex-none items-center gap-2 border-t border-line bg-sunken p-3",
   input:
     "h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink " +
     "transition-colors placeholder:text-ink-3 focus:border-cata-red " +
@@ -379,13 +392,13 @@ const SHEET: PanelSkin = {
   // The sheet's top edge IS the top of the screen, so the header clears the
   // status bar itself; the card never touched a safe area.
   header:
-    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-white px-[15px] pb-3 " +
-    "pt-[max(0.75rem,env(safe-area-inset-top))] text-ink",
+    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-coal px-[15px] pb-3 " +
+    "pt-[max(0.75rem,env(safe-area-inset-top))] text-white",
   // 44x44 — the touch-target floor in `docs/ux/objetivo-tactil.md`, which a
   // 15px glyph in 4px of padding (23px square) was half of.
   close:
-    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-3 " +
-    "transition-colors hover:bg-paper hover:text-ink",
+    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white/55 " +
+    "transition-colors hover:bg-white/10 hover:text-white",
   // `min-h-0` instead of the 250px floor: a flex child will not shrink below
   // its content without it, so with the keyboard open the column overflowed a
   // panel that is `overflow-hidden` and took the composer off screen with it.
@@ -397,7 +410,7 @@ const SHEET: PanelSkin = {
   // already taken that space: `max(12px, safe-area − keyboard)` collapses back
   // to the ordinary padding while typing.
   form:
-    "flex flex-none items-center gap-2 border-t border-line p-3 " +
+    "flex flex-none items-center gap-2 border-t border-line bg-sunken p-3 " +
     "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)_-_var(--chat-keyboard-inset,0px)))]",
   // `text-lg`, and the reason is the platform rather than the type system:
   // mobile Safari zooms the page whenever a focused field is under 16px, and
@@ -674,7 +687,10 @@ export default function ChatWidget({
         </span>
         <span className="min-w-0 flex-1 leading-tight">
           <span className="block truncate text-sm font-bold">{BOT_NAME}</span>
-          <span className="block truncate text-2xs tracking-flat text-ink-3">Responde en segundos</span>
+          {/* `white/50` — the same muted-on-coal idiom `AppShell`'s own area
+              label wears (`text-white/50`, measured 5.36:1): `ink-3` reads
+              fine on `paper` but is close to invisible on this coal header. */}
+          <span className="block truncate text-2xs tracking-flat text-white/50">Responde en segundos</span>
         </span>
         <button
           type="button"
@@ -702,7 +718,7 @@ export default function ChatWidget({
         className={skin.history}
       >
         {mensajes.length === 0 && (
-          <p className={`${BUBBLE_BASE} self-start rounded-bl-[4px] bg-state-neutral-bg text-ink-2`}>
+          <p className={`${BUBBLE_BASE} self-start rounded-bl-[4px] ${ASSISTANT_SURFACE} text-ink-2`}>
             Hola 👋 Soy {BOT_NAME}, el asistente del club. Pregúntele cómo usar la app — o toque
             «{TALK_TO_CLUB_LABEL}» si prefiere hablar con una persona.
           </p>
@@ -715,7 +731,7 @@ export default function ChatWidget({
             className={`${BUBBLE_BASE} ${
               m.rol === "usuario"
                 ? "self-end rounded-br-[4px] bg-coal text-white"
-                : "self-start rounded-bl-[4px] bg-state-neutral-bg text-ink-2"
+                : `self-start rounded-bl-[4px] ${ASSISTANT_SURFACE} text-ink-2`
             }`}
           >
             {m.texto}
@@ -745,7 +761,7 @@ export default function ChatWidget({
           <span
             role="status"
             aria-label={`${BOT_NAME} está escribiendo`}
-            className="inline-flex items-center gap-1 self-start rounded-xl bg-state-neutral-bg px-[13px] py-[11px]"
+            className={`inline-flex items-center gap-1 self-start rounded-xl ${ASSISTANT_SURFACE} px-[13px] py-[11px]`}
           >
             {[0, 180, 360].map((delay) => (
               <span
@@ -825,8 +841,12 @@ export default function ChatWidget({
         <p
           id={contadorId}
           aria-live="polite"
+          /* `ink-3-strong`, not `ink-3`: this sits on `bg-canvas`, and `ink-3`
+             only clears AA on `paper` (4.62:1) — it slips to 3.78:1 on the
+             canvas grey (`tailwind.config.ts`'s own `ink["3-strong"]`
+             comment). */
           className={`flex-none bg-canvas px-[15px] pb-2 text-right text-2xs tabular-nums ${
-            excedido ? "font-semibold text-state-bad" : "text-ink-3"
+            excedido ? "font-semibold text-state-bad" : "text-ink-3-strong"
           }`}
         >
           {formatCharacterCount(largo)} / {CHATBOT_MAX_MESSAGE_LENGTH_LABEL} caracteres

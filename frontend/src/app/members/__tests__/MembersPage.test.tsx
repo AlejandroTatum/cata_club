@@ -3670,4 +3670,81 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
     // the line whole.
     expect(group.className).not.toContain("flex-none");
   });
+
+  // --- Cuenta badge (issue #869) --------------------------------------------
+  // `accountState` is `Usuario.activo` (the login flag) — independent of
+  // `Persona.activo` (the "Estado" badge inside each student panel) and of
+  // `Membresía`. Three states, tested on the desktop row, the mobile card and
+  // the edit dialog's own header badge (the "summary" the issue says used to
+  // read hardcoded-active).
+  describe("Cuenta badge", () => {
+    it.each<["active" | "inactive" | "none", string]>([
+      ["active", "Activa"],
+      ["inactive", "Inactiva"],
+      ["none", "Sin cuenta"],
+    ])("shows %s as %s on the desktop row, the mobile card, and the edit dialog header", async (accountState, label) => {
+      mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState }] });
+
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+
+      const row = await findAccountRow();
+      expect(within(row).getByText(label)).toBeInTheDocument();
+
+      const card = await findAccountCard();
+      expect(within(card).getByText(label)).toBeInTheDocument();
+
+      fireEvent.click(getEditButton(row));
+      const dialog = screen.getByRole("dialog");
+      // Scoped to the header (`.bg-sunken`, same selector convention as the
+      // shell-chain test above): the "Estado de la cuenta" toggle further
+      // down also renders "Activa"/"Inactiva", sourced from the roles fetch
+      // rather than from `account.accountState` — a different control, not
+      // the summary this badge fixes.
+      const header = dialog.querySelector(".bg-sunken") as HTMLElement;
+      expect(within(header).getByText(label)).toBeInTheDocument();
+    });
+
+    it("never reads as hardcoded-active for a persona with no Usuario, unlike the roles-endpoint-derived toggle", async () => {
+      // The roles endpoint failing (its real behavior for a persona without
+      // Usuario — RolServicio._obtener_usuario_de_persona) must not leave the
+      // header summary defaulting to "Activa": it has to come from the list's
+      // own `accountState`, never from this fetch.
+      mockObtenerRolesDePersona.mockReset();
+      mockObtenerRolesDePersona.mockRejectedValue(new Error("sin Usuario"));
+      mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "none" }] });
+
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+
+      const row = await findAccountRow();
+      fireEvent.click(getEditButton(row));
+      const dialog = screen.getByRole("dialog");
+      const header = dialog.querySelector(".bg-sunken") as HTMLElement;
+      expect(within(header).getByText("Sin cuenta")).toBeInTheDocument();
+      expect(within(header).queryByText("Activo")).not.toBeInTheDocument();
+    });
+
+    it("does not change the Membresía badge for an account with no login (accountState inactive)", async () => {
+      mockFetchMembers.mockResolvedValue({ accounts: [{ ...ACCOUNT, accountState: "inactive" }] });
+
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+
+      const row = await findAccountRow();
+      // ACCOUNT's one student carries no membership either way — "Sin
+      // membresía" (neutral) stays exactly that, alongside the new badge.
+      expect(within(row).getByText("Sin membresía")).toBeInTheDocument();
+      expect(within(row).getByText("Inactiva")).toBeInTheDocument();
+    });
+  });
 });

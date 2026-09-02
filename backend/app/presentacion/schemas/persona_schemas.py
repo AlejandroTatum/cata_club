@@ -132,6 +132,26 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
         return resolver_url_foto_perfil(valor)
 
 
+class PersonaListItemDTO(PersonaResponseDTO):
+    """`GET /personas/` (el roster admin), y SOLO ese endpoint -- issue #869,
+    hallazgo en vivo PR #972. `cuenta_activa` vive acá y no en
+    `PersonaResponseDTO` a propósito: ese DTO base sirve una docena de
+    endpoints que devuelven una `Persona` recién creada/actualizada/consultada
+    por id, ninguno de los cuales carga `Persona.usuario` con `joinedload`
+    (`PersonaRepositorio.listar` es el único que lo hace). Antes de esta
+    separación, `PersonaResponseDTO.cuenta_activa` heredaba a TODOS esos
+    endpoints y la propiedad ORM lazy-cargaba `usuario` al serializar --
+    justo en el hilo del event loop, después de que el handler salió de
+    `run_in_threadpool` (ver `Persona.cuenta_activa` en `dominio/modelos.py`
+    para la guardia adicional que ahora también lo impide).
+    """
+    # Issue #869: estado de la CUENTA (`Usuario.activo`, el mismo flag que
+    # decide el login), no el de la persona (`activo` arriba) ni el de
+    # ninguna membresía. `None` = "sin cuenta" (no existe `Usuario` para esta
+    # persona) -- nunca se infiere, siempre viene de `Persona.cuenta_activa`.
+    cuenta_activa: Optional[bool] = Field(default=None, examples=[True])
+
+
 class PersonaBusquedaDTO(ResponseBase, BaseModel):
     """Resultado ligero para el autocomplete de búsqueda de personas."""
     id: int
