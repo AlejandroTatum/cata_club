@@ -16,6 +16,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
+import { enrollFieldId } from "@/app/student/enroll/enroll-utils";
+import { birthDatePartIds } from "@/components/wizard-fields";
 import { enrollStudent } from "@/services/api";
 import { MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
 
@@ -175,7 +178,10 @@ describe("EnrollPage — autocomplete on the representative step", () => {
     // this is, so only one "Nombres" field exists on screen at a time.
     expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("autoComplete", "given-name");
     expect(screen.getByLabelText(/^Apellidos/)).toHaveAttribute("autoComplete", "family-name");
-    expect(screen.getByLabelText(/fecha de nacimiento/i)).toHaveAttribute("autoComplete", "bday");
+    const fechaParts = birthDatePartIds(enrollFieldId("fechaNacimiento"));
+    expect(document.getElementById(fechaParts.day)).toHaveAttribute("autoComplete", "bday-day");
+    expect(document.getElementById(fechaParts.month)).toHaveAttribute("autoComplete", "bday-month");
+    expect(document.getElementById(fechaParts.year)).toHaveAttribute("autoComplete", "bday-year");
     expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
     expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
@@ -285,7 +291,7 @@ describe("EnrollPage — error prevention on the student step", () => {
 
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     // A self enrollment signs in as the student, so its credentials are part
@@ -299,24 +305,26 @@ describe("EnrollPage — error prevention on the student step", () => {
 
   // #312 / hallazgo #32 — the birth-date field had no min/max, no format
   // hint, and its LIVE preview (before blur, before studentBirthDateRule's
-  // own message) showed a raw impossible age for a typo'd year.
-  it("bounds the birth-date field to plausible member ages", () => {
+  // own message) showed a raw impossible age for a typo'd year. Issue #853
+  // replaced the single native input with Día/Mes/Año — the bound now shows
+  // on the Año part, the only one a calendar year applies to.
+  it("bounds the birth-date year to plausible member ages", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
-    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
+    const year = screen.getByLabelText(/^Año/);
     const thisYear = new Date().getFullYear();
-    expect(fecha).toHaveAttribute("min", `${thisYear - 75}-01-01`);
-    expect(fecha).toHaveAttribute("max", `${thisYear - 5}-12-31`);
+    expect(year).toHaveAttribute("min", `${thisYear - 75}`);
+    expect(year).toHaveAttribute("max", `${thisYear - 5}`);
   });
 
-  it("hints the expected year format next to the birth-date field", () => {
+  it("hints the expected format next to the birth-date field", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
-    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
-    expect(fecha).toHaveAttribute("aria-describedby");
-    const hintId = fecha.getAttribute("aria-describedby") as string;
+    const group = screen.getByRole("group", { name: /fecha de nacimiento/i });
+    expect(group).toHaveAttribute("aria-describedby");
+    const hintId = group.getAttribute("aria-describedby") as string;
     expect(document.getElementById(hintId)?.textContent).toMatch(/año/i);
   });
 
@@ -324,11 +332,10 @@ describe("EnrollPage — error prevention on the student step", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
-    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
-    // The exact repro from the audit: a typo'd year (1015 for 2015), field
-    // still focused — the moment studentBirthDateRule's own message has not
-    // fired yet.
-    fireEvent.change(fecha, { target: { value: "1015-06-15" } });
+    // The exact repro from the audit: a typo'd year (1015 for 2015), still
+    // focused — the moment studentBirthDateRule's own message has not fired
+    // yet.
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1015-06-15");
 
     expect(screen.queryByText(/1011 años/)).not.toBeInTheDocument();
     expect(screen.getByText(/revise el año/i)).toBeInTheDocument();
@@ -336,13 +343,18 @@ describe("EnrollPage — error prevention on the student step", () => {
 
   // #312 / hallazgo #33 — ningún campo declaraba autocomplete, así que el
   // navegador no podía ofrecer nada guardado en un formulario de 17 campos.
+  // Issue #853's Día/Mes/Año carries the three-part `bday-*` tokens instead
+  // of the single `bday` the native input used.
   it("declares autocomplete on every field the browser can actually fill", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
     expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("autoComplete", "given-name");
     expect(screen.getByLabelText(/^Apellidos/)).toHaveAttribute("autoComplete", "family-name");
-    expect(screen.getByLabelText(/fecha de nacimiento/i)).toHaveAttribute("autoComplete", "bday");
+    const fechaParts = birthDatePartIds(enrollFieldId("fechaNacimiento"));
+    expect(document.getElementById(fechaParts.day)).toHaveAttribute("autoComplete", "bday-day");
+    expect(document.getElementById(fechaParts.month)).toHaveAttribute("autoComplete", "bday-month");
+    expect(document.getElementById(fechaParts.year)).toHaveAttribute("autoComplete", "bday-year");
     expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
     expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
@@ -352,9 +364,8 @@ describe("EnrollPage — error prevention on the student step", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
-    const fecha = screen.getByLabelText(/fecha de nacimiento/i);
-    fireEvent.change(fecha, { target: { value: "2015-06-15" } });
-    fireEvent.blur(fecha);
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.blur(screen.getByLabelText(/^Año/));
 
     expect(screen.getByText(/menores de edad no pueden autoinscribirse/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
@@ -377,7 +388,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
@@ -528,7 +539,7 @@ function reachSummaryStep(): void {
   fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-  fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+  fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
@@ -713,7 +724,7 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "2015-06-15" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
@@ -759,7 +770,7 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
@@ -789,7 +800,7 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });

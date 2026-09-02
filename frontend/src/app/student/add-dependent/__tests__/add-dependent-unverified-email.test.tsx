@@ -31,6 +31,7 @@ import { installAddDependentHarness } from "./add-dependent-harness";
 import { ApiClientError, crearRepresentado, vincularRepresentado } from "@/services/api";
 import { addDependentFieldId, type AddDependentField } from "@/app/student/add-dependent/add-dependent-utils";
 import { MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 
 /** Verbatim copy of `MENSAJE_CORREO_SIN_VERIFICAR` (backend `app/dominio/mensajes.py`). */
 const MENSAJE_CORREO_SIN_VERIFICAR =
@@ -88,7 +89,7 @@ async function walkToReviewedSummary(): Promise<void> {
   setField("nombres", "Mateo Andres");
   setField("apellidos", "Zambrano Loor");
   setField("cedula", "1798765432");
-  setField("fechaNacimiento", "2014-05-12");
+  fillBirthDate(addDependentFieldId("fechaNacimiento"), "2014-05-12");
   setField("telefono", "0991234567");
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 

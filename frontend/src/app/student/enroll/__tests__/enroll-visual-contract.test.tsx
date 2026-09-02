@@ -38,6 +38,7 @@ import {
   type EnrollField,
 } from "@/app/student/enroll/enroll-utils";
 import { slugifyLabel } from "@/components/wizard-fields";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/student/enroll",
@@ -108,7 +109,7 @@ function chooseRepresentative(): void {
 function fillStudent(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-  fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "2015-06-15" } });
+  fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
 }
@@ -145,10 +146,15 @@ describe("the field ids are declared, not slugged from the label", () => {
 
       // The point of the whole exercise: the id no longer follows the label.
       // Every one of these seven labels dropped "del Representante" — which is
-      // what makes them ALL slug to something the id is not.
-      const label = document.querySelector(`label[for="${enrollFieldId(field)}"]`);
-      expect(label?.textContent ?? "").not.toMatch(/representante/i);
-      expect(`enroll-${slugifyLabel(label?.textContent ?? "")}`).not.toBe(enrollFieldId(field));
+      // what makes them ALL slug to something the id is not. `fechaNacimiento`
+      // is `BirthDateField`'s `<fieldset>` (issue #853): its accessible name
+      // is the `<legend>`, not a sibling `<label for>`.
+      const labelText =
+        input?.tagName === "FIELDSET"
+          ? (input.querySelector("legend")?.textContent ?? "")
+          : (document.querySelector(`label[for="${enrollFieldId(field)}"]`)?.textContent ?? "");
+      expect(labelText).not.toMatch(/representante/i);
+      expect(`enroll-${slugifyLabel(labelText)}`).not.toBe(enrollFieldId(field));
     }
   });
 

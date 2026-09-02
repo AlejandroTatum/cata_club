@@ -41,6 +41,7 @@ import {
   type AddDependentField,
 } from "@/app/student/add-dependent/add-dependent-utils";
 import { slugifyLabel } from "@/components/wizard-fields";
+import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 
 // The seven-mock preamble this wizard needs before it will mount lives in
 // `add-dependent-harness`; see that module for why the bodies are there and
@@ -69,9 +70,7 @@ function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Mateo Andres" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano Loor" } });
   fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
-  fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/), {
-    target: { value: "2014-05-12" },
-  });
+  fillBirthDate(addDependentFieldId("fechaNacimiento"), "2014-05-12");
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
 }
 
