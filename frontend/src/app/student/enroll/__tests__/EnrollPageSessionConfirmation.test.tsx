@@ -34,13 +34,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { enrollStudent, fetchInstituciones, fetchTarifas } from "@/services/api";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
-import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
-import { enrollFieldId } from "@/app/student/enroll/enroll-utils";
+import { completeSelfEnrollmentWizard } from "@/lib/__tests__/fill-enroll-student-step";
 import type { AuthSession } from "@/services/auth";
 
 // ---------------------------------------------------------------------------
@@ -151,25 +150,7 @@ async function completeEnrollment(): Promise<void> {
     </AuthProvider>,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-  fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
-  fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-  fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
-  fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
-  fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
-  fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
-  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-
-  fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
-  fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
-  fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
-  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
-
-  await screen.findByText(/inscripción completada/i);
+  await completeSelfEnrollmentWizard();
 }
 
 beforeEach(() => {

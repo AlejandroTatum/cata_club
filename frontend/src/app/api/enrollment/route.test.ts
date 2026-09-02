@@ -93,6 +93,28 @@ describe("POST /api/enrollment", () => {
     expect(forwarded).not.toHaveProperty("documentos");
   });
 
+  /**
+   * Issue #876: the wizard's confirmation field is UI-only and is never
+   * meant to reach this boundary — but `isCredentials` only checks that
+   * `correo`/`contrasenia` are present, so an unexpected extra key on
+   * `credencialesAlumno` still passes the guard. Same pattern as "strips
+   * client legal metadata" above: pinned at `buildEnrollmentCreateDTO`,
+   * which builds the backend body field-by-field and never spreads the key.
+   */
+  it("strips an unexpected confirmation key instead of forwarding it to the backend", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    await POST(enrollRequest({
+      ...validBody,
+      credencialesAlumno: { ...validBody.credencialesAlumno, contraseniaConfirmacion: "tampered" },
+    }));
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const forwarded = JSON.parse(String((init as RequestInit).body));
+    expect(forwarded.credenciales_alumno).toEqual({ correo: "ana@example.com", contrasenia: "password8" });
+    expect(forwarded.credenciales_alumno).not.toHaveProperty("contraseniaConfirmacion");
+  });
+
   it("rejects a request without affirmative grouped consent", async () => {
     const response = await POST(enrollRequest({ ...validBody, aceptaConsentimientos: false }));
     expect(response.status).toBe(400);

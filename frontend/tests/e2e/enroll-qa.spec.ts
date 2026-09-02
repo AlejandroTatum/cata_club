@@ -86,6 +86,7 @@ const F = {
   telefono: "enroll-telefono",
   correo: "enroll-correo",
   contrasenia: "enroll-contrasenia",
+  contraseniaConfirmacion: "enroll-confirmar-contrasena",
   nombresRepresentante: "enroll-nombres-representante",
   apellidosRepresentante: "enroll-apellidos-representante",
   cedulaRepresentante: "enroll-cedula-representante",
@@ -93,6 +94,7 @@ const F = {
   telefonoRepresentante: "enroll-telefono-representante",
   correoRepresentante: "enroll-correo-representante",
   contraseniaRepresentante: "enroll-contrasenia-representante",
+  contraseniaRepresentanteConfirmacion: "enroll-confirmar-contrasena-representante",
   tipoSangre: "enroll-tipo-sangre",
   contactoEmergencia: "enroll-contacto-emergencia",
   telefonoEmergencia: "enroll-telefono-emergencia",
@@ -179,6 +181,7 @@ const VALID_STUDENT = {
 const VALID_CREDENTIALS = {
   correo: "juan.perez@example.com",
   contrasenia: "clave-segura-8",
+  contraseniaConfirmacion: "clave-segura-8",
 };
 
 const VALID_REPRESENTATIVE = {
@@ -189,6 +192,7 @@ const VALID_REPRESENTATIVE = {
   telefono: "0987654321",
   correo: "maria.mora@example.com",
   contrasenia: "clave-segura-8",
+  contraseniaConfirmacion: "clave-segura-8",
 };
 
 const VALID_HEALTH = {
@@ -283,6 +287,14 @@ async function fillValidRepresentative(page: Page): Promise<void> {
   await field(page, F.telefonoRepresentante).fill(VALID_REPRESENTATIVE.telefono);
   await field(page, F.correoRepresentante).fill(VALID_REPRESENTATIVE.correo);
   await field(page, F.contraseniaRepresentante).fill(VALID_REPRESENTATIVE.contrasenia);
+  await field(page, F.contraseniaRepresentanteConfirmacion).fill(VALID_REPRESENTATIVE.contraseniaConfirmacion);
+}
+
+/** El correo y la contraseña (con su confirmación) de la autoinscripción, sin avanzar. */
+async function fillValidCredentials(page: Page): Promise<void> {
+  await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
+  await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+  await field(page, F.contraseniaConfirmacion).fill(VALID_CREDENTIALS.contraseniaConfirmacion);
 }
 
 async function fillValidHealth(page: Page): Promise<void> {
@@ -525,8 +537,7 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
 
   test("P22 · con todo válido, Siguiente se habilita y el paso avanza", async ({ page }) => {
     await fillValidStudent(page);
-    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillValidCredentials(page);
     await expect(nextButton(page)).toBeEnabled();
     await shot(page, "P22", "paso-completo-valido");
 
@@ -536,13 +547,27 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
 
   test("P23 · la autoinscripción salta el paso de representante", async ({ page }) => {
     await fillValidStudent(page);
-    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillValidCredentials(page);
     await nextButton(page).click();
     // Un jugador no tiene representante: el paso no debe existir en su recorrido.
     await expect(page.getByRole("heading", { name: /datos del representante/i })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
     await shot(page, "P23", "salto-de-paso-representante");
+  });
+
+  test("P24 · la confirmación que no repite la contraseña bloquea Siguiente (#876)", async ({ page }) => {
+    await fillValidStudent(page);
+    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
+    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillAndBlur(page, F.contraseniaConfirmacion, "otra-clave-9");
+    await expect(fieldError(page, F.contraseniaConfirmacion)).toHaveText(
+      "Las contraseñas no coinciden.",
+    );
+    await expect(nextButton(page)).toBeDisabled();
+    await shot(page, "P24", "confirmacion-no-coincide");
+
+    await field(page, F.contraseniaConfirmacion).fill(VALID_CREDENTIALS.contrasenia);
+    await expect(nextButton(page)).toBeEnabled();
   });
 });
 
@@ -733,8 +758,7 @@ test.describe("H · Salud y emergencia", () => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     await fillValidStudent(page);
-    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillValidCredentials(page);
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
   });
@@ -788,8 +812,7 @@ async function goToSummary(page: Page): Promise<void> {
   await enterFromLogin(page);
   await goToPersonal(page, "Jugador");
   await fillValidStudent(page);
-  await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-  await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+  await fillValidCredentials(page);
   await nextButton(page).click();
   await fillValidHealth(page);
   await nextButton(page).click();
@@ -1075,8 +1098,7 @@ test.describe("N · Navegación del asistente", () => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     await fillValidStudent(page);
-    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillValidCredentials(page);
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
 
@@ -1090,8 +1112,7 @@ test.describe("N · Navegación del asistente", () => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     await fillValidStudent(page);
-    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillValidCredentials(page);
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
 
@@ -1177,8 +1198,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     await fillValidStudent(page);
-    await field(page, F.correo).fill(VALID_CREDENTIALS.correo);
-    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await fillValidCredentials(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(120));
 
     // El estudiante que se autoinscribe ahora comparte el mismo techo que ya

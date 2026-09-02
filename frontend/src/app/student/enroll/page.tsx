@@ -361,7 +361,21 @@ function EnrollWizard(): React.ReactElement {
     key: K,
     value: EnrollFormData[K],
   ): void {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [key]: value };
+      // A withdrawn optional child account takes its confirmation with it:
+      // once correo AND contrasenia are empty again, a leftover confirmation
+      // value could no longer describe anything the visitor can see (#876).
+      if (
+        next.enrollmentType === ENROLLMENT_TYPES.CHILD &&
+        (key === "correo" || key === "contrasenia") &&
+        !next.correo &&
+        !next.contrasenia
+      ) {
+        next.contraseniaConfirmacion = "";
+      }
+      return next;
+    });
     setFormErrors([]);
     // The visitor is now actively working the form again — same moment the
     // attendance wizard's own "Recuperamos las marcas…" banner drops on the
@@ -478,6 +492,7 @@ function EnrollWizard(): React.ReactElement {
           telefono: "0991234567",
           correo: "sofia@example.com",
           contrasenia: "password8",
+          contraseniaConfirmacion: "password8",
           ...base,
         });
         break;
@@ -497,6 +512,7 @@ function EnrollWizard(): React.ReactElement {
           telefonoRepresentante: "0991234567",
           correoRepresentante: "sofia@example.com",
           contraseniaRepresentante: "password8",
+          contraseniaRepresentanteConfirmacion: "password8",
           ...base,
         });
         break;
@@ -811,6 +827,18 @@ function EnrollWizard(): React.ReactElement {
             hint: "Al menos 8 caracteres.",
             autoComplete: "new-password",
           })}
+          {/* Only while credentials are actually being created — always for
+              a self enrollment, only once the child's optional account has
+              started, exactly like "Contraseña" above (#876). */}
+          {(isSelf || childCredentialsRequired) &&
+            renderField("contraseniaConfirmacion", {
+              label: "Confirmar contraseña",
+              value: formData.contraseniaConfirmacion,
+              onChange: (v) => updateField("contraseniaConfirmacion", v),
+              type: "password",
+              required: isSelf || childCredentialsRequired,
+              autoComplete: "new-password",
+            })}
         </div>
       </div>
     );
@@ -899,6 +927,15 @@ function EnrollWizard(): React.ReactElement {
           type: "password",
           required: true,
           hint: "Al menos 8 caracteres.",
+          autoComplete: "new-password",
+        })}
+
+        {renderField("contraseniaRepresentanteConfirmacion", {
+          label: "Confirmar contraseña",
+          value: formData.contraseniaRepresentanteConfirmacion,
+          onChange: (v) => updateField("contraseniaRepresentanteConfirmacion", v),
+          type: "password",
+          required: true,
           autoComplete: "new-password",
         })}
 

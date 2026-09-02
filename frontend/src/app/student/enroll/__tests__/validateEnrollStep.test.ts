@@ -26,6 +26,8 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     telefono: "0991234567",
     correo: "juan@example.com",
     contrasenia: "password8",
+    contraseniaConfirmacion: "password8",
+    contraseniaRepresentanteConfirmacion: "password8",
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
     contactoEmergencia: "María Pérez",
     // Issue #860: has to be a different valid mobile than `telefono` above —

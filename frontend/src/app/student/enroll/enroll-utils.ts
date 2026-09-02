@@ -49,6 +49,8 @@ export interface EnrollFormData {
   telefono: string;
   correo: string;
   contrasenia: string;
+  /** UI-only: never read by the draft serializer or the payload builder (#876). */
+  contraseniaConfirmacion: string;
   /** School/institution (child enrollment only) — optional. */
   institucionId: string;
   nombreRepresentante: string;
@@ -58,6 +60,8 @@ export interface EnrollFormData {
   telefonoRepresentante: string;
   correoRepresentante: string;
   contraseniaRepresentante: string;
+  /** UI-only: never read by the draft serializer or the payload builder (#876). */
+  contraseniaRepresentanteConfirmacion: string;
   tipoSangre: BloodType | "";
   condicionesSalud: string;
   alergias: string;
@@ -120,6 +124,7 @@ export const initialFormData: EnrollFormData = {
   telefono: "",
   correo: "",
   contrasenia: "",
+  contraseniaConfirmacion: "",
   institucionId: "",
   nombreRepresentante: "",
   apellidosRepresentante: "",
@@ -128,6 +133,7 @@ export const initialFormData: EnrollFormData = {
   telefonoRepresentante: "",
   correoRepresentante: "",
   contraseniaRepresentante: "",
+  contraseniaRepresentanteConfirmacion: "",
   tipoSangre: "",
   condicionesSalud: "",
   alergias: "",
@@ -322,6 +328,7 @@ export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
   telefono: "telefono",
   correo: "correo",
   contrasenia: "contrasenia",
+  contraseniaConfirmacion: "confirmar-contrasena",
   institucionId: "institucion",
   nombreRepresentante: "nombres-representante",
   apellidosRepresentante: "apellidos-representante",
@@ -330,6 +337,7 @@ export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
   telefonoRepresentante: "telefono-representante",
   correoRepresentante: "correo-representante",
   contraseniaRepresentante: "contrasenia-representante",
+  contraseniaRepresentanteConfirmacion: "confirmar-contrasena-representante",
   tipoSangre: "tipo-sangre",
   condicionesSalud: "condiciones-salud",
   alergias: "alergias",
@@ -354,6 +362,18 @@ export function digitsOf(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+/**
+ * Confirmation must repeat the password exactly (issue #876). The helper is
+ * unconditional; whether a confirmation is required at all is decided by the
+ * caller — `FIELD_RULES` for self/representante credentials, and the
+ * both-or-neither gate inside `optionalStudentCredentialErrors` for the
+ * child's optional account.
+ */
+function passwordConfirmRule(confirm: string, password: string): string | null {
+  if (confirm.length === 0) return "La confirmación de contraseña es obligatoria.";
+  return confirm === password ? null : "Las contraseñas no coinciden.";
+}
+
 const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string | null>> = {
   nombres: (d) => personNameRule(d.nombres, "Los nombres"),
   apellidos: (d) => personNameRule(d.apellidos, "Los apellidos"),
@@ -372,6 +392,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   telefono: (d) => phoneRule(d.telefono, "El teléfono"),
   correo: (d) => (isEmail(d.correo) ? null : "El correo electrónico no es válido."),
   contrasenia: (d) => passwordRule(d.contrasenia, "La contraseña"),
+  contraseniaConfirmacion: (d) => passwordConfirmRule(d.contraseniaConfirmacion, d.contrasenia),
   nombreRepresentante: (d) => personNameRule(d.nombreRepresentante, "Los nombres del representante"),
   apellidosRepresentante: (d) =>
     personNameRule(d.apellidosRepresentante, "Los apellidos del representante"),
@@ -394,6 +415,8 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     isEmail(d.correoRepresentante) ? null : "El correo del representante no es válido.",
   contraseniaRepresentante: (d) =>
     passwordRule(d.contraseniaRepresentante, "La contraseña del representante"),
+  contraseniaRepresentanteConfirmacion: (d) =>
+    passwordConfirmRule(d.contraseniaRepresentanteConfirmacion, d.contraseniaRepresentante),
   tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
@@ -413,7 +436,7 @@ const STUDENT_FIELDS: EnrollField[] = [
   "telefono",
 ];
 
-const CREDENTIAL_FIELDS: EnrollField[] = ["correo", "contrasenia"];
+const CREDENTIAL_FIELDS: EnrollField[] = ["correo", "contrasenia", "contraseniaConfirmacion"];
 
 /** Every representante field — they all live on the "representative" step. */
 const REPRESENTATIVE_FIELDS: EnrollField[] = [
@@ -424,6 +447,7 @@ const REPRESENTATIVE_FIELDS: EnrollField[] = [
   "telefonoRepresentante",
   "correoRepresentante",
   "contraseniaRepresentante",
+  "contraseniaRepresentanteConfirmacion",
 ];
 
 const HEALTH_FIELDS: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
@@ -486,6 +510,7 @@ const FIELD_LABELS: Partial<Record<EnrollField, string>> = {
   telefono: "Teléfono",
   correo: "Correo electrónico",
   contrasenia: "Contraseña",
+  contraseniaConfirmacion: "Confirmar contraseña",
   nombreRepresentante: "Nombres del representante",
   apellidosRepresentante: "Apellidos del representante",
   cedulaRepresentante: "Cédula del representante",
@@ -493,6 +518,7 @@ const FIELD_LABELS: Partial<Record<EnrollField, string>> = {
   telefonoRepresentante: "Teléfono del representante",
   correoRepresentante: "Correo del representante",
   contraseniaRepresentante: "Contraseña del representante",
+  contraseniaRepresentanteConfirmacion: "Confirmar contraseña del representante",
   tipoSangre: "Tipo de sangre",
   contactoEmergencia: "Nombre del contacto de emergencia",
   telefonoEmergencia: "Teléfono de emergencia",
@@ -540,6 +566,8 @@ function optionalStudentCredentialErrors(data: EnrollFormData): EnrollFieldError
       const passwordError = passwordRule(data.contrasenia, "La contraseña del estudiante");
       if (passwordError) errors.contrasenia = passwordError;
     }
+    const confirmError = passwordConfirmRule(data.contraseniaConfirmacion, data.contrasenia);
+    if (confirmError) errors.contraseniaConfirmacion = confirmError;
   }
   return errors;
 }
@@ -594,14 +622,29 @@ const ENROLL_DRAFT_KEY = "cata_enroll_draft";
  * cédulas and medical data of a minor. The stored draft omits these keys; on
  * restore the visitor re-types the password, and the wizard's own per-field
  * validation walks them back to the step that asks for it.
+ *
+ * Issue #876 extends the same "never persisted" set to the two confirmation
+ * fields — they exist only to catch a typo on screen, never a value the
+ * draft has any reason to remember.
  */
-const ENROLL_PASSWORD_FIELDS = ["contrasenia", "contraseniaRepresentante"] as const;
+const ENROLL_PASSWORD_FIELDS = [
+  "contrasenia",
+  "contraseniaConfirmacion",
+  "contraseniaRepresentante",
+  "contraseniaRepresentanteConfirmacion",
+] as const;
 
 /** What actually lands in `sessionStorage` — the form minus its passwords. */
 type StoredEnrollDraft = Omit<EnrollFormData, (typeof ENROLL_PASSWORD_FIELDS)[number]>;
 
 function stripEnrollPasswords(data: EnrollFormData): StoredEnrollDraft {
-  const { contrasenia: _c, contraseniaRepresentante: _r, ...stored } = data;
+  const {
+    contrasenia: _c,
+    contraseniaConfirmacion: _cc,
+    contraseniaRepresentante: _r,
+    contraseniaRepresentanteConfirmacion: _rc,
+    ...stored
+  } = data;
   return stored;
 }
 
@@ -641,7 +684,13 @@ function parseStoredEnrollDraft(raw: string | null): {
   const record = parsed as Record<string, unknown>;
   return {
     // Passwords are ALWAYS blanked, never read back from storage.
-    draft: { ...parsed, contrasenia: "", contraseniaRepresentante: "" },
+    draft: {
+      ...parsed,
+      contrasenia: "",
+      contraseniaConfirmacion: "",
+      contraseniaRepresentante: "",
+      contraseniaRepresentanteConfirmacion: "",
+    },
     hadStoredPasswords: ENROLL_PASSWORD_FIELDS.some((field) => record[field] !== undefined),
   };
 }
