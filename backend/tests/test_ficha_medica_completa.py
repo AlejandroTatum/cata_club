@@ -285,6 +285,78 @@ def test_patch_no_puede_poner_un_telefono_invalido(client, db_session, telefono)
     assert persona.ficha_medica.telefono_emergencia == "0991112233"
 
 
+# ---------------------------------------------------------------------------
+# Issue #860 — el teléfono de emergencia no puede repetir el personal
+#
+# `FichaMedicaCreateDTO`/`FichaMedicaUpdateDTO` no llevan el teléfono
+# personal en el payload -- solo `persona_id` (creación) o el id de la URL
+# (PATCH) -- así que el DTO no puede comparar por sí solo. El candado real
+# vive en `FichaMedicaServicio`, contra el `Persona.telefono` ya guardado, y
+# es lo que estos tests custodian: evadir el DTO (esta ruta SIEMPRE lo evade,
+# es su forma normal de uso) no evade la regla.
+# ---------------------------------------------------------------------------
+
+def test_crear_ficha_rechaza_telefono_emergencia_igual_al_personal(client, db_session):
+    persona = _persona(db_session, 30)
+
+    resp = client.post(
+        "/api/v1/fichas-medicas/",
+        json=_cuerpo_creacion(persona.id, telefono_emergencia=persona.telefono),
+    )
+
+    assert resp.status_code == 400
+    assert not _tiene_ficha(db_session, persona.id)
+
+
+def test_upsert_por_patch_rechaza_telefono_emergencia_igual_al_personal(client, db_session):
+    """La misma regla, del lado del PATCH que CREA la ficha (persona sin
+    ficha médica todavía)."""
+    persona = _persona(db_session, 31)
+
+    resp = client.patch(
+        f"/api/v1/fichas-medicas/persona/{persona.id}",
+        json={"tipo_sangre": "O_POSITIVO", "telefono_emergencia": persona.telefono},
+    )
+
+    assert resp.status_code == 400
+    assert not _tiene_ficha(db_session, persona.id)
+
+
+def test_patch_rechaza_telefono_emergencia_igual_al_personal_sobre_ficha_existente(client, db_session):
+    persona = _persona(db_session, 32)
+    _ficha_valida(db_session, persona)
+
+    resp = client.patch(
+        f"/api/v1/fichas-medicas/persona/{persona.id}",
+        json={"telefono_emergencia": persona.telefono},
+    )
+
+    assert resp.status_code == 400
+    db_session.expire_all()
+    # La ficha no queda a medio escribir: conserva el valor que tenía.
+    assert persona.ficha_medica.telefono_emergencia == "0991112233"
+
+
+def test_crear_ficha_acepta_cuando_la_persona_no_tiene_telefono_personal(client, db_session):
+    """Issue #860: el teléfono personal es opcional en la fila (`Persona.
+    telefono` tolera `""`, ver `_exigir_telefono_valido`). Sin uno con qué
+    comparar, la regla no bloquea nada."""
+    persona = Persona(
+        nombres="Ana", apellidos="SinTelefono", cedula=cedula_valida(760),
+        fecha_nacimiento=date(2010, 5, 14), telefono="",
+    )
+    db_session.add(persona)
+    db_session.commit()
+    db_session.refresh(persona)
+
+    resp = client.post(
+        "/api/v1/fichas-medicas/",
+        json=_cuerpo_creacion(persona.id),
+    )
+
+    assert resp.status_code == 201
+
+
 def test_patch_si_puede_borrar_alergias_y_el_nombre_del_contacto(client, db_session):
     """FIC-5 intacto donde sigue valiendo: estos dos son opcionales, así que
     vaciarlos es una operación legítima y `null` la expresa."""

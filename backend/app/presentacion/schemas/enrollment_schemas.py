@@ -15,6 +15,7 @@ from app.presentacion.schemas.validadores import (
     CedulaValidada,
     TelefonoValidado,
     TipoSangreValidado,
+    validar_telefono_emergencia_distinto,
 )
 
 
@@ -156,6 +157,15 @@ class EnrollmentCreateDTO(BaseModel):
         acuña los tres y por eso mira el `tipo_cuenta`)."""
         if self.ficha_medica is None:
             raise ValueError(MENSAJE_FICHA_MEDICA_OBLIGATORIA)
+        return self
+
+    @model_validator(mode="after")
+    def _telefono_emergencia_distinto_del_alumno(self) -> "EnrollmentCreateDTO":
+        """Issue #860. `Optional` en el tipo por el mismo motivo que
+        `_ficha_medica_obligatoria` de arriba -- ese validador ya la exige
+        en los hechos, esto solo evita un `AttributeError` sobre `None`."""
+        if self.ficha_medica is not None:
+            validar_telefono_emergencia_distinto(self.alumno.telefono, self.ficha_medica.telefono_emergencia)
         return self
 
 

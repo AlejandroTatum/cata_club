@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.dominio.enums import TipoSangre
 from app.dominio.modelos import ConsultaFichaEmergencia, FichaMedica, Enfermedades
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida
+from app.dominio.telefono import MENSAJE_TELEFONO_EMERGENCIA_IGUAL, telefonos_coinciden
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
 from app.presentacion.schemas.persona_schemas import (
@@ -26,6 +27,12 @@ class FichaMedicaServicio:
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         if persona.ficha_medica:
             raise EntidadDuplicada("La persona ya tiene una ficha médica registrada")
+        # Issue #860: `FichaMedicaCreateDTO` no lleva el teléfono personal --
+        # solo `persona_id` -- así que el DTO no puede comparar por sí solo.
+        # Este candado es lo que hace que la regla valga también acá, no
+        # solo en los tres DTOs que sí traen ambos campos.
+        if telefonos_coinciden(persona.telefono, datos.telefono_emergencia):
+            raise OperacionInvalida(MENSAJE_TELEFONO_EMERGENCIA_IGUAL)
 
         ficha = FichaMedica(
             tipo_sangre=datos.tipo_sangre,
@@ -82,6 +89,10 @@ class FichaMedicaServicio:
                 telefono_emergencia=datos.telefono_emergencia,
                 al_crear=True,
             )
+            # Issue #860, mismo motivo que en `crear_ficha_medica`: el upsert
+            # del PATCH tampoco recibe el teléfono personal en el payload.
+            if telefonos_coinciden(persona.telefono, datos.telefono_emergencia):
+                raise OperacionInvalida(MENSAJE_TELEFONO_EMERGENCIA_IGUAL)
             ficha = FichaMedica(
                 tipo_sangre=datos.tipo_sangre,
                 persona_id=persona_id,
@@ -121,6 +132,12 @@ class FichaMedicaServicio:
             telefono_emergencia=ficha.telefono_emergencia,
             al_crear=False,
         )
+        # Issue #860: se mira el RESULTADO del parche (`ficha`, ya aplicado
+        # arriba), no `datos` -- un PATCH que no toca `telefono_emergencia`
+        # deja la fila con lo que ya tenía, y esta comprobación tiene que ver
+        # exactamente eso, no solo lo que vino en este request.
+        if telefonos_coinciden(persona.telefono, ficha.telefono_emergencia):
+            raise OperacionInvalida(MENSAJE_TELEFONO_EMERGENCIA_IGUAL)
         return self.repo.guardar_cambios(ficha)
 
     @staticmethod
