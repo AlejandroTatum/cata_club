@@ -105,13 +105,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // A pending token may become complete after the club activates a
   // membership. Refresh once the authoritative `/auth/me` answer says the
-  // hito is complete, so the Edge guard receives the new coarse hint too.
+  // gate is complete (issue #940: the backend's own decision, not the two
+  // raw facts), so the Edge guard receives the new coarse hint too.
   if (
     !refreshedAccessToken &&
     activeAccessToken &&
     hasPendingActivationToken(activeAccessToken) &&
-    built.session.correoVerificado &&
-    built.session.altaPresencialCompletada &&
+    built.session.activacionCompleta &&
     refreshCookie
   ) {
     const refreshResult = await backendRefresh(refreshCookie);

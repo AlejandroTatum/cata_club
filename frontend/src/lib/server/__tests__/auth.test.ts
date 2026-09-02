@@ -524,6 +524,22 @@ describe("backendMe", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("invalid_response");
   });
+
+  // Issue #940: `activacionCompleta` is the backend's gate decision — a
+  // malformed value here must not silently pass through as a session.
+  it("rejects a non-boolean activacionCompleta as invalid_response", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({
+        correo: "a@a.com", personaId: 1, nombres: "A", apellidos: "B", roles: ["ALUMNO"],
+        activacionCompleta: "yes",
+      }),
+    );
+
+    const result = await backendMe("token");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_response");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -646,6 +662,50 @@ describe("buildSession", () => {
       correoVerificado: true,
       altaPresencialCompletada: true,
     });
+  });
+
+  // Issue #940: `activacionCompleta` is the backend's own gate decision —
+  // `buildSession` must carry it through as-is, never recompute it.
+  it("maps activacionCompleta straight through when the backend sends it", () => {
+    const session = sessionFrom({
+      correo: "admin-sin-alta@cataclub.com",
+      personaId: 16,
+      nombres: "Rita",
+      apellidos: "Mora",
+      roles: ["ADMINISTRADOR"],
+      // The gate decision is true even though the raw fact is false — an
+      // admin without a membership, exactly the case that trapped #940.
+      correoVerificado: true,
+      altaPresencialCompletada: false,
+      activacionCompleta: true,
+    });
+
+    expect(session).toMatchObject({
+      altaPresencialCompletada: false,
+      activacionCompleta: true,
+    });
+  });
+
+  it("derives activacionCompleta from the two facts when the backend omits it (pre-#940)", () => {
+    const incomplete = sessionFrom({
+      correo: "pendiente2@cataclub.com",
+      personaId: 17,
+      nombres: "Noe",
+      apellidos: "Diaz",
+      roles: ["ALUMNO"],
+      correoVerificado: false,
+      altaPresencialCompletada: true,
+    });
+    expect(incomplete.activacionCompleta).toBe(false);
+
+    const complete = sessionFrom({
+      correo: "listo@cataclub.com",
+      personaId: 18,
+      nombres: "Uma",
+      apellidos: "Reyes",
+      roles: ["ALUMNO"],
+    });
+    expect(complete.activacionCompleta).toBe(true);
   });
 
   it("builds an estudiante session with the extra discriminated fields", () => {

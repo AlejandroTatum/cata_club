@@ -103,6 +103,7 @@ describe("POST /api/auth/login", () => {
       roles: ["ADMINISTRADOR"],
       correoVerificado: true,
       altaPresencialCompletada: true,
+      activacionCompleta: true,
       loggedInAt: expect.any(String),
     });
   });

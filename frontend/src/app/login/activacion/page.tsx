@@ -7,7 +7,7 @@ import { Check, CircleAlert, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { reenviarVerificacionCorreo } from "@/services/api";
 import { getDefaultRoute } from "@/lib/auth-utils";
-import { activationPendingReasons, type ActivationSession } from "@/lib/activation-reasons";
+import { activationPendingReasons, isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
 import AuthShell, { AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
 import { Button, buttonClasses } from "@/components/ui";
@@ -45,10 +45,12 @@ function ActivationPageContent(): React.ReactElement {
       router.replace("/login");
       return;
     }
-    if (correoVerificado && altaCompletada) {
+    // Issue #940: the backend's gate decision rules the redirect — not the
+    // two facts below, which only drive the checklist rendered underneath.
+    if (isActivationComplete(activation)) {
       router.replace(getDefaultRoute(activation.user.role));
     }
-  }, [activation, altaCompletada, correoVerificado, isAuthenticated, isLoading, router]);
+  }, [activation, isAuthenticated, isLoading, router]);
 
   async function resendVerification(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();

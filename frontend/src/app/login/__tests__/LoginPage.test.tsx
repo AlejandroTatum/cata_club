@@ -315,6 +315,55 @@ describe("LoginPage", () => {
       expect(mockReplace).toHaveBeenCalledWith("/dashboard");
       vi.useRealTimers();
     });
+
+    /**
+     * Issue #940: the E2E symptom, at unit level. An admin without a
+     * membership has `altaPresencialCompletada: false` but the backend's own
+     * gate decision (`activacionCompleta`) is true — the redirect must obey
+     * that decision, not recompute it from the raw facts.
+     */
+    it("sends an admin whose alta presencial is incomplete straight to the dashboard when the backend's decision is complete", async () => {
+      vi.useFakeTimers();
+      const session = {
+        ...createMockSession(),
+        altaPresencialCompletada: false,
+        activacionCompleta: true,
+      };
+      const mockLogin = vi.fn().mockResolvedValue({ ok: true, session });
+      mockUseAuth.mockReturnValue({
+        ...createUnauthenticatedAuth(false),
+        login: mockLogin,
+      });
+
+      render(<LoginPage />);
+      submitLoginForm();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(mockReplace).toHaveBeenCalledWith("/dashboard");
+      vi.useRealTimers();
+    });
+
+    it("sends a public account to /login/activacion when the decision is incomplete, even with both facts true", async () => {
+      vi.useFakeTimers();
+      const session = {
+        ...createMockSession({ roles: ["ALUMNO"] }),
+        correoVerificado: true,
+        altaPresencialCompletada: true,
+        activacionCompleta: false,
+      };
+      const mockLogin = vi.fn().mockResolvedValue({ ok: true, session });
+      mockUseAuth.mockReturnValue({
+        ...createUnauthenticatedAuth(false),
+        login: mockLogin,
+      });
+
+      render(<LoginPage />);
+      submitLoginForm();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(mockReplace).toHaveBeenCalledWith("/login/activacion");
+      vi.useRealTimers();
+    });
   });
 });
 
