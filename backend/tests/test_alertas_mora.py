@@ -180,8 +180,7 @@ def _notificaciones_de_familia(db, tipo: TipoNotificacion, persona_id: int) -> i
 def test_dia_1_notifica_solo_al_representante_con_ambos_canales(
     db_session, sesion_inyectada, monkeypatch
 ):
-    # Issue #905: el representante es el ÚNICO responsable de pago -- recibe
-    # la fila in-app y el correo, y el alumno representado no recibe nada.
+    # Issue #905: el representante es el ÚNICO responsable de pago.
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
     representante = _crear_persona(db_session, cedula_valida(201))
     correo_representante = "representante201@cataclub.test"
@@ -204,7 +203,6 @@ def test_dia_1_notifica_solo_al_representante_con_ambos_canales(
         db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
     ) == 0
     assert [envio["destinatario"] for envio in llamadas] == [correo_representante]
-    # El cuerpo del correo nombra al representado, no al representante.
     assert "Nino" in llamadas[0]["cuerpo_texto"]
 
 
@@ -248,6 +246,31 @@ def test_dia_8_notifica_segundo_aviso(db_session, sesion_inyectada, monkeypatch)
     assert _notificaciones_de_familia(
         db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
     ) == 0
+
+
+# --- Issue #905/#898: el asunto distingue día 1 (aviso) de día 8 (último) --
+
+@pytest.mark.parametrize(
+    ("dias_mora", "estado", "asunto_esperado"),
+    [
+        (1, EstadoMembresia.ACTIVA, "Aviso de mora - Cata Club"),
+        (8, EstadoMembresia.VENCIDA, "Último aviso de mora - Cata Club"),
+    ],
+)
+def test_asunto_de_mora_distingue_dia_1_de_dia_8(
+    db_session, sesion_inyectada, monkeypatch, dias_mora, estado, asunto_esperado,
+):
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(241 + dias_mora))
+    _crear_usuario(db_session, alumno, f"alumno{241 + dias_mora}@cataclub.test")
+    _crear_membresia_con_pago(
+        db_session, alumno, HOY - timedelta(days=dias_mora), estado=estado,
+    )
+    llamadas = _mock_envio(monkeypatch)
+
+    alertas_mod.alertar_mora_diaria()
+
+    assert llamadas[0]["asunto"] == asunto_esperado
 
 
 # --- Día 15: silencio --------------------------------------------------------
@@ -297,9 +320,9 @@ def test_dos_corridas_el_mismo_dia_no_duplican(db_session, sesion_inyectada, mon
         .count()
     )
     assert total_resumen == 1
-    # El correo del alumno sale una vez; el del admin (resumen) sale una vez.
-    assert len([envio for envio in llamadas if envio["destinatario"] == "alumno207@cataclub.test"]) == 1
-    assert len([envio for envio in llamadas if envio["destinatario"] == "admin206@cataclub.test"]) == 1
+    # El correo del alumno sale una vez; el resumen al admin es in-app y
+    # nunca dispara `enviar_correo` (issue #905).
+    assert [envio["destinatario"] for envio in llamadas] == ["alumno207@cataclub.test"]
 
 
 # --- Un pago aprobado posterior detiene los avisos ---------------------------
@@ -367,15 +390,21 @@ def test_membresia_suspendida_no_genera_aviso(db_session, sesion_inyectada, monk
 
 # --- Resumen diario al administrador -----------------------------------------
 
-def test_resumen_admin_contiene_morosos_con_meses_adeudados(
-    db_session, sesion_inyectada, monkeypatch
+@pytest.mark.parametrize("cantidad_admins", [1, 2])
+def test_resumen_admin_es_solo_in_app_sin_llamar_enviar_correo(
+    db_session, sesion_inyectada, monkeypatch, cantidad_admins,
 ):
+    # Issue #905: el resumen administrativo es exclusivamente in-app -- no
+    # dispara ninguna solicitud SMTP, sin importar cuántos administradores haya.
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    admin_persona, _ = _crear_admin(db_session, cedula_valida(210), "admin210@cataclub.test")
+    admin_personas, _ = zip(*[
+        _crear_admin(db_session, cedula_valida(211 + i), f"admin{211 + i}@cataclub.test")
+        for i in range(cantidad_admins)
+    ])
     alumno = _crear_persona(
-        db_session, cedula_valida(211), nombres="Mora", apellidos="Uno",
+        db_session, cedula_valida(210), nombres="Mora", apellidos="Uno",
     )
-    _crear_usuario(db_session, alumno, "alumno211@cataclub.test")
+    _crear_usuario(db_session, alumno, "alumno210@cataclub.test")
     _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
     llamadas = _mock_envio(monkeypatch)
 
@@ -384,21 +413,19 @@ def test_resumen_admin_contiene_morosos_con_meses_adeudados(
     assert resultado["total_avisos_familia"] == 1
     assert resultado["resumen_admin_enviado"] is True
 
-    resumen = (
+    resumenes = (
         db_session.query(Notificacion)
-        .filter(
-            Notificacion.tipo == TipoNotificacion.RESUMEN_MORA_ADMIN,
-            Notificacion.persona_id == admin_persona.id,
-        )
-        .one()
+        .filter(Notificacion.tipo == TipoNotificacion.RESUMEN_MORA_ADMIN)
+        .all()
     )
+    assert {fila.persona_id for fila in resumenes} == {p.id for p in admin_personas}
     meses = _meses_enteros_desde(HOY - timedelta(days=1), HOY)
-    assert "Mora Uno" in resumen.mensaje
-    assert f"{meses} meses" in resumen.mensaje
-    assert "$35.00" in resumen.mensaje
+    assert "Mora Uno" in resumenes[0].mensaje
+    assert f"{meses} meses" in resumenes[0].mensaje
 
-    # El resumen también se envía por correo al administrador.
-    assert "admin210@cataclub.test" in [envio["destinatario"] for envio in llamadas]
+    # El correo del alumno en mora sí sale (canal de familia); el resumen al
+    # administrador nunca llama a `enviar_correo`.
+    assert [envio["destinatario"] for envio in llamadas] == ["alumno210@cataclub.test"]
 
 
 def test_resumen_admin_no_se_duplica_en_el_mismo_dia(
@@ -527,46 +554,6 @@ def test_lote_de_mora_sigue_cuando_una_familia_tiene_el_correo_rechazado(
     )
     assert fila_rechazada.last_error_redacted is not None
     assert "550" in fila_rechazada.last_error_redacted
-
-
-def test_resumen_admin_sigue_con_el_otro_admin_si_uno_es_rechazado(
-    db_session, sesion_inyectada, monkeypatch
-):
-    """Tercer lote de la tarea: el resumen diario a los administradores. Con
-    dos administradores y la dirección del primero rechazada con 550, el
-    segundo igual recibe su resumen y el primero conserva el suyo in-app con
-    la auditoría del rechazo."""
-    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    alumno = _crear_persona(db_session, cedula_valida(233))
-    _crear_usuario(db_session, alumno, "alumno233@cataclub.test")
-    _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
-    correo_rechazado = "admin234@cataclub.test"
-    correo_bueno = "admin235@cataclub.test"
-    admin_rechazado, _ = _crear_admin(db_session, cedula_valida(234), correo_rechazado)
-    admin_bueno, _ = _crear_admin(db_session, cedula_valida(235), correo_bueno)
-    registro = configurar_smtp_falso(
-        monkeypatch, rechazos={correo_rechazado: (550, "buzón inexistente")},
-    )
-    mock_retry = Mock(side_effect=CeleryRetry("reintentando", None))
-    monkeypatch.setattr(alertas_mod.alertar_mora_diaria, "retry", mock_retry)
-
-    resultado = alertas_mod.alertar_mora_diaria()
-
-    assert mock_retry.call_count == 0
-    assert correo_bueno in registro.enviados
-    assert correo_rechazado not in registro.enviados
-    assert resultado["resumen_admin_enviado"] is True
-    assert resultado["total_rechazos_permanentes"] == 1
-
-    resumenes = {
-        fila.persona_id: fila
-        for fila in db_session.query(Notificacion).filter(
-            Notificacion.tipo == TipoNotificacion.RESUMEN_MORA_ADMIN
-        )
-    }
-    assert set(resumenes) == {admin_rechazado.id, admin_bueno.id}
-    assert "550" in resumenes[admin_rechazado.id].last_error_redacted
-    assert resumenes[admin_bueno.id].last_error_redacted is None
 
 
 def test_lote_de_mora_aborta_con_cooldown_si_el_fallo_es_global(

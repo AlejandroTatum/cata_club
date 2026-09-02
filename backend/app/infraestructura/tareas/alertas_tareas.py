@@ -81,6 +81,29 @@ def _responsable_de_pago(persona: Persona) -> Persona:
     return persona.representante if persona.representante_id else persona
 
 
+def _render_vencimiento(nombre: str, mensaje: str) -> tuple[str, str]:
+    """`(asunto, cuerpo_texto)` del correo de vencimiento. Pura -- sin I/O.
+    Issue #898 reemplaza SOLO esta función (y `_render_mora`) por su versión
+    con HTML."""
+    asunto = "Vencimiento de membresía - Cata Club"
+    cuerpo = (
+        f"Hola {nombre},\n\n"
+        f"{mensaje} Por favor, regularice su pago para evitar la suspensión de beneficios."
+    )
+    return asunto, cuerpo
+
+
+def _render_mora(tipo: TipoNotificacion, nombre: str, mensaje: str) -> tuple[str, str]:
+    """`(asunto, cuerpo_texto)` del correo de mora. El asunto distingue el
+    día 8 (último aviso) del día 1 -- mapa 4a/4b de #898."""
+    asunto = (
+        "Último aviso de mora - Cata Club"
+        if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_8
+        else "Aviso de mora - Cata Club"
+    )
+    return asunto, f"Hola {nombre},\n\n{mensaje}"
+
+
 @celery_app.task(
     name="app.infraestructura.tareas.alertas_tareas.alertar_vencimientos_hoy_mas_5",
     bind=True,
@@ -323,16 +346,12 @@ def _construir_notificacion_vencimiento(
     rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
     if responsable.usuario:
+        asunto, cuerpo = _render_vencimiento(responsable.nombres, mensaje)
         try:
             from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
             svc = ServicioNotificaciones()
             svc.enviar_correo(
-                destinatario=responsable.usuario.correo,
-                asunto="Vencimiento de membresía - Cata Club",
-                cuerpo_texto=(
-                    f"Hola {responsable.nombres},\n\n"
-                    f"{mensaje} Por favor, regularice su pago para evitar la suspensión de beneficios."
-                ),
+                destinatario=responsable.usuario.correo, asunto=asunto, cuerpo_texto=cuerpo,
             )
         except RuntimeError:
             logger.warning(
@@ -408,13 +427,12 @@ def _construir_notificaciones_mora(
     rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
     if responsable.usuario:
+        asunto, cuerpo = _render_mora(tipo, responsable.nombres, mensaje)
         try:
             from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
             svc = ServicioNotificaciones()
             svc.enviar_correo(
-                destinatario=responsable.usuario.correo,
-                asunto="Aviso de mora - Cata Club",
-                cuerpo_texto=f"Hola {responsable.nombres},\n\n{mensaje}",
+                destinatario=responsable.usuario.correo, asunto=asunto, cuerpo_texto=cuerpo,
             )
         except RuntimeError:
             logger.warning(
@@ -479,46 +497,21 @@ def _formatear_resumen_mora(hoy: date, morosos: list[dict]) -> str:
 
 def _construir_resumen_admin(
     ya_notificados: set[int], admin_usuario: Usuario, resumen: str, inicio_dia: datetime,
-) -> tuple[Notificacion | None, DestinatarioRechazadoPermanentemente | None]:
-    """Arma el RESUMEN_MORA_ADMIN in-app para un administrador y envía el
-    correo. NO escribe en la base -- el llamador persiste el lote entero
-    junto (issue #833). Dedup resuelto en `ya_notificados` (una consulta por
-    lote, ver `_admins_ya_notificados_hoy`); `ServicioNoDisponible` NO se
-    atrapa acá, igual que la rama de familia."""
+) -> Notificacion | None:
+    """Arma el RESUMEN_MORA_ADMIN in-app para un administrador. NO escribe en
+    la base -- el llamador persiste el lote entero junto (issue #833). Dedup
+    resuelto en `ya_notificados` (`_admins_ya_notificados_hoy`). Issue #905:
+    exclusivamente in-app, NUNCA dispara `enviar_correo` -- a diferencia de
+    las ramas de familia, acá no hay canal que pueda fallar."""
     admin_persona = admin_usuario.persona
     if admin_persona.id in ya_notificados:
-        return None, None
+        return None
 
-    fila = Notificacion(
+    return Notificacion(
         tipo=TipoNotificacion.RESUMEN_MORA_ADMIN,
         mensaje=resumen,
         persona_id=admin_persona.id,
     )
-    rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
-
-    try:
-        from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-        svc = ServicioNotificaciones()
-        svc.enviar_correo(
-            destinatario=admin_usuario.correo,
-            asunto=f"Resumen de mora - Cata Club ({inicio_dia.strftime('%d/%m/%Y')})",
-            cuerpo_texto=resumen,
-        )
-    except RuntimeError:
-        logger.warning(
-            "SMTP no configurado — email de resumen no enviado para admin persona_id=%s",
-            admin_persona.id,
-        )
-    except DestinatarioRechazadoPermanentemente as exc:
-        # Mismo criterio que las dos ramas de familia (issue #837): la
-        # dirección de ESTE administrador no acepta correo, el resumen in-app
-        # igual se arma con la auditoría del rechazo, y se devuelve como
-        # `rechazo_terminal` para que el llamador siga con el administrador
-        # siguiente.
-        rechazo_terminal = exc
-        fila.last_error_redacted = _auditoria_de_rechazo(exc)
-
-    return fila, rechazo_terminal
 
 
 @celery_app.task(
@@ -545,10 +538,11 @@ def alertar_mora_diaria(self) -> dict:
     hoy = hoy_club()
     avisos_familia: list[dict] = []
     resumen_admin_enviado = False
-    # Correos rechazados de forma definitiva, de familia o de administrador
-    # (issue #837). El aviso in-app de cada uno sí se emitió; esta lista
-    # existe para que la corrida no informe una entrega limpia cuando hay
-    # direcciones que hay que corregir a mano.
+    # Correos de familia rechazados de forma definitiva (issue #837). El
+    # aviso in-app de cada uno sí se emitió; esta lista existe para que la
+    # corrida no informe una entrega limpia cuando hay direcciones que hay
+    # que corregir a mano. El resumen al administrador es exclusivamente
+    # in-app (issue #905) y no tiene correo que pueda rechazarse.
     rechazos_permanentes: list[dict] = []
 
     with SessionLocal() as db:
@@ -693,42 +687,17 @@ def alertar_mora_diaria(self) -> dict:
                 db, {admin.persona.id for admin in admins}, inicio_dia, fin_dia
             )
 
+            # Issue #905: el resumen es exclusivamente in-app -- no hay
+            # `enviar_correo` que pueda fallar, así que a diferencia del
+            # lote de familia no hace falta capturar `ServicioNoDisponible`
+            # ni un rechazo por destinatario.
             lote_admin: list[Notificacion] = []
             for admin_usuario in admins:
-                try:
-                    fila, rechazo = _construir_resumen_admin(
-                        ya_notificados_admin, admin_usuario, resumen, inicio_dia
-                    )
-                except ServicioNoDisponible as exc:
-                    logger.warning(
-                        "Circuito SMTP abierto enviando resumen de mora a admin "
-                        "persona_id=%s; reintentando en %.0fs",
-                        admin_usuario.persona_id, CIRCUITO_SMTP_COOLDOWN_SEGUNDOS,
-                    )
-                    _persistir_lote(lote_admin)
-                    raise self.retry(exc=exc, countdown=CIRCUITO_SMTP_COOLDOWN_SEGUNDOS)
-                except Exception:
-                    logger.exception(
-                        "Fallo enviando resumen de mora a admin persona_id=%s",
-                        admin_usuario.persona_id,
-                    )
-                    _persistir_lote(lote_admin)
-                    raise
-
+                fila = _construir_resumen_admin(
+                    ya_notificados_admin, admin_usuario, resumen, inicio_dia
+                )
                 if fila is not None:
                     lote_admin.append(fila)
-                    resumen_admin_enviado = True
-                if rechazo is not None:
-                    # Issue #837: la dirección de ESTE administrador no
-                    # acepta correo, pero el lote sigue con el siguiente.
-                    logger.warning(
-                        "Correo del resumen de mora rechazado de forma permanente "
-                        "para admin persona_id=%s: %s; el lote continúa",
-                        admin_usuario.persona_id, rechazo.detalle_tecnico,
-                    )
-                    rechazos_permanentes.append({
-                        "admin_persona_id": admin_usuario.persona_id,
-                    })
                     resumen_admin_enviado = True
             _persistir_lote(lote_admin)
 
