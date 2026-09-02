@@ -33,15 +33,9 @@ sys.path.insert(0, str(_RAIZ_BACKEND))
 
 from app.dominio.modelos import Usuario  # noqa: E402
 from app.soporte_transversal.configuracion import settings  # noqa: E402
+from scripts.sesion_solo_lectura import abrir_sesion_solo_lectura  # noqa: E402, F401 (re-exportada para tests)
 
 LARGO_HUELLA = 12  # hex; 48 bits alcanzan para distinguir buckets en un reporte
-
-
-def abrir_sesion_solo_lectura(engine) -> Session:
-    """`Session` sobre una conexión `postgresql_readonly=True`: Postgres
-    rechaza cualquier escritura con un error del propio servidor."""
-    conexion = engine.connect().execution_options(postgresql_readonly=True)
-    return Session(bind=conexion)
 
 
 def _huella_hmac(clave_normalizada: str, sal: bytes) -> str:
