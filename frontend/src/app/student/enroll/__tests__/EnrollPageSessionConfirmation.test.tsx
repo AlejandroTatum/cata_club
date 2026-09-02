@@ -223,6 +223,11 @@ describe("EnrollPage — the confirmation's session claim is conditional on a co
     it("still confirms the enrolment itself", () => {
       expect(screen.getByText(/inscripción completada/i)).toBeInTheDocument();
       expect(screen.getByText(/su cuenta ya está creada\. inicie sesión/i)).toBeInTheDocument();
+      // #877: the branded welcome and emotional line stay regardless of the
+      // session outcome — they say nothing about membership, payment or
+      // session, so this unconfirmed branch carries them too.
+      expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
+      expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
     });
   });
 
@@ -275,6 +280,9 @@ describe("EnrollPage — the confirmation's session claim is conditional on a co
       expect(screen.getByText(/su cuenta ya está creada y la sesión, iniciada/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /ir a mi cuenta/i })).toHaveAttribute("href", "/student");
       expect(screen.queryByTestId("enroll-session-not-confirmed")).not.toBeInTheDocument();
+      // #877: same branded welcome and emotional line as the unconfirmed branch.
+      expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
+      expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
     });
 
     it("confirms against the session route the rest of the app hydrates from", async () => {

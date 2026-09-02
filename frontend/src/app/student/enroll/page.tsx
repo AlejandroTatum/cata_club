@@ -1272,7 +1272,7 @@ function EnrollWizard(): React.ReactElement {
                 the wizard where the club gets to speak in its own colours. */}
             <div className="flex justify-end bg-coal px-page py-2">
               <span className="text-2xs font-bold uppercase text-ball">
-                Bienvenido al club
+                ¡Le damos la bienvenida a Cata Club!
               </span>
             </div>
 
@@ -1297,6 +1297,12 @@ function EnrollWizard(): React.ReactElement {
                 <h1 className="font-display text-xl uppercase tracking-flat text-ink">
                   Inscripción completada
                 </h1>
+                {/* #877: a contained emotional line, not a second claim — it
+                    says nothing about membership, payment or session, so it
+                    stays true regardless of `sessionConfirmed`. */}
+                <p className="max-w-[44ch] text-sm text-ink-2">
+                  Su camino en el tenis de mesa comienza aquí.
+                </p>
                 <p className="max-w-[44ch] text-sm text-ink-2">
                   <b className="font-semibold text-ink">
                     {formData.nombres} {formData.apellidos}

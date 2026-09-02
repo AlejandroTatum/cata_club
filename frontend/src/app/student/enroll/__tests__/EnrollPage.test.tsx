@@ -898,4 +898,11 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
 
     expect(screen.getByText(/administraci[oó]n/i)).toBeInTheDocument();
   });
+
+  it("muestra la bienvenida de marca y la línea emocional en la confirmación (#877)", async () => {
+    await completarInscripcionPropia();
+
+    expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
+    expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
+  });
 });
