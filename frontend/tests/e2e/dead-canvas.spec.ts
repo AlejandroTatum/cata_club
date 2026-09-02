@@ -471,7 +471,11 @@ const SCREENS: Screen[] = [
     short: true,
     open: async (page) => {
       await mockSession(page, "admin");
-      await page.route("**/api/descuentos", (r) => fulfillJson(r, DISCOUNTS));
+      // Paginated backend (issue #814): `fetchDescuentos` unwraps `{items,
+      // total, skip, limit}`.
+      await page.route("**/api/descuentos**", (r) =>
+        fulfillJson(r, { items: DISCOUNTS, total: DISCOUNTS.length, skip: 0, limit: 200 }),
+      );
       await page.goto("/discounts");
       await expect(page.locator("table tbody tr").first()).toBeVisible({ timeout: 20_000 });
     },

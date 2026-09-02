@@ -1268,13 +1268,16 @@ function makeDescuento(overrides: Partial<DescuentoCatalogo> = {}): DescuentoCat
 }
 
 describe("fetchDescuentos", () => {
-  it("GETs /api/descuentos and returns the full catalog (active + inactive)", async () => {
+  // Paginated backend (issue #814): the endpoint answers the standard
+  // `{items, total, skip, limit}` envelope and the client requests one page
+  // at the backend's cap (limit=200), unwrapping `items` for its callers.
+  it("GETs /api/descuentos and unwraps the paginated envelope (active + inactive)", async () => {
     const items = [makeDescuento(), makeDescuento({ id: 2, nombre: "Vieja", activo: false })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse(items));
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items, total: 2, skip: 0, limit: 200 }));
 
     const result = await fetchDescuentos();
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/descuentos", expect.anything());
+    expect(global.fetch).toHaveBeenCalledWith("/api/descuentos?limit=200", expect.anything());
     expect(result).toEqual(items);
   });
 });

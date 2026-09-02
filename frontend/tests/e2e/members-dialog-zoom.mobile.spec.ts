@@ -100,8 +100,13 @@ async function mockMembersRuntime(page: Page): Promise<void> {
   await page.route("**/api/personas/*/pagos**", (route: Route) => fulfillJson(route, { items: [], total: 0 }));
   // A non-empty catalogue, or the Beneficio picker renders "no hay descuentos"
   // instead of the `<select>` — which is the single most important field here.
+  // Paginated backend (issue #814): `fetchDescuentos` unwraps `{items,
+  // total, skip, limit}`.
   await page.route("**/api/descuentos**", (route: Route) =>
-    fulfillJson(route, [{ id: 1, nombre: "Hermanos", tipo: "PORCENTAJE", valor: 20, activo: true }]),
+    fulfillJson(route, {
+      items: [{ id: 1, nombre: "Hermanos", tipo: "PORCENTAJE", valor: 20, activo: true }],
+      total: 1, skip: 0, limit: 200,
+    }),
   );
 }
 

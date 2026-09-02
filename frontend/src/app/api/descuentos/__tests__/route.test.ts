@@ -19,8 +19,8 @@ function makeJwt(expSecondsFromNow: number): string {
   return `${header}.${payload}.sig`;
 }
 
-function getRequest(cookie = ""): NextRequest {
-  return new NextRequest("http://localhost/api/descuentos", {
+function getRequest(cookie = "", search = ""): NextRequest {
+  return new NextRequest(`http://localhost/api/descuentos${search}`, {
     method: "GET",
     headers: cookie ? { cookie } : {},
   });
@@ -56,18 +56,33 @@ describe("GET /api/descuentos", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("proxies the full catalog (active + inactive) from the backend", async () => {
+  it("proxies the full catalog (active + inactive) from the backend, paginated envelope intact", async () => {
     const inactivo = { ...DESCUENTO, id: 2, nombre: "Beca vieja", activo: false };
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([DESCUENTO, inactivo]));
+    const envelope = { items: [DESCUENTO, inactivo], total: 2, skip: 0, limit: 200 };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(envelope));
 
     const token = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${token}`));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual([DESCUENTO, inactivo]);
+    expect(await response.json()).toEqual(envelope);
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/descuentos/",
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: `Bearer ${token}` }) }),
+    );
+  });
+
+  it("forwards the incoming query string (skip/limit) to the backend", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ items: [DESCUENTO], total: 1, skip: 0, limit: 200 }),
+    );
+
+    const token = makeJwt(3600);
+    await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${token}`, "?limit=200"));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/descuentos/?limit=200",
+      expect.anything(),
     );
   });
 

@@ -2053,9 +2053,18 @@ export interface ActualizarDescuentoInput {
 }
 
 /** Admin-only: full discount catalog, ACTIVE AND INACTIVE — `GET /api/descuentos`.
- *  The list is the administration view (and the road to reactivating). */
+ *  The list is the administration view (and the road to reactivating).
+ *
+ *  Paginated on the backend (issue #814): the standard `{items, total, skip,
+ *  limit}` envelope. One page at the backend's cap (limit=200) — same as
+ *  `fetchAlumnosPorHorario` — keeps this catalog's callers (this page and
+ *  the /members Beneficio picker) working unchanged. */
 export async function fetchDescuentos(): Promise<DescuentoCatalogo[]> {
-  return request<DescuentoCatalogo[]>(apiEndpoint("/descuentos"), { method: "GET" });
+  const { items } = await request<PaginatedEnvelope<DescuentoCatalogo>>(
+    apiEndpoint(`/descuentos?limit=${ROSTER_PAGE_LIMIT}`),
+    { method: "GET" },
+  );
+  return items;
 }
 
 /** Admin-only: create a catalog discount — `POST /api/descuentos`. */

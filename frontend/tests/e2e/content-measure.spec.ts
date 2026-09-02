@@ -170,8 +170,12 @@ test.describe("the discounts rail", () => {
   test("opening the form does not move the catalog", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await loginAsAdmin(page);
-    // Registered after `loginAsAdmin`'s catch-all, so it wins.
-    await page.route("**/descuentos", (route) => fulfillJson(route, DISCOUNTS));
+    // Registered after `loginAsAdmin`'s catch-all, so it wins. Paginated
+    // backend (issue #814): `fetchDescuentos` unwraps `{items, total, skip,
+    // limit}`.
+    await page.route("**/descuentos**", (route) =>
+      fulfillJson(route, { items: DISCOUNTS, total: DISCOUNTS.length, skip: 0, limit: 200 }),
+    );
     await page.goto("/discounts");
 
     const table = page.locator("table");
