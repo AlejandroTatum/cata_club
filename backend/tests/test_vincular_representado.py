@@ -31,7 +31,7 @@ from app.dominio.excepciones import OperacionInvalida
 from app.dominio.mensajes import MENSAJE_VINCULACION_NO_DISPONIBLE
 from app.dominio.modelos import Notificacion, Persona, VinculacionRepresentante
 from app.dominio.enums import TipoNotificacion
-from app.presentacion.schemas.persona_schemas import VincularRepresentadoDTO
+from app.servicios_negocio.dtos.persona_schemas import VincularRepresentadoDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio import persona_servicio as persona_servicio_modulo
 from app.servicios_negocio.persona_servicio import PersonaServicio

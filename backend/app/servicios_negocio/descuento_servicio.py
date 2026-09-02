@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import Descuento
 from app.infraestructura.repositorios.descuento_repositorio import DescuentoRepositorio
-from app.presentacion.schemas.descuento_schemas import DescuentoCreateDTO, DescuentoUpdateDTO
+from app.servicios_negocio.dtos.descuento_schemas import DescuentoCreateDTO, DescuentoUpdateDTO
 
 MENSAJE_DESCUENTO_AMBIGUO = (
     "El descuento debe definir exactamente uno: porcentaje o monto fijo"

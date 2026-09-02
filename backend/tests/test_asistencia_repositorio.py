@@ -19,7 +19,7 @@ from app.dominio.modelos import (
 from app.infraestructura.repositorios.asistencia_repositorio import (
     AlumnoHorarioRepositorio, AsistenciaRepositorio, SesionAsistenciaRepositorio,
 )
-from app.presentacion.schemas.asistencia_schemas import AsistenciaCreateDTO
+from app.servicios_negocio.dtos.asistencia_schemas import AsistenciaCreateDTO
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 
 

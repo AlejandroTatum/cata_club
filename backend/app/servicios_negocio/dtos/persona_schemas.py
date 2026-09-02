@@ -5,9 +5,9 @@ from typing import Optional, List
 from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoManoDominante
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from pydantic import EmailStr
-from app.presentacion.schemas.base import ResponseBase
-from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
-from app.presentacion.schemas.validadores import (
+from app.servicios_negocio.dtos.base import ResponseBase
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
+from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,

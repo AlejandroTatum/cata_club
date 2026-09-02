@@ -6,8 +6,8 @@ from typing import Optional
 from app.dominio.enums import (
     EstadoMembresia, TipoModalidad, EstadoPago, TipoPago, EfectoCoberturaCorreccion,
 )
-from app.presentacion.schemas.base import ResponseBase
-from app.presentacion.schemas.validadores import NombrePresentado
+from app.servicios_negocio.dtos.base import ResponseBase
+from app.servicios_negocio.dtos.validadores import NombrePresentado
 
 
 # --- TipoMembresia ---

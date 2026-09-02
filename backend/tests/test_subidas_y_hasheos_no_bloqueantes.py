@@ -49,8 +49,8 @@ from sqlalchemy import inspect as inspeccionar_orm
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona
-from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
-from app.presentacion.schemas.persona_schemas import (
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
+from app.servicios_negocio.dtos.persona_schemas import (
     PersonaListItemDTO, PersonaResponseDTO, RepresentadoCreateDTO,
 )
 from app.servicios_negocio.persona_servicio import PersonaServicio

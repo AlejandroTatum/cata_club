@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.presentacion.schemas.base import ResponseBase
+from app.servicios_negocio.dtos.base import ResponseBase
 
 
 # --- Pais ---

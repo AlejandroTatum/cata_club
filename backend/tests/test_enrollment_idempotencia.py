@@ -12,7 +12,7 @@ from app.infraestructura.repositorios.inscripcion_idempotencia_repositorio impor
     ESTADO_PENDIENTE,
     InscripcionIdempotenciaRepositorio,
 )
-from app.presentacion.schemas.enrollment_schemas import EnrollmentCreateDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO
 from app.servicios_negocio.enrollment_servicio import (
     MENSAJE_IDEMPOTENCIA_EN_VUELO,
     MENSAJE_IDEMPOTENCIA_REUTILIZADA,

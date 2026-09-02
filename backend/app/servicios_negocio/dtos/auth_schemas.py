@@ -11,8 +11,8 @@ from pydantic import BaseModel, EmailStr, Field, field_serializer
 from typing import List, Optional
 
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
-from app.presentacion.schemas.base import ResponseBase
-from app.presentacion.schemas.validadores import CedulaValidada, NombrePresentado, TelefonoValidado
+from app.servicios_negocio.dtos.base import ResponseBase
+from app.servicios_negocio.dtos.validadores import CedulaValidada, NombrePresentado, TelefonoValidado
 
 
 class RegistroUsuarioDTO(BaseModel):

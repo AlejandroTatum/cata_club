@@ -24,7 +24,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
 )
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,

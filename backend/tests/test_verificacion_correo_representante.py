@@ -33,7 +33,7 @@ from app.dominio.enums import TipoRol, TipoSangre
 from app.dominio.excepciones import PermisosInsuficientes
 from app.dominio.mensajes import MENSAJE_CORREO_SIN_VERIFICAR
 from app.dominio.modelos import FichaMedica, Persona, Rol, Usuario
-from app.presentacion.schemas.persona_schemas import VincularRepresentadoDTO
+from app.servicios_negocio.dtos.persona_schemas import VincularRepresentadoDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio import persona_servicio as persona_servicio_modulo
 from app.servicios_negocio.persona_servicio import PersonaServicio

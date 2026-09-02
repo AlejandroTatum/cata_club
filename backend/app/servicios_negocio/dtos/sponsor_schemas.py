@@ -1,7 +1,7 @@
 """DTOs para los logos públicos de patrocinadores (issue #503)."""
 from pydantic import BaseModel, Field, field_validator
 
-from app.presentacion.schemas.base import ResponseBase
+from app.servicios_negocio.dtos.base import ResponseBase
 
 
 class SponsorResponseDTO(ResponseBase, BaseModel):

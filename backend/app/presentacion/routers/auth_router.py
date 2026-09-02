@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
 from app.servicios_negocio.gestor_permisos import GestorPermisos
-from app.presentacion.schemas.auth_schemas import (
+from app.servicios_negocio.dtos.auth_schemas import (
     RegistroUsuarioDTO, RefreshTokenDTO, UsuarioMeResponseDTO, LogoutResponseDTO,
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO,
     SolicitarVerificacionCorreoDTO, SolicitarVerificacionCorreoResponseDTO,

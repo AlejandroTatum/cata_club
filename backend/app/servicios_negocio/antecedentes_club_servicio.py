@@ -4,7 +4,7 @@ from app.dominio.modelos import AntecedentesClub
 from app.dominio.excepciones import EntidadNoEncontrada, EntidadDuplicada
 from app.infraestructura.repositorios.antecedentes_club_repositorio import AntecedentesClubRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-from app.presentacion.schemas.persona_schemas import AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO
+from app.servicios_negocio.dtos.persona_schemas import AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO
 
 
 class AntecedentesClubServicio:

@@ -17,8 +17,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.presentacion.schemas.base import ResponseBase
-from app.presentacion.schemas.beneficio_schemas import AsignacionDescuentoResponseDTO
+from app.servicios_negocio.dtos.base import ResponseBase
+from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
 
 
 class CoberturaBonificadaCreateDTO(BaseModel):

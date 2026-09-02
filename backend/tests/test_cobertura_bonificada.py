@@ -45,8 +45,8 @@ from app.dominio.modelos import (
     Notificacion, Pago, Persona, TipoMembresia,
 )
 from app.infraestructura.repositorios.pago_repositorio import CoberturaBonificadaRepositorio
-from app.presentacion.schemas.cobertura_bonificada_schemas import CoberturaBonificadaCreateDTO
-from app.presentacion.schemas.membresia_pago_schemas import CorreccionPagoDTO
+from app.servicios_negocio.dtos.cobertura_bonificada_schemas import CoberturaBonificadaCreateDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import CorreccionPagoDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import (

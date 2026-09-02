@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.dominio.enums import TipoNotificacion
-from app.presentacion.schemas.base import ResponseBase
+from app.servicios_negocio.dtos.base import ResponseBase
 
 
 class NotificacionResponseDTO(ResponseBase, BaseModel):

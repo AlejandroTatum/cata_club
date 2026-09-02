@@ -18,7 +18,7 @@ from datetime import date, time
 
 from app.dominio.enums import DiaSemana
 from app.dominio.modelos import Persona
-from app.presentacion.schemas.asistencia_schemas import (
+from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO,
 )
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio

@@ -23,7 +23,7 @@ from app.dominio.enums import (
 )
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona, Usuario, Rol, Membresia, Pago, TipoMembresia
-from app.presentacion.schemas.persona_schemas import IndependizarDTO
+from app.servicios_negocio.dtos.persona_schemas import IndependizarDTO
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.seguridad.gestor_auth import GestorAutenticacion

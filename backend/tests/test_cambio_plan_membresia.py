@@ -26,7 +26,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import HistorialCambioPlanMembresia, Membresia, Pago, Persona, TipoMembresia
-from app.presentacion.schemas.membresia_pago_schemas import CambioPlanMembresiaDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import CambioPlanMembresiaDTO
 from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio, _sumar_meses
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 

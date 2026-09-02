@@ -25,7 +25,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago
 from app.dominio.excepciones import PermisosInsuficientes
 from app.dominio.modelos import Membresia, Persona, Pago, TipoMembresia
-from app.presentacion.schemas.membresia_pago_schemas import PagoCreateDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import PagoCreateDTO
 from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio, PagoServicio
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 

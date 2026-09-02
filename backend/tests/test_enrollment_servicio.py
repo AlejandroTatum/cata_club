@@ -11,7 +11,7 @@ from app.dominio.modelos import (
     FichaMedica, Notificacion,
     Persona, Usuario,
 )
-from app.presentacion.schemas.enrollment_schemas import (
+from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentAntecedentesDTO,
     EnrollmentCreateDTO,

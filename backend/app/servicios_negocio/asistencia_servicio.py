@@ -25,7 +25,7 @@ from app.infraestructura.repositorios.asistencia_repositorio import (
     AsistenciaRepositorio, HorarioRepositorio, AlumnoHorarioRepositorio,
     SesionAsistenciaRepositorio,
 )
-from app.presentacion.schemas.asistencia_schemas import (
+from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,

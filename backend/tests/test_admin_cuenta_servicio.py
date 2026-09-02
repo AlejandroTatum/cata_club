@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Persona, Usuario
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 
 

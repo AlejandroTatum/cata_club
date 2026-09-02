@@ -524,7 +524,7 @@ def _dto_ficha_enrollment(**overrides) -> dict:
 def test_enrollment_rechaza_tipo_de_sangre_desconocido():
     from pydantic import ValidationError
 
-    from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     with pytest.raises(ValidationError):
         EnrollmentFichaMedicaDTO(**_dto_ficha_enrollment(tipo_sangre="DESCONOCIDO"))
@@ -536,7 +536,7 @@ def test_enrollment_ya_no_asume_desconocido_cuando_falta_el_tipo_de_sangre():
     Ahora la ausencia es un rechazo, no una suposición."""
     from pydantic import ValidationError
 
-    from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     cuerpo = _dto_ficha_enrollment()
     del cuerpo["tipo_sangre"]
@@ -549,7 +549,7 @@ def test_enrollment_ya_no_asume_desconocido_cuando_falta_el_tipo_de_sangre():
 def test_enrollment_rechaza_un_telefono_de_emergencia_invalido(telefono):
     from pydantic import ValidationError
 
-    from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     with pytest.raises(ValidationError):
         EnrollmentFichaMedicaDTO(**_dto_ficha_enrollment(telefono_emergencia=telefono))
@@ -564,7 +564,7 @@ def test_el_nombre_del_contacto_si_es_obligatorio_en_enrollment():
     queda cubierta en los dos lados."""
     from pydantic import ValidationError
 
-    from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     cuerpo = _dto_ficha_enrollment()
     del cuerpo["contacto_emergencia"]
@@ -574,7 +574,7 @@ def test_el_nombre_del_contacto_si_es_obligatorio_en_enrollment():
 
 
 def test_enrollment_deja_opcionales_alergias_y_enfermedades():
-    from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     dto = EnrollmentFichaMedicaDTO(
         tipo_sangre="O_POSITIVO",
@@ -587,7 +587,7 @@ def test_enrollment_deja_opcionales_alergias_y_enfermedades():
 
 
 def test_enrollment_acepta_una_ficha_completa():
-    from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     dto = EnrollmentFichaMedicaDTO(**_dto_ficha_enrollment())
 
@@ -646,7 +646,7 @@ def test_el_alta_por_admin_rechaza_desconocido(db_session):
     """`AdminCrearCuentaDTO.ficha_medica` reusa el mismo DTO otra vez."""
     from pydantic import ValidationError
 
-    from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
+    from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 
     with pytest.raises(ValidationError):
         AdminCrearCuentaDTO(

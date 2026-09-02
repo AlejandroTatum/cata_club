@@ -233,7 +233,7 @@ def test_pago_validar_dto_no_declara_ningun_campo_de_autor():
     autor/admin como parte de su contrato -- si alguien lo agregara a
     futuro, este test lo detecta aunque el fix de abajo (Pydantic ignora
     extras) lo siga tolerando en runtime."""
-    from app.presentacion.schemas.membresia_pago_schemas import PagoValidarDTO
+    from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 
     campos = set(PagoValidarDTO.model_fields)
     assert "validado_por_persona_id" not in campos

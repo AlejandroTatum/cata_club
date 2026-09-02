@@ -16,16 +16,16 @@ from pydantic import ValidationError
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoSangre
 from app.dominio.telefono import MENSAJE_TELEFONO_EMERGENCIA_IGUAL
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
-from app.presentacion.schemas.auth_schemas import ActualizarPerfilPropioDTO, RegistroUsuarioDTO
-from app.presentacion.schemas.enrollment_schemas import (
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.auth_schemas import ActualizarPerfilPropioDTO, RegistroUsuarioDTO
+from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentCreateDTO,
     EnrollmentCredencialesDTO,
     EnrollmentFichaMedicaDTO,
     EnrollmentRepresentanteDTO,
 )
-from app.presentacion.schemas.persona_schemas import (
+from app.servicios_negocio.dtos.persona_schemas import (
     FichaMedicaCreateDTO,
     FichaMedicaUpdateDTO,
     PersonaCreateDTO,

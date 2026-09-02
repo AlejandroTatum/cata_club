@@ -29,7 +29,7 @@ from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
-from app.presentacion.schemas.persona_schemas import (
+from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
     VincularRepresentadoDTO,
 )

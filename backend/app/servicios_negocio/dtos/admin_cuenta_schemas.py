@@ -9,11 +9,11 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 from datetime import date
 from typing import Optional, Literal
 
-from app.presentacion.schemas.enrollment_schemas import (
+from app.servicios_negocio.dtos.enrollment_schemas import (
     MENSAJE_FICHA_MEDICA_OBLIGATORIA,
     EnrollmentFichaMedicaDTO,
 )
-from app.presentacion.schemas.validadores import (
+from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     NombreValidado,

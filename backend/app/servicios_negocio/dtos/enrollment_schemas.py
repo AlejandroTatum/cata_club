@@ -11,7 +11,7 @@ from datetime import date
 from typing import Optional, List
 
 from app.dominio.enums import NivelTecnicoAlumno, TipoManoDominante
-from app.presentacion.schemas.validadores import (
+from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,

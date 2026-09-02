@@ -5,7 +5,8 @@ Ruff corría con el set mínimo por defecto, sin ninguna regla de complejidad,
 y no había ninguna herramienta que verificara la dirección de los imports
 entre capas. Sin esos candados, cualquier limpieza que se hiciera se volvía a
 llenar de a una, sin que nada avisara (16 imports de `servicios_negocio` a
-`presentacion`, ver #829).
+`presentacion`, resueltos moviendo los DTOs a `servicios_negocio.dtos`, ver
+#829).
 
 Las ocho funciones que superan el umbral 12 se eximen por ARCHIVO en
 `[tool.ruff.lint.per-file-ignores]`, no con `# noqa: C901` en la línea `def`:

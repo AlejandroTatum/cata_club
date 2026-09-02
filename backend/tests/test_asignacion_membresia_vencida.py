@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago
 from app.dominio.modelos import Membresia, Pago, Persona, TipoMembresia
-from app.presentacion.schemas.asistencia_schemas import (
+from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, HorarioCreateDTO,
 )
 from app.servicios_negocio import asistencia_servicio as asistencia_servicio_mod

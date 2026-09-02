@@ -9,7 +9,7 @@ from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
-from app.presentacion.schemas.asistencia_schemas import (
+from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
     AsistenciaCorreccionResponseDTO,
     AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
@@ -18,7 +18,7 @@ from app.presentacion.schemas.asistencia_schemas import (
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
     UltimaListaDTO,
 )
-from app.presentacion.schemas.base import PaginatedResponse
+from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
