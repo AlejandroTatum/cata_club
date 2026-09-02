@@ -57,9 +57,18 @@ fail_under = 90
 target-version = "py313"
 
 [tool.ruff.lint]
-# Set por defecto de ruff: E4 (imports, incluye E402), E7, E9 y F (pyflakes).
-# Se deja explicito para que ampliarlo sea una decision visible en el diff.
-select = ["E4", "E7", "E9", "F"]
+# Set por defecto de ruff: E4 (imports, incluye E402), E7, E9 y F (pyflakes),
+# mas C901 (complejidad ciclomatica, issue #832). Se deja explicito para que
+# ampliarlo mas alla siga siendo una decision visible en el diff.
+select = ["E4", "E7", "E9", "F", "C901"]
+
+[tool.ruff.lint.mccabe]
+# Umbral 12: deja pasar todo el codigo actual salvo ocho funciones, eximidas
+# en `[tool.ruff.lint.per-file-ignores]` como deuda declarada (#832). Un
+# umbral mas alto (p.ej. 27, el maximo actual) entraria en verde sin marcar
+# nada, pero no protege: una funcion podria crecer hasta ese techo sin que
+# el diff lo muestre.
+max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
 # Alembic escribe `op` y `sa` en cada revision desde su template. Las
@@ -70,3 +79,16 @@ select = ["E4", "E7", "E9", "F"]
 # cualquier modulo de `app.*`: settings es un singleton que lee las env vars
 # una sola vez, al importarse. Los imports tardios son el mecanismo.
 "tests/conftest.py" = ["E402"]
+# Complejidad ciclomatica por encima del umbral 12 (issue #832), deuda
+# declarada, no una exencion en blanco: el candado function-granular vive en
+# `tests/test_lint_contracts.py`, que corre ruff aislado (sin estos ignores)
+# y falla si aparece una funcion compleja nueva en estos archivos, o si
+# alguna de las de abajo deja de estar en la lista declarada. Esta lista
+# solo puede achicarse a medida que se refactoricen.
+"app/infraestructura/tareas/alertas_tareas.py" = ["C901"]  # alertar_mora_diaria: 17
+"app/servicios_negocio/admin_cuenta_servicio.py" = ["C901"]  # crear_cuenta: 15
+"app/servicios_negocio/enrollment_servicio.py" = ["C901"]  # enroll: 26
+"app/servicios_negocio/membresia_pago_servicio.py" = ["C901"]  # registrar_pago: 13, corregir_pago: 20, adjuntar_voucher: 16
+"scripts/seed_dev_base.py" = ["C901"]  # main: 28
+"scripts/seed_dev_bulk.py" = ["C901"]  # main: 27
+"tests/test_bloqueo_del_event_loop.py" = ["C901"]  # destino: 15
