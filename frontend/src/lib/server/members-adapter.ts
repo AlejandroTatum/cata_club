@@ -47,7 +47,7 @@
  */
 
 import type { EstadoMembresia } from "@/types/domain";
-import type { MemberAccount, MemberStudentSummary, PaymentStatus } from "@/app/members/members-utils";
+import type { AccountState, MemberAccount, MemberStudentSummary, PaymentStatus } from "@/app/members/members-utils";
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoPago, type BackendMembresia, type BackendTipoMembresia } from "@/lib/server/payments-adapter";
 import { readsAsVencida } from "@/lib/membership-status";
 import type { BackendPagoListItem } from "@/lib/server/payments-adapter";
@@ -88,6 +88,13 @@ export interface BackendPersonaFull {
   representanteId: number | null;
   /** `Persona.activo`, supplied by the admin personas listing. */
   activo?: boolean;
+  /**
+   * Issue #869: `Persona.cuenta_activa` — `Usuario.activo` (login flag),
+   * `null` when the persona has no `Usuario` at all, `undefined` for an
+   * older backend/fixture that omits the field. Never `Persona.activo`
+   * (`activo` above): those are two independent planes.
+   */
+  cuentaActiva?: boolean | null;
   /** Profile photo URL (Cloudinary). Absent/null until someone uploads one. */
   fotoUrl?: string | null;
 }
@@ -112,6 +119,18 @@ const PAYMENT_STATUS_BY_ESTADO_PAGO: Record<BackendEstadoPago, PaymentStatus> = 
 // the club assigns each student.
 function buildMembershipTypeLabel(tipo: BackendTipoMembresia | undefined): string {
   return tipo ? tipo.categoria : "Sin tipo";
+}
+
+/**
+ * `BackendPersonaFull.cuentaActiva` -> `AccountState` (issue #869).
+ * `true`/`false` when the backend found a `Usuario`, `null`/`undefined`
+ * ("sin cuenta") otherwise — never inferred from `Persona.activo` or from
+ * any `Membresia`.
+ */
+function resolveAccountState(cuentaActiva: boolean | null | undefined): AccountState {
+  if (cuentaActiva === true) return "active";
+  if (cuentaActiva === false) return "inactive";
+  return "none";
 }
 
 /**
@@ -295,6 +314,7 @@ export function buildMemberAccounts(
       // question `EmergencyCardDialog.tsx`'s `estaCompletamenteVacia` asks,
       // not this one).
       sinDatosEmergencia: persona.representanteId == null && !personaIdsConFicha.has(persona.id),
+      accountState: resolveAccountState(persona.cuentaActiva),
       estudiantes: [
         buildMemberStudentSummary(
           persona,

@@ -14,6 +14,7 @@ import {
   countActiveStudents,
   filterAccounts,
   getAccountStatusBadge,
+  getAccountStateBadge,
   normalizeText,
   accountMatchesFlag,
   countAccountsMatchingFlag,
@@ -22,6 +23,7 @@ import {
   MEMBERS_AGGREGATE_LIMIT,
   MEMBERS_PAGE_SIZE,
   MEMBERSHIP_TYPE_LABELS,
+  type AccountState,
   type MemberAccount,
 } from "../members-utils";
 import { formatCurrency, formatDate } from "../../../lib/format-utils";
@@ -374,6 +376,64 @@ describe("getAccountStatusBadge", () => {
       label: "Sin membresía",
       tone: "neutral",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAccountStateBadge (issue #869)
+// ---------------------------------------------------------------------------
+
+describe("getAccountStateBadge", () => {
+  const baseAccount: MemberAccount = {
+    id: "acc-cuenta",
+    role: "representante",
+    nombres: "Cuenta",
+    apellidos: "De Prueba",
+    telefono: "+593 00 000 0000",
+    estudiantes: [],
+  };
+
+  it.each<[AccountState, { label: string; tone: string }]>([
+    ["active", { label: "Activa", tone: "ok" }],
+    ["inactive", { label: "Inactiva", tone: "bad" }],
+    ["none", { label: "Sin cuenta", tone: "neutral" }],
+  ])("renders %s as %o", (accountState, expected) => {
+    expect(getAccountStateBadge({ ...baseAccount, accountState })).toEqual(expected);
+  });
+
+  it('defaults to "Sin cuenta" / neutral when the field is omitted', () => {
+    // Same omit-rather-than-invent convention as `sinDatosEmergencia`: a
+    // fixture that predates this field must not silently read as "Activa".
+    expect(getAccountStateBadge(baseAccount)).toEqual({
+      label: "Sin cuenta",
+      tone: "neutral",
+    });
+  });
+
+  it("never derives from Membresía — a vencida membership with an active account still reads Activa", () => {
+    const account: MemberAccount = {
+      ...baseAccount,
+      accountState: "active",
+      estudiantes: [
+        {
+          id: "est-1",
+          nombres: "Alumno",
+          apellidos: "Uno",
+          activo: true,
+          membresia: {
+            tipo: "Mensual",
+            estado: "vencida",
+            fechaInicio: "2026-06-01",
+            fechaFin: "2026-06-30",
+            monto: 85,
+            id: 1,
+          },
+          ultimoPago: null,
+        },
+      ],
+    };
+    expect(getAccountStateBadge(account)).toEqual({ label: "Activa", tone: "ok" });
+    expect(getAccountStatusBadge(account)).toEqual({ label: "Membresía vencida", tone: "bad" });
   });
 });
 

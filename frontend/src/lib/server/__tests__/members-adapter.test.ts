@@ -376,4 +376,31 @@ describe("buildMemberAccounts", () => {
     );
     expect(accounts[0].estudiantes[0]).toMatchObject({ activo: false, membresia: { id: membresia.id } });
   });
+
+  // Issue #869: `Usuario.activo` (the login flag), never inferred from
+  // `Persona.activo` (`admin.activo` above) or from any membership — three
+  // independent personas, three independent states.
+  describe("accountState", () => {
+    it.each<[boolean | null | undefined, "active" | "inactive" | "none"]>([
+      [true, "active"],
+      [false, "inactive"],
+      [null, "none"],
+      [undefined, "none"],
+    ])("maps cuentaActiva=%s to accountState %s", (cuentaActiva, expected) => {
+      const persona: BackendPersonaFull = { ...admin, cuentaActiva };
+      const accounts = buildMemberAccounts([persona], new Map(), new Map(), new Map(), new Map());
+      expect(accounts[0].accountState).toBe(expected);
+    });
+
+    it("does not depend on Persona.activo nor on the membership state", () => {
+      const accounts = buildMemberAccounts(
+        [{ ...child, activo: false, cuentaActiva: true }],
+        new Map([[3, pago]]),
+        new Map([[100, { ...membresia, estado: "VENCIDA" as const }]]),
+        new Map(),
+        new Map([[5, tipo]]),
+      );
+      expect(accounts[0].accountState).toBe("active");
+    });
+  });
 });
