@@ -357,40 +357,31 @@ def test_reintento_del_lote_usa_el_cooldown_del_circuito(
 
 
 # --- consultas-sin-n1, slice 2: N+1 al cargar Persona.usuario --------------
+# --- y issue #833: dedup de idempotencia en lote, no por destinatario ------
 
+@pytest.mark.parametrize("cantidad", [3, 6])
 def test_alertar_vencimientos_no_incurre_en_n_mas_uno_al_cargar_usuario(
-    db_session, sesion_inyectada, contar_selects, monkeypatch
+    db_session, sesion_inyectada, contar_selects, monkeypatch, cantidad
 ):
     """`persona.usuario` se accedía sin eager load: una consulta extra por
-    destinatario (`SELECT usuario WHERE persona_id = ...`), lazy-cacheada por
-    instancia así que un solo acceso por persona basta para reproducirla.
+    destinatario, corregida con `joinedload(Persona.usuario)` en el lote.
 
-    El lote NO queda libre de N+1 después de este fix -- se elimina SOLO el
-    de `Persona.usuario`. `_disparar_notificacion_vencimiento` sigue llamando
-    a `_ya_notificado` una vez por destinatario (idempotencia, PR #120 de
-    `degradacion-controlada`, no removible con un loader option); sin
-    representante ese chequeo corre 1 vez por fila, no 2 (el chequeo del
-    representante hace cortocircuito cuando `representante_id` es None y no
-    emite SELECT). Aritmética con N=3 destinatarios, todos con `Usuario`, sin
-    representante:
-        HOY  (sin joinedload): 1 (lote) + 3 (usuario lazy) + 3 (_ya_notificado) = 7
-        LUEGO (con joinedload): 1 (lote, ya trae usuario)  + 3 (_ya_notificado) = 4
-    El total sigue creciendo con N -- 1+N, no una constante -- porque
-    `_ya_notificado` es intrínsecamente por-fila. Esta prueba fija ese "1+N",
-    no un número mágico, para que no se lea un futuro `1+N` como una
-    regresión."""
+    Issue #833: la dedup (antes `_ya_notificado`, un `SELECT` por
+    destinatario) ahora corre en UNA sola consulta de lote
+    (`_notificaciones_existentes`), así que el total deja de crecer con
+    `cantidad`: 1 (lote, con joinedload) + 1 (dedup en lote) = 2, constante
+    -- se corre con 3 Y con 6 destinatarios para fijarlo."""
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
     # `sesion_inyectada` colapsa las DOS sesiones reales de la tarea (lote de
-    # lectura + escritura por notificación) en la MISMA `db_session`. En
-    # producción son sesiones distintas: el `commit()` de la de escritura
-    # nunca expira los objetos ya cargados por la de lectura. Con una sola
-    # sesión, el `expire_on_commit` por defecto SÍ los expira -- se
-    # refrescarían `pago`/`membresia`/`persona` con SELECTs adicionales que no
-    # existen en producción y arruinarían la aritmética "1+N". Se desactiva
-    # acá para que el conteo refleje el comportamiento real de dos sesiones,
-    # no un artefacto de haberlas colapsado para poder observarlas.
+    # lectura + escritura del lote) en la MISMA `db_session`. En producción
+    # son sesiones distintas: el `commit()` de la de escritura nunca expira
+    # los objetos ya cargados por la de lectura. Con una sola sesión, el
+    # `expire_on_commit` por defecto SÍ los expira -- se refrescarían
+    # `pago`/`membresia`/`persona` con SELECTs adicionales que no existen en
+    # producción. Se desactiva acá para que el conteo refleje el
+    # comportamiento real de dos sesiones, no un artefacto de haberlas
+    # colapsado para poder observarlas.
     db_session.expire_on_commit = False
-    cantidad = 3
     for i in range(cantidad):
         persona = _crear_persona(db_session, cedula_valida(119 + i))
         _crear_usuario(db_session, persona, f"alumno{70 + i}@cataclub.test")
@@ -402,10 +393,10 @@ def test_alertar_vencimientos_no_incurre_en_n_mas_uno_al_cargar_usuario(
 
     assert resultado["total_alertas"] == cantidad
     selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
-    assert len(selects) == 1 + cantidad, (
-        f"Se esperaban 1 + {cantidad} = {1 + cantidad} SELECTs (batch con "
-        f"joinedload + un `_ya_notificado` por fila), se ejecutaron "
-        f"{len(selects)}: {selects}"
+    assert len(selects) == 2, (
+        f"Se esperaban 2 SELECTs (batch con joinedload + dedup en lote), "
+        f"constantes sin importar `cantidad`; se ejecutaron {len(selects)} "
+        f"con cantidad={cantidad}: {selects}"
     )
 
 
