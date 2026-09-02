@@ -28,23 +28,26 @@
  * had just typed. Three controls whose only documented behaviour was "these do
  * not affect the thing you came here to produce" are three controls too many.
  *
- * ## PDF and CSV
+ * ## PDF and Excel
  *
  * PDF is real and server-rendered: all three presets map to an endpoint that
  * exists (see the deviation note above), so the button downloads a document
  * the backend produced.
  *
- * CSV has NO backend. Grepping `backend/` for "csv" finds `.env.example` and
- * `configuracion.py` and nothing else — there is no route to call. The control
- * therefore builds the file in the browser, which is honest here and only
- * here: the page already holds the COMPLETE result set for the range (the
- * table's pagination is a client-side slice), so the CSV carries exactly the
- * rows the preview counts and the PDF renders. Faking a request, or shipping a
- * button that silently did nothing, were the two alternatives; a real file
- * built from data already in hand beats both. Server-side CSV is tracked as
- * backend work in issue #150, which is what removes the three limits this
- * approach really does have: column definitions that can drift from the PDF's,
- * no streaming, and an export the backend never sees.
+ * The Excel (`.xlsx`) export has NO backend either — same gap the CSV export
+ * it replaced (issue #864) had, and the same reason: grepping `backend/` for
+ * "csv" or "xlsx" finds no export route. The control builds the file in the
+ * browser with `exceljs` (`@/app/reports/xlsx-export`), which is honest here
+ * and only here: the page already holds the COMPLETE result set for the range
+ * (the table's pagination is a client-side slice), so the workbook carries
+ * exactly the rows the preview counts and the PDF renders — typed date,
+ * number and currency cells instead of the CSV's plain text. Faking a
+ * request, or shipping a button that silently did nothing, were the two
+ * alternatives; a real file built from data already in hand beats both.
+ * Server-side export is tracked as backend work in issue #150, which is what
+ * removes the three limits this approach really does have: column
+ * definitions that can drift from the PDF's, no streaming, and an export the
+ * backend never sees.
  *
  * The `<h2>` level of the section headings was normalised in an earlier phase
  * and is preserved: `AppShell` owns the page `<h1>`.
@@ -91,9 +94,6 @@ import {
   getAsistenciaReportTotalPages,
   paginatePagosResults,
   getPagosReportTotalPages,
-  csvFilename,
-  downloadCsv,
-  toCsv,
   PERSONA_REPORT_PAGE_SIZE,
   ASISTENCIA_REPORT_PAGE_SIZE,
   PAGOS_REPORT_PAGE_SIZE,
@@ -101,6 +101,12 @@ import {
   REPORT_DATE_PRESETS,
   type ReportRangePreset,
 } from "@/app/reports/reports-utils";
+import {
+  buildWorkbook,
+  downloadXlsx,
+  xlsxFilename,
+  type XlsxColumn,
+} from "@/app/reports/xlsx-export";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format-utils";
 import {
   Badge,
@@ -169,6 +175,38 @@ function pluralize(noun: string, count: number): string {
   return count === 1 ? noun : `${noun}s`;
 }
 
+/**
+ * `.xlsx` column specs, one per report — the only report-specific piece of
+ * the export. Headers and coverage mirror the preview table exactly, same as
+ * the CSV export they replace (issue #864); `buildWorkbook` (`xlsx-export.ts`)
+ * is the one generic builder every report shares.
+ */
+const PERSONA_XLSX_COLUMNS: XlsxColumn[] = [
+  { header: "Nombres", key: "nombres", type: "text" },
+  { header: "Apellidos", key: "apellidos", type: "text" },
+  { header: "Cédula", key: "cedula", type: "text" },
+  { header: "Fecha de nacimiento", key: "fechaNacimiento", type: "date" },
+  { header: "Edad", key: "edad", type: "number" },
+  { header: "Teléfono", key: "telefono", type: "text" },
+];
+
+const ASISTENCIA_XLSX_COLUMNS: XlsxColumn[] = [
+  { header: "Fecha", key: "fecha", type: "date" },
+  { header: "Horario", key: "horario", type: "text" },
+  { header: "Estudiante", key: "estudiante", type: "text" },
+  { header: "Estado", key: "estado", type: "text" },
+];
+
+const PAGOS_XLSX_COLUMNS: XlsxColumn[] = [
+  { header: "Estudiante", key: "estudiante", type: "text" },
+  { header: "Responsable de pago", key: "responsable", type: "text" },
+  { header: "Período", key: "periodo", type: "text" },
+  { header: "Monto", key: "monto", type: "currency" },
+  { header: "Método", key: "metodo", type: "text" },
+  { header: "Subido", key: "subido", type: "date" },
+  { header: "Estado", key: "estado", type: "text" },
+];
+
 export default function ReportsPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
@@ -182,6 +220,7 @@ function ReportsContent(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
 
   /**
    * ONE range for every preset. The screen used to keep three independent
@@ -374,69 +413,64 @@ function ReportsContent(): React.ReactElement {
   }
 
   /**
-   * The CSV of everything currently previewed. Columns mirror the preview's
-   * own table exactly, so what you downloaded is what you were looking at —
-   * and it covers the whole result set, not the visible page, because
-   * `*Results` already hold every row for the range (see `reports-utils`).
+   * The Excel workbook of everything currently previewed. Columns mirror the
+   * preview's own table exactly, so what you downloaded is what you were
+   * looking at — and it covers the whole result set, not the visible page,
+   * because `*Results` already hold every row for the range (see
+   * `reports-utils`). Dates and money are handed over raw (not through
+   * `formatDate`/`formatCurrency`) so `buildWorkbook` writes them as typed
+   * cells instead of pre-formatted text.
    */
-  function handleDownloadCsv(): void {
+  async function handleDownloadXlsx(): Promise<void> {
+    setExportingXlsx(true);
     setError(null);
     try {
       if (preset === "periodo") {
-        downloadCsv(
-          csvFilename("periodo"),
-          toCsv(
-            ["Nombres", "Apellidos", "Cédula", "Fecha de nacimiento", "Edad", "Teléfono"],
-            personaResults.map((persona) => [
-              persona.nombres,
-              persona.apellidos,
-              persona.cedula,
-              formatDate(persona.fechaNacimiento),
-              calcAge(persona.fechaNacimiento),
-              persona.telefono,
-            ]),
-          ),
+        const workbook = await buildWorkbook(
+          "Personas",
+          PERSONA_XLSX_COLUMNS,
+          personaResults.map((persona) => ({
+            nombres: persona.nombres,
+            apellidos: persona.apellidos,
+            cedula: persona.cedula,
+            fechaNacimiento: persona.fechaNacimiento,
+            edad: calcAge(persona.fechaNacimiento),
+            telefono: persona.telefono,
+          })),
         );
+        await downloadXlsx(xlsxFilename("periodo"), workbook);
       } else if (preset === "asistencia") {
-        downloadCsv(
-          csvFilename("asistencia"),
-          toCsv(
-            ["Fecha", "Horario", "Estudiante", "Estado"],
-            attendanceResults.map((record) => [
-              formatDate(record.fecha),
-              record.horario,
-              record.estudiante,
-              getAttendanceLabel(record.estado),
-            ]),
-          ),
+        const workbook = await buildWorkbook(
+          "Asistencia",
+          ASISTENCIA_XLSX_COLUMNS,
+          attendanceResults.map((record) => ({
+            fecha: record.fecha,
+            horario: record.horario,
+            estudiante: record.estudiante,
+            estado: getAttendanceLabel(record.estado),
+          })),
         );
+        await downloadXlsx(xlsxFilename("asistencia"), workbook);
       } else {
-        downloadCsv(
-          csvFilename("pagos"),
-          toCsv(
-            [
-              "Estudiante",
-              "Responsable de pago",
-              "Período",
-              "Monto",
-              "Método",
-              "Subido",
-              "Estado",
-            ],
-            pagosResults.map((pago) => [
-              pago.studentName,
-              pago.responsablePagoName ?? "",
-              pago.membershipPeriod,
-              formatCurrency(pago.expectedAmount),
-              pago.paymentMethod,
-              formatDateTime(pago.uploadedAt),
-              VALIDATION_STATUS_LABELS[pago.validationStatus],
-            ]),
-          ),
+        const workbook = await buildWorkbook(
+          "Pagos",
+          PAGOS_XLSX_COLUMNS,
+          pagosResults.map((pago) => ({
+            estudiante: pago.studentName,
+            responsable: pago.responsablePagoName ?? "",
+            periodo: pago.membershipPeriod,
+            monto: pago.expectedAmount,
+            metodo: pago.paymentMethod,
+            subido: pago.uploadedAt,
+            estado: VALIDATION_STATUS_LABELS[pago.validationStatus],
+          })),
         );
+        await downloadXlsx(xlsxFilename("pagos"), workbook);
       }
     } catch {
-      setError("No se pudo generar el CSV del reporte.");
+      setError("No se pudo generar el archivo de Excel. Intente nuevamente.");
+    } finally {
+      setExportingXlsx(false);
     }
   }
 
@@ -446,9 +480,9 @@ function ReportsContent(): React.ReactElement {
       /*
        * Two named actions rather than one button behind a format menu: the PDF
        * is the club's document (server-rendered, the one to hand in) and the
-       * CSV is the same rows as data (built here in the browser). They are
-       * different artefacts, so they say so. Red stays on the PDF alone — it is
-       * the primary CTA of the screen and the only red control.
+       * Excel file is the same rows as data (built here in the browser). They
+       * are different artefacts, so they say so. Red stays on the PDF alone —
+       * it is the primary CTA of the screen and the only red control.
        *
        * They used to live INSIDE the filter card, which made "generar" read as
        * one more filter control rather than as the thing the screen is for.
@@ -468,9 +502,16 @@ function ReportsContent(): React.ReactElement {
             {exportingPdf ? "Generando…" : "Generar PDF"}
           </Button>
 
-          <Button onClick={handleDownloadCsv} disabled={!canQuery || resultCount === 0}>
-            <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            Descargar CSV
+          <Button
+            onClick={() => void handleDownloadXlsx()}
+            disabled={exportingXlsx || !canQuery || resultCount === 0}
+          >
+            {exportingXlsx ? (
+              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {exportingXlsx ? "Generando…" : "Exportar a Excel"}
           </Button>
         </>
       }
