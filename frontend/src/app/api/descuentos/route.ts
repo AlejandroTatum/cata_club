@@ -2,7 +2,10 @@
  * BFF proxy — GET/POST /api/descuentos (issue #12)
  *
  * GET: full discount catalog, active AND inactive — the admin management
- *      view. Proxies FastAPI's `GET /descuentos/`.
+ *      view. Proxies FastAPI's paginated `GET /descuentos/` (issue #814),
+ *      forwarding the incoming query string (`skip`/`limit`) as-is — see
+ *      `fetchDescuentos` in src/services/api.ts, which requests one page at
+ *      the backend's cap.
  * POST: creates a catalog discount. Proxies `POST /descuentos/`, whose
  *       `DescuentoCreateDTO` accepts `nombre`, `porcentaje`, `monto`,
  *       `activo` — same key names in both casings, so no translation.
@@ -21,7 +24,9 @@ import {
 } from "@/lib/server/backend-client";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  return proxyBackendGet(request, "/descuentos/", "No se pudo cargar el catálogo de descuentos.");
+  return proxyBackendGet(
+    request, `/descuentos/${request.nextUrl.search}`, "No se pudo cargar el catálogo de descuentos.",
+  );
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

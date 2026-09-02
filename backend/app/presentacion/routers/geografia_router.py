@@ -1,9 +1,10 @@
-from typing import List, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
+from app.presentacion.schemas.base import PaginatedResponse
 from app.presentacion.schemas.geografia_schemas import (
     PaisCreateDTO, PaisResponseDTO,
     ProvinciaCreateDTO, ProvinciaResponseDTO,
@@ -38,9 +39,22 @@ async def crear_pais(datos: PaisCreateDTO, db: Session = Depends(obtener_sesion)
     return PaisServicio(db).crear_pais(datos)
 
 
-@router.get("/paises", response_model=List[PaisResponseDTO], dependencies=_AUTENTICADO)
-async def listar_paises(db: Session = Depends(obtener_sesion)):
-    return PaisServicio(db).listar_paises()
+# Issue #814: este listado quedó mergeado sin paginar pese a que el
+# repositorio ya soportaba `skip`/`limit`/`contar()`. Mismo contrato que
+# `GET /personas/`: `limit` tope 200.
+@router.get(
+    "/paises", response_model=PaginatedResponse[PaisResponseDTO], dependencies=_AUTENTICADO,
+)
+async def listar_paises(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
+    """Lista países paginados (catálogo de ubicación)."""
+    servicio = PaisServicio(db)
+    items = servicio.listar_paises(skip=skip, limit=limit)
+    total = servicio.contar_paises()
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/paises/{pais_id}", response_model=PaisResponseDTO, dependencies=_AUTENTICADO)
@@ -57,12 +71,20 @@ async def crear_provincia(datos: ProvinciaCreateDTO, db: Session = Depends(obten
     return ProvinciaServicio(db).crear_provincia(datos)
 
 
-@router.get("/provincias", response_model=List[ProvinciaResponseDTO], dependencies=_AUTENTICADO)
+@router.get(
+    "/provincias", response_model=PaginatedResponse[ProvinciaResponseDTO], dependencies=_AUTENTICADO,
+)
 async def listar_provincias(
     pais_id: Optional[int] = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
 ):
-    return ProvinciaServicio(db).listar_provincias(pais_id=pais_id)
+    """Lista provincias paginadas, opcionalmente filtradas por `pais_id`."""
+    servicio = ProvinciaServicio(db)
+    items = servicio.listar_provincias(pais_id=pais_id, skip=skip, limit=limit)
+    total = servicio.contar_provincias(pais_id=pais_id)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/provincias/{provincia_id}", response_model=ProvinciaResponseDTO, dependencies=_AUTENTICADO)
@@ -79,12 +101,20 @@ async def crear_canton(datos: CantonCreateDTO, db: Session = Depends(obtener_ses
     return CantonServicio(db).crear_canton(datos)
 
 
-@router.get("/cantones", response_model=List[CantonResponseDTO], dependencies=_AUTENTICADO)
+@router.get(
+    "/cantones", response_model=PaginatedResponse[CantonResponseDTO], dependencies=_AUTENTICADO,
+)
 async def listar_cantones(
     provincia_id: Optional[int] = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
 ):
-    return CantonServicio(db).listar_cantones(provincia_id=provincia_id)
+    """Lista cantones paginados, opcionalmente filtrados por `provincia_id`."""
+    servicio = CantonServicio(db)
+    items = servicio.listar_cantones(provincia_id=provincia_id, skip=skip, limit=limit)
+    total = servicio.contar_cantones(provincia_id=provincia_id)
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/cantones/{canton_id}", response_model=CantonResponseDTO, dependencies=_AUTENTICADO)
