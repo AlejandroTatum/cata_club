@@ -2568,6 +2568,24 @@ export async function marcarNotificacionLeida(id: number): Promise<Notificacion>
   });
 }
 
+/** Result of marking ALL pending notifications read — the number of rows the backend actually changed. */
+export interface MarcarTodasLeidasResultado {
+  actualizadas: number;
+}
+
+/**
+ * Mark ALL of the caller's pending notifications as read — `PATCH
+ * /ranking/notificaciones/leer-todas` (issue #859). Never sends ids: scope
+ * (own + active dependents') is resolved entirely server-side.
+ */
+export async function marcarTodasNotificacionesLeidas(): Promise<MarcarTodasLeidasResultado> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<MarcarTodasLeidasResultado>(apiEndpoint("/ranking/notificaciones/leer-todas"), {
+    method: "PATCH",
+    headers: mockHeaders,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Asignación directa Alumno ↔ Horario
 // ---------------------------------------------------------------------------
