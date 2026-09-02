@@ -27,6 +27,7 @@
 import { useState, type ReactElement, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import { cn } from "./cn";
 
 export interface AccordionItem {
@@ -67,7 +68,12 @@ export default function Accordion({ items, idPrefix, label, className }: Accordi
                 aria-expanded={isOpen}
                 aria-controls={panelId}
                 onClick={() => setOpenId(isOpen ? null : item.id)}
-                className="flex w-full items-center justify-between gap-3 text-left text-sm font-bold text-ink"
+                // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the trigger
+                // is already full width, but measured only 20.3px tall.
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 text-left text-sm font-bold text-ink",
+                  MIN_TARGET_CLASS,
+                )}
               >
                 <span>{item.question}</span>
                 <ChevronDown

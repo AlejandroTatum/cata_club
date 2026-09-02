@@ -19,6 +19,28 @@ import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import ContextualHelp from "@/components/ContextualHelp";
 
+// Issue #818 (WCAG 2.5.8, AA): "Ver ayuda" measured 56 × 18.8px — bare 12px
+// type with no padding or min-height, on every screen that renders it. jsdom
+// cannot measure layout, so the lock is class-based: `MIN_TARGET_CLASS`
+// (`min-h-[24px]`) is the project's shared floor for exactly this shape
+// (`lib/target-size.ts`), paired with `inline-flex items-center` so the extra
+// space is shared above and below the label instead of pushing it down.
+describe("ContextualHelp — the trigger clears the 24px target-size floor", () => {
+  it("gives the toggle a 24px minimum hit area without resizing its type", () => {
+    render(
+      <ContextualHelp title="Ayuda sobre límite de resultados">
+        <p>Hasta 200 registros.</p>
+      </ContextualHelp>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Ayuda sobre límite de resultados" });
+    expect(toggle).toHaveClass("min-h-[24px]");
+    expect(toggle).toHaveClass("inline-flex");
+    expect(toggle).toHaveClass("items-center");
+    expect(toggle.className).toMatch(/\btext-xs\b/);
+  });
+});
+
 describe("ContextualHelp — the container owns the rhythm", () => {
   it("carries no vertical margin of its own", () => {
     const { container } = render(
