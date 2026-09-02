@@ -150,6 +150,7 @@ import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
+import { PHONE_FORMAT_HINT } from "@/lib/identity-validation";
 import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 
 // ---------------------------------------------------------------------------
@@ -1154,10 +1155,12 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
                     disabled={saving}
                     className="input-field max-w-xs"
                   />
-                  {telefonoMasking.limitReached && (
+                  {telefonoMasking.limitReached ? (
                     <p aria-live="polite" className="mt-1 text-xs font-semibold text-state-warn">
                       {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
                     </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-ink-3">{PHONE_FORMAT_HINT}</p>
                   )}
                 </div>
               ) : (

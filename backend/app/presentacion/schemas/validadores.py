@@ -19,7 +19,7 @@ from pydantic import AfterValidator
 
 from app.dominio.cedula import es_cedula_valida
 from app.dominio.enums import TipoSangre
-from app.dominio.telefono import es_telefono_valido
+from app.dominio.telefono import es_telefono_valido, normalizar_telefono
 
 
 # `isascii()` antes de `isdigit()`, igual que en `dominio/cedula.py` y
@@ -41,14 +41,19 @@ def _validar_cedula(valor: str) -> str:
 def _validar_telefono(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El teléfono es obligatorio.")
-    if not (valor.isascii() and valor.isdigit()):
+    # Issue #855: normaliza ANTES de exigir solo dígitos, así un celular
+    # autocompletado en formato internacional (`+593991234567`) se convierte
+    # a `09XXXXXXXX` antes de que el `+`/código de país lleguen a esta
+    # comprobación -- el mismo orden que el frontend aplica en la máscara.
+    normalizado = normalizar_telefono(valor)
+    if not (normalizado.isascii() and normalizado.isdigit()):
         raise ValueError("El teléfono solo puede tener dígitos.")
-    if not es_telefono_valido(valor):
+    if not es_telefono_valido(normalizado):
         raise ValueError(
             "El teléfono debe tener 10 dígitos y empezar en 09, "
             "o 9 dígitos empezando en 0."
         )
-    return valor
+    return normalizado
 
 
 def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:

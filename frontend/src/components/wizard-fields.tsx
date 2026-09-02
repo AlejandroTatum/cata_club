@@ -19,7 +19,12 @@ import {
   EyeOff,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
+import {
+  calculatePersonAge,
+  isPlausibleHumanAge,
+  studentBirthDateBounds,
+  PHONE_FORMAT_HINT,
+} from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
@@ -326,8 +331,8 @@ export const CEDULA_DIGITS = 10;
 /** The cédula field's resting hint — shared with `/student/enroll`'s representative fields, which render their own copy of `PersonIdentityFields`'s cédula input. */
 export const CEDULA_HINT = `${CEDULA_DIGITS} dígitos, sin guiones.`;
 
-/** The phone field's hint — shared by both `PersonIdentityFields`, `EmergencyContactFields`, and `/student/enroll`'s representative phone field. */
-export const PHONE_HINT = "Celular: 09 y 8 dígitos más. Fijo: 0, código de área y 7 dígitos.";
+/** The phone field's hint — shared by both `PersonIdentityFields`, `EmergencyContactFields`, and `/student/enroll`'s representative phone field. Text lives in `identity-validation.ts` (issue #855) so every consumer names the same accepted formats. */
+export const PHONE_HINT = PHONE_FORMAT_HINT;
 
 function digitCount(value: string): number {
   return value.replace(/\D/g, "").length;

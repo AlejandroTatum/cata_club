@@ -21,6 +21,14 @@
  *     strips before validating — space, hyphen, parenthesis
  *     (`PHONE_SEPARATOR_PATTERN`). Separators don't count against the digit
  *     cap: "099-123-4567" is 10 digits and 2 separators, not 12 characters.
+ *     `+` is also allowed (issue #855): an autofilled/typed `+593…` mobile
+ *     needs it to reach `use-numeric-field-masking.ts`'s `onChange`, which
+ *     normalizes it to `09XXXXXXXX` BEFORE this module's cap ever runs.
+ *     Allowing it here — instead of stripping it like a letter — matches
+ *     this module's own rule: a character that turns out not to form a
+ *     valid international prefix is left visible for `phoneError` to reject,
+ *     never silently eaten (the same reasoning issue #229 already applies
+ *     to letters).
  *
  * ## Why `capDigits` and `filterNumericInput` are two different functions
  *
@@ -54,7 +62,7 @@ export type NumericFieldMode = "cedula" | "phone" | "amount";
 
 const ALLOWED_CHAR: Record<NumericFieldMode, RegExp> = {
   cedula: /[0-9]/,
-  phone: /[0-9\s\-()]/,
+  phone: /[0-9\s\-()+]/,
   // Both spellings: an es-EC/es-AR admin on `/tarifas` naturally types ","
   // (issue #506) — see `capAmount`, which treats either as THE one
   // separator slot, not two independent characters.
