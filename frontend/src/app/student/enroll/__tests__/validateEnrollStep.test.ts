@@ -28,7 +28,10 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     contrasenia: "password8",
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
     contactoEmergencia: "María Pérez",
-    telefonoEmergencia: "0991234567",
+    // Issue #860: has to be a different valid mobile than `telefono` above —
+    // an equal number is now rejected, and this is the "everything valid"
+    // base fixture most tests in this file build on.
+    telefonoEmergencia: "0987654321",
     ...overrides,
   };
 }

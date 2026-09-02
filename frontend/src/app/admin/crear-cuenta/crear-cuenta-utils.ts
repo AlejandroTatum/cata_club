@@ -2,6 +2,7 @@ import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
+  emergencyPhoneDiffersRule,
   personNameRule,
   passwordRule,
   calculatePersonAge,
@@ -306,7 +307,11 @@ function validateMedical(data: CrearCuentaFormData): string[] {
   }
   const contactoMessage = personNameRule(data.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false });
   if (contactoMessage) errors.push(contactoMessage);
-  const telefonoEmergenciaMessage = phoneRule(data.telefonoEmergencia, "El teléfono de emergencia");
+  // Issue #860: chained after `phoneRule`, same order the two student
+  // wizards use — a malformed number is reported first.
+  const telefonoEmergenciaMessage =
+    phoneRule(data.telefonoEmergencia, "El teléfono de emergencia") ??
+    emergencyPhoneDiffersRule(data.telefonoEmergencia, data.telefono);
   if (telefonoEmergenciaMessage) errors.push(telefonoEmergenciaMessage);
   return errors;
 }

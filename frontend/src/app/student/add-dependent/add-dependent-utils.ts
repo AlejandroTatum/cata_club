@@ -15,6 +15,7 @@ import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
+  emergencyPhoneDiffersRule,
   personNameRule,
   passwordRule,
   studentBirthDateRule,
@@ -227,7 +228,10 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
-  telefonoEmergencia: (d) => phoneRule(d.telefonoEmergencia, "El teléfono de emergencia"),
+  // Issue #860: chained after `phoneRule`, same order the public wizard uses.
+  telefonoEmergencia: (d) =>
+    phoneRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
+    emergencyPhoneDiffersRule(d.telefonoEmergencia, d.telefono),
 };
 
 const CHILD_FIELDS: AddDependentField[] = [
