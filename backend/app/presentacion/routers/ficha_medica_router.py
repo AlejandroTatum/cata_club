@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
@@ -89,6 +89,14 @@ async def crear_ficha_medica(datos: FichaMedicaCreateDTO, db: Session = Depends(
 # no una string separada por comas parseada a mano: FastAPI ya valida/convierte
 # cada valor a `int` y devuelve 422 solo en el elemento roto, en vez de que un
 # `"1,x,3".split(",")` casero explote entero o, peor, trague el error.
+#
+# Tope de cardinalidad (issue #812): mismo cap que `_MAX_BULK_DEUDA_IDS` en
+# `GET /membresias/deuda/bulk` (issue #326), que esta ruta citaba como
+# precedente sin replicarlo -- una lista sin techo es la misma clase de
+# defecto, sea "ids de membresía" o "ids de persona".
+_MAX_EXISTE_IDS = 200
+
+
 @router.get(
     "/existe",
     response_model=FichaMedicaExistenciaResponseDTO,
@@ -98,6 +106,11 @@ async def existe_ficha_medica(
     persona_ids: List[int] = Query(default=[]),
     db: Session = Depends(obtener_sesion),
 ):
+    if len(persona_ids) > _MAX_EXISTE_IDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Esta consulta admite hasta {_MAX_EXISTE_IDS} personas a la vez.",
+        )
     return FichaMedicaExistenciaResponseDTO(
         persona_ids_con_ficha=sorted(
             FichaMedicaServicio(db).listar_personas_con_ficha(persona_ids)

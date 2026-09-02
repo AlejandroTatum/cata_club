@@ -278,3 +278,23 @@ def test_existe_ficha_medica_requiere_admin(client_sin_permisos):
     resp = client_sin_permisos.get("/api/v1/fichas-medicas/existe", params={"persona_ids": [1]})
 
     assert resp.status_code == 403
+
+
+# --- Tope de cardinalidad de `persona_ids` (issue #812) ---------------------
+#
+# Mismo cap que `_MAX_BULK_DEUDA_IDS` en `GET /membresias/deuda/bulk`
+# (issue #326): sin él, `?persona_ids=1&persona_ids=2&...` no tiene techo.
+
+
+def test_existe_ficha_medica_201_ids_da_422(client):
+    query = "&".join(f"persona_ids={i}" for i in range(1, 202))
+    resp = client.get(f"/api/v1/fichas-medicas/existe?{query}")
+
+    assert resp.status_code == 422
+
+
+def test_existe_ficha_medica_200_ids_ok(client):
+    query = "&".join(f"persona_ids={i}" for i in range(1, 201))
+    resp = client.get(f"/api/v1/fichas-medicas/existe?{query}")
+
+    assert resp.status_code == 200
