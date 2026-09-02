@@ -28,6 +28,7 @@ from app.infraestructura.repositorios.notificacion_repositorio import Notificaci
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
+from app.servicios_negocio.rol_servicio import RolServicio
 from app.presentacion.schemas.persona_schemas import (
     PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
     VincularRepresentadoDTO,
@@ -167,7 +168,6 @@ class PersonaServicio:
         if datos.correo and datos.contrasenia:
             if self.repo_usuario.obtener_por_correo(datos.correo):
                 raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
-            from app.seguridad.gestor_auth import GestorAutenticacion
             hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
             usuario = Usuario(
                 correo=datos.correo,
@@ -478,9 +478,6 @@ class PersonaServicio:
         usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
 
         if not activo and usuario is not None:
-            # Import local: `RolServicio` ya importa este módulo indirectamente
-            # a través de los repositorios; hacerlo arriba crearía un ciclo.
-            from app.servicios_negocio.rol_servicio import RolServicio
             RolServicio(self.db)._asegurar_que_queda_otro_administrador(
                 usuario, "dar de baja a esta persona"
             )
