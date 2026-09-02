@@ -93,6 +93,24 @@ vi.mock("@/services/api", () => ({
   searchStudents: (...args: unknown[]) => mockSearchStudents(...args),
 }));
 
+/**
+ * `xlsx-export.ts` is unit-tested on its own (`xlsx-export.test.ts`) — real
+ * `exceljs` generation, real Date/currency cells. Mocking it here lets these
+ * component tests assert what the PAGE hands the builder (columns, the FULL
+ * row set, filename) without re-running the workbook generation itself.
+ */
+const mockBuildWorkbook = vi.fn();
+const mockDownloadXlsx = vi.fn();
+
+vi.mock("@/app/reports/xlsx-export", () => ({
+  buildWorkbook: (...args: unknown[]) => mockBuildWorkbook(...args),
+  downloadXlsx: (...args: unknown[]) => mockDownloadXlsx(...args),
+  xlsxFilename: (slug: string, today: Date = new Date()) =>
+    `reporte-${slug}_${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+      today.getDate(),
+    ).padStart(2, "0")}.xlsx`,
+}));
+
 const PERSONA: PersonaReporte = {
   id: 1,
   nombres: "Juan",
@@ -678,29 +696,21 @@ describe("ReportsPage — Generar PDF", () => {
 });
 
 /**
- * ReportsPage — Descargar CSV.
+ * ReportsPage — Exportar a Excel.
  *
- * The CSV has no backend endpoint (the whole of `backend/` has no CSV route),
- * so the control builds the file in the browser from the result set the page
- * already holds. These tests pin the two things that make that honest rather
- * than a fake: the button is only live when there is something to export, and
- * what it writes is the FULL result set with the preview's own columns — not
- * the visible page, and not an empty file.
+ * The `.xlsx` export has no backend endpoint (issue #864), so the control
+ * builds the workbook in the browser from the result set the page already
+ * holds — same reasoning the CSV export it replaces had. `xlsx-export.ts` is
+ * mocked here (it has its own unit tests); these tests pin what the PAGE
+ * hands it: the button is only live when there is something to export, the
+ * builder receives the FULL result set with the preview's own columns — not
+ * the visible page — the button shows a busy state while generating, and a
+ * failure restores the button and surfaces a message instead of failing
+ * silently.
  */
-describe("ReportsPage — Descargar CSV", () => {
-  let capturedBlob: Blob | null;
-  let capturedFilename: string;
-  let originalCreateObjectURL: typeof URL.createObjectURL;
-  let originalRevokeObjectURL: typeof URL.revokeObjectURL;
-
-  function csvButton(): HTMLElement {
-    return screen.getByRole("button", { name: /descargar csv/i });
-  }
-
-  /** The text of the file the page just handed to the browser. */
-  async function downloadedCsv(): Promise<string> {
-    if (capturedBlob === null) throw new Error("no se generó ningún archivo");
-    return capturedBlob.text();
+describe("ReportsPage — Exportar a Excel", () => {
+  function xlsxButton(): HTMLElement {
+    return screen.getByRole("button", { name: /exportar a excel/i });
   }
 
   beforeEach(() => {
@@ -710,62 +720,23 @@ describe("ReportsPage — Descargar CSV", () => {
     mockFetchPagosReporte.mockResolvedValue([]);
     mockFetchNuevosPorPeriodo.mockResolvedValue([]);
     mockSearchStudents.mockResolvedValue([]);
-
-    capturedBlob = null;
-    capturedFilename = "";
-    // jsdom implements neither object-URL method, so the download path needs
-    // both stubbed; the Blob itself is real and is what the assertions read.
-    originalCreateObjectURL = URL.createObjectURL;
-    originalRevokeObjectURL = URL.revokeObjectURL;
-    URL.createObjectURL = vi.fn((blob: Blob): string => {
-      capturedBlob = blob;
-      return "blob:mock";
-    }) as unknown as typeof URL.createObjectURL;
-    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
-
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      capturedFilename = this.download;
-    });
-  });
-
-  afterEach(() => {
-    URL.createObjectURL = originalCreateObjectURL;
-    URL.revokeObjectURL = originalRevokeObjectURL;
-    vi.restoreAllMocks();
+    mockBuildWorkbook.mockResolvedValue("workbook-stub");
+    mockDownloadXlsx.mockResolvedValue(undefined);
   });
 
   it("stays disabled until the preview actually has rows to export", async () => {
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
-    expect(csvButton()).toBeDisabled();
+    expect(xlsxButton()).toBeDisabled();
 
     setRange("2026-01-01", "2026-12-31");
     await waitFor(() => expect(mockFetchNuevosPorPeriodo).toHaveBeenCalled());
     // The range is valid but the report came back empty — still nothing to write.
-    expect(csvButton()).toBeDisabled();
+    expect(xlsxButton()).toBeDisabled();
   });
 
-  it("writes the período rows with the preview's own columns", async () => {
-    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
-    render(<ReportsPage />);
-    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
-
-    setRange("2026-01-01", "2026-12-31");
-    await waitFor(() => expect(csvButton()).toBeEnabled());
-    fireEvent.click(csvButton());
-
-    const csv = await downloadedCsv();
-    expect(csv).toContain("Nombres,Apellidos,Cédula");
-    expect(csv).toContain("Juan");
-    expect(csv).toContain("Pérez");
-    expect(csv).toContain("1710034065");
-    expect(capturedFilename).toMatch(/^reporte-periodo_\d{4}-\d{2}-\d{2}\.csv$/);
-  });
-
-  it("exports every row of the range, not just the visible page", async () => {
+  it("builds the período workbook with the preview's own columns and every row, not just the visible page", async () => {
     const many = Array.from({ length: 23 }, (_, i) => ({
       ...PERSONA,
       id: i + 1,
@@ -776,26 +747,104 @@ describe("ReportsPage — Descargar CSV", () => {
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     setRange("2026-01-01", "2026-12-31");
-    await waitFor(() => expect(csvButton()).toBeEnabled());
-    fireEvent.click(csvButton());
+    await waitFor(() => expect(xlsxButton()).toBeEnabled());
+    fireEvent.click(xlsxButton());
 
-    // 23 rows + 1 header. The preview only shows 10 of them at a time.
-    const csv = await downloadedCsv();
-    expect(csv.trim().split("\r\n")).toHaveLength(24);
-    expect(csv).toContain("Alumno22");
+    await waitFor(() => expect(mockBuildWorkbook).toHaveBeenCalled());
+    const [sheetName, columns, rows] = mockBuildWorkbook.mock.calls[0] as [
+      string,
+      { header: string }[],
+      Record<string, unknown>[],
+    ];
+    expect(sheetName).toBe("Personas");
+    expect(columns.map((c) => c.header)).toEqual([
+      "Nombres",
+      "Apellidos",
+      "Cédula",
+      "Fecha de nacimiento",
+      "Edad",
+      "Teléfono",
+    ]);
+    // 23 rows, not the 10 the preview table shows on its first page.
+    expect(rows).toHaveLength(23);
+    expect(rows[22]).toMatchObject({ nombres: "Alumno22" });
+
+    await waitFor(() =>
+      expect(mockDownloadXlsx).toHaveBeenCalledWith(
+        expect.stringMatching(/^reporte-periodo_\d{4}-\d{2}-\d{2}\.xlsx$/),
+        "workbook-stub",
+      ),
+    );
   });
 
-  it("names the file after the preset that is selected", async () => {
+  it("builds the pagos workbook with its own sheet name and columns", async () => {
     mockFetchPagosReporte.mockResolvedValue([PAGO]);
     render(<ReportsPage />);
     await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
 
     choosePreset(/reporte de pagos/i);
-    await waitFor(() => expect(csvButton()).toBeEnabled());
-    fireEvent.click(csvButton());
+    await waitFor(() => expect(xlsxButton()).toBeEnabled());
+    fireEvent.click(xlsxButton());
 
-    expect(capturedFilename).toMatch(/^reporte-pagos_\d{4}-\d{2}-\d{2}\.csv$/);
-    expect(await downloadedCsv()).toContain("Estudiante,Responsable de pago");
+    await waitFor(() => expect(mockBuildWorkbook).toHaveBeenCalled());
+    const [sheetName, columns] = mockBuildWorkbook.mock.calls[0] as [string, { header: string }[]];
+    expect(sheetName).toBe("Pagos");
+    expect(columns.map((c) => c.header)).toEqual([
+      "Estudiante",
+      "Responsable de pago",
+      "Período",
+      "Monto",
+      "Método",
+      "Subido",
+      "Estado",
+    ]);
+    await waitFor(() =>
+      expect(mockDownloadXlsx).toHaveBeenCalledWith(
+        expect.stringMatching(/^reporte-pagos_\d{4}-\d{2}-\d{2}\.xlsx$/),
+        "workbook-stub",
+      ),
+    );
+  });
+
+  it("shows a busy state while the workbook is generating and disables the button", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    let resolveBuild!: (value: string) => void;
+    mockBuildWorkbook.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveBuild = resolve;
+        }),
+    );
+
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+    setRange("2026-01-01", "2026-12-31");
+    await waitFor(() => expect(xlsxButton()).toBeEnabled());
+
+    fireEvent.click(xlsxButton());
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /generando/i })).toBeDisabled();
+    });
+
+    resolveBuild("workbook-stub");
+    await waitFor(() => expect(xlsxButton()).toBeEnabled());
+  });
+
+  it("reports a failed export instead of failing silently, and re-enables the button", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    mockBuildWorkbook.mockRejectedValue(new Error("boom"));
+
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+    setRange("2026-01-01", "2026-12-31");
+    await waitFor(() => expect(xlsxButton()).toBeEnabled());
+
+    fireEvent.click(xlsxButton());
+
+    expect(
+      await screen.findByText("No se pudo generar el archivo de Excel. Intente nuevamente."),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(xlsxButton()).toBeEnabled());
   });
 });
 
