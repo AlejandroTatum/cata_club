@@ -745,3 +745,46 @@ def test_retirada_no_recibe_alerta_de_mora(db_session, sesion_inyectada, monkeyp
     resultado = alertas_mod.alertar_mora_diaria()
 
     assert resultado["total_avisos_familia"] == 0
+
+
+# --- Issue #833: el resumen de mora no debe crecer en SELECTs con N --------
+# `_ya_notificado_admin_hoy` corría un SELECT de dedup POR administrador
+# dentro de `_disparar_resumen_admin`, además de abrir una `SessionLocal()`
+# propia por administrador para el commit. El candado de abajo mide solo los
+# SELECT (`contar_selects`, mismo criterio que #810): con 3 y con 6
+# administradores la cantidad de SELECT tiene que ser la MISMA -- si creciera
+# con N, el fix no está aplicado.
+
+def _sembrar_lote_de_mora_con_admins(db, monkeypatch, cantidad_admins: int) -> None:
+    """Una familia en mora (dispara el resumen) más `cantidad_admins`
+    administradores activos. Aislado en un helper para no duplicar el
+    sembrado entre los dos casos parametrizados (gate de duplicación de
+    SonarCloud)."""
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db, cedula_valida(240))
+    _crear_usuario(db, alumno, "alumno240@cataclub.test")
+    _crear_membresia_con_pago(db, alumno, HOY - timedelta(days=1))
+    for indice in range(cantidad_admins):
+        _crear_admin(
+            db, cedula_valida(250 + indice), f"admin{250 + indice}@cataclub.test",
+        )
+
+
+@pytest.mark.parametrize("cantidad_admins", [3, 6])
+def test_resumen_admin_no_crece_en_selects_con_la_cantidad_de_administradores(
+    db_session, sesion_inyectada, contar_selects, monkeypatch, cantidad_admins,
+):
+    _sembrar_lote_de_mora_con_admins(db_session, monkeypatch, cantidad_admins)
+    _mock_envio(monkeypatch)
+
+    with contar_selects() as sentencias:
+        resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["resumen_admin_enviado"] is True
+    selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
+    assert len(selects) == 4, (
+        f"Se esperaban 4 SELECTs (lote de mora + dedup de familia en lote + "
+        f"listado de administradores + dedup de resumen en lote), constantes "
+        f"sin importar la cantidad de administradores; se ejecutaron "
+        f"{len(selects)} con cantidad_admins={cantidad_admins}: {selects}"
+    )
