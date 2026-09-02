@@ -155,6 +155,53 @@ test.describe("on a touch device", () => {
 });
 
 /**
+ * #873 — rendered surface colours on the sheet, measured in a real browser
+ * instead of read off a class name.
+ *
+ * `ChatWidget.test.tsx` and `chat-contrast.test.tsx` already prove the
+ * CLASSES and the maths; this is the one place that proves the cascade
+ * actually paints them — Tailwind's build step, `globals.css`'s `.card` rule
+ * and any later override all sit between a class name and a pixel, and none
+ * of them are exercised in jsdom.
+ */
+test("the sheet paints coal/canvas/sunken, not a white-on-white stack", async ({ page }) => {
+  // No `hasTouch` needed here: at 390px the media query's WIDTH clause alone
+  // selects the sheet, regardless of pointer type — the `pointer: coarse`
+  // gate only matters for the landscape clause (see the file header).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+  await openPanel(page);
+
+  const colors = await page.evaluate((panelSelector: string) => {
+    const panel = document.querySelector(panelSelector) as HTMLElement;
+    const header = panel.querySelector("header") as HTMLElement;
+    const form = panel.querySelector("form") as HTMLElement;
+    const history = panel.querySelector(".overflow-y-auto") as HTMLElement;
+    return {
+      header: getComputedStyle(header).backgroundColor,
+      form: getComputedStyle(form).backgroundColor,
+      history: getComputedStyle(history).backgroundColor,
+    };
+  }, PANEL);
+
+  // Coal, canvas, sunken — three different fills, none of them white.
+  expect(colors.header).toBe("rgb(19, 19, 22)");
+  expect(colors.history).toBe("rgb(232, 232, 238)");
+  expect(colors.form).toBe("rgb(244, 244, 247)");
+  expect(new Set(Object.values(colors)).size).toBe(3);
+});
+
+test("the floating launcher paints coal, never white, before the panel opens", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+
+  const launcher = page.getByRole("button", { name: LAUNCHER });
+  await expect(launcher).toBeVisible({ timeout: 20_000 });
+  const fill = await launcher.evaluate((el: HTMLElement) => getComputedStyle(el).backgroundColor);
+  expect(fill).toBe("rgb(19, 19, 22)");
+});
+
+/**
  * The other side of the `pointer: coarse` gate: the same 844x390 box, on a
  * machine with a mouse. Without this the landscape clause could be widened to
  * every short window and both suites would stay green.
@@ -454,4 +501,18 @@ test("the desktop panel is the same corner card it has always been", async ({ pa
     return !!(panel && document.activeElement && panel.contains(document.activeElement));
   }, PANEL);
   expect(stillInside).toBe(false);
+
+  // #873 — the corner card's own header and composer are coal/sunken here
+  // too: the geometry above is unchanged, the surfaces are not.
+  const colors = await page.evaluate((panelSelector: string) => {
+    const panel = document.querySelector(panelSelector) as HTMLElement;
+    const header = panel.querySelector("header") as HTMLElement;
+    const form = panel.querySelector("form") as HTMLElement;
+    return {
+      header: getComputedStyle(header).backgroundColor,
+      form: getComputedStyle(form).backgroundColor,
+    };
+  }, PANEL);
+  expect(colors.header).toBe("rgb(19, 19, 22)");
+  expect(colors.form).toBe("rgb(244, 244, 247)");
 });

@@ -322,11 +322,15 @@ function useDockClearance(dockRef: React.RefObject<HTMLElement | null>): DockCle
  * up the corner is empty and the launcher takes the system's usual 20px.
  *
  * @touch-target The phone disc is the floor itself; see `docs/ux/objetivo-tactil.md`.
+ *
+ * Exported for `chat-contrast.test.tsx` (#873): the launcher's own fill is
+ * asserted directly off this constant rather than through a full render, the
+ * same way `SHEET_MEDIA_QUERY` is exported from `ChatWidget.tsx`.
  */
-const LAUNCHER_CLASSES =
+export const LAUNCHER_CLASSES =
   "fixed bottom-4 right-2 z-40 flex h-11 w-11 items-center justify-center rounded-full " +
-  "bg-white text-ink border border-line-2 shadow-float " +
-  "transition-[transform,opacity] duration-200 ease-out hover:bg-paper " +
+  "bg-coal text-white shadow-float " +
+  "transition-[transform,opacity,background-color] duration-200 ease-out hover:bg-coal-2 " +
   "lg:bottom-5 lg:right-5 lg:h-[76px] lg:w-[76px]";
 
 /**
@@ -447,9 +451,11 @@ export default function HelpChatDock(): React.ReactElement {
           exactly like the hero paddle crest below does. The cropped source
           crop, not the raw JPEG — see `ChatWidget`'s own comment for why the
           full logo's wordmark band can't just be `object-cover`'d away. Its
-          transparent margin relies on this button's own `bg-white`
-          (`LAUNCHER_CLASSES` below) showing through instead of the JPEG's
-          light-grey square.
+          transparent margin lets this button's own `bg-coal` (`LAUNCHER_
+          CLASSES` above, #873) show through instead of the JPEG's light-grey
+          square — a dark disc rather than the light one the crop was
+          originally cut for, and the intended fix: the launcher must never
+          be white (issue #873).
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
           <Image
