@@ -55,9 +55,17 @@ export default function Stepper({
               data-state={done ? "done" : active ? "current" : "upcoming"}
               className={cn(
                 PILL,
-                done && "border-state-ok/30 bg-paper text-state-ok",
+                // #874: a completed pill is FILLED with its own tint (the
+                // same pair `Badge`'s `ok` tone spends), not `paper` with
+                // tinted text — the pill itself has to read as "done" before
+                // anyone reads the label inside it.
+                done && "border-state-ok/30 bg-state-ok-bg text-state-ok",
                 active && "border-coal bg-coal text-white",
-                !done && !active && "border-line-2 bg-paper text-ink-3",
+                // #874: pending steps sit on `sunken`, not `paper` — a step
+                // nobody has reached yet is the one pill that should read as
+                // recessed, not as another white surface next to the wash and
+                // the card it sits between.
+                !done && !active && "border-line bg-sunken text-ink-3-strong",
               )}
             >
               <span

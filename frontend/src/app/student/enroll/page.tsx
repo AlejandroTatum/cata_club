@@ -601,9 +601,15 @@ function EnrollWizard(): React.ReactElement {
         </p>
 
         {/* `.choice` (_sistema.css:323-328). Even height via `items-stretch` +
-            `h-full`, so the two cards never step on each other. Selection is
-            coal plus the yellow ball dot — NEVER red: red belongs to the
-            primary CTA and to destructive actions only. */}
+            `h-full`, so the two cards never step on each other.
+
+            Issue #874 reserves `cata-red` for this ONE selected-state border,
+            the enrollment wizard's own carve-out from "la regla del rojo
+            único" (DESIGN.md) — every other selected state in the product
+            still draws coal plus the yellow ball dot. The badge below is that
+            same non-colour marker: `aria-pressed`, the "Seleccionado" text and
+            the ball dot are what make the state readable without colour, the
+            border is only the accent on top of that. */}
         <div className="grid items-stretch gap-section sm:grid-cols-2">
           {ENROLLMENT_CHOICES.map((choice) => {
             const selected = formData.enrollmentType === choice.value;
@@ -615,7 +621,7 @@ function EnrollWizard(): React.ReactElement {
                 onClick={() => updateField("enrollmentType", choice.value)}
                 className={`flex h-full flex-col gap-field rounded-card border p-page text-left transition-colors duration-150 ${
                   selected
-                    ? "border-coal bg-paper ring-1 ring-coal"
+                    ? "border-cata-red bg-paper ring-1 ring-cata-red"
                     : "border-line-2 bg-paper hover:bg-sunken"
                 }`}
               >
@@ -641,7 +647,7 @@ function EnrollWizard(): React.ReactElement {
             on a second card: a card inside a card is a border and a shadow the
             system never asks for, and this block is a footnote to the two
             above it, not a sibling of them. */}
-        <div className="rounded-ctl bg-sunken p-page">
+        <div data-testid="enroll-info-panel" className="rounded-ctl bg-sunken p-page">
           <p className="text-sm font-bold text-ink">
             {formData.enrollmentType === "self"
               ? "Inscripción como jugador"
@@ -1072,8 +1078,14 @@ function EnrollWizard(): React.ReactElement {
             redraw all three by hand. The ROW is still local: `DataRow` leads
             with a `flex-1` name and this list leads with a fixed 150px label
             column, so it is a different row, not the same row spelled twice —
-            see the note in the comparison. */}
-        <DataRowList>
+            see the note in the comparison.
+
+            `bg-sunken` on the caller, not on `DataRowList` itself (#874):
+            the primitive is shared by five other screens and its own default
+            has no background at all — this list is the one that sits inside
+            a summary card and needs to read as an inset panel instead of a
+            second `paper` surface stacked on the first. */}
+        <DataRowList className="bg-sunken">
           {summaryRow(
             "Tipo",
             isChild ? "Representante — inscribe a un dependiente" : "Jugador — titular de su propia cuenta",
@@ -1410,11 +1422,20 @@ function EnrollWizard(): React.ReactElement {
               (Graduate), the case, the flat tracking and the absent weight
               class; this screen owns only the eyebrow above it, which the
               primitive has no slot for. */}
-          <div>
-            {/* `ink-3-strong`, not `ink-3`: this block sits on the PAGE
-                surface (#F4F4F7, the body fill), not inside a card, and
-                `ink-3` only clears AA on `paper` — it measures 4.21:1 here.
-                Same reason `PageHeader` uses the companion token. */}
+          {/* The header/context wash (#874): the one place on this screen
+              that carries `enroll-wash` instead of `canvas`/`paper`/`sunken`.
+              The 3px left rule is the brand accent the acceptance criteria
+              asks for — a rule beside the heading, never red TEXT on it, the
+              same distinction the primary button already draws between
+              "the action" and "everything else". */}
+          <div
+            data-testid="enroll-wizard-header"
+            className="rounded-card border border-line border-l-[3px] border-l-cata-red bg-enroll-wash p-page"
+          >
+            {/* `ink-3-strong`, not `ink-3`: this block sits on the wash
+                surface, not on plain `paper`, and `ink-3` only clears AA on
+                `paper` — it measures 4.21:1 here. Same reason `PageHeader`
+                uses the companion token. */}
             <p className="mb-field text-2xs font-bold uppercase text-ink-3-strong">
               {isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
             </p>
@@ -1441,13 +1462,14 @@ function EnrollWizard(): React.ReactElement {
                       : " Usted actúa como representante.")
               }
             />
-          </div>
 
-          <Stepper
-            label="Pasos de la inscripción"
-            current={currentIndex + 1}
-            steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
-          />
+            <Stepper
+              label="Pasos de la inscripción"
+              current={currentIndex + 1}
+              steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+              className="mt-page"
+            />
+          </div>
 
           {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
               servidor — nada de esto se envió todavía. El rótulo lo dice para
@@ -1536,7 +1558,7 @@ function EnrollWizard(): React.ReactElement {
           )}
 
           {/* Form card */}
-          <div className="card p-page">
+          <div data-testid="enroll-wizard-card" className="card p-page">
             {/* The card title was `text-sm font-bold` — 13.5px of Barlow, the
                 DENSE step, which is the size of a table cell. It was smaller
                 than the labels of the fields inside it, so the title of the

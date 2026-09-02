@@ -261,3 +261,91 @@ describe("the school catalogue never fails in silence", () => {
     expect(screen.queryByText(/no pudimos cargar la lista de escuelas/i)).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #874 — surface hierarchy: the wash, the card, the sunken panels and
+// the stepper's three states each have to be tellable apart.
+// ---------------------------------------------------------------------------
+
+describe("the enrollment wash marks only the wizard's own header/context", () => {
+  it("carries the wash and the 3px red accent on the header block, and nowhere else", () => {
+    const { container } = render(<EnrollPage />);
+
+    const header = screen.getByTestId("enroll-wizard-header");
+    expect(header.className).toContain("bg-enroll-wash");
+    expect(header.className).toContain("border-l-cata-red");
+    expect(header).toContainElement(
+      screen.getByRole("heading", { name: /inscripción de estudiante/i }),
+    );
+    expect(header).toContainElement(
+      screen.getByRole("list", { name: /pasos de la inscripción/i }),
+    );
+
+    // The wash is this ONE block's surface — nothing else on the screen
+    // repeats it.
+    expect(container.querySelectorAll(".bg-enroll-wash")).toHaveLength(1);
+  });
+
+  it("keeps the form card off the wash and the info panel on sunken", () => {
+    render(<EnrollPage />);
+
+    expect(screen.getByTestId("enroll-wizard-card").className).not.toMatch(/bg-enroll-wash/);
+    expect(screen.getByTestId("enroll-info-panel").className).toContain("bg-sunken");
+  });
+});
+
+describe("the stepper's three states are tellable apart without colour alone", () => {
+  it("marks the current step coal and the pending ones sunken, not paper", () => {
+    render(<EnrollPage />);
+
+    const current = screen.getByText("Tipo");
+    expect(current).toHaveAttribute("data-state", "current");
+    expect(current.className).toContain("bg-coal");
+
+    const pending = screen.getByText("Estudiante");
+    expect(pending).toHaveAttribute("data-state", "upcoming");
+    expect(pending.className).toContain("bg-sunken");
+    expect(pending.className).not.toMatch(/\bbg-paper\b/);
+  });
+
+  it("marks a completed step with the green pair and keeps its check glyph", () => {
+    render(<EnrollPage />);
+    next(); // type -> personal
+
+    const done = screen.getByText("Tipo");
+    expect(done).toHaveAttribute("data-state", "done");
+    expect(done.className).toContain("bg-state-ok-bg");
+    // The non-colour marker survives the fill change: a real check glyph.
+    expect(done.querySelector("svg")).not.toBeNull();
+  });
+});
+
+describe("the summary reads as an inset panel, not a second white card", () => {
+  /** Self flow (fewer steps than the representative one) all the way to step 5. */
+  function goToSummary(): void {
+    next(); // type -> personal
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    next(); // personal -> health
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
+    fireEvent.change(screen.getByLabelText(/teléfono de emergencia/i), { target: { value: "0999888777" } });
+    next(); // health -> summary
+  }
+
+  it("carries the summary rows on the sunken surface", () => {
+    render(<EnrollPage />);
+    goToSummary();
+
+    expect(screen.getByRole("heading", { name: /resumen y confirmación/i })).toBeInTheDocument();
+    // "Tipo de sangre" is a summary-row label with no collision elsewhere on
+    // screen (unlike "Tipo", which the stepper pill also renders).
+    const list = screen.getByText("Tipo de sangre").closest("ul");
+    expect(list?.className).toContain("bg-sunken");
+  });
+});

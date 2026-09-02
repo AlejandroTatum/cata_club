@@ -209,6 +209,11 @@ este rojo se ve sucio, así que el neutro está elegido, no heredado.
 - **La rampa de estados**: cuatro pares —correcto, advertencia, neutro, malo—, cada uno con su tinte
   de fondo. La tinta está definida para leerse sobre su propio tinte **y** sobre el canvas, porque
   una insignia a veces cae fuera de una tarjeta.
+- **El wash de inscripción** (`{colors.enroll-wash}`, `#FFF7F7`): exclusivo del encabezado/contexto
+  del asistente público en `/student/enroll` (#874). No es un escalón más de la escalera neutra —
+  mide 1.06:1 contra `paper`, casi el mismo brillo— sino un tinte cálido, con un matiz del rojo
+  institucional mezclado en blanco. `ink` mide 16.8:1 sobre él y `ink-3-strong` 5.6:1, así que el
+  tono nunca compite con la lectura. No sale de esa única pantalla.
 
 ### La paleta de gráfico
 
@@ -234,9 +239,12 @@ tocaba la dona del admin. Queda declarada acá, que es donde se busca un color a
 
 ### Named Rules
 
-**La regla del rojo único.** El rojo es la acción primaria y el estado destructivo. Nunca es un
-estado seleccionado, nunca es decoración, y nunca hay dos botones rojos en una pantalla. Un estado
-activo se dibuja con caucho más el punto amarillo.
+**La regla del rojo único.** El rojo es la acción primaria y el estado destructivo. Nunca es
+decoración, y nunca hay dos botones rojos en una pantalla. Un estado activo se dibuja con caucho más
+el punto amarillo — con una única excepción declarada: el borde de la tarjeta de elección
+seleccionada en `/student/enroll` (#874), donde el rojo marca la elección del propio flujo de alta
+y el marcador amarillo de "Seleccionado" sigue siendo la señal que no depende del color. Ninguna
+otra tarjeta de elección del producto adopta esta excepción sin su propio issue.
 
 **La regla del par medido.** Ningún color entra al sistema sin su medición de contraste anotada
 contra todas las superficies donde puede caer. El número que fija la escalera entera es
