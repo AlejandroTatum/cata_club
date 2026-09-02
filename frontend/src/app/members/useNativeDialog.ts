@@ -62,10 +62,33 @@ interface NativeDialogHandles {
  * That direction is the safe one — a slightly shorter dialog, never one under
  * the keys — and it costs a handful of pixels in a state that lasts as long as
  * someone is typing.
+ *
+ * ## Issue #856: `h-fit` is a non-definite height, and WebKit knows it
+ *
+ * `h-fit` (`height: fit-content`) never gave this box a definite height — it
+ * asked the browser to size the dialog to its own content instead, the same
+ * intrinsic sizing keyword CSS uses for a `<div>` with no height at all. Every
+ * major engine mostly tolerates that when a flex-grow child inside asks for a
+ * share of it (`NATIVE_DIALOG_BODY_CLASS`'s `flex-1`), but WebKit is the one
+ * that resolves an indefinite-height flex container's `flex-basis` as if the
+ * child had nothing to grow into: the body collapsed to its `min-height`
+ * (browser default `auto`, i.e. its own content height with nowhere to
+ * shrink), and on a tall form that pushed the footer off both the visible
+ * area and the dialog's own clipped box. Header and close button stayed
+ * visible because they are `shrink-0` siblings measured before the body ever
+ * gets a size — exactly the report's "header renders, body does not".
+ *
+ * Removing `h-fit` leaves `height` at its CSS default, `auto` — genuinely
+ * auto, not `fit-content` — bounded by the `max-h-[…]` above, which IS a
+ * definite length (a `calc()` of concrete viewport/inset values). A definite
+ * `max-height` on an `auto`-height flex container is what every engine,
+ * WebKit included, needs to resolve the `flex-1` body against: short content
+ * still shrink-wraps below the cap, and anything taller is clamped at the cap
+ * with the excess going to the body's own scrollbar instead of off-screen.
  */
 export const NATIVE_DIALOG_SHELL_CLASS =
   "fixed inset-x-0 top-[var(--dialog-viewport-top,0px)] " +
-  "bottom-[var(--dialog-keyboard-inset,0px)] z-50 m-auto flex h-fit " +
+  "bottom-[var(--dialog-keyboard-inset,0px)] z-50 m-auto flex " +
   "max-h-[calc(var(--dialog-viewport-height,100dvh)-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] " +
   "w-[calc(100%-2rem-env(safe-area-inset-left)-env(safe-area-inset-right))] max-w-2xl " +
   "flex-col overflow-hidden rounded-2xl border border-line bg-paper p-0 shadow-elevated backdrop:bg-coal/40";
@@ -89,9 +112,19 @@ export const NATIVE_DIALOG_SHELL_CLASS =
  * additional benefit. `ChatWidget`'s sheet and `AttendanceRosterList` already
  * carry the same utility, so this is the codebase's established spelling
  * rather than a new convention.
+ *
+ * `min-h-0` (issue #856) is the other half of the shell's `h-fit` removal: a
+ * flex item's `min-height` defaults to `auto`, which means "never shrink
+ * below your content" — the opposite of what a `flex-1 overflow-y-auto`
+ * scroll body needs. Without it, WebKit sized this body to fit its full,
+ * unscrolled content and only THEN discovered there was no room left inside
+ * the shell's `max-h-[…]`, so the overflow it clipped was the body itself
+ * rather than something the body's own scrollbar could reach. `ChatWidget`'s
+ * history pane (`ChatWidget.tsx`) already carries `min-h-0` next to its own
+ * `flex-1 overflow-y-auto` for the identical reason.
  */
 export const NATIVE_DIALOG_BODY_CLASS =
-  "flex-1 space-y-section overflow-y-auto overscroll-contain bg-canvas px-5 py-4";
+  "flex-1 min-h-0 space-y-section overflow-y-auto overscroll-contain bg-canvas px-5 py-4";
 
 /**
  * Wires a native `<dialog>` the way every modal on the Miembros page behaves:
