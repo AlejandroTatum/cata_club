@@ -61,11 +61,14 @@ se aprobó. Consulta [staging-redeploy.md](staging-redeploy.md).
 perseguir una deriva inexistente es un desvío caro.
 
 El caso más común es `observado: unknown`. Significa que el frontend responde bien
-pero `BUILD_SHA` nunca llegó a la imagen. **`docker-compose.override.yml` es el
-único compose del repositorio que pasa esa variable**, así que una imagen de
-producción reporta `unknown` siempre, por diseño actual y no por una falla del
-momento. En ese caso el eje revisión no puede concluir nada desde una máquina
-local, y hay que ir a la recolección en el host (más abajo).
+pero `BUILD_SHA` nunca llegó a la imagen. Desde el PR #425, CI pasa
+`BUILD_SHA=IMAGE_TAG` al construir la imagen de producción y además rechaza
+publicarla si `/api/health` no sirve exactamente esa revisión (issue #927) —
+así que un `unknown` en producción **no** puede venir de la ruta de publicación
+de CI. Significa que la imagen corriendo no vino de ahí: un `docker compose
+build` local sin `BUILD_SHA` exportado, una imagen armada a mano, o algo
+similar. Ese es el hallazgo en sí mismo, y hay que ir a la recolección en el
+host (más abajo) para determinar de dónde salió esa imagen.
 
 Las otras causas son que el endpoint no respondiera o que faltara el campo. Ahí
 revisa primero que el stack esté realmente arriba.
