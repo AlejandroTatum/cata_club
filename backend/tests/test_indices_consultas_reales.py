@@ -125,6 +125,12 @@ _INDICES_REQUERIDOS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # `ORDER BY fecha_registro ASC`. Una sola columna alcanza: no hay
     # igualdad previa que anteponer.
     ("persona", "ix_persona_fecha_registro", ("fecha_registro",)),
+    # Issue #827: `usuario_ficha_repositorio.py` `obtener_por_correo` (:73-78)
+    # filtra `func.lower(correo) = ?`, no `correo`. Corre en CADA petición
+    # autenticada (`GestorAutenticacion.decodificar_token`) y en cada login,
+    # así que necesita un índice FUNCIONAL sobre la misma expresión -- el
+    # unique implícito de la columna es sensible a mayúsculas y no la sirve.
+    ("usuario", "ix_usuario_correo_lower", (_EXPRESION,)),
 )
 
 
