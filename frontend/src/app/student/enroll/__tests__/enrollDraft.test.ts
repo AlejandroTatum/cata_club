@@ -57,29 +57,35 @@ describe("clearEnrollDraft", () => {
   });
 });
 
-describe("password stripping (issue #553)", () => {
+describe("password stripping (issue #553, extended to confirmations by #876)", () => {
   const DRAFT_KEY = "cata_enroll_draft";
   const DRAFT_WITH_PASSWORDS: EnrollFormData = {
     ...SOME_DRAFT,
     contrasenia: "SecretaAlumno1!",
+    contraseniaConfirmacion: "SecretaAlumno1!",
     contraseniaRepresentante: "SecretaRepre2!",
+    contraseniaRepresentanteConfirmacion: "SecretaRepre2!",
   };
 
-  it("never persists password fields in the stored draft", () => {
+  it("never persists password fields, including the confirmations, in the stored draft", () => {
     saveEnrollDraft(DRAFT_WITH_PASSWORDS);
     const stored = JSON.parse(window.sessionStorage.getItem(DRAFT_KEY) as string);
     expect(stored).not.toHaveProperty("contrasenia");
+    expect(stored).not.toHaveProperty("contraseniaConfirmacion");
     expect(stored).not.toHaveProperty("contraseniaRepresentante");
+    expect(stored).not.toHaveProperty("contraseniaRepresentanteConfirmacion");
     // The rest of the draft still round-trips.
     expect(stored.nombres).toBe("Lucas");
   });
 
-  it("loads a saved draft with the password fields blanked, not resurrected", () => {
+  it("loads a saved draft with the password and confirmation fields blanked, not resurrected", () => {
     saveEnrollDraft(DRAFT_WITH_PASSWORDS);
     expect(loadEnrollDraft()).toEqual({
       ...DRAFT_WITH_PASSWORDS,
       contrasenia: "",
+      contraseniaConfirmacion: "",
       contraseniaRepresentante: "",
+      contraseniaRepresentanteConfirmacion: "",
     });
   });
 
@@ -90,7 +96,9 @@ describe("password stripping (issue #553)", () => {
     expect(loadEnrollDraft()).toEqual({
       ...DRAFT_WITH_PASSWORDS,
       contrasenia: "",
+      contraseniaConfirmacion: "",
       contraseniaRepresentante: "",
+      contraseniaRepresentanteConfirmacion: "",
     });
 
     // First load must overwrite the stored value so the plaintext passwords
@@ -99,15 +107,25 @@ describe("password stripping (issue #553)", () => {
     expect(rewritten).not.toContain("SecretaAlumno1!");
     expect(rewritten).not.toContain("SecretaRepre2!");
     expect(JSON.parse(rewritten)).not.toHaveProperty("contrasenia");
+    expect(JSON.parse(rewritten)).not.toHaveProperty("contraseniaConfirmacion");
     expect(JSON.parse(rewritten)).not.toHaveProperty("contraseniaRepresentante");
+    expect(JSON.parse(rewritten)).not.toHaveProperty("contraseniaRepresentanteConfirmacion");
   });
 
   it("parseEnrollDraft accepts a stored draft without password keys", () => {
-    const { contrasenia: _c, contraseniaRepresentante: _r, ...stored } = SOME_DRAFT;
+    const {
+      contrasenia: _c,
+      contraseniaConfirmacion: _cc,
+      contraseniaRepresentante: _r,
+      contraseniaRepresentanteConfirmacion: _rc,
+      ...stored
+    } = SOME_DRAFT;
     expect(parseEnrollDraft(JSON.stringify(stored))).toEqual({
       ...SOME_DRAFT,
       contrasenia: "",
+      contraseniaConfirmacion: "",
       contraseniaRepresentante: "",
+      contraseniaRepresentanteConfirmacion: "",
     });
   });
 });

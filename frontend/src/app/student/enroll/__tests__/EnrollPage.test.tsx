@@ -308,6 +308,7 @@ describe("EnrollPage — error prevention on the student step", () => {
     // of this step (they moved here when the representante got its own step).
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
 
     expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
     expect(screen.queryByText(/para continuar, revise:/i)).not.toBeInTheDocument();
@@ -368,6 +369,7 @@ describe("EnrollPage — error prevention on the student step", () => {
     expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
     expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
+    expect(screen.getByLabelText(/^Confirmar contraseña/)).toHaveAttribute("autoComplete", "new-password");
   });
 
   it("keeps a minor from self-enrolling, with the message on the birth-date field", () => {
@@ -379,6 +381,67 @@ describe("EnrollPage — error prevention on the student step", () => {
 
     expect(screen.getByText(/menores de edad no pueden autoinscribirse/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+  });
+
+  /**
+   * Issue #876: the confirmation blocks "Siguiente" the same way every other
+   * field-level rule already does — a message beside the field, not just a
+   * generic step alert.
+   */
+  it("blocks 'Siguiente' when the confirmation does not repeat the password", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    const confirm = screen.getByLabelText(/^Confirmar contraseña/);
+    fireEvent.change(confirm, { target: { value: "otraClave9" } });
+    fireEvent.blur(confirm);
+
+    expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+
+    fireEvent.change(confirm, { target: { value: "password8" } });
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
+  });
+});
+
+/**
+ * Issue #876: the dependent's account is optional, and its confirmation
+ * follows the same "both-or-neither" gate the password and correo already
+ * use — it only exists while an account is actually being created.
+ */
+describe("EnrollPage — confirmación de la cuenta opcional del menor (#876)", () => {
+  it("hides and clears the confirmation once the optional account is withdrawn", () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    const correo = screen.getByLabelText(/^Correo electrónico/);
+    fireEvent.change(correo, { target: { value: "lucas@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    const confirm = screen.getByLabelText(/^Confirmar contraseña/);
+    fireEvent.change(confirm, { target: { value: "otraClave9" } });
+    fireEvent.blur(confirm);
+    expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
+
+    // Withdraw the optional account: clearing both correo and contrasenia
+    // takes the confirmation with them.
+    fireEvent.change(correo, { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "" } });
+
+    expect(screen.queryByLabelText(/^Confirmar contraseña/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Las contraseñas no coinciden.")).not.toBeInTheDocument();
+
+    // Re-entering credentials starts from a clean, unmatched confirmation —
+    // never resurrecting the withdrawn value.
+    fireEvent.change(correo, { target: { value: "lucas@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    expect(screen.getByLabelText(/^Confirmar contraseña/)).toHaveValue("");
   });
 });
 
@@ -397,6 +460,7 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ })); // personal -> health
   }
 
@@ -456,6 +520,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
@@ -607,6 +672,7 @@ function reachSummaryStep(): void {
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
   fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+  fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
   fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
   fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
@@ -838,6 +904,7 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
@@ -868,6 +935,7 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });

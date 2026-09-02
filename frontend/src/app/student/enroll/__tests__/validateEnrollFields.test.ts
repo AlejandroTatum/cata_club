@@ -26,6 +26,7 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     telefono: "0991234567",
     correo: "juan@example.com",
     contrasenia: "password8",
+    contraseniaConfirmacion: "password8",
     nombreRepresentante: "María",
     apellidosRepresentante: "Rodríguez",
     cedulaRepresentante: "0998765432",
@@ -33,6 +34,7 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     telefonoRepresentante: "0991234567",
     correoRepresentante: "maria@example.com",
     contraseniaRepresentante: "password8",
+    contraseniaRepresentanteConfirmacion: "password8",
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
     contactoEmergencia: "María Pérez",
     // Issue #860: has to differ from `telefono` above — see the same note in
@@ -222,6 +224,72 @@ describe("validateEnrollFields", () => {
         validForm({ telefono: "0991234567", telefonoEmergencia: "123" }),
       );
       expect(errors.telefonoEmergencia).toMatch(/celular.*fijo/);
+    });
+  });
+
+  /**
+   * Issue #876: a confirmation must repeat the password exactly. Same matrix
+   * for the student's own credentials (personal step, self type) and the
+   * representante's (always required, on its own step) — `passwordConfirmRule`
+   * backs both, so one table covers both call sites.
+   */
+  describe("password confirmation matrix (#876)", () => {
+    it.each([
+      ["matches", "password8", "password8", undefined],
+      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden."],
+      ["is left empty", "password8", "", "La confirmación de contraseña es obligatoria."],
+    ])("student confirmation that %s", (_label, contrasenia, contraseniaConfirmacion, expected) => {
+      const errors = validateEnrollFields("personal", validForm({ contrasenia, contraseniaConfirmacion }));
+      expect(errors.contraseniaConfirmacion).toBe(expected);
+    });
+
+    it.each([
+      ["matches", "password8", "password8", undefined],
+      ["mismatches", "password8", "otraClave9", "Las contraseñas no coinciden."],
+      ["is left empty", "password8", "", "La confirmación de contraseña es obligatoria."],
+    ])(
+      "representante confirmation that %s",
+      (_label, contraseniaRepresentante, contraseniaRepresentanteConfirmacion, expected) => {
+        const errors = validateEnrollFields(
+          "representative",
+          validForm({ enrollmentType: "child", contraseniaRepresentante, contraseniaRepresentanteConfirmacion }),
+        );
+        expect(errors.contraseniaRepresentanteConfirmacion).toBe(expected);
+      },
+    );
+
+    it("does not require the child's optional confirmation while no account is being created", () => {
+      const errors = validateEnrollFields(
+        "personal",
+        validForm({ enrollmentType: "child", correo: "", contrasenia: "", contraseniaConfirmacion: "" }),
+      );
+      expect(errors.contraseniaConfirmacion).toBeUndefined();
+    });
+
+    it("requires the child's optional confirmation once its account starts being created", () => {
+      const errors = validateEnrollFields(
+        "personal",
+        validForm({
+          enrollmentType: "child",
+          correo: "lucas@example.com",
+          contrasenia: "password8",
+          contraseniaConfirmacion: "",
+        }),
+      );
+      expect(errors.contraseniaConfirmacion).toBe("La confirmación de contraseña es obligatoria.");
+    });
+
+    it("accepts the child's optional confirmation once it repeats the password", () => {
+      const errors = validateEnrollFields(
+        "personal",
+        validForm({
+          enrollmentType: "child",
+          correo: "lucas@example.com",
+          contrasenia: "password8",
+          contraseniaConfirmacion: "password8",
+        }),
+      );
+      expect(errors.contraseniaConfirmacion).toBeUndefined();
     });
   });
 });

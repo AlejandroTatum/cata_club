@@ -159,6 +159,7 @@ async function completeEnrollment(): Promise<void> {
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
   fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
   fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+  fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
   fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
   fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });

@@ -331,6 +331,7 @@ describe("the summary reads as an inset panel, not a second white card", () => {
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
     next(); // personal -> health
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
     fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
