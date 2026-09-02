@@ -195,20 +195,11 @@ describe("validateEnrollFields", () => {
    * the field the visitor is actually looking at.
    */
   describe("telefonoEmergencia must differ from telefono (#860)", () => {
-    it("rejects the same number, keyed to telefonoEmergencia", () => {
-      const errors = validateEnrollFields(
-        "health",
-        validForm({ telefono: "0991234567", telefonoEmergencia: "0991234567" }),
-      );
-      expect(errors.telefonoEmergencia).toBe(
-        "El teléfono de emergencia debe ser diferente del teléfono del estudiante.",
-      );
-    });
-
     it.each([
+      ["the exact same number", "0991234567", "0991234567"],
       ["the +593 form of the same number", "0991234567", "+593991234567"],
       ["the 593 form of the same number (no plus sign)", "0991234567", "593991234567"],
-    ])("rejects %s as equivalent to the student's own", (_description, telefono, telefonoEmergencia) => {
+    ])("rejects %s, keyed to telefonoEmergencia", (_description, telefono, telefonoEmergencia) => {
       const errors = validateEnrollFields("health", validForm({ telefono, telefonoEmergencia }));
       expect(errors.telefonoEmergencia).toBe(
         "El teléfono de emergencia debe ser diferente del teléfono del estudiante.",

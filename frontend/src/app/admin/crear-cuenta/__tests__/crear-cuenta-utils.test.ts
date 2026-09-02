@@ -154,13 +154,8 @@ describe("validateCrearCuentaForm — ficha médica (#643)", () => {
   describe("telefonoEmergencia must differ from telefono (#860)", () => {
     const MENSAJE = "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
 
-    it("rejects the same number", () => {
-      expect(
-        validateCrearCuentaForm(withMedical({ telefonoEmergencia: form().telefono })),
-      ).toContain(MENSAJE);
-    });
-
     it.each([
+      ["the exact same number", form().telefono],
       ["the +593 form of the same number", "+593991234567"],
       ["the 593 form of the same number (no plus sign)", "593991234567"],
     ])("rejects %s as equivalent to the account's own (telefono is 0991234567)", (_description, telefonoEmergencia) => {

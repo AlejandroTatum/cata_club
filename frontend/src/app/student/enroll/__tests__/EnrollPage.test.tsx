@@ -379,36 +379,23 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ })); // personal -> health
   }
 
-  it("shows the error beside 'Teléfono de emergencia' and keeps 'Siguiente' disabled", () => {
+  it.each([
+    ["the exact same local number", "0991234567"],
+    ["the equivalent +593 form of the same number", "+593991234567"],
+  ])("rejects %s beside 'Teléfono de emergencia' and keeps 'Siguiente' disabled", (_description, valor) => {
     render(<EnrollPage />);
     goToHealthStep();
 
     fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
     fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
     const telefonoEmergencia = screen.getByLabelText(/teléfono de emergencia/i);
-    fireEvent.change(telefonoEmergencia, { target: { value: "0991234567" } });
+    fireEvent.change(telefonoEmergencia, { target: { value: valor } });
     fireEvent.blur(telefonoEmergencia);
 
     expect(
       screen.getByText("El teléfono de emergencia debe ser diferente del teléfono del estudiante."),
     ).toBeInTheDocument();
     expect(telefonoEmergencia).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
-  });
-
-  it("accepts an equivalent +593 form of the same number as still identical", () => {
-    render(<EnrollPage />);
-    goToHealthStep();
-
-    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
-    fireEvent.change(screen.getByLabelText(/nombre del contacto/i), { target: { value: "Ana Martinez" } });
-    const telefonoEmergencia = screen.getByLabelText(/teléfono de emergencia/i);
-    fireEvent.change(telefonoEmergencia, { target: { value: "+593991234567" } });
-    fireEvent.blur(telefonoEmergencia);
-
-    expect(
-      screen.getByText("El teléfono de emergencia debe ser diferente del teléfono del estudiante."),
-    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
   });
 

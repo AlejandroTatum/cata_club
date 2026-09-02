@@ -296,27 +296,24 @@ def test_patch_no_puede_poner_un_telefono_invalido(client, db_session, telefono)
 # es su forma normal de uso) no evade la regla.
 # ---------------------------------------------------------------------------
 
-def test_crear_ficha_rechaza_telefono_emergencia_igual_al_personal(client, db_session):
-    persona = _persona(db_session, 30)
+@pytest.mark.parametrize("via", ["post", "patch"])
+def test_crear_ficha_rechaza_telefono_emergencia_igual_al_personal(client, db_session, via):
+    """Cubre los dos caminos que CREAN una ficha -- `POST /fichas-medicas/`
+    y el upsert de `PATCH .../persona/{id}` sobre una persona que todavía no
+    tiene ficha -- porque el candado del #860 vive en el mismo lugar
+    (`FichaMedicaServicio`) para los dos."""
+    persona = _persona(db_session, 30 if via == "post" else 31)
 
-    resp = client.post(
-        "/api/v1/fichas-medicas/",
-        json=_cuerpo_creacion(persona.id, telefono_emergencia=persona.telefono),
-    )
-
-    assert resp.status_code == 400
-    assert not _tiene_ficha(db_session, persona.id)
-
-
-def test_upsert_por_patch_rechaza_telefono_emergencia_igual_al_personal(client, db_session):
-    """La misma regla, del lado del PATCH que CREA la ficha (persona sin
-    ficha médica todavía)."""
-    persona = _persona(db_session, 31)
-
-    resp = client.patch(
-        f"/api/v1/fichas-medicas/persona/{persona.id}",
-        json={"tipo_sangre": "O_POSITIVO", "telefono_emergencia": persona.telefono},
-    )
+    if via == "post":
+        resp = client.post(
+            "/api/v1/fichas-medicas/",
+            json=_cuerpo_creacion(persona.id, telefono_emergencia=persona.telefono),
+        )
+    else:
+        resp = client.patch(
+            f"/api/v1/fichas-medicas/persona/{persona.id}",
+            json={"tipo_sangre": "O_POSITIVO", "telefono_emergencia": persona.telefono},
+        )
 
     assert resp.status_code == 400
     assert not _tiene_ficha(db_session, persona.id)

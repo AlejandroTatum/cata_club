@@ -190,16 +190,8 @@ describe("validateAddDependentStep — health step", () => {
   describe("telefonoEmergencia must differ from telefono (#860)", () => {
     const MENSAJE = "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
 
-    it("rejects the same number", () => {
-      expect(
-        validateAddDependentStep(
-          "health",
-          validForm({ telefono: "0991234567", telefonoEmergencia: "0991234567" }),
-        ),
-      ).toContain(MENSAJE);
-    });
-
     it.each([
+      ["the exact same number", "0991234567", "0991234567"],
       ["the +593 form of the same number", "0991234567", "+593991234567"],
       ["the 593 form of the same number (no plus sign)", "0991234567", "593991234567"],
     ])("rejects %s as equivalent to the dependent's own", (_description, telefono, telefonoEmergencia) => {

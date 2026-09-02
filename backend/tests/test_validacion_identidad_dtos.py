@@ -54,6 +54,16 @@ TELEFONO_DIGITOS_NO_ASCII = "٠٩٩١٢٣٤٥٦٧"
 FECHA_NACIMIENTO_ADULTO = date(1990, 5, 14)
 
 
+def _assert_rechaza_por_telefono_emergencia_igual(construir):
+    """Issue #860: agrupa el `pytest.raises` + el assert del mensaje,
+    reusado por los tres DTOs que comparan teléfono personal vs. de
+    emergencia (`RepresentadoCreateDTO`, `EnrollmentCreateDTO`,
+    `AdminCrearCuentaDTO`) en vez de repetir el mismo bloque en cada uno."""
+    with pytest.raises(ValidationError) as error:
+        construir()
+    assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
+
+
 class TestPersonaCreateDTO:
     def _base(self, **overrides):
         datos = dict(
@@ -182,16 +192,14 @@ class TestRepresentadoCreateDTO:
     def test_acepta_telefono_emergencia_distinto_del_personal(self):
         RepresentadoCreateDTO(**self._con_ficha(TELEFONO_EMERGENCIA_VALIDO))
 
-    def test_rechaza_telefono_emergencia_igual_al_personal(self):
-        with pytest.raises(ValidationError) as error:
-            RepresentadoCreateDTO(**self._con_ficha(TELEFONO_VALIDO))
-        assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
-
+    # `FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO` incluye la forma local
+    # (idéntica a `TELEFONO_VALIDO`) además de las dos internacionales, así
+    # que un solo parametrize cubre "igual" y "equivalente" a la vez.
     @pytest.mark.parametrize("telefono_emergencia", FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO)
-    def test_rechaza_formatos_equivalentes_al_telefono_personal(self, telefono_emergencia):
-        with pytest.raises(ValidationError) as error:
-            RepresentadoCreateDTO(**self._con_ficha(telefono_emergencia))
-        assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
+    def test_rechaza_telefono_emergencia_igual_o_equivalente_al_personal(self, telefono_emergencia):
+        _assert_rechaza_por_telefono_emergencia_igual(
+            lambda: RepresentadoCreateDTO(**self._con_ficha(telefono_emergencia))
+        )
 
 
 class TestVincularRepresentadoDTO:
@@ -313,16 +321,11 @@ class TestEnrollmentCreateDTO:
     def test_acepta_datos_validos(self):
         EnrollmentCreateDTO(**self._base())
 
-    def test_rechaza_telefono_emergencia_igual_al_del_alumno(self):
-        with pytest.raises(ValidationError) as error:
-            EnrollmentCreateDTO(**self._base(telefono_emergencia=TELEFONO_VALIDO))
-        assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
-
     @pytest.mark.parametrize("telefono_emergencia", FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO)
-    def test_rechaza_formatos_equivalentes_al_telefono_del_alumno(self, telefono_emergencia):
-        with pytest.raises(ValidationError) as error:
-            EnrollmentCreateDTO(**self._base(telefono_emergencia=telefono_emergencia))
-        assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
+    def test_rechaza_telefono_emergencia_igual_o_equivalente_al_del_alumno(self, telefono_emergencia):
+        _assert_rechaza_por_telefono_emergencia_igual(
+            lambda: EnrollmentCreateDTO(**self._base(telefono_emergencia=telefono_emergencia))
+        )
 
 
 class TestAdminCrearCuentaDTO:
@@ -365,33 +368,25 @@ class TestAdminCrearCuentaDTO:
 
     # --- Issue #860: el teléfono de emergencia no puede repetir el personal -
 
+    def _con_telefono_emergencia(self, telefono_emergencia: str) -> dict:
+        return self._base(
+            ficha_medica=dict(
+                tipo_sangre="O_POSITIVO", enfermedades=[],
+                contacto_emergencia="María Torres",
+                telefono_emergencia=telefono_emergencia,
+            ),
+        )
+
     def test_sin_ficha_medica_no_hay_nada_que_comparar(self):
         # REPRESENTANTE no exige ficha médica (#730); sin ella, la
         # comparación del #860 no tiene con qué compararse.
         AdminCrearCuentaDTO(**self._base(tipo_cuenta="REPRESENTANTE", ficha_medica=None))
 
-    def test_rechaza_telefono_emergencia_igual_al_personal(self):
-        with pytest.raises(ValidationError) as error:
-            AdminCrearCuentaDTO(**self._base(
-                ficha_medica=dict(
-                    tipo_sangre="O_POSITIVO", enfermedades=[],
-                    contacto_emergencia="María Torres",
-                    telefono_emergencia=TELEFONO_VALIDO,
-                ),
-            ))
-        assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
-
     @pytest.mark.parametrize("telefono_emergencia", FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO)
-    def test_rechaza_formatos_equivalentes_al_telefono_personal(self, telefono_emergencia):
-        with pytest.raises(ValidationError) as error:
-            AdminCrearCuentaDTO(**self._base(
-                ficha_medica=dict(
-                    tipo_sangre="O_POSITIVO", enfermedades=[],
-                    contacto_emergencia="María Torres",
-                    telefono_emergencia=telefono_emergencia,
-                ),
-            ))
-        assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
+    def test_rechaza_telefono_emergencia_igual_o_equivalente_al_personal(self, telefono_emergencia):
+        _assert_rechaza_por_telefono_emergencia_igual(
+            lambda: AdminCrearCuentaDTO(**self._con_telefono_emergencia(telefono_emergencia))
+        )
 
 
 class TestAuthSchemas:
