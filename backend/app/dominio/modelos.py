@@ -225,6 +225,15 @@ class Rol(Base):
 
 class Usuario(Base):
     __tablename__ = "usuario"
+    # Issue #827: `UsuarioRepositorio.obtener_por_correo` filtra por
+    # `func.lower(correo)`, no por `correo`. El unique implícito de la
+    # columna es un btree sensible a mayúsculas y no puede servir ese
+    # predicado -- corre en CADA petición autenticada (vía
+    # `GestorAutenticacion.decodificar_token`) y en cada login, así que el
+    # sequential scan es sobre la consulta más caliente del sistema. Ver
+    # `tests/test_indices_consultas_reales.py` para la verificación contra
+    # el catálogo real de Postgres.
+    __table_args__ = (Index("ix_usuario_correo_lower", func.lower(Column("correo"))),)
     id: Mapped[int] = mapped_column(primary_key=True)
     correo: Mapped[str] = mapped_column(String(100), unique=True)
     contrasenia: Mapped[str] = mapped_column(String(255))
