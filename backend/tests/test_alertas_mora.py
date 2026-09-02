@@ -177,14 +177,45 @@ def _notificaciones_de_familia(db, tipo: TipoNotificacion, persona_id: int) -> i
 
 # --- Día 1: primer aviso a la familia ---------------------------------------
 
-def test_dia_1_notifica_alumno_y_representante(db_session, sesion_inyectada, monkeypatch):
+def test_dia_1_notifica_solo_al_representante_con_ambos_canales(
+    db_session, sesion_inyectada, monkeypatch
+):
+    # Issue #905: el representante es el ÚNICO responsable de pago -- recibe
+    # la fila in-app y el correo, y el alumno representado no recibe nada.
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
     representante = _crear_persona(db_session, cedula_valida(201))
+    correo_representante = "representante201@cataclub.test"
+    _crear_usuario(db_session, representante, correo_representante)
     alumno = _crear_persona(
-        db_session, cedula_valida(202), representante_id=representante.id,
+        db_session, cedula_valida(202), nombres="Nino", apellidos="Chico",
+        representante_id=representante.id,
     )
-    correo_alumno = "alumno202@cataclub.test"
-    _crear_usuario(db_session, alumno, correo_alumno)
+    _crear_usuario(db_session, alumno, "alumno202@cataclub.test")
+    _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
+    llamadas = _mock_envio(monkeypatch)
+
+    resultado = alertas_mod.alertar_mora_diaria()
+
+    assert resultado["total_avisos_familia"] == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, representante.id
+    ) == 1
+    assert _notificaciones_de_familia(
+        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
+    ) == 0
+    assert [envio["destinatario"] for envio in llamadas] == [correo_representante]
+    # El cuerpo del correo nombra al representado, no al representante.
+    assert "Nino" in llamadas[0]["cuerpo_texto"]
+
+
+def test_dia_1_sin_representante_solo_notifica_al_alumno(
+    db_session, sesion_inyectada, monkeypatch
+):
+    # Issue #905: sin representante, la propia persona es responsable.
+    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
+    alumno = _crear_persona(db_session, cedula_valida(203))
+    correo = "alumno203@cataclub.test"
+    _crear_usuario(db_session, alumno, correo)
     _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
     llamadas = _mock_envio(monkeypatch)
 
@@ -194,28 +225,7 @@ def test_dia_1_notifica_alumno_y_representante(db_session, sesion_inyectada, mon
     assert _notificaciones_de_familia(
         db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
     ) == 1
-    assert _notificaciones_de_familia(
-        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, representante.id
-    ) == 1
-    # El correo va SOLO al alumno (mismo criterio que las alertas de vencimiento).
-    assert [envio["destinatario"] for envio in llamadas] == [correo_alumno]
-
-
-def test_dia_1_sin_representante_solo_notifica_al_alumno(
-    db_session, sesion_inyectada, monkeypatch
-):
-    monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
-    alumno = _crear_persona(db_session, cedula_valida(203))
-    _crear_usuario(db_session, alumno, "alumno203@cataclub.test")
-    _crear_membresia_con_pago(db_session, alumno, HOY - timedelta(days=1))
-    _mock_envio(monkeypatch)
-
-    resultado = alertas_mod.alertar_mora_diaria()
-
-    assert resultado["total_avisos_familia"] == 1
-    assert _notificaciones_de_familia(
-        db_session, TipoNotificacion.MIEMBRESIA_MORA_DIA_1, alumno.id
-    ) == 1
+    assert [envio["destinatario"] for envio in llamadas] == [correo]
 
 
 # --- Día 8: segundo y último aviso -------------------------------------------

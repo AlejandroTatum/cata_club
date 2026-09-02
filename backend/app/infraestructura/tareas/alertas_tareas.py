@@ -73,6 +73,14 @@ def _auditoria_de_rechazo(exc: DestinatarioRechazadoPermanentemente) -> str:
     return (exc.detalle_tecnico or exc.mensaje)[:Notificacion.ULTIMO_ERROR_MAX]
 
 
+def _responsable_de_pago(persona: Persona) -> Persona:
+    """Issue #905: el representante si `persona.representante_id` está
+    seteado, si no la propia persona. `persona.representante` llega
+    precargado por `joinedload` en el batch del llamador -- acceder acá NO
+    agrega un `SELECT`."""
+    return persona.representante if persona.representante_id else persona
+
+
 @celery_app.task(
     name="app.infraestructura.tareas.alertas_tareas.alertar_vencimientos_hoy_mas_5",
     bind=True,
@@ -114,10 +122,15 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
             # (N+1). Es relación a-uno (`uselist=False`, `usuario.persona_id`
             # es UNIQUE), así que el LEFT JOIN no puede multiplicar filas y
             # `joinedload` la resuelve en el MISMO SELECT sin costo de una
-            # segunda consulta (a diferencia de `selectinload`). La dedup de
+            # segunda consulta (a diferencia de `selectinload`). Issue #905:
+            # mismo criterio, encadenado, para `persona.representante` y su
+            # `usuario` (los lee `_responsable_de_pago`). La dedup de
             # idempotencia (más abajo) también corre en UNA sola consulta de
             # lote, no una por destinatario -- issue #833.
-            .options(joinedload(Persona.usuario))
+            .options(
+                joinedload(Persona.usuario),
+                joinedload(Persona.representante).joinedload(Persona.usuario),
+            )
             .where(
                 Pago.estado_pago == EstadoPago.APROBADO,
                 # Ventana de recuperación, no cambio de regla: en la corrida
@@ -144,9 +157,8 @@ def alertar_vencimientos_hoy_mas_5(self) -> dict:
         tipo_vencimiento = TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO
         claves_dedup: set[tuple[TipoNotificacion, int, int]] = set()
         for pago, _membresia, persona in filas:
-            claves_dedup.add((tipo_vencimiento, persona.id, pago.id))
-            if persona.representante_id:
-                claves_dedup.add((tipo_vencimiento, persona.representante_id, pago.id))
+            responsable = _responsable_de_pago(persona)
+            claves_dedup.add((tipo_vencimiento, responsable.id, pago.id))
         ya_notificados = _notificaciones_existentes(db, claves_dedup)
 
         # Una sola sesión de escritura para TODO el lote, no una por fila
@@ -278,12 +290,12 @@ def _construir_notificacion_vencimiento(
     ya_notificados: set[tuple[TipoNotificacion, int, int]],
     persona: Persona, membresia: Membresia, pago: Pago, vence: date,
 ) -> tuple[list[Notificacion], DestinatarioRechazadoPermanentemente | None]:
-    """Arma las `Notificacion` pendientes del alumno (y su representante si
-    corresponde) y envía el correo si SMTP está configurado. NO escribe en
-    la base -- el llamador persiste el lote entero junto, en una sola
-    sesión, después del bucle de envío (issue #833); acá solo se arman los
-    objetos en memoria. El dedup llega resuelto en `ya_notificados` (una
-    consulta por lote, ver `_notificaciones_existentes`).
+    """Arma la `Notificacion` pendiente del ÚNICO responsable de pago (issue
+    #905, ver `_responsable_de_pago`) y envía el correo si SMTP está
+    configurado. NO escribe en la base -- el llamador persiste el lote
+    entero junto, en una sola sesión, después del bucle de envío (issue
+    #833); acá solo se arma el objeto en memoria. El dedup llega resuelto en
+    `ya_notificados` (una consulta por lote, ver `_notificaciones_existentes`).
 
     Devuelve `(filas_pendientes, rechazo_terminal)`. Si `enviar_correo`
     levanta `ServicioNoDisponible` (circuito abierto), la excepción NO se
@@ -292,69 +304,55 @@ def _construir_notificacion_vencimiento(
     con `last_error_redacted`, y se devuelve como `rechazo_terminal` en vez
     de levantarse -- el llamador decide cuándo seguir con el siguiente."""
     tipo = TipoNotificacion.MIEMBRESIA_VENCIMIENTO_PROXIMO
-    alumno_pendiente = (tipo, persona.id, pago.id) not in ya_notificados
-    representante_pendiente = bool(persona.representante_id) and (
-        (tipo, persona.representante_id, pago.id) not in ya_notificados
-    )
-
-    if not alumno_pendiente and not representante_pendiente:
+    responsable = _responsable_de_pago(persona)
+    if (tipo, responsable.id, pago.id) in ya_notificados:
         return [], None  # ya procesado por completo en un intento anterior
 
-    filas_pendientes: list[Notificacion] = []
+    if responsable.id == persona.id:
+        mensaje = f"Su membresía vence el {vence.strftime('%d/%m/%Y')}."
+    else:
+        nombre_alumno = acortar_nombre_para_notificacion(
+            nombre_completo(persona.nombres, persona.apellidos)
+        )
+        mensaje = f"La membresía de {nombre_alumno} vence el {vence.strftime('%d/%m/%Y')}."
+
+    fila = Notificacion(
+        tipo=tipo, mensaje=mensaje,
+        persona_id=responsable.id, entidad_relacionada_id=pago.id,
+    )
     rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
-    if alumno_pendiente:
-        fila_alumno = Notificacion(
-            tipo=tipo,
-            mensaje=f"Su membresía vence el {vence.strftime('%d/%m/%Y')}.",
-            persona_id=persona.id,
-            entidad_relacionada_id=pago.id,
-        )
-        filas_pendientes.append(fila_alumno)
-
-        if persona.usuario:
-            try:
-                from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-                svc = ServicioNotificaciones()
-                svc.enviar_correo(
-                    destinatario=persona.usuario.correo,
-                    asunto="Vencimiento de membresía - Cata Club",
-                    cuerpo_texto=(
-                        f"Hola {persona.nombres},\n\n"
-                        f"Su membresía vence el {vence.strftime('%d/%m/%Y')}. "
-                        f"Por favor, regularice su pago para evitar la suspensión de beneficios."
-                    ),
-                )
-            except RuntimeError:
-                logger.warning(
-                    "SMTP no configurado — email no enviado para persona_id=%s", persona.id
-                )
-            except DestinatarioRechazadoPermanentemente as exc:
-                # Issue #837: el correo NO va a llegar a esa dirección, ni
-                # ahora ni reintentando. La notificación in-app, en cambio, sí
-                # tiene que existir -- es el otro canal, el que la familia ve
-                # al entrar -- y el rechazo queda en la misma fila para que
-                # alguien pueda corregir la dirección.
-                rechazo_terminal = exc
-                fila_alumno.last_error_redacted = _auditoria_de_rechazo(exc)
-        else:
-            logger.warning(
-                "persona_id=%s no tiene usuario vinculado — email omitido", persona.id
+    if responsable.usuario:
+        try:
+            from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+            svc = ServicioNotificaciones()
+            svc.enviar_correo(
+                destinatario=responsable.usuario.correo,
+                asunto="Vencimiento de membresía - Cata Club",
+                cuerpo_texto=(
+                    f"Hola {responsable.nombres},\n\n"
+                    f"{mensaje} Por favor, regularice su pago para evitar la suspensión de beneficios."
+                ),
             )
+        except RuntimeError:
+            logger.warning(
+                "SMTP no configurado — email no enviado para persona_id=%s", responsable.id
+            )
+        except DestinatarioRechazadoPermanentemente as exc:
+            # Issue #837: el correo NO va a llegar a esa dirección, ni
+            # ahora ni reintentando. La notificación in-app, en cambio, sí
+            # tiene que existir -- es el otro canal, el que la familia ve
+            # al entrar -- y el rechazo queda en la misma fila para que
+            # alguien pueda corregir la dirección.
+            rechazo_terminal = exc
+            fila.last_error_redacted = _auditoria_de_rechazo(exc)
+    else:
+        logger.warning(
+            "persona_id=%s (responsable de pago) no tiene usuario vinculado — "
+            "email omitido", responsable.id
+        )
 
-    if representante_pendiente:
-        nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(persona.nombres, persona.apellidos))
-        filas_pendientes.append(Notificacion(
-            tipo=tipo,
-            mensaje=(
-                f"La membresía de {nombre_alumno} "
-                f"vence el {vence.strftime('%d/%m/%Y')}."
-            ),
-            persona_id=persona.representante_id,
-            entidad_relacionada_id=pago.id,
-        ))
-
-    return filas_pendientes, rechazo_terminal
+    return [fila], rechazo_terminal
 
 
 def _rango_dia_club(hoy: date) -> tuple[datetime, datetime]:
@@ -372,77 +370,67 @@ def _construir_notificaciones_mora(
     ya_notificados: set[tuple[TipoNotificacion, int, int]],
     persona: Persona, pago_id: int, fecha_vencimiento: date, tipo: TipoNotificacion,
 ) -> tuple[list[Notificacion], DestinatarioRechazadoPermanentemente | None]:
-    """Arma las `Notificacion` de mora del alumno (y su representante si
-    existe) y envía un correo real si SMTP está configurado. NO escribe en
-    la base -- el llamador persiste el lote entero junto (issue #833).
-    Mismo criterio que `_construir_notificacion_vencimiento`: dedup resuelto
-    en `ya_notificados`, `ServicioNoDisponible` se propaga sin atraparse, y
-    un rechazo permanente (issue #837) se arma con su auditoría y se
-    devuelve como `rechazo_terminal` en vez de levantarse."""
-    alumno_pendiente = (tipo, persona.id, pago_id) not in ya_notificados
-    representante_pendiente = bool(persona.representante_id) and (
-        (tipo, persona.representante_id, pago_id) not in ya_notificados
-    )
-
-    if not alumno_pendiente and not representante_pendiente:
+    """Arma la `Notificacion` de mora del ÚNICO responsable de pago (issue
+    #905) y envía un correo real si SMTP está configurado. NO escribe en la
+    base -- el llamador persiste el lote entero junto (issue #833). Mismo
+    criterio que `_construir_notificacion_vencimiento`: dedup resuelto en
+    `ya_notificados`, `ServicioNoDisponible` se propaga sin atraparse, y un
+    rechazo permanente (issue #837) se arma con su auditoría y se devuelve
+    como `rechazo_terminal` en vez de levantarse."""
+    responsable = _responsable_de_pago(persona)
+    if (tipo, responsable.id, pago_id) in ya_notificados:
         return [], None
 
     fecha_str = fecha_vencimiento.strftime("%d/%m/%Y")
     if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_1:
-        mensaje = (
+        base = (
             f"Su membresía venció el {fecha_str}. Regularice su pago para no "
             f"perder los beneficios."
         )
     else:
-        mensaje = (
+        base = (
             "Su membresía sigue vencida. Este es el último aviso: regularice su "
             "pago para reactivar sus beneficios."
         )
 
-    filas_pendientes: list[Notificacion] = []
+    if responsable.id == persona.id:
+        mensaje = base
+    else:
+        nombre_alumno = acortar_nombre_para_notificacion(
+            nombre_completo(persona.nombres, persona.apellidos)
+        )
+        mensaje = f"Para {nombre_alumno}: {base}"
+
+    fila = Notificacion(
+        tipo=tipo, mensaje=mensaje,
+        persona_id=responsable.id, entidad_relacionada_id=pago_id,
+    )
     rechazo_terminal: DestinatarioRechazadoPermanentemente | None = None
 
-    if alumno_pendiente:
-        fila_alumno = Notificacion(
-            tipo=tipo,
-            mensaje=mensaje,
-            persona_id=persona.id,
-            entidad_relacionada_id=pago_id,
-        )
-        filas_pendientes.append(fila_alumno)
-
-        if persona.usuario:
-            try:
-                from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
-                svc = ServicioNotificaciones()
-                svc.enviar_correo(
-                    destinatario=persona.usuario.correo,
-                    asunto="Aviso de mora - Cata Club",
-                    cuerpo_texto=f"Hola {persona.nombres},\n\n{mensaje}",
-                )
-            except RuntimeError:
-                logger.warning(
-                    "SMTP no configurado — email no enviado para persona_id=%s", persona.id
-                )
-            except DestinatarioRechazadoPermanentemente as exc:
-                # Mismo criterio que en la rama de vencimiento (issue #837).
-                rechazo_terminal = exc
-                fila_alumno.last_error_redacted = _auditoria_de_rechazo(exc)
-        else:
-            logger.warning(
-                "persona_id=%s no tiene usuario vinculado — email omitido", persona.id
+    if responsable.usuario:
+        try:
+            from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+            svc = ServicioNotificaciones()
+            svc.enviar_correo(
+                destinatario=responsable.usuario.correo,
+                asunto="Aviso de mora - Cata Club",
+                cuerpo_texto=f"Hola {responsable.nombres},\n\n{mensaje}",
             )
+        except RuntimeError:
+            logger.warning(
+                "SMTP no configurado — email no enviado para persona_id=%s", responsable.id
+            )
+        except DestinatarioRechazadoPermanentemente as exc:
+            # Mismo criterio que en la rama de vencimiento (issue #837).
+            rechazo_terminal = exc
+            fila.last_error_redacted = _auditoria_de_rechazo(exc)
+    else:
+        logger.warning(
+            "persona_id=%s (responsable de pago) no tiene usuario vinculado — "
+            "email omitido", responsable.id
+        )
 
-    if representante_pendiente:
-        nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(persona.nombres, persona.apellidos))
-        filas_pendientes.append(Notificacion(
-            tipo=tipo,
-            mensaje=f"Para {nombre_alumno}: {mensaje}",
-            persona_id=persona.representante_id,
-            entidad_relacionada_id=pago_id,
-        ))
-
-    return filas_pendientes, rechazo_terminal
+    return [fila], rechazo_terminal
 
 
 def _listar_administradores(db) -> list[Usuario]:
@@ -589,7 +577,13 @@ def alertar_mora_diaria(self) -> dict:
             select(Membresia, Persona, ultimo_pago.c.pago_id, ultimo_pago.c.ultima_fecha_fin)
             .join(ultimo_pago, ultimo_pago.c.membresia_id == Membresia.id)
             .join(Persona, Persona.id == Membresia.persona_id)
-            .options(joinedload(Persona.usuario))
+            # Issue #905: mismo eager load encadenado que en
+            # `alertar_vencimientos_hoy_mas_5`, para que `_responsable_de_pago`
+            # no agregue un `SELECT` por familia.
+            .options(
+                joinedload(Persona.usuario),
+                joinedload(Persona.representante).joinedload(Persona.usuario),
+            )
             .where(
                 Membresia.estado != EstadoMembresia.INACTIVA,
                 # Issue #400 (slice 5a): "Suspender detiene la generación de
@@ -632,9 +626,8 @@ def alertar_mora_diaria(self) -> dict:
         # `_ya_notificado` uno por familia -- ver `_notificaciones_existentes`.
         claves_dedup: set[tuple[TipoNotificacion, int, int]] = set()
         for _membresia, persona, pago_id, _ultima_fecha_fin, _dias, tipo in candidatos:
-            claves_dedup.add((tipo, persona.id, pago_id))
-            if persona.representante_id:
-                claves_dedup.add((tipo, persona.representante_id, pago_id))
+            responsable = _responsable_de_pago(persona)
+            claves_dedup.add((tipo, responsable.id, pago_id))
         ya_notificados = _notificaciones_existentes(db, claves_dedup)
 
         # Una sola sesión de escritura para el lote de familias, no una por
