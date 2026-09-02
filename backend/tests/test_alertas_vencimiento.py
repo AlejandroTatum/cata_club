@@ -386,12 +386,24 @@ def test_alertar_vencimientos_no_incurre_en_n_mas_uno_al_cargar_usuario(
         persona = _crear_persona(db_session, cedula_valida(119 + i))
         _crear_usuario(db_session, persona, f"alumno{70 + i}@cataclub.test")
         _crear_membresia_con_pago(db_session, persona, VENCE)
+
+    # Issue #905: algunas familias con representante (que también carga
+    # `Persona.usuario` DEL representante, no solo el propio) -- el
+    # joinedload encadenado no debe sumar un SELECT extra.
+    extra = min(2, cantidad)
+    for i in range(extra):
+        representante = _crear_persona(db_session, cedula_valida(150 + i))
+        _crear_usuario(db_session, representante, f"representante{150 + i}@cataclub.test")
+        alumno_con_rep = _crear_persona(
+            db_session, cedula_valida(160 + i), representante_id=representante.id,
+        )
+        _crear_membresia_con_pago(db_session, alumno_con_rep, VENCE)
     _mock_envio(monkeypatch)
 
     with contar_selects() as sentencias:
         resultado = alertas_mod.alertar_vencimientos_hoy_mas_5()
 
-    assert resultado["total_alertas"] == cantidad
+    assert resultado["total_alertas"] == cantidad + extra
     selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
     assert len(selects) == 2, (
         f"Se esperaban 2 SELECTs (batch con joinedload + dedup en lote), "
@@ -585,12 +597,16 @@ def test_lote_de_tres_aborta_con_cooldown_si_el_fallo_es_global(
 def test_representante_recibe_una_sola_notificacion_en_reintento(
     db_session, sesion_inyectada, monkeypatch
 ):
+    # Issue #905: el representante es el ÚNICO responsable de pago -- recibe
+    # ambos canales y el alumno representado no recibe ninguno.
     monkeypatch.setattr(alertas_mod, "hoy_club", lambda: HOY)
     representante = _crear_persona(db_session, cedula_valida(116))
+    correo_representante = "representante116@cataclub.test"
+    _crear_usuario(db_session, representante, correo_representante)
     alumno = _crear_persona(db_session, cedula_valida(117), representante_id=representante.id)
     _crear_usuario(db_session, alumno, "alumno018@cataclub.test")
     _crear_membresia_con_pago(db_session, alumno, VENCE)
-    _mock_envio(monkeypatch)
+    llamadas = _mock_envio(monkeypatch)
 
     alertas_mod.alertar_vencimientos_hoy_mas_5()
     alertas_mod.alertar_vencimientos_hoy_mas_5()
@@ -599,6 +615,11 @@ def test_representante_recibe_una_sola_notificacion_en_reintento(
         Notificacion.persona_id == representante.id
     ).count()
     assert total_rep == 1
+    total_alumno = db_session.query(Notificacion).filter(
+        Notificacion.persona_id == alumno.id
+    ).count()
+    assert total_alumno == 0
+    assert [envio["destinatario"] for envio in llamadas] == [correo_representante]
 
 
 def test_retirada_no_recibe_alerta_de_vencimiento(db_session, sesion_inyectada, monkeypatch):
