@@ -263,6 +263,17 @@ function DetailCell({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+/**
+ * Issue #868: the proof header used to show the file's own name — in
+ * practice the last path segment of `voucherUrl`, which for a signed
+ * download URL is a long, query-string-bearing technical id, not a name a
+ * user ever chose. Neither the original name nor the URL is meaningful to an
+ * admin deciding whether a payment is real, so both stay internal (used only
+ * as the `src`/`href` of the preview and download links) and this neutral
+ * label takes their place on screen.
+ */
+const PROOF_ATTACHED_LABEL = "Comprobante adjunto";
+
 function ProofViewer({
   request,
   previewUnavailable,
@@ -294,7 +305,7 @@ function ProofViewer({
       </div>
       <div className="flex items-center gap-2 border-b border-line bg-sunken px-4 py-3">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
-          {request.proofFileName}
+          {request.proofPreviewUrl ? PROOF_ATTACHED_LABEL : "Sin comprobante adjunto"}
         </span>
         <span className="shrink-0 text-2xs tracking-flat text-ink-3">
           {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
@@ -1749,7 +1760,7 @@ export default function PaymentsPage(): React.ReactElement {
               >
                 <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
                   <p className="truncate text-sm font-semibold text-ink">
-                    {selectedRequest.proofFileName}
+                    {PROOF_ATTACHED_LABEL}
                   </p>
                   <button
                     type="button"

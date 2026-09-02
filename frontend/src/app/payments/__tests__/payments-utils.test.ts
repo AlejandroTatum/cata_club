@@ -32,7 +32,6 @@ function buildRequests(count: number): PaymentValidationRequest[] {
     paymentMethod: "Transferencia",
     uploadedAt: "2026-07-01T12:00:00Z",
     currentMembershipStatus: "vencida",
-    proofFileName: "comprobante.png",
     proofFileType: "image",
     validationStatus: "pendiente",
     startDate: "2026-07-01",

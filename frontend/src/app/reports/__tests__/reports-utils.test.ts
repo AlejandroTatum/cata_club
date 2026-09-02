@@ -57,7 +57,6 @@ function buildPagos(count: number): PaymentValidationRequest[] {
     paymentMethod: "Transferencia",
     uploadedAt: "2026-07-01T09:00:00Z",
     currentMembershipStatus: "activa",
-    proofFileName: "voucher.jpg",
     proofFileType: "image",
     validationStatus: "pendiente",
     startDate: "2026-07-01",

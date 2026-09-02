@@ -40,12 +40,6 @@ function proofFileType(voucherFormato?: string | null): ProofFileType {
   return voucherFormato?.toLowerCase().includes("pdf") ? "pdf" : "image";
 }
 
-function proofFileName(voucherUrl?: string | null): string {
-  if (!voucherUrl) return "Sin comprobante adjunto";
-  const lastSegment = voucherUrl.split("/").pop();
-  return lastSegment || "Comprobante";
-}
-
 /** Fields common to both `PagoListItemDTO` and `PagoResponseDTO` (camelCase, as received from FastAPI). */
 export interface BackendPagoCore {
   id: number;
@@ -173,7 +167,6 @@ export function buildPaymentValidationRequest(
     paymentMethod: PAYMENT_METHOD_BY_TIPO_PAGO[pago.tipoPago],
     uploadedAt: pago.fechaRegistro,
     currentMembershipStatus: MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado],
-    proofFileName: proofFileName(pago.voucherUrl),
     proofFileType: proofFileType(pago.voucherFormato),
     proofPreviewUrl: pago.voucherUrl ?? undefined,
     validationStatus: ESTADO_PAGO_TO_VALIDATION_STATUS[pago.estadoPago],
