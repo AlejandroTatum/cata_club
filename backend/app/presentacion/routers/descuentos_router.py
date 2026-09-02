@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
-from app.presentacion.schemas.base import PaginatedResponse
-from app.presentacion.schemas.descuento_schemas import (
+from app.servicios_negocio.dtos.base import PaginatedResponse
+from app.servicios_negocio.dtos.descuento_schemas import (
     DescuentoCreateDTO, DescuentoResponseDTO, DescuentoUpdateDTO,
 )
 from app.servicios_negocio.descuento_servicio import DescuentoServicio

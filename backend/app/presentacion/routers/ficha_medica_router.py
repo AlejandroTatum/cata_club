@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-from app.presentacion.schemas.persona_schemas import (
+from app.servicios_negocio.dtos.persona_schemas import (
     FichaEmergenciaResponseDTO, FichaMedicaCreateDTO, FichaMedicaExistenciaResponseDTO,
     FichaMedicaResponseDTO, FichaMedicaUpdateDTO,
 )

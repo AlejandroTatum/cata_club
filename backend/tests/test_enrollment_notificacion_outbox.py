@@ -187,7 +187,7 @@ def _inscribir(db_session, secuencia: int = 730):
     from datetime import date as _date
 
     from app.dominio.cedula import cedula_valida
-    from app.presentacion.schemas.enrollment_schemas import (
+    from app.servicios_negocio.dtos.enrollment_schemas import (
         EnrollmentAlumnoDTO,
         EnrollmentCreateDTO,
         EnrollmentCredencialesDTO,

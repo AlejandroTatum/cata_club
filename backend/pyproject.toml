@@ -105,28 +105,9 @@ name = "La capa de aplicacion no depende de la web"
 type = "forbidden"
 source_modules = ["app.servicios_negocio"]
 forbidden_modules = ["app.presentacion"]
-# Deuda conocida (#829): 16 imports de schemas de presentacion consumidos
-# directo desde servicios_negocio, en vez de recibir DTOs ya armados. Esta
-# lista es un piso, no una meta: solo puede achicarse a medida que #829
-# los resuelva, nunca crecer.
-ignore_imports = [
-    "app.servicios_negocio.admin_cuenta_servicio -> app.presentacion.schemas.admin_cuenta_schemas",
-    "app.servicios_negocio.auth_servicio -> app.presentacion.schemas.auth_schemas",
-    "app.servicios_negocio.enrollment_servicio -> app.presentacion.schemas.enrollment_schemas",
-    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.membresia_pago_schemas",
-    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.cobertura_bonificada_schemas",
-    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.beneficio_schemas",
-    "app.servicios_negocio.membresia_pago_servicio -> app.presentacion.schemas.descuento_schemas",
-    "app.servicios_negocio.descuento_servicio -> app.presentacion.schemas.descuento_schemas",
-    "app.servicios_negocio.geografia_servicio -> app.presentacion.schemas.geografia_schemas",
-    "app.servicios_negocio.ficha_medica_servicio -> app.presentacion.schemas.persona_schemas",
-    "app.servicios_negocio.persona_servicio -> app.presentacion.schemas.persona_schemas",
-    "app.servicios_negocio.asistencia_servicio -> app.presentacion.schemas.asistencia_schemas",
-    "app.servicios_negocio.beneficio_servicio -> app.presentacion.schemas.beneficio_schemas",
-    "app.servicios_negocio.beneficio_servicio -> app.presentacion.schemas.descuento_schemas",
-    "app.servicios_negocio.sponsor_servicio -> app.presentacion.schemas.sponsor_schemas",
-    "app.servicios_negocio.antecedentes_club_servicio -> app.presentacion.schemas.persona_schemas",
-]
+# Sin excepciones (#829): los DTOs que antes vivian en app.presentacion.schemas
+# se mudaron a app.servicios_negocio.dtos, asi que hoy la capa esta limpia y
+# el candado lo mantiene asi.
 
 [[tool.importlinter.contracts]]
 name = "La infraestructura no depende de la logica de negocio"

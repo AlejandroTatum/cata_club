@@ -548,7 +548,7 @@ def _congelar_hoy_asistencia(monkeypatch, hoy):
     `correctable` leyendo el reloj real y cualquier test que lo revise
     quedaría a merced de la fecha en la que corre la suite."""
     import app.servicios_negocio.asistencia_servicio as asistencia_mod
-    import app.presentacion.schemas.asistencia_schemas as asistencia_schemas_mod
+    import app.servicios_negocio.dtos.asistencia_schemas as asistencia_schemas_mod
     monkeypatch.setattr(asistencia_mod, "hoy_club", lambda: hoy)
     monkeypatch.setattr(asistencia_schemas_mod, "hoy_club", lambda: hoy)
 

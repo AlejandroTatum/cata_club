@@ -36,7 +36,7 @@ from app.infraestructura.tareas.verificacion_correo_tareas import (
     limpiar_verificaciones_expiradas,
     procesar_verificacion_correo_outbox,
 )
-from app.presentacion.schemas.enrollment_schemas import (
+from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO, EnrollmentCreateDTO, EnrollmentFichaMedicaDTO,
     EnrollmentRepresentanteDTO,
 )

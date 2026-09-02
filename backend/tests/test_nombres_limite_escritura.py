@@ -9,9 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.dominio.modelos import FichaMedica, Persona
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
-from app.presentacion.schemas.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentFichaMedicaDTO, EnrollmentRepresentanteDTO
-from app.presentacion.schemas.persona_schemas import FichaMedicaCreateDTO, PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentFichaMedicaDTO, EnrollmentRepresentanteDTO
+from app.servicios_negocio.dtos.persona_schemas import FichaMedicaCreateDTO, PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO
 
 _PERSONA_KWARGS = dict(
     nombres="faby", apellidos="ESPINOZA", cedula="1710034065",

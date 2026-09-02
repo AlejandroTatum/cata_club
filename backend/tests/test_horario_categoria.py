@@ -6,7 +6,7 @@ import pytest
 from app.dominio.enums import Categoria, DiaSemana
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia
-from app.presentacion.schemas.asistencia_schemas import HorarioCreateDTO, HorarioUpdateDTO
+from app.servicios_negocio.dtos.asistencia_schemas import HorarioCreateDTO, HorarioUpdateDTO
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from datetime import time
 

@@ -7,7 +7,7 @@ from app.dominio.nombre_propio import nombre_completo
 from app.dominio.telefono import MENSAJE_TELEFONO_EMERGENCIA_IGUAL, telefonos_coinciden
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
-from app.presentacion.schemas.persona_schemas import (
+from app.servicios_negocio.dtos.persona_schemas import (
     FichaEmergenciaResponseDTO, FichaMedicaCreateDTO, FichaMedicaUpdateDTO,
 )
 

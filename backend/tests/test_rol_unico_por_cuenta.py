@@ -30,15 +30,15 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoModalidad, TipoRol
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import Membresia, Persona, Rol, TipoMembresia, Usuario
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
-from app.presentacion.schemas.enrollment_schemas import (
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentCreateDTO,
     EnrollmentCredencialesDTO,
     EnrollmentFichaMedicaDTO,
     EnrollmentRepresentanteDTO,
 )
-from app.presentacion.schemas.membresia_pago_schemas import MembresiaCreateDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaCreateDTO
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio

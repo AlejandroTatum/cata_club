@@ -16,7 +16,7 @@ import pytest
 from app.dominio.enums import DiaSemana, EstadoAsistencia
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia
-from app.presentacion.schemas.asistencia_schemas import (
+from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO,
 )
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
@@ -216,7 +216,7 @@ def test_actualizar_categoria_quitar_dia_con_asistencias_bloquea_la_edicion_ente
     servicio.asignar_alumno_a_horario(
         AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
     )
-    from app.presentacion.schemas.asistencia_schemas import AsistenciaCreateDTO
+    from app.servicios_negocio.dtos.asistencia_schemas import AsistenciaCreateDTO
     servicio.registrar_asistencia(AsistenciaCreateDTO(
         fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
         persona_id=alumno["id"], horario_id=horario_lunes.id,
@@ -260,7 +260,7 @@ def test_eliminar_categoria_con_asistencias_bloquea_y_no_borra_nada(db_session, 
     servicio.asignar_alumno_a_horario(
         AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario.id)
     )
-    from app.presentacion.schemas.asistencia_schemas import AsistenciaCreateDTO
+    from app.servicios_negocio.dtos.asistencia_schemas import AsistenciaCreateDTO
     servicio.registrar_asistencia(AsistenciaCreateDTO(
         fecha_entrenamiento="2026-08-10", estado=EstadoAsistencia.PRESENTE,
         persona_id=alumno["id"], horario_id=horario.id,

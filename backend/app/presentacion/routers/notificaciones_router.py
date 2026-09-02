@@ -21,7 +21,7 @@ from app.presentacion.schemas.notificacion_schemas import (
     MarcarTodasLeidasResponseDTO,
     NotificacionResponseDTO,
 )
-from app.presentacion.schemas.base import PaginatedResponse
+from app.servicios_negocio.dtos.base import PaginatedResponse
 
 router = APIRouter(prefix="/ranking/notificaciones", tags=["notificaciones"])
 

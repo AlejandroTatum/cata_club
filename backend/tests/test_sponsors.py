@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 import app.infraestructura.cloudinary_cliente as cc
 from app.dominio.modelos import Sponsor
-from app.presentacion.schemas.sponsor_schemas import SponsorCreateDTO
+from app.servicios_negocio.dtos.sponsor_schemas import SponsorCreateDTO
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.sponsor_servicio import SponsorServicio
 from app.soporte_transversal.resiliencia import CIRCUITO_CLOUDINARY_UMBRAL_FALLOS

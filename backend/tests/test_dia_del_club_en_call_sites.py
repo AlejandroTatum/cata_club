@@ -131,7 +131,7 @@ def test_calculo_de_edad_usa_el_dia_del_club(monkeypatch):
 
 def test_inicio_en_el_club_usa_el_dia_del_club(db_session, monkeypatch):
     import app.servicios_negocio.enrollment_servicio as enroll_mod
-    from app.presentacion.schemas.enrollment_schemas import (
+    from app.servicios_negocio.dtos.enrollment_schemas import (
         EnrollmentAlumnoDTO, EnrollmentAntecedentesDTO, EnrollmentCreateDTO,
         EnrollmentCredencialesDTO, EnrollmentFichaMedicaDTO,
     )

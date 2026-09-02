@@ -10,7 +10,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.presentacion.schemas.base import ResponseBase
+from app.servicios_negocio.dtos.base import ResponseBase
 
 _MENSAJE_EXCLUSIVIDAD = (
     "El descuento debe definir exactamente uno: porcentaje o monto fijo"

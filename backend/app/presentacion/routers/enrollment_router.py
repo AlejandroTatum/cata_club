@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
-from app.presentacion.schemas.enrollment_schemas import EnrollmentCreateDTO, EnrollmentResponseDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO, EnrollmentResponseDTO
 from app.servicios_negocio.enrollment_servicio import (
     ConflictoIdempotencia,
     EnrollmentServicio,

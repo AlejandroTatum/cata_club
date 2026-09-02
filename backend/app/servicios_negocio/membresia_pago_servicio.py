@@ -34,17 +34,17 @@ from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
-from app.presentacion.schemas.membresia_pago_schemas import (
+from app.servicios_negocio.dtos.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
     ComprobantePagoCreateDTO,
     PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO, CorreccionPagoDTO,
     CambioPlanMembresiaDTO,
 )
-from app.presentacion.schemas.cobertura_bonificada_schemas import (
+from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
 )
-from app.presentacion.schemas.beneficio_schemas import AsignacionDescuentoResponseDTO
-from app.presentacion.schemas.descuento_schemas import DescuentoResponseDTO
+from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
+from app.servicios_negocio.dtos.descuento_schemas import DescuentoResponseDTO
 
 
 def _sumar_meses(fecha: date, meses: int) -> date:

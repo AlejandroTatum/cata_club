@@ -50,7 +50,7 @@ from app.infraestructura.repositorios.inscripcion_idempotencia_repositorio impor
     ESTADO_PENDIENTE,
     InscripcionIdempotenciaRepositorio,
 )
-from app.presentacion.schemas.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import (

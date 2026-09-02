@@ -32,6 +32,11 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
 ROUTERS = RAIZ / "backend" / "app" / "presentacion" / "routers"
+# Los DTOs de #829 quedaron en dos paquetes: los que solo consumen routers
+# (dashboard, chatbot, notificaciones) siguen acá; los que también arma y
+# devuelve servicios_negocio se mudaron a DTOS.
+ESQUEMAS_DE_PRESENTACION = RAIZ / "backend" / "app" / "presentacion" / "schemas"
+DTOS = RAIZ / "backend" / "app" / "servicios_negocio" / "dtos"
 MONTAJE = RAIZ / "backend" / "main.py"
 RUTAS_BFF = RAIZ / "frontend" / "src" / "app" / "api"
 SERVIDOR = RAIZ / "frontend" / "src" / "lib" / "server"
@@ -419,7 +424,6 @@ class TestContratoDocumentado:
 # en rojo: esa es la parte que no envejece.
 
 ENUMS = RAIZ / "backend" / "app" / "dominio" / "enums.py"
-ESQUEMAS = RAIZ / "backend" / "app" / "presentacion" / "schemas"
 FRONTEND = RAIZ / "frontend" / "src"
 
 
@@ -859,13 +863,22 @@ PISOS_DE_ENUM = {
 }
 
 
+def ruta_del_esquema(nombre: str) -> Path:
+    """El archivo de un DTO, en el paquete que le corresponda (#829): los que
+    también arma y devuelve servicios_negocio viven en DTOS; los que solo
+    consumen routers (dashboard, chatbot, notificaciones) siguen en
+    ESQUEMAS_DE_PRESENTACION."""
+    para_dtos = DTOS / nombre
+    return para_dtos if para_dtos.is_file() else ESQUEMAS_DE_PRESENTACION / nombre
+
+
 def campos_de_dto(fuente: str, dto: str) -> set[str]:
     """Los nombres Python de los campos que declara un DTO de Pydantic."""
     return set(_CAMPO_DTO.findall(cuerpo_de_clase(fuente, dto)))
 
 
 def hereda_response_base(fuente: str, dto: str) -> bool:
-    """Si el DTO trae el `alias_generator` snake→camel de `schemas/base.py`."""
+    """Si el DTO trae el `alias_generator` snake→camel de `dtos/base.py`."""
     clase = re.search(rf"^class {re.escape(dto)}\(([^)]*)\):", fuente, re.M)
     return clase is not None and "ResponseBase" in clase.group(1)
 
@@ -892,7 +905,7 @@ def a_snake(nombre: str) -> str:
 def viaja_camelizado(campo: Campo) -> bool:
     """Si el nombre de ese campo llega camelizado a la respuesta. Ver el bloque de arriba."""
     router = (ROUTERS / campo.router).read_text(encoding="utf-8")
-    esquema = (ESQUEMAS / campo.esquema).read_text(encoding="utf-8")
+    esquema = ruta_del_esquema(campo.esquema).read_text(encoding="utf-8")
     return declara_response_model(router, campo.decorador) and hereda_response_base(esquema, campo.dto)
 
 
@@ -926,7 +939,8 @@ IDS_DE_CAMPO = [f"{c.ruta}-{c.campo}" for c in CAMPOS_OBLIGATORIOS]
 
 @pytest.fixture(scope="module")
 def esquemas() -> dict[str, str]:
-    return {archivo.name: archivo.read_text(encoding="utf-8") for archivo in ESQUEMAS.glob("*.py")}
+    archivos = [*DTOS.glob("*.py"), *ESQUEMAS_DE_PRESENTACION.glob("*.py")]
+    return {archivo.name: archivo.read_text(encoding="utf-8") for archivo in archivos}
 
 
 class TestCamposObligatorios:
@@ -952,7 +966,7 @@ class TestCamposObligatorios:
     def test_las_cuatro_combinaciones_de_serializacion_estan_representadas(self):
         combinaciones = {
             (declara_response_model((ROUTERS / c.router).read_text(encoding="utf-8"), c.decorador),
-             hereda_response_base((ESQUEMAS / c.esquema).read_text(encoding="utf-8"), c.dto))
+             hereda_response_base(ruta_del_esquema(c.esquema).read_text(encoding="utf-8"), c.dto))
             for c in CAMPOS_OBLIGATORIOS
         }
         faltantes = sorted({(True, True), (True, False), (False, True)} - combinaciones)

@@ -30,8 +30,8 @@ from app.infraestructura.repositorios.descuento_repositorio import (
 )
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
-from app.presentacion.schemas.beneficio_schemas import AsignacionDescuentoResponseDTO
-from app.presentacion.schemas.descuento_schemas import DescuentoResponseDTO
+from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
+from app.servicios_negocio.dtos.descuento_schemas import DescuentoResponseDTO
 
 MENSAJE_BENEFICIO_ACTIVO_DUPLICADO = (
     "Esta persona ya tiene un beneficio activo. Retírelo antes de "

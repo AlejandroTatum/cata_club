@@ -9,19 +9,19 @@ from app.soporte_transversal.rate_limit import limiter
 from app.soporte_transversal.tiempo import hoy_club, rango_de_dias_club
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
-from app.presentacion.schemas.persona_schemas import (
+from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaListItemDTO, PersonaUpdateDTO,
     PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO, EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
-from app.presentacion.schemas.base import PaginatedResponse
+from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
-from app.presentacion.schemas.beneficio_schemas import (
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.beneficio_schemas import (
     AsignacionDescuentoCreateDTO, AsignacionDescuentoResponseDTO,
 )
 from app.servicios_negocio.beneficio_servicio import BeneficioServicio
@@ -31,7 +31,7 @@ from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.politica_acceso import SOLO_ADMINISTRADOR, PoliticaAccesoPersona
 from app.dominio.enums import TipoRol
 from pydantic import BaseModel
-from app.presentacion.schemas.base import ResponseBase
+from app.servicios_negocio.dtos.base import ResponseBase
 
 _COLUMNAS_PERSONAS_PDF = [
     "Nombres", "Apellidos", "Cédula", "Teléfono", "Fecha de Registro",

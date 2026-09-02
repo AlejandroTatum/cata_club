@@ -53,7 +53,7 @@ from app.dominio.modelos import (
     ComprobantePago, Membresia, Notificacion, Pago, Persona, TipoMembresia,
 )
 from app.infraestructura.tareas import comprobante_tareas as ct
-from app.presentacion.schemas.membresia_pago_schemas import PagoValidarDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import (
     crear_membresia_orm,

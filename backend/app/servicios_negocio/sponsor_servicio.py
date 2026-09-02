@@ -7,7 +7,7 @@ from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import Sponsor
 from app.infraestructura.cloudinary_cliente import eliminar_logo_sponsor, subir_logo_sponsor
 from app.infraestructura.repositorios.sponsor_repositorio import SponsorRepositorio
-from app.presentacion.schemas.sponsor_schemas import SponsorCreateDTO
+from app.servicios_negocio.dtos.sponsor_schemas import SponsorCreateDTO
 from app.soporte_transversal.firma_archivos import es_firma_valida
 
 

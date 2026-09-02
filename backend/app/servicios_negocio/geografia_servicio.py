@@ -7,7 +7,7 @@ from app.dominio.excepciones import EntidadNoEncontrada
 from app.infraestructura.repositorios.geografia_repositorio import (
     PaisRepositorio, ProvinciaRepositorio, CantonRepositorio,
 )
-from app.presentacion.schemas.geografia_schemas import (
+from app.servicios_negocio.dtos.geografia_schemas import (
     PaisCreateDTO, ProvinciaCreateDTO, CantonCreateDTO,
 )
 

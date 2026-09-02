@@ -69,8 +69,8 @@ from app.dominio.modelos import (
     AsignacionDescuento, CoberturaBonificada, Descuento, HistorialEstadoMembresia, Membresia,
     Pago, Persona, TipoMembresia,
 )
-from app.presentacion.schemas.cobertura_bonificada_schemas import CoberturaBonificadaCreateDTO
-from app.presentacion.schemas.membresia_pago_schemas import PagoCreateDTO, SuspensionReactivacionDTO
+from app.servicios_negocio.dtos.cobertura_bonificada_schemas import CoberturaBonificadaCreateDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import PagoCreateDTO, SuspensionReactivacionDTO
 from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio, PagoServicio
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
@@ -270,7 +270,7 @@ def test_crear_membresia_nueva_rechazada_si_la_persona_tiene_una_suspendida(db_s
     persona, tipo, membresia = grafo
     PagoServicio(db_session).suspender_membresia(membresia.id, "motivo", admin_id)
 
-    from app.presentacion.schemas.membresia_pago_schemas import MembresiaCreateDTO
+    from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaCreateDTO
     with pytest.raises(OperacionInvalida, match="activa o suspendida"):
         MembresiaServicio(db_session).crear_membresia(
             MembresiaCreateDTO(persona_id=persona.id, tipo_membresia_id=tipo.id)

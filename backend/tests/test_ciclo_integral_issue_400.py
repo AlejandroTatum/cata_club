@@ -42,7 +42,7 @@ import pytest
 import app.servicios_negocio.membresia_pago_servicio as mps
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago
-from app.presentacion.schemas.membresia_pago_schemas import (
+from app.servicios_negocio.dtos.membresia_pago_schemas import (
     CambioPlanMembresiaDTO,
     MembresiaCreateDTO,
     PagoCreateDTO,

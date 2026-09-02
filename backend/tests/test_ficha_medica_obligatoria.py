@@ -28,8 +28,8 @@ from pydantic import ValidationError
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import FichaMedica, Persona
-from app.presentacion.schemas.admin_cuenta_schemas import AdminCrearCuentaDTO
-from app.presentacion.schemas.enrollment_schemas import EnrollmentCreateDTO
+from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO
 
 
 def _ficha(**overrides) -> dict:

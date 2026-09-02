@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
-from app.presentacion.schemas.sponsor_schemas import SponsorCreateDTO, SponsorResponseDTO
+from app.servicios_negocio.dtos.sponsor_schemas import SponsorCreateDTO, SponsorResponseDTO
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.sponsor_servicio import SponsorServicio
 from app.soporte_transversal.lectura_archivos import leer_con_limite

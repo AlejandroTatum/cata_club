@@ -4,8 +4,8 @@ from typing import Optional
 
 from app.dominio.enums import EstadoAsistencia, DiaSemana
 from app.dominio.reglas_negocio import LIMITE_CORRECCION_ASISTENCIA_DIAS
-from app.presentacion.schemas.base import ResponseBase
-from app.presentacion.schemas.validadores import NombrePresentado
+from app.servicios_negocio.dtos.base import ResponseBase
+from app.servicios_negocio.dtos.validadores import NombrePresentado
 from app.soporte_transversal.tiempo import hoy_club
 
 

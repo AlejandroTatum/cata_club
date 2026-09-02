@@ -8,7 +8,7 @@ from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.dominio.enums import EstadoPago
-from app.presentacion.schemas.membresia_pago_schemas import (
+from app.servicios_negocio.dtos.membresia_pago_schemas import (
     MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
@@ -17,10 +17,10 @@ from app.presentacion.schemas.membresia_pago_schemas import (
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
     CambioPlanMembresiaDTO,
 )
-from app.presentacion.schemas.cobertura_bonificada_schemas import (
+from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
 )
-from app.presentacion.schemas.base import PaginatedResponse
+from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.membresia_pago_servicio import (
     MembresiaServicio, PagoServicio, TAMANO_MAXIMO_VOUCHER_BYTES,
