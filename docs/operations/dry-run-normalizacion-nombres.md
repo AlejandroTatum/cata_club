@@ -8,7 +8,7 @@ Acceso de lectura (réplica o rol sin escritura); `DATABASE_URL` sale del entorn
 ```bash
 uv run python scripts/dry_run_normalizacion_nombres.py [--json]
 uv run python scripts/dry_run_normalizacion_nombres.py --artifact  # solo así escribe, ruta fija bajo cwd
-TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_normalizacion_nombres.py tests/test_dry_run_normalizacion_nombres.py -v
+TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_nombre_propio.py tests/test_dry_run_normalizacion_nombres.py -v
 ```
 
 ## Cómo interpretar la salida
@@ -20,7 +20,7 @@ Nunca contiene nombres ni cédulas -- solo `conteos_por_clase`, `conteos_por_mot
 | `apostrofe` | El token trae apóstrofe (`d'angelo`, `o'brien`). |
 | `mayuscula_interior` | Mayúscula tras minúscula en el original (`McArthur`). |
 | `caracter_no_valido` | Dígitos u otro carácter fuera de letras/marcas/guion/apóstrofe. |
-| `inicial` | Token de una sola letra. |
+| `inicial` | Token de una sola letra que no es partícula (`y`/`e` no cuentan). |
 | `vacio` | El valor queda vacío tras limpiar espacios. |
 | `demasiado_largo` | El valor normalizado supera los 100 caracteres. |
 
