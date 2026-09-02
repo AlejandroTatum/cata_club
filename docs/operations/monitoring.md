@@ -97,6 +97,12 @@ hacer con ellas.
    entorno desechable antes de declarar recuperabilidad. No entra en el cron
    ni copia la identidad privada age al host: se ejecuta fuera del droplet con
    `restore-check.sh <dump>.dump.age --identity <archivo>`.
+5. ~~Exigir un segundo destinatario `age`, para que perder una identidad no
+   vuelva irrecuperable el histórico entero~~ — **hecho**: `install-cron`
+   rechaza instalar el cron con menos de dos destinatarios en
+   `backup-recipients.txt` (issue #791). `backup-db.sh` solo avisa, no falla,
+   si igual queda corriendo con uno solo — ver
+   [`provisioning.md`](provisioning.md).
 
 No instalar un monitor dentro del mismo host como sustituto del control externo:
 una caída completa lo silenciaría junto con la aplicación. Por eso los dos

@@ -325,17 +325,24 @@ sudo apt-get install -y age
 ```
 
 Se puede poner más de un destinatario, uno por línea: `age` cifra para todos y
-cualquiera de las identidades descifra. Vale la pena una segunda clave de
-resguardo — con una sola identidad, perderla vuelve irrecuperable **todo** el
-histórico de backups a la vez.
+cualquiera de las identidades descifra. **`install-cron` exige un segundo
+destinatario** (issue #791) — con una sola identidad, perderla (droplet
+robado, gestor de contraseñas comprometido) vuelve irrecuperable **todo** el
+histórico de backups a la vez. Las dos identidades privadas van en gestores de
+contraseñas distintos, no en la misma caja fuerte.
 
 Alternativa por entorno: `BACKUP_AGE_RECIPIENTS='age1... age1...'`. Sirve para
 una corrida manual, pero **no** para el cron, que no hereda el shell del
 operador. Por eso el camino recomendado es el archivo.
 
-`install-cron` verifica que el archivo exista y que `age` esté instalado antes
-de tocar el crontab, y `deploy` aborta si el backup pre-deploy no puede cifrar:
-sin backup recuperable no se corren migraciones, que no tienen vuelta atrás.
+`install-cron` verifica que el archivo exista, que tenga al menos dos
+destinatarios y que `age` esté instalado antes de tocar el crontab. Con un
+solo destinatario configurado, el backup de las 03:30 no falla —
+`backup-db.sh` sigue cifrando y escribiendo el artefacto— pero deja un AVISO
+en su log; instalar el cron con esa configuración incompleta sí se rechaza,
+porque ahí el operador todavía está en la terminal para corregirlo.
+`deploy` aborta si el backup pre-deploy no puede cifrar: sin backup
+recuperable no se corren migraciones, que no tienen vuelta atrás.
 
 ### URL del heartbeat (obligatoria antes de instalar el cron)
 
