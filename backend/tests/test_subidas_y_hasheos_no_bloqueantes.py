@@ -51,7 +51,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona
 from app.presentacion.schemas.enrollment_schemas import EnrollmentFichaMedicaDTO
 from app.presentacion.schemas.persona_schemas import (
-    PersonaResponseDTO, RepresentadoCreateDTO,
+    PersonaListItemDTO, PersonaResponseDTO, RepresentadoCreateDTO,
 )
 from app.servicios_negocio.persona_servicio import PersonaServicio
 
@@ -256,4 +256,50 @@ def test_crear_representado_devuelve_una_persona_que_no_vuelve_a_la_base(
         f"{len(sentencias)} sentencia(s) contra la base. Eso pasa en el hilo "
         "del event loop, después de que el handler salió del "
         f"`run_in_threadpool`: {sentencias}"
+    )
+
+
+# --- Guardia del hallazgo en vivo, PR #972 -----------------------------------
+# `PersonaResponseDTO` (arriba) nunca lazy-carga nada: cada uno de sus campos
+# es una columna propia de `Persona`. `Persona.cuenta_activa` (issue #869) es
+# distinta -- lee `self.usuario`, una relación -- y la primera versión de la
+# propiedad la leía sin condición, así que CUALQUIER endpoint que devolviera
+# una `PersonaResponseDTO` con ese campo heredaba el mismo defecto que el test
+# de arriba corrige para el resto de la fila: un SELECT en el hilo del event
+# loop, disparado por la serialización. La corrección tiene dos capas -- ver
+# `Persona.cuenta_activa` en `dominio/modelos.py` para la guardia, y
+# `PersonaListItemDTO` en `persona_schemas.py` para por qué el campo ya no
+# vive en el DTO base -- y este test pin la primera de las dos: leer
+# `cuenta_activa` sobre una Persona cuyo `usuario` no está cargado no puede
+# ejecutar ninguna sentencia, la lea quien la lea.
+def test_cuenta_activa_no_dispara_select_si_usuario_no_esta_cargado(db_session, contar_selects):
+    persona = Persona(
+        nombres="Elena", apellidos="Rios", cedula=cedula_valida(3),
+        fecha_nacimiento=date(1992, 3, 20), telefono="0991230002",
+    )
+    db_session.add(persona)
+    db_session.commit()
+    db_session.refresh(persona)
+
+    assert "usuario" in inspeccionar_orm(persona).unloaded, (
+        "la fixture de este test cambió y ya no cubre el camino sin "
+        "joinedload -- ver PersonaRepositorio.listar"
+    )
+
+    with contar_selects() as sentencias:
+        estado = persona.cuenta_activa
+
+    assert estado is None
+    assert sentencias == [], (
+        "Leer `Persona.cuenta_activa` con `usuario` sin cargar ejecutó "
+        f"{len(sentencias)} sentencia(s): {sentencias}"
+    )
+
+    with contar_selects() as sentencias_dto:
+        cuerpo = PersonaListItemDTO.model_validate(persona)
+
+    assert cuerpo.cuenta_activa is None
+    assert sentencias_dto == [], (
+        "Serializar `PersonaListItemDTO` sobre esa misma Persona ejecutó "
+        f"{len(sentencias_dto)} sentencia(s): {sentencias_dto}"
     )

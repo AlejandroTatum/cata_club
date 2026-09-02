@@ -194,6 +194,41 @@ def test_persona_listar_no_incurre_en_n_mas_uno(db_session, contar_selects):
     )
 
 
+def test_persona_listar_incluye_el_estado_de_la_cuenta_sin_n_mas_uno(db_session, contar_selects):
+    """Issue #869: `PersonaResponseDTO.cuenta_activa` lee `Persona.usuario.
+    activo` por cada fila -- la misma relación lazy to-one `p.usuario` que el
+    test de arriba prueba que dispara un SELECT extra por persona sin eager
+    load. `PersonaRepositorio.listar` la trae con `joinedload`, así que
+    tocarla (como hace el serializer del DTO al leer `cuenta_activa`) no debe
+    sumar ningún SELECT."""
+    con_cuenta = Persona(
+        nombres="Ana", apellidos="Con Cuenta", cedula=cedula_valida(610),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
+    )
+    sin_cuenta = Persona(
+        nombres="Ana", apellidos="Sin Cuenta", cedula=cedula_valida(611),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
+    )
+    db_session.add_all([con_cuenta, sin_cuenta])
+    db_session.commit()
+    db_session.add(Usuario(correo="n1-869@test.com", contrasenia="hash", persona_id=con_cuenta.id, activo=True))
+    db_session.commit()
+    db_session.expire_all()
+
+    repo = PersonaRepositorio(db_session)
+
+    with contar_selects() as sentencias:
+        resultado = repo.listar(skip=0, limit=50)
+        estados = [p.cuenta_activa for p in resultado]
+
+    # `_ORDEN_NOMINA` ordena por apellidos: "Con Cuenta" antes que "Sin Cuenta".
+    assert estados == [True, None]
+    selects = _selects(sentencias)
+    assert len(selects) == 1, (
+        f"Se esperaba 1 sola sentencia SELECT (con JOIN a Usuario), se ejecutaron {len(selects)}: {selects}"
+    )
+
+
 def _sembrar_administradores(db_session, cantidad: int) -> None:
     """Crea `cantidad` Persona + Usuario compartiendo el mismo `Rol`
     ADMINISTRADOR (many-to-many vía `usuario_rol`), como en producción: un

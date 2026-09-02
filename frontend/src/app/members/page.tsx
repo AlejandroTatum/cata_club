@@ -74,6 +74,7 @@ import {
   accountMatchesFlag,
   countAccountsMatchingFlag,
   getAccountStatusBadge,
+  getAccountStateBadge,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
@@ -430,6 +431,7 @@ function PaymentsAccessButton({
 /** One account as a table row (`sm` and up). */
 function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
+  const accountBadge = getAccountStateBadge(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
 
   return (
@@ -448,6 +450,11 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       <TableCell type="badge">
         <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
       </TableCell>
+      {/* Issue #869: `Cuenta` — `Usuario.activo`, never derived from the
+          `Membresía` badge to its left. */}
+      <TableCell type="badge">
+        <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
+      </TableCell>
       <TableCell type="action">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <MedicalRecordAccessButton account={account} onMedical={onMedical} />
@@ -462,6 +469,7 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
 /** The same account below `sm`, where a five-column table cannot fit. */
 function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
+  const accountBadge = getAccountStateBadge(account);
 
   return (
     <DataRow
@@ -480,7 +488,14 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
           ) : null}
         </>
       }
-      status={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      status={
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+          {/* Issue #869: `Cuenta`, the mobile row equivalent of the desktop
+              table's own column — never derived from the badge above. */}
+          <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
+        </div>
+      }
       actions={
         <>
           <MedicalRecordAccessButton account={account} onMedical={onMedical} />
@@ -514,6 +529,14 @@ function MemberEditDialog({
     toggleEstado,
   } = useAccountRolesAndStatus(Number(account.id));
   const statusBadge = getAccountStatusBadge(account);
+  // Issue #869: the header badge below reads `account.accountState` (from
+  // the list's own bulk fetch), never `activo` from `useAccountRolesAndStatus`
+  // — that hook's placeholder defaults to `true` and its fetch fails outright
+  // for a persona with no `Usuario` (`RolServicio._obtener_usuario_de_persona`),
+  // which is exactly the "summary hardcoded as active" the issue reports. The
+  // "Estado de la cuenta" toggle further down still needs the hook: it is the
+  // control that MUTATES the state, not a read of it.
+  const accountBadge = getAccountStateBadge(account);
   const personaId = Number(account.id);
 
   // Issue #460: `LinkRepresentativeSection` only makes sense for a minor —
@@ -608,9 +631,7 @@ function MemberEditDialog({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Badge tone={activo ? "ok" : "bad"}>
-                  {activo ? "Activo" : "Inactivo"}
-                </Badge>
+                <Badge tone={accountBadge.tone}>{accountBadge.label}</Badge>
                 <button
                   ref={closeButtonRef}
                   type="button"
@@ -1176,6 +1197,9 @@ export default function MembersPage(): React.ReactElement {
                   <TableHeaderCell>Miembro</TableHeaderCell>
                   <TableHeaderCell>Representado por</TableHeaderCell>
                   <TableHeaderCell type="badge">Membresía</TableHeaderCell>
+                  {/* Issue #869: account (login) state, separate from
+                      Membresía to its left — never derived from it. */}
+                  <TableHeaderCell type="badge">Cuenta</TableHeaderCell>
                   {/* Named for what the column HOLDS, not for the button
                       inside it — a column called "Editar" is a heading that
                       reads the label of the control under it back to you.
