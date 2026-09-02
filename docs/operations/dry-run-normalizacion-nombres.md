@@ -30,4 +30,4 @@ Solo con `--artifact` (booleano; sin flag no escribe nada). Ruta fija, nunca de 
 
 ## Lo que NO puede hacer, y escalamiento
 
-No escribe (garantía server-side de Postgres, igual que #902), no normaliza cédula/teléfono/correo, ni resuelve ambigüedades automáticamente. Cualquier escritura futura requiere aprobación humana explícita tras revisar este dry-run (se rastrea en #875). Ante duda, no la ejecutes.
+No escribe (garantía server-side de Postgres, igual que #902), no normaliza cédula/teléfono/correo, ni resuelve ambigüedades automáticamente. La escritura ya existe -- ver el [backfill reversible](./backfill-normalizacion-nombres.md) (#875) -- y exige aprobación humana explícita tras revisar este dry-run. Ante duda, no la ejecutes.
