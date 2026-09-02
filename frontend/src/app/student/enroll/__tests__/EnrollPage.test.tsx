@@ -382,7 +382,7 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ })); // type -> personal
     fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
-    fireEvent.change(screen.getByLabelText(/fecha de nacimiento/i), { target: { value: "1990-05-20" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
     fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
