@@ -11,12 +11,11 @@ registrar_pago` resuelve server-side la `AsignacionDescuento` vigente de
 quien paga (asignada/retirada vía `POST|DELETE /personas/{id}/beneficio`,
 ver `beneficio_servicio.py`) y congela su valor.
 """
-from typing import List
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.infraestructura.db import obtener_sesion
+from app.presentacion.schemas.base import PaginatedResponse
 from app.presentacion.schemas.descuento_schemas import (
     DescuentoCreateDTO, DescuentoResponseDTO, DescuentoUpdateDTO,
 )
@@ -36,10 +35,22 @@ async def crear_descuento(datos: DescuentoCreateDTO, db: Session = Depends(obten
 
 # Incluye inactivos a propósito: el listado es la vista de administración
 # del catálogo completo (y el camino para reactivar un descuento dado de baja).
-@router.get("/", response_model=List[DescuentoResponseDTO],
+#
+# Issue #814: este listado quedó mergeado sin paginar pese a que el
+# repositorio ya soportaba `skip`/`limit`/`contar()`. Mismo contrato que
+# `GET /personas/`: `limit` tope 200.
+@router.get("/", response_model=PaginatedResponse[DescuentoResponseDTO],
             dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
-async def listar_descuentos(db: Session = Depends(obtener_sesion)):
-    return DescuentoServicio(db).listar()
+async def listar_descuentos(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(obtener_sesion),
+):
+    """Lista el catálogo completo de descuentos, paginado (incluye inactivos)."""
+    servicio = DescuentoServicio(db)
+    items = servicio.listar(skip=skip, limit=limit)
+    total = servicio.contar()
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/{descuento_id}", response_model=DescuentoResponseDTO,

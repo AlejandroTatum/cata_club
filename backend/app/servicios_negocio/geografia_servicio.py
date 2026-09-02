@@ -25,6 +25,9 @@ class PaisServicio:
     def listar_paises(self, skip: int = 0, limit: Optional[int] = None) -> List[Pais]:
         return self.repo.listar(skip=skip, limit=limit)
 
+    def contar_paises(self) -> int:
+        return self.repo.contar()
+
     def obtener_pais(self, pais_id: int) -> Pais:
         pais = self.repo.obtener_por_id(pais_id)
         if not pais:
@@ -47,6 +50,9 @@ class ProvinciaServicio:
         skip: int = 0, limit: Optional[int] = None,
     ) -> List[Provincia]:
         return self.repo.listar(pais_id=pais_id, skip=skip, limit=limit)
+
+    def contar_provincias(self, pais_id: Optional[int] = None) -> int:
+        return self.repo.contar(pais_id=pais_id)
 
     def obtener_provincia(self, provincia_id: int) -> Provincia:
         provincia = self.repo.obtener_por_id(provincia_id)
@@ -72,6 +78,9 @@ class CantonServicio:
         skip: int = 0, limit: Optional[int] = None,
     ) -> List[Canton]:
         return self.repo.listar(provincia_id=provincia_id, skip=skip, limit=limit)
+
+    def contar_cantones(self, provincia_id: Optional[int] = None) -> int:
+        return self.repo.contar(provincia_id=provincia_id)
 
     def obtener_canton(self, canton_id: int) -> Canton:
         canton = self.repo.obtener_por_id(canton_id)

@@ -129,9 +129,11 @@ def test_listado_admin_incluye_inactivos(client):
 
     listado = client.get(RUTA_DESCUENTOS)
     assert listado.status_code == 200
-    por_nombre = {d["nombre"]: d for d in listado.json()}
+    cuerpo = listado.json()
+    por_nombre = {d["nombre"]: d for d in cuerpo["items"]}
     assert por_nombre["Beca municipal"]["activo"] is False
     assert por_nombre["Descuento familiar"]["activo"] is True
+    assert cuerpo["total"] == len(cuerpo["items"])
 
 
 def test_admin_actualiza_porcentaje_del_descuento(client):
@@ -165,6 +167,39 @@ def test_catalogo_requiere_rol_administrador(client_sin_permisos):
 
 def test_catalogo_sin_token_responde_401(client_sin_token):
     assert client_sin_token.get(RUTA_DESCUENTOS).status_code == 401
+
+
+# --- Paginación (issue #814) --------------------------------------------------
+# Mismo defecto y misma corrección que en `test_geografia.py`: el repositorio
+# y el servicio ya soportaban `skip`/`limit`/`contar()`, pero el router nunca
+# los expuso.
+
+def test_paginacion_respeta_skip_limit_y_total(client):
+    for i in range(3):
+        crear_descuento_api(client, f"Descuento {i}", porcentaje="10")
+
+    primera_pagina = client.get(f"{RUTA_DESCUENTOS}?limit=2")
+    assert primera_pagina.status_code == 200
+    cuerpo_1 = primera_pagina.json()
+    assert len(cuerpo_1["items"]) == 2
+    assert cuerpo_1["total"] == 3
+    assert cuerpo_1["skip"] == 0
+    assert cuerpo_1["limit"] == 2
+
+    segunda_pagina = client.get(f"{RUTA_DESCUENTOS}?skip=2&limit=2")
+    assert segunda_pagina.status_code == 200
+    cuerpo_2 = segunda_pagina.json()
+    assert len(cuerpo_2["items"]) == 1
+    assert cuerpo_2["total"] == 3
+    ids_pagina_1 = {item["id"] for item in cuerpo_1["items"]}
+    ids_pagina_2 = {item["id"] for item in cuerpo_2["items"]}
+    assert ids_pagina_1.isdisjoint(ids_pagina_2)
+
+
+@pytest.mark.parametrize("limit_invalido", [0, 201])
+def test_limit_fuera_de_rango_es_rechazado(client, limit_invalido):
+    resp = client.get(f"{RUTA_DESCUENTOS}?limit={limit_invalido}")
+    assert resp.status_code == 422
 
 
 # --- Aplicación al registrar un pago -----------------------------------------
