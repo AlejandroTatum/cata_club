@@ -93,52 +93,45 @@ class TestPersonaCreateDTO:
         assert "El teléfono solo puede tener dígitos." in mensaje
         assert "empezar en 09" not in mensaje
 
-
-# Issue #855: un celular autocompletado por el navegador móvil en formato
-# internacional se acepta y se normaliza al local -- probado sobre el DTO
-# que ya venía usándose para el resto de esta suite (`PersonaCreateDTO`),
-# porque `TelefonoValidado` es el mismo `Annotated` en los nueve DTOs.
-class TestNormalizacionTelefonoInternacional:
-    def _base(self, **overrides):
-        datos = dict(
-            nombres="Juana", apellidos="Pérez", cedula=CEDULA_VALIDA,
-            fecha_nacimiento=FECHA_NACIMIENTO_ADULTO, telefono=TELEFONO_VALIDO,
-        )
-        datos.update(overrides)
-        return datos
-
-    def test_acepta_prefijo_internacional_con_signo_mas_y_lo_normaliza(self):
-        persona = PersonaCreateDTO(**self._base(telefono="+593991234567"))
+    # --- Issue #855: normalización de celulares autocompletados en formato --
+    # --- internacional -------------------------------------------------------
+    @pytest.mark.parametrize(
+        "telefono",
+        ["+593991234567", "593991234567", "0991234567"],
+        ids=["593_con_signo_mas", "593_sin_signo_mas", "local_09_no_cambia"],
+    )
+    def test_acepta_y_normaliza_los_tres_formatos_de_celular(self, telefono):
+        # Los tres formatos del criterio de aceptación producen el mismo
+        # valor local almacenado -- incluido el que ya venía en formato
+        # local, que no cambia.
+        persona = PersonaCreateDTO(**self._base(telefono=telefono))
         assert persona.telefono == "0991234567"
 
-    def test_acepta_prefijo_internacional_sin_signo_mas_y_lo_normaliza(self):
-        persona = PersonaCreateDTO(**self._base(telefono="593991234567"))
-        assert persona.telefono == "0991234567"
-
-    def test_local_09_sigue_almacenandose_igual(self):
-        persona = PersonaCreateDTO(**self._base(telefono="0991234567"))
-        assert persona.telefono == "0991234567"
-
-    def test_fijo_no_cambia_su_regla(self):
-        # El mapeo internacional es exclusivo de celulares -- un fijo con
-        # prefijo 593 no calza con "9" + 8 dígitos y se rechaza igual que
-        # antes, por la razón real: no es un celular ni un fijo válido tal
-        # cual llegó.
+    @pytest.mark.parametrize(
+        "telefono",
+        ["+593223456", "+11234567890"],
+        ids=["fijo_con_prefijo_593_el_mapeo_es_mobile_only", "codigo_de_pais_distinto"],
+    )
+    def test_rechaza_lo_que_el_mapeo_internacional_no_convierte(self, telefono):
+        # El mapeo internacional es exclusivo de celulares: un fijo con
+        # prefijo 593 no calza con "9" + 8 dígitos, y un código de país
+        # distinto tampoco calza -- ambos se rechazan por la razón real, no
+        # es un celular ni un fijo válido tal cual llegaron.
         with pytest.raises(ValidationError):
-            PersonaCreateDTO(**self._base(telefono="+593223456"))
+            PersonaCreateDTO(**self._base(telefono=telefono))
 
-    def test_rechaza_codigo_de_pais_distinto(self):
-        with pytest.raises(ValidationError):
-            PersonaCreateDTO(**self._base(telefono="+11234567890"))
 
-    def test_otro_dto_normaliza_igual(self):
-        # `EnrollmentAlumnoDTO` reusa el mismo `TelefonoValidado` -- una sola
-        # regla, nueve DTOs.
-        alumno = EnrollmentAlumnoDTO(
-            nombres="Luis", apellidos="Gómez", cedula=CEDULA_VALIDA,
-            fecha_nacimiento=FECHA_NACIMIENTO_ADULTO, telefono="+593991234567",
-        )
-        assert alumno.telefono == "0991234567"
+def test_otro_dto_normaliza_el_celular_internacional_igual():
+    # `EnrollmentAlumnoDTO` reusa el mismo `TelefonoValidado` que
+    # `PersonaCreateDTO` -- una sola regla, nueve DTOs (issue #855).
+    alumno = EnrollmentAlumnoDTO(
+        nombres="Luis",
+        apellidos="Gómez",
+        cedula=CEDULA_VALIDA,
+        fecha_nacimiento=FECHA_NACIMIENTO_ADULTO,
+        telefono="+593991234567",
+    )
+    assert alumno.telefono == "0991234567"
 
 
 class TestRepresentadoCreateDTO:

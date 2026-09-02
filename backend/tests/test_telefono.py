@@ -11,6 +11,9 @@ rechazando el prefijo internacional, ver `test_prefijo_internacional_se_
 rechaza` arriba), la conversión vive en esta función aparte y la llama
 `_validar_telefono` (validadores.py) antes de validar.
 """
+
+import pytest
+
 from app.dominio.telefono import es_telefono_valido, normalizar_telefono
 
 
@@ -80,38 +83,37 @@ def test_digitos_con_volado_se_rechazan():
     assert es_telefono_valido("09" + "²" * 8) is False
 
 
-class TestNormalizarTelefono:
-    """Issue #855 -- los tres formatos del criterio de aceptación producen
-    el mismo valor local."""
-
-    def test_celular_local_no_cambia(self):
-        assert normalizar_telefono("0991234567") == "0991234567"
-
-    def test_celular_con_prefijo_internacional_y_signo_mas(self):
-        assert normalizar_telefono("+593991234567") == "0991234567"
-
-    def test_celular_con_prefijo_internacional_sin_signo_mas(self):
-        assert normalizar_telefono("593991234567") == "0991234567"
-
-    def test_fijo_no_se_toca(self):
+@pytest.mark.parametrize(
+    ("entrada", "esperado"),
+    [
+        pytest.param("0991234567", "0991234567", id="celular_local_no_cambia"),
+        pytest.param("+593991234567", "0991234567", id="celular_593_con_signo_mas"),
+        pytest.param("593991234567", "0991234567", id="celular_593_sin_signo_mas"),
         # El mapeo es exclusivo de celulares -- un fijo nunca lleva el
         # troncal "9" que el patrón exige, así que ni con prefijo 593 calza.
-        assert normalizar_telefono("022345678") == "022345678"
-        assert normalizar_telefono("+593223456") == "+593223456"
-
-    def test_codigo_de_pais_distinto_no_se_toca(self):
-        assert normalizar_telefono("+11234567890") == "+11234567890"
-
-    def test_largo_incorrecto_tras_593_no_se_toca(self):
+        pytest.param("022345678", "022345678", id="fijo_local_no_se_toca"),
+        pytest.param("+593223456", "+593223456", id="fijo_con_prefijo_593_no_se_toca"),
+        pytest.param(
+            "+11234567890", "+11234567890", id="codigo_de_pais_distinto_no_se_toca"
+        ),
         # Un dígito de menos en el número nacional: no calza el patrón, así
         # que `_validar_telefono` lo rechaza después por largo incorrecto,
         # no lo normaliza a algo distinto de lo que llegó.
-        assert normalizar_telefono("+59399123456") == "+59399123456"
-
-    def test_separadores_no_se_descartan(self):
+        pytest.param(
+            "+59399123456", "+59399123456", id="largo_incorrecto_tras_593_no_se_toca"
+        ),
         # `normalizar_telefono` no toca separadores -- ninguna capa del
         # backend los aceptó nunca (`test_separadores_se_rechazan_no_se_
         # descartan`) -- así que un valor con espacios no calza el patrón y
         # se devuelve tal cual, para que la validación posterior lo rechace
         # por el motivo real: contiene caracteres que no son dígitos.
-        assert normalizar_telefono("+593 99 123 4567") == "+593 99 123 4567"
+        pytest.param(
+            "+593 99 123 4567", "+593 99 123 4567", id="separadores_no_se_descartan"
+        ),
+    ],
+)
+def test_normalizar_telefono(entrada, esperado):
+    """Issue #855 -- los tres formatos del criterio de aceptación producen
+    el mismo valor local; un fijo, otro código de país, un largo incorrecto
+    o un valor con separadores se devuelven tal cual llegaron."""
+    assert normalizar_telefono(entrada) == esperado

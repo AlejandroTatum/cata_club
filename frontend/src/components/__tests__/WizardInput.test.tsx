@@ -70,6 +70,13 @@ function renderAmount(value = "") {
   return { input: screen.getByLabelText(/precio/i) as HTMLInputElement, onChange };
 }
 
+/** Dispatches a native paste event with `text` as the clipboard content — every `numericMode` paste test drives it through this one helper. */
+function paste(input: HTMLInputElement, text: string) {
+  return fireEvent.paste(input, {
+    clipboardData: { getData: () => text },
+  });
+}
+
 describe("WizardInput — numericMode blocks a typed letter (keydown)", () => {
   it("prevents the default insertion for a letter key on a cédula field", () => {
     const { input, onChange } = renderCedula();
@@ -141,12 +148,6 @@ describe("WizardInput — numericMode blocks a second decimal separator on amoun
 });
 
 describe("WizardInput — numericMode strips letters on paste", () => {
-  function paste(input: HTMLInputElement, text: string) {
-    return fireEvent.paste(input, {
-      clipboardData: { getData: () => text },
-    });
-  }
-
   it("strips letters from pasted cédula text and reports the filtered value", () => {
     const { input, onChange } = renderCedula();
     const notCancelled = paste(input, "17ab345678");
@@ -207,22 +208,15 @@ describe("WizardInput — the digit cap warns instead of silently truncating", (
  * shared by every wizard/editor that collects a teléfono.
  */
 describe("WizardInput — numericMode='phone' normalizes an international celular before the cap (issue #855)", () => {
-  it("normalizes an autofilled +593 value instead of truncating it", () => {
+  it.each([
+    ["normalizes an autofilled +593 value instead of truncating it", "+593991234567"],
+    ["normalizes an autofilled 593 value with no plus sign", "593991234567"],
+  ])("%s (onChange)", (_description, autofilled) => {
     const { input, onChange } = renderPhone();
-    fireEvent.change(input, { target: { value: "+593991234567" } });
+    fireEvent.change(input, { target: { value: autofilled } });
     expect(onChange).toHaveBeenCalledWith("0991234567");
     expect(screen.queryByText(/alcanzó el máximo/i)).not.toBeInTheDocument();
   });
-
-  it("normalizes an autofilled 593 value with no plus sign", () => {
-    const { input, onChange } = renderPhone();
-    fireEvent.change(input, { target: { value: "593991234567" } });
-    expect(onChange).toHaveBeenCalledWith("0991234567");
-  });
-
-  function paste(input: HTMLInputElement, text: string) {
-    return fireEvent.paste(input, { clipboardData: { getData: () => text } });
-  }
 
   it("normalizes a pasted international value with the typing separators an autofill can include", () => {
     const { input, onChange } = renderPhone();

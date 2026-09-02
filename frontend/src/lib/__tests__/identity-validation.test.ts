@@ -180,74 +180,40 @@ describe("teléfono", () => {
   // mismo valor local, y la normalización corre ANTES del chequeo de forma
   // — no queda enmascarada por "invalid-chars" solo por llevar un "+".
   describe("normalizeEcuadorianMobile", () => {
-    it("converts the +593 form to the local 09 form", () => {
-      expect(normalizeEcuadorianMobile("+593991234567")).toBe("0991234567");
-    });
-
-    it("converts the 593 form (no plus sign) to the local 09 form", () => {
-      expect(normalizeEcuadorianMobile("593991234567")).toBe("0991234567");
-    });
-
-    it("converts +593 with the typing separators an autofill can include", () => {
-      expect(normalizeEcuadorianMobile("+593 99 123 4567")).toBe("0991234567");
-    });
-
-    it("leaves an already-local celular untouched", () => {
-      expect(normalizeEcuadorianMobile("0991234567")).toBe("0991234567");
-    });
-
-    it("leaves a fijo untouched even with a 593 prefix — the mapping is mobile-only", () => {
-      expect(normalizeEcuadorianMobile("+593223456")).toBe("+593223456");
-    });
-
-    it("leaves a different country code untouched", () => {
-      expect(normalizeEcuadorianMobile("+11234567890")).toBe("+11234567890");
-    });
-
-    it("leaves a value with a wrong length after 593 untouched", () => {
-      expect(normalizeEcuadorianMobile("+59399123456")).toBe("+59399123456");
-    });
-
-    it("does not rewrite a locally-typed number that merely has separators", () => {
+    it.each([
+      ["converts the +593 form to the local 09 form", "+593991234567", "0991234567"],
+      ["converts the 593 form (no plus sign) to the local 09 form", "593991234567", "0991234567"],
+      ["converts +593 with the typing separators an autofill can include", "+593 99 123 4567", "0991234567"],
+      ["leaves an already-local celular untouched", "0991234567", "0991234567"],
+      ["leaves a fijo untouched even with a 593 prefix — the mapping is mobile-only", "+593223456", "+593223456"],
+      ["leaves a different country code untouched", "+11234567890", "+11234567890"],
+      ["leaves a value with a wrong length after 593 untouched", "+59399123456", "+59399123456"],
       // Regression guard for the masking layer: a value that never matches
       // the international shape must come back byte-for-byte, separators
       // included — `use-numeric-field-masking.ts` relies on this to never
       // rewrite what a visitor is typing locally.
-      expect(normalizeEcuadorianMobile("099-123-4567")).toBe("099-123-4567");
+      ["does not rewrite a locally-typed number that merely has separators", "099-123-4567", "099-123-4567"],
+    ])("%s", (_description, input, expected) => {
+      expect(normalizeEcuadorianMobile(input)).toBe(expected);
     });
   });
 
-  describe("phoneError / phoneRule accept the international mobile formats (issue #855)", () => {
-    it("accepts +593991234567 as a valid celular", () => {
-      expect(phoneError("+593991234567")).toBeNull();
+  describe("phoneError accepts/rejects the international mobile formats (issue #855)", () => {
+    it.each([
+      ["accepts +593991234567 as a valid celular", "+593991234567", null],
+      ["accepts 593991234567 (no plus sign) as a valid celular", "593991234567", null],
+      ["accepts the international form with the typing separators", "+593 99 123 4567", null],
+      ["rejects a fijo dressed up with a 593 prefix — the mapping is mobile-only", "593223456", "invalid-number"],
+      // The stray "+" is never silently dropped (issue #229's own rule).
+      ["rejects a fijo with a leading + as invalid-chars, not invalid-number", "+593223456", "invalid-chars"],
+      ["rejects a different country code", "+11234567890", "invalid-chars"],
+      ["rejects 593 with the wrong number of digits after it", "+59399123456", "invalid-chars"],
+    ])("%s", (_description, input, expected) => {
+      expect(phoneError(input)).toBe(expected);
+    });
+
+    it("isValidEcuadorianPhone/phoneRule agree with phoneError on an international value", () => {
       expect(isValidEcuadorianPhone("+593991234567")).toBe(true);
-    });
-
-    it("accepts 593991234567 (no plus sign) as a valid celular", () => {
-      expect(phoneError("593991234567")).toBeNull();
-    });
-
-    it("accepts the international form with the typing separators", () => {
-      expect(phoneError("+593 99 123 4567")).toBeNull();
-    });
-
-    it("rejects a fijo dressed up with a 593 prefix — the mapping is mobile-only", () => {
-      expect(phoneError("593223456")).toBe("invalid-number");
-    });
-
-    it("rejects a fijo with a leading + — the stray + is never silently dropped (issue #229's own rule)", () => {
-      expect(phoneError("+593223456")).toBe("invalid-chars");
-    });
-
-    it("rejects a different country code", () => {
-      expect(phoneError("+11234567890")).toBe("invalid-chars");
-    });
-
-    it("rejects 593 with the wrong number of digits after it", () => {
-      expect(phoneError("+59399123456")).toBe("invalid-chars");
-    });
-
-    it("phoneRule passes a plain-language message for the international form, same as the local one", () => {
       expect(phoneRule("+593991234567", "El teléfono")).toBeNull();
     });
   });
