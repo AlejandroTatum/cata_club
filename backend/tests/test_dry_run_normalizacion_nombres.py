@@ -5,11 +5,13 @@ test_auditar_colisiones_correo.py (issue #902); no se duplica acá."""
 import json
 import os
 import stat
+from datetime import date
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, insert
 
 from app.dominio.cedula import cedula_valida
+from app.dominio.modelos import Persona
 from scripts.dry_run_normalizacion_nombres import construir_dry_run, ejecutar, escribir_artifact, formatear_json, formatear_texto
 from tests.fabricas_pagos import crear_persona_orm
 
@@ -18,7 +20,19 @@ _TOKENS = ("Juan", "Pérez", "García", "López", "maría", "JOSÉ", "cruz", "an
 
 def _sembrar(db_session):
     canonico = crear_persona_orm(db_session, cedula_valida(201), nombres="Juan Pérez", apellidos="García López")
-    propuesto = crear_persona_orm(db_session, cedula_valida(202), nombres="maría JOSÉ", apellidos="de la cruz")
+    # Issue #875: el constructor de `Persona` ya normaliza vía `@validates`,
+    # así que sembrar "propuesto" con `Persona(...)` lo dejaría canónico de
+    # entrada. Un INSERT de Core (documentado en modelos.py como el camino
+    # que SÍ saltea `@validates`) simula la fila LEGACY, previa a la regla,
+    # que es justo lo que este dry-run tiene que poder detectar.
+    db_session.execute(
+        insert(Persona).values(
+            cedula=cedula_valida(202), nombres="maría JOSÉ", apellidos="de la cruz",
+            fecha_nacimiento=date(1990, 1, 1), telefono="0990001111",
+        )
+    )
+    db_session.flush()
+    propuesto = db_session.query(Persona).filter_by(cedula=cedula_valida(202)).one()
     ambiguo = crear_persona_orm(db_session, cedula_valida(203), nombres="d'angelo", apellidos="McArthur")
     db_session.commit()
     return canonico, propuesto, ambiguo

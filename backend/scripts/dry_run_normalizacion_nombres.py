@@ -19,7 +19,7 @@ sys.path.insert(0, str(_RAIZ_BACKEND))
 
 from app.dominio.modelos import Persona  # noqa: E402
 from app.soporte_transversal.configuracion import settings  # noqa: E402
-from scripts.normalizacion_nombres import clasificar  # noqa: E402
+from app.dominio.nombre_propio import clasificar  # noqa: E402
 from scripts.sesion_solo_lectura import abrir_sesion_solo_lectura  # noqa: E402
 
 _CLASES = ("sin_cambio", "cambio_propuesto", "ambiguo")

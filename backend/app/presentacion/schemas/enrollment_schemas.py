@@ -12,7 +12,10 @@ from typing import Optional, List
 
 from app.dominio.enums import NivelTecnicoAlumno, TipoManoDominante
 from app.presentacion.schemas.validadores import (
+    ApellidoValidado,
     CedulaValidada,
+    ContactoEmergenciaValidado,
+    NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
     validar_telefono_emergencia_distinto,
@@ -21,8 +24,8 @@ from app.presentacion.schemas.validadores import (
 
 class EnrollmentRepresentanteDTO(BaseModel):
     """Datos del representante legal (solo para inscripción de hijo/dependiente)."""
-    nombres: str = Field(..., min_length=1, max_length=100)
-    apellidos: str = Field(..., min_length=1, max_length=100)
+    nombres: NombreValidado = Field(..., max_length=100)
+    apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
@@ -38,8 +41,8 @@ class EnrollmentAlumnoDTO(BaseModel):
       un Usuario con rol ALUMNO (Opción B: menores con cuenta propia).
     Para inscripción "self" (adulto): las credenciales van en
       `credenciales_alumno`."""
-    nombres: str = Field(..., min_length=1, max_length=100)
-    apellidos: str = Field(..., min_length=1, max_length=100)
+    nombres: NombreValidado = Field(..., max_length=100)
+    apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
@@ -82,7 +85,7 @@ class EnrollmentFichaMedicaDTO(BaseModel):
     tipo_sangre: TipoSangreValidado
     enfermedades: List[str] = Field(default_factory=list)
     alergias: Optional[str] = Field(default=None, max_length=255)
-    contacto_emergencia: str = Field(..., min_length=1, max_length=150)
+    contacto_emergencia: ContactoEmergenciaValidado = Field(..., min_length=1, max_length=150)
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
 
