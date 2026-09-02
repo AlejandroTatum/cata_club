@@ -25,7 +25,7 @@ from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.dominio.cedula import es_cedula_valida
-from app.dominio.nombre_propio import normalizar_nombre_propio
+from app.dominio.nombre_propio import nombre_completo, normalizar_nombre_propio
 from app.dominio.telefono import es_telefono_valido
 from app.dominio.enums import (
     TipoRol, EstadoMembresia, TipoModalidad, EstadoPago,
@@ -1263,7 +1263,7 @@ class AsignacionDescuento(Base):
         `PagoServicio._a_cobertura_response_dto`) convierten UNA fila cada
         uno, así que no hay listado donde esto pudiera degenerar en un N+1.
         """
-        return f"{self.asignado_por.nombres} {self.asignado_por.apellidos}".strip()
+        return nombre_completo(self.asignado_por.nombres, self.asignado_por.apellidos)
 
     # Nullable: NULL es "todavía vigente". Ver el docstring de la clase para
     # por qué esto reemplaza a un booleano `activo` separado.
@@ -1628,7 +1628,7 @@ class Asistencia(Base):
         autor = self.registrado_por
         if autor is None:
             return None
-        return f"{autor.nombres} {autor.apellidos}".strip()
+        return nombre_completo(autor.nombres, autor.apellidos)
 
     @property
     def persona_nombre_completo(self) -> str:
@@ -1641,7 +1641,7 @@ class Asistencia(Base):
         resuelve. Mismo criterio de eager-load que `registrado_por_nombre`:
         va joinedloaded en los listados del repositorio (evita N+1); en la
         creación (una sola fila) se resuelve por lazy load."""
-        return f"{self.persona.nombres} {self.persona.apellidos}".strip()
+        return nombre_completo(self.persona.nombres, self.persona.apellidos)
 
 
 class SesionAsistencia(Base):
@@ -1760,7 +1760,7 @@ class AsistenciaCorreccion(Base):
         `Optional`: `corregido_por_id` es NOT NULL (tabla nueva, sin
         historial previo sin autor)."""
         autor = self.corregido_por
-        return f"{autor.nombres} {autor.apellidos}".strip()
+        return nombre_completo(autor.nombres, autor.apellidos)
 
 
 # ---------------------------------------------------------------------------

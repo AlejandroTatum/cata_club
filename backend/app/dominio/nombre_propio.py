@@ -12,6 +12,7 @@ valor se preserva tal cual): `apostrofe`, `mayuscula_interior`
 import re
 import unicodedata
 from dataclasses import dataclass
+from typing import Optional
 
 PARTICULAS = frozenset({"de", "del", "la", "las", "los", "y", "e", "da", "do", "das", "dos", "van", "von", "di", "du"})
 
@@ -110,3 +111,13 @@ def clasificar(valor: str) -> Clasificacion:
     normalizado = normalizar_nombre_propio(valor)
     clase = "sin_cambio" if normalizado == valor else "cambio_propuesto"
     return Clasificacion(clase=clase, valor_normalizado=normalizado, motivos=())
+
+
+def nombre_completo(nombres: Optional[str], apellidos: Optional[str]) -> str:
+    """ÚNICO lugar donde se arma un nombre completo para PRESENTACIÓN (issue
+    #875). Aplica la MISMA regla por-campo que el límite de escritura y
+    `NombrePresentado`: cada mitad se normaliza por separado, no la cadena
+    unida como una sola unidad -- así una fila canónica (`María`/`De la
+    Cruz`) se ve igual venga por campos o por nombre completo. `None` cuenta
+    como vacío."""
+    return " ".join(p for p in (normalizar_nombre_propio(nombres or ""), normalizar_nombre_propio(apellidos or "")) if p)

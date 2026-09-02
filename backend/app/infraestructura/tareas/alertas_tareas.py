@@ -30,6 +30,7 @@ from app.dominio.excepciones import (
 )
 from app.dominio.modelos import Pago, Membresia, Persona, Notificacion, Rol, Usuario
 from app.dominio.enums import EstadoPago, EstadoMembresia, TipoNotificacion, TipoRol
+from app.dominio.nombre_propio import nombre_completo
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.membresia_pago_servicio import _meses_enteros_desde
 from app.soporte_transversal.resiliencia import CIRCUITO_SMTP_COOLDOWN_SEGUNDOS
@@ -342,7 +343,7 @@ def _construir_notificacion_vencimiento(
             )
 
     if representante_pendiente:
-        nombre_alumno = acortar_nombre_para_notificacion(f"{persona.nombres} {persona.apellidos}")
+        nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(persona.nombres, persona.apellidos))
         filas_pendientes.append(Notificacion(
             tipo=tipo,
             mensaje=(
@@ -433,7 +434,7 @@ def _construir_notificaciones_mora(
             )
 
     if representante_pendiente:
-        nombre_alumno = acortar_nombre_para_notificacion(f"{persona.nombres} {persona.apellidos}")
+        nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(persona.nombres, persona.apellidos))
         filas_pendientes.append(Notificacion(
             tipo=tipo,
             mensaje=f"Para {nombre_alumno}: {mensaje}",
@@ -684,7 +685,7 @@ def alertar_mora_diaria(self) -> dict:
                     "dias_mora": dias,
                     "meses_adeudados": _meses_enteros_desde(ultima_fecha_fin, hoy),
                     "monto_mensual": f"{membresia.monto_aplicado:,.2f}",
-                    "nombre": f"{persona.nombres} {persona.apellidos}",
+                    "nombre": nombre_completo(persona.nombres, persona.apellidos),
                 })
         _persistir_lote(lote_familia)
 

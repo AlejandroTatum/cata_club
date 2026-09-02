@@ -6,7 +6,7 @@ import unicodedata
 
 import pytest
 
-from app.dominio.nombre_propio import clasificar, normalizar_nombre_propio
+from app.dominio.nombre_propio import clasificar, nombre_completo, normalizar_nombre_propio
 
 _NFD_JUAN_PEREZ = unicodedata.normalize("NFD", "juan  pérez")
 
@@ -70,3 +70,26 @@ def test_clasifica_como_ambiguo_con_motivo_y_valor_intacto(valor, motivo):
 def test_normalizar_nombre_propio_es_conservadora(valor, esperado):
     assert normalizar_nombre_propio(valor) == esperado
     assert normalizar_nombre_propio(esperado) == esperado  # idempotente
+
+
+# --- Límite de lectura: nombre_completo, fallback de presentación ----------
+
+
+@pytest.mark.parametrize("nombres, apellidos, esperado", [
+    ("faby", "ESPINOZA", "Faby Espinoza"),  # legacy: casing crudo pre-#875
+    (None, "ESPINOZA", "Espinoza"),  # None de un lado
+    ("faby", None, "Faby"),
+    (None, None, ""),
+    ("", "", ""),
+    ("maría", "DE LA CRUZ", "María De la Cruz"),  # cada mitad, por separado
+    ("Faby", "Espinoza", "Faby Espinoza"),  # ya canónico: idempotente
+    ("María", "De la Cruz", "María De la Cruz"),  # concuerda con NombrePresentado
+])
+def test_nombre_completo_normaliza_cada_campo_por_separado(nombres, apellidos, esperado):
+    assert nombre_completo(nombres, apellidos) == esperado
+
+
+def test_nombre_completo_es_idempotente_sobre_su_propia_salida():
+    resultado = nombre_completo("faby", "ESPINOZA")
+    nombre, apellido = resultado.split(" ", 1)
+    assert nombre_completo(nombre, apellido) == resultado
