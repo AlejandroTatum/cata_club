@@ -217,6 +217,30 @@ describe("AuthProvider sessionExpired (issue #353)", () => {
     await screen.findByText("auth:false expired:false");
   });
 
+  it("stays false on an auth failure that never had a session behind it (issue #817)", async () => {
+    // A visitor with no account/cookies who opens a protected route hits a
+    // 401 whose refresh also fails — `notifyAuthFailure()` fires — without
+    // ever having had an authenticated session in this tab. Unlike the other
+    // tests in this block, hydration must resolve to UNAUTHENTICATED first,
+    // so there is nothing to have "expired".
+    mockGetSession.mockResolvedValue({ kind: "unauthenticated" as const });
+
+    render(
+      <AuthProvider>
+        <SessionProbe />
+      </AuthProvider>,
+    );
+    await screen.findByText("auth:false expired:false");
+
+    expect(authFailureListener).not.toBeNull();
+    act(() => {
+      authFailureListener?.();
+    });
+
+    // Must NOT flip to true — nobody was logged in for this to end.
+    await screen.findByText("auth:false expired:false");
+  });
+
   it("resets on a fresh successful login, so a later unrelated bounce is not mislabeled", async () => {
     function ProbeWithLogin() {
       const { login } = useAuth();

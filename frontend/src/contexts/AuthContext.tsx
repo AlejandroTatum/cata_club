@@ -91,6 +91,11 @@ export interface AuthContextValue {
    *
    * Reset on a fresh successful `login()` so a LATER, unrelated bounce is
    * never mislabeled by a stale flag from a session two logins ago.
+   *
+   * Issue #817: "not an ordinary visit that was never authenticated" above
+   * was only intent until now — the failure listener set this unconditionally,
+   * so a first-time visitor with no account also saw the banner. Enforced via
+   * `hadSessionRef`, set the moment a session is actually established.
    */
   sessionExpired: boolean;
   /**
@@ -144,6 +149,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [periodicOutage, setPeriodicOutage] = useState(false);
   const sessionRef = useRef<AuthSession | null>(null);
   sessionRef.current = session;
+  /**
+   * Issue #817: true once an authenticated session has actually been
+   * established in THIS tab (mount hydration, a background revalidation, or
+   * a fresh login) — as opposed to `sessionExpired`, which only says a
+   * refresh-and-retry failed. A visitor who opens a protected route with no
+   * account at all also fails that refresh, but there was never a session
+   * for it to have "expired": without this ref the failure listener below
+   * could not tell the two apart, and every first-time visitor saw the
+   * "Su sesión expiró" banner. A ref, not state: it must be readable
+   * SYNCHRONOUSLY inside the listener below, and a state read there could
+   * still observe a stale closure from before the establishing render
+   * committed.
+   */
+  const hadSessionRef = useRef(false);
   // Set synchronously at the start of logout() so any revalidation already
   // scheduled (interval tick / visibilitychange) bails out immediately
   // instead of racing a new refresh in after logout begins.
@@ -171,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return outcome;
     }
     setPeriodicOutage(false);
+    if (outcome.kind === "authenticated") hadSessionRef.current = true;
     setSession(outcome.kind === "authenticated" ? outcome.session : null);
     return outcome;
   }, []);
@@ -193,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setHydrationOutage(false);
       const saved = outcome.kind === "authenticated" ? outcome.session : null;
+      if (saved) hadSessionRef.current = true;
       const { session: hydratedSession, isLoading: done } = hydrateState(saved);
       setSession(hydratedSession);
       setIsLoading(done);
@@ -212,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setHydrationOutage(false);
       const saved = outcome.kind === "authenticated" ? outcome.session : null;
+      if (saved) hadSessionRef.current = true;
       const { session: hydratedSession, isLoading: done } = hydrateState(saved);
       setSession(hydratedSession);
       setIsLoading(done);
@@ -259,9 +281,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return subscribeAuthFailure(() => {
       setSession(null);
-      // Distinguishes THIS from an ordinary unauthenticated visit or an
-      // explicit logout() — see the field's own doc comment.
-      setSessionExpired(true);
+      // Issue #817: a visitor who never had a session in this tab also
+      // fails a refresh-and-retry the first time they touch a protected
+      // route (there is no token to refresh) — that is not a session that
+      // "expired". Only announce it when `hadSessionRef` says one was
+      // actually established here; otherwise this stays an ordinary
+      // unauthenticated visit and `ProtectedRoute` redirects silently.
+      if (hadSessionRef.current) setSessionExpired(true);
     });
   }, []);
 
@@ -269,6 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await authService.login(email, password);
     if (result.ok) {
       loggingOutRef.current = false;
+      hadSessionRef.current = true;
       setSession(result.session);
       setSessionExpired(false);
     }
