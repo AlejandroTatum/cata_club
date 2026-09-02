@@ -276,3 +276,19 @@ describe("AyudaPage — the way back follows who is asking (#295)", () => {
     expect(screen.getAllByRole("link", { name: /^volver/i })).toHaveLength(1);
   });
 });
+
+/**
+ * #821 — the schedule table's horizontal-scroll wrapper held nothing
+ * focusable, so a keyboard user had no way to reach or scroll it on mobile,
+ * where the table does not fit. axe flags this as
+ * `scrollable-region-focusable` (serious).
+ */
+describe("AyudaPage — the schedule table's scroll wrapper is keyboard-reachable (#821)", () => {
+  it("puts the scroll wrapper in the tab order, named for assistive tech", () => {
+    render(<AyudaPage />);
+
+    const region = screen.getByRole("region", { name: /tabla desplazable/i });
+    expect(region).toHaveAttribute("tabIndex", "0");
+    expect(region).toContainElement(screen.getByRole("table"));
+  });
+});

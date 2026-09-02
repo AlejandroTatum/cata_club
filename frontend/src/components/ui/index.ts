@@ -55,6 +55,9 @@ export type { PageHeaderProps } from "./PageHeader";
 export { default as ResponsiveListTable } from "./ResponsiveListTable";
 export type { ResponsiveListTableProps } from "./ResponsiveListTable";
 
+export { default as ScrollableTable } from "./ScrollableTable";
+export type { ScrollableTableProps } from "./ScrollableTable";
+
 // `ResponsiveList` (issue #400) is a separate, deliberately distinct sibling of
 // `ResponsiveListTable` above — not a duplicate to collapse into it. It needs a
 // configurable breakpoint (`/payments` splits at `md`, `ResponsiveListTable`'s
