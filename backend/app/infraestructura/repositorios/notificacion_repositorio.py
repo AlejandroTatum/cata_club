@@ -44,3 +44,18 @@ class NotificacionRepositorio:
         self.db.commit()
         self.db.refresh(notificacion)
         return notificacion
+
+    def marcar_todas_leidas(self, persona_ids: list[int]) -> int:
+        """UN solo UPDATE para todas las filas pendientes de `persona_ids`
+        (issue #859) -- nunca un loop por fila. `synchronize_session=False`
+        porque nada de este método mantiene instancias ORM cargadas que haga
+        falta sincronizar en memoria; `expire_on_commit` (default de la
+        sesión) ya fuerza un refetch en la próxima lectura de cualquier
+        `Notificacion` que sí esté cargada en esta misma sesión."""
+        actualizadas = (
+            self.db.query(Notificacion)
+            .filter(Notificacion.persona_id.in_(persona_ids), Notificacion.leida.is_(False))
+            .update({"leida": True}, synchronize_session=False)
+        )
+        self.db.commit()
+        return actualizadas

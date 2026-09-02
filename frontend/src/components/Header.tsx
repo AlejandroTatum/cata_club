@@ -361,7 +361,8 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
   const [menuOpen, setMenuOpen] = useState(false);
   const { isAuthenticated, session, logout, isLoading } = useAuth();
   const links = useNavLinks();
-  const { notificaciones, loadError, markRead } = useNotificaciones(isAuthenticated && !!session);
+  const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
+    useNotificaciones(isAuthenticated && !!session);
 
   const closeMenu = useCallback((): void => setMenuOpen(false), []);
 
@@ -467,7 +468,14 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
           {/* User menu — shown when authenticated */}
           {isAuthenticated && session && (
             <li className="ml-2 flex items-center gap-2 border-l border-white/10 pl-3">
-              <NotificationBell notificaciones={notificaciones} loadError={loadError} onMarkRead={markRead} />
+              <NotificationBell
+                notificaciones={notificaciones}
+                loadError={loadError}
+                onMarkRead={markRead}
+                onMarkAllRead={marcarTodasLeidas}
+                marcandoTodas={marcandoTodas}
+                errorMarcarTodas={errorMarcarTodas}
+              />
               <AccountMenu userName={session.user.name} onLogout={logout} />
             </li>
           )}
@@ -518,7 +526,14 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
                     <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
                     <span className="truncate">{session.user.name}</span>
                   </span>
-                  <NotificationBell notificaciones={notificaciones} loadError={loadError} onMarkRead={markRead} />
+                  <NotificationBell
+                notificaciones={notificaciones}
+                loadError={loadError}
+                onMarkRead={markRead}
+                onMarkAllRead={marcarTodasLeidas}
+                marcandoTodas={marcandoTodas}
+                errorMarcarTodas={errorMarcarTodas}
+              />
                 </div>
                 <AccountMobileItems onNavigate={closeMenu} onLogout={logout} />
               </li>

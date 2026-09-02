@@ -370,7 +370,8 @@ export default function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const { session, logout } = useAuth();
-  const { notificaciones, loadError, markRead } = useNotificaciones(!!session);
+  const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
+    useNotificaciones(!!session);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isDesktopViewport = useIsDesktopViewport();
   // Desktop-only collapse state, independent from the mobile drawer
@@ -1004,6 +1005,9 @@ export default function AppShell({
               notificaciones={notificaciones}
               loadError={loadError}
               onMarkRead={markRead}
+              onMarkAllRead={marcarTodasLeidas}
+              marcandoTodas={marcandoTodas}
+              errorMarcarTodas={errorMarcarTodas}
               variant="light"
             />
           )}

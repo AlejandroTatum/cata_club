@@ -23,6 +23,7 @@ import {
   updatePaymentValidation,
   fetchNotificaciones,
   marcarNotificacionLeida,
+  marcarTodasNotificacionesLeidas,
   fetchMiPerfil,
   actualizarMiPerfil,
   invalidarOtrasSesiones,
@@ -704,6 +705,20 @@ describe("marcarNotificacionLeida", () => {
       expect.objectContaining({ method: "PATCH" }),
     );
     expect(result.leida).toBe(true);
+  });
+});
+
+describe("marcarTodasNotificacionesLeidas", () => {
+  it("sends PATCH to /api/ranking/notificaciones/leer-todas", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ actualizadas: 5 }));
+
+    const result = await marcarTodasNotificacionesLeidas();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/ranking/notificaciones/leer-todas",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(result.actualizadas).toBe(5);
   });
 });
 
