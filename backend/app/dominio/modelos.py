@@ -605,6 +605,20 @@ class Persona(Base):
     def _validar_nombres(self, key: str, value):
         return _normalizar_nombre_propio_orm(value)
 
+    @property
+    def cuenta_activa(self) -> Optional[bool]:
+        """Estado de ACCESO de esta persona -- `Usuario.activo`, el mismo
+        flag que decide el login (`AuthServicio.login`) -- expuesto como
+        `cuentaActiva` en `PersonaResponseDTO` (issue #869, from_attributes).
+        `None` cuando la persona no tiene `Usuario` ("sin cuenta"): un menor
+        representado sin credenciales propias. Nunca se infiere de `activo`
+        arriba (pertenencia al club) ni de ninguna membresía -- son tres
+        planos distintos. Mismo criterio de eager-load que
+        `AsistenciaEntrenamiento.registrado_por_nombre`: `Persona.usuario` va
+        joinedloaded en `PersonaRepositorio.listar` (evita N+1); en un
+        `GET /personas/{id}` (una sola fila) se resuelve por lazy load."""
+        return self.usuario.activo if self.usuario is not None else None
+
 
 class AntecedentesClub(Base):
     __tablename__ = "antecedentes_club"

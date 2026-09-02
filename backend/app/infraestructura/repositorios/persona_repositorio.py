@@ -1,6 +1,6 @@
 from typing import Optional, List
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import Persona, Usuario, Rol, usuario_rol
 
@@ -46,9 +46,18 @@ class PersonaRepositorio:
     # escondieran a las personas dadas de baja, un administrador no tendría
     # ninguna forma de volver a encontrarlas para reactivarlas. El DTO expone
     # `activo` para que la UI las pueda marcar.
+    #
+    # `joinedload(Persona.usuario)` (issue #869): `PersonaResponseDTO.
+    # cuenta_activa` lee `Persona.usuario.activo` por cada fila -- sin este
+    # eager load esa relación to-one es lazy, y tocarla una vez por persona
+    # convierte el listado en un SELECT por fila (N+1). Con el JOIN sigue
+    # siendo una sola sentencia, guardado por
+    # `test_persona_listar_incluye_el_estado_de_la_cuenta_sin_n_mas_uno`
+    # (`tests/test_sin_n_mas_uno.py`).
     def listar(self, skip: int = 0, limit: int = 50) -> List[Persona]:
         return (
             self.db.query(Persona)
+            .options(joinedload(Persona.usuario))
             .order_by(*self._ORDEN_NOMINA)
             .offset(skip)
             .limit(limit)

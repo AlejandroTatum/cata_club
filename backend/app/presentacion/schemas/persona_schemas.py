@@ -122,6 +122,11 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
     # de baja para poder marcarlo en el roster admin (que sí los sigue
     # listando) y ofrecer reincorporarlo.
     activo: bool = Field(default=True, examples=[True])
+    # Issue #869: estado de la CUENTA (`Usuario.activo`, el mismo flag que
+    # decide el login), no el de la persona (`activo` arriba) ni el de
+    # ninguna membresía. `None` = "sin cuenta" (no existe `Usuario` para esta
+    # persona) -- nunca se infiere, siempre viene de `Persona.cuenta_activa`.
+    cuenta_activa: Optional[bool] = Field(default=None, examples=[True])
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
