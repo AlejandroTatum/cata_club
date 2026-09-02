@@ -125,10 +125,10 @@ REFERENCIA_ESPERADA = "origin/main"
 SHA_AUSENTE = "unknown"
 
 _DETALLE_SHA_AUSENTE = (
-    "El frontend responde, pero BUILD_SHA no llegó a la imagen: "
-    "docker-compose.override.yml es el ÚNICO compose que lo pasa, así que una "
-    "imagen de producción siempre reporta 'unknown'. No es deriva — la "
-    "revisión no se puede determinar desde acá."
+    "El frontend responde, pero BUILD_SHA no llegó a la imagen: la ruta de "
+    "publicación de CI pasa esa variable y verifica la revisión antes de "
+    "publicar (issue #927), así que esta imagen no vino de ahí. No es "
+    "deriva — la revisión no se puede determinar desde acá."
 )
 
 # Lo que se reporta como `observado` cuando la fuente no dejó nada que leer:

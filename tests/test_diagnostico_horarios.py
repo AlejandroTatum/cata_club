@@ -91,11 +91,12 @@ def test_sha_servido_distinto_reporta_revision_drift_con_esperado_y_observado():
 
 
 def test_sha_desconocido_no_es_deriva_sino_revision_unavailable():
-    """El caso que motiva la clase separada: el compose de producción NO pasa
-    `BUILD_SHA` (solo `docker-compose.override.yml` lo hace), así que
-    `/api/health` responde `sha: "unknown"`. Reportar eso como deriva mandaría
-    al operador a perseguir un fantasma; el diagnóstico tiene que poder decir
-    "no sé" en vez de adivinar."""
+    """El caso que motiva la clase separada: si `/api/health` responde
+    `sha: "unknown"`, la imagen corriendo no vino de la ruta de publicación
+    de CI (que desde el PR #425 pasa `BUILD_SHA=IMAGE_TAG` y, desde el
+    issue #927, verifica esa revisión antes de publicar). Reportar eso como
+    deriva mandaría al operador a perseguir un fantasma; el diagnóstico tiene
+    que poder decir "no sé" en vez de adivinar."""
     hallazgos = diag.detectar_hallazgos_de_revision(
         _observacion(sha_servido=diag.SHA_AUSENTE)
     )
