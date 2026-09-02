@@ -46,6 +46,7 @@
  */
 
 import { test, expect, type Locator, type Page, type Route } from "@playwright/test";
+import { birthDatePart, fillBirthDate } from "./helpers/birth-date";
 
 const SHOT_DIR = process.env.ENROLL_QA_SHOT_DIR ?? "test-results/enroll-qa";
 
@@ -133,8 +134,21 @@ function nextButton(page: Page): Locator {
   return page.getByRole("button", { name: /siguiente/i });
 }
 
+/**
+ * `BirthDateField` (issue #853) has no single input to `.fill()` — the two
+ * birth-date ids route through `fillBirthDate` and blur its last part
+ * (Año), the same control every fill ends on; every other field keeps the
+ * original single-input path.
+ */
+const BIRTH_DATE_FIELDS: readonly FieldId[] = [F.fechaNacimiento, F.fechaNacimientoRepresentante];
+
 /** Escribe un valor y hace blur, que es lo que destapa el mensaje del campo. */
 async function fillAndBlur(page: Page, id: FieldId, value: string): Promise<void> {
+  if (BIRTH_DATE_FIELDS.includes(id)) {
+    await fillBirthDate(page, id, value);
+    await birthDatePart(page, id, "anio").blur();
+    return;
+  }
   const input = field(page, id);
   await input.fill(value);
   await input.blur();
@@ -256,7 +270,7 @@ async function goToPersonal(page: Page, type: "Jugador" | "Representante"): Prom
 async function fillValidStudent(page: Page): Promise<void> {
   await field(page, F.nombres).fill(VALID_STUDENT.nombres);
   await field(page, F.apellidos).fill(VALID_STUDENT.apellidos);
-  await field(page, F.fechaNacimiento).fill(VALID_STUDENT.fechaNacimiento);
+  await fillBirthDate(page, F.fechaNacimiento, VALID_STUDENT.fechaNacimiento);
   await field(page, F.cedula).fill(VALID_STUDENT.cedula);
   await field(page, F.telefono).fill(VALID_STUDENT.telefono);
 }
@@ -265,7 +279,7 @@ async function fillValidRepresentative(page: Page): Promise<void> {
   await field(page, F.nombresRepresentante).fill(VALID_REPRESENTATIVE.nombres);
   await field(page, F.apellidosRepresentante).fill(VALID_REPRESENTATIVE.apellidos);
   await field(page, F.cedulaRepresentante).fill(VALID_REPRESENTATIVE.cedula);
-  await field(page, F.fechaNacimientoRepresentante).fill(VALID_REPRESENTATIVE.fechaNacimiento);
+  await fillBirthDate(page, F.fechaNacimientoRepresentante, VALID_REPRESENTATIVE.fechaNacimiento);
   await field(page, F.telefonoRepresentante).fill(VALID_REPRESENTATIVE.telefono);
   await field(page, F.correoRepresentante).fill(VALID_REPRESENTATIVE.correo);
   await field(page, F.contraseniaRepresentante).fill(VALID_REPRESENTATIVE.contrasenia);
@@ -429,8 +443,8 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   });
 
   test("P13 · fecha de nacimiento vacía", async ({ page }) => {
-    await field(page, F.fechaNacimiento).focus();
-    await field(page, F.fechaNacimiento).blur();
+    await birthDatePart(page, F.fechaNacimiento, "dia").focus();
+    await birthDatePart(page, F.fechaNacimiento, "dia").blur();
     await expect(fieldError(page, F.fechaNacimiento)).toHaveText(
       "La fecha de nacimiento es obligatoria.",
     );
@@ -666,8 +680,8 @@ test.describe("R · Datos del representante", () => {
   });
 
   test("R06 · fecha del representante vacía", async ({ page }) => {
-    await field(page, F.fechaNacimientoRepresentante).focus();
-    await field(page, F.fechaNacimientoRepresentante).blur();
+    await birthDatePart(page, F.fechaNacimientoRepresentante, "dia").focus();
+    await birthDatePart(page, F.fechaNacimientoRepresentante, "dia").blur();
     // "(18+)" salió del mensaje: era una abreviatura de la propia frase que lo
     // contenía, y la regla de las palabras no admite abreviaturas. El número
     // sigue estando, en la rama que sí puede nombrarlo (R05, "entre 18 y 74").
