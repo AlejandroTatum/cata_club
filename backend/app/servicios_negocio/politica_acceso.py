@@ -3,15 +3,20 @@ Política de acceso a los datos de una Persona.
 
 Regla única del negocio: los datos de una persona los puede ver (o accionar)
 la propia persona, su representante legal, o un rol del staff con mandato
-para hacerlo. Estaba escrita a mano en seis lugares distintos --
-`MembresiaServicio.listar_membresias_por_persona`,
-`MembresiaServicio.obtener_membresia`, `PagoServicio.registrar_pago`,
-`PagoServicio.listar_pagos_de_persona`, `PagoServicio.adjuntar_voucher`, y
-tres chequeos inline en `personas_router` -- y esa duplicación es
-exactamente la razón por la que cinco endpoints hermanos quedaron sin
-ningún chequeo: al agregarlos, no había un solo lugar del que acordarse.
+para hacerlo. Estaba escrita a mano en cada call site, y esa duplicación es
+exactamente la razón por la que varios endpoints hermanos quedaron sin
+ningún chequeo: al agregarlos, no había un solo lugar del que acordarse
+(issue #457).
 
-Este módulo es ese lugar. No cambia el criterio: lo centraliza.
+Este módulo es ese lugar. No cambia el criterio: lo centraliza. Hoy lo usan,
+vía `exigir_acceso`/`exigir_acceso_directo`, los routers `personas_router`,
+`asistencias_router` y `ficha_medica_router`; y vía `puede_acceder`,
+`MembresiaServicio.obtener_membresia`,
+`MembresiaServicio.listar_membresias_por_persona`,
+`PagoServicio.obtener_pago`, `PagoServicio.registrar_pago`,
+`PagoServicio.listar_pagos_de_persona` y `PagoServicio.adjuntar_voucher`
+en `membresia_pago_servicio.py` (issue #830, que terminó de migrar estos
+últimos cuatro).
 """
 from sqlalchemy.orm import Session
 

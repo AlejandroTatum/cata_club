@@ -31,6 +31,7 @@ from app.infraestructura.repositorios.notificacion_repositorio import Notificaci
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
+from app.servicios_negocio.rol_servicio import RolServicio
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.presentacion.schemas.membresia_pago_schemas import (
@@ -246,7 +247,6 @@ class MembresiaServicio:
         # abajo junto a la asignación perezosa: al final del método la
         # membresía ya estaría comiteada, así que el rechazo dejaría a la
         # persona matriculada y con un error en pantalla.
-        from app.servicios_negocio.rol_servicio import RolServicio
         RolServicio(self.db).exigir_que_pueda_ser_alumno(datos.persona_id)
         # Estado y fecha_activacion NO vienen del payload (B-12): una membresía
         # nace INACTIVA y se ACTIVA al aprobarse su primer pago. La
@@ -270,7 +270,6 @@ class MembresiaServicio:
         # Asignación perezosa del rol ALUMNO (principio de diseño ya
         # acordado: se asigna al matricularse, no al crear la cuenta).
         # Best-effort: si la persona aún no tiene Usuario, no hace nada.
-        from app.servicios_negocio.rol_servicio import RolServicio
         RolServicio(self.db).asignar_alumno_si_corresponde(datos.persona_id)
         return membresia
 
@@ -393,21 +392,13 @@ class MembresiaServicio:
     ) -> list[Membresia]:
         """Membresías de una persona para lectura por el propio alumno, su
         representante, o un administrador. Mismo criterio de autorización que
-        `PagoServicio.listar_pagos_de_persona`: dueño, representante, o
-        ADMINISTRADOR; "es representante" solo se resuelve cuando dueño/admin
-        no autorizan de entrada."""
+        `PagoServicio.listar_pagos_de_persona` (ver `PoliticaAccesoPersona`)."""
         roles_solicitante = roles_solicitante or []
-        es_duenio = persona_id_solicitante is not None and persona_id_solicitante == persona_id_objetivo
-        es_admin = "ADMINISTRADOR" in roles_solicitante
-        es_representante = False
-
-        if not es_duenio and not es_admin and persona_id_solicitante is not None:
-            persona_objetivo = self.repo_persona.obtener_por_id(persona_id_objetivo)
-            es_representante = bool(
-                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
-            )
-
-        if not (es_duenio or es_representante or es_admin):
+        if not PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=persona_id_objetivo,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        ):
             raise PermisosInsuficientes(
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden ver estas membresías"
@@ -478,15 +469,12 @@ class PagoServicio:
         roles_solicitante = roles_solicitante or []
         es_duenio = persona_id_solicitante is not None and persona_id_solicitante == datos.persona_id
         es_admin = "ADMINISTRADOR" in roles_solicitante
-        es_representante = False
 
-        if not es_duenio and not es_admin and persona_id_solicitante is not None:
-            persona_objetivo = self.repo_persona.obtener_por_id(datos.persona_id)
-            es_representante = bool(
-                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
-            )
-
-        if not (es_duenio or es_representante or es_admin):
+        if not PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=datos.persona_id,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        ):
             raise PermisosInsuficientes(
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden registrar este pago"
@@ -505,7 +493,7 @@ class PagoServicio:
         # Recién aquí (ya autorizado) se resuelve existencia real y, si
         # corresponde, el chequeo de solo-lectura financiera para menores
         # (E01-RF006/RF007). No aplica si actúa el representante o un admin.
-        if es_duenio and not es_admin and not es_representante:
+        if es_duenio and not es_admin:
             persona_objetivo = self.repo_persona.obtener_por_id(datos.persona_id)
             if not persona_objetivo:
                 raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
@@ -1844,25 +1832,14 @@ class PagoServicio:
         """Historial completo (cualquier estado) de los pagos de una persona,
         para que el propio alumno o su representante puedan ver su historial
         financiero (lectura, sin exponer subida/registro de comprobante --
-        eso sigue siendo otro flujo). Misma autorización que `registrar_pago`:
-        dueño, su representante, o ADMINISTRADOR; "es representante" solo se
-        resuelve cuando dueño/admin no autorizan de entrada (ver docstring
-        allá). No se extrae un helper compartido con `registrar_pago`/
-        `adjuntar_voucher`: ambos ya duplican este mismo chequeo localmente
-        en este archivo en vez de compartirlo, así que duplicarlo una tercera
-        vez es lo consistente con el estilo ya establecido acá."""
+        eso sigue siendo otro flujo). Misma autorización que `registrar_pago`
+        (ver `PoliticaAccesoPersona`)."""
         roles_solicitante = roles_solicitante or []
-        es_duenio = persona_id_solicitante is not None and persona_id_solicitante == persona_id_objetivo
-        es_admin = "ADMINISTRADOR" in roles_solicitante
-        es_representante = False
-
-        if not es_duenio and not es_admin and persona_id_solicitante is not None:
-            persona_objetivo = self.repo_persona.obtener_por_id(persona_id_objetivo)
-            es_representante = bool(
-                persona_objetivo and persona_objetivo.representante_id == persona_id_solicitante
-            )
-
-        if not (es_duenio or es_representante or es_admin):
+        if not PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=persona_id_objetivo,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        ):
             raise PermisosInsuficientes(
                 "Solo la propia persona, su representante, o un administrador "
                 "pueden ver este historial de pagos"
@@ -2277,34 +2254,6 @@ class PagoServicio:
         comprobante = ComprobantePago(**datos.model_dump(), pago_id=pago_id)
         return self.repo_comprobante.crear(comprobante)
 
-    def _resolver_autorizacion_pago(
-        self,
-        pago: Pago | None,
-        persona_id_solicitante: int | None,
-        roles_solicitante: list[str],
-    ) -> tuple[bool, bool, bool]:
-        """Resuelve (es_duenio, es_representante, es_admin) para un `pago`
-        que puede no existir (issue #457): extraído de `adjuntar_voucher`
-        para bajar su complejidad cognitiva, y reescrito para que el análisis
-        estático de Sonar pueda probar la correlación entre `pago` y la
-        persona titular -- antes, `persona_titular` salía de un ternario
-        aparte y `es_representante` la dereferenciaba en una expresión
-        distinta a la que verificaba `pago is not None`, algo que en tiempo
-        de ejecución es seguro (el `and` corta antes) pero que Sonar no puede
-        probar mirando solo el flujo de datos.
-        """
-        es_admin = "ADMINISTRADOR" in roles_solicitante
-        es_duenio = False
-        es_representante = False
-        if pago is not None and persona_id_solicitante is not None:
-            es_duenio = persona_id_solicitante == pago.persona_id
-            persona_titular = pago.persona
-            es_representante = (
-                persona_titular is not None
-                and persona_titular.representante_id == persona_id_solicitante
-            )
-        return es_duenio, es_representante, es_admin
-
     # --- Voucher de transferencia (cliente) -----------------------------------
     def adjuntar_voucher(
         self,
@@ -2365,10 +2314,16 @@ class PagoServicio:
         # interna está bien, lo que no puede pasar es que el pago inexistente
         # se distinga de uno ajeno en la respuesta.
         pago = self.repo.obtener_por_id(pago_id)
-        es_duenio, es_representante, es_admin = self._resolver_autorizacion_pago(
-            pago, persona_id_solicitante, roles_solicitante
+        es_admin = "ADMINISTRADOR" in roles_solicitante
+        autorizado = es_admin or (
+            pago is not None
+            and PoliticaAccesoPersona(self.db).puede_acceder(
+                persona_id_objetivo=pago.persona_id,
+                persona_id_solicitante=persona_id_solicitante,
+                roles_solicitante=roles_solicitante,
+            )
         )
-        if not (es_duenio or es_representante or es_admin):
+        if not autorizado:
             raise PermisosInsuficientes(
                 "Solo el titular del pago, su representante, o un administrador "
                 "pueden adjuntar el voucher"
@@ -2387,7 +2342,8 @@ class PagoServicio:
         # E01-RF006/RF007: mismo criterio de solo-lectura financiera para
         # menores que en registrar_pago (ver docstring allá). `pago` ya está
         # garantizado no-None acá (el check #2 de arriba lo asegura).
-        if es_duenio and not es_admin and not es_representante:
+        es_duenio = persona_id_solicitante is not None and persona_id_solicitante == pago.persona_id
+        if es_duenio and not es_admin:
             edad = _calcular_edad(pago.persona.fecha_nacimiento)
             if edad < 18:
                 raise PermisosInsuficientes(
