@@ -115,6 +115,17 @@ class PersonaRepositorio:
             .all()
         )
 
+    def contar_nuevas_por_periodo(self, fecha_inicio, fecha_fin) -> int:
+        """Total del mismo filtro que `listar_nuevas_por_periodo`, sin traer
+        las filas -- para el tope del reporte (issue #812), que necesita
+        saber si el rango excede el límite ANTES de pedir todas las
+        `Persona` completas."""
+        return (
+            self.db.query(func.count(Persona.id))
+            .filter(Persona.fecha_registro >= fecha_inicio, Persona.fecha_registro <= fecha_fin)
+            .scalar()
+        )
+
     def buscar_por_nombre(
         self, q: str, rol: Optional[str] = None, skip: int = 0, limit: int = 20
     ) -> List[Persona]:

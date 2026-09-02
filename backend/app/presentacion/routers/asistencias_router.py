@@ -18,6 +18,7 @@ from app.presentacion.schemas.asistencia_schemas import (
     UltimaListaDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
+from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 from app.servicios_negocio.gestor_permisos import GestorPermisos
@@ -278,6 +279,15 @@ async def reporte_asistencia(
 # ejecuta vía `run_in_threadpool` para no bloquear el event loop de asyncio
 # (un solo worker uvicorn) — mismo motivo por el que
 # `generar_comprobante_pago_pdf` corre en una tarea de Celery, no inline.
+#
+# Tope duro (issue #812): a diferencia del JSON hermano de arriba, este PDF
+# llama a `generar_reporte` SIN `skip`/`limit` -- un solo documento
+# descargado entero, no un listado paginado -- así que sin este guardarraíl
+# un rango sin filtrar se truncaba en silencio a las primeras N filas. Mismo
+# patrón que `LIMITE_MAXIMO_REPORTE_PAGOS` en `membresias_pagos_router.py`.
+LIMITE_MAXIMO_REPORTE_ASISTENCIAS = 10000
+
+
 @router.get(
     "/reportes/pdf",
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
@@ -290,7 +300,13 @@ async def reporte_asistencia_pdf(
     db: Session = Depends(obtener_sesion),
 ):
     _validar_rango_de_fechas(fecha_inicio, fecha_fin)
-    registros = AsistenciaServicio(db).generar_reporte(
+    servicio = AsistenciaServicio(db)
+    total = servicio.contar_reporte(
+        horario_id=horario_id, persona_id=persona_id,
+        fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
+    )
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_ASISTENCIAS, "asistencias")
+    registros = servicio.generar_reporte(
         horario_id=horario_id, persona_id=persona_id,
         fecha_inicio=fecha_inicio, fecha_fin=fecha_fin,
     )

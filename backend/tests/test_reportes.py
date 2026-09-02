@@ -718,6 +718,114 @@ def test_reporte_pagos_exactamente_en_el_limite_da_200(client, monkeypatch):
     assert len(resp.json()) == 2
 
 
+# --- Tope del reporte de asistencias y de personas (issue #812) ------------
+#
+# Mismo defecto que cerró el #121 en pagos, sin replicar acá: el PDF de
+# asistencias y los dos endpoints de "nuevos por período" no tenían tope, así
+# que un rango sin filtrar se truncaba en silencio a las primeras N filas.
+# Mismo reemplazo: 422 con el número real, nunca 200 con menos filas de las
+# que matchean el filtro.
+
+
+def test_reporte_asistencia_pdf_supera_el_limite_maximo_da_422(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
+    )
+    alumno = _crear_persona(client, cedula_valida(600))
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    for fecha in ("2026-07-06", "2026-07-13", "2026-07-20"):
+        client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+
+    resp = client.get("/api/v1/asistencias/reportes/pdf", params={"horario_id": horario["id"]})
+    assert resp.status_code == 422
+    assert "2" in resp.json()["detail"]
+
+
+def test_reporte_asistencia_pdf_exactamente_en_el_limite_da_200(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
+    )
+    alumno = _crear_persona(client, cedula_valida(601))
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "MARTES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    for fecha in ("2026-07-07", "2026-07-14"):
+        client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": "PRESENTE",
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+
+    resp = client.get("/api/v1/asistencias/reportes/pdf", params={"horario_id": horario["id"]})
+    assert resp.status_code == 200
+
+
+def test_reporte_personas_supera_el_limite_maximo_da_422(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.personas_router.LIMITE_MAXIMO_REPORTE_PERSONAS", 2,
+    )
+    _crear_persona(client, cedula_valida(602))
+    _crear_persona(client, cedula_valida(603))
+    _crear_persona(client, cedula_valida(604))
+
+    resp = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo",
+        params={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
+    )
+    assert resp.status_code == 422
+    assert "2" in resp.json()["detail"]
+
+
+def test_reporte_personas_pdf_supera_el_limite_maximo_da_422(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.personas_router.LIMITE_MAXIMO_REPORTE_PERSONAS", 2,
+    )
+    _crear_persona(client, cedula_valida(605))
+    _crear_persona(client, cedula_valida(606))
+    _crear_persona(client, cedula_valida(607))
+
+    resp = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo/pdf",
+        params={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
+    )
+    assert resp.status_code == 422
+
+
+def test_reporte_personas_exactamente_en_el_limite_da_200(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.presentacion.routers.personas_router.LIMITE_MAXIMO_REPORTE_PERSONAS", 2,
+    )
+    _crear_persona(client, cedula_valida(608))
+    _crear_persona(client, cedula_valida(609))
+
+    resp = client.get(
+        "/api/v1/personas/reportes/nuevos-por-periodo",
+        params={"fecha_inicio": "2026-01-01", "fecha_fin": "2026-12-31"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+
 # --- Candado de ancho: ninguna tabla de reporte excede la página (#366) ------
 
 # Peor caso conocido de cada reporte, con los datos que el club produce de

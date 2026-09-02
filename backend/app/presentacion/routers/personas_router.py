@@ -15,6 +15,7 @@ from app.presentacion.schemas.persona_schemas import (
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.presentacion.schemas.base import PaginatedResponse
+from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
@@ -129,6 +130,15 @@ def listar_personas(
 # Rate-limited (D6-b/d): escaneo completo del rango de fechas + lista de
 # PersonaResponseDTO (PII). 20/min, mismo tier que `validar_pago`/
 # `adjuntar_comprobante` -- amplificación admin, no autoservicio.
+#
+# Tope duro (issue #812): ninguno de los dos endpoints de abajo paginaba
+# (mismo criterio deliberado que el reporte de pagos: es un documento que se
+# descarga entero, no un listado que se recorre en pantalla), así que un
+# rango sin acotar se truncaba en silencio. Mismo guardarraíl que
+# `LIMITE_MAXIMO_REPORTE_PAGOS` en `membresias_pagos_router.py`.
+LIMITE_MAXIMO_REPORTE_PERSONAS = 10000
+
+
 @router.get(
     "/reportes/nuevos-por-periodo",
     response_model=List[PersonaResponseDTO],
@@ -158,7 +168,10 @@ async def reporte_nuevos_por_periodo(
     # guarda como 00:30 UTC del día siguiente y no salía en NINGÚN preset,
     # tampoco en "Histórico completo" (cuyo `fecha_fin` también es "hoy").
     inicio, fin = rango_de_dias_club(fecha_inicio, fecha_fin)
-    return PersonaServicio(db).reporte_nuevos_por_periodo(inicio, fin)
+    servicio = PersonaServicio(db)
+    total = servicio.contar_nuevas_por_periodo(inicio, fin)
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_PERSONAS, "personas")
+    return servicio.reporte_nuevos_por_periodo(inicio, fin)
 
 
 # --- Exportación a PDF del reporte de arriba --------------------------------
@@ -195,7 +208,10 @@ async def reporte_nuevos_por_periodo_pdf(
     # (issue #761). Este endpoint arma su propio rango en vez de reusar aquel,
     # así que el defecto podía sobrevivir acá aunque allá estuviera corregido.
     inicio, fin = rango_de_dias_club(fecha_inicio, fecha_fin)
-    personas = PersonaServicio(db).reporte_nuevos_por_periodo(inicio, fin)
+    servicio = PersonaServicio(db)
+    total = servicio.contar_nuevas_por_periodo(inicio, fin)
+    exigir_tope_reporte(total, LIMITE_MAXIMO_REPORTE_PERSONAS, "personas")
+    personas = servicio.reporte_nuevos_por_periodo(inicio, fin)
     pdf_bytes = await run_in_threadpool(
         generar_reporte_pdf,
         titulo="Reporte de Nuevos Miembros por Período",
