@@ -20,12 +20,19 @@ class RecuperacionOutboxRepositorio:
             select(RecuperacionOutbox)
             .where(
                 RecuperacionOutbox.expires_at > now,
-                RecuperacionOutbox.attempts < MAX_ATTEMPTS,
                 or_(
                     and_(
                         RecuperacionOutbox.status == "PENDIENTE",
+                        RecuperacionOutbox.attempts < MAX_ATTEMPTS,
                         RecuperacionOutbox.next_attempt_at <= now,
                     ),
+                    # Sin el tope de intentos acá: una fila reclamada en su
+                    # último intento (`attempts` llega a MAX_ATTEMPTS al
+                    # reclamarla) cuyo worker muere antes de `requeue` queda
+                    # `ENVIANDO` para siempre si este branch también exige
+                    # `attempts < MAX_ATTEMPTS` -- ninguna limpieza retira
+                    # `ENVIANDO`. El siguiente `requeue` ya resuelve a
+                    # `AGOTADO` porque `attempts >= MAX_ATTEMPTS`.
                     and_(
                         RecuperacionOutbox.status == "ENVIANDO",
                         RecuperacionOutbox.claimed_at < stale,
