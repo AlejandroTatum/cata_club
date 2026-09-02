@@ -30,6 +30,7 @@ Postgres ni fixtures de conftest, solo los archivos de configuración,
 queda cubierto sin tocar `ci.yml`.
 """
 
+import ast
 import json
 import re
 import subprocess
@@ -149,6 +150,37 @@ def test_contrato_de_capas_prohibe_servicios_negocio_hacia_presentacion():
     contrato = capas[0]
     assert contrato["type"] == "forbidden"
     assert contrato["forbidden_modules"] == ["app.presentacion"]
+    assert not contrato.get("ignore_imports"), (
+        "servicios_negocio no tiene deuda declarada (#829): la lista es un "
+        "piso que solo se achica, y ya llegó a cero"
+    )
+
+
+def test_servicios_negocio_no_importa_presentacion_por_ast():
+    """`lint-imports` no corre en este archivo (ver el docstring del módulo),
+    así que este candado camina cada `.py` de `servicios_negocio` con `ast`
+    y falla ante cualquier `Import`/`ImportFrom` cuyo módulo empiece con
+    `app.presentacion`, incluidos los imports diferidos dentro de una
+    función que un grep superficial pasaría por alto (#829)."""
+    servicios_negocio = BACKEND / "app" / "servicios_negocio"
+    assert servicios_negocio.is_dir(), f"falta el directorio: {servicios_negocio}"
+
+    violaciones = []
+    for archivo in sorted(servicios_negocio.rglob("*.py")):
+        arbol = ast.parse(archivo.read_text(encoding="utf-8"), filename=str(archivo))
+        for nodo in ast.walk(arbol):
+            if isinstance(nodo, ast.Import):
+                for alias in nodo.names:
+                    if alias.name.startswith("app.presentacion"):
+                        violaciones.append(f"{archivo}: import {alias.name}")
+            elif isinstance(nodo, ast.ImportFrom):
+                if nodo.module and nodo.module.startswith("app.presentacion"):
+                    violaciones.append(f"{archivo}: from {nodo.module} import ...")
+
+    assert not violaciones, (
+        "servicios_negocio importa de la capa de presentación:\n"
+        + "\n".join(violaciones)
+    )
 
 
 def test_importlinter_declara_los_tres_contratos_de_capas():
