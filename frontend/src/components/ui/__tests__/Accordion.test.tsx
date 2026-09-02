@@ -167,3 +167,17 @@ describe("Accordion — no truncated text", () => {
     }
   });
 });
+
+// Issue #818 (WCAG 2.5.8, AA): every `/ayuda` trigger measured 524 × 20.3px —
+// wide enough already, just under the 24px height floor. `MIN_TARGET_CLASS`
+// (`min-h-[24px]`, `lib/target-size.ts`) is the project's shared class for
+// exactly this.
+describe("Accordion — the trigger clears the 24px target-size floor", () => {
+  it("gives every trigger a 24px minimum height", () => {
+    renderAccordion();
+    for (const item of ITEMS) {
+      const trigger = screen.getByRole("button", { name: item.question });
+      expect(trigger).toHaveClass("min-h-[24px]");
+    }
+  });
+});

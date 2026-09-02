@@ -59,6 +59,7 @@ import {
 import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -439,7 +440,9 @@ function Carnet({
         <button
           type="button"
           onClick={() => window.print()}
-          className="text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+          // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the button used
+          // to be exactly its text, 87 × 18.8px.
+          className={`inline-flex items-center text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink ${MIN_TARGET_CLASS}`}
         >
           Imprimir carnet
         </button>

@@ -2576,6 +2576,26 @@ describe("TrainerAttendancePage — the picker opens on today", () => {
     expect(screen.queryByRole("button", { name: /^viernes/i })).not.toBeInTheDocument();
   });
 
+  // Issue #818 (WCAG 2.5.8, AA): "Ver todos los días" measured 99 × 18.8px —
+  // bare 12px type with no padding or min-height. `MIN_TARGET_CLASS`
+  // (`min-h-[24px]`, `lib/target-size.ts`) is the project's shared floor for
+  // exactly this shape.
+  it("gives Ver todos los días a 24px minimum hit area without resizing its type", async () => {
+    pinToMonday();
+    mockFetchTrainingSchedules.mockResolvedValue([
+      sched(12, "lun", "18:00"),
+      sched(13, "vie", "20:00"),
+    ]);
+
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    const boton = await screen.findByRole("button", { name: "Ver todos los días" });
+    expect(boton).toHaveClass("min-h-[24px]");
+    expect(boton).toHaveClass("inline-flex");
+    expect(boton).toHaveClass("items-center");
+    expect(boton.className).toMatch(/\btext-xs\b/);
+  });
+
   it("shows the full week and says why when today has nothing scheduled", async () => {
     // Narrowing to an empty list would read as a broken screen on a rest day.
     vi.setSystemTime(new Date("2026-07-21T15:00:00Z")); // Tuesday

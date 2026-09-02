@@ -689,6 +689,33 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     expect(printSpy).toHaveBeenCalledTimes(1);
   });
 
+  // Issue #818 (WCAG 2.5.8, AA): "Imprimir carnet" measured 87 × 18.8px — bare
+  // 12px type with no padding or min-height. `MIN_TARGET_CLASS`
+  // (`min-h-[24px]`, `lib/target-size.ts`) is the project's shared floor for
+  // exactly this shape.
+  it("gives Imprimir carnet a 24px minimum hit area without resizing its type", async () => {
+    render(<StudentPage />);
+
+    const boton = await screen.findByRole("button", { name: /imprimir carnet/i });
+    expect(boton).toHaveClass("min-h-[24px]");
+    expect(boton).toHaveClass("inline-flex");
+    expect(boton).toHaveClass("items-center");
+    expect(boton.className).toMatch(/\btext-xs\b/);
+  });
+
+  // Issue #818 (WCAG 2.5.8, AA): "Ver pagos" (`CuotaCard`'s header link)
+  // measured 56 × 18.8px, the same bare-text shape as "Imprimir carnet" beside
+  // it.
+  it("gives Ver pagos a 24px minimum hit area without resizing its type", async () => {
+    render(<StudentPage />);
+
+    const link = await screen.findByRole("link", { name: "Ver pagos" });
+    expect(link).toHaveClass("min-h-[24px]");
+    expect(link).toHaveClass("inline-flex");
+    expect(link).toHaveClass("items-center");
+    expect(link.className).toMatch(/\btext-xs\b/);
+  });
+
   // THIS LOCK CHANGES ITS MECHANISM, not its verdict. The actions used to sit
   // INSIDE the print area and be excluded by a `print:hidden` class on their
   // own row. Under "Funda" they sit in the PANEL — the frame that belongs to

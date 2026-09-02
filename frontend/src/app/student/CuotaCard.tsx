@@ -74,6 +74,7 @@ import { AlertTriangle, ArrowRight, CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { buttonClasses, cn, DataBox } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format-utils";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import { paymentBandTone, type PaymentSituation } from "./student-utils";
 
 export interface CuotaCardProps {
@@ -186,7 +187,9 @@ export default function CuotaCard({
         <h2 className="flex-1 text-sm font-bold text-ink">Cuota</h2>
         <Link
           href={viewPagosHref}
-          className="text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+          // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the link used to
+          // be exactly its text, 56 × 18.8px.
+          className={`inline-flex items-center text-xs font-semibold text-ink-2 underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink ${MIN_TARGET_CLASS}`}
         >
           Ver pagos
         </Link>

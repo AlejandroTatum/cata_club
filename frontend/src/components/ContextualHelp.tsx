@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 interface ContextualHelpProps {
   title: string;
@@ -30,7 +31,12 @@ export default function ContextualHelp({ title, children }: ContextualHelpProps)
         // field (it was 4.59:1 on the old near-white canvas, i.e. always
         // marginal). Ink plus an underline says "control" without spending
         // the CTA colour on a disclosure toggle: 7.16:1 on canvas.
-        className="text-xs font-semibold text-ink-2 underline underline-offset-2 hover:text-ink"
+        //
+        // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the control used to
+        // be exactly its text, 56 × 18.8px. `inline-flex items-center` shares
+        // the extra height above and below the label instead of pushing it
+        // down, so the type keeps its size and position.
+        className={`inline-flex items-center text-xs font-semibold text-ink-2 underline underline-offset-2 hover:text-ink ${MIN_TARGET_CLASS}`}
       >
         {isOpen ? "Ocultar ayuda" : "Ver ayuda"}
       </button>

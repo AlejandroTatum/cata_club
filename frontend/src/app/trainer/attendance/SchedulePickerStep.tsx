@@ -1,6 +1,7 @@
 import { Calendar } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { EmptyState } from "@/components/ui";
+import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import {
   formatDay,
   groupSchedulesByDay,
@@ -79,7 +80,9 @@ export default function SchedulePickerStep({
             <button
               type="button"
               onClick={onToggleShowAllDays}
-              className="text-xs font-semibold text-ink-2 underline underline-offset-2 transition-colors hover:text-ink"
+              // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the button
+              // used to be exactly its text, 99 × 18.8px.
+              className={`inline-flex items-center text-xs font-semibold text-ink-2 underline underline-offset-2 transition-colors hover:text-ink ${MIN_TARGET_CLASS}`}
             >
               {showAllDays ? "Ver solo hoy" : "Ver todos los días"}
             </button>
