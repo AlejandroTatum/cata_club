@@ -61,6 +61,34 @@ def test_stale_lease_es_reclamable(db_session):
     assert reclamado.attempts == 1
 
 
+def test_enviando_huerfana_en_el_ultimo_intento_es_reclamable(db_session):
+    """Issue #791 (bullet no bloqueante): `attempts` llega a `MAX_ATTEMPTS`
+    en el reclamo que agota los intentos. Si el worker muere antes de
+    `requeue`, la fila queda `ENVIANDO` con el lease vencido -- y ninguna
+    limpieza retira `ENVIANDO`. Tiene que seguir siendo reclamable pase lo
+    que pase con `attempts`; el siguiente `requeue` ya la agota."""
+    usuario = _usuario(db_session, cedula_valida(4))
+    evento = RecuperacionOutbox(
+        usuario_id=usuario.id,
+        status="ENVIANDO",
+        attempts=6,
+        claimed_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    db_session.add(evento)
+    db_session.commit()
+
+    repo = RecuperacionOutboxRepositorio(db_session)
+    reclamado = repo.claim_pending(lease_minutes=10)
+
+    assert reclamado is not None, "la fila huérfana quedó fuera del reclamo"
+    assert reclamado.id == evento.id
+    assert reclamado.status == "ENVIANDO"
+
+    repo.requeue(reclamado, Exception("smtp caído"))
+    assert reclamado.status == "AGOTADO"
+
+
 def test_requeue_aplica_backoff_y_agota_en_sexto_intento(db_session):
     usuario = _usuario(db_session, cedula_valida(3))
     evento = RecuperacionOutbox(

@@ -185,6 +185,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`
     ("PATCH", "/fichas-medicas/persona/{persona_id}"),           # (b) - admin o representante, SIN el titular
+    ("PATCH", "/ranking/notificaciones/leer-todas"),             # (b) - propio via `persona_id` del token
     ("PATCH", "/ranking/notificaciones/{notificacion_id}/leer"), # (b) - propio via `persona_id` del token
     ("POST", "/auth/me/foto"),                                   # (b) - propio via `sub`
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`

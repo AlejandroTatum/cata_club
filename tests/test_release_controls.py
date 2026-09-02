@@ -18,6 +18,11 @@ ROOT = Path(__file__).resolve().parent.parent
 # binario `age` en tests/test_backup_controls.py.
 DESTINATARIO_DE_PRUEBA = "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsxxxxxx"
 
+# Segundo destinatario de mentira, para los tests que exigen DOS identidades
+# `age` (issue #791): una sola es un solo punto de fallo sobre el histórico
+# entero de backups.
+SEGUNDO_DESTINATARIO_DE_PRUEBA = "age1pppppppppppppppppppppppppppppppppppppppppppppppppzzzzzz"
+
 # URL de heartbeat de mentira. El token va en el path, así que si estos bytes
 # aparecen en el crontab es porque `install-cron` los escribió ahí -- y
 # `crontab -l` lo lista sin privilegios. `.invalid` es un TLD reservado
@@ -256,8 +261,13 @@ def _stub_crontab(bin_dir: Path) -> None:
 
 def _entorno_install_cron(tmp_path, bin_dir: Path, **extra: str) -> dict[str, str]:
     """Entorno hermético de `install-cron`: nada mira el /etc real de la máquina."""
+    # DOS destinatarios por default (issue #791): `install-cron` exige un
+    # segundo desde que una sola identidad age deja todo el histórico de
+    # backups sin recuperación posible si esa identidad se pierde. Los tests
+    # que quieren ejercer específicamente ese candado pasan su propio
+    # `BACKUP_AGE_RECIPIENTS_FILE` con un solo destinatario.
     destinatarios = tmp_path / "backup-recipients.txt"
-    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
+    destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n{SEGUNDO_DESTINATARIO_DE_PRUEBA}\n")
     heartbeat = tmp_path / "heartbeat-url.txt"
     heartbeat.write_text(f"{URL_DE_HEARTBEAT_DE_PRUEBA}\n")
     entorno = {
@@ -1561,6 +1571,62 @@ def test_rollback_persists_the_target_sha_to_env_and_current_ledger(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "IMAGE_TAG=deadbee" in (stack / ".env").read_text()
     assert "IMAGE_TAG=deadbee" in (records / "current.env").read_text()
+
+
+def test_install_cron_se_niega_si_hay_un_solo_destinatario_de_cifrado(tmp_path):
+    """Una sola identidad `age` es un solo punto de fallo sobre el histórico
+    entero de backups (issue #791): si esa identidad se pierde (droplet
+    robado, gestor de contraseñas comprometido), todo lo cifrado con ella
+    queda irrecuperable. Se exige acá, con el operador todavía en la
+    terminal, igual que el resto de las compuertas de `install-cron`.
+    """
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    un_solo_destinatario = tmp_path / "un-solo-destinatario.txt"
+    un_solo_destinatario.write_text(f"{DESTINATARIO_DE_PRUEBA}\n")
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path,
+            bin_dir,
+            BACKUP_AGE_RECIPIENTS_FILE=str(un_solo_destinatario),
+        ),
+    )
+
+    assert result.returncode != 0
+    assert "segundo destinatario" in result.stderr
+    assert not cron_file.exists(), "no se instala un cron con un solo destinatario de cifrado"
+
+
+def test_install_cron_instala_con_dos_destinatarios_de_cifrado(tmp_path):
+    """La compuerta anterior no puede bloquear el caso que existe para servir."""
+    cron_file = tmp_path / "crontab"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+    dos_destinatarios = tmp_path / "dos-destinatarios.txt"
+    dos_destinatarios.write_text(f"{DESTINATARIO_DE_PRUEBA}\n{SEGUNDO_DESTINATARIO_DE_PRUEBA}\n")
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(
+            tmp_path,
+            bin_dir,
+            BACKUP_AGE_RECIPIENTS_FILE=str(dos_destinatarios),
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "backup-db.sh" in cron_file.read_text()
 
 
 def test_install_cron_se_niega_si_el_cifrado_no_esta_configurado(tmp_path):

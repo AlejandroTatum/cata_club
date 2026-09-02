@@ -122,6 +122,18 @@ if [ "${#DESTINATARIOS[@]}" -eq 0 ]; then
   CIFRAR=0
 fi
 
+# Un solo destinatario `age` en producción es un solo punto de fallo sobre el
+# histórico entero de backups (issue #791): perder esa identidad privada
+# vuelve irrecuperable todo lo cifrado con ella. Esto SOLO avisa, no falla:
+# este script corre a las 03:30 sin nadie mirando, y el dump pre-deploy de
+# `deploy.sh` corre en medio de un release -- fallar ACÁ dejaría de producir
+# el backup del día por un problema que no es del día. El fail-closed real
+# vive en `deploy.sh install-cron`, que corre con el operador en la terminal.
+if [ "$CIFRAR" = "1" ] && [ "${#DESTINATARIOS[@]}" -eq 1 ] && es_produccion; then
+  log "AVISO: un solo destinatario de cifrado configurado (${ORIGEN_DESTINATARIOS})."
+  log "AVISO: perder esa identidad privada vuelve irrecuperable TODO el histórico de backups. Agregá un segundo destinatario."
+fi
+
 STAMP="$(date +%F)"
 if [ "$CIFRAR" = "1" ]; then
   DUMP_FINAL="${BACKUP_DIR}/cataclub_${STAMP}.dump.age"

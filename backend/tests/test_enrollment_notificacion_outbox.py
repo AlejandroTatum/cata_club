@@ -118,6 +118,30 @@ def test_dispatcher_fallo_de_broker_reencola(monkeypatch, db_session):
     assert db_session.query(Notificacion).filter_by(enrollment_outbox_id=event_id).count() == 0
 
 
+def test_enviando_huerfana_en_el_ultimo_intento_es_reclamable(db_session):
+    """Issue #791 (bullet no bloqueante): `attempts` llega a `MAX_ATTEMPTS`
+    en el reclamo que agota los intentos. Si el worker muere antes de
+    `requeue`, la fila queda `ENVIANDO` con el lease vencido -- y ninguna
+    limpieza retira `ENVIANDO`. Tiene que seguir siendo reclamable pase lo
+    que pase con `attempts`; el siguiente `requeue` ya la agota."""
+    event = _evento(
+        db_session,
+        status="ENVIANDO",
+        attempts=MAX_ATTEMPTS,
+        claimed_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+    )
+    repo = EnrollmentNotificacionOutboxRepositorio(db_session)
+
+    reclamado = repo.claim_pending(lease_minutes=10)
+
+    assert reclamado is not None, "la fila huérfana quedó fuera del reclamo"
+    assert reclamado.id == event.id
+    assert reclamado.status == "ENVIANDO"
+
+    repo.requeue(reclamado, Exception("smtp caído"))
+    assert reclamado.status == "AGOTADO"
+
+
 def test_claim_recupera_lease_vencido(db_session):
     event = _evento(
         db_session,

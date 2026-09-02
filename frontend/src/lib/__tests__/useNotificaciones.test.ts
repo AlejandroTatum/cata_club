@@ -13,10 +13,12 @@ import type { Notificacion } from "@/types/domain";
 
 const mockFetchNotificaciones = vi.fn();
 const mockMarcarNotificacionLeida = vi.fn();
+const mockMarcarTodasNotificacionesLeidas = vi.fn();
 
 vi.mock("@/services/api", () => ({
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
+  marcarTodasNotificacionesLeidas: () => mockMarcarTodasNotificacionesLeidas(),
 }));
 
 function makeNotificacion(overrides: Partial<Notificacion> = {}): Notificacion {
@@ -44,6 +46,7 @@ describe("useNotificaciones", (): void => {
   beforeEach((): void => {
     mockFetchNotificaciones.mockReset().mockResolvedValue(makePaginated([]));
     mockMarcarNotificacionLeida.mockReset().mockResolvedValue(undefined);
+    mockMarcarTodasNotificacionesLeidas.mockReset().mockResolvedValue({ actualizadas: 0 });
   });
 
   it("does not fetch when disabled", (): void => {
@@ -98,5 +101,69 @@ describe("useNotificaciones", (): void => {
     expect(result.current.notificaciones[0]?.leida).toBe(true);
 
     await waitFor(() => expect(result.current.notificaciones[0]?.leida).toBe(false));
+  });
+
+  it("does not call the API when there are no unread notifications", async (): Promise<void> => {
+    mockFetchNotificaciones.mockResolvedValue(makePaginated([makeNotificacion({ id: 1, leida: true })]));
+
+    const { result } = renderHook(() => useNotificaciones(true));
+    await waitFor(() => expect(result.current.notificaciones).toHaveLength(1));
+
+    act(() => {
+      result.current.marcarTodasLeidas();
+    });
+
+    expect(mockMarcarTodasNotificacionesLeidas).not.toHaveBeenCalled();
+  });
+
+  it("optimistically marks every notification read, and reflects the in-flight state", async (): Promise<void> => {
+    mockFetchNotificaciones.mockResolvedValue(
+      makePaginated([
+        makeNotificacion({ id: 1, leida: false }),
+        makeNotificacion({ id: 2, leida: false }),
+      ]),
+    );
+    let resolver: (value: { actualizadas: number }) => void = () => {};
+    mockMarcarTodasNotificacionesLeidas.mockReturnValue(
+      new Promise((resolve) => {
+        resolver = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => useNotificaciones(true));
+    await waitFor(() => expect(result.current.notificaciones).toHaveLength(2));
+
+    act(() => {
+      result.current.marcarTodasLeidas();
+    });
+
+    expect(result.current.notificaciones.every((n) => n.leida)).toBe(true);
+    expect(result.current.marcandoTodas).toBe(true);
+
+    await act(async () => {
+      resolver({ actualizadas: 2 });
+    });
+
+    await waitFor(() => expect(result.current.marcandoTodas).toBe(false));
+  });
+
+  it("rolls back and reports an error when marking all read fails", async (): Promise<void> => {
+    mockFetchNotificaciones.mockResolvedValue(
+      makePaginated([makeNotificacion({ id: 1, leida: false })]),
+    );
+    mockMarcarTodasNotificacionesLeidas.mockRejectedValue(new Error("network down"));
+
+    const { result } = renderHook(() => useNotificaciones(true));
+    await waitFor(() => expect(result.current.notificaciones).toHaveLength(1));
+
+    act(() => {
+      result.current.marcarTodasLeidas();
+    });
+
+    expect(result.current.notificaciones[0]?.leida).toBe(true);
+
+    await waitFor(() => expect(result.current.notificaciones[0]?.leida).toBe(false));
+    expect(result.current.marcandoTodas).toBe(false);
+    expect(result.current.errorMarcarTodas).toBe(true);
   });
 });
