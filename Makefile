@@ -103,8 +103,9 @@ test-diagnostico-horarios: ## Test the schedules revision diagnostic script
 # ─── Linting ────────────────────────────────────────────────────────────────
 lint: lint-backend lint-frontend ## Lint both projects
 
-lint-backend: ## Lint backend (ruff)
+lint-backend: ## Lint backend (ruff + import-linter)
 	cd backend && uv run ruff check .
+	cd backend && uv run lint-imports
 
 lint-frontend: ## Lint frontend (next lint)
 	cd frontend && pnpm lint

@@ -87,7 +87,8 @@ jobs:
 
       - name: Install dependencies
         # --no-build: instala solo wheels, sin ejecutar setup scripts de
-        # sdists. Verificado que los 75 paquetes del lock resuelven a wheels.
+        # sdists. Verificado que los 78 paquetes del lock resuelven a wheels
+        # (incluye import-linter y grimp, agregados en #832).
         run: uv sync --frozen --no-build
 
       - name: Lint
@@ -95,6 +96,13 @@ jobs:
         # los viera: el workflow solo linteaba el frontend. La config vive en
         # backend/pyproject.toml ([tool.ruff]).
         run: uv run --frozen --no-build ruff check .
+
+      - name: Lint imports
+        # El contrato de capas vive en backend/pyproject.toml
+        # ([tool.importlinter]): sin este paso corriendo en CI, una nueva
+        # violacion de la direccion de dependencias no pone nada en rojo
+        # (issue #832).
+        run: uv run --frozen --no-build lint-imports
 
       - name: Run tests
         # Solo TEST_DATABASE_URL. `AMBIENTE` y `JWT_SECRET_KEY` los pone
