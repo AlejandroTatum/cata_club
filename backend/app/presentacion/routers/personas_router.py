@@ -10,7 +10,7 @@ from app.soporte_transversal.tiempo import hoy_club, rango_de_dias_club
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.presentacion.schemas.persona_schemas import (
-    PersonaCreateDTO, PersonaResponseDTO, PersonaUpdateDTO,
+    PersonaCreateDTO, PersonaResponseDTO, PersonaListItemDTO, PersonaUpdateDTO,
     PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO, EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
@@ -96,7 +96,12 @@ async def registrar_persona(persona_in: PersonaCreateDTO, db: Session = Depends(
 # a admins. Único consumidor real es la página admin de Miembros.
 @router.get(
     "/",
-    response_model=PaginatedResponse[PersonaResponseDTO],
+    # Issue #869 (hallazgo en vivo, PR #972): `PersonaListItemDTO`, no
+    # `PersonaResponseDTO` -- este es el ÚNICO endpoint cuyo repositorio
+    # (`PersonaRepositorio.listar`) hace `joinedload(Persona.usuario)`, así
+    # que es el único lector seguro de `cuenta_activa`. Ver el docstring de
+    # `PersonaListItemDTO` en `persona_schemas.py`.
+    response_model=PaginatedResponse[PersonaListItemDTO],
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 # `skip`/`limit` eran defaults planos de Python (sin `Query(...)`, sin `ge=`

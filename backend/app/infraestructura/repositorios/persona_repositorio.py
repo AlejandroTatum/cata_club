@@ -47,7 +47,7 @@ class PersonaRepositorio:
     # ninguna forma de volver a encontrarlas para reactivarlas. El DTO expone
     # `activo` para que la UI las pueda marcar.
     #
-    # `joinedload(Persona.usuario)` (issue #869): `PersonaResponseDTO.
+    # `joinedload(Persona.usuario)` (issue #869): `PersonaListItemDTO.
     # cuenta_activa` lee `Persona.usuario.activo` por cada fila -- sin este
     # eager load esa relación to-one es lazy, y tocarla una vez por persona
     # convierte el listado en un SELECT por fila (N+1). Con el JOIN sigue

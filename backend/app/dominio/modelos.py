@@ -19,7 +19,7 @@ from typing import List, Optional
 from sqlalchemy import (
     String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
     CheckConstraint, Index, UniqueConstraint, text, func, event,
-    Enum as SAEnum,
+    Enum as SAEnum, inspect as inspeccionar_orm,
 )
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
@@ -609,14 +609,29 @@ class Persona(Base):
     def cuenta_activa(self) -> Optional[bool]:
         """Estado de ACCESO de esta persona -- `Usuario.activo`, el mismo
         flag que decide el login (`AuthServicio.login`) -- expuesto como
-        `cuentaActiva` en `PersonaResponseDTO` (issue #869, from_attributes).
+        `cuentaActiva` en `PersonaListItemDTO` (issue #869, from_attributes).
         `None` cuando la persona no tiene `Usuario` ("sin cuenta"): un menor
         representado sin credenciales propias. Nunca se infiere de `activo`
         arriba (pertenencia al club) ni de ninguna membresía -- son tres
-        planos distintos. Mismo criterio de eager-load que
-        `AsistenciaEntrenamiento.registrado_por_nombre`: `Persona.usuario` va
-        joinedloaded en `PersonaRepositorio.listar` (evita N+1); en un
-        `GET /personas/{id}` (una sola fila) se resuelve por lazy load."""
+        planos distintos.
+
+        GUARDIA (hallazgo en vivo, PR #972): esta propiedad NUNCA dispara un
+        SELECT propio. Antes leía `self.usuario` sin condición -- si la
+        relación no estaba cargada, el lazy load corría donde sea que
+        alguien tocara el atributo, y eso incluye la serialización de
+        FastAPI en el hilo del EVENT LOOP, después de que el handler salió
+        de `run_in_threadpool` (#826, el mismo defecto que
+        `PersonaServicio.crear_representado` ya evita para el resto de la
+        fila). `PersonaRepositorio.listar` es el ÚNICO lector soportado: ahí
+        `usuario` va `joinedload`eado, así que `"usuario" not in unloaded` y
+        la propiedad devuelve el valor real. En cualquier otro camino (un
+        `GET /personas/{id}` sin ese joinedload, o un objeto recién creado)
+        la relación sigue sin cargar y esto devuelve `None` en vez de
+        lazy-loadear -- "no sé" en lugar de una consulta inesperada. Ver
+        `test_cuenta_activa_no_dispara_select_si_usuario_no_esta_cargado`
+        (`tests/test_subidas_y_hasheos_no_bloqueantes.py`)."""
+        if "usuario" in inspeccionar_orm(self).unloaded:
+            return None
         return self.usuario.activo if self.usuario is not None else None
 
 
