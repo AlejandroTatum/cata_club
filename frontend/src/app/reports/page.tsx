@@ -112,6 +112,7 @@ import {
   FilterPill,
   LoadingState,
   Pagination,
+  ScrollableTable,
   Table,
   TableBody,
   TableCell,
@@ -754,7 +755,7 @@ function PersonaPreview({
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <ScrollableTable label="Listado de personas, tabla desplazable">
       <Table>
         <TableHead>
           <tr>
@@ -777,7 +778,7 @@ function PersonaPreview({
           ))}
         </TableBody>
       </Table>
-    </div>
+    </ScrollableTable>
   );
 }
 
@@ -803,7 +804,7 @@ function AsistenciaPreview({
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <ScrollableTable label="Listado de asistencia, tabla desplazable">
       <Table>
         <TableHead>
           <tr>
@@ -828,7 +829,7 @@ function AsistenciaPreview({
           ))}
         </TableBody>
       </Table>
-    </div>
+    </ScrollableTable>
   );
 }
 
@@ -854,7 +855,7 @@ function PagosPreview({
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <ScrollableTable label="Listado de pagos, tabla desplazable">
       <Table>
         <TableHead>
           <tr>
@@ -885,6 +886,6 @@ function PagosPreview({
           ))}
         </TableBody>
       </Table>
-    </div>
+    </ScrollableTable>
   );
 }

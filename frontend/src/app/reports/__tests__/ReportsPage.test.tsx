@@ -798,3 +798,53 @@ describe("ReportsPage — Descargar CSV", () => {
     expect(await downloadedCsv()).toContain("Estudiante,Responsable de pago");
   });
 });
+
+/**
+ * #821 — the mobile listing container scrolls horizontally but held nothing
+ * focusable, so a keyboard user had no way to reach or scroll it: axe flags
+ * this as `scrollable-region-focusable` (serious). jsdom cannot compute
+ * overflow, so the lock is the container's attributes, not the scroll itself.
+ */
+describe("ReportsPage — the listing container is keyboard-reachable (#821)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchTrainingSchedules.mockResolvedValue([]);
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockFetchPagosReporte.mockResolvedValue([]);
+    mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
+  });
+
+  it("makes the período listing focusable and named for assistive tech", async () => {
+    mockFetchNuevosPorPeriodo.mockResolvedValue([PERSONA]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchNuevosPorPeriodo).toHaveBeenCalled());
+
+    const region = await screen.findByRole("region", { name: /tabla desplazable/i });
+    expect(region).toHaveAttribute("tabIndex", "0");
+  });
+
+  it("makes the asistencia listing focusable and named for assistive tech", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([ATTENDANCE_RECORD]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/asistencia/i);
+    await waitFor(() => expect(mockFetchAttendanceRecords).toHaveBeenCalled());
+
+    const region = await screen.findByRole("region", { name: /tabla desplazable/i });
+    expect(region).toHaveAttribute("tabIndex", "0");
+  });
+
+  it("makes the pagos listing focusable and named for assistive tech", async () => {
+    mockFetchPagosReporte.mockResolvedValue([PAGO]);
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    choosePreset(/pagos/i);
+    await waitFor(() => expect(mockFetchPagosReporte).toHaveBeenCalled());
+
+    const region = await screen.findByRole("region", { name: /tabla desplazable/i });
+    expect(region).toHaveAttribute("tabIndex", "0");
+  });
+});

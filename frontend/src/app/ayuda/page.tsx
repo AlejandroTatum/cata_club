@@ -17,7 +17,7 @@ import { Dumbbell, HelpCircle, Rocket, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
-import { Accordion, BackLink, Button } from "@/components/ui";
+import { Accordion, BackLink, Button, ScrollableTable } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
 import { openHelpChat } from "@/components/chatbot/help-chat-store";
@@ -116,7 +116,7 @@ export default function AyudaPage(): React.ReactElement {
           Días y horas fijos del club, por categoría.
         </p>
 
-        <div className="overflow-x-auto">
+        <ScrollableTable label="Horarios, tabla desplazable">
           <table className="w-full min-w-[420px] border-collapse text-left">
             <thead>
               <tr className="border-b border-line">
@@ -149,7 +149,7 @@ export default function AyudaPage(): React.ReactElement {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
 
         {/*
          * #315 hallazgo #48: this table cannot be reconciled with a reader's
