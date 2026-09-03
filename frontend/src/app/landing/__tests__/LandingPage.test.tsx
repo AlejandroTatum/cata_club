@@ -674,10 +674,11 @@ describe("LandingPage", (): void => {
       expect(slides[0]).toHaveStyle({ objectPosition: HERO_PHOTOS[0].objectPosition });
     });
 
-    // Round 2 of human review on PR #870: the buttons moved from a footer bar
-    // below the photo to the photo's own left/right edges, and the now-empty
-    // bar container was retired along with its CSS.
-    it("places the navigation buttons beside the photo, not in the retired bottom bar", (): void => {
+    // Round 3 of human review on PR #870: the arrows must not touch the
+    // photo at all, so they moved out of the frame entirely and became its
+    // siblings inside a carousel wrapper that reserves real column space
+    // for each one — the now-empty bar container from round 1 stays retired.
+    it("places the navigation buttons beside the photo frame, never inside it", (): void => {
       render(<LandingPage />);
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
@@ -685,8 +686,10 @@ describe("LandingPage", (): void => {
       const prev = within(hero).getByRole("button", { name: "Foto anterior" });
       const next = within(hero).getByRole("button", { name: "Foto siguiente" });
 
-      expect(prev.parentElement).toBe(frame);
-      expect(next.parentElement).toBe(frame);
+      expect(frame.contains(prev)).toBe(false);
+      expect(frame.contains(next)).toBe(false);
+      expect(prev.parentElement).toBe(frame.parentElement);
+      expect(next.parentElement).toBe(frame.parentElement);
       expect(hero.querySelector(".landing-hero-screen-bar")).not.toBeInTheDocument();
       expect(hero.querySelector(".landing-hero-screen-dots")).not.toBeInTheDocument();
     });

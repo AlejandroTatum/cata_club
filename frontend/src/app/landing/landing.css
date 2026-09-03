@@ -158,23 +158,26 @@
 .landing-hero-slide[data-active="true"] { clip-path: inset(0% 0% 0% 0%); opacity: 1; }
 /* The crossing ball inside the screen during a tab switch; GSAP animates it in. */
 .landing-hero-frameball { position: absolute; left: 0; top: 0; z-index: 5; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--landing-ball); box-shadow: 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 55%, transparent), inset -4px -5px 0 color-mix(in srgb, var(--landing-brand-black) 14%, transparent); opacity: 0; pointer-events: none; }
-/* Round 2 of human review on PR #870: the arrows sit centred on the photo's
-   own left/right edge, straddling the frame's 14px bezel — the classic
-   carousel placement — rather than in a bar below it. The frame (not the
-   screen) hosts them because the screen clips at its own edge with
-   `overflow: hidden`, which would cut the half that pokes past the photo.
-   14px matches `.landing-hero-frame`'s own padding, so the button's centre
-   lands exactly on the photo's border regardless of viewport; the 8px that
-   spills past the frame stays well inside the smallest gutter (24px). */
+/* Round 3 of human review on PR #870: the arrows must not touch the photo at
+   all, so the frame's own box can no longer be the only thing in this
+   column — `.landing-hero-carousel` is a small grid that reserves real
+   column space for each arrow instead of overlaying them, which is what let
+   them straddle the border in round 2. Below 768px (the breakpoint the hero
+   itself already stacks at) that reserved space would cost the photo more
+   width than it has to spare, so the grid re-flows: the frame keeps the
+   full row and both arrows move to a centred row underneath instead. */
+.landing-hero-carousel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "prev frame next"; align-items: center; gap: 16px; }
+.landing-hero-carousel .landing-hero-frame { grid-area: frame; min-width: 0; }
+.landing-hero-nav-prev { grid-area: prev; }
+.landing-hero-nav-next { grid-area: next; }
 /* @touch-target Matches the 44px floor every other tappable control here uses. */
-.landing-hero-nav { position: absolute; z-index: 6; top: 50%; left: 14px; display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); border: 1px solid color-mix(in srgb, var(--landing-surface) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--landing-brand-black) 82%, transparent); color: var(--landing-surface); cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
+.landing-hero-nav { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--landing-brand-black) 82%, transparent); color: var(--landing-surface); cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
 .landing-hero-nav:hover { background: var(--landing-highlight); border-color: var(--landing-highlight); color: var(--landing-on-highlight); }
 /* `--landing-focus` is near-black, invisible against this button's own
    near-black rest state — swapped for the hero's existing yellow accent
    (already the screen's own ring colour) so the ring reads over the photo,
    the bezel and the button's dark fill alike. */
 .landing-hero-nav:focus-visible { outline: 3px solid var(--landing-highlight); outline-offset: 3px; }
-.landing-hero-nav-next { left: calc(100% - 14px); }
 .landing-hero-nav svg { width: 18px; height: 18px; }
 /* The serve: a ball resting on the club's paddle, bottom-right of the hero.
    ONE anchor drives both. The paddle sits on `--landing-serve-y`; the ball's
@@ -549,6 +552,13 @@
      The bottom stays at 64px so the section still ends up ~46px shorter. */
   .landing-hero { min-height: auto; grid-template-columns: 1fr; padding: 80px var(--landing-gutter) 64px; }
   .landing-hero-copy { align-items: flex-start; }
+  /* Reserving side columns here would eat into the one thing this breakpoint
+     was meant to give the photo back: its full stacked-row width. The frame
+     keeps that whole row and the arrows drop to a centred row underneath,
+     never touching the photo either way. */
+  .landing-hero-carousel { grid-template-columns: 1fr 1fr; grid-template-areas: "frame frame" "prev next"; row-gap: 14px; }
+  .landing-hero-nav-prev { justify-self: end; }
+  .landing-hero-nav-next { justify-self: start; }
   .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 12px; padding: 42px 20px; }
   .landing-stat strong { font-size: 38px; }
   .landing-page { --landing-gutter: 24px; }

@@ -82,27 +82,7 @@ export default function HeroCarousel(): React.ReactElement {
   };
 
   return (
-    <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
-      <div className="landing-hero-screen">
-        <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
-        {HERO_PHOTOS.map((photo, index): React.ReactElement => (
-          <Image
-            key={photo.src}
-            className="landing-hero-slide"
-            src={photo.src}
-            alt={photo.alt}
-            fill
-            priority={index === 0}
-            loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
-            quality={90}
-            sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
-            style={{ objectPosition: photo.objectPosition }}
-            data-slide={index}
-            data-active={index === current}
-            aria-hidden={index === current ? undefined : true}
-          />
-        ))}
-      </div>
+    <div className="landing-hero-carousel">
       <button
         type="button"
         className="landing-hero-nav landing-hero-nav-prev"
@@ -111,6 +91,28 @@ export default function HeroCarousel(): React.ReactElement {
       >
         <ChevronLeft aria-hidden="true" />
       </button>
+      <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
+        <div className="landing-hero-screen">
+          <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
+          {HERO_PHOTOS.map((photo, index): React.ReactElement => (
+            <Image
+              key={photo.src}
+              className="landing-hero-slide"
+              src={photo.src}
+              alt={photo.alt}
+              fill
+              priority={index === 0}
+              loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
+              quality={90}
+              sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
+              style={{ objectPosition: photo.objectPosition }}
+              data-slide={index}
+              data-active={index === current}
+              aria-hidden={index === current ? undefined : true}
+            />
+          ))}
+        </div>
+      </div>
       <button
         type="button"
         className="landing-hero-nav landing-hero-nav-next"
