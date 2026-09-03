@@ -230,10 +230,20 @@
 .landing-value-row, .landing-location-row { display: flex; width: 100%; gap: 24px; }
 
 /* Editorial blocks. Rank comes from an index, a scale jump and one rule —
-   no tinted icon chip, and no <hr> pretending to be structure. */
-.landing-editorial { display: grid; width: 100%; grid-template-columns: 1fr 1fr; }
-.landing-editorial-item { padding-right: 44px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: center; }
-.landing-editorial-item + .landing-editorial-item { padding-right: 0; padding-left: 44px; border-left: 1px solid var(--landing-border); }
+   no tinted icon chip, and no <hr> pretending to be structure.
+
+   Issue #863: the two halves used to centre their own copy independently
+   (`align-items: center`, computed per item) and the divider was a
+   `border-left` on the second `.landing-editorial-item` — a column's
+   property standing in for the wrapper's. Both are now anchored on
+   `.landing-editorial` itself: `align-items: start` top-aligns text on both
+   sides regardless of which copy runs longer, and the divider is its own
+   direct child (`.landing-editorial-divider`), stretched full-height and
+   held exactly centred by two equal `1fr` tracks either side of it — never a
+   property of either half. */
+.landing-editorial { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 44px; align-items: start; }
+.landing-editorial-divider { align-self: stretch; width: 1px; background: var(--landing-border); }
+.landing-editorial-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: start; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
 .landing-index-label { color: var(--landing-text-muted); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
 .landing-index-label::before { content: "—"; margin: 0 8px; }
@@ -283,7 +293,7 @@
 .landing-section#nosotros .landing-editorial-item h3,
 .landing-section#nosotros .landing-editorial-item p,
 .landing-section#nosotros .landing-lead { color: var(--landing-surface); }
-.landing-section#nosotros .landing-editorial-item + .landing-editorial-item { border-color: color-mix(in srgb, var(--landing-surface) 22%, transparent); }
+.landing-section#nosotros .landing-editorial-divider { background: color-mix(in srgb, var(--landing-surface) 22%, transparent); }
 .landing-section#nosotros .landing-editorial-media { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 16%, transparent); }
 
 /* On the yellow ground the accents invert: text/guides become brand black
@@ -566,15 +576,16 @@
   .landing-section, .landing-footer { padding: 64px 24px; }
   .landing-location-row { flex-direction: column; }
   .landing-value-row { grid-template-columns: 1fr; }
-  /* Stacked, the divider has to move to the top edge or it draws a rule down
-     the side of a single column. */
-  .landing-editorial { grid-template-columns: 1fr; }
+  /* Stacked, the divider has to turn from a vertical rule between two
+     columns into a horizontal one between two rows — the wrapper's own
+     `row-gap` opens the space on both of its sides, so the line still reads
+     as owned by the wrapper rather than by whichever half stacks first. */
+  .landing-editorial { grid-template-columns: 1fr; row-gap: 34px; }
   .landing-editorial-item { grid-template-columns: 1fr; gap: 26px; }
+  .landing-editorial-divider { width: 100%; height: 1px; align-self: auto; }
   .landing-sched { grid-template-columns: 1fr; gap: 30px; }
   .landing-sched-panel { padding: 26px; }
       .landing-day-row { grid-template-columns: 82px minmax(0, 1fr); gap: 10px; }
-  .landing-editorial-item { padding-right: 0; }
-  .landing-editorial-item + .landing-editorial-item { margin-top: 34px; padding-top: 34px; padding-left: 0; border-top: 1px solid var(--landing-border); border-left: 0; }
   .landing-motto { padding-inline: 28px; }
   .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-map-stage { width: 100%; min-height: 348px; height: 348px; flex: none; }
