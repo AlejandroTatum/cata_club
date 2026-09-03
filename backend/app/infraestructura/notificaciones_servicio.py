@@ -29,6 +29,10 @@ from app.soporte_transversal.resiliencia import (
 
 logger = logging.getLogger("cataclub.notificaciones")
 
+# Identidad de remitente de las cuatro superficies de correo transaccional
+# (issue #898). Ronda 2: solo texto -- no cambia estructura MIME ni maquetado.
+NOMBRE_REMITENTE = "Cata Club"
+
 
 # Los errores de SMTP pueden repetir el usuario o la contraseña que el cliente
 # intentó usar. Antes de ponerlos en un log o en un detalle técnico, se eliminan
@@ -181,7 +185,11 @@ class ServicioNotificaciones:
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = asunto
-        msg["From"] = self._from
+        # Cabecera VISIBLE con identidad de marca (issue #898): "Cata Club
+        # <SMTP_FROM>". El sobre SMTP (`sendmail`, abajo) sigue usando
+        # `self._from` -- la dirección cruda -- sin cambios: eso es MAIL
+        # FROM, no lo que el cliente de correo muestra.
+        msg["From"] = f"{NOMBRE_REMITENTE} <{self._from}>"
         msg["To"] = destinatario
         msg.attach(MIMEText(cuerpo_texto, "plain", "utf-8"))
         if cuerpo_html:
@@ -241,13 +249,18 @@ class ServicioNotificaciones:
         logger.info("Correo enviado a %s con asunto '%s'", destinatario, asunto)
 
     def enviar_recuperacion_contrasenia(self, correo: str, token: str) -> None:
-        """Envía el enlace de restablecimiento de contraseña al usuario."""
+        """Envía el enlace de restablecimiento de contraseña al usuario.
+
+        Ronda 2 del issue #898: solo texto (asunto, aclaración de "un solo
+        uso") sobre la misma estructura MIME/HTML que ya existía -- sin
+        layout nuevo."""
         enlace = f"{self._frontend_url}/reset-password?token={token}"
-        asunto = "Recuperación de contraseña - Cata Club"
+        asunto = "Cata Club | Recuperación de contraseña"
         texto = (
             f"Hola,\n\n"
             f"Recibimos una solicitud para restablecer su contraseña en Cata Club.\n"
-            f"Puede hacerlo haciendo clic en el siguiente enlace (válido por 30 minutos):\n\n"
+            f"Puede hacerlo haciendo clic en el siguiente enlace, válido por 30 "
+            f"minutos y de un solo uso:\n\n"
             f"{enlace}\n\n"
             f"Si no solicitó el cambio, ignore este correo.\n\n"
             f"Saludos,\nEquipo Cata Club"
@@ -256,7 +269,8 @@ class ServicioNotificaciones:
             "<html><body>"
             "<p>Hola,</p>"
             "<p>Recibimos una solicitud para restablecer su contraseña en Cata Club.</p>"
-            f'<p><a href="{enlace}">Restablecer contraseña</a> (válido por 30 minutos)</p>'
+            f'<p><a href="{enlace}">Restablecer contraseña</a> (válido por 30 '
+            "minutos, de un solo uso)</p>"
             "<p>Si no solicitó el cambio, ignore este correo.</p>"
             "<p>Saludos,<br>Equipo Cata Club</p>"
             "</body></html>"
@@ -270,9 +284,10 @@ class ServicioNotificaciones:
         El cuerpo dice para qué sirve verificar y qué pasa si no se hace: sin
         eso, quien se inscribe en el club no tiene forma de relacionar este
         correo con el rechazo que va a encontrar cuando intente agregar a otro
-        representado."""
+        representado. Ronda 2 del issue #898: solo cambia el asunto, sobre la
+        misma estructura MIME/HTML que ya existía."""
         enlace = f"{self._frontend_url}/verificar-correo?token={token}"
-        asunto = "Verificación de correo - Cata Club"
+        asunto = "Cata Club | Verificación de correo"
         texto = (
             f"Hola,\n\n"
             f"Gracias por registrarse en Cata Club. Para confirmar que esta "
