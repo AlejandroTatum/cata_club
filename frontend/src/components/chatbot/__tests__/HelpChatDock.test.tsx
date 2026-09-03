@@ -73,6 +73,17 @@ describe("HelpChatDock — the launcher", () => {
     expect(launcher.className).not.toContain("bg-white");
   });
 
+  it("serves the light crest, since the disc under it stays coal (#994)", () => {
+    render(<HelpChatDock />);
+
+    // The dark navy silhouette in `cata-club-crest-256.png` disappears on the
+    // coal disc (#873 keeps it from going white). `-light.png` is the same
+    // crop recolored fully white so it reads there — swap the crest, not the
+    // disc's color.
+    const crest = screen.getByRole("button", { name: /abrir cata-bot/i }).querySelector("img");
+    expect(crest).toHaveAttribute("src", "/brand/cata-club-crest-256-light.png");
+  });
+
   it("shows CATA-BOT's face big enough to read, without widening the phone corner", () => {
     /*
      * The complaint was that the assistant was hard to SEE. The 44px phone disc

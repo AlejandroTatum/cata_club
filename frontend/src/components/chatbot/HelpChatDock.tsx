@@ -452,14 +452,16 @@ export default function HelpChatDock(): React.ReactElement {
           crop, not the raw JPEG — see `ChatWidget`'s own comment for why the
           full logo's wordmark band can't just be `object-cover`'d away. Its
           transparent margin lets this button's own `bg-coal` (`LAUNCHER_
-          CLASSES` above, #873) show through instead of the JPEG's light-grey
-          square — a dark disc rather than the light one the crop was
-          originally cut for, and the intended fix: the launcher must never
-          be white (issue #873).
+          CLASSES` above, #873) show through, and the dark navy silhouette in
+          `cata-club-crest-256.png` was unreadable against it (issue #994).
+          `cata-club-crest-256-light.png` is the same crop recolored fully
+          white so it reads on the coal disc; the launcher must never go
+          white itself (issue #873), so the disc stays coal and only the
+          crest swaps.
         */}
         <span className="relative block h-10 w-10 overflow-hidden rounded-full lg:h-16 lg:w-16">
           <Image
-            src="/brand/cata-club-crest-256.png"
+            src="/brand/cata-club-crest-256-light.png"
             alt=""
             width={128}
             height={128}
