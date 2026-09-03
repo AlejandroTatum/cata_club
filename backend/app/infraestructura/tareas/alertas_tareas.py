@@ -101,20 +101,22 @@ def _render_vencimiento(nombre: str, mensaje: str) -> tuple[str, str]:
 def _render_mora(tipo: TipoNotificacion, nombre: str, mensaje: str) -> tuple[str, str]:
     """`(asunto, cuerpo_texto)` del correo de mora. El asunto distingue el
     día 8 (último aviso) del día 1 -- mapa 4a/4b de #898. Ronda 2: solo texto,
-    sin HTML nuevo."""
+    sin HTML nuevo. Ronda 3: el cierre del día 8 se funde con `mensaje` en una
+    sola idea -- antes repetía "último aviso" en dos frases seguidas."""
     ultimo_aviso = tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_8
     asunto = (
         "Cata Club | Último aviso de mora" if ultimo_aviso else "Cata Club | Aviso de mora"
     )
-    cierre = (
-        "Este es el último aviso automático. Para recuperar sus beneficios, "
-        'ingrese a "Ir a mis pagos" y registre su pago.'
-        if ultimo_aviso
-        else 'Para recuperar sus beneficios, ingrese a "Ir a mis pagos" y '
-        "registre su pago."
-    )
+    accion = 'Para recuperar sus beneficios, ingrese a "Ir a mis pagos" y registre su pago.'
+    if ultimo_aviso:
+        # `mensaje` ya dice que es el último aviso (ver `_construir_
+        # notificaciones_mora`); acá se funde en la MISMA oración con la
+        # acción, en vez de repetir la idea en un párrafo aparte.
+        cuerpo_principal = f"{mensaje} {accion}"
+    else:
+        cuerpo_principal = f"{mensaje}\n\n{accion}"
     return asunto, (
-        f"Hola {nombre},\n\n{mensaje}\n\n{cierre}\n\n"
+        f"Hola {nombre},\n\n{cuerpo_principal}\n\n"
         f"Ante cualquier duda, escríbanos por WhatsApp al {WHATSAPP_CANONICO}."
     )
 
@@ -422,10 +424,11 @@ def _construir_notificaciones_mora(
             f"perder los beneficios."
         )
     else:
-        base = (
-            "Su membresía sigue vencida. Este es el último aviso: regularice su "
-            "pago para reactivar sus beneficios."
-        )
+        # Ronda 3 del issue #898: sin "regularice su pago para reactivar sus
+        # beneficios" -- esa acción la agrega `_render_mora` una sola vez,
+        # fundida en la misma oración; repetirla acá duplicaba "último
+        # aviso" en dos frases seguidas del correo.
+        base = "Su membresía sigue vencida y este es el último aviso automático que recibirá."
 
     if responsable.id == persona.id:
         mensaje = base

@@ -125,8 +125,7 @@ def _enviar_mora_dia_8() -> None:
     asunto, texto = _render_mora(
         TipoNotificacion.MIEMBRESIA_MORA_DIA_8,
         "Ana Ficticia",
-        "Su membresía sigue vencida. Este es el último aviso: regularice su "
-        "pago para reactivar sus beneficios.",
+        "Su membresía sigue vencida y este es el último aviso automático que recibirá.",
     )
     ServicioNotificaciones().enviar_correo(CORREO_FICTICIO, asunto, texto)
 
@@ -212,6 +211,17 @@ def test_ultimo_aviso_de_mora_indica_que_es_automatico_y_como_recuperar(smtp_cap
     assert "último aviso automático" in texto.lower()
     assert "Ir a mis pagos" in texto
     assert WHATSAPP_ESPERADO in texto
+
+
+def test_ultimo_aviso_de_mora_no_repite_la_idea_del_ultimo_aviso(smtp_capturado):
+    """Ronda 3 de revisión humana: el 4b decía "último aviso" dos veces en
+    frases seguidas ("Este es el último aviso: regularice..." y luego "Este
+    es el último aviso automático. Para recuperar..."). Debe fundirse en una
+    sola idea."""
+    _enviar_mora_dia_8()
+    _, partes = _partes(smtp_capturado["mensaje"])
+    texto = _decodificar(partes[0])
+    assert texto.lower().count("último aviso") == 1
 
 
 @pytest.mark.parametrize(
