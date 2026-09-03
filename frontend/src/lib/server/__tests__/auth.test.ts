@@ -516,6 +516,25 @@ describe("backendMe", () => {
     expect(result).toEqual({ ok: false, error: { code: "unauthorized", message: expect.any(String) } });
   });
 
+  // A stale access token minted before an account was activated made every
+  // later call resolve to the SAME url+headers as the one that fetched the
+  // pending decision the first time. Without an explicit `no-store`, Next's
+  // fetch Data Cache serves that first (pending) answer forever — GET
+  // /api/auth/session (and its "Consultar estado nuevamente" retry) never
+  // actually asks the backend again, no matter how many times it is called.
+  it("never caches the call — always asks the backend fresh", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({ correo: "a@a.com", personaId: 1, nombres: "A", apellidos: "B", roles: ["ALUMNO"] }),
+    );
+
+    await backendMe("access-token-123");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/me",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
   it("rejects a response missing required fields as invalid_response", async () => {
     vi.mocked(global.fetch).mockResolvedValue(jsonResponse({ correo: "a@a.com" }));
 
