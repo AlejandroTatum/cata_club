@@ -115,7 +115,9 @@ class NotificacionServicio:
         ids_autorizados = self._resolver_ids_autorizados(persona_id)
         if not ids_autorizados:
             return 0
-        return self.repo.marcar_todas_leidas(ids_autorizados)
+        actualizadas = self.repo.marcar_todas_leidas(ids_autorizados)
+        self.db.commit()
+        return actualizadas
 
     def marcar_leida(self, notificacion_id: int, persona_id: int) -> Notificacion:
         notificacion = self.db.get(Notificacion, notificacion_id)
@@ -123,4 +125,6 @@ class NotificacionServicio:
             raise EntidadNoEncontrada(f"Notificación con id {notificacion_id} no encontrada")
         if notificacion.persona_id != persona_id:
             raise PermisosInsuficientes("No puede marcar como leída una notificación ajena")
-        return self.repo.marcar_leida(notificacion)
+        resultado = self.repo.marcar_leida(notificacion)
+        self.db.commit()
+        return resultado

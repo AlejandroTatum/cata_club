@@ -184,7 +184,13 @@ class AdminCuentaServicio:
                 ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
             self.repo_ficha.crear(ficha)
 
-        # 9. Emitir tokens JWT para auto-login
+        # 9. Un solo commit para toda la operación (issue #831): antes,
+        # Persona, Usuario, cada asignación de rol y la FichaMedica
+        # comiteaban por separado -- si el último paso fallaba, los
+        # anteriores ya habían quedado persistidos.
+        self.db.commit()
+
+        # 10. Emitir tokens JWT para auto-login
         return self._emitir_tokens(usuario)
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
@@ -193,12 +199,15 @@ class AdminCuentaServicio:
         La regla de "un solo rol activo" (issue #762) la decide
         `exigir_rol_unico`, compartida con los otros tres caminos de alta:
         antes cada uno tenía esta misma comparación copiada y solo miraba el
-        duplicado del MISMO rol."""
+        duplicado del MISMO rol.
+
+        Solo `flush()` (issue #831): forma parte de la transacción atómica
+        de `crear_cuenta`, que hace el único `commit()` al final."""
         if not exigir_rol_unico(usuario, tipo_rol):
             return
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
-        self.db.commit()
+        self.db.flush()
 
     def _emitir_tokens(self, usuario: Usuario) -> dict:
         """Emite el par access + refresh tokens para auto-login."""

@@ -14,6 +14,7 @@ class AntecedentesClubServicio:
     pero sin router ni servicio detrás."""
 
     def __init__(self, db: Session):
+        self.db = db
         self.repo = AntecedentesClubRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
 
@@ -23,7 +24,9 @@ class AntecedentesClubServicio:
         if self.repo.obtener_por_persona(datos.persona_id):
             raise EntidadDuplicada("Esta persona ya tiene antecedentes de club registrados")
         antecedentes = AntecedentesClub(**datos.model_dump())
-        return self.repo.crear(antecedentes)
+        resultado = self.repo.crear(antecedentes)
+        self.db.commit()
+        return resultado
 
     def obtener_por_persona(self, persona_id: int) -> AntecedentesClub:
         antecedentes = self.repo.obtener_por_persona(persona_id)
@@ -37,4 +40,6 @@ class AntecedentesClubServicio:
         antecedentes = self.obtener_por_persona(persona_id)
         for campo, valor in datos.model_dump(exclude_unset=True).items():
             setattr(antecedentes, campo, valor)
-        return self.repo.guardar_cambios(antecedentes)
+        resultado = self.repo.guardar_cambios(antecedentes)
+        self.db.commit()
+        return resultado

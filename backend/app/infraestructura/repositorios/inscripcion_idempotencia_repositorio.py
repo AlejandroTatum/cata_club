@@ -55,11 +55,13 @@ class InscripcionIdempotenciaRepositorio:
         self.db.flush()
 
     def eliminar_expiradas(self, *, limite: Optional[datetime] = None) -> int:
+        """Sin caller en producción hoy -- solo `flush()` (issue #831): la
+        futura tarea de limpieza que lo agende es quien debe comitear."""
         limite = limite if limite is not None else _ahora_utc()
         resultado = self.db.execute(
             delete(InscripcionIdempotencia).where(
                 InscripcionIdempotencia.vence_en < limite
             )
         )
-        self.db.commit()
+        self.db.flush()
         return resultado.rowcount

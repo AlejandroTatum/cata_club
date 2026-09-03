@@ -298,6 +298,7 @@ class AuthServicio:
             correo_verificado=True,
         )
         nuevo_usuario = self.repo.crear(nuevo_usuario)
+        self.db.commit()
         return self._emitir_par_tokens(nuevo_usuario)
 
     # --- Perfil del usuario autenticado -------------------------------------

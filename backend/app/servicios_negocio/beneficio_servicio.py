@@ -110,7 +110,9 @@ class BeneficioServicio:
             asignado_por_persona_id=persona_id_admin,
         )
         try:
-            return self.repo.crear(asignacion)
+            resultado = self.repo.crear(asignacion)
+            self.db.commit()
+            return resultado
         except IntegrityError as error:
             self.db.rollback()
             if "uq_asignacion_descuento_activa_por_persona" in str(error.orig):
@@ -129,7 +131,9 @@ class BeneficioServicio:
 
         activa.retirado_en = datetime.now(timezone.utc)
         activa.retirado_por_persona_id = persona_id_admin
-        return self.repo.guardar_cambios(activa)
+        resultado = self.repo.guardar_cambios(activa)
+        self.db.commit()
+        return resultado
 
     def a_response_dto(self, asignacion: AsignacionDescuento) -> AsignacionDescuentoResponseDTO:
         """Punto único donde una `AsignacionDescuento` ORM se convierte en la

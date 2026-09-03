@@ -79,6 +79,7 @@ def _sluggificar_nombre(nombre: str) -> str:
 
 class AsistenciaServicio:
     def __init__(self, db: Session):
+        self.db = db
         self.repo = AsistenciaRepositorio(db)
         self.repo_horario = HorarioRepositorio(db)
         self.repo_persona = PersonaRepositorio(db)
@@ -134,7 +135,9 @@ class AsistenciaServicio:
                     f"dia_semana={horario.dia_semana.value}"
                 ),
             )
-        return self.repo_horario.crear(horario)
+        resultado = self.repo_horario.crear(horario)
+        self.db.commit()
+        return resultado
 
     def listar_horarios(self, categoria: Optional[str] = None) -> list[HorarioEntrenamiento]:
         return self.repo_horario.listar(categoria)
@@ -245,6 +248,7 @@ class AsistenciaServicio:
             for d in dias
         ]
         categoria = self.repo_categoria.crear_con_horarios(categoria, horarios)
+        self.db.commit()
         return self._a_categoria_dto(categoria)
 
     def actualizar_categoria(self, codigo: str, datos: CategoriaUpdateDTO) -> CategoriaResponseDTO:
@@ -375,6 +379,7 @@ class AsistenciaServicio:
             horarios_a_borrar=horarios_a_borrar,
             alumno_horario_a_borrar=alumno_horario_a_borrar,
         )
+        self.db.commit()
         return self._a_categoria_dto(categoria)
 
     def eliminar_categoria(self, codigo: str) -> None:
@@ -405,6 +410,7 @@ class AsistenciaServicio:
             for a in self.repo_alumno_horario.listar_por_horario_sin_filtro(h.id)
         ]
         self.repo_categoria.eliminar_con_horarios(categoria, horarios, alumno_horario_a_borrar)
+        self.db.commit()
 
     def actualizar_horario(self, horario_id: int, datos: HorarioUpdateDTO) -> HorarioEntrenamiento:
         horario = self.repo_horario.obtener_por_id(horario_id)
@@ -419,9 +425,20 @@ class AsistenciaServicio:
         # únicos campos actualizables y ambos re-derivan las horas: se
         # valida/deriva siempre.
         self._validar_dia_y_derivar_horas(horario)
-        return self.repo_horario.actualizar(horario)
+        resultado = self.repo_horario.actualizar(horario)
+        self.db.commit()
+        return resultado
 
     def eliminar_horario(self, horario_id: int) -> None:
+        """Todo o nada (issue #831): antes, `eliminar_por_horario` comiteaba
+        de verdad y `repo_horario.eliminar` (vía `eliminar_o_error_de_
+        dominio`) comiteaba/revertía por separado -- si el horario tenía
+        historial, las filas de `alumno_horario` ya habían quedado borradas
+        aunque el `horario_entrenamiento` sobreviviera. Ahora ambos pasos
+        solo flushean; un solo `commit()` al final los confirma juntos, y si
+        `repo_horario.eliminar` falla, su propio `rollback()` (ver
+        `eliminacion_segura.py`) descarta también el borrado de
+        `alumno_horario` de más arriba."""
         horario = self.repo_horario.obtener_por_id(horario_id)
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
@@ -433,6 +450,7 @@ class AsistenciaServicio:
         # (`repo_horario.eliminar` below) -- that data is never auto-cleaned.
         self.repo_alumno_horario.eliminar_por_horario(horario_id)
         self.repo_horario.eliminar(horario)
+        self.db.commit()
 
     def registrar_asistencia(
         self, datos: AsistenciaCreateDTO, roles_solicitante: list[str], persona_id_solicitante: int
@@ -542,15 +560,17 @@ class AsistenciaServicio:
         # si otra persona ya cerró esta misma sesión antes, devuelve esa
         # fila sin tocarla -- el cierre lo gana quien llega primero, no
         # quien llama último. Se agrega/flushea en la MISMA sesión de BD que
-        # la `Asistencia` de abajo; el `commit()` de `self.repo.crear` los
-        # confirma juntos.
+        # la `Asistencia` de abajo; el `commit()` del caso de uso (issue
+        # #831) los confirma juntos.
         self.repo_sesion.obtener_o_crear_cerrada(
             datos.horario_id, datos.fecha_entrenamiento, persona_id_solicitante,
         )
         try:
-            return self.repo.crear(
+            resultado = self.repo.crear(
                 Asistencia(**datos.model_dump(), registrado_por_id=persona_id_solicitante)
             )
+            self.db.commit()
+            return resultado
         except IntegrityError:
             # Carrera real (no solo teórica): dos requests para la MISMA
             # persona pueden pasar ambas el `if existente` de arriba antes
@@ -629,6 +649,7 @@ class AsistenciaServicio:
         asistencia.estado_justificativo = datos.estado_justificativo
 
         _, correccion = self.repo.guardar_correccion(asistencia, correccion)
+        self.db.commit()
         return correccion
 
     def listar_correcciones(self, asistencia_id: int) -> list[AsistenciaCorreccion]:
@@ -857,6 +878,7 @@ class AsistenciaServicio:
             AlumnoHorario(persona_id=datos.persona_id, horario_id=h.id)
             for h in pendientes
         ])
+        self.db.commit()
         membresia_vencida, dias_vencida = self._info_membresia_vencida(datos.persona_id)
         return AsignacionAlumnoHorarioResponseDTO(
             asignaciones=[self._a_detalle_dto(a) for a in nuevas],
@@ -886,6 +908,7 @@ class AsistenciaServicio:
                 f"No existe asignación del alumno {persona_id} a esa categoría"
             )
         self.repo_alumno_horario.eliminar_muchos(asignaciones)
+        self.db.commit()
 
     @staticmethod
     def _a_detalle_dto(a: AlumnoHorario) -> AlumnoHorarioDetalleDTO:

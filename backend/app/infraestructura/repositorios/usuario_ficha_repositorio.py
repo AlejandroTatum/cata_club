@@ -10,20 +10,15 @@ class FichaMedicaRepositorio:
     def __init__(self, db: Session):
         self.db = db
 
-    def crear(self, ficha: FichaMedica, *, commit: bool = True) -> FichaMedica:
-        """`commit=False`: ver `PersonaRepositorio.crear` (issue #338)."""
+    def crear(self, ficha: FichaMedica) -> FichaMedica:
+        """Solo `flush()` (issue #831): el caso de uso comitea una sola vez."""
         self.db.add(ficha)
-        if commit:
-            self.db.commit()
-            self.db.refresh(ficha)
-        else:
-            self.db.flush()
+        self.db.flush()
         return ficha
 
     def guardar_cambios(self, ficha: FichaMedica) -> FichaMedica:
         self.db.add(ficha)
-        self.db.commit()
-        self.db.refresh(ficha)
+        self.db.flush()
         return ficha
 
     def listar_persona_ids_con_ficha(self, persona_ids: list[int]) -> set[int]:
@@ -97,12 +92,8 @@ class UsuarioRepositorio:
             consulta = consulta.filter(Usuario.id != excluir_usuario_id)
         return consulta.count()
 
-    def crear(self, usuario: Usuario, *, commit: bool = True) -> Usuario:
-        """`commit=False`: ver `PersonaRepositorio.crear` (issue #338)."""
+    def crear(self, usuario: Usuario) -> Usuario:
+        """Solo `flush()` (issue #831): el caso de uso comitea una sola vez."""
         self.db.add(usuario)
-        if commit:
-            self.db.commit()
-            self.db.refresh(usuario)
-        else:
-            self.db.flush()
+        self.db.flush()
         return usuario

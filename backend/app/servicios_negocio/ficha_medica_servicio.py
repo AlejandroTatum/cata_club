@@ -44,7 +44,9 @@ class FichaMedicaServicio:
         )
         for nombre in datos.enfermedades:
             ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
-        return self.repo.crear(ficha)
+        resultado = self.repo.crear(ficha)
+        self.db.commit()
+        return resultado
 
     def listar_personas_con_ficha(self, persona_ids: list[int]) -> set[int]:
         """Issue #362: de `persona_ids`, cuáles YA tienen ficha médica. Solo
@@ -104,7 +106,9 @@ class FichaMedicaServicio:
             if datos.enfermedades:
                 for n in datos.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=n))
-            return self.repo.crear(ficha)
+            resultado = self.repo.crear(ficha)
+            self.db.commit()
+            return resultado
 
         # FIC-5: `is not None` no distinguía "el campo no vino en el PATCH"
         # de "vino explícitamente en null" -- ambos se leían igual y borrar
@@ -139,7 +143,9 @@ class FichaMedicaServicio:
         # exactamente eso, no solo lo que vino en este request.
         if telefonos_coinciden(persona.telefono, ficha.telefono_emergencia):
             raise OperacionInvalida(MENSAJE_TELEFONO_EMERGENCIA_IGUAL)
-        return self.repo.guardar_cambios(ficha)
+        resultado = self.repo.guardar_cambios(ficha)
+        self.db.commit()
+        return resultado
 
     @staticmethod
     def _exigir_ficha_completa(*, tipo_sangre, telefono_emergencia, al_crear: bool) -> None:

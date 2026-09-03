@@ -37,13 +37,11 @@ class DescuentoRepositorio:
 
     def crear(self, descuento: Descuento) -> Descuento:
         self.db.add(descuento)
-        self.db.commit()
-        self.db.refresh(descuento)
+        self.db.flush()
         return descuento
 
     def guardar_cambios(self, descuento: Descuento) -> Descuento:
-        self.db.commit()
-        self.db.refresh(descuento)
+        self.db.flush()
         return descuento
 
 
@@ -78,11 +76,9 @@ class AsignacionDescuentoRepositorio:
 
     def crear(self, asignacion: AsignacionDescuento) -> AsignacionDescuento:
         self.db.add(asignacion)
-        self.db.commit()
-        self.db.refresh(asignacion)
+        self.db.flush()
         return asignacion
 
     def guardar_cambios(self, asignacion: AsignacionDescuento) -> AsignacionDescuento:
-        self.db.commit()
-        self.db.refresh(asignacion)
+        self.db.flush()
         return asignacion

@@ -96,6 +96,15 @@ class PersonaServicio:
         self._dormir = dormir
 
     def registrar_persona(self, datos: PersonaCreateDTO) -> Persona:
+        persona = self._crear_persona_validada(datos)
+        self.db.commit()
+        return persona
+
+    def _crear_persona_validada(self, datos: PersonaCreateDTO) -> Persona:
+        """Núcleo de `registrar_persona`, SIN commit (issue #831):
+        `crear_representado` lo reusa como un paso más de su propia
+        transacción atómica, para no comitear a la Persona antes de que la
+        ficha médica y el Usuario del menor terminen de escribirse."""
         if self.repo.obtener_por_cedula(datos.cedula):
             raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
@@ -138,8 +147,12 @@ class PersonaServicio:
         3. Si se proporcionaron `correo` + `contrasenia`: crear Usuario con
            rol ALUMNO para el menor (Opción B: menores con cuenta propia).
 
-        Nota: igual que `EnrollmentServicio`, cada `repo.crear()` hace su
-        propio commit. Riesgo heredado, no introducido aquí."""
+        Todo o nada (issue #831): un solo `commit()` al final, después de la
+        Persona, la ficha médica y el Usuario+rol del menor. Usa
+        `_crear_persona_validada` (el núcleo SIN commit de
+        `registrar_persona`), no `registrar_persona` en sí -- comitear acá
+        antes de escribir la ficha o el usuario reproduciría exactamente el
+        bug que el issue #831 cierra."""
         persona_datos = PersonaCreateDTO(
             nombres=datos.nombres,
             apellidos=datos.apellidos,
@@ -149,7 +162,7 @@ class PersonaServicio:
             representante_id=representante_id,
             institucion_id=datos.institucion_id,
         )
-        representado = self.registrar_persona(persona_datos)
+        representado = self._crear_persona_validada(persona_datos)
 
         if datos.ficha_medica:
             ficha = FichaMedica(
@@ -177,11 +190,11 @@ class PersonaServicio:
             self.repo_usuario.crear(usuario)
             self._asignar_rol(usuario, TipoRol.ALUMNO)
 
-        # `registrar_persona` (arriba) hace commit+refresh, pero cada paso
-        # posterior vuelve a commitear -- `FichaMedicaRepositorio.crear`,
-        # `repo_usuario.crear`, `_asignar_rol` -- y `expire_on_commit` está en
-        # su default `True` (`app/infraestructura/db.py:14`, el `sessionmaker`
-        # no lo declara). Así, `representado` sale de acá EXPIRADO: sus
+        self.db.commit()
+
+        # `expire_on_commit` está en su default `True`
+        # (`app/infraestructura/db.py:14`, el `sessionmaker` no lo declara),
+        # así que el `commit()` de arriba deja a `representado` EXPIRADO: sus
         # atributos ya no están en memoria.
         #
         # Quien lo despertaría entonces es la serialización de FastAPI contra
@@ -365,6 +378,10 @@ class PersonaServicio:
                 persona_id=representante_anterior_id,
                 entidad_relacionada_id=representado.id,
             ))
+            # Efecto POSTERIOR al hecho principal, en su propio commit (issue
+            # #831): la vinculación ya está comiteada arriba, y este aviso es
+            # un "mejor esfuerzo" que no debe poder tirarla para atrás.
+            self.db.commit()
         except Exception:
             self.db.rollback()
             logger.exception(
@@ -376,12 +393,14 @@ class PersonaServicio:
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
         """Asigna un rol al usuario si aún no lo tiene (idempotente).
 
-        Regla de un solo rol activo compartida (issue #762)."""
+        Regla de un solo rol activo compartida (issue #762). Solo `flush()`
+        (issue #831): forma parte de la transacción atómica de
+        `crear_representado`, que hace el único `commit()` al final."""
         if not exigir_rol_unico(usuario, tipo_rol):
             return
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
-        self.db.commit()
+        self.db.flush()
 
     def listar_personas(self, skip: int = 0, limit: int = 50) -> tuple[list[Persona], int]:
         items = self.repo.listar(skip, limit)
@@ -403,7 +422,9 @@ class PersonaServicio:
     def actualizar_persona(self, persona_id: int, cambios: PersonaUpdateDTO) -> Persona:
         persona = self.obtener_persona(persona_id)
         datos = cambios.model_dump(exclude_unset=True)
-        return self.repo.actualizar(persona, datos)
+        resultado = self.repo.actualizar(persona, datos)
+        self.db.commit()
+        return resultado
 
     # --- Foto de una persona (carnet de socio, issue #286) -------------------
     # Misma validación + subida que `AuthServicio.actualizar_foto_perfil`
@@ -447,9 +468,20 @@ class PersonaServicio:
             content_type=content_type,
             persona_id=persona.id,
         )
-        return self.repo.actualizar(
+        resultado = self.repo.actualizar(
             persona, {"foto_url": componer_valor_foto_perfil(public_id, version)},
         )
+        self.db.commit()
+        # Issue #826 (ver el comentario de `crear_representado`): este método
+        # corre dentro de `run_in_threadpool` y su valor de retorno se
+        # serializa DESPUÉS, ya en el event loop -- si sale expirado, ese
+        # SELECT de recarga se pagaría ahí. Antes lo evitaba el
+        # `refresh()` que el repositorio hacía junto a su propio `commit()`;
+        # ahora que el repositorio solo flushea, el refresco explícito queda
+        # acá, todavía adentro del threadpool.
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
 
     # --- Baja lógica (reemplaza el borrado duro) --------------------------
@@ -488,7 +520,9 @@ class PersonaServicio:
             # y por lo tanto tampoco bombea nada.
             usuario.revocar_sesiones()
 
-        return self.repo.actualizar(persona, {"activo": activo})
+        resultado = self.repo.actualizar(persona, {"activo": activo})
+        self.db.commit()
+        return resultado
 
     def independizar(self, persona_id: int, datos: IndependizarDTO) -> Persona:
         """Permite a un ex-menor (mayor de edad) independizarse de su
@@ -539,6 +573,12 @@ class PersonaServicio:
 
         persona.representante_id = None
         self.repo.actualizar(persona, {"representante_id": None})
+        self.db.commit()
+        # Issue #826 (ver el comentario de `crear_representado`/
+        # `actualizar_foto`): esta llamada corre dentro de `run_in_threadpool`
+        # y `persona` se serializa después, ya en el event loop.
+        if inspeccionar_orm(persona).expired:
+            self.db.refresh(persona)
 
         return persona
 

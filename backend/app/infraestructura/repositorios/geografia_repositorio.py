@@ -27,8 +27,7 @@ class PaisRepositorio:
 
     def crear(self, pais: Pais) -> Pais:
         self.db.add(pais)
-        self.db.commit()
-        self.db.refresh(pais)
+        self.db.flush()
         return pais
 
 
@@ -63,8 +62,7 @@ class ProvinciaRepositorio:
 
     def crear(self, provincia: Provincia) -> Provincia:
         self.db.add(provincia)
-        self.db.commit()
-        self.db.refresh(provincia)
+        self.db.flush()
         return provincia
 
 
@@ -99,6 +97,5 @@ class CantonRepositorio:
 
     def crear(self, canton: Canton) -> Canton:
         self.db.add(canton)
-        self.db.commit()
-        self.db.refresh(canton)
+        self.db.flush()
         return canton

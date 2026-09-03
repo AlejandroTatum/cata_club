@@ -1,6 +1,7 @@
 """Administración de logos de patrocinadores (issue #503)."""
 from uuid import uuid4
 
+from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.orm import Session
 
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
@@ -15,6 +16,7 @@ class SponsorServicio:
     TAMANO_MAXIMO_LOGO_BYTES = 5 * 1024 * 1024
 
     def __init__(self, db: Session):
+        self.db = db
         self.repo = SponsorRepositorio(db)
 
     def listar(self) -> list[Sponsor]:
@@ -41,9 +43,16 @@ class SponsorServicio:
 
         public_id = str(uuid4())
         logo_url = subir_logo_sponsor(contenido, public_id, content_type)
-        return self.repo.crear(Sponsor(
+        resultado = self.repo.crear(Sponsor(
             nombre=datos.nombre.strip(), logo_url=logo_url, logo_public_id=public_id,
         ))
+        self.db.commit()
+        # Issue #826 (ver el comentario de `PersonaServicio.crear_representado`):
+        # este método corre dentro de `run_in_threadpool` y el `Sponsor` se
+        # serializa después, ya en el event loop.
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     def eliminar(self, sponsor_id: int) -> None:
         sponsor = self.repo.obtener_por_id(sponsor_id)
@@ -51,3 +60,4 @@ class SponsorServicio:
             raise EntidadNoEncontrada(f"Patrocinador con id {sponsor_id} no encontrado")
         eliminar_logo_sponsor(sponsor.logo_public_id)
         self.repo.eliminar(sponsor)
+        self.db.commit()

@@ -243,13 +243,11 @@ class PagoRepositorio:
 
     def crear(self, pago: Pago) -> Pago:
         self.db.add(pago)
-        self.db.commit()
-        self.db.refresh(pago)
+        self.db.flush()
         return pago
 
     def guardar_cambios(self, pago: Pago) -> Pago:
-        self.db.commit()
-        self.db.refresh(pago)
+        self.db.flush()
         return pago
 
     def listar_correcciones_por_pago(self, pago_id: int) -> list[CorreccionPago]:
@@ -271,8 +269,7 @@ class ComprobantePagoRepositorio:
 
     def crear(self, comprobante: ComprobantePago) -> ComprobantePago:
         self.db.add(comprobante)
-        self.db.commit()
-        self.db.refresh(comprobante)
+        self.db.flush()
         return comprobante
 
 
@@ -352,6 +349,5 @@ class CoberturaBonificadaRepositorio:
 
     def crear(self, cobertura: CoberturaBonificada) -> CoberturaBonificada:
         self.db.add(cobertura)
-        self.db.commit()
-        self.db.refresh(cobertura)
+        self.db.flush()
         return cobertura

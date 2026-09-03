@@ -20,16 +20,14 @@ class TipoMembresiaRepositorio:
 
     def crear(self, tipo: TipoMembresia) -> TipoMembresia:
         self.db.add(tipo)
-        self.db.commit()
-        self.db.refresh(tipo)
+        self.db.flush()
         return tipo
 
     def guardar_cambios(self, tipo: TipoMembresia) -> TipoMembresia:
         """Persiste una tarifa ya mutada por el servicio (issue #394). Mismo
         patrón que `DescuentoRepositorio.guardar_cambios`: quién decide QUÉ
-        cambia es el servicio; el repositorio solo confirma."""
-        self.db.commit()
-        self.db.refresh(tipo)
+        cambia es el servicio; el repositorio solo flushea (issue #831)."""
+        self.db.flush()
         return tipo
 
 
@@ -113,15 +111,14 @@ class MembresiaRepositorio:
 
     def crear(self, membresia: Membresia) -> Membresia:
         self.db.add(membresia)
-        self.db.commit()
-        self.db.refresh(membresia)
+        self.db.flush()
         return membresia
 
     def guardar_cambios(self, membresia: Membresia) -> Membresia:
         """Persiste cambios hechos sobre una entidad ya adjunta a la sesión
-        (ej. cambio de estado disparado por otro servicio)."""
-        self.db.commit()
-        self.db.refresh(membresia)
+        (ej. cambio de estado disparado por otro servicio). Solo `flush()`
+        (issue #831): el caso de uso comitea una sola vez."""
+        self.db.flush()
         return membresia
 
     # ------------------------------------------------------------------

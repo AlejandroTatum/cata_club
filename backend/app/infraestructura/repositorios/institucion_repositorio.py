@@ -27,7 +27,8 @@ class InstitucionRepositorio:
         return self.db.get(Institucion, institucion_id)
 
     def crear(self, institucion: Institucion) -> Institucion:
+        """Sin caller en producción hoy -- solo `flush()` (issue #831): quien
+        la use en el futuro es quien decide cuándo comitear."""
         self.db.add(institucion)
-        self.db.commit()
-        self.db.refresh(institucion)
+        self.db.flush()
         return institucion

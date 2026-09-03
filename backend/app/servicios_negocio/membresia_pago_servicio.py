@@ -4,6 +4,7 @@ from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, date, timezone
 from decimal import Decimal
+from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -196,7 +197,13 @@ class MembresiaServicio:
         self.repo_persona = PersonaRepositorio(db)
 
     def crear_tipo_membresia(self, datos: TipoMembresiaCreateDTO) -> TipoMembresia:
-        return self.repo_tipo.crear(TipoMembresia(**datos.model_dump()))
+        resultado = self.repo_tipo.crear(TipoMembresia(**datos.model_dump()))
+        self.db.commit()
+        # `expire_on_commit` (default True) expira el objeto tras el commit
+        # de arriba; antes lo refrescaba el propio repositorio (issue #831).
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     def listar_tipos_membresia(self) -> list[TipoMembresia]:
         return self.repo_tipo.listar()
@@ -222,7 +229,11 @@ class MembresiaServicio:
         for campo, valor in datos.model_dump(exclude_unset=True).items():
             setattr(tipo, campo, valor)
 
-        return self.repo_tipo.guardar_cambios(tipo)
+        resultado = self.repo_tipo.guardar_cambios(tipo)
+        self.db.commit()
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     def crear_membresia(self, datos: MembresiaCreateDTO) -> Membresia:
         if not self.repo_persona.obtener_por_id(datos.persona_id):
@@ -270,7 +281,12 @@ class MembresiaServicio:
         # Asignación perezosa del rol ALUMNO (principio de diseño ya
         # acordado: se asigna al matricularse, no al crear la cuenta).
         # Best-effort: si la persona aún no tiene Usuario, no hace nada.
+        # `asignar_alumno_si_corresponde` ya no comitea por su cuenta (issue
+        # #831): forma parte de esta misma transacción.
         RolServicio(self.db).asignar_alumno_si_corresponde(datos.persona_id)
+        self.db.commit()
+        if inspeccionar_orm(membresia).expired:
+            self.db.refresh(membresia)
         return membresia
 
     def cambiar_plan(
@@ -333,7 +349,11 @@ class MembresiaServicio:
                 actor_persona_id=actor_persona_id,
             )
         )
-        return self.repo.guardar_cambios(membresia)
+        resultado = self.repo.guardar_cambios(membresia)
+        self.db.commit()
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     def obtener_membresia(
         self,
@@ -660,12 +680,20 @@ class PagoServicio:
         # `rollback()` es obligatorio: un flush fallido deja la sesión
         # inválida para cualquier uso posterior.
         try:
-            return self.repo.crear(pago)
+            resultado = self.repo.crear(pago)
+            self.db.commit()
         except IntegrityError as error:
             self.db.rollback()
             if "uq_pago_pendiente_por_membresia" in str(error.orig):
                 raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
             raise
+        # Issue #826/#451 (ver el comentario de `PersonaServicio.
+        # crear_representado`): este método corre dentro de
+        # `run_in_threadpool` y el router arma la respuesta (`pago_a_
+        # response_dto`) DESPUÉS, ya en el event loop.
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     # --- Issue #398/3c: beneficio del pagador, resuelto server-side --------
     def _congelar_beneficio_activo(
@@ -1111,7 +1139,11 @@ class PagoServicio:
                 motivo=motivo,
             )
         )
-        return self.repo_membresia.guardar_cambios(membresia)
+        resultado = self.repo_membresia.guardar_cambios(membresia)
+        self.db.commit()
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     def reactivar_membresia(
         self,
@@ -1185,7 +1217,11 @@ class PagoServicio:
             )
         )
         try:
-            return self.repo_membresia.guardar_cambios(membresia)
+            resultado = self.repo_membresia.guardar_cambios(membresia)
+            self.db.commit()
+            if inspeccionar_orm(resultado).expired:
+                self.db.refresh(resultado)
+            return resultado
         except IntegrityError as error:
             self.db.rollback()
             if "uq_membresia_activa_por_persona" in str(error.orig):
@@ -1256,7 +1292,11 @@ class PagoServicio:
             regularizada_por_persona_id=persona_id_admin,
             motivo_regularizacion=datos.motivo,
         )
-        return self.repo.crear(pago)
+        resultado = self.repo.crear(pago)
+        self.db.commit()
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     # --- Issue #400 (slice 5b): corrección financiera -------------------------
     # Seis campos financieros congelados de `Pago`. Un DTO puede traer
@@ -1486,6 +1526,11 @@ class PagoServicio:
         )
         self.db.add(correccion)
         pago_guardado = self.repo.guardar_cambios(pago)
+        self.db.commit()
+        if inspeccionar_orm(pago_guardado).expired:
+            self.db.refresh(pago_guardado)
+        if inspeccionar_orm(correccion).expired:
+            self.db.refresh(correccion)
         return pago_guardado, correccion
 
     def listar_correcciones_de_pago(self, pago_id: int) -> list[CorreccionPago]:
@@ -1652,6 +1697,11 @@ class PagoServicio:
         )
         try:
             cobertura = self.repo_cobertura_bonificada.crear(cobertura)
+            # Un solo commit para membresía + cobertura (issue #831): antes,
+            # `_activar_membresia_con_red_de_seguridad` flusheaba y
+            # `repo_cobertura_bonificada.crear` comiteaba por separado -- acá
+            # se confirman juntas.
+            self.db.commit()
         except IntegrityError as error:
             self.db.rollback()
             if "ex_cobertura_bonificada_periodo_no_solapa" in str(error.orig):
@@ -1668,6 +1718,10 @@ class PagoServicio:
             ),
             id_para_log=f"cobertura bonificada {cobertura.id}",
         )
+        # Issue #826/#451: este método corre dentro de `run_in_threadpool` y
+        # el router arma la respuesta después, ya en el event loop.
+        if inspeccionar_orm(cobertura).expired:
+            self.db.refresh(cobertura)
         return cobertura
 
     def cobertura_bonificada_a_response_dto(
@@ -2023,6 +2077,11 @@ class PagoServicio:
             try:
                 self._aplicar_regla_familiar_si_corresponde(membresia, pago)
                 self.repo.guardar_cambios(pago)
+                # Un solo commit para membresía + pago (issue #831): antes,
+                # `repo.guardar_cambios(pago)` comiteaba acá adentro, ya
+                # separado del `flush()` de `_activar_membresia_con_red_de_
+                # seguridad` -- ahora se confirman juntos.
+                self.db.commit()
             except IntegrityError as error:
                 self.db.rollback()
                 if "uq_membresia_activa_por_persona" in str(error.orig):
@@ -2040,12 +2099,22 @@ class PagoServicio:
             # EstadoPago.RECHAZADO: el estado de Membresia no cambia; el rechazo
             # queda registrado únicamente en Pago.estado_pago y Pago.motivo_rechazo.
             self.repo.guardar_cambios(pago)
+            self.db.commit()
             motivo = f": {pago.motivo_rechazo}" if pago.motivo_rechazo else ""
             aviso_ok = self._crear_notificacion_pago(
                 pago=pago,
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
                 mensaje=f"Su pago fue rechazado{motivo}.",
             )
+        # Issue #826/#451 (ver el comentario de `PersonaServicio.
+        # crear_representado`): este método corre dentro de
+        # `run_in_threadpool` y el router arma la respuesta (`pago_a_
+        # response_dto`) DESPUÉS, ya en el event loop. Va ANTES de asignar
+        # el atributo transitorio de abajo: `refresh()` solo recarga
+        # columnas mapeadas, nunca toca atributos Python sueltos, pero
+        # hacerlo en este orden evita cualquier ambigüedad.
+        if inspeccionar_orm(pago).expired:
+            self.db.refresh(pago)
         # Atributo transitorio, no una columna de `Pago`: `PagoResponseDTO`
         # (from_attributes=True) lo lee por `getattr` para que el 200 que
         # vuelve diga la verdad completa cuando el aviso in-app falló
@@ -2231,6 +2300,14 @@ class PagoServicio:
                     entidad_relacionada_id=entidad_relacionada_id,
                 )
                 self.repo_notificacion.crear(notif_rep)
+            # Commit PROPIO (issue #831): el repositorio ya solo flushea, así
+            # que esta notificación necesita su propio `commit()` para
+            # persistir -- deliberadamente SEPARADO del commit de la
+            # operación principal (aprobar/rechazar un pago, otorgar
+            # cobertura), que ya corrió antes de llegar acá. Ver el docstring
+            # de arriba: un aviso fallido nunca debe poder tirar para atrás
+            # una operación que ya se procesó.
+            self.db.commit()
             return True
         except Exception:
             # `rollback()` deshace SOLO la transacción de esta notificación
@@ -2252,7 +2329,11 @@ class PagoServicio:
         if pago.comprobante:
             raise OperacionInvalida("Este pago ya tiene un comprobante adjunto")
         comprobante = ComprobantePago(**datos.model_dump(), pago_id=pago_id)
-        return self.repo_comprobante.crear(comprobante)
+        resultado = self.repo_comprobante.crear(comprobante)
+        self.db.commit()
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        return resultado
 
     # --- Voucher de transferencia (cliente) -----------------------------------
     def adjuntar_voucher(

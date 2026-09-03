@@ -59,6 +59,5 @@ class RolRepositorio:
             return rol
         rol = Rol(tipo_rol=tipo_rol, descripcion=tipo_rol.value.capitalize())
         self.db.add(rol)
-        self.db.commit()
-        self.db.refresh(rol)
+        self.db.flush()
         return rol

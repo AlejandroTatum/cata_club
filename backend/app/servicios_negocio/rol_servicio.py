@@ -150,6 +150,10 @@ class RolServicio:
         MembresiaServicio.crear_membresia. Es un "mejor esfuerzo": si la
         persona todavía no tiene Usuario (no se ha auto-registrado), no hace
         nada -- no es un error, simplemente no hay nada que asignar todavía.
+
+        Solo `flush()` (issue #831): es un paso de la transacción atómica de
+        `crear_membresia`, que hace el único `commit()` al final -- antes
+        comiteaba acá, ANTES de que `crear_membresia` terminara de escribir.
         """
         usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
         if not usuario:
@@ -162,7 +166,7 @@ class RolServicio:
             return None
         rol_alumno = self.repo_rol.obtener_o_crear(TipoRol.ALUMNO)
         usuario.roles.append(rol_alumno)
-        self.db.commit()
+        self.db.flush()
 
     def exigir_que_pueda_ser_alumno(self, persona_id: int) -> None:
         """La mitad de `asignar_alumno_si_corresponde` que NO muta, para que
