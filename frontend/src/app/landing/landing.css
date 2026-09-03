@@ -253,6 +253,34 @@
 .landing-rule { display: block; width: 64px; height: 3px; margin: 20px 0 22px; background: var(--landing-action); }
 .landing-editorial-item p { max-width: 46ch; color: var(--landing-text); font-size: 17.5px; line-height: 1.72; }
 .landing-editorial-item p + p { margin-top: 16px; }
+/* Issue #996: matching h3 tops was not enough — Mission's lead ("Promover el
+   tenis de mesa mediante formación deportiva de calidad.", 65 chars) wraps an
+   extra line against Vision's ("Ser un club líder y referente provincial y
+   nacional.", 51 chars) at 1280/1366/1600, and everything below the lead
+   inherited that extra 31.5px (the lead's own line-height) because each half
+   stacked its own copy independently. `min-height` on the lead was rejected:
+   it caps at whatever line count is measured today and silently breaks the
+   day either copy grows past it.
+   Fixed at the source instead: `.landing-editorial` owns five named rows
+   (eyebrow/title/rule/lead/body) and both halves place their matching piece
+   in the same row via `subgrid`, so a row's height is always the taller of
+   its two occupants — the shorter side's row grows to match instead of the
+   taller side's overflow pushing only its own column down. Scoped to
+   >= 769px: below that the two halves already stack vertically (one column,
+   sequential rows) and sharing rows across them is meaningless. */
+@media (min-width: 769px) {
+  .landing-editorial { grid-template-rows: repeat(5, auto); }
+  .landing-editorial-divider { grid-row: 1 / -1; }
+  .landing-editorial-item { grid-template-rows: subgrid; grid-row: 1 / -1; }
+  .landing-editorial-media { grid-row: 1 / -1; }
+  .landing-editorial-copy { display: grid; grid-template-columns: auto 1fr; grid-template-rows: subgrid; grid-row: 1 / -1; }
+  .landing-editorial-copy .landing-index { grid-row: 1; grid-column: 1; }
+  .landing-editorial-copy .landing-index-label { grid-row: 1; grid-column: 2; }
+  .landing-editorial-item h3 { grid-row: 2; grid-column: 1 / -1; }
+  .landing-editorial-item .landing-rule { grid-row: 3; grid-column: 1 / -1; }
+  .landing-editorial-item .landing-lead { grid-row: 4; grid-column: 1 / -1; }
+  .landing-editorial-item p:not(.landing-lead) { grid-row: 5; grid-column: 1 / -1; }
+}
 /* The approved editorial photos sit on a token-light card so the jpegs read as
    photographs, not as bleeding edges — and the 4/3 stage keeps both blocks the
    same height at every breakpoint. */
