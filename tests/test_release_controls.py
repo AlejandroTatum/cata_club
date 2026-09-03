@@ -2578,3 +2578,142 @@ def test_una_imagen_unica_y_valida_sigue_llegando_al_manifiesto(tmp_path):
     assert _manifiestos_consultados(docker_log) == [
         "manifest inspect registry.example/cata-backend:abcdef1"
     ]
+
+
+# --- Variables sin default en deploy.sh (issue #993) -------------------------
+#
+# `RELEASE_RECORD_DIR` se usaba en `verificar_release_persistido` sin haberse
+# definido nunca en la cabecera. Bajo `set -u` eso es fatal, pero solo AL
+# FINAL: el deploy completo (backup, imágenes, migraciones, healthchecks) ya
+# corrió y salió bien, y el script muere igual en su último paso. Un `bash -n`
+# no lo detecta -- `set -u` falla en ejecución, no en parseo -- y la fixture
+# `_deploy_env` de este archivo tampoco lo hubiera detectado: siempre pasa
+# `RELEASE_RECORD_DIR` en el entorno (línea 560), así que ningún test previo
+# ejercitaba el caso real de producción, donde nadie la exporta y el default
+# de la cabecera es lo único que la define.
+#
+# En vez de fijar solo ese caso, este candado ataca la clase entera: extrae
+# toda variable que `deploy.sh` expande sin operador de default (`$VAR` /
+# `${VAR}`, sin `:-`, `-`, `:+`, `+`, `:?`, `?`, ni una forma con subíndice o
+# manipulación como `${VAR[0]}` o `${VAR#patrón}`) y exige que esté asignada
+# en algún punto del propio archivo (por ejemplo dentro de una función, como
+# `IMAGE_TAG` en `load_image_tag`) o sea una variable de entorno conocida que
+# el script asume provista por quien lo invoca.
+#
+# El escaneo respeta el quoting real de bash: dentro de comillas simples `$`
+# no expande nada (así se ignoran los bloques de python embebidos, que van
+# entre comillas simples), y una asignación solo cuenta si el nombre aparece
+# fuera de cualquier comilla -- una mención dentro de un mensaje de error como
+# `"HEAD=${IMAGE_TAG}"` no es una asignación real y no debe poder tapar una
+# variable de verdad sin definir.
+DEPLOY_SH = Path(__file__).resolve().parent.parent / "scripts" / "deploy" / "deploy.sh"
+
+# Variables de entorno que `deploy.sh` asume provistas por quien lo invoca
+# (o por su entorno de ejecución) sin definirlas ni con default ni con una
+# asignación propia. Hoy está vacía: toda variable que el script expande sin
+# default termina asignada en algún punto del propio archivo. Se deja el
+# mecanismo para no convertir este candado en una carrera contra el próximo
+# caso legítimo de una variable verdaderamente externa.
+VARIABLES_DE_ENTORNO_CONOCIDAS: frozenset[str] = frozenset()
+
+_NOMBRE = r"[A-Za-z_][A-Za-z0-9_]*"
+_PATRON_LLAVES_SIN_DEFAULT = re.compile(r"\$\{(" + _NOMBRE + r")\}")
+_PATRON_BARE = re.compile(r"\$(" + _NOMBRE + r")")
+_PATRON_ASIGNACION = re.compile(r"(?:^|[\s;{(&|])(" + _NOMBRE + r")\+?=", re.MULTILINE)
+
+
+def _variables_expandidas_sin_default_y_asignadas(fuente: str) -> tuple[set[str], set[str]]:
+    """Devuelve (usos_sin_default, asignaciones), respetando el quoting real:
+
+    - dentro de comillas simples, `$` es literal (no hay expansión);
+    - una asignación solo cuenta si el nombre queda fuera de toda comilla.
+    """
+    sin_comentarios = "\n".join(
+        "" if linea.strip().startswith("#") else linea for linea in fuente.splitlines()
+    )
+    largo = len(sin_comentarios)
+    en_comilla = [False] * largo
+    en_simple = en_doble = False
+    usos: list[str] = []
+    i = 0
+    while i < largo:
+        en_comilla[i] = en_simple or en_doble
+        caracter = sin_comentarios[i]
+        if en_simple:
+            if caracter == "'":
+                en_simple = False
+            i += 1
+            continue
+        if caracter == "'":
+            en_simple = True
+            i += 1
+            continue
+        if caracter == '"':
+            en_doble = not en_doble
+            i += 1
+            continue
+        if caracter == "\\":
+            i += 2
+            continue
+        if caracter == "$":
+            coincidencia = _PATRON_LLAVES_SIN_DEFAULT.match(sin_comentarios, i)
+            if coincidencia:
+                usos.append(coincidencia.group(1))
+                i = coincidencia.end()
+                continue
+            coincidencia = _PATRON_BARE.match(sin_comentarios, i)
+            if coincidencia:
+                usos.append(coincidencia.group(1))
+                i = coincidencia.end()
+                continue
+        i += 1
+
+    asignaciones = {
+        coincidencia.group(1)
+        for coincidencia in _PATRON_ASIGNACION.finditer(sin_comentarios)
+        if not en_comilla[coincidencia.start(1)]
+    }
+    return set(usos), asignaciones
+
+
+def test_deploy_no_expande_variables_sin_asignar_ni_default(tmp_path):
+    """Candado del issue #993: `RELEASE_RECORD_DIR` se usaba en la línea 171
+    sin haberse definido nunca, y `set -u` mataba el deploy DESPUÉS de que
+    todo hubiera salido bien. Este test no fija solo ese caso: falla ante
+    CUALQUIER variable que `deploy.sh` expanda sin default y sin asignar."""
+    fuente = DEPLOY_SH.read_text()
+
+    usos_sin_default, asignaciones = _variables_expandidas_sin_default_y_asignadas(fuente)
+
+    sin_definir = sorted(
+        usos_sin_default - asignaciones - VARIABLES_DE_ENTORNO_CONOCIDAS
+    )
+    assert sin_definir == [], (
+        f"deploy.sh expande {sin_definir} sin default y sin asignarla en el "
+        "archivo; bajo `set -u` eso mata el script en tiempo de ejecución "
+        "(issue #993). Agregá una asignación con default en la cabecera, o "
+        "sumá la variable a VARIABLES_DE_ENTORNO_CONOCIDAS si es realmente "
+        "provista por quien invoca el script."
+    )
+
+
+def test_release_record_dir_esta_asignada_antes_de_su_primer_uso():
+    """Mínimo del issue #993, explícito para no depender solo del barrido
+    general: `RELEASE_RECORD_DIR` tiene que quedar asignada en la cabecera de
+    `deploy.sh` antes de la línea de `verificar_release_persistido` que la
+    usa, o `set -u` la mata ahí con el deploy ya terminado y correcto."""
+    lineas = DEPLOY_SH.read_text().splitlines()
+
+    primer_uso = next(
+        i for i, linea in enumerate(lineas) if "$RELEASE_RECORD_DIR/current.env" in linea
+    )
+    primera_asignacion = next(
+        (i for i, linea in enumerate(lineas) if re.match(r"RELEASE_RECORD_DIR=", linea)),
+        None,
+    )
+
+    assert primera_asignacion is not None, "RELEASE_RECORD_DIR nunca se asigna en deploy.sh"
+    assert primera_asignacion < primer_uso, (
+        "RELEASE_RECORD_DIR se asigna después de usarse; con `set -u` eso "
+        "sigue siendo una variable no ligada en el momento del uso"
+    )

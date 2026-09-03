@@ -8,6 +8,7 @@ die() { log "ERROR: $*" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STACK_DIR="${STACK_DIR:-/opt/cata-club}"
+RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
 BACKUP_CRON_LOG="${BACKUP_CRON_LOG:-/var/log/cataclub-backup.log}"
 cmd="${1:-deploy}"
