@@ -435,10 +435,43 @@
 .landing-day-track { display: flex; flex-direction: column; gap: 8px; }
 .landing-day-row { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 14px; align-items: center; }
 .landing-day-row > b { color: var(--landing-text-muted); font-size: 11px; font-weight: 800; letter-spacing: 1px; line-height: 1; text-transform: uppercase; white-space: nowrap; }
-.landing-day-lane { position: relative; height: 46px; border-radius: 10px; background: color-mix(in srgb, var(--landing-brand-black) 5%, transparent); overflow: hidden; }
-/* No text inside the bars: the lane answers WHEN, the list answers WHAT. */
-.landing-day-bar { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; background: color-mix(in srgb, var(--landing-cat, var(--landing-action)) 22%, transparent); transition: background-color 300ms ease, box-shadow 300ms ease; }
+/* `overflow: visible` (was `hidden`): a narrow bar's range label has to step
+   outside its own box (below, see the `@container` fallback) without being
+   clipped by the lane that hosts it — issue #872. */
+.landing-day-lane { position: relative; height: 46px; border-radius: 10px; background: color-mix(in srgb, var(--landing-brand-black) 5%, transparent); overflow: visible; }
+/* The lane still answers WHEN, the list still answers WHAT — the bar now
+   also carries its own compact range (issue #872), so `container-type`
+   lets that label react to the bar's real rendered width, not a guess. */
+.landing-day-bar { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; background: color-mix(in srgb, var(--landing-cat, var(--landing-action)) 22%, transparent); transition: background-color 300ms ease, box-shadow 300ms ease; container-type: inline-size; }
 .landing-day-bar[data-on="true"] { background: var(--landing-cat, var(--landing-action)); box-shadow: 0 3px 10px color-mix(in srgb, var(--landing-cat, var(--landing-action)) 45%, transparent); }
+/* Centered inside the bar by default: tabular numerals keep "20:00–21:15"
+   from jittering, `nowrap` keeps it one line, and the shadow holds contrast
+   over every category color. `overflow: hidden` clips it only if a bar this
+   wide should never need the fallback below and somehow still does. */
+.landing-day-bar-label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: 0 6px; overflow: hidden; pointer-events: none;
+  font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
+  color: var(--landing-surface); text-shadow: 0 1px 2px color-mix(in srgb, var(--landing-brand-black) 55%, transparent);
+}
+/* Below ~78px (roughly what "20:00–21:15" needs at this size) the label
+   cannot sit inside the bar without clipping, so it steps outside instead:
+   a small anchored tag rather than text mashed into a sliver. Odd/even bars
+   alternate which side they grow toward — the first bar in a back-to-back
+   pair (e.g. Noche's 18:00–20:00 / 20:00–21:15) has empty room before it,
+   the last has empty room after it, so alternating keeps the two labels
+   from growing into each other. This does not generalize past two adjacent
+   narrow bars in one lane; the data model only ever produces that shape. */
+@container (max-width: 78px) {
+  .landing-day-bar-label {
+    position: absolute; inset: auto; top: 50%; transform: translateY(-50%); left: 100%; margin-left: 4px;
+    display: block; width: max-content; justify-content: normal;
+    padding: 1px 6px; border-radius: 5px; background: var(--landing-surface);
+    color: var(--landing-text-strong); text-shadow: none; box-shadow: 0 2px 6px color-mix(in srgb, var(--landing-brand-black) 18%, transparent);
+    z-index: 2;
+  }
+  .landing-day-bar:nth-of-type(odd) .landing-day-bar-label { left: auto; right: 100%; margin-left: 0; margin-right: 4px; }
+}
 
 .landing-location { background: var(--landing-background); }
 .landing-location-row { align-items: stretch; }

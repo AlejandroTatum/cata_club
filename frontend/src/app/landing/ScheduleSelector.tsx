@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import type { LandingSchedule } from "./schedule-data";
-import { barGeometry, deriveDayRange, type DayRange } from "./schedule-timeline";
+import { barGeometry, deriveDayRange, formatRangeLabel, type DayRange } from "./schedule-timeline";
 
 const CATEGORY_COLORS = [
   "var(--landing-brand-red)", "var(--landing-brand-yellow)", "var(--landing-brand-fuchsia)",
@@ -78,8 +78,14 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
   const renderBars = (which: DayGroup): React.ReactElement[] => (active?.slots ?? []).flatMap((slot, slotIndex): React.ReactElement[] => {
     if (!dayGroups(slot.days).some(({ key }): boolean => key === which)) return [];
     const geometry = barGeometry(slot.hours, range);
-    return [<span key={`${active.category}-${slotIndex}-${which}`} className="landing-day-bar" data-on="true"
-      title={`${active.category} · ${slot.hours} · ${slot.days}`} style={{ left: `${geometry.left.toFixed(3)}%`, width: `calc(${geometry.width.toFixed(3)}% - 3px)`, "--landing-cat": CATEGORY_COLORS[selected % CATEGORY_COLORS.length] } as React.CSSProperties} />];
+    // Category, hours and days — the same detail `title` already carried,
+    // now also the bar's own accessible label (issue #872) rather than a new
+    // string, so the two can never drift apart.
+    const detail = `${active.category} · ${slot.hours} · ${slot.days}`;
+    return [<span key={`${active.category}-${slotIndex}-${which}`} className="landing-day-bar" data-on="true" role="img"
+      title={detail} aria-label={detail} style={{ left: `${geometry.left.toFixed(3)}%`, width: `calc(${geometry.width.toFixed(3)}% - 3px)`, "--landing-cat": CATEGORY_COLORS[selected % CATEGORY_COLORS.length] } as React.CSSProperties}>
+      <span className="landing-day-bar-label" aria-hidden="true">{formatRangeLabel(slot.hours)}</span>
+    </span>];
   });
 
   return <div className="landing-sched">
@@ -92,7 +98,12 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
     </div>
     <div className="landing-sched-panel" role="tabpanel" id="schedule-panel" aria-labelledby={`schedule-tab-${selected}`}>
       <h3>{active.category}</h3><div className="landing-sched-facts">{active.audience ? <span className="landing-sched-fact"><small>Edad</small><b>{active.audience}</b></span> : null}<span className="landing-sched-fact"><small>Horario</small><b>{active.slots.map((slot): string => slot.hours).join("  ·  ")}</b></span><span className="landing-sched-fact"><small>Días</small><b>{categoryDays(active)}</b></span></div>
-      <div className="landing-day"><div className="landing-day-track" role="img" aria-label={DAY_TRACK_LABEL}>{rows.map(([on, label]): React.ReactElement => <div className="landing-day-row" key={on} data-day-row={on}><b>{label}</b><div className="landing-day-lane" data-day-lane={on}>{renderBars(on)}</div></div>)}</div></div>
+      {/* A group, not `role="img"`: an image role swallows its descendants
+          into presentation, and each bar below now carries its own
+          accessible label (issue #872) that has to survive as a real node
+          in the accessibility tree. The track keeps the same descriptive
+          label as before — its generic context, unchanged. */}
+      <div className="landing-day"><div className="landing-day-track" role="group" aria-label={DAY_TRACK_LABEL}>{rows.map(([on, label]): React.ReactElement => <div className="landing-day-row" key={on} data-day-row={on}><b>{label}</b><div className="landing-day-lane" data-day-lane={on}>{renderBars(on)}</div></div>)}</div></div>
       <a className="landing-button" href="#contacto">Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" /></a>
     </div>
   </div>;

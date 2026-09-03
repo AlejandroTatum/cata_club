@@ -5,6 +5,7 @@ import {
   closedWeekdayGap,
   deriveDayRange,
   formatClock,
+  formatRangeLabel,
   parseClockRange,
 } from "@/app/landing/schedule-timeline";
 import { category, publishedCatalog, satSlot, weekSlot } from "./schedule-fixtures";
@@ -97,6 +98,17 @@ describe("data-driven day groups", (): void => {
         expect(geometry.left + geometry.width).toBeLessThanOrEqual(100 + 1e-9);
       });
     });
+  });
+});
+
+describe("formatRangeLabel", (): void => {
+  it("compacts the published range into a tabular, unspaced label — issue #872", (): void => {
+    expect(formatRangeLabel("20:00 – 21:15")).toBe("20:00–21:15");
+    expect(formatRangeLabel("08:00 – 09:15")).toBe("08:00–09:15");
+  });
+
+  it("still zero-pads a single-digit hour the published format never uses", (): void => {
+    expect(formatRangeLabel("8:00 – 9:15")).toBe("08:00–09:15");
   });
 });
 

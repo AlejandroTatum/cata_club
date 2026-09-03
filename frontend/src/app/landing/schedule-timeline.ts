@@ -68,6 +68,18 @@ export function barGeometry(hours: string, range: DayRange): BarGeometry {
 }
 
 /**
+ * The compact "HH:MM–HH:MM" label rendered on (or beside) a timeline bar —
+ * issue #872. Reuses `parseClockRange`/`formatClock` rather than reformatting
+ * the raw string, so it stays correct for the single-digit-hour input those
+ * already tolerate; it just drops the spaces the published `"HH:MM – HH:MM"`
+ * copy carries around its en dash, which a narrow bar has no room for.
+ */
+export function formatRangeLabel(hours: string): string {
+  const { start, end } = parseClockRange(hours);
+  return `${formatClock(start)}–${formatClock(end)}`;
+}
+
+/**
  * The weekday track's closure, computed rather than assumed: the widest gap
  * between consecutive weekday slots, returned only when it exceeds sixty
  * minutes. Saturday-only slots are ignored — the weekday lane answers when the
