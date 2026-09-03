@@ -12,8 +12,7 @@ class NotificacionRepositorio:
 
     def crear(self, notificacion: Notificacion) -> Notificacion:
         self.db.add(notificacion)
-        self.db.commit()
-        self.db.refresh(notificacion)
+        self.db.flush()
         return notificacion
 
     def listar_por_persona(
@@ -41,8 +40,7 @@ class NotificacionRepositorio:
 
     def marcar_leida(self, notificacion: Notificacion) -> Notificacion:
         notificacion.leida = True
-        self.db.commit()
-        self.db.refresh(notificacion)
+        self.db.flush()
         return notificacion
 
     def marcar_todas_leidas(self, persona_ids: list[int]) -> int:
@@ -57,5 +55,5 @@ class NotificacionRepositorio:
             .filter(Notificacion.persona_id.in_(persona_ids), Notificacion.leida.is_(False))
             .update({"leida": True}, synchronize_session=False)
         )
-        self.db.commit()
+        self.db.flush()
         return actualizadas

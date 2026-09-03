@@ -28,7 +28,9 @@ class DescuentoServicio:
     def crear(self, datos: DescuentoCreateDTO) -> Descuento:
         if self.repo.obtener_por_nombre(datos.nombre):
             raise EntidadDuplicada(f"Ya existe un descuento con el nombre '{datos.nombre}'")
-        return self.repo.crear(Descuento(**datos.model_dump()))
+        resultado = self.repo.crear(Descuento(**datos.model_dump()))
+        self.db.commit()
+        return resultado
 
     def listar(self, skip: int = 0, limit: Optional[int] = None) -> list[Descuento]:
         return self.repo.listar(skip=skip, limit=limit)
@@ -65,4 +67,6 @@ class DescuentoServicio:
 
         for campo, valor in cambios.items():
             setattr(descuento, campo, valor)
-        return self.repo.guardar_cambios(descuento)
+        resultado = self.repo.guardar_cambios(descuento)
+        self.db.commit()
+        return resultado

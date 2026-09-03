@@ -17,10 +17,13 @@ class PaisServicio:
     FastAPI ni HTTPException (mismo patrón que PersonaServicio)."""
 
     def __init__(self, db: Session):
+        self.db = db
         self.repo = PaisRepositorio(db)
 
     def crear_pais(self, datos: PaisCreateDTO) -> Pais:
-        return self.repo.crear(Pais(**datos.model_dump()))
+        resultado = self.repo.crear(Pais(**datos.model_dump()))
+        self.db.commit()
+        return resultado
 
     def listar_paises(self, skip: int = 0, limit: Optional[int] = None) -> List[Pais]:
         return self.repo.listar(skip=skip, limit=limit)
@@ -37,13 +40,16 @@ class PaisServicio:
 
 class ProvinciaServicio:
     def __init__(self, db: Session):
+        self.db = db
         self.repo = ProvinciaRepositorio(db)
         self.repo_pais = PaisRepositorio(db)
 
     def crear_provincia(self, datos: ProvinciaCreateDTO) -> Provincia:
         if not self.repo_pais.obtener_por_id(datos.pais_id):
             raise EntidadNoEncontrada(f"País con id {datos.pais_id} no encontrado")
-        return self.repo.crear(Provincia(**datos.model_dump()))
+        resultado = self.repo.crear(Provincia(**datos.model_dump()))
+        self.db.commit()
+        return resultado
 
     def listar_provincias(
         self, pais_id: Optional[int] = None,
@@ -63,6 +69,7 @@ class ProvinciaServicio:
 
 class CantonServicio:
     def __init__(self, db: Session):
+        self.db = db
         self.repo = CantonRepositorio(db)
         self.repo_provincia = ProvinciaRepositorio(db)
 
@@ -71,7 +78,9 @@ class CantonServicio:
             raise EntidadNoEncontrada(
                 f"Provincia con id {datos.provincia_id} no encontrada"
             )
-        return self.repo.crear(Canton(**datos.model_dump()))
+        resultado = self.repo.crear(Canton(**datos.model_dump()))
+        self.db.commit()
+        return resultado
 
     def listar_cantones(
         self, provincia_id: Optional[int] = None,

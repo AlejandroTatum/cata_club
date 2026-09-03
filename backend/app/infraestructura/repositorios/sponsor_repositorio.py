@@ -16,10 +16,9 @@ class SponsorRepositorio:
 
     def crear(self, sponsor: Sponsor) -> Sponsor:
         self.db.add(sponsor)
-        self.db.commit()
-        self.db.refresh(sponsor)
+        self.db.flush()
         return sponsor
 
     def eliminar(self, sponsor: Sponsor) -> None:
         self.db.delete(sponsor)
-        self.db.commit()
+        self.db.flush()

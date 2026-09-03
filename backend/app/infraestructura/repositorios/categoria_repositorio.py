@@ -1,10 +1,8 @@
 from typing import List, Optional
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import AlumnoHorario, CategoriaHorario, HorarioEntrenamiento
 
 
@@ -15,12 +13,23 @@ class CategoriaRepositorio:
 
     ABM del admin (docs/archive/fixes/24-abm-categorias.md): `crear_con_horarios`,
     `guardar_edicion` y `eliminar_con_horarios` son operaciones COMPUESTAS
-    a propósito -- cada una hace UN solo `commit()` para la categoria y
+    a propósito -- cada una hace UN solo `flush()` para la categoria y
     todo lo que cambia junto con ella (sus `categoria_horario_dia`, los
     `horario_entrenamiento` que crea/borra, y el `alumno_horario` que
     purga o backfillea). `AsistenciaServicio` es quien decide QUÉ armar
-    (validaciones, bloqueo por historial); este repositorio solo garantiza
-    que se aplique TODO junto o nada."""
+    (validaciones, bloqueo por historial) Y quién comitea, en UN solo
+    `commit()` de caso de uso (issue #831): este repositorio solo garantiza
+    que se aplique TODO junto o nada dentro de esa transacción.
+
+    Antes (issue original de este método) cada una de las tres atrapaba su
+    propio `IntegrityError` y hacía `rollback()` acá adentro -- un
+    "transaction script" a nivel de repositorio que, dentro de un caso de
+    uso más grande, revertiría trabajo YA flusheado por OTRO repositorio.
+    Ninguna de las tres ramas tiene cobertura de test (son una red de
+    seguridad ante una carrera que las validaciones de `AsistenciaServicio`
+    ya descartan en el camino normal); se retira la traducción a
+    `OperacionInvalida` y se deja propagar el `IntegrityError` crudo -- el
+    caso de uso o el cierre de la sesión revierten la transacción."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -56,15 +65,7 @@ class CategoriaRepositorio:
         sin categoria a medio crear."""
         self.db.add(categoria)
         self.db.add_all(horarios)
-        try:
-            self.db.commit()
-        except IntegrityError as error:
-            self.db.rollback()
-            raise OperacionInvalida(
-                "No se pudo crear la categoría: revisá que el nombre no esté "
-                "repetido.",
-            ) from error
-        self.db.refresh(categoria)
+        self.db.flush()
         return categoria
 
     def guardar_edicion(
@@ -90,15 +91,7 @@ class CategoriaRepositorio:
             self.db.delete(h)
         self.db.add_all(horarios_nuevos)
         self.db.add_all(alumno_horario_nuevos)
-        try:
-            self.db.commit()
-        except IntegrityError as error:
-            self.db.rollback()
-            raise OperacionInvalida(
-                "No se pudo guardar la categoría: revisá que el nombre no "
-                "esté repetido y que los días no se dupliquen.",
-            ) from error
-        self.db.refresh(categoria)
+        self.db.flush()
         return categoria
 
     def eliminar_con_horarios(
@@ -117,11 +110,4 @@ class CategoriaRepositorio:
         for h in horarios:
             self.db.delete(h)
         self.db.delete(categoria)
-        try:
-            self.db.commit()
-        except IntegrityError as error:
-            self.db.rollback()
-            raise OperacionInvalida(
-                f'No se puede eliminar la categoría "{categoria.label}" '
-                "porque tiene registros asociados.",
-            ) from error
+        self.db.flush()

@@ -58,13 +58,11 @@ class HorarioRepositorio:
 
     def crear(self, horario: HorarioEntrenamiento) -> HorarioEntrenamiento:
         self.db.add(horario)
-        self.db.commit()
-        self.db.refresh(horario)
+        self.db.flush()
         return horario
 
     def actualizar(self, horario: HorarioEntrenamiento) -> HorarioEntrenamiento:
-        self.db.commit()
-        self.db.refresh(horario)
+        self.db.flush()
         return horario
 
     def eliminar(self, horario: HorarioEntrenamiento) -> None:
@@ -81,13 +79,11 @@ class AsistenciaRepositorio:
 
     def crear(self, asistencia: Asistencia) -> Asistencia:
         self.db.add(asistencia)
-        self.db.commit()
-        self.db.refresh(asistencia)
+        self.db.flush()
         return asistencia
 
     def actualizar(self, asistencia: Asistencia) -> Asistencia:
-        self.db.commit()
-        self.db.refresh(asistencia)
+        self.db.flush()
         return asistencia
 
     def obtener_por_id(self, asistencia_id: int) -> Optional[Asistencia]:
@@ -100,11 +96,10 @@ class AsistenciaRepositorio:
         auditoría de la corrección en UNA sola transacción (issue #389,
         slice 2) -- mismo criterio "un commit por operación lógica" que
         `AlumnoHorarioRepositorio.crear_muchos`, no uno por fila: si algo
-        falla entre medio, ninguna de las dos queda a mitad de camino."""
+        falla entre medio, ninguna de las dos queda a mitad de camino.
+        Solo `flush()` (issue #831): el caso de uso comitea una sola vez."""
         self.db.add_all([asistencia, correccion])
-        self.db.commit()
-        self.db.refresh(asistencia)
-        self.db.refresh(correccion)
+        self.db.flush()
         return asistencia, correccion
 
     def listar_correcciones_por_asistencia(self, asistencia_id: int) -> List[AsistenciaCorreccion]:
@@ -333,45 +328,48 @@ class AlumnoHorarioRepositorio:
 
     def crear(self, alumno_horario: AlumnoHorario) -> AlumnoHorario:
         self.db.add(alumno_horario)
-        self.db.commit()
-        self.db.refresh(alumno_horario)
+        self.db.flush()
         return alumno_horario
 
     def eliminar(self, alumno_horario: AlumnoHorario) -> None:
         self.db.delete(alumno_horario)
-        self.db.commit()
+        self.db.flush()
 
     def crear_muchos(self, alumnos_horario: List[AlumnoHorario]) -> List[AlumnoHorario]:
-        """Persists every row in ONE transaction: the club enrolls a student
-        into a whole training categoria at once (full month, never a loose
-        weekday), so this either lands every row or none of them -- a single
-        commit instead of one per row, which would leave the categoria
-        half-enrolled if a later row failed."""
+        """Persists every row in ONE flush (issue #831: el caso de uso
+        comitea): the club enrolls a student into a whole training categoria
+        at once (full month, never a loose weekday), so this either lands
+        every row or none of them -- a single flush instead of one per row,
+        which would leave the categoria half-enrolled if a later row failed."""
         self.db.add_all(alumnos_horario)
-        self.db.commit()
-        for alumno_horario in alumnos_horario:
-            self.db.refresh(alumno_horario)
+        self.db.flush()
         return alumnos_horario
 
     def eliminar_muchos(self, alumnos_horario: List[AlumnoHorario]) -> None:
-        """Mirror of `crear_muchos`: removes every row in ONE transaction."""
+        """Mirror of `crear_muchos`: removes every row in ONE flush."""
         for alumno_horario in alumnos_horario:
             self.db.delete(alumno_horario)
-        self.db.commit()
+        self.db.flush()
 
     def eliminar_por_horario(self, horario_id: int) -> None:
         """Removes every AlumnoHorario row pinned to this ONE horario_id --
         used when the row itself is about to be deleted (e.g. an admin drops
-        one día from a categoria's schedule). Deliberately narrower than
+        one día from a categoria's schedule). Deliberadamente narrower than
         `eliminar_muchos`/the categoria-wide fan-out in
         `AsistenciaServicio.desasignar_alumno_de_horario`: unenrolling a
         student because their whole categoria was chosen is a different
-        question from cleaning up the one row that is being deleted."""
+        question from cleaning up the one row that is being deleted.
+
+        Solo `flush()` (issue #831): forma parte de la transacción atómica
+        de `AsistenciaServicio.eliminar_horario`, que comitea (o revierte)
+        junto con `HorarioRepositorio.eliminar` -- antes cada uno comiteaba
+        por separado, y una fila de `alumno_horario` podía quedar borrada
+        aunque el `horario_entrenamiento` sobreviviera por tener historial."""
         stmt = select(AlumnoHorario).where(AlumnoHorario.horario_id == horario_id)
         filas = list(self.db.execute(stmt).scalars().all())
         for fila in filas:
             self.db.delete(fila)
-        self.db.commit()
+        self.db.flush()
 
     def listar_por_horario_sin_filtro(self, horario_id: int) -> List[AlumnoHorario]:
         """Todas las filas de un horario, sin filtrar por alumno activo ni

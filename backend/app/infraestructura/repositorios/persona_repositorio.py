@@ -19,8 +19,8 @@ def _normalizar_termino(palabra: str) -> str:
 
 class PersonaRepositorio:
     """Encapsula todo el acceso a datos de Persona. Es la ÚNICA clase
-    del proyecto que debe importar Session y ejecutar db.query/add/commit
-    para esta entidad.
+    del proyecto que debe importar Session y ejecutar db.query/add/flush
+    para esta entidad -- el `commit()` es del caso de uso (issue #831).
 
     NO expone `eliminar`: una Persona nunca se borra. La baja es lógica
     (`Persona.activo`), porque su historial de asistencias, pagos y ficha
@@ -90,24 +90,21 @@ class PersonaRepositorio:
     # `contar_por_rol` se eliminaron junto con el ranking competitivo: su
     # único consumidor era `RankingServicio.listar_alumnos_con_nivel`.
 
-    def crear(self, persona: Persona, *, commit: bool = True) -> Persona:
-        """`commit=False` deja la fila en un `flush()` (con `id` ya asignado)
-        sin cerrar la transacción -- lo usa `EnrollmentServicio.enroll` para
-        que representante + menor + roles + inscripción se escriban en una
-        sola transacción atómica (issue #338): todo o nada."""
+    def crear(self, persona: Persona) -> Persona:
+        """Deja la fila en un `flush()` (con `id` ya asignado) sin cerrar la
+        transacción -- issue #831: el caso de uso decide cuándo comitear,
+        nunca el repositorio. Antes existía `commit: bool = True` para que
+        `EnrollmentServicio.enroll` pudiera pedir `commit=False` (issue
+        #338); ahora `flush()` es el único comportamiento, y el llamador es
+        quien comitea una sola vez al final."""
         self.db.add(persona)
-        if commit:
-            self.db.commit()
-            self.db.refresh(persona)
-        else:
-            self.db.flush()
+        self.db.flush()
         return persona
 
     def actualizar(self, persona: Persona, cambios: dict) -> Persona:
         for campo, valor in cambios.items():
             setattr(persona, campo, valor)
-        self.db.commit()
-        self.db.refresh(persona)
+        self.db.flush()
         return persona
 
     # --- Reportes (E04-RF014) --------------------------------------------------

@@ -32,8 +32,37 @@ class ConsentimientoLegalServicio:
         version: str,
         texto_por_documento: Mapping[str, str],
         representado_persona_id: Optional[int] = None,
-        commit: bool = True,
     ) -> list[ConsentimientoLegal]:
+        """Caso de uso independiente: registra Y comitea (issue #831, mismo
+        criterio que `revocar`). `EnrollmentServicio.enroll` NO llama a este
+        método -- usa `_registrar_aceptacion_grupal_nucleo` directo, sin
+        commit, porque ahí la aceptación es un paso más de la transacción
+        atómica de la inscripción completa (mismo patrón que
+        `PersonaServicio._crear_persona_validada`, el núcleo sin commit de
+        `registrar_persona`)."""
+        registros = self._registrar_aceptacion_grupal_nucleo(
+            cuenta_id=cuenta_id,
+            documentos=documentos,
+            version=version,
+            texto_por_documento=texto_por_documento,
+            representado_persona_id=representado_persona_id,
+        )
+        self.db.commit()
+        return registros
+
+    def _registrar_aceptacion_grupal_nucleo(
+        self,
+        *,
+        cuenta_id: int,
+        documentos: Sequence[str],
+        version: str,
+        texto_por_documento: Mapping[str, str],
+        representado_persona_id: Optional[int] = None,
+    ) -> list[ConsentimientoLegal]:
+        """Núcleo SIN commit de `registrar_aceptacion_grupal` (issue #831):
+        antes existía `commit: bool = True` para esta misma distinción (mismo
+        hueco que el `commit` de los repositorios, issue #338); ahora es un
+        método propio, no un flag."""
         documentos = tuple(documentos)
         if not documentos or any(documento not in DOCUMENTOS_LEGALES for documento in documentos):
             raise ValueError("documento legal no reconocido")
@@ -57,8 +86,6 @@ class ConsentimientoLegalServicio:
                 version_documento=version,
                 texto_aceptado=texto_por_documento[documento],
             )))
-        if commit:
-            self.db.commit()
         return registros
 
     def revocar(self, consentimiento_id: int, *, cuenta_id: int, motivo: str) -> RevocacionConsentimientoLegal:

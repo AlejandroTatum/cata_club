@@ -224,7 +224,7 @@ class EnrollmentServicio:
                     fecha_nacimiento=datos.representante.fecha_nacimiento,
                     telefono=datos.representante.telefono,
                 )
-                self.repo_persona.crear(rep, commit=False)
+                self.repo_persona.crear(rep)
                 representante_id = rep.id
                 correo_login_rep = datos.representante.correo
 
@@ -237,7 +237,7 @@ class EnrollmentServicio:
                 representante_id=representante_id,
                 institucion_id=datos.alumno.institucion_id,
             )
-            self.repo_persona.crear(alumno, commit=False)
+            self.repo_persona.crear(alumno)
 
             if datos.ficha_medica:
                 ficha = FichaMedica(
@@ -249,7 +249,7 @@ class EnrollmentServicio:
                 )
                 for nombre in datos.ficha_medica.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
-                self.repo_ficha.crear(ficha, commit=False)
+                self.repo_ficha.crear(ficha)
 
             if datos.antecedentes and datos.antecedentes.nivel_tecnico_alumno:
                 ant = AntecedentesClub(
@@ -261,7 +261,7 @@ class EnrollmentServicio:
                     nivel_tecnico_alumno=datos.antecedentes.nivel_tecnico_alumno,
                     mano_dominante=datos.antecedentes.mano_dominante,
                 )
-                self.repo_antecedentes.crear(ant, commit=False)
+                self.repo_antecedentes.crear(ant)
 
             if correo_login_rep:
                 # Representante se registra con sus credenciales
@@ -273,7 +273,7 @@ class EnrollmentServicio:
                     contrasenia=hash_pw,
                     persona_id=representante_id,
                 )
-                self.repo_usuario.crear(usuario, commit=False)
+                self.repo_usuario.crear(usuario)
                 # Issue #762: acá se otorgaba también ALUMNO. Esas dos
                 # líneas seguidas eran el camino por el que la inscripción
                 # pública fabricaba cuentas REPRESENTANTE+ALUMNO. Quien
@@ -294,7 +294,7 @@ class EnrollmentServicio:
                     contrasenia=hash_pw,
                     persona_id=alumno.id,
                 )
-                self.repo_usuario.crear(usuario, commit=False)
+                self.repo_usuario.crear(usuario)
                 # Autoinscripción de un adulto jugador: solo ALUMNO (sin
                 # representante involucrado, no hereda el rol REPRESENTANTE
                 # del flujo de menor).
@@ -306,13 +306,12 @@ class EnrollmentServicio:
                 self.db.rollback()
                 return None
 
-            ConsentimientoLegalServicio(self.db).registrar_aceptacion_grupal(
+            ConsentimientoLegalServicio(self.db)._registrar_aceptacion_grupal_nucleo(
                 cuenta_id=usuario.id,
                 documentos=DOCUMENTOS_LEGALES,
                 version=VERSION_LEGAL_VIGENTE,
                 texto_por_documento=TEXTOS_LEGALES_VIGENTES,
                 representado_persona_id=alumno.id if datos.representante else None,
-                commit=False,
             )
             self._encolar_verificacion_de_correo(usuario)
             self._notificar_nueva_inscripcion(alumno)
@@ -432,16 +431,16 @@ class EnrollmentServicio:
     def _crear_usuario_alumno(self, alumno_data: EnrollmentAlumnoDTO, persona_id: int) -> Usuario:
         """Crea Usuario + ALUMNO para un menor con credenciales propias.
 
-        La unicidad del correo ya se validó en la Fase 1 de `enroll`; este
-        `commit=False` es lo que la hace parte de la misma transacción
-        atómica en vez de comitear por separado."""
+        La unicidad del correo ya se validó en la Fase 1 de `enroll`; el
+        repositorio solo flushea (issue #831), así que esto es parte de la
+        misma transacción atómica en vez de comitear por separado."""
         hash_pw = GestorAutenticacion.obtener_hash_contrasenia(alumno_data.contrasenia)
         usuario = Usuario(
             correo=alumno_data.correo,
             contrasenia=hash_pw,
             persona_id=persona_id,
         )
-        self.repo_usuario.crear(usuario, commit=False)
+        self.repo_usuario.crear(usuario)
         self._asignar_rol(usuario, TipoRol.ALUMNO)
         return usuario
 
