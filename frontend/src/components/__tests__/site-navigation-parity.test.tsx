@@ -24,9 +24,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render, within } from "@testing-library/react";
 import Header from "@/components/Header";
 import LandingPage from "@/app/landing/LandingPage";
+// Only the stub/teardown pair, not the mock registrations: this file keeps
+// its own `next/image` double below (it also mocks `next/link`,
+// `AuthContext` and more), so it must not import `landing-render-mocks`.
+import { resetLandingTestEnvironment, stubLandingGlobals } from "@/app/landing/__tests__/landing-test-doubles";
 
 interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: React.ReactNode;
@@ -136,31 +140,11 @@ function targetSectionOf(href: string): string {
 describe("public navigation parity (issue #771)", (): void => {
   beforeEach((): void => {
     mockPathname.mockReturnValue("/terminos");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((): Promise<{ ok: boolean; json: () => Promise<unknown> }> =>
-        Promise.resolve({ ok: true, json: async (): Promise<unknown> => [] })),
-    );
-    vi.stubGlobal("ResizeObserver", class {
-      observe(): void {}
-      unobserve(): void {}
-      disconnect(): void {}
-    });
-    vi.stubGlobal("matchMedia", vi.fn((query: string): MediaQueryList => ({
-      matches: query === "(prefers-reduced-motion: reduce)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    } as unknown as MediaQueryList)));
+    stubLandingGlobals();
   });
 
   afterEach((): void => {
-    cleanup();
-    vi.unstubAllGlobals();
+    resetLandingTestEnvironment();
   });
 
   it("names the same sections, in the same order, on the landing and off it", (): void => {

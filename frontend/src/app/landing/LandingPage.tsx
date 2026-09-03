@@ -277,6 +277,11 @@ function MissionVision(): React.ReactElement {
             <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
           </div>
         </article>
+        {/* Owned by the wrapper, not by either column (issue #863) — a
+            direct child of `.landing-editorial` so it stays centred and
+            full-height regardless of which half's copy happens to run
+            longer. See `.landing-editorial-divider` in landing.css. */}
+        <span className="landing-editorial-divider" aria-hidden="true" />
         <article className="landing-editorial-item" data-reveal>
           {/* Vision inverts the grid: copy leads (left), photo follows (right). */}
           <div className="landing-editorial-copy">
