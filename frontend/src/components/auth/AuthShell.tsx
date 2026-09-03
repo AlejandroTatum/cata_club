@@ -307,14 +307,33 @@ export default function AuthShell({
         {/*
          * The rail's contents live in landmarks (#820): the way back and the
          * brand cluster sat loose in the composition, outside every region a
-         * screen-reader user can jump to. The header spans the two upper grid
-         * rows and re-runs them as `[1fr_auto]` with the panel's own gaps, so
-         * the geometry the axis tests pin is unchanged — only the semantics
-         * are new. The accessible names are Spanish, like every user-facing
-         * label in the product ("Navegación principal", "Datos del club").
+         * screen-reader user can jump to. #931 gave them a shared `<header>`
+         * but spanned it across the panel's top TWO rows and re-ran them as
+         * its own `[1fr_auto]` sub-grid, on the theory that re-running the
+         * outer rows inside the item left the geometry untouched. It did not
+         * (#998): a grid item spanning a flexible (`1fr`) track and an
+         * intrinsic (`auto`) track has its size demand settled almost
+         * entirely against the flexible track, so the outer auto row — the
+         * one the brand cluster actually sits in — collapsed to 0px and the
+         * cluster rested AGAINST the axis instead of ON it. Measured 164px
+         * off centre at both 1920x1080 and 1440x900: the same figure at both
+         * viewports, because it came from the collapsed row, not from either
+         * one of them.
+         *
+         * The header is a normal, unspanned item of the middle row now — one
+         * cell, sized to its own content, with row1 and row3 equal and
+         * flexible either side of it, exactly like the panel's light half.
+         * It must not go back to spanning rows: `BackLink` moves out of that
+         * flow instead, `absolute` against this panel (the nearest
+         * `relative` ancestor, one level up), so the exit keeps sitting at
+         * the panel's own top-left corner the way it always did, and never
+         * again contributes to the middle row's height. It stays inside this
+         * `<header>` for the landmark; it just no longer shares the header's
+         * box. The accessible name is Spanish, like every user-facing label
+         * in the product ("Marca de Cata Club").
          */}
-        <header aria-label="Marca de Cata Club" className="row-span-2 grid grid-rows-[1fr_auto] gap-8 split:gap-10">
-        <BackLink href={backHref} tone="coal" className="relative z-[1] justify-self-start" />
+        <header aria-label="Marca de Cata Club" className="row-start-2 grid">
+        <BackLink href={backHref} tone="coal" className="absolute left-0 top-0 z-[1]" />
 
         {/*
          * The centred cluster — `gap:22px`, and a measure that TRACKS THE
@@ -479,7 +498,7 @@ export default function AuthShell({
          * footer is a one-cell grid so the line keeps the `self-end` floor
          * placement the panel's lower rail gave it.
          */}
-        <footer aria-label="Derechos de autor" className="grid">
+        <footer aria-label="Derechos de autor" className="row-start-3 grid">
         {/* `.copy` — the prototype says 12px; `xs` renders it at 12.5px, the
             nearest step. Alone at the foot so it weighs the same as the exit
             link above and the middle row stays on the page's axis. */}
