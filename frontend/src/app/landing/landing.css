@@ -400,55 +400,49 @@
 .landing-schedule { background: var(--landing-surface); }
 .landing-schedule-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
 
-/* Master-detail schedule selector: a tablist drives one panel with a shared
-   day timeline derived from the published schedule data. */
-.landing-sched { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 44px; align-items: start; width: 100%; }
-.landing-sched-list-wrap { position: relative; }
-.landing-sched-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
-.landing-sched-list button { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 14px; width: 100%; min-height: 68px; padding: 16px 4px; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; transition: color 220ms ease; }
-.landing-sched-list button:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
-/* One accent per category, carried from the list dot to the day-bar it owns. */
-.landing-cat-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--landing-cat, var(--landing-action)) 22%, transparent); transition: transform 260ms cubic-bezier(.22,1,.36,1); }
-.landing-sched-list button[aria-selected="true"] .landing-cat-dot { transform: scale(1.3); }
-.landing-sched-list button strong { display: block; font-family: var(--font-landing-barlow), sans-serif; font-size: 19px; letter-spacing: 1px; text-transform: uppercase; }
-.landing-sched-list button > span > span { display: block; margin-top: 3px; font-size: 14px; font-weight: 600; }
-.landing-sched-list button em { font-style: normal; font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 1px; opacity: 0.6; }
-.landing-sched-list button:hover { color: var(--landing-text); }
-.landing-sched-list button[aria-selected="true"] { color: var(--landing-text-strong); }
-.landing-sched-list button[aria-selected="true"] em { color: var(--landing-action); opacity: 1; }
-/* One marker element glided by a plain CSS transition — no motion-runtime
-   dependency. The box itself is fixed at the list's full track height and
-   never resizes; only the visible slice is animated, via `clip-path`, so
-   the transition never touches `top`/`height` (layout) — it stays on the
-   compositor/paint path. `translateY`+`scaleY` was tried first and
-   rejected: this marker's 4px width forces border-radius to render as
-   rounded end-caps, and a non-uniform vertical scale stretches those caps
-   into ellipses instead of preserving the 4px radius. `clip-path`'s own
-   `round` keeps the exact same corner geometry at every frame. */
-.landing-sched-marker {
-  position: absolute; top: 0; left: 0; width: 4px; height: var(--landing-sched-marker-track, 0px);
-  background: var(--landing-action); pointer-events: none;
-  clip-path: inset(var(--landing-sched-marker-top, 0px) 0 calc(var(--landing-sched-marker-track, 0px) - var(--landing-sched-marker-top, 0px) - var(--landing-sched-marker-bar, 0px)) 0 round 4px);
-  transition: clip-path 260ms cubic-bezier(.22,1,.36,1);
-}
+/* The simple card (issue #988): a tablist of categories drives one card that
+   states the first slot's schedule, never a bar chart of every published
+   block — the timeline this replaced said nothing the facts below didn't. */
+.landing-schedule-layout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: start; width: 100%; }
 
-.landing-sched-panel { display: flex; flex-direction: column; gap: 26px; padding: 34px; border-radius: 18px; background: var(--landing-surface); box-shadow: 0 18px 40px -24px color-mix(in srgb, var(--landing-brand-black) 45%, transparent), inset 0 0 0 1px var(--landing-border); }
-.landing-sched-panel h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(21px, 2.2vw, 28px); letter-spacing: 1px; text-transform: uppercase; }
-.landing-sched-facts { display: flex; flex-wrap: wrap; gap: 30px; }
-.landing-sched-fact { display: flex; flex-direction: column; gap: 5px; }
-.landing-sched-fact small { color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
-.landing-sched-fact b { color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: 23px; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
+.landing-schedule-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--landing-border); }
+.landing-schedule-tab { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 12px 8px 12px 0; border: 0; border-bottom: 1px solid var(--landing-border); background: transparent; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; text-align: left; cursor: pointer; position: relative; transition: color 220ms ease; }
+.landing-schedule-tab::before { content: ""; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 4px; background: var(--landing-action); border-radius: 2px; transform: scaleY(0); transition: transform 320ms ease; }
+.landing-schedule-tab[aria-selected="true"]::before { transform: scaleY(1); }
+.landing-schedule-tab:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 2px; }
+/* One accent per category, carried from the list dot to the card it owns. */
+.landing-schedule-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); flex: none; transition: transform 260ms ease; }
+.landing-schedule-tab[aria-selected="true"] .landing-schedule-dot { transform: scale(1.3); }
+.landing-schedule-tab-name { flex: 1; font-family: var(--font-landing-barlow), sans-serif; font-size: 19px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-schedule-tab-hours { font-style: normal; font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 0.5px; opacity: 0.6; }
+.landing-schedule-tab:hover { color: var(--landing-text); }
+.landing-schedule-tab[aria-selected="true"] { color: var(--landing-text-strong); }
+.landing-schedule-tab[aria-selected="true"] .landing-schedule-tab-hours { color: var(--landing-action); opacity: 1; }
 
-/* One row per day group on the shared scale; every bar is positioned from
-   the real published times, so the picture cannot drift from the data. */
-.landing-day { display: flex; flex-direction: column; gap: 10px; }
-.landing-day-track { display: flex; flex-direction: column; gap: 8px; }
-.landing-day-row { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 14px; align-items: center; }
-.landing-day-row > b { color: var(--landing-text-muted); font-size: 11px; font-weight: 800; letter-spacing: 1px; line-height: 1; text-transform: uppercase; white-space: nowrap; }
-.landing-day-lane { position: relative; height: 46px; border-radius: 10px; background: color-mix(in srgb, var(--landing-brand-black) 5%, transparent); overflow: hidden; }
-/* No text inside the bars: the lane answers WHEN, the list answers WHAT. */
-.landing-day-bar { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; background: color-mix(in srgb, var(--landing-cat, var(--landing-action)) 22%, transparent); transition: background-color 300ms ease, box-shadow 300ms ease; }
-.landing-day-bar[data-on="true"] { background: var(--landing-cat, var(--landing-action)); box-shadow: 0 3px 10px color-mix(in srgb, var(--landing-cat, var(--landing-action)) 45%, transparent); }
+/* The one card. Its decorative corner circle picks up the selected
+   category's color; the ball fill/ink pair does the same so a lit day stays
+   legible against every swatch in `CATEGORY_COLORS`. */
+.landing-schedule-card { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 34px 36px 32px; border: 1px solid var(--landing-border); border-radius: 20px; background: var(--landing-surface); box-shadow: 0 24px 48px -32px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
+.landing-schedule-card::after { content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: var(--landing-cat, var(--landing-action)); opacity: 0.12; transition: background 400ms ease; }
+.landing-schedule-card h3 { margin: 0; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(21px, 2.2vw, 28px); letter-spacing: 1px; text-transform: uppercase; }
+.landing-schedule-audience { margin: 0 0 12px; color: var(--landing-text); }
+.landing-schedule-label { display: block; margin-bottom: 2px; color: var(--landing-text-muted); font-size: 11.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; }
+
+.landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0 0 8px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(38px, 5vw, 56px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
+.landing-schedule-dash { color: var(--landing-action); }
+.landing-schedule-digit { display: inline-block; }
+.landing-schedule-time--animate .landing-schedule-digit { animation: landing-schedule-digit-roll 520ms ease both; }
+@keyframes landing-schedule-digit-roll { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.landing-schedule-days { display: flex; gap: 10px; margin: 0 0 26px; }
+.landing-schedule-day { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--landing-border); color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; background: var(--landing-surface); transition: background 320ms ease, border-color 320ms ease, color 320ms ease; }
+.landing-schedule-day--on { background: var(--landing-cat, var(--landing-action)); border-color: var(--landing-cat, var(--landing-action)); color: var(--landing-cat-ink, var(--landing-text-strong)); }
+.landing-schedule-day--pop { animation: landing-schedule-day-pop 560ms ease both; }
+@keyframes landing-schedule-day-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+.landing-schedule-second { margin: 18px 0 0; padding-top: 16px; border-top: 1px dashed var(--landing-border); color: var(--landing-text); font-size: 15px; }
+.landing-schedule-second b { color: var(--landing-text-strong); font-variant-numeric: tabular-nums; }
 
 .landing-location { background: var(--landing-background); }
 .landing-location-row { align-items: stretch; }
@@ -583,9 +577,18 @@
   .landing-editorial { grid-template-columns: 1fr; row-gap: 34px; }
   .landing-editorial-item { grid-template-columns: 1fr; gap: 26px; }
   .landing-editorial-divider { width: 100%; height: 1px; align-self: auto; }
-  .landing-sched { grid-template-columns: 1fr; gap: 30px; }
-  .landing-sched-panel { padding: 26px; }
-      .landing-day-row { grid-template-columns: 82px minmax(0, 1fr); gap: 10px; }
+  /* The list becomes horizontal chips with scroll instead of a stacked
+     vertical list — the accent bar and the tab's own hours line are
+     desktop-only reads, so both drop rather than crowd a 44px-tall pill. */
+  .landing-schedule-layout { grid-template-columns: 1fr; gap: 20px; }
+  .landing-schedule-list { flex-direction: row; overflow-x: auto; border-top: 0; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .landing-schedule-tab { width: auto; flex: none; min-height: 44px; padding: 8px 14px; border: 1px solid var(--landing-border); border-radius: 999px; font-size: 16px; }
+  .landing-schedule-tab::before { display: none; }
+  .landing-schedule-tab[aria-selected="true"] { background: var(--landing-brand-black); color: var(--landing-surface); border-color: var(--landing-brand-black); }
+  .landing-schedule-tab-hours { display: none; }
+  .landing-schedule-card { padding: 26px 22px; }
+  .landing-schedule-day { width: 44px; height: 44px; }
+  .landing-schedule-days { gap: 6px; }
   .landing-motto { padding-inline: 28px; }
   .landing-motto .landing-motto-lead { font-size: 28px; }
   .landing-map-stage { width: 100%; min-height: 348px; height: 348px; flex: none; }
@@ -615,4 +618,9 @@
      guard for a transform left inline by a run that started before the
      preference changed — author `!important` outbids GSAP's inline write. */
   .landing-hero [data-serve-ball], .landing-hero [data-serve-paddle] { opacity: 1 !important; transform: none !important; }
+  /* `ScheduleSelector` already withholds the `--animate`/`--pop` classes once
+     its own `useReducedMotion` hook reads this same preference; these rules
+     are the CSS-only backstop for the same two keyframes. */
+  .landing-schedule-time--animate .landing-schedule-digit, .landing-schedule-day--pop { animation: none; }
+  .landing-schedule-tab, .landing-schedule-dot, .landing-schedule-tab::before, .landing-schedule-day, .landing-schedule-card::after { transition: none; }
 }
