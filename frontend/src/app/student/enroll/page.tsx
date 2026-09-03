@@ -1060,15 +1060,15 @@ function EnrollWizard(): React.ReactElement {
    * (_sistema.css:247-250).
    *
    * `duplicateCandidate: true` flags a row as one of the fields a
-   * duplicate-identity 400 could not tell apart (issue #233): student
-   * cédula, representative cédula, representative correo. When the backend
+   * duplicate-identity 400 could not tell apart (issue #233, revisited in
+   * #999): student cédula, student/representative correo. When the backend
    * answers with that error, EVERY candidate row gets the SAME "Revisar"
    * marker — never just one — so the visitor's eye lands on the right
    * "Corregir" button without the app ever singling out which field was
-   * actually the duplicate. The marker lives here, outside `WizardNavigation`'s
-   * alert box: `enroll-qa.spec.ts`'s S09 pins the alert itself to never
-   * mention "cédula" or "correo" at all, so any field-naming guidance has to
-   * live somewhere else on the page.
+   * actually the duplicate. The alert itself (`MENSAJE_IDENTIDAD_DUPLICADA`)
+   * may now name the SET of fields that can collide ("cédula o correo") —
+   * that does not narrow anything an attacker doesn't already know — but it
+   * never says WHICH one matched; that is still what these two rows are for.
    */
   function summaryRow(
     label: string,
@@ -1154,7 +1154,12 @@ function EnrollWizard(): React.ReactElement {
             isChild ? "Correo del representante" : "Correo",
             (isChild ? formData.correoRepresentante : formData.correo) || "—",
             isChild ? "representative" : "personal",
-            { duplicateCandidate: isChild },
+            // Both branches validate this exact correo for uniqueness
+            // (`enrollment_servicio.py`: representante.correo in the child
+            // flow, credenciales_alumno.correo in the self flow) — flagging
+            // it only for `isChild` left a self-enrolled visitor correcting
+            // their cédula while the real collision was on this row (#999).
+            { duplicateCandidate: true },
           )}
           {isChild && formData.correo.trim()
             ? summaryRow("Cuenta del estudiante", formData.correo, "personal")

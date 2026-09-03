@@ -21,11 +21,24 @@ implementación de un servicio en particular.
 # cada uno sería un oráculo del otro (el atacante sabría cuál de los dos campos
 # acertó). Tampoco repite el identificador recibido.
 #
+# Issue #999: el texto SÍ nombra el CONJUNTO de campos que pueden chocar
+# ("cédula o correo"), y eso no reabre el oráculo. La distinción es entre
+# nombrar el conjunto y nombrar el elemento: quien ataca ya sabe que el
+# conjunto es ese (son los dos únicos campos que este formulario pide y
+# valida como identidad); lo único que el mensaje sigue sin decir es CUÁL de
+# los dos coincidió, que es el dato que de verdad permitiría sondear el
+# padrón. Antes de este cambio el mensaje no nombraba ningún campo, y quien
+# se inscribía corregía el único que creía culpable, chocaba con el otro y
+# leía el mismo texto: la corrección parecía ignorada.
+#
 # El frontend detecta este texto para ofrecer "Iniciar sesión" / "Recuperar
 # contraseña" (`frontend/src/lib/duplicate-identity.ts`); cambiarlo aquí sin
 # actualizar ese archivo rompe esa salida, y por eso hay un test que lo fija
 # (`tests/test_mensajes_identidad_duplicada.py`).
-MENSAJE_IDENTIDAD_DUPLICADA = "Ya existe una cuenta registrada con los datos ingresados."
+MENSAJE_IDENTIDAD_DUPLICADA = (
+    "Alguno de los datos ingresados, cédula o correo, ya pertenece a una "
+    "cuenta registrada."
+)
 
 # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1, guardarraíl 3): respuesta
 # única para "esta cédula no se puede vincular a su cuenta", sin importar el

@@ -11,8 +11,12 @@
  *
  *  - Public and representative-facing flows (enrollment, registration, adding
  *    a dependent) answer with ONE fixed generic sentence, identical for cédula
- *    and for e-mail. Repeating the identifier, or naming which field matched,
- *    turned an unauthenticated endpoint into a membership oracle.
+ *    and for e-mail. It names the SET of fields that could have collided
+ *    ("cédula o correo") — that names nothing an attacker doesn't already
+ *    know — but never which one actually matched, and never repeats the
+ *    identifier (issue #999: an earlier version of this sentence named
+ *    neither field, and a visitor who fixed the one they guessed wrong kept
+ *    reading the same generic text after colliding on the other).
  *  - The admin panel (`POST /personas/admin/cuentas`, ADMINISTRADOR-only)
  *    keeps the precise wording — an operator who can already list the whole
  *    roster learns nothing new from it, and needs to know what to correct.
@@ -31,11 +35,12 @@
  */
 
 /** Verbatim copy of `MENSAJE_IDENTIDAD_DUPLICADA` (backend `app/dominio/mensajes.py`). */
-export const MENSAJE_IDENTIDAD_DUPLICADA = "Ya existe una cuenta registrada con los datos ingresados.";
+export const MENSAJE_IDENTIDAD_DUPLICADA =
+  "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada.";
 
 const PATRONES_IDENTIDAD_DUPLICADA = [
   // Generic message — public, representative and registration flows.
-  /ya existe una cuenta registrada con los datos ingresados/i,
+  /alguno de los datos ingresados, c[eé]dula o correo, ya pertenece a una cuenta registrada/i,
   // Precise messages — kept for the admin panel.
   /ya existe una persona con la c[eé]dula/i,
   /el correo (del representante )?ya est[aá] en uso/i,

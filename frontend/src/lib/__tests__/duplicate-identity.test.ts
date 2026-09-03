@@ -6,8 +6,8 @@ describe("isDuplicateIdentityError", () => {
     // Generic message returned by the public / representative flows. Pinned on
     // the backend side too — see backend/tests/test_mensajes_identidad_duplicada.py.
     MENSAJE_IDENTIDAD_DUPLICADA,
-    "Ya existe una cuenta registrada con los datos ingresados.",
-    "ya existe una cuenta registrada con los datos ingresados",
+    "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada.",
+    "alguno de los datos ingresados, cedula o correo, ya pertenece a una cuenta registrada",
     // Precise messages, still returned by the admin panel.
     "Ya existe una persona con la cédula 1712345678",
     "Ya existe una persona con la cedula 1712345678",
