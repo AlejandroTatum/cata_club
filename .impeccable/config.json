@@ -40,6 +40,15 @@
         "value": "animate-bounce",
         "createdAt": "2026-08-27T15:36:18.659Z",
         "reason": "Indicador de escritura del chat: tres puntos tras motion-safe con aria-label; convencion de dominio, no easing decorativo"
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "frontend/src/app/landing/landing.css"
+        ],
+        "createdAt": "2026-09-03T01:35:17.548Z",
+        "reason": "The .landing-ribbon arc is drawn on purpose with a thick border-bottom on a circular element; confirmed intentional by the owner on 2026-09-02"
       }
     ]
   }
