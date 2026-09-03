@@ -103,7 +103,7 @@ function loginErrorFeedback(error: AuthErrorKind): { message: string; descriptio
     case "role_conflict":
       return {
         message: "Su cuenta tiene más de un rol activo",
-        description: "No podemos saber con cuál entrar. Comuníquese con el club para que le dejen uno solo.",
+        description: "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
       };
     case "timeout":
       return {
