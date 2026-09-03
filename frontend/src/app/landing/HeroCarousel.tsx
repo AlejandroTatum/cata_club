@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { HERO_PHOTOS } from "./landing-hero-photos";
 
 /** Detail payload for the `landing:hero-slide-change` DOM event dispatched on
@@ -40,15 +41,14 @@ type IdleWindow = Window & {
 };
 
 /**
- * The hero's 01/02/03 photo tab-carousel. A plain React-state machine:
- * tabs swap slide and `aria-selected` synchronously with no GSAP, so it
- * works before the motion runtime loads and under reduced motion. The
+ * The hero's photo carousel. A plain React-state machine: previous/next
+ * buttons swap the active slide synchronously with no GSAP, so it works
+ * before the motion runtime loads and under reduced motion. The
  * `landing:hero-slide-change` event additively hooks GSAP's wipe crossing.
  */
 export default function HeroCarousel(): React.ReactElement {
   const [current, setCurrent] = useState(0);
   const [slideReach, setSlideReach] = useState(PRIORITY_SLIDE_REACH);
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const previousRef = useRef(0);
 
@@ -79,64 +79,48 @@ export default function HeroCarousel(): React.ReactElement {
     const next = ((index % HERO_PHOTOS.length) + HERO_PHOTOS.length) % HERO_PHOTOS.length;
     setSlideReach(HERO_PHOTOS.length);
     setCurrent(next);
-    tabRefs.current[next]?.focus();
   };
-
-  const onTablistKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      go(current + 1);
-    } else if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      go(current - 1);
-    }
-  };
-
 
   return (
-    <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
-      <div className="landing-hero-screen">
-        <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
-        {HERO_PHOTOS.map((photo, index): React.ReactElement => (
-          <Image
-            key={photo.src}
-            className="landing-hero-slide"
-            src={photo.src}
-            alt={photo.alt}
-            fill
-            priority={index === 0}
-            loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
-            quality={90}
-            sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
-            style={{ objectPosition: photo.objectPosition }}
-            data-slide={index}
-            data-active={index === current}
-          />
-        ))}
-        <div className="landing-hero-screen-bar">
-          <div
-            className="landing-hero-screen-dots"
-            role="tablist"
-            aria-label="Fotos del club"
-            onKeyDown={onTablistKeyDown}
-          >
-            {HERO_PHOTOS.map((photo, index): React.ReactElement => (
-              <button
-                key={photo.src}
-                type="button"
-                role="tab"
-                ref={(element): void => { tabRefs.current[index] = element; }}
-                aria-selected={index === current}
-                aria-label={`Foto ${index + 1}, ${photo.tabDescription}`}
-                tabIndex={index === current ? 0 : -1}
-                onClick={(): void => go(index)}
-              >
-                {String(index + 1).padStart(2, "0")}
-              </button>
-            ))}
-          </div>
+    <div className="landing-hero-carousel">
+      <button
+        type="button"
+        className="landing-hero-nav landing-hero-nav-prev"
+        aria-label="Foto anterior"
+        onClick={(): void => go(current - 1)}
+      >
+        <ChevronLeft aria-hidden="true" />
+      </button>
+      <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
+        <div className="landing-hero-screen">
+          <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
+          {HERO_PHOTOS.map((photo, index): React.ReactElement => (
+            <Image
+              key={photo.src}
+              className="landing-hero-slide"
+              src={photo.src}
+              alt={photo.alt}
+              fill
+              priority={index === 0}
+              loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
+              quality={90}
+              sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
+              style={{ objectPosition: photo.objectPosition }}
+              data-slide={index}
+              data-active={index === current}
+              aria-hidden={index === current ? undefined : true}
+            />
+          ))}
         </div>
       </div>
+      <button
+        type="button"
+        className="landing-hero-nav landing-hero-nav-next"
+        aria-label="Foto siguiente"
+        onClick={(): void => go(current + 1)}
+      >
+        <ChevronRight aria-hidden="true" />
+      </button>
     </div>
   );
 }
