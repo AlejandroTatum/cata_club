@@ -100,7 +100,7 @@ class AsistenciaServicio:
         la tabla es la única fuente)."""
         categoria = self.repo_categoria.obtener_por_codigo(horario.categoria)
         if categoria is None:
-            raise EntidadNoEncontrada(f"Categoria {horario.categoria} no encontrada")
+            raise EntidadNoEncontrada(f"Categoría {horario.categoria} no encontrada")
         dias_permitidos = {d.dia_semana for d in categoria.dias_permitidos}
         if horario.dia_semana not in dias_permitidos:
             raise OperacionInvalida(
@@ -268,7 +268,7 @@ class AsistenciaServicio:
         4. `codigo` nunca cambia acá (ver `_generar_codigo`)."""
         categoria = self.repo_categoria.obtener_por_codigo(codigo)
         if categoria is None:
-            raise EntidadNoEncontrada(f"Categoria {codigo} no encontrada")
+            raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
 
         update_data = datos.model_dump(exclude_unset=True)
         if not update_data:
@@ -389,7 +389,7 @@ class AsistenciaServicio:
         historial). Todo o nada: si un día bloquea, ninguno se toca."""
         categoria = self.repo_categoria.obtener_por_codigo(codigo)
         if categoria is None:
-            raise EntidadNoEncontrada(f"Categoria {codigo} no encontrada")
+            raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
 
         horarios = self.repo_horario.listar(codigo)
         bloqueados = [h for h in horarios if self.repo_horario.tiene_asistencias(h.id)]

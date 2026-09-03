@@ -179,6 +179,9 @@ describe("POST /api/auth/login", () => {
     // The message names the problem and the way out, and names no role: the
     // point is that the frontend did not pick one.
     expect(json.message).toMatch(/rol/i);
+    // Issue #865: the club ASSIGNS which role stays, it does not "let" the
+    // account keep one — "dejen" understated who does the work.
+    expect(json.message).toContain("para que le asignen uno solo");
   });
 
   it("sets no cookies for a multi-role account, so no half-session survives", async () => {

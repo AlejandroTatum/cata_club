@@ -597,8 +597,8 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
-    expect(screen.queryByText("6 inscriptos")).not.toBeInTheDocument();
+    expect(await screen.findByText("2 inscritos")).toBeInTheDocument();
+    expect(screen.queryByText("6 inscritos")).not.toBeInTheDocument();
   });
 
   it("never shows a partial-enrollment footnote (full-month enrollment, v5): even mismatched rosters across días render no such message", async () => {
@@ -617,7 +617,7 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    expect(await screen.findByText("2 inscriptos")).toBeInTheDocument();
+    expect(await screen.findByText("2 inscritos")).toBeInTheDocument();
     expect(screen.queryByText(/no está inscript[oa]/i)).not.toBeInTheDocument();
   });
 
@@ -633,7 +633,7 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     await waitForHorarios();
 
     await waitFor(() => expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText(/inscripto/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/inscrito/i)).not.toBeInTheDocument();
   });
 
   it("fetches the roster in one call regardless of how many schedules there are (TRA-7)", async () => {
@@ -648,7 +648,7 @@ describe("GroupsPage — categoria card grid (one card per training group)", () 
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    await waitFor(() => expect(screen.getByText("1 inscripto")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("1 inscrito")).toBeInTheDocument());
     expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1);
     // The per-horario endpoint is only for the "Ver alumnos" panel of a
     // SINGLE opened group, never for the grid's count line.

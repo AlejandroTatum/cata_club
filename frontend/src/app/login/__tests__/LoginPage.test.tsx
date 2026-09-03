@@ -263,6 +263,25 @@ describe("LoginPage", () => {
         });
       });
     });
+
+    it("names the remedy as the club assigning a single role, not letting the account keep one (issue #865)", async () => {
+      const mockLogin = vi.fn().mockResolvedValue({ ok: false, error: "role_conflict" });
+      mockUseAuth.mockReturnValue({
+        ...createUnauthenticatedAuth(false),
+        login: mockLogin,
+      });
+
+      render(<LoginPage />);
+      submitLoginForm();
+
+      await waitFor(() => {
+        expect(mockShowError).toHaveBeenCalledWith("Su cuenta tiene más de un rol activo", {
+          description:
+            "No podemos saber con cuál entrar. Comuníquese con el club para que le asignen uno solo.",
+          duration: 20000,
+        });
+      });
+    });
   });
 
   describe("successful submission", () => {
