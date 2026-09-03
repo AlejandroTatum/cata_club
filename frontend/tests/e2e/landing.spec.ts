@@ -54,9 +54,9 @@ test.describe("Landing page", () => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
       // Auto-wait for the ready state before measuring the stacked layout.
-      await expect(page.locator(".landing-sched")).toBeVisible();
+      await expect(page.locator(".landing-schedule-layout")).toBeVisible();
       const layout = await page.evaluate(() => {
-        const sched = document.querySelector(".landing-sched");
+        const sched = document.querySelector(".landing-schedule-layout");
         if (!sched) return null;
         const cs = getComputedStyle(sched);
         return {

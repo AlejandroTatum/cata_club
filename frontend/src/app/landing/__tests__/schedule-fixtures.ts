@@ -8,10 +8,9 @@
  * removed, and `landing-config-no-schedule-list.test.ts` guards against
  * exactly that. What lives here is a stand-in catalog invented for the tests:
  * a morning block, a midday closure, back-to-back evening blocks and a
- * Saturday-only category — the cases `deriveContactHours` and the timeline
- * maths have to survive.
+ * Saturday-only category — the cases `deriveContactHours` has to survive.
  *
- * It is shared because `landing-config.test.ts` and `schedule-timeline.test.ts`
+ * It is shared because `landing-config.test.ts` and `ScheduleSelector.test.tsx`
  * need the same shapes, and two byte-identical copies of the same literal are
  * one duplicated block to a detector that reads tokens rather than intent.
  *

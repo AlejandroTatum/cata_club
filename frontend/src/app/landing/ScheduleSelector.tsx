@@ -1,99 +1,161 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import type { LandingSchedule } from "./schedule-data";
-import { barGeometry, deriveDayRange, type DayRange } from "./schedule-timeline";
+import { landingConfig, toWhatsAppLink } from "./landing-config";
 
+/**
+ * The simple card, decided 2026-09-02 over the prototype `horarios-simple.html`
+ * (issue #988). One vertical list of categories drives one card that shows
+ * the FIRST slot's schedule in large type, six day balls, the WhatsApp CTA
+ * and one secondary line per additional slot. Replaces the timeline this
+ * component used to draw (`schedule-timeline.ts`, deleted with this issue) —
+ * a bar chart said nothing the "Horario / Días" facts above it did not
+ * already say.
+ */
 const CATEGORY_COLORS = [
   "var(--landing-brand-red)", "var(--landing-brand-yellow)", "var(--landing-brand-fuchsia)",
   "var(--landing-ball)", "var(--landing-brand-red-strong)", "var(--landing-brand-fuchsia-strong)",
 ] as const;
-const DAY_TRACK_LABEL = "Distribución de los horarios de la categoría seleccionada";
-type DayGroup = "week" | "sat" | "sun" | "custom";
-const DAY_NAMES: Array<{ name: string; short: string; group: DayGroup }> = [
-  { name: "Lunes", short: "LUN", group: "week" }, { name: "Martes", short: "MAR", group: "week" },
-  { name: "Miércoles", short: "MIÉ", group: "week" }, { name: "Jueves", short: "JUE", group: "week" },
-  { name: "Viernes", short: "VIE", group: "week" }, { name: "Sábado", short: "SÁB", group: "sat" },
-  { name: "Domingo", short: "DOM", group: "sun" },
-];
+/** The ink each swatch above needs under its ball's letter to stay legible. */
+const CATEGORY_INK = ["#fff", "var(--landing-brand-black)", "#fff", "var(--landing-brand-black)", "#fff", "#fff"] as const;
 
-function dayGroups(days: string): Array<{ key: DayGroup; label: string }> {
-  const present = DAY_NAMES.filter(({ name }): boolean => days.includes(name));
-  const weekdays = present.filter(({ group }): boolean => group === "week");
-  const groups: Array<{ key: DayGroup; label: string }> = [];
-  if (weekdays.length > 0) groups.push({ key: "week", label: days.includes("Lunes a Viernes") || weekdays.length === 5 ? "LUN–VIE" : weekdays.map(({ short }): string => short).join(", ") });
-  present.filter(({ group }): boolean => group === "sat" || group === "sun").forEach(({ group, short }): void => {
-    if (!groups.some(({ key }): boolean => key === group)) groups.push({ key: group, label: short });
-  });
-  return groups.length > 0 ? groups : [{ key: "custom", label: days }];
-}
+const DAY_BALLS = ["L", "M", "X", "J", "V", "S"] as const;
+const DAY_FULL_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"] as const;
+
+/** The stagger the prototype fixes: 35ms per hour digit, 70ms per day ball. */
+const DIGIT_STAGGER_MS = 35;
+const BALL_STAGGER_MS = 70;
+
+const HOURS_PATTERN = /(\d{1,2}:\d{2})\D+(\d{1,2}:\d{2})/;
 
 interface ScheduleSelectorProps { schedules: LandingSchedule[] }
-function categoryTimes(schedule: LandingSchedule): string[] {
-  const seen = new Set<string>();
-  return schedule.slots.map((slot): string => slot.hours.replace(/\s/g, "")).filter((hours): boolean => {
-    if (seen.has(hours)) return false;
-    seen.add(hours);
-    return true;
-  });
+
+/**
+ * Reads `(prefers-reduced-motion: reduce)` the same way `LandingMotionLoader`
+ * does — `addEventListener`/`removeEventListener`, cleaned up on unmount —
+ * except this component only ever reads the value, it never mounts or
+ * unmounts anything because of it. The initializer runs during the first
+ * render (not after it, like a plain `useEffect` write would), so a visitor
+ * who prefers reduced motion never sees the animation classes flash on
+ * before this corrects them.
+ */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState((): boolean =>
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  useEffect((): (() => void) => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = (): void => setReduced(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return (): void => media.removeEventListener("change", sync);
+  }, []);
+
+  return reduced;
 }
-function categoryDays(schedule: LandingSchedule): string {
-  const seen = new Set<string>();
-  return schedule.slots.map((slot): string => slot.days).filter((days): boolean => {
-    if (seen.has(days)) return false;
-    seen.add(days);
-    return true;
-  }).join(" y ");
+
+/** `"HH:MM – HH:MM"` → its two `"HH:MM"` halves, tolerant of the en dash. */
+function splitHours(hours: string): [string, string] {
+  const match = HOURS_PATTERN.exec(hours);
+  return match ? [match[1], match[2]] : [hours, ""];
+}
+
+/** Which of the six day balls (Sunday excluded by design) a days string lights. */
+function activeDayIndexes(days: string): boolean[] {
+  return DAY_FULL_NAMES.map((name): boolean => days.includes(name));
+}
+
+/** One `"HH:MM"` half as a run of per-character spans, staggered when animated. */
+function DigitRun({ text, animate }: { text: string; animate: boolean }): React.ReactElement {
+  return <>{[...text].map((char, index): React.ReactElement => (
+    <span
+      key={`${char}-${index}`}
+      className="landing-schedule-digit"
+      style={animate ? { animationDelay: `${index * DIGIT_STAGGER_MS}ms` } : undefined}
+    >
+      {char}
+    </span>
+  ))}</>;
 }
 
 export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): React.ReactElement {
   const [selected, setSelected] = useState(0);
-  // top/bar describe the visible marker segment; track is the full list's
-  // height. Together they let the marker sit at a fixed size (see
-  // landing.css) and reveal itself through `clip-path`, so the transition
-  // never touches `top`/`height` — the layout-triggering properties the
-  // marker used to animate.
-  const [marker, setMarker] = useState({ top: 0, bar: 0, track: 0 });
+  const animate = !useReducedMotion();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const range: DayRange = deriveDayRange(schedules);
-  const active = schedules[selected] ?? schedules[0];
-  const rows = Array.from((active?.slots ?? []).reduce((groups, slot): Map<DayGroup, string> => {
-    dayGroups(slot.days).forEach(({ key, label }): void => { if (!groups.has(key)) groups.set(key, label); });
-    return groups;
-  }, new Map<DayGroup, string>()));
 
-  useEffect((): void => {
-    const tab = tabRefs.current[selected];
-    const list = listRef.current;
-    if (tab && list) setMarker({ top: tab.offsetTop + 10, bar: Math.max(0, tab.offsetHeight - 20), track: list.offsetHeight });
-  }, [selected]);
+  const active = schedules[selected] ?? schedules[0];
+  const [main, ...rest] = active.slots;
+  const [start, end] = splitHours(main.hours);
+  const litDays = activeDayIndexes(main.days);
+  const color = CATEGORY_COLORS[selected % CATEGORY_COLORS.length];
+  const ink = CATEGORY_INK[selected % CATEGORY_INK.length];
+  const waLink = `${toWhatsAppLink(landingConfig.contact.whatsapp[0])}?text=${encodeURIComponent(`Hola, quiero consultar cupo en ${active.category}.`)}`;
+
   const select = (index: number): void => { setSelected(index); tabRefs.current[index]?.focus(); };
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     const next = event.key === "ArrowDown" ? selected + 1 : event.key === "ArrowUp" ? selected - 1 : -1;
     if (next < 0 || next >= schedules.length) return;
     event.preventDefault(); select(next);
   };
-  const renderBars = (which: DayGroup): React.ReactElement[] => (active?.slots ?? []).flatMap((slot, slotIndex): React.ReactElement[] => {
-    if (!dayGroups(slot.days).some(({ key }): boolean => key === which)) return [];
-    const geometry = barGeometry(slot.hours, range);
-    return [<span key={`${active.category}-${slotIndex}-${which}`} className="landing-day-bar" data-on="true"
-      title={`${active.category} · ${slot.hours} · ${slot.days}`} style={{ left: `${geometry.left.toFixed(3)}%`, width: `calc(${geometry.width.toFixed(3)}% - 3px)`, "--landing-cat": CATEGORY_COLORS[selected % CATEGORY_COLORS.length] } as React.CSSProperties} />];
-  });
 
-  return <div className="landing-sched">
-    <div className="landing-sched-list-wrap"><span className="landing-sched-marker" aria-hidden="true" style={{ "--landing-sched-marker-top": `${marker.top}px`, "--landing-sched-marker-bar": `${marker.bar}px`, "--landing-sched-marker-track": `${marker.track}px` } as React.CSSProperties} />
-      <div className="landing-sched-list" role="tablist" aria-label="Categorías" aria-orientation="vertical" ref={listRef} onKeyDown={onKeyDown}>
-        {schedules.map((schedule, index): React.ReactElement => <button key={schedule.category} type="button" role="tab" id={`schedule-tab-${index}`} ref={(element): void => { tabRefs.current[index] = element; }} aria-selected={index === selected} aria-controls="schedule-panel" tabIndex={index === selected ? 0 : -1} style={{ "--landing-cat": CATEGORY_COLORS[index % CATEGORY_COLORS.length] } as React.CSSProperties} onClick={(): void => select(index)}>
-          <i className="landing-cat-dot" aria-hidden="true" /><span><strong>{schedule.category}</strong>{schedule.audience ? <span>{schedule.audience}</span> : null}</span><em>{categoryTimes(schedule).map((time, timeIndex): React.ReactElement => <Fragment key={time}>{timeIndex > 0 ? <br /> : null}{time}</Fragment>)}</em>
-        </button>)}
-      </div>
+  return <div className="landing-schedule-layout">
+    <div className="landing-schedule-list" role="tablist" aria-label="Categorías" aria-orientation="vertical" ref={listRef} onKeyDown={onKeyDown}>
+      {schedules.map((schedule, index): React.ReactElement => <button
+        key={schedule.category} type="button" role="tab" id={`schedule-tab-${index}`}
+        ref={(element): void => { tabRefs.current[index] = element; }}
+        aria-selected={index === selected} aria-controls="schedule-panel" tabIndex={index === selected ? 0 : -1}
+        className="landing-schedule-tab"
+        style={{ "--landing-cat": CATEGORY_COLORS[index % CATEGORY_COLORS.length] } as React.CSSProperties}
+        onClick={(): void => select(index)}
+      >
+        <i className="landing-schedule-dot" aria-hidden="true" />
+        <span className="landing-schedule-tab-name">{schedule.category}</span>
+        <em className="landing-schedule-tab-hours">{splitHours(schedule.slots[0].hours).join("–")}</em>
+      </button>)}
     </div>
-    <div className="landing-sched-panel" role="tabpanel" id="schedule-panel" aria-labelledby={`schedule-tab-${selected}`}>
-      <h3>{active.category}</h3><div className="landing-sched-facts">{active.audience ? <span className="landing-sched-fact"><small>Edad</small><b>{active.audience}</b></span> : null}<span className="landing-sched-fact"><small>Horario</small><b>{active.slots.map((slot): string => slot.hours).join("  ·  ")}</b></span><span className="landing-sched-fact"><small>Días</small><b>{categoryDays(active)}</b></span></div>
-      <div className="landing-day"><div className="landing-day-track" role="img" aria-label={DAY_TRACK_LABEL}>{rows.map(([on, label]): React.ReactElement => <div className="landing-day-row" key={on} data-day-row={on}><b>{label}</b><div className="landing-day-lane" data-day-lane={on}>{renderBars(on)}</div></div>)}</div></div>
-      <a className="landing-button" href="#contacto">Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" /></a>
+
+    <div
+      className="landing-schedule-card" role="tabpanel" id="schedule-panel"
+      aria-labelledby={`schedule-tab-${selected}`} aria-live="polite"
+      style={{ "--landing-cat": color, "--landing-cat-ink": ink } as React.CSSProperties}
+    >
+      <h3>{active.category}</h3>
+      {active.audience ? <p className="landing-schedule-audience">{active.audience}</p> : null}
+
+      <span className="landing-schedule-label">Horario</span>
+      <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
+        <DigitRun text={start} animate={animate} />
+        <span className="landing-schedule-dash">–</span>
+        <DigitRun text={end} animate={animate} />
+        <small>{main.days}</small>
+      </p>
+
+      <span className="landing-schedule-label">Días</span>
+      <div className="landing-schedule-days" aria-label={main.days}>
+        {DAY_BALLS.map((label, index): React.ReactElement => {
+          const on = litDays[index];
+          return <span
+            key={label} aria-hidden="true"
+            className={`landing-schedule-day${on ? " landing-schedule-day--on" : ""}${on && animate ? " landing-schedule-day--pop" : ""}`}
+            style={on && animate ? { animationDelay: `${index * BALL_STAGGER_MS}ms` } : undefined}
+          >
+            {label}
+          </span>;
+        })}
+      </div>
+
+      <a className="landing-button" href={waLink} target="_blank" rel="noreferrer">
+        Consultar cupo por WhatsApp <ArrowRight aria-hidden="true" />
+      </a>
+
+      {rest.map((slot, index): React.ReactElement => (
+        <p className="landing-schedule-second" key={`${active.category}-${index}`}>
+          También <b>{splitHours(slot.hours).join("–")}</b> los {slot.days.toLowerCase()}.
+        </p>
+      ))}
     </div>
   </div>;
 }
