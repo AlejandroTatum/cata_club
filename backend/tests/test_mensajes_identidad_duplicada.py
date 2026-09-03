@@ -10,9 +10,11 @@ municipio, así que ese oráculo de enumeración se cierra aquí.
 
 Reglas verificadas:
   1. En los flujos públicos y en los de representante, cédula y correo
-     duplicados devuelven EXACTAMENTE el mismo mensaje genérico, que no repite
-     el identificador ni revela qué campo coincidió (si difirieran, cada uno
-     sería un oráculo del otro).
+     duplicados devuelven EXACTAMENTE el mismo mensaje genérico. Ese mensaje
+     nombra el CONJUNTO de campos que pueden chocar ("cédula o correo",
+     issue #999) pero no repite el identificador ni revela CUÁL de los dos
+     coincidió (si los dos mensajes difirieran, cada uno sería un oráculo
+     del otro).
   2. El panel de administración, que es autenticado y solo ADMINISTRADOR,
      conserva el mensaje preciso: ahí no hay divulgación (quien lo lee ya puede
      listar el padrón completo) y el operador necesita saber qué corregir.
@@ -64,13 +66,14 @@ def _sembrar_persona_con_cuenta(db_session) -> Persona:
 
 
 def _afirmar_generico(mensaje: str) -> None:
-    """El mensaje no debe repetir el identificador ni nombrar el campo."""
+    """El mensaje nombra el CONJUNTO de campos posibles (cédula y correo,
+    issue #999) pero no repite el identificador enviado ni delata cuál de
+    los dos coincidió."""
     assert mensaje == MENSAJE_IDENTIDAD_DUPLICADA
     assert CEDULA_OCUPADA not in mensaje
     assert CORREO_OCUPADO not in mensaje
-    assert "cédula" not in mensaje.lower()
-    assert "cedula" not in mensaje.lower()
-    assert "correo" not in mensaje.lower()
+    assert "cédula" in mensaje.lower()
+    assert "correo" in mensaje.lower()
 
 
 def _representante(correo: str = "sofia@example.com", cedula: str = "1798765432"):
@@ -181,6 +184,24 @@ def test_cedula_y_correo_duplicados_son_indistinguibles(db_session):
         )
 
     assert por_cedula.value.mensaje == por_correo.value.mensaje
+
+
+def test_enroll_con_cedula_corregida_tiene_exito_tras_duplicado(db_session):
+    """Issue #999: `enroll()` no deja estado entre intentos. Un primer envío
+    con cédula duplicada falla; un segundo envío, con la cédula corregida y un
+    correo nuevo, tiene éxito -- confirma que el defecto reportado ("corrijo
+    la cédula y sigo chocando") no está en el backend, sino en que la
+    interfaz señalaba un único campo como culpable."""
+    _sembrar_persona_con_cuenta(db_session)
+    servicio = EnrollmentServicio(db_session)
+
+    with pytest.raises(EntidadDuplicada):
+        servicio.enroll(
+            _inscripcion(representante=_representante(cedula=CEDULA_OCUPADA), alumno=_alumno())
+        )
+
+    resultado = servicio.enroll(_inscripcion(representante=_representante(), alumno=_alumno()))
+    assert resultado["persona_id"] is not None
 
 
 # --- 2. Registro público de credenciales (POST /auth/registro) -------------

@@ -47,6 +47,10 @@
 
 import { test, expect, type Locator, type Page, type Route } from "@playwright/test";
 import { birthDatePart, fillBirthDate } from "./helpers/birth-date";
+// Importado, no copiado a mano (issue #999): un mock que repite el texto en
+// vez de leerlo de la constante queda desactualizado en silencio la próxima
+// vez que el mensaje cambie, exactamente lo que le pasó a este archivo.
+import { MENSAJE_IDENTIDAD_DUPLICADA } from "../../src/lib/duplicate-identity";
 
 const SHOT_DIR = process.env.ENROLL_QA_SHOT_DIR ?? "test-results/enroll-qa";
 
@@ -836,16 +840,25 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
   });
 
   /**
-   * Status y cuerpo VERIFICADOS contra el backend real (`POST
-   * /api/v1/enrollment/` con una cédula ya sembrada): responde **400**, no 409,
-   * con `{detail, message}` y este texto exacto.
+   * Status VERIFICADO contra el backend real (`POST /api/v1/enrollment/` con
+   * una cédula ya sembrada): responde **400**, no 409, con `{detail, message}`.
    *
    * La primera versión de este test inventaba un 409 y un texto propio. Pasaba
    * igual, que es lo peligroso: un mock infiel certifica la traducción de una
    * respuesta que el servidor nunca manda. Es el mismo error que ya se pagó una
    * vez en este repo con los mocks sin `status`.
+   *
+   * El TEXTO ya no se copia a mano acá: issue #999 cambió el mensaje y este
+   * archivo quedó con el anterior, indetectado, hasta que `isDuplicateIdentityError`
+   * dejó de reconocerlo en CI (dejaba de ofrecer "Iniciar sesión" / "Recuperar
+   * contraseña" en S08). `MENSAJE_IDENTIDAD_DUPLICADA` es la MISMA constante que
+   * usa `duplicate-identity.ts` en producción — si vuelve a cambiar, este mock
+   * cambia solo. Lo que sigue sin poder derivarse de código es que el backend
+   * real siga devolviendo exactamente esa constante con status 400: eso solo lo
+   * prueba `tests/e2e/*.live.spec.ts` (`make qa-live`) o correrlo a mano contra
+   * QA.
    */
-  const DUPLICADO_REAL = "Ya existe una cuenta registrada con los datos ingresados.";
+  const DUPLICADO_REAL = MENSAJE_IDENTIDAD_DUPLICADA;
 
   test("S03 · identidad ya registrada: el 400 real del backend llega al visitante", async ({ page }) => {
     await goToSummary(page);
@@ -895,9 +908,14 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     // correo de representante devuelven los tres el MISMO mensaje. Es
     // deliberado — distinguirlos convierte el alta pública en un oráculo para
     // averiguar si una cédula o un correo están registrados.
+    //
+    // Issue #999: el mensaje SÍ nombra el CONJUNTO de campos que pueden chocar
+    // ("cédula o correo") — eso no reabre el oráculo, porque quien ataca ya
+    // sabe que el conjunto es ese. Lo que sigue sin poder aparecer es el DATO
+    // que de verdad delataría cuál coincidió: el valor que el visitante
+    // escribió. Antes de #999 esta afirmación era "no menciona los campos";
+    // ahora es "no repite el valor".
     const alerta = stepAlert(page);
-    await expect(alerta).not.toContainText(/cédula/i);
-    await expect(alerta).not.toContainText(/correo/i);
     await expect(alerta).not.toContainText(VALID_STUDENT.cedula);
     await expect(alerta).not.toContainText(VALID_CREDENTIALS.correo);
     await shot(page, "S09", "duplicado-no-divulga-cual-dato");
@@ -1039,7 +1057,8 @@ test.describe("S07 · idempotencia de reintentos", () => {
 // ===========================================================================
 
     test.describe("M · Presentación de los mensajes", () => {
-  const DUPLICADO = "Ya existe una cuenta registrada con los datos ingresados.";
+  // Misma constante que S03/S08/S09 arriba — ver el comentario ahí (issue #999).
+  const DUPLICADO = MENSAJE_IDENTIDAD_DUPLICADA;
 
   async function fallarConDuplicado(page: Page): Promise<void> {
     await goToSummary(page);

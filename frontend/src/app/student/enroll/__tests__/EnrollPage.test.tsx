@@ -483,15 +483,17 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
 });
 
 /**
- * Task 2 (QA cycle 2026-08-12): a duplicate-identity 400 used to leave the
- * visitor on the summary with only the generic message — no indication of
- * which step/field to revisit. The fix flags the summary rows that hold a
- * candidate field (student cédula; for a dependent, also the representative's
- * cédula/correo) so the visitor's eye lands on the right "Corregir" button —
- * without the alert itself ever naming a field, which would turn the public
- * enrollment form into an oracle for probing who's already registered
- * (issue #233). `stepAlert`'s equivalent here — the `role="alert"` box — is
- * checked for exactly that absence, mirroring `enroll-qa.spec.ts`'s S09.
+ * Task 2 (QA cycle 2026-08-12), revisited by issue #999: a duplicate-identity
+ * 400 used to leave the visitor on the summary with only the generic message
+ * — no indication of which step/field to revisit, and (until #999) only ONE
+ * row flagged even though correo can collide in every enrollment type. The
+ * fix flags every candidate row (student cédula, and correo whether it is
+ * the student's own or the representative's) so the visitor's eye lands on
+ * the right "Corregir" button, while the alert itself only ever names the
+ * SET of fields that can collide ("cédula o correo") — never which one
+ * actually matched, and never the value the visitor typed. `stepAlert`'s
+ * equivalent here — the `role="alert"` box — is checked for exactly that:
+ * mirroring `enroll-qa.spec.ts`'s S09.
  */
 describe("EnrollPage — duplicate-identity recovery on the summary step", () => {
   function fillValidSelfEnrollment(): void {
@@ -513,21 +515,23 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     await screen.findByRole("alert");
   }
 
-  it("flags the Cédula summary row without naming any field inside the alert itself", async () => {
+  it("flags the Cédula AND Correo summary rows without confirming which one matched", async () => {
     render(<EnrollPage />);
     fillValidSelfEnrollment();
     await submitAndFailWithDuplicate();
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(MENSAJE_IDENTIDAD_DUPLICADA);
-    // The oracle guard: the alert names no field, mirroring S09 in
-    // enroll-qa.spec.ts at the unit level.
-    expect(alert.textContent ?? "").not.toMatch(/cédula/i);
-    expect(alert.textContent ?? "").not.toMatch(/correo/i);
+    // The oracle guard, revisited by #999: the alert may name the SET of
+    // fields that can collide ("cédula o correo") but must never repeat the
+    // value the visitor typed, which is the only thing that would actually
+    // confirm which one matched.
+    expect(alert.textContent ?? "").not.toContain("1798765432");
+    expect(alert.textContent ?? "").not.toContain("sofia@example.com");
 
     // The flag lives OUTSIDE the alert, on the summary row itself, right
     // next to the pre-existing "Corregir" button — no new navigation, no
-    // field name inside the alert.
+    // identifier repeated inside the alert.
     //
     // `closest("li")` and not `closest("div")`: the summary rows are the items
     // of a `DataRowList` now, so the nearest `div` is the container that holds
@@ -538,6 +542,14 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     expect(cedulaRow).not.toBeNull();
     expect(within(cedulaRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
     expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
+
+    // Issue #999: BOTH candidate rows get flagged, never just the one the
+    // wizard happens to show first — a self enrollment collides on the same
+    // "Correo" row a dependent's flow shows as "Correo del representante".
+    const correoRow = screen.getByText("Correo").closest("li");
+    expect(correoRow).not.toBeNull();
+    expect(within(correoRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
+    expect(within(correoRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
   });
 
   it("still offers the two exits (Iniciar sesión / Recuperar contraseña)", async () => {
