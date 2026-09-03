@@ -209,6 +209,13 @@ describe("AuthShell — the two halves share one vertical axis", () => {
     const dark = screen.getByTestId("auth-panel-dark");
     expect(dark.className).toContain("grid-rows-[1fr_auto_1fr]");
     expect(screen.getByTestId("auth-brand-cluster").className).toContain("self-center");
+    // Placement, not just a class string: the string survived #931 unchanged
+    // while `row-span-2` on the header collapsed the middle row to 0px
+    // (#998). The header itself must own the middle row, same as the card
+    // does on the light half.
+    const banner = screen.getByRole("banner", { name: "Marca de Cata Club" });
+    expect(banner.className).toContain("row-start-2");
+    expect(banner.className).not.toContain("row-span-2");
   });
 
   it("centres the form card on the same axis, with its small print in the lower rail", () => {
