@@ -267,11 +267,21 @@
    its two occupants — the shorter side's row grows to match instead of the
    taller side's overflow pushing only its own column down. Scoped to
    >= 769px: below that the two halves already stack vertically (one column,
-   sequential rows) and sharing rows across them is meaningless. */
+   sequential rows) and sharing rows across them is meaningless.
+   `.landing-editorial-item`'s own `gap: 36px` (above) is a `row-gap`+
+   `column-gap` shorthand, written back when the item had a single implicit
+   row and `row-gap` had nothing to act on. Subgridding five rows into that
+   same item gave `row-gap` four boundaries to fill — 4 × 36px = 144px added
+   on top of the shared-row fix itself, measured live with no visible reason
+   (issue #1005's CI failure: `document.scrollHeight` 37px over the #871/#985
+   ceiling). `row-gap: 0` below restores the item to column-gap-only, which
+   is all it was ever meant to be at this width; the shared rows still absorb
+   Mission's extra line exactly as before, just without the phantom padding
+   that was never part of the fix. */
 @media (min-width: 769px) {
   .landing-editorial { grid-template-rows: repeat(5, auto); }
   .landing-editorial-divider { grid-row: 1 / -1; }
-  .landing-editorial-item { grid-template-rows: subgrid; grid-row: 1 / -1; }
+  .landing-editorial-item { grid-template-rows: subgrid; grid-row: 1 / -1; row-gap: 0; }
   .landing-editorial-media { grid-row: 1 / -1; }
   .landing-editorial-copy { display: grid; grid-template-columns: auto 1fr; grid-template-rows: subgrid; grid-row: 1 / -1; }
   .landing-editorial-copy .landing-index { grid-row: 1; grid-column: 1; }
