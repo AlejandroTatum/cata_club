@@ -253,8 +253,8 @@ def test_dia_8_notifica_segundo_aviso(db_session, sesion_inyectada, monkeypatch)
 @pytest.mark.parametrize(
     ("dias_mora", "estado", "asunto_esperado"),
     [
-        (1, EstadoMembresia.ACTIVA, "Aviso de mora - Cata Club"),
-        (8, EstadoMembresia.VENCIDA, "Último aviso de mora - Cata Club"),
+        (1, EstadoMembresia.ACTIVA, "Cata Club | Aviso de mora"),
+        (8, EstadoMembresia.VENCIDA, "Cata Club | Último aviso de mora"),
     ],
 )
 def test_asunto_de_mora_distingue_dia_1_de_dia_8(

@@ -81,27 +81,42 @@ def _responsable_de_pago(persona: Persona) -> Persona:
     return persona.representante if persona.representante_id else persona
 
 
+WHATSAPP_CANONICO = "0994219619"
+
+
 def _render_vencimiento(nombre: str, mensaje: str) -> tuple[str, str]:
     """`(asunto, cuerpo_texto)` del correo de vencimiento. Pura -- sin I/O.
-    Issue #898 reemplaza SOLO esta función (y `_render_mora`) por su versión
-    con HTML."""
-    asunto = "Vencimiento de membresía - Cata Club"
+    Ronda 2 del issue #898: solo texto (asunto, mención de "Ir a mis pagos" y
+    de WhatsApp) sobre la misma estructura de siempre -- sin HTML nuevo."""
+    asunto = "Cata Club | Su membresía vence pronto"
     cuerpo = (
         f"Hola {nombre},\n\n"
-        f"{mensaje} Por favor, regularice su pago para evitar la suspensión de beneficios."
+        f"{mensaje} Por favor, regularice su pago para evitar la suspensión "
+        f"de beneficios. Puede hacerlo desde \"Ir a mis pagos\", en su cuenta.\n\n"
+        f"Ante cualquier duda, escríbanos por WhatsApp al {WHATSAPP_CANONICO}."
     )
     return asunto, cuerpo
 
 
 def _render_mora(tipo: TipoNotificacion, nombre: str, mensaje: str) -> tuple[str, str]:
     """`(asunto, cuerpo_texto)` del correo de mora. El asunto distingue el
-    día 8 (último aviso) del día 1 -- mapa 4a/4b de #898."""
+    día 8 (último aviso) del día 1 -- mapa 4a/4b de #898. Ronda 2: solo texto,
+    sin HTML nuevo."""
+    ultimo_aviso = tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_8
     asunto = (
-        "Último aviso de mora - Cata Club"
-        if tipo == TipoNotificacion.MIEMBRESIA_MORA_DIA_8
-        else "Aviso de mora - Cata Club"
+        "Cata Club | Último aviso de mora" if ultimo_aviso else "Cata Club | Aviso de mora"
     )
-    return asunto, f"Hola {nombre},\n\n{mensaje}"
+    cierre = (
+        "Este es el último aviso automático. Para recuperar sus beneficios, "
+        'ingrese a "Ir a mis pagos" y registre su pago.'
+        if ultimo_aviso
+        else 'Para recuperar sus beneficios, ingrese a "Ir a mis pagos" y '
+        "registre su pago."
+    )
+    return asunto, (
+        f"Hola {nombre},\n\n{mensaje}\n\n{cierre}\n\n"
+        f"Ante cualquier duda, escríbanos por WhatsApp al {WHATSAPP_CANONICO}."
+    )
 
 
 @celery_app.task(
