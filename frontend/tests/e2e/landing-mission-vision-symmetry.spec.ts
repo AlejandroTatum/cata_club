@@ -9,11 +9,23 @@
  * `src/app/landing/__tests__/landing-editorial-symmetry.test.tsx`; this file
  * measures what only a real browser can: whether the two halves actually land
  * on the same geometry.
+ *
+ * The desktop case measures under `prefers-reduced-motion: reduce`, following
+ * this suite's convention for geometry (`landing-vertical-space.spec.ts`).
+ * `.landing-editorial-item` carries `data-reveal`, and the motion layer
+ * animates those with `gsap.from({ y: 40, duration: 0.7, stagger: 0.1 })`
+ * (`LandingMotion.tsx`): the two halves start 100ms apart, so mid-flight their
+ * headings legitimately sit up to 40px apart. Without the emulation this lock
+ * was reporting the animation rather than the grid — green on a fast machine,
+ * red on a loaded CI runner, with no change to the section in between. Under
+ * `reduce` the whole `(prefers-reduced-motion: no-preference)` branch never
+ * runs, so what is measured is the CSS layout this test is actually about.
  */
 import { test, expect } from "@playwright/test";
 
 test.describe("Mission/Vision editorial symmetry", () => {
   test("aligns both headings on the same Y and keeps the divider centred on desktop", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/");
 
@@ -24,6 +36,13 @@ test.describe("Mission/Vision editorial symmetry", () => {
     const visionHeading = section.getByRole("heading", { name: "Nuestra Visión" });
     await expect(missionHeading).toBeVisible();
     await expect(visionHeading).toBeVisible();
+
+    // Asserted, not assumed: if the reveal ever runs despite the emulation,
+    // this fails naming the cause instead of silently measuring a frame
+    // mid-animation again and blaming the grid.
+    for (const item of await section.locator(".landing-editorial-item").all()) {
+      await expect(item, "reveal settled before measuring").toHaveCSS("transform", "none");
+    }
 
     const geometry = await page.evaluate(() => {
       const wrapper = document.querySelector(".landing-editorial") as HTMLElement;
