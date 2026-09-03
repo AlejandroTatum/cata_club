@@ -162,9 +162,9 @@
 
 .landing-hero-screen-dots { display: flex; gap: 6px; }
 /* @touch-target Matches the 44px floor every other tappable control here uses. */
-.landing-hero-screen-dots button { min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); font-family: var(--font-landing-barlow), sans-serif; font-size: 12.5px; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
+.landing-hero-screen-dots button { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
 .landing-hero-screen-dots button:hover { border-color: var(--landing-highlight); color: var(--landing-highlight); }
-.landing-hero-screen-dots button[aria-selected="true"] { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
+.landing-hero-screen-dots svg { width: 18px; height: 18px; }
 /* The serve: a ball resting on the club's paddle, bottom-right of the hero.
    ONE anchor drives both. The paddle sits on `--landing-serve-y`; the ball's
    own offsets are derived from that same origin, so "beneath and on the same

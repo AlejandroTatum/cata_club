@@ -151,24 +151,26 @@ describe("hero carousel releases every slide to the network (issue #705)", (): v
     expect(slides()[1]).toHaveAttribute("loading", "eager");
   });
 
-  it("releases every remaining slide on the first interaction with the tabs", (): void => {
+  it("releases every remaining slide on the first interaction with the navigation buttons", (): void => {
     render(<HeroCarousel />);
 
     // Before any interaction the last slide is still held back, so a visitor
     // who never touches the carousel does not pay for three hero photos.
     expect(slides()[HERO_PHOTOS.length - 1]).toHaveAttribute("loading", "lazy");
 
-    fireEvent.click(screen.getAllByRole("tab")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Foto siguiente" }));
 
     for (const slide of slides().slice(1)) {
       expect(slide).toHaveAttribute("loading", "eager");
     }
   });
 
-  it("releases the remaining slides from keyboard navigation too", (): void => {
+  it("releases the remaining slides from keyboard activation too", (): void => {
     render(<HeroCarousel />);
 
-    fireEvent.keyDown(screen.getAllByRole("tab")[0].parentElement as HTMLElement, { key: "ArrowRight" });
+    const next = screen.getByRole("button", { name: "Foto siguiente" });
+    next.focus();
+    fireEvent.click(next);
 
     for (const slide of slides().slice(1)) {
       expect(slide).toHaveAttribute("loading", "eager");

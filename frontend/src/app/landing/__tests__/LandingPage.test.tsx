@@ -654,16 +654,16 @@ describe("LandingPage", (): void => {
 
   // Progressive enhancement like the gallery: never assert GSAP internals.
   describe("hero photo carousel", (): void => {
-    it("renders three tabs and their slides from HERO_PHOTOS", (): void => {
+    it("renders its slides from HERO_PHOTOS behind previous/next navigation", (): void => {
       render(<LandingPage />);
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
-      const tabs = within(hero).getAllByRole("tab");
-      expect(tabs).toHaveLength(HERO_PHOTOS.length);
-      tabs.forEach((tab, index): void => {
-        expect(tab).toHaveTextContent(String(index + 1).padStart(2, "0"));
-        expect(tab).toHaveAttribute("aria-selected", index === 0 ? "true" : "false");
-      });
+      const prev = within(hero).getByRole("button", { name: "Foto anterior" });
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+      expect(prev).toBeInTheDocument();
+      expect(next).toBeInTheDocument();
+      expect(within(hero).queryByRole("tablist")).not.toBeInTheDocument();
+      expect(within(hero).queryByRole("tab")).not.toBeInTheDocument();
 
       const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
       expect(slides).toHaveLength(HERO_PHOTOS.length);
@@ -674,34 +674,59 @@ describe("LandingPage", (): void => {
       expect(slides[0]).toHaveStyle({ objectPosition: HERO_PHOTOS[0].objectPosition });
     });
 
-    it("switches slide and aria-selected instantly on click, without GSAP", (): void => {
+    it("only exposes the active slide to assistive tech", (): void => {
       render(<LandingPage />);
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
-      const tabs = within(hero).getAllByRole("tab");
       const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
 
-      fireEvent.click(tabs[1]);
-
-      expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-      expect(slides[1]).toHaveAttribute("data-active", "true");
-      expect(slides[0]).toHaveAttribute("data-active", "false");
+      expect(slides[0]).not.toHaveAttribute("aria-hidden");
+      expect(slides[1]).toHaveAttribute("aria-hidden", "true");
+      expect(slides[2]).toHaveAttribute("aria-hidden", "true");
     });
 
-    it("moves selection and focus with arrow keys on the tablist", (): void => {
+    it("advances to the next slide on click, without GSAP", (): void => {
       render(<LandingPage />);
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
-      const tablist = within(hero).getByRole("tablist");
-      const tabs = within(hero).getAllByRole("tab");
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
 
-      fireEvent.keyDown(tablist, { key: "ArrowRight" });
-      expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-      expect(tabs[1]).toHaveFocus();
+      fireEvent.click(next);
 
-      fireEvent.keyDown(tablist, { key: "ArrowLeft" });
-      expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-      expect(tabs[0]).toHaveFocus();
+      expect(slides[1]).toHaveAttribute("data-active", "true");
+      expect(slides[1]).not.toHaveAttribute("aria-hidden");
+      expect(slides[0]).toHaveAttribute("data-active", "false");
+      expect(slides[0]).toHaveAttribute("aria-hidden", "true");
+    });
+
+    it("wraps around in both directions", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const prev = within(hero).getByRole("button", { name: "Foto anterior" });
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
+
+      fireEvent.click(prev);
+      expect(slides[HERO_PHOTOS.length - 1]).toHaveAttribute("data-active", "true");
+
+      fireEvent.click(next);
+      expect(slides[0]).toHaveAttribute("data-active", "true");
+    });
+
+    it("activates from the keyboard: focusing and pressing a navigation button moves the slide", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
+
+      next.focus();
+      expect(next).toHaveFocus();
+      fireEvent.click(next);
+
+      expect(slides[1]).toHaveAttribute("data-active", "true");
     });
   });
 

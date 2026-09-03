@@ -114,22 +114,22 @@ test.describe("landing image delivery", () => {
         return !!img && img.complete && img.naturalWidth > 0;
       }, index);
 
-    const tabs = page.getByRole("tab");
-    await expect(tabs).toHaveCount(3);
+    const nextButton = page.getByRole("button", { name: "Foto siguiente" });
+    await expect(nextButton).toBeVisible();
 
     // The first slide is `priority`, and the second is released once the page
-    // goes idle — so by the time anyone can press tab 02, it is already there.
+    // goes idle — so by the time anyone can press "next", it is already there.
     await expect.poll(() => slideLoaded(0), { timeout: 15_000 }).toBe(true);
     await expect.poll(() => slideLoaded(1), { timeout: 15_000 }).toBe(true);
 
     // The reveal itself: no waiting between the press and the assertion. On
     // `main` this is the step that fails — slide 1 is still at naturalWidth 0.
-    await tabs.nth(1).click();
+    await nextButton.click();
     expect(await slideLoaded(1)).toBe(true);
 
-    // That first interaction releases the rest, so the same holds for 03.
+    // That first interaction releases the rest, so the same holds for slide 03.
     await expect.poll(() => slideLoaded(2), { timeout: 15_000 }).toBe(true);
-    await tabs.nth(2).click();
+    await nextButton.click();
     expect(await slideLoaded(2)).toBe(true);
   });
 });
