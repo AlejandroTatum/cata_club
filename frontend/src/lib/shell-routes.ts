@@ -36,6 +36,13 @@ const AUTH_SHELL_PREFIXES = [
   // contrasenia.html`. It renders `AuthShell` now, so it must claim the auth
   // chrome like its three siblings.
   "/reset-password",
+  // `/verificar-correo` renders `AuthShell` too (issue #790) and was missing
+  // here the same way `/reset-password` used to be: with no prefix claiming
+  // it, it fell through to "public" and stacked the top `Header`'s full
+  // authenticated nav on top of its own composition — see
+  // `frontend/src/lib/__tests__/auth-shell-route-parity.test.ts`, which reads
+  // the app directory so a third omission fails a test instead of shipping.
+  "/verificar-correo",
 ] as const;
 
 /**
