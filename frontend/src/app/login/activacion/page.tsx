@@ -93,17 +93,19 @@ function ActivationPageContent(): React.ReactElement {
           <ActivationCheck label="Inscripción presencial completada" complete={altaCompletada} />
         </ul>
 
-        <div className="rounded-ctl border border-line-2 bg-canvas px-3.5 py-3 text-sm leading-relaxed text-ink-2">
-          {activationPendingReasons(activation).length === 2 && (
-            <p>Le faltan verificar su correo y completar la inscripción presencial en el club.</p>
-          )}
-          {activationPendingReasons(activation).length === 1 && !correoVerificado && (
-            <p>Verifique su correo electrónico para continuar. La inscripción presencial ya está registrada.</p>
-          )}
-          {activationPendingReasons(activation).length === 1 && !altaCompletada && (
-            <p>Complete la inscripción presencial en el club para habilitar el acceso a los módulos.</p>
-          )}
-        </div>
+        {activationPendingReasons(activation).length > 0 && (
+          <div className="rounded-ctl border border-line-2 bg-canvas px-3.5 py-3 text-sm leading-relaxed text-ink-2">
+            {activationPendingReasons(activation).length === 2 && (
+              <p>Le faltan verificar su correo y completar la inscripción presencial en el club.</p>
+            )}
+            {activationPendingReasons(activation).length === 1 && !correoVerificado && (
+              <p>Verifique su correo electrónico para continuar. La inscripción presencial ya está registrada.</p>
+            )}
+            {activationPendingReasons(activation).length === 1 && !altaCompletada && (
+              <p>Complete la inscripción presencial en el club para habilitar el acceso a los módulos.</p>
+            )}
+          </div>
+        )}
 
         {!correoVerificado && (
           <form className="flex flex-col gap-2.5" onSubmit={resendVerification}>
