@@ -158,13 +158,24 @@
 .landing-hero-slide[data-active="true"] { clip-path: inset(0% 0% 0% 0%); opacity: 1; }
 /* The crossing ball inside the screen during a tab switch; GSAP animates it in. */
 .landing-hero-frameball { position: absolute; left: 0; top: 0; z-index: 5; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--landing-ball); box-shadow: 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 55%, transparent), inset -4px -5px 0 color-mix(in srgb, var(--landing-brand-black) 14%, transparent); opacity: 0; pointer-events: none; }
-.landing-hero-screen-bar { position: absolute; z-index: 6; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: flex-end; padding: 8px 10px; }
-
-.landing-hero-screen-dots { display: flex; gap: 6px; }
+/* Round 2 of human review on PR #870: the arrows sit centred on the photo's
+   own left/right edge, straddling the frame's 14px bezel — the classic
+   carousel placement — rather than in a bar below it. The frame (not the
+   screen) hosts them because the screen clips at its own edge with
+   `overflow: hidden`, which would cut the half that pokes past the photo.
+   14px matches `.landing-hero-frame`'s own padding, so the button's centre
+   lands exactly on the photo's border regardless of viewport; the 8px that
+   spills past the frame stays well inside the smallest gutter (24px). */
 /* @touch-target Matches the 44px floor every other tappable control here uses. */
-.landing-hero-screen-dots button { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 34%, transparent); border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 74%, transparent); cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease; }
-.landing-hero-screen-dots button:hover { border-color: var(--landing-highlight); color: var(--landing-highlight); }
-.landing-hero-screen-dots svg { width: 18px; height: 18px; }
+.landing-hero-nav { position: absolute; z-index: 6; top: 50%; left: 14px; display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); border: 1px solid color-mix(in srgb, var(--landing-surface) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--landing-brand-black) 82%, transparent); color: var(--landing-surface); cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
+.landing-hero-nav:hover { background: var(--landing-highlight); border-color: var(--landing-highlight); color: var(--landing-on-highlight); }
+/* `--landing-focus` is near-black, invisible against this button's own
+   near-black rest state — swapped for the hero's existing yellow accent
+   (already the screen's own ring colour) so the ring reads over the photo,
+   the bezel and the button's dark fill alike. */
+.landing-hero-nav:focus-visible { outline: 3px solid var(--landing-highlight); outline-offset: 3px; }
+.landing-hero-nav-next { left: calc(100% - 14px); }
+.landing-hero-nav svg { width: 18px; height: 18px; }
 /* The serve: a ball resting on the club's paddle, bottom-right of the hero.
    ONE anchor drives both. The paddle sits on `--landing-serve-y`; the ball's
    own offsets are derived from that same origin, so "beneath and on the same

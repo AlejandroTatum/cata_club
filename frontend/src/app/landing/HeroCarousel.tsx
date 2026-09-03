@@ -102,17 +102,23 @@ export default function HeroCarousel(): React.ReactElement {
             aria-hidden={index === current ? undefined : true}
           />
         ))}
-        <div className="landing-hero-screen-bar">
-          <div className="landing-hero-screen-dots">
-            <button type="button" aria-label="Foto anterior" onClick={(): void => go(current - 1)}>
-              <ChevronLeft aria-hidden="true" />
-            </button>
-            <button type="button" aria-label="Foto siguiente" onClick={(): void => go(current + 1)}>
-              <ChevronRight aria-hidden="true" />
-            </button>
-          </div>
-        </div>
       </div>
+      <button
+        type="button"
+        className="landing-hero-nav landing-hero-nav-prev"
+        aria-label="Foto anterior"
+        onClick={(): void => go(current - 1)}
+      >
+        <ChevronLeft aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className="landing-hero-nav landing-hero-nav-next"
+        aria-label="Foto siguiente"
+        onClick={(): void => go(current + 1)}
+      >
+        <ChevronRight aria-hidden="true" />
+      </button>
     </div>
   );
 }

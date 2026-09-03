@@ -674,6 +674,23 @@ describe("LandingPage", (): void => {
       expect(slides[0]).toHaveStyle({ objectPosition: HERO_PHOTOS[0].objectPosition });
     });
 
+    // Round 2 of human review on PR #870: the buttons moved from a footer bar
+    // below the photo to the photo's own left/right edges, and the now-empty
+    // bar container was retired along with its CSS.
+    it("places the navigation buttons beside the photo, not in the retired bottom bar", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const frame = hero.querySelector(".landing-hero-frame") as HTMLElement;
+      const prev = within(hero).getByRole("button", { name: "Foto anterior" });
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+
+      expect(prev.parentElement).toBe(frame);
+      expect(next.parentElement).toBe(frame);
+      expect(hero.querySelector(".landing-hero-screen-bar")).not.toBeInTheDocument();
+      expect(hero.querySelector(".landing-hero-screen-dots")).not.toBeInTheDocument();
+    });
+
     it("only exposes the active slide to assistive tech", (): void => {
       render(<LandingPage />);
 
