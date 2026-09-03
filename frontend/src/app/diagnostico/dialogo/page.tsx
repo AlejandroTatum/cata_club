@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS, useNativeDialog } from "@/app/members/useNativeDialog";
+import { ICON } from "@/lib/icon-size";
 
 /** Cuántos párrafos de relleno lleva el cuerpo — fuerza scroll interno, igual que el ~1132px real de Editar miembro. */
 const FILLER_PARAGRAPH_COUNT = 40;
@@ -214,9 +215,13 @@ export default function DiagnosticoDialogoPage(): React.ReactElement {
         className={NATIVE_DIALOG_SHELL_CLASS}
         style={shellStyle}
       >
-        {/* Header — shrink-0, igual que en MemberEditDialog/MedicalRecordDialog/PaymentsDialog. */}
+        {/* Header — shrink-0, igual que en MemberEditDialog/MedicalRecordDialog/PaymentsDialog.
+            Título en el mismo paso `title` (20px) que usan esos diálogos: la
+            cara Graduate (`font-display`) con su tracking declarado
+            (`tracking-flat`) — lo que exige `display-face-usage.test.ts` para
+            todo <h1>-<h3> en `text-lg`. */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-sunken px-5 py-4">
-          <h2 id="diagnostico-dialogo-title" className="text-lg font-bold text-ink">
+          <h2 id="diagnostico-dialogo-title" className="font-display text-lg uppercase tracking-flat text-ink">
             Diagnóstico del diálogo — iOS
           </h2>
           <button
@@ -226,42 +231,36 @@ export default function DiagnosticoDialogoPage(): React.ReactElement {
             aria-label="Cerrar diagnóstico"
             className="rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-sunken hover:text-ink"
           >
-            <X size={18} strokeWidth={1.5} aria-hidden="true" />
+            {/* `ICON.base` (18px), nunca un literal — `arbitrary-style-values.test.ts`
+                solo acepta un paso de la escala `ICON` en un archivo que importa lucide-react. */}
+            <X size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
           </button>
         </div>
 
         {/* Cuerpo scrollable — misma clase compartida que rompe en WebKit real. */}
         <div ref={bodyRef} className={NATIVE_DIALOG_BODY_CLASS}>
-          <div
-            style={{
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-              fontSize: "15px",
-              lineHeight: 1.5,
-              color: "#0a0a0a",
-              backgroundColor: "#ffffff",
-              border: "2px solid #0a0a0a",
-              borderRadius: "8px",
-              padding: "12px",
-              marginBottom: "16px",
-            }}
-          >
+          {/* Panel de lectura — mismo par superficie/control que `ModalSection`
+              (`rounded-ctl border border-line bg-paper`), `text-ink` (el único
+              color que un número de lectura puede llevar, ver el comentario de
+              `tailwind.config.ts` sobre `ink`) y `tabular-nums` en `text-base`
+              (15px, el piso de la escala tipográfica) para que cada medición
+              quede ancha-fija y legible en un pantallazo sin inventar una
+              familia monoespaciada que el sistema de diseño no declara. */}
+          <div className="mb-4 rounded-ctl border border-ink bg-paper p-3 text-base text-ink">
             <div
-              style={{
-                fontSize: "20px",
-                fontWeight: 700,
-                padding: "8px",
-                marginBottom: "10px",
-                textAlign: "center",
-                color: "#ffffff",
-                backgroundColor: verdictOk === null ? "#525252" : verdictOk ? "#0a7d2c" : "#b91c1c",
-                borderRadius: "6px",
-              }}
+              className={`mb-2.5 rounded-ctl px-3 py-2 text-center text-lg font-extrabold ${
+                verdictOk === null
+                  ? "bg-state-neutral-bg text-state-neutral"
+                  : verdictOk
+                    ? "bg-state-ok-bg text-state-ok"
+                    : "bg-state-bad-bg text-state-bad"
+              }`}
             >
               {verdictOk === null ? "MIDIENDO…" : verdictOk ? "DIAGNÓSTICO OK" : "DIAGNÓSTICO ROTO"}
             </div>
             {lines.map((line) => (
-              <div key={line.label} style={{ wordBreak: "break-word" }}>
-                <strong>{line.label}:</strong> {line.value}
+              <div key={line.label} className="break-words tabular-nums">
+                <strong className="font-semibold">{line.label}:</strong> {line.value}
               </div>
             ))}
           </div>
@@ -280,7 +279,7 @@ export default function DiagnosticoDialogoPage(): React.ReactElement {
           <button
             type="button"
             onClick={() => dialogRef.current?.close()}
-            className="rounded-lg border border-line bg-paper px-4 py-2 text-sm font-medium text-ink hover:bg-sunken"
+            className="rounded-lg border border-line bg-paper px-4 py-2 text-sm font-semibold text-ink hover:bg-sunken"
           >
             Cerrar
           </button>
