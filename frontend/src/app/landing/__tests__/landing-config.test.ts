@@ -16,7 +16,7 @@ import { category, publishedCatalog, satSlot } from "./schedule-fixtures";
  * reach the page through `GET /api/schedules` (issue #789).
  * `deriveContactHours` is a pure function over whatever catalog it is handed,
  * so its tests state the input they need and nothing more. The builders live
- * in `schedule-fixtures.ts` because `schedule-timeline.test.ts` needs the same
+ * in `schedule-fixtures.ts` because `ScheduleSelector.test.tsx` needs the same
  * shapes; importing the club's real list back in would be the second copy this
  * issue removed.
  */

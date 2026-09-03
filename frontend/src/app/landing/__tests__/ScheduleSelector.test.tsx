@@ -82,7 +82,7 @@ describe("ScheduleSelector", (): void => {
     expect(within(panel).queryByText(/también/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /competitivo/i }));
-    expect(within(panel).getByText(/También/)).toHaveTextContent("También 18:00–20:00 los Sábado.");
+    expect(within(panel).getByText(/También/)).toHaveTextContent("También 18:00–20:00 los sábado.");
   });
 
   it("adds no animation class to the digits or the lit balls with reduced motion", (): void => {

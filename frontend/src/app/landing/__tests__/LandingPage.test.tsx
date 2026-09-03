@@ -7,7 +7,6 @@ import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-locatio
 import { deriveContactHours, landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
-import { barGeometry, deriveDayRange } from "@/app/landing/schedule-timeline";
 import { mapPublicSchedules } from "@/app/landing/schedule-data";
 import LandingPage from "@/app/landing/LandingPage";
 
@@ -168,7 +167,7 @@ describe("LandingPage", (): void => {
       it("renders client-pending values from the centralized config", async (): Promise<void> => {
     render(<LandingPage />);
 
-    await waitFor((): void => { expect(screen.getByText(PUBLISHED[0].slots[0].hours)).toBeInTheDocument(); });
+    await waitFor((): void => { expect(screen.getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
     expect(within(contactHoursRow()).getByText(deriveContactHours(PUBLISHED))).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cata Club Loja" })).toHaveAttribute("href", landingConfig.contact.facebook);
     expect(screen.getByRole("link", { name: "@cataclub_tenis_de_mesa" })).toHaveAttribute("href", landingConfig.contact.instagram);
@@ -225,7 +224,7 @@ describe("LandingPage", (): void => {
       expect(contactHoursRow()).not.toHaveTextContent("08:00");
     });
 
-    it("shows the age label only for the categories that publish one", async (): Promise<void> => {
+    it("shows the audience label only for the categories that publish one", async (): Promise<void> => {
       render(<LandingPage />);
 
       const section = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section") as HTMLElement;
@@ -233,13 +232,12 @@ describe("LandingPage", (): void => {
       const panel = screen.getByRole("tabpanel");
 
       fireEvent.click(within(section).getByRole("tab", { name: /formativo/i }));
-      expect(within(panel).getByText("Edad")).toBeInTheDocument();
       expect(within(panel).getByText("5 a 10 años")).toBeInTheDocument();
 
       // `ages: null` is a legitimate state: the fact disappears, and nothing
       // is invented to fill it.
       fireEvent.click(within(section).getByRole("tab", { name: /juego libre/i }));
-      expect(within(panel).queryByText("Edad")).not.toBeInTheDocument();
+      expect(panel.querySelector(".landing-schedule-audience")).not.toBeInTheDocument();
     });
 
     it("says the club has published nothing yet, in both views, when the catalog is empty", async (): Promise<void> => {
@@ -360,20 +358,20 @@ describe("LandingPage", (): void => {
 
     PUBLISHED.forEach((schedule, index): void => {
       expect(tabs[index]).toHaveTextContent(schedule.category);
-      // One line per DISTINCT band, compacted to "HH:MM–HH:MM".
-      schedule.slots.forEach((slot): void => {
-        expect(tabs[index]).toHaveTextContent(slot.hours.replace(/\s/g, ""));
-      });
+      // Only the FIRST slot's hours, compacted to "HH:MM–HH:MM" — the tab is
+      // a quick reference, not a restatement of every published block.
+      expect(tabs[index]).toHaveTextContent(schedule.slots[0].hours.replace(/\s/g, ""));
     });
   });
 
   /**
    * Regression guard for the schedule migration to multiple slots per
-   * category: the master-detail panel must show every slot of Adultos
-   * (weekday morning + evening) and Competitivo (weekday + Saturday), not
-   * just the first.
+   * category (issue #988): the card shows the FIRST slot's schedule in the
+   * large "Horario" fact and one secondary "También …" line per extra
+   * slot — Adultos (weekday morning + evening) and Competitivo (weekday +
+   * Saturday) both publish two.
    */
-  it("shows every slot of a multi-slot category in the detail panel", async (): Promise<void> => {
+  it("shows the first slot's schedule and a secondary line per extra slot", async (): Promise<void> => {
     render(<LandingPage />);
 
     const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
@@ -382,18 +380,22 @@ describe("LandingPage", (): void => {
     const panel = screen.getByRole("tabpanel");
 
     fireEvent.click(within(tablist).getByRole("tab", { name: /adultos/i }));
-    expect(within(panel).getByText(/08:00 – 09:15/)).toBeInTheDocument();
-    expect(within(panel).getByText(/20:00 – 21:15/)).toBeInTheDocument();
+    expect(panel.querySelector(".landing-schedule-time")?.textContent).toContain("08:00–09:15");
+    const adultosSecond = panel.querySelectorAll(".landing-schedule-second");
+    expect(adultosSecond).toHaveLength(1);
+    expect(adultosSecond[0]).toHaveTextContent("También 20:00–21:15 los lunes, martes, miércoles, jueves y viernes.");
 
     fireEvent.click(within(tablist).getByRole("tab", { name: /competitivo/i }));
-    expect(within(panel).getByText(/Lunes, Martes, Miércoles, Jueves y Viernes y Sábado/)).toBeInTheDocument();
-        expect(panel.querySelectorAll(".landing-day-bar")).toHaveLength(2);
+    expect(panel.querySelector(".landing-schedule-time")?.textContent).toContain("18:00–20:00");
+    const competitivoSecond = panel.querySelectorAll(".landing-schedule-second");
+    expect(competitivoSecond).toHaveLength(1);
+    expect(competitivoSecond[0]).toHaveTextContent("También 18:00–20:00 los sábado.");
   });
 
   it("orders the main content Hero → Ticker → Stats → Horarios → rest", async (): Promise<void> => {
     const { container } = render(<LandingPage />);
     const main = container.querySelector("main");
-    await waitFor((): void => { expect(container.querySelector(".landing-sched")).toBeInTheDocument(); });
+    await waitFor((): void => { expect(container.querySelector(".landing-schedule-layout")).toBeInTheDocument(); });
     expect(main).not.toBeNull();
     const sections = Array.from(main?.querySelectorAll("section, header") ?? []);
     expect(sections[0]?.getAttribute("id")).toBe("inicio");
@@ -402,62 +404,32 @@ describe("LandingPage", (): void => {
     // content block.
     expect(sections[1]?.classList.contains("landing-credentials-ticker")).toBe(true);
     expect(sections[2]?.classList.contains("landing-stats")).toBe(true);
-    expect(sections[3]?.querySelector(".landing-sched")).not.toBeNull();
+    expect(sections[3]?.querySelector(".landing-schedule-layout")).not.toBeNull();
   });
 
   /**
-   * The day timeline is data-driven: one row per distinct day group in the
-   * published data, with every slot rendered exactly once as a bar on the
-   * shared scale. Adding or reordering categories or slots must change the
-   * picture without touching the component — no hardcoded two-lane layout
-   * or legend copy survives. Expectations derive from the same API payload
-   * the fetch stub feeds the page, so they track the real data, not any
-   * hardcoded lane structure.
+   * The day balls are data-driven (issue #988): which of `L M X J V S`
+   * lights up comes from the FIRST slot's days, read straight off the
+   * fetched payload — no hardcoded per-category day set survives, and no
+   * leftover legend or lane from the retired timeline does either. Sunday
+   * never lights a ball; a slot that runs on it can only say so in text.
    */
-  it("derives timeline rows and bars from the published schedules on the shared scale", async (): Promise<void> => {
+  it("lights the day balls from the first slot's real days, never a hardcoded set", async (): Promise<void> => {
     render(<LandingPage />);
     const scheduleSection = screen.getByRole("heading", { name: "Elija una categoría" }).closest("section");
     await waitFor((): void => { expect(within(scheduleSection as HTMLElement).getByRole("tablist", { name: "Categorías" })).toBeInTheDocument(); });
 
     // Mapped the same way the page maps the fetched payload.
     const schedules = mapPublicSchedules(publicSchedulePayload);
-    const range = deriveDayRange(schedules);
     fireEvent.click(within(scheduleSection as HTMLElement).getByRole("tab", { name: /competitivo/i }));
-        const selected = schedules.find((schedule): boolean => schedule.category === "Competitivo");
-        const expectedGroups = ["week", "sat"];
+    const competitivo = schedules.find((schedule): boolean => schedule.category === "Competitivo");
 
-    // One row per distinct day group actually present in the data.
-    const rows = Array.from(scheduleSection?.querySelectorAll("[data-day-row]") ?? []);
-    expect(rows.map((row): string | null => row.getAttribute("data-day-row"))).toEqual(expectedGroups);
+    const group = scheduleSection?.querySelector(".landing-schedule-days") as HTMLElement;
+    expect(group).toHaveAttribute("aria-label", competitivo?.slots[0].days);
+    const lit = Array.from(group.querySelectorAll(".landing-schedule-day--on")).map((ball): string => ball.textContent ?? "");
+    expect(lit).toEqual(["L", "M", "X", "J", "V"]);
 
-    // Row labels come from the data's day strings — never hardcoded copy.
-    rows.forEach((row): void => {
-      const on = row.getAttribute("data-day-row") ?? "";
-      const expectedLabel = on === "week" ? "LUN–VIE" : "SÁB";
-      expect(row.querySelector("b")?.textContent).toBe(expectedLabel);
-    });
-
-        const allSlots = (selected?.slots ?? []).map((slot): { category: string; hours: string; days: string; on: string } => ({
-          category: selected?.category ?? "", hours: slot.hours, days: slot.days, on: slot.on,
-        }));
-    const bars = Array.from(scheduleSection?.querySelectorAll(".landing-day-bar") ?? []);
-    expect(bars).toHaveLength(allSlots.length);
-
-    const titles = new Set(bars.map((bar): string | null => bar.getAttribute("title")));
-    allSlots.forEach((slot): void => {
-      const geometry = barGeometry(slot.hours, range);
-      const bar = bars.find((candidate): boolean =>
-        candidate.getAttribute("title") === `${slot.category} · ${slot.hours} · ${slot.days}`,
-      );
-      expect(bar).not.toBeUndefined();
-      const style = bar?.getAttribute("style") ?? "";
-      expect(Number(style.match(/left:\s*([\d.]+)%/)?.[1])).toBeCloseTo(geometry.left, 3);
-      expect(Number(style.match(/width:\s*calc\(([\d.]+)%/)?.[1])).toBeCloseTo(geometry.width, 3);
-      expect(bar?.closest("[data-day-lane]")?.getAttribute("data-day-lane")).toBe(slot.on);
-    });
-    expect(titles.size).toBe(selected?.slots.length);
-
-    // No hardcoded two-lane legend or decorative ball remains.
+    // No leftover legend or decorative element from the retired timeline.
     expect(scheduleSection?.querySelector(".landing-day-legend")).toBeNull();
     expect(scheduleSection?.querySelector("[data-schedule-ball]")).toBeNull();
     expect(scheduleSection).not.toHaveTextContent(/Dos bloques por día/);
@@ -481,7 +453,7 @@ describe("LandingPage", (): void => {
 
       expect(tabs[2]).toHaveAttribute("aria-selected", "true");
       expect(within(panel).getByRole("heading", { level: 3 })).toHaveTextContent("Juvenil");
-      expect(within(panel).getByText(/17:00 – 18:00/)).toBeInTheDocument();
+      expect(panel.querySelector(".landing-schedule-time")?.textContent).toContain("17:00–18:00");
     });
 
     it("moves selection and focus with ArrowDown and ArrowUp", async (): Promise<void> => {
