@@ -11,7 +11,7 @@
  *    lazy-loader declines the inactive slides because landing.css leaves them
  *    transparent and clipped, so tab 02 revealed an empty frame.
  *
- * The `next/image` mock below deliberately forwards `sizes` and `loading`.
+ * The `next/image` double below deliberately forwards `sizes` and `loading`.
  * The mock in `LandingPage.test.tsx` strips `sizes`, which is precisely why
  * that suite stayed green while three images shipped without one — a lock on
  * an attribute has to let the attribute through.
@@ -22,49 +22,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HeroCarousel from "@/app/landing/HeroCarousel";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
 import LandingPage from "@/app/landing/LandingPage";
+import { stubLandingGlobals } from "./landing-test-doubles";
 
-vi.mock("next/image", (): { __esModule: boolean; default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean; unoptimized?: boolean }) => React.ReactElement } => ({
-  __esModule: true,
-  default: ({ priority, fill: _fill, unoptimized, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean; unoptimized?: boolean }): React.ReactElement => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      alt={alt ?? ""}
-      data-priority={priority ? "true" : undefined}
-      data-unoptimized={unoptimized ? "true" : undefined}
-      {...props}
-    />
-  ),
-}));
+// A `vi.mock` factory is hoisted above every import in this file, including
+// the one that would otherwise supply the doubles above — a static import
+// there throws "Cannot access '...' before initialization". Each factory
+// awaits its own dynamic `import()` instead, which is not subject to that
+// hoisting and is Vitest's documented way to share a mock implementation.
+vi.mock("next/image", async () => {
+  const { NextImageDouble } = await import("./landing-test-doubles");
+  return { __esModule: true, default: NextImageDouble };
+});
 
-vi.mock("@/app/landing/LandingMap", (): { default: () => React.ReactElement } => ({
-  default: (): React.ReactElement => <div aria-label="Mapa de ubicación de Cata Club" />,
-}));
+vi.mock("@/app/landing/LandingMap", async () => {
+  const { LandingMapDouble } = await import("./landing-test-doubles");
+  return { default: LandingMapDouble };
+});
 
-vi.mock("@/app/landing/LandingMotion", (): { default: () => null } => ({
-  default: (): null => null,
-}));
+vi.mock("@/app/landing/LandingMotion", async () => {
+  const { LandingMotionDouble } = await import("./landing-test-doubles");
+  return { default: LandingMotionDouble };
+});
 
 beforeEach((): void => {
-  // `LandingPage` mounts a reduced-motion query, a sponsor fetch and a
-  // `ResizeObserver`; jsdom provides none of them and this suite cares about
-  // none of them, so they are stubbed to their quietest useful answer.
-  vi.stubGlobal("fetch", vi.fn((): Promise<{ ok: boolean; json: () => Promise<unknown> }> =>
-    Promise.resolve({ ok: true, json: async (): Promise<unknown> => [] })));
-  vi.stubGlobal("ResizeObserver", class {
-    observe(): void {}
-    unobserve(): void {}
-    disconnect(): void {}
-  });
-  vi.stubGlobal("matchMedia", vi.fn((query: string): MediaQueryList => ({
-    matches: query === "(prefers-reduced-motion: reduce)",
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  } as unknown as MediaQueryList)));
+  stubLandingGlobals();
 });
 
 afterEach((): void => {
