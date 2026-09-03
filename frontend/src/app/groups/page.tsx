@@ -1395,7 +1395,7 @@ export default function GroupsPage(): React.ReactElement {
                           <>
                             <CellLabel>{COLUMNS[2]}</CellLabel>
                             <p className="text-base font-semibold text-ink">
-                              {inscriptos} inscripto{inscriptos === 1 ? "" : "s"}
+                              {inscriptos} inscrito{inscriptos === 1 ? "" : "s"}
                             </p>
                           </>
                         )}

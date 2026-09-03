@@ -844,7 +844,7 @@ function resolveSituation(input: PaymentSituationInput, today: Date): PaymentSit
         ? "Su membresía tiene gratuidad familiar"
         : `La membresía de ${input.studentName} tiene gratuidad familiar`,
       detail:
-        "El club le otorgó gratuidad familiar por ser el cuarto integrante de la familia inscripto: esta membresía no genera ningún cobro. Para extender su cobertura, acérquese a administración del club.",
+        "El club le otorgó gratuidad familiar por ser el cuarto integrante de la familia inscrito: esta membresía no genera ningún cobro. Para extender su cobertura, acérquese a administración del club.",
       priceNote: null,
       canRegister: false,
       urgent: false,

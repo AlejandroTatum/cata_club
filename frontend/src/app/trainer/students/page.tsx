@@ -116,7 +116,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
   if (nomina.length === 0) {
     estadoVacio = {
       icon: <BookUser size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />,
-      title: "Todavía no hay alumnos inscriptos",
+      title: "Todavía no hay alumnos inscritos",
       description: "Cuando la administración asigne alumnos a un horario, van a aparecer acá.",
     };
   } else if (encontrados.length === 0) {

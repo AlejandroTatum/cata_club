@@ -420,7 +420,7 @@ describe("cuando no hay padrón que mostrar", () => {
 
     render(<TrainerStudentsPage />);
 
-    expect(await screen.findByText(/todavía no hay alumnos inscriptos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/todavía no hay alumnos inscritos/i)).toBeInTheDocument();
   });
 
   it("ofrece reintentar, sin culpar al entrenador, cuando el padrón no carga", async () => {
