@@ -19,38 +19,24 @@
  * order (`[image][mission] | [vision][image]`) must survive.
  */
 
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// Registers next/image/LandingMap/LandingMotion mocks as a side effect — see
+// the doc comment there for why that is safe under Vitest's hoisting. This
+// MUST come before `LandingPage` (or anything that imports it) below: sibling
+// imports evaluate in source order, so a later position here would let
+// `LandingPage`'s own `next/image` import resolve to the real module first.
+// This file must not declare its own `vi.mock` for any of those three paths.
+import "./landing-render-mocks";
+import { render } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import LandingPage from "@/app/landing/LandingPage";
-import { stubLandingGlobals } from "./landing-test-doubles";
-
-// A `vi.mock` factory is hoisted above every import in this file, including
-// the one that would otherwise supply the doubles above — a static import
-// there throws "Cannot access '...' before initialization". Each factory
-// awaits its own dynamic `import()` instead, which is not subject to that
-// hoisting and is Vitest's documented way to share a mock implementation.
-vi.mock("next/image", async () => {
-  const { NextImageDouble } = await import("./landing-test-doubles");
-  return { __esModule: true, default: NextImageDouble };
-});
-
-vi.mock("@/app/landing/LandingMap", async () => {
-  const { LandingMapDouble } = await import("./landing-test-doubles");
-  return { default: LandingMapDouble };
-});
-
-vi.mock("@/app/landing/LandingMotion", async () => {
-  const { LandingMotionDouble } = await import("./landing-test-doubles");
-  return { default: LandingMotionDouble };
-});
+import { resetLandingTestEnvironment, stubLandingGlobals } from "./landing-test-doubles";
 
 beforeEach((): void => {
   stubLandingGlobals();
 });
 
 afterEach((): void => {
-  cleanup();
-  vi.unstubAllGlobals();
+  resetLandingTestEnvironment();
 });
 
 describe("Mission/Vision editorial symmetry (issue #863)", (): void => {
