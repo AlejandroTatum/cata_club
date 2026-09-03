@@ -36,7 +36,7 @@ from app.infraestructura.tareas.recuperacion_tareas import (
 from app.soporte_transversal.configuracion import settings
 
 MENSAJE_EXITO = "Si el correo está registrado, se envió un enlace de recuperación"
-ASUNTO_RECUPERACION = "Recuperación de contraseña - Cata Club"
+ASUNTO_RECUPERACION = "Cata Club | Recuperación de contraseña"
 
 
 # ─── Arnés ──────────────────────────────────────────────────────────────────
