@@ -578,6 +578,17 @@ export async function backendMe(accessToken: string): Promise<AuthResult<Backend
   const result = await backendFetch("/auth/me", {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}` },
+    // `cache: "no-store"` is load-bearing, not decorative: Next.js's fetch
+    // Data Cache defaults GET requests to `force-cache`, keyed on url+init,
+    // INDEPENDENTLY of this route already being dynamic (that only opts the
+    // route's own response out of the separate Full Route Cache). Without
+    // this, a stale access token minted before a membership was activated
+    // kept returning its own cached `/auth/me` answer forever — every later
+    // "Consultar estado nuevamente" replayed the same cached
+    // `activacion_completa: false` instead of asking the backend again, and
+    // the pending-token reissue below (which reads THIS response) could
+    // never see the fresh decision either. See GET /api/auth/session.
+    cache: "no-store",
   });
   if (!result.ok) return result;
 
