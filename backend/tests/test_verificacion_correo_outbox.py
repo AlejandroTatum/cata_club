@@ -51,7 +51,7 @@ from tests.fabricas_auth import crear_usuario_auth
 from datetime import date
 
 
-ASUNTO_VERIFICACION = "Verificación de correo - Cata Club"
+ASUNTO_VERIFICACION = "Cata Club | Verificación de correo"
 
 
 # ─── Arnés ──────────────────────────────────────────────────────────────────
