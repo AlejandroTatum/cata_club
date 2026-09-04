@@ -19,6 +19,7 @@ from app.dominio.excepciones import (
     DestinatarioRechazadoPermanentemente,
     ServicioNoDisponible,
 )
+from app.infraestructura.asuntos_correo import ASUNTO_RECUPERACION
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
@@ -255,7 +256,7 @@ class ServicioNotificaciones:
         uso") sobre la misma estructura MIME/HTML que ya existía -- sin
         layout nuevo."""
         enlace = f"{self._frontend_url}/reset-password?token={token}"
-        asunto = "Cata Club | Recuperación de contraseña"
+        asunto = ASUNTO_RECUPERACION
         texto = (
             f"Hola,\n\n"
             f"Recibimos una solicitud para restablecer su contraseña en Cata Club.\n"

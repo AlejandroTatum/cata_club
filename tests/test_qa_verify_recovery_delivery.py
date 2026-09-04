@@ -1,4 +1,11 @@
-"""Tests for the local-only QA password-recovery delivery smoke."""
+"""Tests for the local-only QA password-recovery delivery smoke.
+
+Este archivo corre desde `backend` con `uv run pytest ../tests/...`
+(`Makefile:95`), así que sí tiene el venv de backend disponible y puede
+importar `app.infraestructura.asuntos_correo` directo -- a diferencia del
+propio script, que corre con `python3` puro desde la raíz del repo sin ese
+venv (ver `scripts/qa_verify_recovery_delivery.py`).
+"""
 
 import sys
 from pathlib import Path
@@ -6,15 +13,26 @@ from unittest.mock import patch
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "scripts"))
+sys.path.insert(0, str(RAIZ / "backend"))
 
 import qa_verify_recovery_delivery as smoke  # noqa: E402
+
+from app.infraestructura.asuntos_correo import ASUNTO_RECUPERACION  # noqa: E402
+
+
+def test_el_asunto_del_script_coincide_con_el_del_backend():
+    """El candado que el #984 habría puesto en rojo: si el backend cambia el
+    asunto de recuperación y el script de QA no se entera, este test falla
+    antes de que `make qa-up` agote los 30 segundos de polling (issue #1010).
+    """
+    assert smoke.RECOVERY_SUBJECT == ASUNTO_RECUPERACION
 
 
 def test_es_correo_de_recuperacion_si_coinciden_destinatario_y_asunto():
     assert smoke.is_recovery_message(
         {
             "To": [{"Address": smoke.QA_RECIPIENT}],
-            "Subject": "Recuperación de contraseña - Cata Club",
+            "Subject": ASUNTO_RECUPERACION,
         }
     )
 
@@ -33,7 +51,7 @@ def test_wait_for_recovery_message_reintenta_hasta_que_mailpit_recibe_el_correo(
                 "messages": [
                     {
                         "To": [{"Address": smoke.QA_RECIPIENT}],
-                        "Subject": "Recuperación de contraseña - Cata Club",
+                        "Subject": ASUNTO_RECUPERACION,
                     }
                 ]
             },
@@ -48,7 +66,7 @@ def test_wait_for_recovery_message_reintenta_hasta_que_mailpit_recibe_el_correo(
         poll_interval_seconds=1,
     )
 
-    assert message["Subject"] == "Recuperación de contraseña - Cata Club"
+    assert message["Subject"] == ASUNTO_RECUPERACION
     assert sleeps == [1]
 
 
@@ -64,6 +82,34 @@ def test_wait_for_recovery_message_falla_si_el_worker_no_entrega_el_correo():
             )
         except RuntimeError as exc:
             assert smoke.QA_RECIPIENT in str(exc)
+        else:
+            raise AssertionError("se esperaba RuntimeError cuando Mailpit no recibe el correo")
+
+
+def test_wait_for_recovery_message_lista_los_asuntos_vistos_al_fallar():
+    """El mensaje viejo solo acusaba al worker y a SMTP; si Mailpit sí tenía
+    correo para el destinatario pero con otro asunto (el caso del #1010), el
+    error tiene que decir cuáles vio en vez de dejar suponer que no llegó
+    nada."""
+    mensajes = {
+        "messages": [
+            {"To": [{"Address": smoke.QA_RECIPIENT}], "Subject": "Cata Club | Aviso de mora"},
+            {"To": [{"Address": smoke.QA_RECIPIENT}], "Subject": "Comprobante de pago"},
+        ]
+    }
+    with patch.object(smoke, "time") as mock_time:
+        mock_time.monotonic.side_effect = [0, 0, 5]
+        try:
+            smoke.wait_for_recovery_message(
+                fetch_messages=lambda: mensajes,
+                sleep=lambda _: None,
+                timeout_seconds=5,
+                poll_interval_seconds=1,
+            )
+        except RuntimeError as exc:
+            mensaje_error = str(exc)
+            assert "Cata Club | Aviso de mora" in mensaje_error
+            assert "Comprobante de pago" in mensaje_error
         else:
             raise AssertionError("se esperaba RuntimeError cuando Mailpit no recibe el correo")
 
