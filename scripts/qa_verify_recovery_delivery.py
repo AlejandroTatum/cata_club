@@ -18,15 +18,40 @@ invisible (issue #764).
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
+from pathlib import Path
+
+
+def _cargar_asunto_recuperacion() -> str:
+    """Carga `ASUNTO_RECUPERACION` por ruta de archivo, sin importar `app`.
+
+    Este script corre con `python3` puro desde la raíz del repo (ver
+    `Makefile`), sin el venv de `backend`, así que no puede hacer
+    `from app.infraestructura.asuntos_correo import ...` como sí puede el
+    test que lo acompaña. El asunto vivía duplicado como literal acá y en
+    el backend -- el PR #984 cambió uno y no el otro, y este script quedó
+    30 segundos acusando al worker por un correo que sí había llegado
+    (issue #1010).
+    """
+    ruta = Path(__file__).resolve().parent.parent / "backend/app/infraestructura/asuntos_correo.py"
+    if not ruta.is_file():
+        raise RuntimeError(f"no se encontró el módulo de asuntos de correo en {ruta}")
+    spec = importlib.util.spec_from_file_location("asuntos_correo", ruta)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"no se pudo cargar el módulo de asuntos de correo desde {ruta}")
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo.ASUNTO_RECUPERACION
+
 
 QA_RECIPIENT = "admin@cataclub.com"
-RECOVERY_SUBJECT = "Recuperación de contraseña - Cata Club"
+RECOVERY_SUBJECT = _cargar_asunto_recuperacion()
 RECOVERY_URL = "http://127.0.0.1:8000/api/v1/auth/recuperar-contrasenia"
 MAILPIT_MESSAGES_URL = "http://127.0.0.1:8025/api/v1/messages"
 POLL_INTERVAL_SECONDS = 1
@@ -69,6 +94,33 @@ def is_recovery_message(message: object) -> bool:
     )
 
 
+def _asuntos_recibidos_por_destinatario(messages: list) -> list[str]:
+    """Asuntos (deduplicados, hasta 10) que Mailpit sí tenía para `QA_RECIPIENT`.
+
+    Si el timeout se agota con esta lista vacía, el correo nunca llegó y el
+    problema está en el worker o en SMTP, como decía siempre el error. Si la
+    lista no está vacía, el correo llegó con OTRO asunto -- el caso del
+    #1010 -- y el error tiene que señalar eso, no el worker.
+    """
+    vistos: list[str] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        recipients = message.get("To")
+        para_destinatario = isinstance(recipients, list) and any(
+            isinstance(recipient, dict) and recipient.get("Address") == QA_RECIPIENT
+            for recipient in recipients
+        )
+        if not para_destinatario:
+            continue
+        asunto = message.get("Subject")
+        if isinstance(asunto, str) and asunto not in vistos:
+            vistos.append(asunto)
+        if len(vistos) >= 10:
+            break
+    return vistos
+
+
 def wait_for_recovery_message(
     fetch_messages: Callable[[], Mapping[str, object]],
     sleep: Callable[[float], None] = time.sleep,
@@ -84,9 +136,16 @@ def wait_for_recovery_message(
             if is_recovery_message(message):
                 return message
         if time.monotonic() - started_at >= timeout_seconds:
+            asuntos_vistos = _asuntos_recibidos_por_destinatario(messages)
+            detalle_asuntos = (
+                f"; asuntos que sí vio Mailpit para {QA_RECIPIENT}: {asuntos_vistos}"
+                if asuntos_vistos
+                else ""
+            )
             raise RuntimeError(
                 f"Mailpit no recibió el correo de recuperación para {QA_RECIPIENT} "
                 f"en {timeout_seconds} segundos; verificá celery-worker y SMTP_HOST=mailpit"
+                f"{detalle_asuntos}"
             )
         sleep(poll_interval_seconds)
 
