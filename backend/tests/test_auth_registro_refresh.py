@@ -118,6 +118,62 @@ def test_registro_no_devuelve_tokens_de_auto_login(client, db_session):
     assert body["correo"] == "sin_tokens@cataclub.com"
 
 
+def test_registro_deja_correo_verificado_en_true(client, db_session):
+    """Regression lock, no prueba de comportamiento nuevo de este cambio:
+    `correo_verificado=True` en `AuthServicio.registrar_usuario` ya existía
+    tal cual en `origin/main` antes de este stack (issue #790) --
+    confirmado con `git diff origin/main..HEAD -- auth_servicio.py`, esa
+    línea queda sin `+`/`-` en el hunk. Se agrega igual porque el
+    escenario "Auth registro creates a pre-verified account" de
+    `account-creation.md` no tenía ningún test que lo asertara sobre el
+    `Usuario` resultante.
+
+    Verificado que muerde invirtiendo el predicado: con `correo_verificado
+    =False,` puesto a mano en su lugar, este test falla con
+    AssertionError; restaurado el original, vuelve a pasar."""
+    _override_admin_token()
+    _crear_persona(db_session, cedula=cedula_valida(185))
+
+    resp = client.post(
+        "/api/v1/auth/registro",
+        json={
+            "cedula": cedula_valida(185),
+            "correo": "verificada@cataclub.com",
+            "contrasenia": "clave12345",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    usuario_id = resp.json()["usuario_id"]
+
+    usuario = db_session.query(Usuario).filter(Usuario.id == usuario_id).one()
+    assert usuario.correo_verificado is True
+
+
+def test_login_correo_insensible_a_mayusculas(client_sin_token, db_session):
+    """Regression lock, no prueba de comportamiento nuevo de este cambio:
+    la búsqueda case-insensitive de `UsuarioRepositorio.obtener_por_correo`
+    ya existía sin cambios en `origin/main` (issues #764/#827) --
+    confirmado con `git diff origin/main..HEAD` sobre
+    `usuario_ficha_repositorio.py`, que no devuelve ninguna línea. Se
+    agrega porque el escenario "Login succeeds regardless of the case
+    typed" de `email-identity.md` no tenía ningún test que golpeara
+    `/api/v1/auth/login` con una variante de mayúsculas.
+
+    Verificado que muerde invirtiendo el predicado: cambiando el filtro de
+    `obtener_por_correo` a comparación case-sensible (`Usuario.correo ==
+    correo.strip()`), este test falla con 401; restaurado el original,
+    vuelve a pasar."""
+    persona = _crear_persona(db_session, cedula=cedula_valida(186), nombres="Ana")
+    _crear_usuario_para_persona(db_session, persona, correo="ana.reyes@cataclub.com")
+
+    resp = client_sin_token.post(
+        "/api/v1/auth/login",
+        data={"username": "ANA.REYES@CATACLUB.COM", "password": "clave12345"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert "access_token" in resp.json()
+
+
 def test_registro_sin_token_devuelve_401(client, db_session):
     _quitar_override_token()
     _crear_persona(db_session, cedula=cedula_valida(180))

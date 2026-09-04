@@ -360,6 +360,47 @@ def test_crear_representado_correo_duplicado_rechazada(client, db_session):
     assert resp2.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
 
 
+def test_crear_representado_correo_case_variant_rechazada(client, db_session):
+    """Regression lock, no prueba de comportamiento nuevo de este cambio:
+    el pre-check case-insensitive de
+    `persona_servicio.py::crear_representado` (`obtener_por_correo`) no
+    cambia entre `origin/main` y este stack -- confirmado con `git diff
+    origin/main..HEAD` sobre el archivo, ese bloque queda fuera del hunk
+    modificado (el diff toca solo el `try/except IntegrityError` que
+    envuelve la creación, no el `if` del pre-check). Se agrega porque el
+    escenario "Dependant credential mint rejects a case-variant of an
+    existing email" de `email-identity.md` solo estaba cubierto por la
+    variante de CARRERA (`test_correo_race_condicion.py`, que anula este
+    mismo pre-check con monkeypatch), nunca por una request SECUENCIAL
+    normal como esta.
+
+    Verificado que muerde invirtiendo el predicado: comentando
+    temporalmente el `if self.repo_usuario.obtener_por_correo(datos.
+    correo):` de `crear_representado`, este test falla (201 en vez de
+    400); restaurado, vuelve a pasar."""
+    representante = _crear_persona_representante(db_session, cedula="1710034065")
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    payload = _payload_representado()
+    payload["correo"] = "case-variante@test.com"
+    payload["contrasenia"] = "clave12345"
+    resp1 = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload,
+    )
+    assert resp1.status_code == 201, resp1.text
+
+    payload2 = _payload_representado(cedula=cedula_valida(522))
+    payload2["correo"] = "CASE-VARIANTE@TEST.COM"
+    payload2["contrasenia"] = "clave12345"
+    resp2 = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload2,
+    )
+    assert resp2.status_code == 400
+    assert resp2.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
+
+
 def test_crear_representado_con_credenciales_correo_invalido_rechazado(client, db_session):
     representante = _crear_persona_representante(db_session)
     _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
