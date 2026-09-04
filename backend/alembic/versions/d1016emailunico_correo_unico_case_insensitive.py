@@ -20,7 +20,7 @@ Esta migración, en UNA sola transacción DDL (ADR-4 -- Postgres corre DDL
 transaccional; partirla en dos dejaría una ventana con filas ya
 canonicalizadas pero sin la protección del índice):
 
-  1. DETECTA colisiones preexistentes por `lower(correo)` y ABORTA sin
+  1. DETECTA colisiones preexistentes por `lower(btrim(correo))` y ABORTA sin
      aplicar nada si encuentra alguna, listando las filas. Nunca elige ni
      fusiona cuentas -- reconciliar dos cuentas de socios distintos es una
      decisión del dueño del club, no de un deploy automático. Misma
@@ -55,19 +55,26 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# La clave de agrupación de la detección DEBE ser la MISMA expresión que el
+# paso 2 usa para canonicalizar -- si difieren, la detección queda más
+# angosta que la canonicalización y dos filas que solo difieren por
+# espacios pasan el gate para chocar recién en el UPDATE, contra el
+# `unique=True` case-sensitive de la columna (R3, revisión CRITICAL).
+_CLAVE_CANONICA = "lower(btrim(correo))"
+
 # Misma consulta que `detectar_colisiones` en
 # `scripts/auditar_colisiones_correo.py` (issue #902) reducida a lo que
 # esta migración necesita: no hace falta la huella HMAC ni el conteo
 # total, solo la clave colisionada y las filas que la componen para poder
 # listarlas en el mensaje de aborto.
 _SQL_COLISIONES = sa.text(
-    """
+    f"""
     SELECT
-        lower(correo) AS clave,
+        {_CLAVE_CANONICA} AS clave,
         array_agg(id ORDER BY id) AS ids,
         array_agg(correo ORDER BY id) AS correos
     FROM usuario
-    GROUP BY lower(correo)
+    GROUP BY {_CLAVE_CANONICA}
     HAVING count(*) > 1
     """
 )
@@ -91,9 +98,10 @@ def upgrade() -> None:
             f"mismo detalle) antes de reintentar. Colisiones: {detalle}"
         )
 
-    # 2. CANONICALIZAR. `btrim` recorta ambos extremos, igual que el
-    # `.strip()` de `CorreoValidado`.
-    conexion.execute(sa.text("UPDATE usuario SET correo = lower(btrim(correo))"))
+    # 2. CANONICALIZAR. Misma expresión que la detección (`_CLAVE_CANONICA`):
+    # `btrim` recorta ambos extremos, igual que el `.strip()` de
+    # `CorreoValidado`.
+    conexion.execute(sa.text(f"UPDATE usuario SET correo = {_CLAVE_CANONICA}"))
 
     # 3. PROTEGER. El índice funcional ya existe (`780ef12115e6`) pero no
     # es único; no se puede `ALTER` un índice para volverlo único, así que

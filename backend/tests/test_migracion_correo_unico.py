@@ -61,6 +61,21 @@ def test_migracion_refuse_con_duplicados_de_capitalizacion(arnes_migracion):
         arnes_migracion.migrar(REVISION_CORREO_UNICO)
 
 
+def test_migracion_refuse_con_duplicados_de_espacios(arnes_migracion):
+    """Dos correos que solo difieren por espacios alrededor pasan la
+    detección actual (agrupa por `lower(correo)`, sin `btrim`) pero
+    colisionan en la canonicalización (`lower(btrim(correo))`) -- deben
+    quedar atrapados en el MISMO paso 1, con el mismo refuso limpio que un
+    duplicado de capitalización, no fallar más adelante contra el
+    `unique=True` case-sensitive de la columna."""
+    arnes_migracion.preparar(REVISION_ANTERIOR)
+    _sembrar_cuenta(arnes_migracion, 1, "1710034065", "espacios@ejemplo.test")
+    _sembrar_cuenta(arnes_migracion, 2, "1710034073", " espacios@ejemplo.test")
+
+    with pytest.raises(RuntimeError, match="ABORTADA"):
+        arnes_migracion.migrar(REVISION_CORREO_UNICO)
+
+
 def test_migracion_no_deja_nada_a_medio_aplicar_al_abortar(arnes_migracion):
     """ADR-4: detectar/abortar, canonicalizar y crear el índice único viven
     en LA MISMA transacción DDL de Postgres -- un aborto no puede dejar
