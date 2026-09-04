@@ -101,7 +101,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let data: Record<string, unknown>;
   try {
-    data = (await result.response.json()) as Record<string, unknown>;
+    const parsed: unknown = await result.response.json();
+    if (typeof parsed !== "object" || parsed === null) {
+      return NextResponse.json({ message: "Respuesta inesperada del servidor." }, { status: 502 });
+    }
+    data = parsed as Record<string, unknown>;
   } catch {
     return NextResponse.json({ message: "Respuesta inesperada del servidor." }, { status: 502 });
   }

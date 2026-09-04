@@ -117,4 +117,15 @@ describe("POST /api/personas/admin/cuentas — no credential tokens reach the br
     expect(body).not.toHaveProperty("token_type");
     expect(body).toMatchObject({ persona_id: 7, usuario_id: 3, correo: "carla@cataclub.test" });
   });
+
+  it("does not throw when the upstream 201 body is not an object", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(null), { status: 201, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const response = await POST(postRequest(validBody("JUGADOR")));
+
+    expect(response.status).toBeGreaterThanOrEqual(200);
+    expect(response.status).toBeLessThan(600);
+  });
 });
