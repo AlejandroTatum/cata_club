@@ -14,31 +14,18 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { backendEnumMembers, frontendUnionMembers } from "@/lib/enum-parity-helpers";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..", "..");
 const BACKEND_ENUMS = join(REPO_ROOT, "backend", "app", "dominio", "enums.py");
 const FRONTEND_PAYMENTS_ADAPTER = join(__dirname, "..", "payments-adapter.ts");
 
-/** The `TipoPago(str, enum.Enum)` class body, up to the next `class`. */
-function backendTipoPagoMembers(): string[] {
-  const source = readFileSync(BACKEND_ENUMS, "utf-8");
-  const classMatch = source.match(/class TipoPago\(str, enum\.Enum\):([\s\S]*?)(?:\nclass \w|$)/);
-  if (!classMatch) return [];
-  const body = classMatch[1];
-  return [...body.matchAll(/^\s{4}([A-Z][A-Z0-9_]*)\s*=\s*"([A-Z][A-Z0-9_]*)"/gm)].map((m) => m[2]);
-}
-
-/** The literal members of `export type BackendTipoPago = ...;` in payments-adapter.ts. */
-function frontendBackendTipoPagoMembers(): string[] {
-  const source = readFileSync(FRONTEND_PAYMENTS_ADAPTER, "utf-8");
-  const typeMatch = source.match(/export type BackendTipoPago =([\s\S]*?);/);
-  if (!typeMatch) return [];
-  return [...typeMatch[1].matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]);
-}
-
 describe("BackendTipoPago — frontend union stays in sync with the backend enum", () => {
-  const backend = backendTipoPagoMembers();
-  const frontend = frontendBackendTipoPagoMembers();
+  const backend = backendEnumMembers(readFileSync(BACKEND_ENUMS, "utf-8"), "TipoPago");
+  const frontend = frontendUnionMembers(
+    readFileSync(FRONTEND_PAYMENTS_ADAPTER, "utf-8"),
+    "BackendTipoPago",
+  );
 
   it("the parser actually finds the backend enum's members", () => {
     expect(backend.length).toBeGreaterThanOrEqual(3);

@@ -15,31 +15,18 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { backendEnumMembers, frontendUnionMembers } from "@/lib/enum-parity-helpers";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
 const BACKEND_ENUMS = join(REPO_ROOT, "backend", "app", "dominio", "enums.py");
 const FRONTEND_MEMBERSHIP_STATUS = join(__dirname, "..", "membership-status.ts");
 
-/** The `EstadoMembresia(str, enum.Enum)` class body, up to the next `class`. */
-function backendEstadoMembresiaMembers(): string[] {
-  const source = readFileSync(BACKEND_ENUMS, "utf-8");
-  const classMatch = source.match(/class EstadoMembresia\(str, enum\.Enum\):([\s\S]*?)(?:\nclass \w|$)/);
-  if (!classMatch) return [];
-  const body = classMatch[1];
-  return [...body.matchAll(/^\s{4}([A-Z][A-Z0-9_]*)\s*=\s*"([A-Z][A-Z0-9_]*)"/gm)].map((m) => m[2]);
-}
-
-/** The literal members of `export type BackendEstadoMembresia = ...;` in membership-status.ts. */
-function frontendBackendEstadoMembresiaMembers(): string[] {
-  const source = readFileSync(FRONTEND_MEMBERSHIP_STATUS, "utf-8");
-  const typeMatch = source.match(/export type BackendEstadoMembresia =([\s\S]*?);/);
-  if (!typeMatch) return [];
-  return [...typeMatch[1].matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]);
-}
-
 describe("BackendEstadoMembresia — frontend union stays in sync with the backend enum", () => {
-  const backend = backendEstadoMembresiaMembers();
-  const frontend = frontendBackendEstadoMembresiaMembers();
+  const backend = backendEnumMembers(readFileSync(BACKEND_ENUMS, "utf-8"), "EstadoMembresia");
+  const frontend = frontendUnionMembers(
+    readFileSync(FRONTEND_MEMBERSHIP_STATUS, "utf-8"),
+    "BackendEstadoMembresia",
+  );
 
   it("the parser actually finds the backend enum's members", () => {
     expect(backend.length).toBeGreaterThanOrEqual(4);
