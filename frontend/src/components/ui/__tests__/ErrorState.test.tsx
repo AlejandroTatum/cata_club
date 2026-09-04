@@ -30,6 +30,12 @@ describe("ErrorState", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
+  /**
+   * jsdom computes no styles, so this pins the declared `bg-state-bad-bg`
+   * token, not the color it resolves to. No Playwright spec covers
+   * ErrorState's rendered color today — there is no live counterpart to
+   * name here.
+   */
   it("uses the shared bad state token rather than an ad-hoc red", () => {
     render(<ErrorState message="Falló" />);
     expect(screen.getByRole("alert")).toHaveClass("bg-state-bad-bg");
