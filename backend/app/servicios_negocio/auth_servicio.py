@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import jwt
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
@@ -19,6 +20,7 @@ from app.dominio.mensajes import (
     MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VERIFICACION_ENVIADA,
 )
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO, ActualizarPerfilPropioDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -301,8 +303,24 @@ class AuthServicio:
             # a alguien que tiene enfrente.
             correo_verificado=True,
         )
-        nuevo_usuario = self.repo.crear(nuevo_usuario)
-        self.db.commit()
+        try:
+            nuevo_usuario = self.repo.crear(nuevo_usuario)
+            self.db.commit()
+        except IntegrityError as error:
+            # Carrera (issue #1016, ADR-3): dos altas casi simultáneas para
+            # la misma persona/correo pasan las dos el pre-check de arriba.
+            # Mismo mensaje genérico que ese pre-check -- no divulgar cuál
+            # de los dos campos chocó (ver `MENSAJE_IDENTIDAD_DUPLICADA`).
+            self.db.rollback()
+            # `None` es una restricción que NO es de identidad: se re-lanza
+            # para que la trate el handler de `main.py`, en vez de anunciar
+            # un duplicado que no ocurrió. `INDETERMINADA` (el driver no
+            # expuso el nombre) conserva la traducción: el mensaje es el
+            # mismo para cédula y para correo, así que no puede atribuirle
+            # el choque al campo equivocado.
+            if identidad_en_conflicto(error) is None:
+                raise
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA) from error
         return {
             "persona_id": nuevo_usuario.persona_id,
             "usuario_id": nuevo_usuario.id,

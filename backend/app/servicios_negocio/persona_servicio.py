@@ -3,6 +3,7 @@ import time
 from datetime import date
 from typing import Callable
 from sqlalchemy import inspect as inspeccionar_orm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
@@ -26,6 +27,7 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
+from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
@@ -162,35 +164,58 @@ class PersonaServicio:
             representante_id=representante_id,
             institucion_id=datos.institucion_id,
         )
-        representado = self._crear_persona_validada(persona_datos)
+        # El `try` abarca desde la Persona hasta el `commit()`, igual que el
+        # de `AdminCuentaServicio.crear_cuenta` (issue #1016, ADR-3/ADR-6).
+        # No alcanza con envolver el INSERT del Usuario: el pre-check de
+        # cédula de `_crear_persona_validada` es tan racy como el de correo,
+        # y ese método ya flushea la Persona -- dos altas casi simultáneas
+        # con la misma cédula caían en el 409 genérico de `main.py`, que es
+        # justo lo que este catch existe para evitar. Las dos rutas que
+        # acuñan credenciales tienen que tratar igual la misma carrera.
+        try:
+            representado = self._crear_persona_validada(persona_datos)
 
-        if datos.ficha_medica:
-            ficha = FichaMedica(
-                tipo_sangre=datos.ficha_medica.tipo_sangre,
-                persona_id=representado.id,
-                alergias=datos.ficha_medica.alergias,
-                contacto_emergencia=datos.ficha_medica.contacto_emergencia,
-                telefono_emergencia=datos.ficha_medica.telefono_emergencia,
-            )
-            for nombre in datos.ficha_medica.enfermedades:
-                ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
-            FichaMedicaRepositorio(self.db).crear(ficha)
+            if datos.ficha_medica:
+                ficha = FichaMedica(
+                    tipo_sangre=datos.ficha_medica.tipo_sangre,
+                    persona_id=representado.id,
+                    alergias=datos.ficha_medica.alergias,
+                    contacto_emergencia=datos.ficha_medica.contacto_emergencia,
+                    telefono_emergencia=datos.ficha_medica.telefono_emergencia,
+                )
+                for nombre in datos.ficha_medica.enfermedades:
+                    ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
+                FichaMedicaRepositorio(self.db).crear(ficha)
 
-        # Opción B: si el admin/representante provee credenciales,
-        # crear también el Usuario + rol ALUMNO para el menor.
-        if datos.correo and datos.contrasenia:
-            if self.repo_usuario.obtener_por_correo(datos.correo):
-                raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
-            hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
-            usuario = Usuario(
-                correo=datos.correo,
-                contrasenia=hash_pw,
-                persona_id=representado.id,
-            )
-            self.repo_usuario.crear(usuario)
-            self._asignar_rol(usuario, TipoRol.ALUMNO)
+            # Opción B: si el admin/representante provee credenciales,
+            # crear también el Usuario + rol ALUMNO para el menor.
+            if datos.correo and datos.contrasenia:
+                if self.repo_usuario.obtener_por_correo(datos.correo):
+                    raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
+                hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
+                usuario = Usuario(
+                    correo=datos.correo,
+                    contrasenia=hash_pw,
+                    persona_id=representado.id,
+                )
+                self.repo_usuario.crear(usuario)
+                self._asignar_rol(usuario, TipoRol.ALUMNO)
 
-        self.db.commit()
+            self.db.commit()
+        except IntegrityError as error:
+            # Carrera (issue #1016, ADR-3): dos altas casi simultáneas con la
+            # misma cédula, o con el mismo correo (o una variante de
+            # mayúsculas), pasan las dos los pre-checks de arriba. Mismo
+            # mensaje genérico que esos pre-checks ya usan.
+            self.db.rollback()
+            # `None` es una restricción que NO es de identidad: se re-lanza
+            # para que la trate el handler de `main.py`. `INDETERMINADA` (el
+            # driver no expuso el nombre) conserva la traducción: el mensaje
+            # no nombra el campo, así que no puede atribuirlo mal. Ver
+            # `restricciones_identidad`.
+            if identidad_en_conflicto(error) is None:
+                raise
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA) from error
 
         # `expire_on_commit` está en su default `True`
         # (`app/infraestructura/db.py:14`, el `sessionmaker` no lo declara),
