@@ -13,6 +13,7 @@ matricula en él. Antes de existir este tipo, dar de alta a un entrenador
 exigía crear la cuenta como JUGADOR y después corregir los roles a mano
 desde el panel de miembros.
 """
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
@@ -24,6 +25,9 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
 )
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
+from app.infraestructura.repositorios.restricciones_identidad import (
+    IdentidadEnConflicto, identidad_en_conflicto,
+)
 from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import (
@@ -140,60 +144,96 @@ class AdminCuentaServicio:
                     f"tiene {edad_rep} años."
                 )
 
-        # 5. Crear Persona
-        persona = Persona(
-            nombres=datos.nombres,
-            apellidos=datos.apellidos,
-            cedula=datos.cedula,
-            fecha_nacimiento=datos.fecha_nacimiento,
-            telefono=datos.telefono,
-            telefono_contacto=datos.telefono_contacto,
-            representante_id=datos.representante_id,
-            direccion_id=datos.direccion_id,
-            institucion_id=datos.institucion_id,
-        )
-        self.repo_persona.crear(persona)
-
-        # 6. Crear Usuario (credenciales)
-        hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
-        usuario = Usuario(
-            correo=datos.correo,
-            contrasenia=hash_pw,
-            persona_id=persona.id,
-            # Issue #790: nace verificada. Este endpoint exige ya una sesión
-            # de ADMINISTRADOR, así que no es el eslabón que ese issue cierra
-            # -- ese es la autoinscripción PÚBLICA. Dejarla sin verificar no
-            # protegería nada y rompería el mostrador: el administrador que da
-            # de alta a un padre parado frente a él quedaría sin poder
-            # vincularle a su hijo hasta que llegue un correo. Que el club
-            # identifique a alguien en persona es una comprobación más fuerte
-            # que una ida y vuelta por correo, no una más débil.
-            correo_verificado=True,
-        )
-        self.repo_usuario.crear(usuario)
-
-        # 7. Asignar roles según tipo de cuenta
-        for tipo_rol in ROLES_POR_TIPO_CUENTA.get(datos.tipo_cuenta, ()):
-            self._asignar_rol(usuario, tipo_rol)
-
-        # 8. Crear Ficha Médica si se proporcionó
-        if datos.ficha_medica:
-            ficha = FichaMedica(
-                tipo_sangre=datos.ficha_medica.tipo_sangre,
-                persona_id=persona.id,
-                alergias=datos.ficha_medica.alergias,
-                contacto_emergencia=datos.ficha_medica.contacto_emergencia,
-                telefono_emergencia=datos.ficha_medica.telefono_emergencia,
+        # 5-9. Persona + Usuario + roles + FichaMedica, en un solo
+        # `try/except` (ADR-3 + ADR-6, issue #1016 y un item de #942): los
+        # pre-checks de arriba (pasos 1-2) ya cubren el caso SECUENCIAL,
+        # pero una carrera -- dos altas casi simultáneas que pasan las dos
+        # el pre-check -- solo la queda atrapar el `IntegrityError` de la
+        # base. Antes de este catch, esa carrera cayera en el
+        # `IntegrityError` genérico de `main.py` (409, mensaje genérico) en
+        # vez del `EntidadDuplicada` (400) específico de esta ruta.
+        try:
+            # 5. Crear Persona
+            persona = Persona(
+                nombres=datos.nombres,
+                apellidos=datos.apellidos,
+                cedula=datos.cedula,
+                fecha_nacimiento=datos.fecha_nacimiento,
+                telefono=datos.telefono,
+                telefono_contacto=datos.telefono_contacto,
+                representante_id=datos.representante_id,
+                direccion_id=datos.direccion_id,
+                institucion_id=datos.institucion_id,
             )
-            for nombre in datos.ficha_medica.enfermedades:
-                ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
-            self.repo_ficha.crear(ficha)
+            self.repo_persona.crear(persona)
 
-        # 9. Un solo commit para toda la operación (issue #831): antes,
-        # Persona, Usuario, cada asignación de rol y la FichaMedica
-        # comiteaban por separado -- si el último paso fallaba, los
-        # anteriores ya habían quedado persistidos.
-        self.db.commit()
+            # 6. Crear Usuario (credenciales)
+            hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
+            usuario = Usuario(
+                correo=datos.correo,
+                contrasenia=hash_pw,
+                persona_id=persona.id,
+                # Issue #790: nace verificada. Este endpoint exige ya una
+                # sesión de ADMINISTRADOR, así que no es el eslabón que ese
+                # issue cierra -- ese es la autoinscripción PÚBLICA. Dejarla
+                # sin verificar no protegería nada y rompería el mostrador:
+                # el administrador que da de alta a un padre parado frente
+                # a él quedaría sin poder vincularle a su hijo hasta que
+                # llegue un correo. Que el club identifique a alguien en
+                # persona es una comprobación más fuerte que una ida y
+                # vuelta por correo, no una más débil.
+                correo_verificado=True,
+            )
+            self.repo_usuario.crear(usuario)
+
+            # 7. Asignar roles según tipo de cuenta
+            for tipo_rol in ROLES_POR_TIPO_CUENTA.get(datos.tipo_cuenta, ()):
+                self._asignar_rol(usuario, tipo_rol)
+
+            # 8. Crear Ficha Médica si se proporcionó
+            if datos.ficha_medica:
+                ficha = FichaMedica(
+                    tipo_sangre=datos.ficha_medica.tipo_sangre,
+                    persona_id=persona.id,
+                    alergias=datos.ficha_medica.alergias,
+                    contacto_emergencia=datos.ficha_medica.contacto_emergencia,
+                    telefono_emergencia=datos.ficha_medica.telefono_emergencia,
+                )
+                for nombre in datos.ficha_medica.enfermedades:
+                    ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
+                self.repo_ficha.crear(ficha)
+
+            # 9. Un solo commit para toda la operación (issue #831): antes,
+            # Persona, Usuario, cada asignación de rol y la FichaMedica
+            # comiteaban por separado -- si el último paso fallaba, los
+            # anteriores ya habían quedado persistidos.
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            # Mismo mensaje que cada pre-check ya usaría para ESTE campo
+            # (pasos 1-2): la carrera tiene que responder igual que el
+            # camino primario, no un texto distinto para el mismo error.
+            #
+            # El campo lo decide el NOMBRE de la restricción, nunca el texto
+            # del error: ver `restricciones_identidad`. Esta es la única de
+            # las tres rutas que nombra el campo, así que también es la única
+            # donde una atribución equivocada le muestra al administrador un
+            # dato que no es el que chocó.
+            conflicto = identidad_en_conflicto(error)
+            if conflicto is IdentidadEnConflicto.CEDULA:
+                raise EntidadDuplicada(
+                    f"Ya existe una persona con la cédula {datos.cedula}"
+                ) from error
+            if conflicto is IdentidadEnConflicto.CORREO:
+                raise EntidadDuplicada(
+                    "El correo ya está en uso por otra cuenta"
+                ) from error
+            # Cualquier otra restricción -- y también `INDETERMINADA`, cuando
+            # el driver no expone el nombre -- se deja pasar al handler de
+            # `main.py` (409 genérico), que es lo que este `except` ya hacía
+            # con lo que no reconocía. Adivinar el campo sería peor que no
+            # nombrarlo.
+            raise
 
         # 10. Devolver la identidad creada (issue #1015: sin tokens -- ver
         # el docstring de este método).
