@@ -16,6 +16,7 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
 from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
+    ContraseniaValidada,
     CorreoValidado,
     NombreValidado,
     TelefonoValidado,
@@ -50,7 +51,7 @@ class AdminCrearCuentaDTO(BaseModel):
 
     # --- Credenciales de la cuenta ---
     correo: CorreoValidado
-    contrasenia: str = Field(..., min_length=8)
+    contrasenia: ContraseniaValidada
 
     # --- Solo para MENOR: representante responsable ---
     representante_id: Optional[int] = None

@@ -17,7 +17,7 @@ _PERSONA_KWARGS = dict(
     nombres="faby", apellidos="ESPINOZA", cedula="1710034065",
     fecha_nacimiento=date(2010, 5, 14), telefono="0991234567",
 )
-_CREDENCIALES = dict(correo="rep@test.com", contrasenia="clave1234")
+_CREDENCIALES = dict(correo="rep@test.com", contrasenia="clave12345")
 
 
 def _instanciar(dto_cls):

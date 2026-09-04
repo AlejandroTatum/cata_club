@@ -19,7 +19,7 @@ def _crear_persona(client, cedula, fecha_nacimiento="2000-05-14", representante_
     return client.post("/api/v1/personas/", json=payload).json()
 
 
-def _registrar_credenciales(client, cedula, correo, contrasenia="password123"):
+def _registrar_credenciales(client, cedula, correo, contrasenia="unaClaveSegura1"):
     return client.post(
         "/api/v1/auth/registro",
         json={"cedula": cedula, "correo": correo, "contrasenia": contrasenia},
@@ -95,7 +95,7 @@ def test_login_real_funciona_tras_asignar_rol(client):
     client.post(f"/api/v1/personas/{persona['id']}/roles", json={"tipo_rol": "ADMINISTRADOR"})
 
     resp = client.post(
-        "/api/v1/auth/login", data={"username": "u2@x.com", "password": "password123"}
+        "/api/v1/auth/login", data={"username": "u2@x.com", "password": "unaClaveSegura1"}
     )
     assert resp.status_code == 200
     token = resp.json()["access_token"]
@@ -123,7 +123,7 @@ def test_alumno_se_asigna_automaticamente_al_matricularse(client):
     )
 
     resp = client.post(
-        "/api/v1/auth/login", data={"username": "u3@x.com", "password": "password123"}
+        "/api/v1/auth/login", data={"username": "u3@x.com", "password": "unaClaveSegura1"}
     )
     import jwt
     from app.soporte_transversal.configuracion import settings
@@ -234,7 +234,7 @@ def test_cuenta_desactivada_no_puede_loguearse(client):
     assert resp.json()["activo"] is False
 
     resp = client.post(
-        "/api/v1/auth/login", data={"username": "u4@x.com", "password": "password123"}
+        "/api/v1/auth/login", data={"username": "u4@x.com", "password": "unaClaveSegura1"}
     )
     assert resp.status_code == 401
 

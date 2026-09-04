@@ -18,6 +18,7 @@ from typing import Annotated, Optional
 from pydantic import AfterValidator, EmailStr
 
 from app.dominio.cedula import es_cedula_valida
+from app.dominio.contrasenia import validar_contrasenia
 from app.dominio.enums import TipoSangre
 from app.dominio.nombre_propio import normalizar_nombre_propio
 from app.dominio.telefono import (
@@ -118,6 +119,17 @@ def _validar_contacto_emergencia(valor: str) -> str:
     return normalizar_nombre_propio(valor)
 
 
+# Issue #1017 (ADR-5): la regla en sí (piso + lista negra) vive en
+# `dominio/contrasenia.py`, igual que `_validar_cedula` reusa
+# `es_cedula_valida`. `validar_contrasenia` ya lanza `ValueError` en
+# castellano, así que este `AfterValidator` solo lo conecta -- no normaliza
+# ni recorta el valor: la contraseña que se hashea es la que el usuario
+# escribió.
+def _validar_contrasenia(valor: str) -> str:
+    validar_contrasenia(valor)
+    return valor
+
+
 def validar_telefono_emergencia_distinto(
     telefono_personal: Optional[str], telefono_emergencia: Optional[str],
 ) -> None:
@@ -151,6 +163,7 @@ NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
 CorreoValidado = Annotated[EmailStr, AfterValidator(_normalizar_correo)]
+ContraseniaValidada = Annotated[str, AfterValidator(_validar_contrasenia)]
 
 
 def _normalizar_si_presente(valor: Optional[str]) -> Optional[str]:

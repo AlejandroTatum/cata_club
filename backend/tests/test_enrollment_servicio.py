@@ -233,6 +233,50 @@ def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
         EnrollmentServicio(db_session).enroll(datos)
 
 
+def test_autoinscripcion_adulto_correo_case_variant_rechazada(db_session):
+    """Regression lock, no prueba de comportamiento nuevo de este cambio:
+    el pre-check case-insensitive de `enrollment_servicio.py`
+    (`obtener_por_correo`, línea ~207) no cambia entre `origin/main` y
+    este stack -- `git diff origin/main..HEAD -- enrollment_servicio.py`
+    no devuelve ninguna línea, el archivo entero es idéntico. Se agrega
+    porque el escenario "Self-enrollment rejects a case-variant of an
+    existing email" de `email-identity.md` solo estaba cubierto por la
+    variante de CARRERA (`test_correo_race_condicion.py`, que anula este
+    mismo pre-check con monkeypatch), nunca por una request SECUENCIAL
+    normal como esta.
+
+    Verificado que muerde invirtiendo el predicado: comentando
+    temporalmente el `if self.repo_usuario.obtener_por_correo(...)` del
+    camino adulto sin representante, este test falla (no se lanza
+    `EntidadDuplicada`); restaurado, vuelve a pasar."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(254),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.flush()
+    usuario = Usuario(
+        correo="mayuscula-ocupado@example.com", contrasenia="hash",
+        persona_id=persona.id,
+    )
+    db_session.add(usuario)
+    db_session.commit()
+
+    datos = _enrollment_dto(
+        alumno=_alumno_dto(cedula=cedula_valida(255), fecha_nacimiento=date(2000, 1, 1)),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="Mayuscula-Ocupado@Example.com", contrasenia="password8",
+        ),
+    )
+    from app.dominio.excepciones import EntidadDuplicada
+    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert db_session.query(Usuario).filter(
+        Usuario.correo == "mayuscula-ocupado@example.com"
+    ).count() == 1
+
+
 # --- Validación de campos del enrollment -----------------------------------
 
 def test_alumno_menor_sin_representante_rechazado():

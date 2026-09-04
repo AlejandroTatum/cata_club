@@ -204,6 +204,33 @@ def test_crear_cuenta_correo_duplicado_rechazada(client, db_session):
     assert "correo" in resp.json()["detail"].lower()
 
 
+def test_crear_cuenta_correo_case_variant_rechazada(client, db_session):
+    """Regression lock, no prueba de comportamiento nuevo de este cambio:
+    el pre-check case-insensitive de `admin_cuenta_servicio.py` (paso 2,
+    `obtener_por_correo`) no cambia entre `origin/main` y este stack --
+    confirmado con `git diff origin/main..HEAD` sobre el archivo, ese
+    bloque queda fuera de los hunks modificados (el diff toca los pasos
+    5-9, no los pasos 1-2). Se agrega porque el escenario "Admin wizard
+    rejects a case-variant of an existing email" de `email-identity.md`
+    solo estaba cubierto por la variante de CARRERA
+    (`test_correo_race_condicion.py`, que anula este mismo pre-check con
+    monkeypatch), nunca por una request SECUENCIAL normal como esta.
+
+    Verificado que muerde invirtiendo el predicado: comentando
+    temporalmente el `if self.repo_usuario.obtener_por_correo(datos.
+    correo):` del paso 2, este test falla (201 en vez de 400); restaurado,
+    vuelve a pasar."""
+    AdminCuentaServicio(db_session).crear_cuenta(
+        AdminCrearCuentaDTO(**_base_payload())
+    )
+    resp = client.post(
+        "/api/v1/personas/admin/cuentas",
+        json=_base_payload(cedula="1798765432", correo="CARLOS@TEST.COM"),
+    )
+    assert resp.status_code == 400
+    assert "correo" in resp.json()["detail"].lower()
+
+
 # --- Validación de edad ----------------------------------------------------
 
 def test_jugador_menor_de_edad_rechazado(client, db_session):

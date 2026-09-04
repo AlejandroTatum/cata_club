@@ -119,7 +119,7 @@ def _crear_persona(client, cedula):
     return client.post("/api/v1/personas/", json=payload).json()
 
 
-def _registrar_credenciales(client, cedula, correo, contrasenia="password123"):
+def _registrar_credenciales(client, cedula, correo, contrasenia="unaClaveSegura1"):
     return client.post(
         "/api/v1/auth/registro",
         json={"cedula": cedula, "correo": correo, "contrasenia": contrasenia},

@@ -15,6 +15,7 @@ from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,
+    ContraseniaValidada,
     CorreoValidado,
     NombreValidado,
     TelefonoValidado,
@@ -31,7 +32,7 @@ class EnrollmentRepresentanteDTO(BaseModel):
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
     correo: CorreoValidado
-    contrasenia: str = Field(..., min_length=8)
+    contrasenia: ContraseniaValidada
 
 
 class EnrollmentAlumnoDTO(BaseModel):
@@ -48,14 +49,14 @@ class EnrollmentAlumnoDTO(BaseModel):
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
     correo: Optional[CorreoValidado] = None
-    contrasenia: Optional[str] = Field(default=None, min_length=8)
+    contrasenia: Optional[ContraseniaValidada] = None
     institucion_id: Optional[int] = None
 
 
 class EnrollmentCredencialesDTO(BaseModel):
     """Credenciales del alumno para autoinscripción sin representante (adulto)."""
     correo: CorreoValidado
-    contrasenia: str = Field(..., min_length=8)
+    contrasenia: ContraseniaValidada
 
 
 class EnrollmentFichaMedicaDTO(BaseModel):
