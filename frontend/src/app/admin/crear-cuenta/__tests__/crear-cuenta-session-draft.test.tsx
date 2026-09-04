@@ -136,10 +136,9 @@ describe("CrearCuentaPage — el borrador sobrevive una sesión expirada (issue 
 
   it("descarta el borrador una vez que la cuenta se crea de verdad", async () => {
     vi.mocked(crearCuentaAdmin).mockResolvedValueOnce({
-      access_token: "a",
-      refresh_token: "b",
-      token_type: "bearer",
       persona_id: 1,
+      usuario_id: 1,
+      correo: "mateo@cataclub.test",
     });
 
     render(<CrearCuentaPage />);
