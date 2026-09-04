@@ -13,7 +13,7 @@ from typing import List, Optional
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.validadores import (
-    CedulaValidada, CorreoValidado, NombrePresentado, TelefonoValidado,
+    CedulaValidada, ContraseniaValidada, CorreoValidado, NombrePresentado, TelefonoValidado,
 )
 
 
@@ -26,7 +26,7 @@ class RegistroUsuarioDTO(BaseModel):
     """
     cedula: CedulaValidada = Field(..., max_length=32)
     correo: CorreoValidado
-    contrasenia: str = Field(..., min_length=8)
+    contrasenia: ContraseniaValidada
 
 
 class LoginResponseDTO(ResponseBase, BaseModel):
@@ -167,7 +167,7 @@ class ConfirmarVerificacionCorreoDTO(BaseModel):
 
 class RestablecerContraseniaDTO(BaseModel):
     token: str
-    nueva_contrasenia: str = Field(..., min_length=8)
+    nueva_contrasenia: ContraseniaValidada
 
 
 # --- E01: invalidación de sesión (epoch compartido, ver gestor_auth.py) -----

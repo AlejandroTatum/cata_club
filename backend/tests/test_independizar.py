@@ -406,3 +406,10 @@ def test_independizar_dto_contrasena_corta_rechazada():
     """Pydantic rechaza contraseñas menores a 8 caracteres."""
     with pytest.raises(Exception):
         IndependizarDTO(contrasenia="corta")
+
+
+def test_independizar_dto_no_aplica_la_lista_negra_de_contrasenias():
+    # Exclusión explícita (issue #1017, ADR-5): verifica la contraseña YA
+    # EXISTENTE del llamante, no acuña una nueva -- aplicar la lista negra
+    # acá bloquearía a cualquiera cuya contraseña actual figure en ella.
+    IndependizarDTO(contrasenia="12345678")

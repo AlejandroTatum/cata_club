@@ -10,6 +10,7 @@ from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,
+    ContraseniaValidada,
     CorreoValidado,
     NombrePresentado,
     NombrePresentadoOpcional,
@@ -59,7 +60,7 @@ class RepresentadoCreateDTO(BaseModel):
     telefono: TelefonoValidado = Field(..., max_length=32)
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
     correo: Optional[CorreoValidado] = None
-    contrasenia: Optional[str] = Field(default=None, min_length=8)
+    contrasenia: Optional[ContraseniaValidada] = None
     institucion_id: Optional[int] = None
 
     @model_validator(mode="after")
