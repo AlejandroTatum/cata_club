@@ -80,7 +80,7 @@ vi.mock("@/services/api", () => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function fillMatchingPasswords(password = "password123"): void {
+function fillMatchingPasswords(password = "unaClaveSegura1"): void {
   fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
     target: { value: password },
   });
@@ -99,10 +99,11 @@ function ruleItem(label: string): HTMLElement {
 }
 
 describe("buildPasswordRules", () => {
-  it("reports both rules unmet for an empty form", () => {
+  it("reports all three rules unmet for an empty form", () => {
     expect(buildPasswordRules("", "")).toEqual([
       { label: "Al menos 8 caracteres", met: false },
       { label: "Las dos contraseñas coinciden", met: false },
+      { label: "No es una de las contraseñas más usadas", met: false },
     ]);
   });
 
@@ -123,11 +124,27 @@ describe("buildPasswordRules", () => {
   });
 
   it("does not invent an uppercase/number policy the backend does not enforce", () => {
-    // `nueva_contrasenia: str = Field(..., min_length=8)` is the whole
-    // server-side contract — a stricter client would reject valid passwords.
+    // The backend's contract is length + the shared denylist (issue #1017)
+    // — not composition rules. A stricter client would reject passwords the
+    // server accepts.
     const rules = buildPasswordRules("alllowercase", "alllowercase");
-    expect(rules).toHaveLength(2);
+    expect(rules).toHaveLength(3);
     expect(rules.every((rule) => rule.met)).toBe(true);
+  });
+
+  it("adds the shared denylist rule ported from identity-validation.ts (issue #1017)", () => {
+    // "12345678" satisfies the length rule on its own but is on
+    // `COMMON_PASSWORDS` — the same gap #1017 closed on the backend: the
+    // wizard already refused it, the reset screen did not.
+    const rules = buildPasswordRules("12345678", "12345678");
+    expect(rules).toHaveLength(3);
+    expect(rules[0].met).toBe(true); // length: 8 chars
+    expect(rules[2]).toEqual({ label: "No es una de las contraseñas más usadas", met: false });
+  });
+
+  it("marks the denylist rule met for a non-common password of sufficient length", () => {
+    const rules = buildPasswordRules("unaClaveSegura1", "unaClaveSegura1");
+    expect(rules[2].met).toBe(true);
   });
 });
 

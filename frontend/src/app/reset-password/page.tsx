@@ -155,7 +155,7 @@ function ResetPasswordContent(): React.ReactElement {
   return (
     <AuthShell
       title="Elija una contraseña nueva"
-      subtitle="Debe cumplir las dos condiciones de abajo"
+      subtitle="Debe cumplir las condiciones de abajo"
       note={EXPIRED_LINK_NOTE}
       // Every state of this screen ends at the login form: the link is dead,
       // or the password is set, or the user gave up — all three want /login,
