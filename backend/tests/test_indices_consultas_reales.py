@@ -232,6 +232,33 @@ def test_indice_de_consulta_real_existe_en_postgres(
     )
 
 
+# Issue #1016 (ADR-3/ADR-4, migración `d1016emailunico`): un índice
+# declarado no es un índice ÚNICO. `test_indice_de_consulta_real_existe_en_
+# postgres` ya prueba que `ix_usuario_correo_lower` existe con la columna
+# correcta, pero un índice funcional plano y uno único son dos hechos
+# distintos para Postgres -- el primero acelera la lectura, el segundo
+# además IMPIDE la carrera de dos altas con distinta capitalización de la
+# MISMA dirección. Se lee `pg_index.indisunique` contra el catálogo real,
+# nunca `Base.metadata` (mismo motivo que el resto de este archivo).
+def test_indice_de_correo_lower_es_unico_en_postgres(db_session: Session):
+    fila = db_session.execute(
+        text(
+            "SELECT indisunique FROM pg_index "
+            "WHERE indrelid = 'usuario'::regclass "
+            "AND indexrelid = 'ix_usuario_correo_lower'::regclass"
+        )
+    ).one_or_none()
+    assert fila is not None, (
+        "No se encontró `ix_usuario_correo_lower` en el catálogo de "
+        "Postgres para la tabla `usuario`."
+    )
+    assert fila[0] is True, (
+        "`ix_usuario_correo_lower` existe pero NO es único: dos cuentas "
+        "cuyo correo difiera solo en mayúsculas o espacios podrían "
+        "convivir. Falta aplicar la migración `d1016emailunico`."
+    )
+
+
 @pytest.mark.parametrize(
     ("tabla", "nombre"),
     _INDICES_RETIRADOS,
