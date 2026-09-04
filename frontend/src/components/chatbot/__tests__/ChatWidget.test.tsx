@@ -182,8 +182,8 @@ describe("ChatWidget — error copy per failure class", () => {
     fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));
 
     const alerta = await screen.findByRole("alert");
-    expect(alerta).toHaveClass("bg-state-bad-bg");
-    expect(alerta).toHaveClass("text-state-bad");
+    expect(alerta).toHaveClass("bg-state-bad/15");
+    expect(alerta).toHaveClass("text-cata-red-light");
   });
 });
 
@@ -275,9 +275,9 @@ describe("ChatWidget — design system", () => {
     expect(screen.getByText("CATA-BOT")).toBeInTheDocument();
     expect(screen.queryByText("Cata Club")).not.toBeInTheDocument();
     expect(screen.getByText("Responde en segundos")).toBeInTheDocument();
-    // #873 — coal with white text, so the header reads apart from the
-    // paper panel it sits on instead of blending into it.
-    expect(container.querySelector("header")).toHaveClass("bg-coal", "text-white");
+    // #1007 — coal-2 with white text, one step lighter than the coal panel
+    // body it sits over, so the header still reads apart from the panel.
+    expect(container.querySelector("header")).toHaveClass("bg-coal-2", "text-white");
   });
 
   it("wears the club's real logo, cropped to a circle over the disc", () => {
@@ -289,13 +289,25 @@ describe("ChatWidget — design system", () => {
     // full `public/brand/cata-club-logo.jpeg` under plain `object-cover`
     // was tried and rejected on inspection: it's wider than tall, so the
     // browser only trims ~4% off each side and the wordmark band survives
-    // almost whole inside the circle. `cata-club-crest-256.png` is a
+    // almost whole inside the circle. `cata-club-crest-256-light.png` is a
     // pre-sized 256×256 derivative of a deterministic (non-AI) crop of that
-    // same JPEG ending above the wordmark, with its background keyed to
-    // transparent — served unoptimized, see issue #681. `object-cover`
+    // same JPEG ending above the wordmark, recolored fully white so it reads
+    // on the dark header — served unoptimized, see issue #681. `object-cover`
     // (not `contain`) still fills the disc from that square source.
-    expect(avatar).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
+    expect(avatar).toHaveAttribute("src", "/brand/cata-club-crest-256-light.png");
     expect(avatar?.className).toContain("object-cover");
+  });
+
+  // Issue #1007 — the same defect the #995 launcher fix already closed once:
+  // the dark-silhouette crest disappears against a coal disc. This is the
+  // header's own lock, the counterpart to `HelpChatDock.test.tsx`'s launcher
+  // lock, since #995 only covered the launcher.
+  it("never serves the dark-silhouette crest on the header, which would vanish on its coal fill", () => {
+    const { container } = render(<ChatWidget open onClose={vi.fn()} />);
+
+    const avatar = container.querySelector("header img");
+    expect(avatar).toHaveAttribute("src", "/brand/cata-club-crest-256-light.png");
+    expect(avatar).not.toHaveAttribute("src", "/brand/cata-club-crest-256.png");
   });
 
   it("introduces itself by name in the opening bubble", () => {
@@ -313,7 +325,7 @@ describe("ChatWidget — design system", () => {
     expect(screen.getByRole("link", { name: "Hablar con el club" })).toBeInTheDocument();
   });
 
-  it("paints the user's turn coal and the bot's grey — never red", async () => {
+  it("paints the user's turn paper and the bot's coal-3 — never red", async () => {
     vi.mocked(global.fetch).mockResolvedValue(okResponse({ reply: "Claro que sí." }));
 
     render(<ChatWidget open onClose={vi.fn()} />);
@@ -322,16 +334,19 @@ describe("ChatWidget — design system", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /enviar mensaje/i }));
 
+    // #1007 — `paper`, the exact mirror of the light theme's `coal`-on-
+    // `canvas` pairing, once the panel itself repainted dark.
     const userBubble = screen.getByText("¿Cómo veo mis pagos?");
-    expect(userBubble).toHaveClass("bg-coal");
+    expect(userBubble).toHaveClass("bg-paper");
     // Red is reserved for the primary CTA and for destructive/error. A red
     // bubble read as an error message.
     expect(userBubble.className).not.toContain("bg-cata-red");
 
     const botBubble = await screen.findByText("Claro que sí.");
-    // #873 — `paper` with a `line` edge, not `state-neutral-bg`: that tint
-    // measured 1.06:1 against the `canvas` history behind it, i.e. invisible.
-    expect(botBubble).toHaveClass("bg-paper", "border-line");
+    // #1007 — `coal-3` with an alpha-white edge, one lift step above the
+    // `coal` history it sits on (1.23:1, the same floor `paper` on `canvas`
+    // used to clear for #873).
+    expect(botBubble).toHaveClass("bg-coal-3", "border-white/[0.08]");
   });
 
   it("keeps the typing indicator's three dots still when the system asks for less motion", () => {
@@ -381,7 +396,7 @@ describe("ChatWidget — quick replies", () => {
     fireEvent.click(screen.getByRole("button", { name: "¿Cómo tomo asistencia?" }));
 
     // The shortcut button carries the same text, so scope to the bubble.
-    expect(screen.getByText("¿Cómo tomo asistencia?", { selector: "p" })).toHaveClass("bg-coal");
+    expect(screen.getByText("¿Cómo tomo asistencia?", { selector: "p" })).toHaveClass("bg-paper");
     await waitFor(() => {
       expect(screen.getByText("Desde Asistencia.")).toBeInTheDocument();
     });
@@ -583,27 +598,29 @@ describe("ChatWidget — the phone sheet (#644)", () => {
     installViewport(1440, 900);
     const { container } = render(<ChatWidget open onClose={vi.fn()} />);
 
-    // The literal that shipped before #644. An exact match, not a `toContain`
-    // sweep: "desktop is untouched" is only a claim worth making if a single
-    // added utility class breaks it. The panel's own geometry is still exactly
-    // this string; only the SURFACE tokens below moved, for #873.
+    // The GEOMETRY that shipped before #644. An exact match, not a
+    // `toContain` sweep: "desktop is untouched" is only a claim worth making
+    // if a single added utility class breaks it. The panel's own box is
+    // still exactly this string; only the SURFACE tokens below moved, first
+    // for #873 and again for #1007's dark panel.
     expect(panel().className).toBe(
       "fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] " +
         "w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated " +
+        "bg-coal border-white/[0.08] " +
         "lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]",
     );
-    // #873 — coal, not white: a white header on a paper panel read as one
-    // surface, not two.
+    // #1007 — coal-2, one step lighter than the coal panel body, so the
+    // header still reads apart from the panel it sits on.
     expect(container.querySelector("header")?.className).toBe(
-      "flex flex-none items-center gap-[11px] border-b border-line-2 bg-coal px-[15px] py-3 text-white",
+      "flex flex-none items-center gap-[11px] border-b border-white/[0.08] bg-coal-2 px-[15px] py-3 text-white",
     );
-    // #873 — sunken, not transparent: an unpainted composer inherited the
-    // panel's own `paper` and blended into it exactly like the header did.
+    // #1007 — coal-2, the same footer step as the header, not the light
+    // theme's sunken.
     expect(container.querySelector("form")?.className).toBe(
-      "flex flex-none items-center gap-2 border-t border-line bg-sunken p-3",
+      "flex flex-none items-center gap-2 border-t border-white/[0.08] bg-coal-2 p-3",
     );
     expect(container.querySelector(".overflow-y-auto")?.className).toBe(
-      "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]",
+      "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-coal p-[15px]",
     );
     // And no geometry is published at all: there is no sheet to place.
     expect(sheetVars()).toEqual({ top: "", height: "", keyboard: "" });
