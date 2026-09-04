@@ -17,6 +17,14 @@
  * anchor is the DOM shape those rules depend on: the divider must be a direct
  * child of the wrapper, never nested inside a column, and the composition
  * order (`[image][mission] | [vision][image]`) must survive.
+ *
+ * Issue #1009 added one more DOM-shape fact this suite can anchor cheaply:
+ * `data-reveal-together` on the section, which is what `LandingMotion.tsx`
+ * reads to skip the default reveal `stagger` between the two `data-reveal`
+ * halves. Losing that attribute is exactly the silent regression the issue
+ * describes — the reveal itself still cannot be measured here (jsdom does not
+ * run GSAP's scroll-triggered tween), but its absence would be, and that is
+ * cheaper to catch here than only in the real-browser in-flight lock.
  */
 
 // Registers next/image/LandingMap/LandingMotion mocks as a side effect — see
@@ -40,6 +48,17 @@ afterEach((): void => {
 });
 
 describe("Mission/Vision editorial symmetry (issue #863)", (): void => {
+  it("opts the section out of the default reveal stagger (issue #1009)", (): void => {
+    const { container } = render(<LandingPage />);
+
+    const section = container.querySelector("#nosotros");
+    expect(section).not.toBeNull();
+    expect(
+      section?.hasAttribute("data-reveal-together"),
+      "Mission and Vision are a symmetric pair, not a list — they must enter the reveal together",
+    ).toBe(true);
+  });
+
   it("owns the divider on the wrapper, never on one of the two columns", (): void => {
     const { container } = render(<LandingPage />);
 

@@ -25,6 +25,7 @@ import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import RecuperacionOutbox
+from app.infraestructura.asuntos_correo import ASUNTO_RECUPERACION
 from app.infraestructura.repositorios.recuperacion_outbox_repositorio import (
     RecuperacionOutboxRepositorio,
 )
@@ -36,7 +37,6 @@ from app.infraestructura.tareas.recuperacion_tareas import (
 from app.soporte_transversal.configuracion import settings
 
 MENSAJE_EXITO = "Si el correo está registrado, se envió un enlace de recuperación"
-ASUNTO_RECUPERACION = "Cata Club | Recuperación de contraseña"
 
 
 # ─── Arnés ──────────────────────────────────────────────────────────────────

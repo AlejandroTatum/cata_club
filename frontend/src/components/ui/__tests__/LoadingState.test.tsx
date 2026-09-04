@@ -19,6 +19,12 @@ describe("LoadingState", () => {
     expect(container.querySelector(".animate-spin")).not.toBeNull();
   });
 
+  /**
+   * jsdom computes no layout, so this pins the declared `px-6`/`py-11`
+   * classes, not the padding they resolve to. No Playwright spec covers
+   * LoadingState's rendered geometry today — there is no live counterpart
+   * to name here.
+   */
   it("shares EmptyState's geometry so the slot does not resize as it resolves", () => {
     render(<LoadingState label="Cargando…" />);
     expect(screen.getByRole("status")).toHaveClass("px-6", "py-11");

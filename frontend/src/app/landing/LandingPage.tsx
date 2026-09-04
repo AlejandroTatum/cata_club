@@ -250,7 +250,16 @@ function Stats(): React.ReactElement {
 
 function MissionVision(): React.ReactElement {
   return (
-    <section className="landing-section" id="nosotros" data-motion-section data-testid="motion-section">
+    <section
+      className="landing-section"
+      id="nosotros"
+      data-motion-section
+      // Mission and Vision are a symmetric pair, not a list of items — see
+      // the `data-reveal-together` handling in `LandingMotion.tsx` (issue
+      // #1009) for why this section opts out of the default reveal stagger.
+      data-reveal-together
+      data-testid="motion-section"
+    >
       <SectionHeader eyebrow="Quiénes somos" title="Misión y Visión" />
       <div className="landing-editorial">
         <article className="landing-editorial-item" data-reveal>
@@ -289,7 +298,7 @@ function MissionVision(): React.ReactElement {
             <span className="landing-index-label" aria-hidden="true">Horizonte</span>
             <h3>Nuestra Visión</h3>
             <span className="landing-rule" aria-hidden="true" data-rule />
-            <p className="landing-lead">Ser un club líder y referente provincial y nacional.</p>
+            <p className="landing-lead">Ser un club líder y referente deportivo a nivel provincial y nacional.</p>
             <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
           </div>
           {/* Approved editorial photo: the squad heading for the selections. */}

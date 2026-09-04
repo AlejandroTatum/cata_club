@@ -26,33 +26,18 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { backendEnumMembers, frontendUnionMembers } from "@/lib/enum-parity-helpers";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
 const BACKEND_ENUMS = join(REPO_ROOT, "backend", "app", "dominio", "enums.py");
 const FRONTEND_DOMAIN_TYPES = join(__dirname, "..", "domain.ts");
 
-/** The `TipoNotificacion(str, enum.Enum)` class body, up to the next `class`. */
-function backendTipoNotificacionMembers(): string[] {
-  const source = readFileSync(BACKEND_ENUMS, "utf-8");
-  const classMatch = source.match(/class TipoNotificacion\(str, enum\.Enum\):([\s\S]*?)(?:\nclass \w|$)/);
-  if (!classMatch) return [];
-  const body = classMatch[1];
-  return [...body.matchAll(/^\s{4}([A-Z][A-Z0-9_]*)\s*=\s*"([A-Z][A-Z0-9_]*)"/gm)].map(
-    (m) => m[2],
-  );
-}
-
-/** The literal members of `export type TipoNotificacion = ...;` in domain.ts. */
-function frontendTipoNotificacionMembers(): string[] {
-  const source = readFileSync(FRONTEND_DOMAIN_TYPES, "utf-8");
-  const typeMatch = source.match(/export type TipoNotificacion =([\s\S]*?);/);
-  if (!typeMatch) return [];
-  return [...typeMatch[1].matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]);
-}
-
 describe("TipoNotificacion — frontend union stays in sync with the backend enum", () => {
-  const backend = backendTipoNotificacionMembers();
-  const frontend = frontendTipoNotificacionMembers();
+  const backend = backendEnumMembers(readFileSync(BACKEND_ENUMS, "utf-8"), "TipoNotificacion");
+  const frontend = frontendUnionMembers(
+    readFileSync(FRONTEND_DOMAIN_TYPES, "utf-8"),
+    "TipoNotificacion",
+  );
 
   it("the parser actually finds the backend enum's members", () => {
     // Guard of the guard: a broken regex would make the real assertion below

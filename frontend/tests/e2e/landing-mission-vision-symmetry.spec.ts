@@ -1,5 +1,6 @@
 /**
- * Symmetry lock — the mirrored Mission/Vision section (issue #863, #996, #992).
+ * Symmetry lock — the mirrored Mission/Vision section (issue #863, #996,
+ * #992, #1009).
  *
  * Measured against `main`: `.landing-editorial-item` centred its own two
  * children independently (`align-items: center`, computed per item) and the
@@ -13,13 +14,15 @@
  * The desktop case measures under `prefers-reduced-motion: reduce`, following
  * this suite's convention for geometry (`landing-vertical-space.spec.ts`).
  * `.landing-editorial-item` carries `data-reveal`, and the motion layer
- * animates those with `gsap.from({ y: 40, duration: 0.7, stagger: 0.1 })`
- * (`LandingMotion.tsx`): the two halves start 100ms apart, so mid-flight their
- * headings legitimately sit up to 40px apart. Without the emulation this lock
- * was reporting the animation rather than the grid — green on a fast machine,
- * red on a loaded CI runner, with no change to the section in between. Under
- * `reduce` the whole `(prefers-reduced-motion: no-preference)` branch never
- * runs, so what is measured is the CSS layout this test is actually about.
+ * animates those with `gsap.from({ y: 40, duration: 0.7 })` (`LandingMotion.tsx`):
+ * even with the `stagger` removed between Mission and Vision (issue #1009,
+ * see below), that tween still takes ~700ms to settle, so mid-flight the
+ * geometry legitimately has a `transform` on it. Without the emulation this
+ * lock was reporting the animation rather than the grid — green on a fast
+ * machine, red on a loaded CI runner, with no change to the section in
+ * between. Under `reduce` the whole `(prefers-reduced-motion: no-preference)`
+ * branch never runs, so what is measured is the CSS layout this test is
+ * actually about.
  *
  * Issue #996: matching `h3` tops was not enough. Mission's lead ("Promover el
  * tenis de mesa mediante formación deportiva de calidad.", 65 chars) wraps an
@@ -38,6 +41,17 @@
  * `h3`s (which that particular mutation happens not to move) and the media's
  * size (never its own top). This version compares the top of every
  * corresponding row, which is what actually shifts under that mutation.
+ *
+ * Issue #1009: none of the locks above ever ran with the reveal actually
+ * playing, and the one at 390px only checked for overflow. Two more gaps were
+ * found this way and are covered by the suites below in this file:
+ *   - the two `h3`s drifted up to ~39px apart WHILE the reveal animated
+ *     (`stagger: 0.1` between them), settling back to 0px — invisible to any
+ *     `reduce`-emulated or post-settle measurement, but real on every scroll;
+ *   - between 391 and 768px, where the halves stack into one column and the
+ *     desktop shared-row grid above does not apply (`landing.css` scopes it to
+ *     `>= 769px`), nothing measured whether the two leads still wrap to the
+ *     same number of lines.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -197,5 +211,201 @@ test.describe("Mission/Vision editorial symmetry", () => {
     expect(layout.trackCount, "stacked to a single column on mobile").toBe(1);
     expect(layout.wrapperOverflowPx, "no overflow inside the editorial wrapper").toBeLessThanOrEqual(0);
     expect(layout.pageOverflowPx, "no page-level horizontal scroll").toBeLessThanOrEqual(0);
+  });
+});
+
+/**
+ * In-flight lock — issue #1009. Every geometry test above measures the
+ * settled grid under `prefers-reduced-motion: reduce`; none of them ever let
+ * the reveal actually play. That is exactly how the PR #991 regression
+ * escaped: a `-14.42` drift reading was archived as "a false positive of the
+ * animation" instead of being read as the animation itself running with
+ * `stagger: 0.1` between the two `h3`s. This test runs with reduced motion
+ * left at its default (the reveal plays) and samples both headings on every
+ * animation frame for the ~700ms the tween takes to settle.
+ */
+test.describe("Mission/Vision reveal stays symmetric in flight", () => {
+  test("keeps the two headings moving together while the reveal plays at 1440px", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto("/");
+
+    // Scroll and sample inside the same `evaluate` call: waiting on Playwright
+    // actionability first (e.g. `scrollIntoViewIfNeeded`) risks letting the
+    // whole ~700ms tween finish before sampling ever starts.
+    const samples = await page.evaluate(async () => {
+      const section = document.querySelector("#nosotros") as HTMLElement;
+      const items = section.querySelectorAll(".landing-editorial-item");
+      const missionHeading = items[0].querySelector("h3") as HTMLElement;
+      const visionHeading = items[1].querySelector("h3") as HTMLElement;
+
+      section.scrollIntoView({ block: "center" });
+
+      const diffs: number[] = [];
+      const start = performance.now();
+      await new Promise<void>((resolve) => {
+        function frame(): void {
+          diffs.push(missionHeading.getBoundingClientRect().top - visionHeading.getBoundingClientRect().top);
+          if (performance.now() - start < 1500) {
+            requestAnimationFrame(frame);
+          } else {
+            resolve();
+          }
+        }
+        requestAnimationFrame(frame);
+      });
+      return diffs;
+    });
+
+    const peak = Math.max(...samples.map((diff) => Math.abs(diff)));
+    // Recorded, not only asserted — see this suite's measurement convention.
+    // eslint-disable-next-line no-console
+    console.log(`mission/vision reveal drift (1440px, ${samples.length} frames): peak ${peak.toFixed(2)}px`);
+
+    // Measured on `main` before the fix: a ~37px peak from the 100ms stagger
+    // between the two tweens. Fixed (no stagger between this pair), both
+    // headings ride the same tween and the live peak measures 0.00px; the
+    // ceiling below stays well clear of that to absorb CI frame jitter while
+    // staying far short of the drift a reintroduced stagger would produce.
+    expect(peak, "Mission and Vision headings must enter together, not up to 100ms apart").toBeLessThanOrEqual(8);
+  });
+});
+
+/**
+ * Stacked-range lock — issue #1009. At <= 768px `.landing-editorial-item`
+ * loses the desktop shared-row grid (`landing.css` scopes it to
+ * `>= 769px`) and the two halves stack into one column instead. The only
+ * existing mobile test (390px, above) checks for overflow and nothing else;
+ * this checks the one thing that actually matters once there is no
+ * side-by-side reference: whether the two leads still wrap to the same
+ * number of lines, so neither half's internal silhouette drifts from the
+ * other's.
+ */
+test.describe("Mission/Vision keep the same lead silhouette while stacked (391-768px)", () => {
+  const STACKED_WIDTHS = [391, 430, 500, 600, 700, 768] as const;
+
+  for (const width of STACKED_WIDTHS) {
+    test(`both leads wrap to the same number of lines at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+
+      const section = page.locator("#nosotros");
+      await section.scrollIntoViewIfNeeded();
+      await expect(section.getByRole("heading", { name: "Nuestra Misión" })).toBeVisible();
+      await expect(section.getByRole("heading", { name: "Nuestra Visión" })).toBeVisible();
+
+      const geometry = await page.evaluate(() => {
+        const items = document.querySelectorAll(".landing-editorial-item");
+        const readLead = (item: Element): { lines: number; itemHeight: number } => {
+          const lead = item.querySelector(".landing-lead") as HTMLElement;
+          const lineHeight = parseFloat(getComputedStyle(lead).lineHeight);
+          return {
+            lines: Math.round(lead.getBoundingClientRect().height / lineHeight),
+            itemHeight: (item as HTMLElement).getBoundingClientRect().height,
+          };
+        };
+        return { mission: readLead(items[0]), vision: readLead(items[1]) };
+      });
+
+      // eslint-disable-next-line no-console
+      console.log(`mission/vision stacked silhouette (${width}px):`, JSON.stringify(geometry));
+
+      expect(geometry.mission.lines, "both leads must wrap to the same line count while stacked").toBe(
+        geometry.vision.lines,
+      );
+    });
+  }
+});
+
+/**
+ * Copy-parity lock — issue #1009. The two leads must keep wrapping to the
+ * same number of lines regardless of the exact column width they land in —
+ * that is what protects a future copy edit from silently reintroducing the
+ * defect this issue fixed. Character count cannot stand in for this: the
+ * issue measured two 70-character strings where one wrapped differently from
+ * the other, so this renders both leads' real text, in the real font
+ * (`.landing-lead`, Playfair 21px / 31.5px line-height), at a swept range of
+ * text widths and counts actual rendered lines.
+ *
+ * The sweep is dense (every 4px from 260 to 720px, 116 samples) rather than a
+ * handful of fixed points, because a handful of fixed points is exactly the
+ * kind of lock this issue is about: which points you happen to pick decides
+ * whether it catches anything. A dense sweep exposes something a literal
+ * "zero mismatches anywhere" assertion would get wrong, though: two
+ * different-length sentences will always cross from N to N-1 lines at
+ * slightly different widths, so a few-pixel-wide mismatch band right at each
+ * crossover is mathematically unavoidable, not a defect. Measured on the
+ * approved copy, both crossovers together account for 7/116 samples (~6%).
+ * Measured on the previous copy ("Ser un club líder y referente provincial y
+ * nacional.") — the one this issue replaces — the same sweep mismatches on
+ * 65/116 samples (~56%), two ~180px-wide bands instead of two ~15px ones.
+ * The ceiling below sits an order of magnitude above the unavoidable noise
+ * and well below the defect it exists to catch.
+ */
+test.describe("Mission/Vision lead line-count parity across text widths", () => {
+  test("both leads wrap to the same line count across a swept 260-720px text-width range", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto("/");
+
+    const missionText = await page
+      .locator("#nosotros .landing-editorial-item")
+      .nth(0)
+      .locator(".landing-lead")
+      .innerText();
+    const visionText = await page
+      .locator("#nosotros .landing-editorial-item")
+      .nth(1)
+      .locator(".landing-lead")
+      .innerText();
+
+    const widths: number[] = [];
+    for (let width = 260; width <= 720; width += 4) widths.push(width);
+
+    const results = await page.evaluate(
+      async ({ missionText, visionText, widths }) => {
+        await document.fonts.ready;
+        // Appended inside `.landing-page`, not `document.body`: the real font
+        // and colour come from CSS custom properties scoped to that element,
+        // not `:root` — outside it the probe would measure the fallback
+        // serif font instead of Playfair, and wrap at different widths.
+        const scope = document.querySelector(".landing-page") as HTMLElement;
+        const probe = document.createElement("p");
+        probe.className = "landing-lead";
+        probe.style.position = "absolute";
+        probe.style.visibility = "hidden";
+        probe.style.left = "-9999px";
+        probe.style.top = "0";
+        probe.style.maxWidth = "none";
+        scope.appendChild(probe);
+
+        const countLines = (text: string, width: number): number => {
+          probe.style.width = `${width}px`;
+          probe.textContent = text;
+          const lineHeight = parseFloat(getComputedStyle(probe).lineHeight);
+          return Math.round(probe.getBoundingClientRect().height / lineHeight);
+        };
+
+        const rows = widths.map((width) => ({
+          width,
+          mission: countLines(missionText, width),
+          vision: countLines(visionText, width),
+        }));
+
+        probe.remove();
+        return rows;
+      },
+      { missionText, visionText, widths },
+    );
+
+    const mismatches = results.filter((row) => row.mission !== row.vision);
+    // eslint-disable-next-line no-console
+    console.log(
+      `lead line-count mismatches: ${mismatches.length}/${results.length} —`,
+      mismatches.map((row) => `${row.width}px m${row.mission}/v${row.vision}`).join(" "),
+    );
+
+    expect(
+      mismatches.length,
+      "leads must wrap to the same line count across almost the whole swept width range",
+    ).toBeLessThanOrEqual(20);
   });
 });

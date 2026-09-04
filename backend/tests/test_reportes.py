@@ -439,11 +439,40 @@ def test_reporte_asistencia_pdf_422_fechas_invertidas(client):
 
 def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client):
     """El rango es opcional y combinable: un único día (inicio == fin) y un
-    extremo suelto siguen siendo consultas válidas, no errores."""
-    assert client.get(
+    extremo suelto siguen siendo consultas válidas, no errores -- y el filtro
+    de un solo día de verdad filtra, no solo evita el 422."""
+    alumno = _crear_persona(client, cedula_valida(553))
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": "2026-07-06", "estado": "PRESENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": "2026-07-07", "estado": "AUSENTE",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+
+    resp = client.get(
         "/api/v1/asistencias/reportes",
         params={"fecha_inicio": "2026-07-06", "fecha_fin": "2026-07-06"},
-    ).status_code == 200
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [item["fechaEntrenamiento"] for item in items] == ["2026-07-06"]
+
     assert client.get(
         "/api/v1/asistencias/reportes", params={"fecha_inicio": "2026-07-06"}
     ).status_code == 200
