@@ -40,7 +40,7 @@ def _crear_persona(client, cedula):
     return client.post("/api/v1/personas/", json=payload).json()
 
 
-def _registrar_credenciales(client, cedula, correo, contrasenia="password123"):
+def _registrar_credenciales(client, cedula, correo, contrasenia="unaClaveSegura1"):
     return client.post(
         "/api/v1/auth/registro",
         json={"cedula": cedula, "correo": correo, "contrasenia": contrasenia},
@@ -169,4 +169,4 @@ def test_restablecer_con_cuenta_desactivada_falla(client, db_session):
     assert "inválido o expiró" in resp.json()["detail"]
     # La contraseña original sigue intacta.
     usuario = db_session.query(Usuario).filter_by(correo="suspendido@x.com").one()
-    assert GestorAutenticacion.verificar_contrasenia("password123", usuario.contrasenia)
+    assert GestorAutenticacion.verificar_contrasenia("unaClaveSegura1", usuario.contrasenia)
