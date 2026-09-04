@@ -101,11 +101,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let data: Record<string, unknown>;
   try {
-    data = (await result.response.json()) as Record<string, unknown>;
+    const parsed: unknown = await result.response.json();
+    if (typeof parsed !== "object" || parsed === null) {
+      return NextResponse.json({ message: "Respuesta inesperada del servidor." }, { status: 502 });
+    }
+    data = parsed as Record<string, unknown>;
   } catch {
     return NextResponse.json({ message: "Respuesta inesperada del servidor." }, { status: 502 });
   }
-  const response = NextResponse.json(data, { status: 201 });
+  // Issue #1015: el backend ya no acuña tokens para la cuenta creada, pero
+  // esta selección explícita es la que garantiza que ninguno llegue al
+  // navegador aunque el backend cambiara — el caller es el ADMINISTRADOR
+  // autenticado, nunca la cuenta recién creada.
+  const { persona_id, usuario_id, correo } = data;
+  const response = NextResponse.json({ persona_id, usuario_id, correo }, { status: 201 });
   if (result.refreshedAccessToken) {
     setAuthCookies(response, { accessToken: result.refreshedAccessToken });
   }

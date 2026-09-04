@@ -91,3 +91,41 @@ describe("POST /api/personas/admin/cuentas — accepted account types", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/personas/admin/cuentas — no credential tokens reach the browser", () => {
+  it("strips access_token/refresh_token even if the backend still sends them (issue #1015)", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          persona_id: 7,
+          usuario_id: 3,
+          correo: "carla@cataclub.test",
+          access_token: "leaked-access",
+          refresh_token: "leaked-refresh",
+          token_type: "bearer",
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const response = await POST(postRequest(validBody("JUGADOR")));
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body).not.toHaveProperty("access_token");
+    expect(body).not.toHaveProperty("refresh_token");
+    expect(body).not.toHaveProperty("token_type");
+    expect(body).toMatchObject({ persona_id: 7, usuario_id: 3, correo: "carla@cataclub.test" });
+  });
+
+  it("does not throw when the upstream 201 body is not an object", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(null), { status: 201, headers: { "Content-Type": "application/json" } }),
+    );
+
+    const response = await POST(postRequest(validBody("JUGADOR")));
+
+    expect(response.status).toBeGreaterThanOrEqual(200);
+    expect(response.status).toBeLessThan(600);
+  });
+});

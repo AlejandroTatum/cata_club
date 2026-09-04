@@ -266,7 +266,11 @@ class AuthServicio:
         Sin roles asignados (coherente con la asignación perezosa de roles ya
         implementada, los roles se asignan por separado).
 
-        Devuelve el mismo shape que `login()` (auto-login tras registro).
+        Devuelve { persona_id, usuario_id, correo }. Issue #1015: NO emite
+        tokens de acceso/refresco -- el llamador es el ADMINISTRADOR
+        autenticado que hace el registro, nunca la persona recién
+        registrada, así que un par de tokens acá sería un par de
+        credenciales vivas y sin dueño en su navegador.
         """
         persona = self.repo_persona.obtener_por_cedula(datos.cedula)
         if not persona:
@@ -299,7 +303,11 @@ class AuthServicio:
         )
         nuevo_usuario = self.repo.crear(nuevo_usuario)
         self.db.commit()
-        return self._emitir_par_tokens(nuevo_usuario)
+        return {
+            "persona_id": nuevo_usuario.persona_id,
+            "usuario_id": nuevo_usuario.id,
+            "correo": nuevo_usuario.correo,
+        }
 
     # --- Perfil del usuario autenticado -------------------------------------
     def obtener_usuario_actual(self, correo: str) -> Usuario:

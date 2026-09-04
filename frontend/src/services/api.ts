@@ -2323,12 +2323,13 @@ export interface AdminCrearCuentaPayload {
 }
 
 /** Admin-only: create a full account (Persona + Usuario + Rol) in one step.
- *  Returns tokens for auto-login. */
+ *  Returns the created identity — no auto-login tokens (issue #1015): the
+ *  caller is the authenticated ADMINISTRADOR, never the newly created
+ *  account. */
 export async function crearCuentaAdmin(data: AdminCrearCuentaPayload): Promise<{
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
   persona_id: number;
+  usuario_id: number;
+  correo: string;
 }> {
   const payload: Record<string, unknown> = {
     tipo_cuenta: data.tipoCuenta,
@@ -2355,10 +2356,9 @@ export async function crearCuentaAdmin(data: AdminCrearCuentaPayload): Promise<{
   }
 
   return request<{
-    access_token: string;
-    refresh_token: string;
-    token_type: string;
     persona_id: number;
+    usuario_id: number;
+    correo: string;
   }>(apiEndpoint("/personas/admin/cuentas"), {
     method: "POST",
     body: JSON.stringify(payload),

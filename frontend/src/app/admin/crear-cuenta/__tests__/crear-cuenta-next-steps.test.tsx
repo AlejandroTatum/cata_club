@@ -73,10 +73,9 @@ afterEach(() => {
 
 async function createAccountAndConfirm(accountType: "Jugador" | "Entrenador" = "Jugador"): Promise<void> {
   vi.mocked(crearCuentaAdmin).mockResolvedValueOnce({
-    access_token: "a",
-    refresh_token: "b",
-    token_type: "bearer",
     persona_id: 1,
+    usuario_id: 1,
+    correo: "mateo@cataclub.test",
   });
 
   render(<CrearCuentaPage />);
