@@ -86,7 +86,14 @@ def _ejecutar_config(
     for archivo in archivos_compose:
         args += ["-f", str(RAIZ / archivo)]
     args += ["config", "--format", "json"]
+    # `**os.environ` va PRIMERO a propósito: los centinelas que siguen tienen
+    # que ganarle a cualquier variable que la máquina de quien corre la suite
+    # ya tenga exportada (p. ej. un POSTGRES_USER de otro proyecto), o el
+    # render dejaría de depender solo de esta suite. `entorno` (el override
+    # explícito de cada test) sigue yendo al final, para que pueda pisar
+    # tanto el entorno real como los centinelas cuando así lo pide el test.
     entorno_final = {
+        **os.environ,
         "JWT_SECRET_KEY": _JWT_PARA_RENDER,
         "CORS_ORIGENES": _CORS_PARA_RENDER,
         "DOMINIO": _DOMINIO_PARA_RENDER,
@@ -95,7 +102,6 @@ def _ejecutar_config(
         "POSTGRES_PASSWORD": _POSTGRES_PASSWORD_PARA_RENDER,
         "POSTGRES_DB": _POSTGRES_DB_PARA_RENDER,
         "IMAGE_TAG": _IMAGE_TAG_PARA_RENDER,
-        **os.environ,
         **(entorno or {}),
     }
     for variable in omitir:
@@ -132,6 +138,23 @@ def _config_produccion(*, con_perfiles: bool = False) -> dict:
         "docker-compose.prod.yml",
         perfiles=PERFILES_DECLARADOS if con_perfiles else (),
     )
+
+
+def test_una_variable_del_entorno_del_desarrollador_no_reemplaza_el_centinela(monkeypatch):
+    """`entorno_final` en `_ejecutar_config` expandía `**os.environ` DESPUÉS
+    de los centinelas de este archivo, así que una `POSTGRES_USER` exportada
+    en la shell de quien corre la suite pisaba `_POSTGRES_USER_PARA_RENDER`
+    -- el render dependía de qué variables tuviera cada máquina, exactamente
+    lo que `--env-file os.devnull` (arriba) existe para evitar."""
+    monkeypatch.setenv("POSTGRES_USER", "usuario-de-la-maquina-del-desarrollador")
+    database_url = str(
+        _config_produccion()["services"]["backend"]["environment"]["DATABASE_URL"]
+    )
+    assert _POSTGRES_USER_PARA_RENDER in database_url, (
+        f"DATABASE_URL usó la POSTGRES_USER real del entorno del desarrollador "
+        f"en vez del centinela de esta suite: {database_url!r}"
+    )
+    assert "usuario-de-la-maquina-del-desarrollador" not in database_url
 
 
 # ─── Guarda de centinela: valores del operador llegan al contenedor ────────
