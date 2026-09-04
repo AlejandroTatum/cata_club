@@ -49,10 +49,6 @@ from app.dominio.modelos import (
     Asistencia,
     AlumnoHorario,
     FichaMedica,
-    Pais,
-    Provincia,
-    Canton,
-    Direccion,
     Institucion,
     Sponsor,
     Descuento,
@@ -138,16 +134,9 @@ HIJOS_POR_REPRESENTANTE = [3, 2, 4, 1, 3, 2, 4, 1, 2, 3, 2, 4, 1, 3, 2, 2]
 CANTIDAD_AUTOGESTIONADOS = 20
 
 # ---------------------------------------------------------------------------
-# Catálogos (issue de QA con 0 dev seed): jerarquía de ubicación, institución
-# educativa, sponsor y descuento. No existe fixture de Ecuador en el repo --
-# este es un subconjunto chico y realista, no el país entero.
+# Catálogos (issue de QA con 0 dev seed): institución educativa, sponsor y
+# descuento.
 # ---------------------------------------------------------------------------
-CANTONES_POR_PROVINCIA = {
-    "Manabí": ["Portoviejo", "Manta", "Chone"],
-    "Pichincha": ["Quito", "Rumiñahui", "Cayambe"],
-    "Guayas": ["Guayaquil", "Durán", "Samborondón"],
-}
-
 INSTITUCIONES_SEED = [
     {"nombre": "Unidad Educativa Particular Bilingüe San Andrés", "tipo_escuela": TipoEscuela.PARTICULAR},
     {"nombre": "Escuela Fiscal Eloy Alfaro", "tipo_escuela": TipoEscuela.FISCAL},
@@ -433,51 +422,6 @@ def _asignar_membresia_y_pago(
     db.flush()
 
 
-def _sembrar_ubicaciones(db) -> list[Direccion]:
-    """Pais -> Provincia -> Canton -> Direccion, idempotente por filtro
-    único compuesto en cada nivel. Devuelve las direcciones sembradas, para
-    que el backfill de `Persona` tenga un pool del que elegir."""
-    pais, _ = _obtener_o_crear(db, Pais, Pais.nombre == "Ecuador", {"nombre": "Ecuador"})
-
-    cantones: list[Canton] = []
-    for nombre_provincia, nombres_cantones in CANTONES_POR_PROVINCIA.items():
-        provincia, _ = _obtener_o_crear(
-            db, Provincia,
-            (Provincia.nombre == nombre_provincia) & (Provincia.pais_id == pais.id),
-            {"nombre": nombre_provincia, "pais_id": pais.id},
-        )
-        for nombre_canton in nombres_cantones:
-            canton, _ = _obtener_o_crear(
-                db, Canton,
-                (Canton.nombre == nombre_canton) & (Canton.provincia_id == provincia.id),
-                {"nombre": nombre_canton, "provincia_id": provincia.id},
-            )
-            cantones.append(canton)
-    db.flush()
-
-    # Dos direcciones por cantón (barrios distintos) para dar variedad sin
-    # sembrar el país entero.
-    direcciones: list[Direccion] = []
-    for c_idx, canton in enumerate(cantones):
-        for barrio_idx in range(2):
-            indice = c_idx * 2 + barrio_idx
-            barrio = f"Barrio Central {indice + 1}"
-            direccion, _ = _obtener_o_crear(
-                db, Direccion,
-                (Direccion.canton_id == canton.id) & (Direccion.barrio == barrio),
-                {
-                    "barrio": barrio,
-                    "calle_principal": f"Av. {indice + 1} de Mayo",
-                    "calle_secundaria": f"Calle {indice + 1}" if indice % 2 == 0 else None,
-                    "numero_casa": str(100 + indice) if indice % 2 == 0 else None,
-                    "canton_id": canton.id,
-                },
-            )
-            direcciones.append(direccion)
-    db.flush()
-    return direcciones
-
-
 def _sembrar_instituciones(db) -> list[Institucion]:
     """Catálogo de instituciones, cubriendo los cuatro valores de
     `TipoEscuela`. Idempotente por `nombre`."""
@@ -542,27 +486,19 @@ def _sembrar_enfermedades(db) -> int:
     return creadas
 
 
-def _asignar_ubicacion_e_institucion(
-    db, direcciones: list[Direccion], instituciones: list[Institucion],
-) -> int:
-    """Backfill (UPDATE, nunca INSERT) de `direccion_id`/`institucion_id`
-    sobre las `Persona` existentes. Deja deliberadamente una de cada tres
-    sin ninguno de los dos campos: el caso "sin dirección" también tiene que
-    existir en QA. Idempotente porque solo toca personas cuyo campo sigue en
-    NULL -- una segunda corrida no reasigna ni pisa nada."""
+def _asignar_institucion(db, instituciones: list[Institucion]) -> int:
+    """Backfill (UPDATE, nunca INSERT) de `institucion_id` sobre las
+    `Persona` existentes. Deja deliberadamente una de cada tres sin el
+    campo: el caso "sin institución" también tiene que existir en QA.
+    Idempotente porque solo toca personas cuyo campo sigue en NULL -- una
+    segunda corrida no reasigna ni pisa nada."""
     actualizadas = 0
     personas = db.query(Persona).order_by(Persona.id).all()
     for idx, persona in enumerate(personas):
         if idx % 3 == 2:
             continue
-        cambio = False
-        if persona.direccion_id is None and direcciones:
-            persona.direccion_id = direcciones[idx % len(direcciones)].id
-            cambio = True
         if persona.institucion_id is None and instituciones:
             persona.institucion_id = instituciones[idx % len(instituciones)].id
-            cambio = True
-        if cambio:
             actualizadas += 1
     db.flush()
     return actualizadas
@@ -592,12 +528,11 @@ def main() -> None:
             )
 
         # ------------------------------------------------------------------
-        # 0.5. Catálogos sin dependencia de eventos de dominio: jerarquía de
-        #      ubicación, institución educativa, sponsor, descuento. Ninguno
-        #      de los cuatro depende de los estudiantes que este script crea
-        #      más abajo, así que se siembran antes.
+        # 0.5. Catálogos sin dependencia de eventos de dominio: institución
+        #      educativa, sponsor, descuento. Ninguno de los tres depende de
+        #      los estudiantes que este script crea más abajo, así que se
+        #      siembran antes.
         # ------------------------------------------------------------------
-        direcciones_seed = _sembrar_ubicaciones(db)
         instituciones_seed = _sembrar_instituciones(db)
         _sembrar_sponsors(db)
         _sembrar_descuentos(db)
@@ -775,13 +710,11 @@ def main() -> None:
         db.flush()
 
         # ------------------------------------------------------------------
-        # 4. Backfill de dirección/institución sobre TODAS las personas
-        #    existentes (UPDATE, no INSERT) -- issue de QA con las 86
-        #    personas del stack en NULL en ambos campos.
+        # 4. Backfill de institución sobre TODAS las personas existentes
+        #    (UPDATE, no INSERT) -- issue de QA con las 86 personas del
+        #    stack en NULL en el campo.
         # ------------------------------------------------------------------
-        personas_actualizadas = _asignar_ubicacion_e_institucion(
-            db, direcciones_seed, instituciones_seed,
-        )
+        personas_actualizadas = _asignar_institucion(db, instituciones_seed)
 
         db.commit()
 
@@ -805,11 +738,8 @@ def main() -> None:
         print(f"[seed] Enfermedades registradas en esta corrida: {enfermedades_creadas}")
         print(f"[seed] Inscripciones a horarios creadas: {inscripciones_creadas}")
         print(f"[seed] Registros de asistencia creados: {asistencias_creadas}")
-        print(
-            f"[seed] Direcciones sembradas: {len(direcciones_seed)}, "
-            f"instituciones: {len(instituciones_seed)}"
-        )
-        print(f"[seed] Personas con dirección/institución backfilleadas en esta corrida: {personas_actualizadas}")
+        print(f"[seed] Instituciones sembradas: {len(instituciones_seed)}")
+        print(f"[seed] Personas con institución backfilleadas en esta corrida: {personas_actualizadas}")
         print(f"[seed] Contraseña compartida para TODAS las cuentas de este seed: {CONTRASENIA_COMPARTIDA}")
         if muestras_correo:
             print(f"[seed] Correos de ejemplo para probar login: {', '.join(muestras_correo)}")

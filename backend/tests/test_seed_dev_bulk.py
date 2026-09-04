@@ -10,15 +10,11 @@ from app.dominio.modelos import (
     AlumnoHorario,
     Asistencia,
     Base,
-    Canton,
     Descuento,
-    Direccion,
     Enfermedades,
     FichaMedica,
     Institucion,
-    Pais,
     Persona,
-    Provincia,
     Sponsor,
     Usuario,
 )
@@ -178,40 +174,6 @@ def test_todas_las_cuentas_del_bulk_nacen_con_el_correo_verificado():
     )
 
 
-def test_main_siembra_la_jerarquia_de_ubicacion_completa():
-    """Todo cantón cuelga de una provincia sembrada y toda provincia de un
-    país sembrado -- sin esto no hay `Direccion` válida que backfillear."""
-    modulo_base = _load_base_seed_module()
-    modulo_bulk = _load_seed_module()
-    SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
-
-    modulo_base.main()
-    modulo_bulk.main()
-
-    with SessionLocal() as verificacion:
-        paises = list(verificacion.execute(select(Pais)).scalars().all())
-        provincias = list(verificacion.execute(select(Provincia)).scalars().all())
-        cantones = list(verificacion.execute(select(Canton)).scalars().all())
-        direcciones = list(verificacion.execute(select(Direccion)).scalars().all())
-
-    assert paises, "el seed no creó ningún país"
-    assert provincias, "el seed no creó ninguna provincia"
-    assert cantones, "el seed no creó ningún cantón"
-    assert direcciones, "el seed no creó ninguna dirección"
-
-    ids_pais = {p.id for p in paises}
-    ids_provincia = {p.id for p in provincias}
-    ids_canton = {c.id for c in cantones}
-
-    huerfanas_provincia = [p for p in provincias if p.pais_id not in ids_pais]
-    huerfanos_canton = [c for c in cantones if c.provincia_id not in ids_provincia]
-    huerfanas_direccion = [d for d in direcciones if d.canton_id not in ids_canton]
-
-    assert not huerfanas_provincia, "provincia sin país sembrado"
-    assert not huerfanos_canton, "cantón sin provincia sembrada"
-    assert not huerfanas_direccion, "dirección sin cantón sembrado"
-
-
 def test_main_cubre_los_cuatro_tipos_de_escuela():
     modulo_base = _load_base_seed_module()
     modulo_bulk = _load_seed_module()
@@ -289,9 +251,9 @@ def test_main_las_enfermedades_cuelgan_de_fichas_existentes():
     assert not huerfanas, f"{len(huerfanas)} enfermedades huérfanas"
 
 
-def test_main_backfill_deja_personas_con_direccion_y_sin_direccion():
-    """El caso "sin dirección" tiene que seguir existiendo tras el backfill:
-    no todas las personas quedan cubiertas a propósito."""
+def test_main_backfill_deja_personas_con_institucion_y_sin_institucion():
+    """El caso "sin institución" tiene que seguir existiendo tras el
+    backfill: no todas las personas quedan cubiertas a propósito."""
     modulo_base = _load_base_seed_module()
     modulo_bulk = _load_seed_module()
     SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
@@ -302,21 +264,17 @@ def test_main_backfill_deja_personas_con_direccion_y_sin_direccion():
     with SessionLocal() as verificacion:
         personas = list(verificacion.execute(select(Persona)).scalars().all())
 
-    con_direccion = [p for p in personas if p.direccion_id is not None]
-    sin_direccion = [p for p in personas if p.direccion_id is None]
     con_institucion = [p for p in personas if p.institucion_id is not None]
     sin_institucion = [p for p in personas if p.institucion_id is None]
 
-    assert con_direccion, "ninguna persona quedó con dirección tras el backfill"
-    assert sin_direccion, "ninguna persona quedó sin dirección: falta la rama NULL"
     assert con_institucion, "ninguna persona quedó con institución tras el backfill"
     assert sin_institucion, "ninguna persona quedó sin institución: falta la rama NULL"
 
 
 def test_main_no_duplica_catalogos_al_correr_dos_veces():
     """El test que más importa: una segunda corrida no debe duplicar ni una
-    sola fila de los catálogos nuevos (ubicación, institución, sponsor,
-    descuento, enfermedades)."""
+    sola fila de los catálogos nuevos (institución, sponsor, descuento,
+    enfermedades)."""
     modulo_base = _load_base_seed_module()
     modulo_bulk = _load_seed_module()
     SessionLocal = _motor_en_memoria(modulo_base, modulo_bulk)
@@ -327,10 +285,6 @@ def test_main_no_duplica_catalogos_al_correr_dos_veces():
     def _conteos():
         with SessionLocal() as verificacion:
             return {
-                "pais": verificacion.execute(select(func.count()).select_from(Pais)).scalar_one(),
-                "provincia": verificacion.execute(select(func.count()).select_from(Provincia)).scalar_one(),
-                "canton": verificacion.execute(select(func.count()).select_from(Canton)).scalar_one(),
-                "direccion": verificacion.execute(select(func.count()).select_from(Direccion)).scalar_one(),
                 "institucion": verificacion.execute(select(func.count()).select_from(Institucion)).scalar_one(),
                 "sponsor": verificacion.execute(select(func.count()).select_from(Sponsor)).scalar_one(),
                 "descuento": verificacion.execute(select(func.count()).select_from(Descuento)).scalar_one(),
