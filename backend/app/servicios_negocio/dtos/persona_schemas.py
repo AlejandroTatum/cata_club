@@ -4,13 +4,13 @@ from typing import Optional, List
 
 from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoManoDominante
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
-from pydantic import EmailStr
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,
+    CorreoValidado,
     NombrePresentado,
     NombrePresentadoOpcional,
     NombreValidado,
@@ -58,7 +58,7 @@ class RepresentadoCreateDTO(BaseModel):
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
-    correo: Optional[EmailStr] = None
+    correo: Optional[CorreoValidado] = None
     contrasenia: Optional[str] = Field(default=None, min_length=8)
     institucion_id: Optional[int] = None
 

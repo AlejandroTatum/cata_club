@@ -6,7 +6,7 @@ el wizard del frontend sin intervención del administrador. El endpoint orquesta
 la creación de Persona, Usuario, FichaMedica y AntecedentesClub en un solo
 request transaccional, y retorna tokens JWT para auto-login inmediato.
 """
-from pydantic import BaseModel, Field, EmailStr, model_validator
+from pydantic import BaseModel, Field, model_validator
 from datetime import date
 from typing import Optional, List
 
@@ -15,6 +15,7 @@ from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
     ContactoEmergenciaValidado,
+    CorreoValidado,
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
@@ -29,7 +30,7 @@ class EnrollmentRepresentanteDTO(BaseModel):
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
-    correo: EmailStr
+    correo: CorreoValidado
     contrasenia: str = Field(..., min_length=8)
 
 
@@ -46,14 +47,14 @@ class EnrollmentAlumnoDTO(BaseModel):
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
-    correo: Optional[EmailStr] = None
+    correo: Optional[CorreoValidado] = None
     contrasenia: Optional[str] = Field(default=None, min_length=8)
     institucion_id: Optional[int] = None
 
 
 class EnrollmentCredencialesDTO(BaseModel):
     """Credenciales del alumno para autoinscripción sin representante (adulto)."""
-    correo: EmailStr
+    correo: CorreoValidado
     contrasenia: str = Field(..., min_length=8)
 
 

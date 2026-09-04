@@ -15,7 +15,7 @@ y se corrigen distinto.
 """
 from typing import Annotated, Optional
 
-from pydantic import AfterValidator
+from pydantic import AfterValidator, EmailStr
 
 from app.dominio.cedula import es_cedula_valida
 from app.dominio.enums import TipoSangre
@@ -98,6 +98,20 @@ def _validar_apellido(valor: str) -> str:
 # A diferencia de esos dos, acá `None`/vacío es legítimo ("todavía no se
 # cargó") -- por eso este validador tolera ambos en vez de rechazarlos; el
 # `Optional[...]` en el tipo hace que `None` ni siquiera lo alcance.
+# Issue #827/#1016 (ADR-3): dos correos que difieren solo en mayúsculas o
+# espacios al borde son la MISMA identidad para este sistema.
+# `UsuarioRepositorio.obtener_por_correo` ya busca por
+# `func.lower(correo) == correo.strip().lower()` -- si el DTO no deja el
+# valor en esa misma forma ANTES de guardarlo, la fila persistida y la
+# consulta que la busca divergen, y dos registros que solo difieren en
+# capitalización pasan cada uno su propio pre-check (la carrera que cierra
+# el índice único funcional de `modelos.py:248`, no este validador).
+# Corre DESPUÉS de que `EmailStr` valida el formato: recibe un correo ya
+# sintácticamente válido y solo lo normaliza.
+def _normalizar_correo(valor: str) -> str:
+    return valor.strip().lower()
+
+
 def _validar_contacto_emergencia(valor: str) -> str:
     if not valor.strip():
         return valor
@@ -136,6 +150,7 @@ TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]
+CorreoValidado = Annotated[EmailStr, AfterValidator(_normalizar_correo)]
 
 
 def _normalizar_si_presente(valor: Optional[str]) -> Optional[str]:

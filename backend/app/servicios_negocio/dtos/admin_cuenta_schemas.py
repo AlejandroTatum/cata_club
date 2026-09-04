@@ -5,7 +5,7 @@ Permite al Administrador crear cuentas completas (Persona + Usuario + Rol)
 en un solo request, para adultos (Jugador/Representante/Entrenador) y
 menores (Dependiente con representante asignado).
 """
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from datetime import date
 from typing import Optional, Literal
 
@@ -16,6 +16,7 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
 from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
+    CorreoValidado,
     NombreValidado,
     TelefonoValidado,
     validar_telefono_emergencia_distinto,
@@ -48,7 +49,7 @@ class AdminCrearCuentaDTO(BaseModel):
     institucion_id: Optional[int] = None
 
     # --- Credenciales de la cuenta ---
-    correo: EmailStr
+    correo: CorreoValidado
     contrasenia: str = Field(..., min_length=8)
 
     # --- Solo para MENOR: representante responsable ---

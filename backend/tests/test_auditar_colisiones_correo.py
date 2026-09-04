@@ -107,6 +107,71 @@ def test_detecta_bucket_triple(arnes_migracion):
     assert sorted(bucket["ids"]) == sorted([a, b, c])
 
 
+def test_detecta_colision_solo_por_espacios(db_session):
+    # `d1016emailunico` canonicaliza con `lower(btrim(correo))`, no solo
+    # `lower(correo)`; dos correos que difieren únicamente por espacios al
+    # inicio/fin no chocan con el índice único case-insensitive vigente
+    # (que no hace btrim) y por eso pueden convivir en una base al HEAD
+    # migrado -- exactamente el escenario que este audit tiene que atrapar
+    # antes de un deploy que canonicalice y falle a mitad de transacción.
+    persona_uno = crear_persona_orm(db_session, "1710034065")
+    persona_dos = crear_persona_orm(db_session, "1710034073")
+    db_session.add_all([
+        Usuario(correo="espacios@ejemplo.test", contrasenia="hash", persona_id=persona_uno.id),
+        Usuario(correo=" espacios@ejemplo.test ", contrasenia="hash", persona_id=persona_dos.id),
+    ])
+    db_session.commit()
+
+    resultado = detectar_colisiones(db_session)
+
+    assert resultado["buckets_en_colision"] == 1
+    assert resultado["usuarios_en_colision"] == 2
+
+
+# --- Alcanzabilidad por la búsqueda de runtime -------------------------------
+
+def test_fila_con_espacios_se_reporta_inalcanzable_y_su_gemela_alcanzable(db_session):
+    # `obtener_por_correo` compara `lower(correo) = lower(btrim(entrada))`:
+    # recorta la ENTRADA, no la columna. La fila con espacios comparte
+    # bucket con su gemela, pero ninguna de las rutas que resuelven una
+    # cuenta por correo la alcanza. Si quien reconcilia la colisión
+    # conserva justo esa, el audit pasa a reportar cero colisiones y la
+    # cuenta queda muerta; por eso el reporte tiene que decir cuál es.
+    persona_uno = crear_persona_orm(db_session, "1710034065")
+    persona_dos = crear_persona_orm(db_session, "1710034073")
+    limpio = Usuario(correo="alcanzable@ejemplo.test", contrasenia="hash",
+                     persona_id=persona_uno.id)
+    con_espacios = Usuario(correo=" alcanzable@ejemplo.test ", contrasenia="hash",
+                           persona_id=persona_dos.id)
+    db_session.add_all([limpio, con_espacios])
+    db_session.commit()
+
+    resultado = detectar_colisiones(db_session)
+
+    bucket = resultado["buckets"][0]
+    por_id = dict(zip(bucket["ids"], bucket["alcanzables"]))
+    assert por_id[limpio.id] is True
+    assert por_id[con_espacios.id] is False
+    assert "alcanzables=" in formatear_texto(resultado)
+
+
+def test_colision_solo_por_mayusculas_reporta_ambas_alcanzables(arnes_migracion):
+    # `lower()` está a AMBOS lados del predicado de runtime, así que una
+    # variante de mayúsculas sí se resuelve: solo los espacios rompen la
+    # búsqueda. Este caso impide degradar el booleano a un genérico "el
+    # valor almacenado no está en forma canónica", que marcaría estas dos
+    # filas como muertas sin serlo.
+    arnes_migracion.preparar(REVISION_SIN_INDICE_UNICO)
+    uno = _sembrar_usuario(arnes_migracion, 1, "1710034065", "Mayus@Ejemplo.test")
+    dos = _sembrar_usuario(arnes_migracion, 2, "1710034073", "mayus@ejemplo.test")
+
+    bucket = _detectar(arnes_migracion)["buckets"][0]
+
+    por_id = dict(zip(bucket["ids"], bucket["alcanzables"]))
+    assert por_id[uno] is True
+    assert por_id[dos] is True
+
+
 def test_usuarios_no_colisionados_quedan_afuera(db_session):
     # Este caso no siembra ninguna colisión: corre igual contra la base al
     # HEAD migrado (issue #1016 no cambia nada de lo que este test afirma).

@@ -12,7 +12,9 @@ from typing import List, Optional
 
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.servicios_negocio.dtos.base import ResponseBase
-from app.servicios_negocio.dtos.validadores import CedulaValidada, NombrePresentado, TelefonoValidado
+from app.servicios_negocio.dtos.validadores import (
+    CedulaValidada, CorreoValidado, NombrePresentado, TelefonoValidado,
+)
 
 
 class RegistroUsuarioDTO(BaseModel):
@@ -23,7 +25,7 @@ class RegistroUsuarioDTO(BaseModel):
     POST /personas). No se crea Persona aquí.
     """
     cedula: CedulaValidada = Field(..., max_length=32)
-    correo: EmailStr
+    correo: CorreoValidado
     contrasenia: str = Field(..., min_length=8)
 
 
