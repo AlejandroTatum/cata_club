@@ -434,11 +434,25 @@ export default function LandingMotion(): null {
         gsap.utils.toArray<HTMLElement>("[data-motion-section]").forEach((section): void => {
           const targets = section.querySelectorAll<HTMLElement>("[data-reveal]:not([data-value])");
           if (targets.length > 0) {
+            /*
+             * `stagger: 0.1` is correct for a section that reveals a LIST of
+             * items — that is the common case below. Mission/Vision
+             * (`[data-reveal-together]`) is not a list, it is a symmetric
+             * PAIR: staggering the two halves 100ms apart animates asymmetry
+             * into the exact block that exists to show the club's two
+             * statements as mirrors of each other (issue #1009 — measured up
+             * to 39px of drift between the two `h3`s mid-reveal, on every
+             * scroll, even though the settled/post-animation geometry was
+             * already 0px). A section opts out of the stagger by declaring
+             * itself here; nothing else changes, so lists keep escalating in
+             * exactly the way that reads as intentional for them.
+             */
+            const stagger = section.hasAttribute("data-reveal-together") ? 0 : 0.1;
             gsap.from(targets, {
               y: 40,
               opacity: 0,
               duration: 0.7,
-              stagger: 0.1,
+              stagger,
               ease: "power3.out",
               immediateRender: false,
               scrollTrigger: { trigger: section, start: "top 82%", once: true },

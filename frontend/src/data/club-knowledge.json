@@ -3,7 +3,7 @@
     "nombre": "Cata Club",
     "resumen": "Cata Club es un club de tenis de mesa de Loja, Ecuador, que forma deportistas desde 2013.",
     "mision": "Promover el tenis de mesa mediante formación deportiva de calidad. Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.",
-    "vision": "Ser un club líder y referente provincial y nacional. Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.",
+    "vision": "Ser un club líder y referente deportivo a nivel provincial y nacional. Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.",
     "valores": [
       {
         "nombre": "Respeto",
@@ -189,38 +189,483 @@
     "idioma": "es-EC",
     "entradas_sha256": "4eab60995913d51a6c7b88ef823cb7f940ba69bfede8b10f4e49ee8efde55d8a",
     "entradas": [
-      {"id": "persona", "canonical_term": "Persona", "definition": "Todo ser humano que el club conoce.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Persona"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "usuario", "canonical_term": "Usuario", "definition": "La cuenta de acceso de una Persona.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Usuario"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "rol", "canonical_term": "Rol", "definition": "Qué puede hacer una Persona dentro del sistema.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Rol", "TipoRol"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "jugador", "canonical_term": "Jugador", "definition": "Término visible para la persona que entrena en el club.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["ALUMNO"], "context_forms": ["alumno", "estudiante"], "notes": ["Jugador es el término visible canónico; ALUMNO, alumno y estudiante permanecen como formas técnicas o de contexto y no compiten como texto visible."], "sources": ["docs:ux/rediseno-visual-2026-08.md#vocabulario", "app:frontend/src/lib/auth-utils.ts#getRoleLabel", "app:frontend/src/lib/auth-utils.ts#getBackendRoleLabel"]},
-      {"id": "miembro", "canonical_term": "Miembro", "definition": "Persona que integra el padrón de miembros del club.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": [], "sources": ["docs:product/concepto-alcance-modelo.md#1-concepto", "docs:ux/rediseno-visual-2026-08.md#vocabulario"]},
-      {"id": "representante", "canonical_term": "Representante", "definition": "Persona que representa a otra dentro del club.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["REPRESENTANTE"], "sources": ["docs:product/concepto-alcance-modelo.md#1-concepto", "docs:product/decisiones-de-negocio-2026-08-11.md#1-un-chico-tiene-un-solo-representante"]},
-      {"id": "administrador", "canonical_term": "Administrador", "definition": "Rol que administra el catálogo de descuentos y aprueba pagos.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["ADMINISTRADOR"], "sources": ["docs:product/concepto-alcance-modelo.md#1-concepto", "docs:product/concepto-alcance-modelo.md#4-decisiones-de-modelado"]},
-      {"id": "entrenador", "canonical_term": "Entrenador", "definition": "Rol que puede operar cualquier horario, incluida la toma de asistencia.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["ENTRENADOR"], "sources": ["docs:product/concepto-alcance-modelo.md#4-decisiones-de-modelado"]},
-      {"id": "membresia", "canonical_term": "Membresía", "definition": "El vínculo vigente de una persona con un plan.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Membresia"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "membresia_activa", "canonical_term": "Activa", "definition": "Estado de una membresía cuya cobertura está vigente.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["ACTIVA"], "notes": ["Estado publicado por separado; no se agrupa con ningún otro estado."], "sources": ["app:backend/app/dominio/enums.py#EstadoMembresia", "app:frontend/src/lib/membership-status.ts"]},
-      {"id": "membresia_inactiva", "canonical_term": "Inactiva", "definition": "Estado inicial de una membresía creada, todavía sin ningún pago aprobado.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["INACTIVA"], "notes": ["Estado publicado por separado; no se agrupa con Vencida."], "sources": ["app:backend/app/dominio/enums.py#EstadoMembresia"]},
-      {"id": "membresia_vencida", "canonical_term": "Vencida", "definition": "Estado de una membresía cuya vigencia ya expiró y requiere pago.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["VENCIDA"], "notes": ["Estado publicado por separado; no se agrupa con Inactiva."], "sources": ["docs:product/decisiones-de-negocio-2026-08-11.md#4-la-cuota-vencida-no-impide-entrenar", "app:backend/app/dominio/enums.py#EstadoMembresia"]},
-      {"id": "membresia_suspendida", "canonical_term": "Suspendida", "definition": "Estado de una membresía que no acumula deuda mientras dura y conserva el plan, el beneficio y la cobertura ya pagada.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["SUSPENDIDA"], "notes": ["Estado publicado por separado; no se agrupa con Vencida."], "sources": ["app:backend/app/dominio/enums.py#EstadoMembresia", "docs:product/decisiones-de-negocio-2026-08-11.md#4-la-cuota-vencida-no-impide-entrenar"]},
-      {"id": "tipo_membresia", "canonical_term": "Plan", "definition": "Plan de membresía con su precio propio: mensual, trimestral o anual.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["TipoMembresia"], "context_forms": ["Tipo de membresía"], "notes": ["Plan es el término visible; Tipo de membresía se conserva para administración y contexto de dominio."], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio", "docs:archive/fixes/12-mi-cuenta-carnet.md#que-se-hizo", "app:frontend/src/app/members/members-utils.ts#MemberStudentSummary"]},
-      {"id": "pago", "canonical_term": "Pago", "definition": "El hecho histórico de quién pagó cuánto; incluye pagos de $0 de becados.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Pago"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "estado_pago", "canonical_term": "Estado del pago", "definition": "Estado visible de validación de un pago.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["EstadoPago"], "notes": ["Los tres estados visibles se publican como entradas distintas y no se sustituyen por los enums técnicos."], "sources": ["app:backend/app/dominio/enums.py#EstadoPago", "app:frontend/src/lib/status-badges.ts"]},
-      {"id": "pago_pendiente_validacion", "canonical_term": "Pendiente de validación", "definition": "Estado de un pago cuya validación todavía está pendiente.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["PENDIENTE_VALIDACION"], "sources": ["app:backend/app/dominio/enums.py#EstadoPago", "app:frontend/src/lib/status-badges.ts"]},
-      {"id": "pago_aprobado", "canonical_term": "Aprobado", "definition": "Estado de un pago que fue aprobado.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["APROBADO"], "sources": ["app:backend/app/dominio/enums.py#EstadoPago", "app:frontend/src/lib/status-badges.ts"]},
-      {"id": "pago_rechazado", "canonical_term": "Rechazado", "definition": "Estado de un pago que fue rechazado.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["RECHAZADO"], "sources": ["app:backend/app/dominio/enums.py#EstadoPago", "app:frontend/src/lib/status-badges.ts"]},
-      {"id": "comprobante_pago", "canonical_term": "Comprobante de pago", "definition": "Evidencia de pago cargada por quien paga.", "prohibited_variants": [], "deprecated_variants": ["voucher"], "technical_forms": ["ComprobantePago"], "notes": ["Voucher se desalienta como variante visible; los identificadores técnicos se conservan cuando sea necesario."], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio", "app:frontend/src/services/api.ts#PaymentValidationRequest"]},
-      {"id": "comprobante_oficial", "canonical_term": "Comprobante oficial", "definition": "Documento emitido por el club.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": [], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio", "app:frontend/src/services/api.ts#PaymentValidationRequest"]},
-      {"id": "descuento", "canonical_term": "Descuento", "definition": "Catálogo administrado por el administrador, con nombre, porcentaje o monto y estado activo.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Descuento"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "descuento_aplicado", "canonical_term": "Descuento aplicado", "definition": "Registro por pago del descuento, su valor congelado, a quién se aplicó y quién lo autorizó.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["DescuentoAplicado"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "categoria", "canonical_term": "Categoría", "definition": "Franja de edad con su horario, definida por el club.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Categoria", "CategoriaHorario"], "notes": ["rango_edad es copy de orientación, no una regla de validación."], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio", "docs:archive/fixes/23-categoria-tabla-manda.md#lo-que-no-cambio", "docs:archive/fixes/24-abm-categorias.md#lo-que-no-cambio"]},
-      {"id": "horario_entrenamiento", "canonical_term": "Horario de entrenamiento", "definition": "Días y horario de una categoría.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["HorarioEntrenamiento"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "asistencia", "canonical_term": "Asistencia", "definition": "Quién vino qué día.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Asistencia"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "ficha_medica", "canonical_term": "Ficha médica", "definition": "Lo que el entrenador debe saber antes del entrenamiento.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["FichaMedica"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "notificacion", "canonical_term": "Notificación", "definition": "Aviso de membresía, pago o inscripción.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["Notificacion"], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"]},
-      {"id": "nivel", "canonical_term": "Nivel", "definition": "Escalón técnico de progresión.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": ["NivelRanking", "NivelTecnicoAlumno"], "notes": ["No se publica una cantidad canónica de niveles hasta reconciliar la documentación y la aplicación."], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio", "app:backend/app/dominio/enums.py#NivelTecnicoAlumno"]},
-      {"id": "cuota", "canonical_term": "Cuota", "definition": "Importe periódico asociado al Plan.", "prohibited_variants": [], "deprecated_variants": [], "technical_forms": [], "notes": ["Membresía es la relación y Pago registra la liquidación."], "sources": ["docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio", "docs:product/decisiones-de-negocio-2026-08-11.md#4-la-cuota-vencida-no-impide-entrenar", "app:frontend/src/app/student/CuotaCard.tsx"]},
-      {"id": "inscrito", "canonical_term": "Inscrito", "definition": "Forma ortográfica canónica documentada para la persona que queda registrada en una inscripción.", "prohibited_variants": ["inscripto", "inscriptos"], "deprecated_variants": [], "technical_forms": [], "sources": ["issue:AlejandroTatum/cata_club#865"]},
-      {"id": "sesion", "canonical_term": "Sesión", "definition": "Unidad de entrenamiento para la que se registra una lista de asistencia.", "prohibited_variants": ["sesións"], "deprecated_variants": [], "technical_forms": [], "sources": ["docs:archive/fixes/09-interfaz-menor.md#asi-6"]}
+      {
+        "id": "persona",
+        "canonical_term": "Persona",
+        "definition": "Todo ser humano que el club conoce.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Persona"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "usuario",
+        "canonical_term": "Usuario",
+        "definition": "La cuenta de acceso de una Persona.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Usuario"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "rol",
+        "canonical_term": "Rol",
+        "definition": "Qué puede hacer una Persona dentro del sistema.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Rol",
+          "TipoRol"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "jugador",
+        "canonical_term": "Jugador",
+        "definition": "Término visible para la persona que entrena en el club.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "ALUMNO"
+        ],
+        "context_forms": [
+          "alumno",
+          "estudiante"
+        ],
+        "notes": [
+          "Jugador es el término visible canónico; ALUMNO, alumno y estudiante permanecen como formas técnicas o de contexto y no compiten como texto visible."
+        ],
+        "sources": [
+          "docs:ux/rediseno-visual-2026-08.md#vocabulario",
+          "app:frontend/src/lib/auth-utils.ts#getRoleLabel",
+          "app:frontend/src/lib/auth-utils.ts#getBackendRoleLabel"
+        ]
+      },
+      {
+        "id": "miembro",
+        "canonical_term": "Miembro",
+        "definition": "Persona que integra el padrón de miembros del club.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#1-concepto",
+          "docs:ux/rediseno-visual-2026-08.md#vocabulario"
+        ]
+      },
+      {
+        "id": "representante",
+        "canonical_term": "Representante",
+        "definition": "Persona que representa a otra dentro del club.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "REPRESENTANTE"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#1-concepto",
+          "docs:product/decisiones-de-negocio-2026-08-11.md#1-un-chico-tiene-un-solo-representante"
+        ]
+      },
+      {
+        "id": "administrador",
+        "canonical_term": "Administrador",
+        "definition": "Rol que administra el catálogo de descuentos y aprueba pagos.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "ADMINISTRADOR"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#1-concepto",
+          "docs:product/concepto-alcance-modelo.md#4-decisiones-de-modelado"
+        ]
+      },
+      {
+        "id": "entrenador",
+        "canonical_term": "Entrenador",
+        "definition": "Rol que puede operar cualquier horario, incluida la toma de asistencia.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "ENTRENADOR"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#4-decisiones-de-modelado"
+        ]
+      },
+      {
+        "id": "membresia",
+        "canonical_term": "Membresía",
+        "definition": "El vínculo vigente de una persona con un plan.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Membresia"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "membresia_activa",
+        "canonical_term": "Activa",
+        "definition": "Estado de una membresía cuya cobertura está vigente.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "ACTIVA"
+        ],
+        "notes": [
+          "Estado publicado por separado; no se agrupa con ningún otro estado."
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoMembresia",
+          "app:frontend/src/lib/membership-status.ts"
+        ]
+      },
+      {
+        "id": "membresia_inactiva",
+        "canonical_term": "Inactiva",
+        "definition": "Estado inicial de una membresía creada, todavía sin ningún pago aprobado.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "INACTIVA"
+        ],
+        "notes": [
+          "Estado publicado por separado; no se agrupa con Vencida."
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoMembresia"
+        ]
+      },
+      {
+        "id": "membresia_vencida",
+        "canonical_term": "Vencida",
+        "definition": "Estado de una membresía cuya vigencia ya expiró y requiere pago.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "VENCIDA"
+        ],
+        "notes": [
+          "Estado publicado por separado; no se agrupa con Inactiva."
+        ],
+        "sources": [
+          "docs:product/decisiones-de-negocio-2026-08-11.md#4-la-cuota-vencida-no-impide-entrenar",
+          "app:backend/app/dominio/enums.py#EstadoMembresia"
+        ]
+      },
+      {
+        "id": "membresia_suspendida",
+        "canonical_term": "Suspendida",
+        "definition": "Estado de una membresía que no acumula deuda mientras dura y conserva el plan, el beneficio y la cobertura ya pagada.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "SUSPENDIDA"
+        ],
+        "notes": [
+          "Estado publicado por separado; no se agrupa con Vencida."
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoMembresia",
+          "docs:product/decisiones-de-negocio-2026-08-11.md#4-la-cuota-vencida-no-impide-entrenar"
+        ]
+      },
+      {
+        "id": "tipo_membresia",
+        "canonical_term": "Plan",
+        "definition": "Plan de membresía con su precio propio: mensual, trimestral o anual.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "TipoMembresia"
+        ],
+        "context_forms": [
+          "Tipo de membresía"
+        ],
+        "notes": [
+          "Plan es el término visible; Tipo de membresía se conserva para administración y contexto de dominio."
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio",
+          "docs:archive/fixes/12-mi-cuenta-carnet.md#que-se-hizo",
+          "app:frontend/src/app/members/members-utils.ts#MemberStudentSummary"
+        ]
+      },
+      {
+        "id": "pago",
+        "canonical_term": "Pago",
+        "definition": "El hecho histórico de quién pagó cuánto; incluye pagos de $0 de becados.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Pago"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "estado_pago",
+        "canonical_term": "Estado del pago",
+        "definition": "Estado visible de validación de un pago.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "EstadoPago"
+        ],
+        "notes": [
+          "Los tres estados visibles se publican como entradas distintas y no se sustituyen por los enums técnicos."
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoPago",
+          "app:frontend/src/lib/status-badges.ts"
+        ]
+      },
+      {
+        "id": "pago_pendiente_validacion",
+        "canonical_term": "Pendiente de validación",
+        "definition": "Estado de un pago cuya validación todavía está pendiente.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "PENDIENTE_VALIDACION"
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoPago",
+          "app:frontend/src/lib/status-badges.ts"
+        ]
+      },
+      {
+        "id": "pago_aprobado",
+        "canonical_term": "Aprobado",
+        "definition": "Estado de un pago que fue aprobado.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "APROBADO"
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoPago",
+          "app:frontend/src/lib/status-badges.ts"
+        ]
+      },
+      {
+        "id": "pago_rechazado",
+        "canonical_term": "Rechazado",
+        "definition": "Estado de un pago que fue rechazado.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "RECHAZADO"
+        ],
+        "sources": [
+          "app:backend/app/dominio/enums.py#EstadoPago",
+          "app:frontend/src/lib/status-badges.ts"
+        ]
+      },
+      {
+        "id": "comprobante_pago",
+        "canonical_term": "Comprobante de pago",
+        "definition": "Evidencia de pago cargada por quien paga.",
+        "prohibited_variants": [],
+        "deprecated_variants": [
+          "voucher"
+        ],
+        "technical_forms": [
+          "ComprobantePago"
+        ],
+        "notes": [
+          "Voucher se desalienta como variante visible; los identificadores técnicos se conservan cuando sea necesario."
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio",
+          "app:frontend/src/services/api.ts#PaymentValidationRequest"
+        ]
+      },
+      {
+        "id": "comprobante_oficial",
+        "canonical_term": "Comprobante oficial",
+        "definition": "Documento emitido por el club.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio",
+          "app:frontend/src/services/api.ts#PaymentValidationRequest"
+        ]
+      },
+      {
+        "id": "descuento",
+        "canonical_term": "Descuento",
+        "definition": "Catálogo administrado por el administrador, con nombre, porcentaje o monto y estado activo.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Descuento"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "descuento_aplicado",
+        "canonical_term": "Descuento aplicado",
+        "definition": "Registro por pago del descuento, su valor congelado, a quién se aplicó y quién lo autorizó.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "DescuentoAplicado"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "categoria",
+        "canonical_term": "Categoría",
+        "definition": "Franja de edad con su horario, definida por el club.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Categoria",
+          "CategoriaHorario"
+        ],
+        "notes": [
+          "rango_edad es copy de orientación, no una regla de validación."
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio",
+          "docs:archive/fixes/23-categoria-tabla-manda.md#lo-que-no-cambio",
+          "docs:archive/fixes/24-abm-categorias.md#lo-que-no-cambio"
+        ]
+      },
+      {
+        "id": "horario_entrenamiento",
+        "canonical_term": "Horario de entrenamiento",
+        "definition": "Días y horario de una categoría.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "HorarioEntrenamiento"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "asistencia",
+        "canonical_term": "Asistencia",
+        "definition": "Quién vino qué día.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Asistencia"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "ficha_medica",
+        "canonical_term": "Ficha médica",
+        "definition": "Lo que el entrenador debe saber antes del entrenamiento.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "FichaMedica"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "notificacion",
+        "canonical_term": "Notificación",
+        "definition": "Aviso de membresía, pago o inscripción.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "Notificacion"
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio"
+        ]
+      },
+      {
+        "id": "nivel",
+        "canonical_term": "Nivel",
+        "definition": "Escalón técnico de progresión.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [
+          "NivelRanking",
+          "NivelTecnicoAlumno"
+        ],
+        "notes": [
+          "No se publica una cantidad canónica de niveles hasta reconciliar la documentación y la aplicación."
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio",
+          "app:backend/app/dominio/enums.py#NivelTecnicoAlumno"
+        ]
+      },
+      {
+        "id": "cuota",
+        "canonical_term": "Cuota",
+        "definition": "Importe periódico asociado al Plan.",
+        "prohibited_variants": [],
+        "deprecated_variants": [],
+        "technical_forms": [],
+        "notes": [
+          "Membresía es la relación y Pago registra la liquidación."
+        ],
+        "sources": [
+          "docs:product/concepto-alcance-modelo.md#3-modelo-de-dominio",
+          "docs:product/decisiones-de-negocio-2026-08-11.md#4-la-cuota-vencida-no-impide-entrenar",
+          "app:frontend/src/app/student/CuotaCard.tsx"
+        ]
+      },
+      {
+        "id": "inscrito",
+        "canonical_term": "Inscrito",
+        "definition": "Forma ortográfica canónica documentada para la persona que queda registrada en una inscripción.",
+        "prohibited_variants": [
+          "inscripto",
+          "inscriptos"
+        ],
+        "deprecated_variants": [],
+        "technical_forms": [],
+        "sources": [
+          "issue:AlejandroTatum/cata_club#865"
+        ]
+      },
+      {
+        "id": "sesion",
+        "canonical_term": "Sesión",
+        "definition": "Unidad de entrenamiento para la que se registra una lista de asistencia.",
+        "prohibited_variants": [
+          "sesións"
+        ],
+        "deprecated_variants": [],
+        "technical_forms": [],
+        "sources": [
+          "docs:archive/fixes/09-interfaz-menor.md#asi-6"
+        ]
+      }
     ]
   }
-    }
+}

@@ -116,7 +116,7 @@ const CLUB_FACTS: readonly string[] = [
   "@cataclub_tenis_de_mesa",
   // What it says it is.
   "Promover el tenis de mesa mediante formación deportiva de calidad",
-  "Ser un club líder y referente provincial y nacional",
+  "Ser un club líder y referente deportivo a nivel provincial y nacional",
   "Respeto",
   "Disciplina",
   "Esfuerzo",

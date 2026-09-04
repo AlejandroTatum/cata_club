@@ -305,7 +305,7 @@ SYSTEM_PROMPT = conocimiento_club.SYSTEM_PROMPT
 # ≈ 1.030 tokens, de los cuales 2.135 caracteres (≈ 533 tokens) eran el bloque
 # de FAQ escrito a mano; el resto son las instrucciones de comportamiento.
 # Después de incorporar el FAQ completo de la web, la ubicación, el contacto y
-# lo que el club dice de sí mismo: 7.432 caracteres ≈ 1.858 tokens. El corpus
+# lo que el club dice de sí mismo: 7.450 caracteres ≈ 1.862 tokens. El corpus
 # legítimo entero, entonces, cuesta menos del doble de lo que ya se enviaba.
 #
 # La estimación es caracteres/4, el mismo método con el que se midió el prompt
@@ -319,7 +319,7 @@ PROMPT_SISTEMA_TOKENS_APROX = PROMPT_SISTEMA_CARACTERES // 4
 # que coincida con el calculado, así que agrandar el conocimiento obliga a
 # tocar esta línea y el crecimiento aparece en el diff en vez de pasar
 # inadvertido.
-PROMPT_SISTEMA_TOKENS_MEDIDOS = 1_858
+PROMPT_SISTEMA_TOKENS_MEDIDOS = 1_862
 
 # Techo deliberado, no un límite del proveedor. Superarlo no rompe nada por sí
 # solo; lo que hace es obligar a una decisión explícita en vez de dejar que el
