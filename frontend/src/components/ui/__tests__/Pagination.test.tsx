@@ -108,6 +108,12 @@ describe("Pagination", () => {
     expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
   });
 
+  /**
+   * jsdom computes no layout, so this can only pin the declared `h-ctl-sm`
+   * class, not the 32px it resolves to. No Playwright spec exercises
+   * Pagination's control height today — there is no live counterpart to
+   * name here.
+   */
   it("renders the 32px in-table control height, not a caller-invented one", () => {
     render(<Pagination page={1} totalPages={2} onPageChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Página siguiente" })).toHaveClass("h-ctl-sm");
@@ -123,6 +129,11 @@ describe("Pagination", () => {
  *
  * That is a missing variant, not a missing `className`: the component knew
  * about exactly one of the two places a pager lives.
+ *
+ * The `toHaveClass` assertions below pin the declared border/spacing
+ * classes only — jsdom computes no layout, so it cannot see whether the
+ * pager actually sits flush against the card. No Playwright spec covers
+ * Pagination placement today.
  */
 describe("Pagination — where it sits", () => {
   it("floats free by default, with its own separation from the block above", () => {
