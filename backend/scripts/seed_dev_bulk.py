@@ -32,6 +32,7 @@ Login with (shared password for every bulk account):
 import os
 import sys
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -48,6 +49,14 @@ from app.dominio.modelos import (
     Asistencia,
     AlumnoHorario,
     FichaMedica,
+    Pais,
+    Provincia,
+    Canton,
+    Direccion,
+    Institucion,
+    Sponsor,
+    Descuento,
+    Enfermedades,
 )
 from app.dominio.enums import (
     TipoRol,
@@ -57,6 +66,7 @@ from app.dominio.enums import (
     EstadoAsistencia,
     DiaSemana,
     TipoSangre,
+    TipoEscuela,
 )
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.dominio.cedula import cedula_valida
@@ -65,11 +75,23 @@ from scripts.seed_guard import SeedNoPermitidoError, validar_seed_permitido
 
 CONTRASENIA_COMPARTIDA = "alumno123"
 DEFAULT_SEED_VOUCHER_BASE_URL = "https://placehold.co/600x400.png?text=Cata+Club+Voucher"
+DEFAULT_SEED_SPONSOR_LOGO_URL = "https://placehold.co/300x150.png?text=Cata+Club+Sponsor"
 
 
 def voucher_fixture_url() -> str:
     """Return the environment-approved URL used by dev payment fixtures."""
     return os.environ.get("SEED_VOUCHER_BASE_URL", "").strip() or DEFAULT_SEED_VOUCHER_BASE_URL
+
+
+def sponsor_logo_fixture_url() -> str:
+    """Return the environment-approved URL used by dev sponsor logo fixtures.
+
+    En producción el logo lo genera Cloudinary; un `logo_public_id`
+    inventado que apunte ahí rompería cualquier endpoint que intente
+    resolverlo, así que este seed nunca inventa uno -- ver
+    `SPONSORS_SEED` más abajo, donde el `logo_public_id` lleva el prefijo
+    `seed/` para dejar explícito que es un fixture, no un asset real."""
+    return os.environ.get("SEED_SPONSOR_LOGO_BASE_URL", "").strip() or DEFAULT_SEED_SPONSOR_LOGO_URL
 
 # ---------------------------------------------------------------------------
 # Rango de secuencia propio para este seed: `cedula_valida` acepta cualquier
@@ -114,6 +136,44 @@ HIJOS_POR_REPRESENTANTE = [3, 2, 4, 1, 3, 2, 4, 1, 2, 3, 2, 4, 1, 3, 2, 2]
 # responsable de pago, matching la regla de dominio ya documentada en el
 # frontend (members/page.tsx).
 CANTIDAD_AUTOGESTIONADOS = 20
+
+# ---------------------------------------------------------------------------
+# Catálogos (issue de QA con 0 dev seed): jerarquía de ubicación, institución
+# educativa, sponsor y descuento. No existe fixture de Ecuador en el repo --
+# este es un subconjunto chico y realista, no el país entero.
+# ---------------------------------------------------------------------------
+CANTONES_POR_PROVINCIA = {
+    "Manabí": ["Portoviejo", "Manta", "Chone"],
+    "Pichincha": ["Quito", "Rumiñahui", "Cayambe"],
+    "Guayas": ["Guayaquil", "Durán", "Samborondón"],
+}
+
+INSTITUCIONES_SEED = [
+    {"nombre": "Unidad Educativa Particular Bilingüe San Andrés", "tipo_escuela": TipoEscuela.PARTICULAR},
+    {"nombre": "Escuela Fiscal Eloy Alfaro", "tipo_escuela": TipoEscuela.FISCAL},
+    {"nombre": "Unidad Educativa Fiscomisional La Dolorosa", "tipo_escuela": TipoEscuela.FISCOMISIONAL},
+    {"nombre": "Colegio Municipal Sucre", "tipo_escuela": TipoEscuela.MUNICIPAL},
+]
+
+# `logo_public_id` con prefijo `seed/`: deja explícito que es un fixture y
+# nunca colisiona con un asset real subido por el admin vía Cloudinary.
+SPONSORS_SEED = [
+    {"nombre": "Deportivo Litoral", "logo_public_id": "seed/sponsor-logo-deportivo-litoral"},
+    {"nombre": "Nutrideportes", "logo_public_id": "seed/sponsor-logo-nutrideportes"},
+    {"nombre": "Ferretería Manabí", "logo_public_id": "seed/sponsor-logo-ferreteria-manabi"},
+]
+
+# Prefijo "Seed - " para no chocar jamás con los nombres que crean en
+# runtime `discounts.live.spec.ts` (prefijo "QA descuento ") ni
+# `payments.live.spec.ts` -- ambos corren contra el mismo stack de QA que
+# este seed. `descuento.nombre` es UNIQUE.
+DESCUENTOS_SEED = [
+    {"nombre": "Seed - Beca deportiva", "porcentaje": Decimal("15.00")},
+    {"nombre": "Seed - Descuento hermanos", "porcentaje": Decimal("10.00")},
+    {"nombre": "Seed - Bono fundacional", "monto": Decimal("5.00")},
+]
+
+ENFERMEDADES_SEED = ["Asma", "Rinitis alérgica", "Diabetes tipo 1", "Epilepsia"]
 
 
 def _obtener_o_crear(db, modelo, filtro, defaults):
@@ -373,6 +433,141 @@ def _asignar_membresia_y_pago(
     db.flush()
 
 
+def _sembrar_ubicaciones(db) -> list[Direccion]:
+    """Pais -> Provincia -> Canton -> Direccion, idempotente por filtro
+    único compuesto en cada nivel. Devuelve las direcciones sembradas, para
+    que el backfill de `Persona` tenga un pool del que elegir."""
+    pais, _ = _obtener_o_crear(db, Pais, Pais.nombre == "Ecuador", {"nombre": "Ecuador"})
+
+    cantones: list[Canton] = []
+    for nombre_provincia, nombres_cantones in CANTONES_POR_PROVINCIA.items():
+        provincia, _ = _obtener_o_crear(
+            db, Provincia,
+            (Provincia.nombre == nombre_provincia) & (Provincia.pais_id == pais.id),
+            {"nombre": nombre_provincia, "pais_id": pais.id},
+        )
+        for nombre_canton in nombres_cantones:
+            canton, _ = _obtener_o_crear(
+                db, Canton,
+                (Canton.nombre == nombre_canton) & (Canton.provincia_id == provincia.id),
+                {"nombre": nombre_canton, "provincia_id": provincia.id},
+            )
+            cantones.append(canton)
+    db.flush()
+
+    # Dos direcciones por cantón (barrios distintos) para dar variedad sin
+    # sembrar el país entero.
+    direcciones: list[Direccion] = []
+    for c_idx, canton in enumerate(cantones):
+        for barrio_idx in range(2):
+            indice = c_idx * 2 + barrio_idx
+            barrio = f"Barrio Central {indice + 1}"
+            direccion, _ = _obtener_o_crear(
+                db, Direccion,
+                (Direccion.canton_id == canton.id) & (Direccion.barrio == barrio),
+                {
+                    "barrio": barrio,
+                    "calle_principal": f"Av. {indice + 1} de Mayo",
+                    "calle_secundaria": f"Calle {indice + 1}" if indice % 2 == 0 else None,
+                    "numero_casa": str(100 + indice) if indice % 2 == 0 else None,
+                    "canton_id": canton.id,
+                },
+            )
+            direcciones.append(direccion)
+    db.flush()
+    return direcciones
+
+
+def _sembrar_instituciones(db) -> list[Institucion]:
+    """Catálogo de instituciones, cubriendo los cuatro valores de
+    `TipoEscuela`. Idempotente por `nombre`."""
+    instituciones: list[Institucion] = []
+    for datos in INSTITUCIONES_SEED:
+        institucion, _ = _obtener_o_crear(
+            db, Institucion, Institucion.nombre == datos["nombre"], dict(datos),
+        )
+        instituciones.append(institucion)
+    db.flush()
+    return instituciones
+
+
+def _sembrar_sponsors(db) -> None:
+    """Idempotente por `logo_public_id` (UNIQUE)."""
+    for datos in SPONSORS_SEED:
+        _obtener_o_crear(
+            db, Sponsor, Sponsor.logo_public_id == datos["logo_public_id"],
+            {
+                "nombre": datos["nombre"],
+                "logo_url": sponsor_logo_fixture_url(),
+                "logo_public_id": datos["logo_public_id"],
+            },
+        )
+    db.flush()
+
+
+def _sembrar_descuentos(db) -> None:
+    """Idempotente por `nombre` (UNIQUE). Respeta el CHECK XOR
+    porcentaje/monto pasando explícitamente el que no aplica como `None`."""
+    for datos in DESCUENTOS_SEED:
+        _obtener_o_crear(
+            db, Descuento, Descuento.nombre == datos["nombre"],
+            {
+                "nombre": datos["nombre"],
+                "porcentaje": datos.get("porcentaje"),
+                "monto": datos.get("monto"),
+            },
+        )
+    db.flush()
+
+
+def _sembrar_enfermedades(db) -> int:
+    """Cuelga condiciones médicas de fichas médicas YA EXISTENTES, siempre
+    vía `ficha.enfermedades.append(...)` -- nunca crea `Enfermedades`
+    sueltas, porque la relación es `cascade="all, delete-orphan"` desde
+    `FichaMedica.enfermedades`. Idempotente: no repite un nombre ya colgado
+    de la misma ficha."""
+    creadas = 0
+    fichas = db.query(FichaMedica).order_by(FichaMedica.id).all()
+    for f_idx, ficha in enumerate(fichas):
+        if f_idx % 2 != 0:
+            # Variedad: no todas las fichas cargadas tienen una condición
+            # registrada -- el caso "sin enfermedades" también es real.
+            continue
+        nombre = ENFERMEDADES_SEED[f_idx % len(ENFERMEDADES_SEED)]
+        if any(e.nombre_enfermedad == nombre for e in ficha.enfermedades):
+            continue
+        ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
+        creadas += 1
+    db.flush()
+    return creadas
+
+
+def _asignar_ubicacion_e_institucion(
+    db, direcciones: list[Direccion], instituciones: list[Institucion],
+) -> int:
+    """Backfill (UPDATE, nunca INSERT) de `direccion_id`/`institucion_id`
+    sobre las `Persona` existentes. Deja deliberadamente una de cada tres
+    sin ninguno de los dos campos: el caso "sin dirección" también tiene que
+    existir en QA. Idempotente porque solo toca personas cuyo campo sigue en
+    NULL -- una segunda corrida no reasigna ni pisa nada."""
+    actualizadas = 0
+    personas = db.query(Persona).order_by(Persona.id).all()
+    for idx, persona in enumerate(personas):
+        if idx % 3 == 2:
+            continue
+        cambio = False
+        if persona.direccion_id is None and direcciones:
+            persona.direccion_id = direcciones[idx % len(direcciones)].id
+            cambio = True
+        if persona.institucion_id is None and instituciones:
+            persona.institucion_id = instituciones[idx % len(instituciones)].id
+            cambio = True
+        if cambio:
+            actualizadas += 1
+    db.flush()
+    return actualizadas
+
+
 def main() -> None:
     db = SessionLocal()
     try:
@@ -395,6 +590,17 @@ def main() -> None:
                 "[seed] AVISO: no se encontraron los TipoMembresia de "
                 "seed_dev_base.py -- las membresías/pagos se omitirán."
             )
+
+        # ------------------------------------------------------------------
+        # 0.5. Catálogos sin dependencia de eventos de dominio: jerarquía de
+        #      ubicación, institución educativa, sponsor, descuento. Ninguno
+        #      de los cuatro depende de los estudiantes que este script crea
+        #      más abajo, así que se siembran antes.
+        # ------------------------------------------------------------------
+        direcciones_seed = _sembrar_ubicaciones(db)
+        instituciones_seed = _sembrar_instituciones(db)
+        _sembrar_sponsors(db)
+        _sembrar_descuentos(db)
 
         # Sin relación entrenador–horario (issue #13): la asistencia se
         # siembra sobre los horarios del club, sin titular.
@@ -485,6 +691,8 @@ def main() -> None:
                 fichas_creadas += 1
         db.flush()
 
+        enfermedades_creadas = _sembrar_enfermedades(db)
+
         # ------------------------------------------------------------------
         # 3. Inscripción por categoría + asistencia histórica.
         #
@@ -566,6 +774,15 @@ def main() -> None:
                         asistencias_creadas += 1
         db.flush()
 
+        # ------------------------------------------------------------------
+        # 4. Backfill de dirección/institución sobre TODAS las personas
+        #    existentes (UPDATE, no INSERT) -- issue de QA con las 86
+        #    personas del stack en NULL en ambos campos.
+        # ------------------------------------------------------------------
+        personas_actualizadas = _asignar_ubicacion_e_institucion(
+            db, direcciones_seed, instituciones_seed,
+        )
+
         db.commit()
 
         # ------------------------------------------------------------------
@@ -585,8 +802,14 @@ def main() -> None:
         print(f"[seed] Alumnos auto-gestionados creados en esta corrida: {autogestionados_creados}")
         print(f"[seed] Total de estudiantes conocidos (nuevos + ya existentes): {total_estudiantes}")
         print(f"[seed] Fichas médicas creadas en esta corrida: {fichas_creadas}")
+        print(f"[seed] Enfermedades registradas en esta corrida: {enfermedades_creadas}")
         print(f"[seed] Inscripciones a horarios creadas: {inscripciones_creadas}")
         print(f"[seed] Registros de asistencia creados: {asistencias_creadas}")
+        print(
+            f"[seed] Direcciones sembradas: {len(direcciones_seed)}, "
+            f"instituciones: {len(instituciones_seed)}"
+        )
+        print(f"[seed] Personas con dirección/institución backfilleadas en esta corrida: {personas_actualizadas}")
         print(f"[seed] Contraseña compartida para TODAS las cuentas de este seed: {CONTRASENIA_COMPARTIDA}")
         if muestras_correo:
             print(f"[seed] Correos de ejemplo para probar login: {', '.join(muestras_correo)}")
