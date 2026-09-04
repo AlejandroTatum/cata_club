@@ -4,7 +4,7 @@ Tests del servicio de creación de cuentas admin (Flujo 1).
 Cubre:
   - Creación exitosa para JUGADOR, REPRESENTANTE y MENOR.
   - Asignación correcta de roles según tipo de cuenta.
-  - Emisión de tokens JWT para auto-login.
+  - La respuesta NO incluye tokens de auto-login (issue #1015).
   - Ficha médica opcional.
   - Validación de cédula duplicada.
   - Validación de correo duplicado.
@@ -71,10 +71,9 @@ def test_crear_cuenta_jugador_asigna_rol_alumno(db_session):
     datos = AdminCrearCuentaDTO(**_base_payload())
     result = AdminCuentaServicio(db_session).crear_cuenta(datos)
 
-    assert "access_token" in result
-    assert "refresh_token" in result
-    assert result["token_type"] == "bearer"
     assert result["persona_id"] > 0
+    assert result["usuario_id"] > 0
+    assert result["correo"] == "carlos@test.com"
 
     usuario = db_session.query(Usuario).filter(Usuario.correo == "carlos@test.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
@@ -91,7 +90,7 @@ def test_crear_cuenta_representante_asigna_solo_rol_representante(db_session):
     ))
     result = AdminCuentaServicio(db_session).crear_cuenta(datos)
 
-    assert "access_token" in result
+    assert result["usuario_id"] > 0
     usuario = db_session.query(Usuario).filter(Usuario.correo == "representante@test.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
     assert roles == {TipoRol.REPRESENTANTE}
@@ -106,7 +105,7 @@ def test_crear_cuenta_entrenador_asigna_solo_rol_entrenador(db_session):
     ))
     result = AdminCuentaServicio(db_session).crear_cuenta(datos)
 
-    assert "access_token" in result
+    assert result["usuario_id"] > 0
     usuario = db_session.query(Usuario).filter(Usuario.correo == "entrenador@test.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
     assert roles == {TipoRol.ENTRENADOR}
@@ -132,13 +131,30 @@ def test_crear_cuenta_menor_asigna_rol_alumno(db_session):
     ))
     result = AdminCuentaServicio(db_session).crear_cuenta(datos)
 
-    assert "access_token" in result
+    assert result["usuario_id"] > 0
     usuario = db_session.query(Usuario).filter(Usuario.correo == "menor@test.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
     assert roles == {TipoRol.ALUMNO}
 
     persona = db_session.query(Persona).get(result["persona_id"])
     assert persona.representante_id == rep.id
+
+
+# --- Sin tokens de auto-login (issue #1015) --------------------------------
+
+def test_crear_cuenta_no_devuelve_tokens_de_auto_login(db_session):
+    """El llamador es el ADMINISTRADOR autenticado, nunca la cuenta recién
+    creada -- emitir un par de tokens acá los deja vivos y sin dueño en el
+    navegador del admin (issue #1015)."""
+    datos = AdminCrearCuentaDTO(**_base_payload())
+    result = AdminCuentaServicio(db_session).crear_cuenta(datos)
+
+    assert "access_token" not in result
+    assert "refresh_token" not in result
+    assert "token_type" not in result
+    assert result["persona_id"] > 0
+    assert result["usuario_id"] > 0
+    assert result["correo"] == "carlos@test.com"
 
 
 # --- Ficha médica opcional ------------------------------------------------

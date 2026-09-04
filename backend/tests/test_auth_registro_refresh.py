@@ -2,7 +2,8 @@
 Tests de autenticación: registro, /me, refresh y logout.
 
 Cubre:
-  - Registro exitoso (solo ADMINISTRADOR): persona existente sin usuario -> 201 + tokens.
+  - Registro exitoso (solo ADMINISTRADOR): persona existente sin usuario -> 201.
+  - Registro no devuelve tokens de auto-login (issue #1015).
   - Registro sin token -> 401.
   - Registro con token no-admin -> 403.
   - Registro falla si la cédula no tiene Persona asociada -> 404.
@@ -87,9 +88,34 @@ def test_registro_exitoso_persona_sin_usuario(client, db_session):
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert "access_token" in body
-    assert "refresh_token" in body
-    assert body["token_type"] == "bearer"
+    assert body["persona_id"] > 0
+    assert body["usuario_id"] > 0
+    assert body["correo"] == "nueva@cataclub.com"
+
+
+def test_registro_no_devuelve_tokens_de_auto_login(client, db_session):
+    """El llamador es el ADMINISTRADOR autenticado, nunca la persona recién
+    registrada -- emitir un par de tokens acá los deja vivos y sin dueño en
+    el navegador del admin (issue #1015)."""
+    _override_admin_token()
+    _crear_persona(db_session, cedula=cedula_valida(184))
+
+    resp = client.post(
+        "/api/v1/auth/registro",
+        json={
+            "cedula": cedula_valida(184),
+            "correo": "sin_tokens@cataclub.com",
+            "contrasenia": "clave12345",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert "access_token" not in body
+    assert "refresh_token" not in body
+    assert "token_type" not in body
+    assert body["persona_id"] > 0
+    assert body["usuario_id"] > 0
+    assert body["correo"] == "sin_tokens@cataclub.com"
 
 
 def test_registro_sin_token_devuelve_401(client, db_session):

@@ -71,7 +71,12 @@ class AdminCuentaServicio:
     def crear_cuenta(self, datos: AdminCrearCuentaDTO) -> dict:
         """
         Flujo completo de creación de cuenta admin.
-        Retorna: { access_token, refresh_token, token_type, persona_id }
+
+        Retorna: { persona_id, usuario_id, correo }. Issue #1015: NO emite
+        tokens de acceso/refresco -- el llamador es el ADMINISTRADOR
+        autenticado que hace el alta, nunca la cuenta recién creada, así que
+        un par de tokens acá sería un par de credenciales vivas y sin dueño
+        en su navegador.
         """
         # 1. Validar que la cédula no exista
         if self.repo_persona.obtener_por_cedula(datos.cedula):
@@ -190,8 +195,13 @@ class AdminCuentaServicio:
         # anteriores ya habían quedado persistidos.
         self.db.commit()
 
-        # 10. Emitir tokens JWT para auto-login
-        return self._emitir_tokens(usuario)
+        # 10. Devolver la identidad creada (issue #1015: sin tokens -- ver
+        # el docstring de este método).
+        return {
+            "persona_id": persona.id,
+            "usuario_id": usuario.id,
+            "correo": usuario.correo,
+        }
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
         """Asigna un rol al usuario si aún no lo tiene (idempotente).
@@ -208,17 +218,3 @@ class AdminCuentaServicio:
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
         self.db.flush()
-
-    def _emitir_tokens(self, usuario: Usuario) -> dict:
-        """Emite el par access + refresh tokens para auto-login."""
-        roles = [rol.tipo_rol.value for rol in usuario.roles]
-        claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles}
-        access = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
-        refresh_claims = {"sub": usuario.correo, "persona_id": usuario.persona_id}
-        refresh = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
-        return {
-            "access_token": access,
-            "refresh_token": refresh,
-            "token_type": "bearer",
-            "persona_id": usuario.persona_id,
-        }
