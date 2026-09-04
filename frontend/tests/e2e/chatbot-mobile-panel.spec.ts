@@ -155,8 +155,8 @@ test.describe("on a touch device", () => {
 });
 
 /**
- * #873 — rendered surface colours on the sheet, measured in a real browser
- * instead of read off a class name.
+ * #873 (light panel) / #1007 (dark panel) — rendered surface colours on the
+ * sheet, measured in a real browser instead of read off a class name.
  *
  * `ChatWidget.test.tsx` and `chat-contrast.test.tsx` already prove the
  * CLASSES and the maths; this is the one place that proves the cascade
@@ -164,7 +164,7 @@ test.describe("on a touch device", () => {
  * and any later override all sit between a class name and a pixel, and none
  * of them are exercised in jsdom.
  */
-test("the sheet paints coal/canvas/sunken, not a white-on-white stack", async ({ page }) => {
+test("the sheet paints the coal ladder, not a white-on-white stack", async ({ page }) => {
   // No `hasTouch` needed here: at 390px the media query's WIDTH clause alone
   // selects the sheet, regardless of pointer type — the `pointer: coarse`
   // gate only matters for the landscape clause (see the file header).
@@ -184,11 +184,15 @@ test("the sheet paints coal/canvas/sunken, not a white-on-white stack", async ({
     };
   }, PANEL);
 
-  // Coal, canvas, sunken — three different fills, none of them white.
-  expect(colors.header).toBe("rgb(19, 19, 22)");
-  expect(colors.history).toBe("rgb(232, 232, 238)");
-  expect(colors.form).toBe("rgb(244, 244, 247)");
-  expect(new Set(Object.values(colors)).size).toBe(3);
+  // #1007 — coal-2 for the header and composer (they share the same inset
+  // step on purpose), coal for the history underneath them. Two fills, not
+  // three, and neither is white.
+  expect(colors.header).toBe("rgb(28, 28, 33)");
+  expect(colors.history).toBe("rgb(19, 19, 22)");
+  expect(colors.form).toBe("rgb(28, 28, 33)");
+  expect(colors.header).toBe(colors.form);
+  expect(colors.header).not.toBe(colors.history);
+  expect(Object.values(colors)).not.toContain("rgb(255, 255, 255)");
 });
 
 test("the floating launcher paints coal, never white, before the panel opens", async ({ page }) => {
@@ -502,8 +506,8 @@ test("the desktop panel is the same corner card it has always been", async ({ pa
   }, PANEL);
   expect(stillInside).toBe(false);
 
-  // #873 — the corner card's own header and composer are coal/sunken here
-  // too: the geometry above is unchanged, the surfaces are not.
+  // #1007 — the corner card's own header and composer are coal-2 here too:
+  // the geometry above is unchanged, the surfaces are not.
   const colors = await page.evaluate((panelSelector: string) => {
     const panel = document.querySelector(panelSelector) as HTMLElement;
     const header = panel.querySelector("header") as HTMLElement;
@@ -513,6 +517,6 @@ test("the desktop panel is the same corner card it has always been", async ({ pa
       form: getComputedStyle(form).backgroundColor,
     };
   }, PANEL);
-  expect(colors.header).toBe("rgb(19, 19, 22)");
-  expect(colors.form).toBe("rgb(244, 244, 247)");
+  expect(colors.header).toBe("rgb(28, 28, 33)");
+  expect(colors.form).toBe("rgb(28, 28, 33)");
 });

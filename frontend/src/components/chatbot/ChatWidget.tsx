@@ -45,6 +45,21 @@
  * primary CTA and for destructive/error, and a red bubble read as an error),
  * 32px quick replies, a three-dot typing indicator, and a 40px input beside a
  * 40px red send button.
+ *
+ * ## The panel went dark (issue #1007)
+ *
+ * The panel itself repainted onto the `coal` ladder — the same one
+ * `AppShell`'s rail already uses — rather than the `paper`/`canvas`/`sunken`
+ * surfaces #873 had it on. Every step reuses a rung the system already
+ * measured: the bot's bubble (`coal-3` on the `coal` history) sits at the
+ * proven 1.20:1 card-lift floor, the header and composer (`coal-2` on
+ * `coal`) sit at the 1.09:1 "inset inside a card" floor `sunken`-on-`paper`
+ * already cleared, and every hairline is the same alpha-white idiom the rail
+ * draws on `coal`. The user's turn stayed OUT of red on purpose (still true
+ * above): it flips to `paper` instead, the exact mirror of the light theme's
+ * `coal`-on-`canvas` pairing, so red stays reserved for the send button —
+ * the one CTA in the panel — the way `HelpChatDock` already documents for
+ * the launcher.
  */
 
 "use client";
@@ -185,20 +200,20 @@ const BUBBLE_BASE =
 
 /**
  * The assistant's own surface, shared by the greeting bubble, every bot turn
- * and the typing indicator (issue #873).
+ * and the typing indicator (issue #873, and #1007 for the dark panel).
  *
- * It used to be `bg-state-neutral-bg` (#EFEFF2) — a status tint meant to sit
- * ON `paper`, not to BE the surface a bubble floats over `canvas` with: the
- * two measure 1.06:1 against each other, so the bot's own turn was reading as
- * the same plane as the history behind it. `paper` on `canvas` is the
- * system's own proven card-lift step (1.22:1, `color-contrast.test.ts`), and
- * `border-line` is the hairline that draws a card's edge.
+ * It used to be `bg-paper border-line` (#873) — a card-lift step meant to sit
+ * over `canvas`, not over the `coal` history the panel repainted onto for
+ * #1007. `coal-3` on `coal` is the same lift the system already measures at
+ * 1.23:1 (`color-contrast.test.ts`'s own floor for "card lift" is 1.20), and
+ * `border-white/[0.08]` is the alpha hairline `AppShell` already draws on
+ * coal — `border-line` (#DEDEE6) would have been invisible on a dark fill.
  */
-const ASSISTANT_SURFACE = "bg-paper border border-line";
+const ASSISTANT_SURFACE = "bg-coal-3 border border-white/[0.08]";
 
 /** The one failure-alert box style — shared by the generic error and the 429 lock so they read as the same kind of thing. */
 const ALERT_CLASS =
-  "flex items-start gap-2 rounded-ctl border border-state-bad/25 bg-state-bad-bg px-3 py-2.5 text-xs text-state-bad";
+  "flex items-start gap-2 rounded-ctl border border-state-bad/45 bg-state-bad/15 px-3 py-2.5 text-xs text-cata-red-light";
 
 /**
  * When the panel is a sheet rather than the corner card.
@@ -235,8 +250,8 @@ const FOCUSABLE_SELECTOR =
 
 /** `.quick` — 32px pill. */
 const QUICK_REPLY =
-  "inline-flex h-ctl-sm items-center rounded-full border border-line-2 bg-paper px-3 " +
-  "text-xs font-semibold text-ink-2 transition-colors hover:border-ink-3 hover:text-ink " +
+  "inline-flex h-ctl-sm items-center rounded-full border border-white/[0.12] bg-coal-3 px-3 " +
+  "text-xs font-semibold text-white/75 transition-colors hover:border-white/30 hover:text-white " +
   `${ASSISTANT_FOCUS_RING} disabled:cursor-not-allowed disabled:opacity-45`;
 
 /**
@@ -329,26 +344,27 @@ interface PanelSkin {
 }
 
 /**
- * The corner card, unchanged.
- *
- * Every string here is the one that shipped before #644, character for
- * character. That is the whole "desktop is untouched" claim, and it is
- * asserted as an exact match in `ChatWidget.test.tsx` — a claim written in a
- * comment is a claim nobody can check.
+ * The corner card. Its GEOMETRY is the one that shipped before #644,
+ * character for character — asserted as an exact match in
+ * `ChatWidget.test.tsx`, a claim nobody could check written only as prose.
+ * Its SURFACE moved to the `coal` ladder for #1007 (see `ChatWidget`'s own
+ * file header for why); the sizes, spacing and breakpoints below are
+ * untouched.
  */
 const CARD: PanelSkin = {
   panel:
     "fixed bottom-[74px] right-3 z-40 flex max-h-[min(34rem,72vh)] " +
     "w-[min(340px,calc(100vw-1.5rem))] flex-col card overflow-hidden text-left shadow-elevated " +
+    "bg-coal border-white/[0.08] " +
     "lg:bottom-5 lg:right-5 lg:max-h-[min(34rem,80vh)]",
   header:
-    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-coal px-[15px] py-3 text-white",
+    "flex flex-none items-center gap-[11px] border-b border-white/[0.08] bg-coal-2 px-[15px] py-3 text-white",
   close: "shrink-0 rounded-lg p-1 text-white/55 transition-colors hover:bg-white/10 hover:text-white",
-  history: "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-canvas p-[15px]",
-  form: "flex flex-none items-center gap-2 border-t border-line bg-sunken p-3",
+  history: "flex min-h-[250px] flex-1 flex-col gap-2.5 overflow-y-auto bg-coal p-[15px]",
+  form: "flex flex-none items-center gap-2 border-t border-white/[0.08] bg-coal-2 p-3",
   input:
-    "h-ctl min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-sm text-ink " +
-    "transition-colors placeholder:text-ink-3 focus:border-cata-red " +
+    "h-ctl min-w-0 flex-1 rounded-ctl border border-white/[0.12] bg-coal px-[13px] text-sm text-white " +
+    "transition-colors placeholder:text-white/40 focus:border-cata-red " +
     "disabled:cursor-not-allowed disabled:opacity-50",
   send:
     "flex h-ctl w-10 flex-none items-center justify-center rounded-ctl bg-cata-red text-white " +
@@ -388,11 +404,12 @@ const SHEET: PanelSkin = {
   panel:
     "fixed inset-x-0 top-[var(--chat-sheet-top,0px)] z-modal flex " +
     "h-[var(--chat-sheet-height,100dvh)] flex-col card overflow-hidden rounded-none border-0 " +
+    "bg-coal border-white/[0.08] " +
     "text-left pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]",
   // The sheet's top edge IS the top of the screen, so the header clears the
   // status bar itself; the card never touched a safe area.
   header:
-    "flex flex-none items-center gap-[11px] border-b border-line-2 bg-coal px-[15px] pb-3 " +
+    "flex flex-none items-center gap-[11px] border-b border-white/[0.08] bg-coal-2 px-[15px] pb-3 " +
     "pt-[max(0.75rem,env(safe-area-inset-top))] text-white",
   // 44x44 — the touch-target floor in `docs/ux/objetivo-tactil.md`, which a
   // 15px glyph in 4px of padding (23px square) was half of.
@@ -405,12 +422,12 @@ const SHEET: PanelSkin = {
   // `overscroll-contain` keeps a flick at the top of the history from
   // scrolling the page behind.
   history:
-    "flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-canvas p-[15px]",
+    "flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-coal p-[15px]",
   // Clear of the home indicator — but not on top of the keyboard, which has
   // already taken that space: `max(12px, safe-area − keyboard)` collapses back
   // to the ordinary padding while typing.
   form:
-    "flex flex-none items-center gap-2 border-t border-line bg-sunken p-3 " +
+    "flex flex-none items-center gap-2 border-t border-white/[0.08] bg-coal-2 p-3 " +
     "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)_-_var(--chat-keyboard-inset,0px)))]",
   // `text-lg`, and the reason is the platform rather than the type system:
   // mobile Safari zooms the page whenever a focused field is under 16px, and
@@ -426,8 +443,8 @@ const SHEET: PanelSkin = {
   // emptied on purpose and reopening it for one field is how it refills. A
   // named step it is.
   input:
-    "h-12 min-w-0 flex-1 rounded-ctl border border-line-2 bg-paper px-[13px] text-lg " +
-    "text-ink transition-colors placeholder:text-ink-3 focus:border-cata-red " +
+    "h-12 min-w-0 flex-1 rounded-ctl border border-white/[0.12] bg-coal px-[13px] text-lg " +
+    "text-white transition-colors placeholder:text-white/40 focus:border-cata-red " +
     "disabled:cursor-not-allowed disabled:opacity-50",
   send:
     "flex h-12 w-12 flex-none items-center justify-center rounded-ctl bg-cata-red text-white " +
@@ -650,7 +667,7 @@ export default function ChatWidget({
       {/* `.chat > header` — white, avatar disc, "Responde en segundos". */}
       <header className={skin.header}>
         {/*
-          `unoptimized`: this is `cata-club-crest-256.png`, a pre-sized
+          `unoptimized`: this is `cata-club-crest-256-light.png`, a pre-sized
           256×256 (23.6KB) derivative of `cata-club-logo-avatar.png` — see
           issue #681. A real CI trace showed Next's `/_next/image` optimizer
           can get one specific request/cache key stuck forever (`status: -1`,
@@ -663,21 +680,19 @@ export default function ChatWidget({
           a srcset lever; `object-cover` on the `<img>` itself still scales
           it down to fill the 32px box.
 
-          `cata-club-crest-256.png`, not the raw `cata-club-logo.jpeg`: the
-          source is 1080×996 (wider than tall), so `object-cover` alone
-          scales it by height and barely trims the sides — the "CATA CLUB /
-          TENIS DE MESA" wordmark below the wreath survives almost whole
-          inside the circle and stays legible-but-wrong at 32px. The crest PNG
-          is a 620×620 crop of the same source, cut above the wordmark band,
-          with the JPEG's light-grey background chroma-keyed to transparent —
-          `object-cover` is still correct here (a square source into a square
-          box needs no cropping, just scaling), and the transparent margin
-          around the wreath's oval lets this header's own `bg-white` show
-          through instead of that light-grey square.
+          `-light.png`, not `cata-club-crest-256.png`: the header is a dark
+          surface (`bg-coal-2` since #1007, `bg-coal` before it), and the dark
+          navy silhouette of the plain crest disappears against it — the
+          defect the #994/#995 pair already fixed for the launcher, which
+          this header shares the header's own `bg-coal` disc heritage with.
+          `-light.png` is the same 620×620 crop, cut above the "CATA CLUB /
+          TENIS DE MESA" wordmark band, recolored fully white so it reads on
+          a dark disc instead of vanishing into it — the exact asset
+          `HelpChatDock`'s launcher has served since #995.
         */}
         <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-full">
           <Image
-            src="/brand/cata-club-crest-256.png"
+            src="/brand/cata-club-crest-256-light.png"
             alt=""
             width={96}
             height={96}
@@ -718,7 +733,7 @@ export default function ChatWidget({
         className={skin.history}
       >
         {mensajes.length === 0 && (
-          <p className={`${BUBBLE_BASE} self-start rounded-bl-[4px] ${ASSISTANT_SURFACE} text-ink-2`}>
+          <p className={`${BUBBLE_BASE} self-start rounded-bl-[4px] ${ASSISTANT_SURFACE} text-white/[0.82]`}>
             Hola 👋 Soy {BOT_NAME}, el asistente del club. Pregúntele cómo usar la app — o toque
             «{TALK_TO_CLUB_LABEL}» si prefiere hablar con una persona.
           </p>
@@ -730,8 +745,8 @@ export default function ChatWidget({
             data-rol={m.rol}
             className={`${BUBBLE_BASE} ${
               m.rol === "usuario"
-                ? "self-end rounded-br-[4px] bg-coal text-white"
-                : `self-start rounded-bl-[4px] ${ASSISTANT_SURFACE} text-ink-2`
+                ? "self-end rounded-br-[4px] bg-paper text-ink"
+                : `self-start rounded-bl-[4px] ${ASSISTANT_SURFACE} text-white/[0.82]`
             }`}
           >
             {m.texto}
@@ -768,7 +783,7 @@ export default function ChatWidget({
                 key={delay}
                 aria-hidden="true"
                 style={{ animationDelay: `${delay}ms` }}
-                className="h-1.5 w-1.5 rounded-full bg-ink-3 motion-safe:animate-bounce"
+                className="h-1.5 w-1.5 rounded-full bg-white/45 motion-safe:animate-bounce"
               />
             ))}
           </span>
@@ -795,7 +810,7 @@ export default function ChatWidget({
       </div>
 
       {/* `.quicks` — the shortcuts, plus the permanent way to reach a person. */}
-      <div className="flex flex-none flex-wrap gap-1.5 bg-canvas px-[15px] pb-3">
+      <div className="flex flex-none flex-wrap gap-1.5 bg-coal px-[15px] pb-3">
         {getQuickReplies(role).map((prompt) => (
           <button
             key={prompt}
@@ -841,12 +856,13 @@ export default function ChatWidget({
         <p
           id={contadorId}
           aria-live="polite"
-          /* `ink-3-strong`, not `ink-3`: this sits on `bg-canvas`, and `ink-3`
-             only clears AA on `paper` (4.62:1) — it slips to 3.78:1 on the
-             canvas grey (`tailwind.config.ts`'s own `ink["3-strong"]`
-             comment). */
-          className={`flex-none bg-canvas px-[15px] pb-2 text-right text-2xs tabular-nums ${
-            excedido ? "font-semibold text-state-bad" : "text-ink-3-strong"
+          /* `white/55`, not `ink-3-strong`: this sits on `bg-coal` since
+             #1007, and a light-theme muted ink has nothing to composite
+             against there. Past the cap: `state-bad` (#C51B22) measures only
+             3.14:1 on `coal` — under AA — while `cata-red-light` (#E55157,
+             the same token the alert box below wears) clears it at 4.99:1. */
+          className={`flex-none bg-coal px-[15px] pb-2 text-right text-2xs tabular-nums ${
+            excedido ? "font-semibold text-cata-red-light" : "text-white/55"
           }`}
         >
           {formatCharacterCount(largo)} / {CHATBOT_MAX_MESSAGE_LENGTH_LABEL} caracteres
@@ -873,9 +889,13 @@ export default function ChatWidget({
           type="submit"
           disabled={enviando || largo === 0 || excedido || rateLimitedUntil !== null}
           aria-label="Enviar mensaje"
-          /* `outline-ball` used to draw this ring. #FFD600 is 1.42:1 on the
-             panel's white footer — a focus indicator that fails 2.4.11 by a
-             factor of two. See `chat-focus-ring.ts`. */
+          /* `outline-ball` used to draw this ring. #FFD600 measured 1.42:1 on
+             the panel's footer back when it was `sunken` (#873) — a focus
+             indicator that failed 2.4.11 by a factor of two. The footer went
+             `coal-2` for #1007, where `ball` would pass on its own (~11.7:1,
+             the same margin the coal rail gets), but the two-tone ring stays:
+             it is the one indicator that works on BOTH panel skins without a
+             conditional. See `chat-focus-ring.ts`. */
           className={`${skin.send} ${ASSISTANT_FOCUS_RING} disabled:cursor-not-allowed disabled:opacity-45`}
         >
           <Send size={ICON.sm} strokeWidth={2} aria-hidden="true" />

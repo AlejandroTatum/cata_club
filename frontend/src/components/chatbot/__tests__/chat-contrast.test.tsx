@@ -1,7 +1,7 @@
 /**
- * Rendered-surface WCAG contrast table for the chatbot (#873).
+ * Rendered-surface WCAG contrast table for the chatbot (#873, #1007).
  *
- * ## What regressed
+ * ## What regressed (#873)
  *
  * The chatbot inherited the same light palette as the rest of the product —
  * `paper` header, `paper` panel, `paper` composer — and the result was three
@@ -10,6 +10,18 @@
  * text pairs still passed AA (`ChatWidget.test.tsx` already covered those),
  * which is exactly why the defect went unnoticed by a contrast checker alone
  * — the failure is COMPONENT and SURFACE recognition, not text legibility.
+ *
+ * ## The panel went dark (#1007)
+ *
+ * Product decided the panel itself should sit on the `coal` ladder rather
+ * than `paper`/`canvas`/`sunken` — the same ladder `AppShell`'s rail already
+ * uses. Every new pair below reuses a rung the system already measured
+ * rather than inventing one: the bot's bubble (`coal-3` on `coal`) sits at
+ * the same 1.20:1 card-lift floor `paper` on `canvas` used to clear, and the
+ * header/composer (`coal-2` on `coal`) sit at the 1.09:1 "inset inside a
+ * card" floor `sunken` on `paper` already cleared. This file's job is the
+ * same as it was for #873: prove the new surfaces still separate and the
+ * text on them still reads, not just that the hex values look plausible.
  *
  * ## Two different instruments, on purpose
  *
@@ -23,7 +35,8 @@
  * nothing on either one is "text". WCAG has no number for that, so this reuses
  * the ≥1.2 contrast-ratio floor `color-contrast.test.ts` already established
  * for exactly this ("lifts a card at least 7 L* points off the page") — the
- * same measurement that proved `paper` reads as an object on `canvas`.
+ * same measurement that proved `paper` reads as an object on `canvas` — plus
+ * the ≥1.09 "inset inside a card" floor for the header/composer step.
  *
  * ## Why classes are read off the components, not just off the token table
  *
@@ -32,7 +45,7 @@
  * for. So the pairs below resolve through the rendered `className`, via
  * `resolveBg`/`resolveFg`, which mirror the exact utility-class spelling this
  * file (and `HelpChatDock`) writes — the same discipline `ChatWidget.test.tsx`
- * already applies to `bg-coal` / `bg-state-neutral-bg` assertions.
+ * already applies to `bg-coal` / `bg-coal-3` assertions.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -48,25 +61,25 @@ const AA_NORMAL_TEXT = 4.5;
 const AA_NON_TEXT = 3;
 /** The surface-ladder floor `color-contrast.test.ts` measured for a card to read as an object. */
 const SURFACE_SEPARATION_FLOOR = 1.2;
+/** The surface-ladder floor for something inset INSIDE a card (header/composer on the panel body). */
+const INSET_SEPARATION_FLOOR = 1.09;
 
 const colors = tailwindConfig.theme?.extend?.colors as Record<string, unknown>;
 const group = (key: string): Record<string, string> => colors[key] as Record<string, string>;
 
 const coal = group("coal");
 const ink = group("ink");
-const line = group("line");
 const cata = group("cata");
+const state = group("state");
 
 const COAL = coal.DEFAULT;
 const COAL_2 = coal["2"];
+const COAL_3 = coal["3"];
 const PAPER = colors.paper as string;
-const SUNKEN = colors.sunken as string;
-const CANVAS = colors.canvas as string;
 const INK = ink.DEFAULT;
-const INK_2 = ink["2"];
-const LINE = line.DEFAULT;
-const LINE_2 = line["2"];
 const CATA_RED = cata.red as string;
+const CATA_RED_LIGHT = cata["red-light"] as string;
+const STATE_BAD = state.bad as string;
 const WHITE = "#FFFFFF";
 
 afterEach(() => {
@@ -100,36 +113,66 @@ interface TextPair {
 }
 
 const TEXT_CONTRAST_PAIRS: readonly TextPair[] = [
-  // Header — CATA-BOT's name, coal with white text (issue #873).
-  { label: "header title — white on coal", fg: WHITE, bg: COAL, threshold: AA_NORMAL_TEXT },
-  // Header subtitle — muted white on coal, the same idiom `AppShell`'s own
-  // area label wears on the same surface (`text-white/50`, measured 5.36:1).
+  // Header — CATA-BOT's name, white on coal-2 (issue #1007: coal-2, one step
+  // lighter than the coal panel body, not the flat coal of #873).
+  { label: "header title — white on coal-2", fg: WHITE, bg: COAL_2, threshold: AA_NORMAL_TEXT },
+  // Header subtitle — muted white on coal-2, the same idiom `AppShell`'s own
+  // area label wears (`text-white/50`).
   {
-    label: "header subtitle — white/50 on coal",
-    fg: compositeOver(WHITE, COAL, 0.5),
-    bg: COAL,
+    label: "header subtitle — white/50 on coal-2",
+    fg: compositeOver(WHITE, COAL_2, 0.5),
+    bg: COAL_2,
     threshold: AA_NORMAL_TEXT,
   },
   // Close control icon — an icon is a graphical object (1.4.11), not text,
   // but `text-white/55` clears the higher bar too, so one number covers both.
   {
-    label: "close icon — white/55 on coal",
-    fg: compositeOver(WHITE, COAL, 0.55),
-    bg: COAL,
+    label: "close icon — white/55 on coal-2",
+    fg: compositeOver(WHITE, COAL_2, 0.55),
+    bg: COAL_2,
     threshold: AA_NON_TEXT,
   },
-  // Assistant bubble body — unchanged ink-2, now on `paper` instead of the
-  // near-invisible `state-neutral-bg` (see the surface-separation table below
-  // for why that surface itself had to change).
-  { label: "assistant bubble text — ink-2 on paper", fg: INK_2, bg: PAPER, threshold: AA_NORMAL_TEXT },
-  // User bubble — coal fill, white text (unchanged by #873).
-  { label: "user bubble text — white on coal", fg: WHITE, bg: COAL, threshold: AA_NORMAL_TEXT },
-  // Composer input — unchanged bg-paper/text-ink.
-  { label: "composer input text — ink on paper", fg: INK, bg: PAPER, threshold: AA_NORMAL_TEXT },
-  // Send button — cata-red fill, white icon (unchanged by #873).
+  // Assistant bubble body — issue #1007: white/[0.82] on coal-3, the panel's
+  // own lifted surface, not the light theme's ink-2 on paper.
+  {
+    label: "assistant bubble text — white/[0.82] on coal-3",
+    fg: compositeOver(WHITE, COAL_3, 0.82),
+    bg: COAL_3,
+    threshold: AA_NORMAL_TEXT,
+  },
+  // User bubble — issue #1007: paper fill, ink text — the exact mirror of the
+  // light theme's coal-on-canvas pairing, and deliberately never red (red is
+  // reserved for the send button, the panel's one CTA).
+  { label: "user bubble text — ink on paper", fg: INK, bg: PAPER, threshold: AA_NORMAL_TEXT },
+  // Composer input — issue #1007: white on coal, not the light theme's ink on
+  // paper.
+  { label: "composer input text — white on coal", fg: WHITE, bg: COAL, threshold: AA_NORMAL_TEXT },
+  // Send button — cata-red fill, white icon (unchanged since #873).
   { label: "send button icon — white on cata-red", fg: WHITE, bg: CATA_RED, threshold: AA_NON_TEXT },
-  // Quick-reply chip — unchanged bg-paper/text-ink-2.
-  { label: "quick reply text — ink-2 on paper", fg: INK_2, bg: PAPER, threshold: AA_NORMAL_TEXT },
+  // Quick-reply chip — issue #1007: white/75 on coal-3.
+  {
+    label: "quick reply text — white/75 on coal-3",
+    fg: compositeOver(WHITE, COAL_3, 0.75),
+    bg: COAL_3,
+    threshold: AA_NORMAL_TEXT,
+  },
+  // Message-limit counter — issue #1007: white/55 on the coal row it shares
+  // with the quick replies.
+  {
+    label: "message limit counter — white/55 on coal",
+    fg: compositeOver(WHITE, COAL, 0.55),
+    bg: COAL,
+    threshold: AA_NORMAL_TEXT,
+  },
+  // Message-limit counter, past the cap — issue #1007: cata-red-light, not
+  // state-bad. `state-bad` on `coal` fails AA (see the sanity check below);
+  // this is the actual token the composer wears once the limit is exceeded.
+  {
+    label: "message limit counter (exceeded) — cata-red-light on coal",
+    fg: CATA_RED_LIGHT,
+    bg: COAL,
+    threshold: AA_NORMAL_TEXT,
+  },
 ];
 
 describe.each(TEXT_CONTRAST_PAIRS)("$label", ({ fg, bg, threshold }) => {
@@ -147,15 +190,11 @@ const NON_TEXT_CONTRAST_PAIRS: readonly TextPair[] = [
   // one, see `HelpChatDock.tsx`'s own reasoning about where the rail carries
   // the assistant instead. Coal against each of the three surfaces it can
   // rest on is what "visible on light pages" and "never white" both cash out
-  // to.
+  // to. Unaffected by #1007 — the launcher never repainted, only the panel
+  // behind it did.
   { label: "launcher fill on paper", fg: COAL, bg: PAPER, threshold: AA_NON_TEXT },
-  { label: "launcher fill on canvas", fg: COAL, bg: CANVAS, threshold: AA_NON_TEXT },
-  { label: "launcher fill on sunken", fg: COAL, bg: SUNKEN, threshold: AA_NON_TEXT },
-  // Composer input border against its new `sunken` footer.
-  { label: "input border (line-2) on sunken", fg: LINE_2, bg: SUNKEN, threshold: 1 },
-  // Header (coal) against the panel body it sits above (paper) — the
-  // white-on-white the issue reported, now a real component boundary.
-  { label: "header (coal) on panel body (paper)", fg: COAL, bg: PAPER, threshold: AA_NON_TEXT },
+  { label: "launcher fill on canvas", fg: COAL, bg: colors.canvas as string, threshold: AA_NON_TEXT },
+  { label: "launcher fill on sunken", fg: COAL, bg: colors.sunken as string, threshold: AA_NON_TEXT },
 ];
 
 describe.each(NON_TEXT_CONTRAST_PAIRS)("$label", ({ fg, bg, threshold }) => {
@@ -179,26 +218,26 @@ interface SurfacePair {
 }
 
 const SURFACE_SEPARATION_PAIRS: readonly SurfacePair[] = [
-  // The bug: `state-neutral-bg` (#EFEFF2) measured 1.06:1 against `canvas`
-  // (#E8E8EE) — a bot bubble that read as the same plane as its own history.
-  // `paper` on `canvas` is the system's own proven card-lift floor (1.22:1).
+  // Issue #1007: the assistant bubble's coal-3 against the coal history it
+  // floats over — the same card-lift floor `paper` on `canvas` used to clear
+  // for #873.
   {
-    label: "assistant bubble (paper) on history (canvas)",
-    a: PAPER,
-    b: CANVAS,
+    label: "assistant bubble (coal-3) on history (coal)",
+    a: COAL_3,
+    b: COAL,
     floor: SURFACE_SEPARATION_FLOOR,
   },
   {
-    label: "quick-reply chip (paper) on its row (canvas)",
-    a: PAPER,
-    b: CANVAS,
+    label: "quick-reply chip (coal-3) on its row (coal)",
+    a: COAL_3,
+    b: COAL,
     floor: SURFACE_SEPARATION_FLOOR,
   },
-  // Composer (sunken) against the panel body — the second white-on-white.
-  // `sunken` is deliberately a SUBTLER step than `canvas` (an inset fill
-  // INSIDE a card, not the page it floats over), so it takes the system's
-  // own sunken/paper floor rather than the card-lift one.
-  { label: "composer (sunken) on panel body (paper)", a: SUNKEN, b: PAPER, floor: 1.09 },
+  // Header (coal-2) against the panel body it sits above (coal) — the
+  // inset-inside-a-card step, same floor `sunken` on `paper` already clears.
+  { label: "header (coal-2) on panel body (coal)", a: COAL_2, b: COAL, floor: INSET_SEPARATION_FLOOR },
+  // Composer (coal-2) against the panel body — the second inset step.
+  { label: "composer (coal-2) on panel body (coal)", a: COAL_2, b: COAL, floor: INSET_SEPARATION_FLOOR },
 ];
 
 describe.each(SURFACE_SEPARATION_PAIRS)("$label", ({ a, b, floor }) => {
@@ -208,30 +247,33 @@ describe.each(SURFACE_SEPARATION_PAIRS)("$label", ({ a, b, floor }) => {
 });
 
 // ---------------------------------------------------------------------------
-// Structural — four different surface tokens, no white-on-white adjacency.
+// Structural — four different surface tokens, no same-surface adjacency.
 // ---------------------------------------------------------------------------
 
 /** Surface utility classes this test cares about telling apart. */
-const SURFACE_CLASSES = ["bg-coal", "bg-canvas", "bg-sunken", "bg-paper", "bg-white"] as const;
+const SURFACE_CLASSES = ["bg-coal", "bg-coal-2", "bg-coal-3", "bg-paper", "bg-white"] as const;
 
 function surfaceClassOf(el: Element | null): string | undefined {
   return SURFACE_CLASSES.find((cls) => el?.classList.contains(cls));
 }
 
-describe("ChatWidget — four different surfaces, no white-on-white adjacency", () => {
-  it("desktop CARD: header, history and composer each carry a distinct non-white surface", () => {
+describe("ChatWidget — four different surfaces, no same-surface adjacency", () => {
+  it("desktop CARD: header, history and composer each carry a distinct surface", () => {
     const { container } = render(<ChatWidget open onClose={(): void => {}} />);
 
     const header = surfaceClassOf(container.querySelector("header"));
     const history = surfaceClassOf(container.querySelector(".overflow-y-auto"));
     const form = surfaceClassOf(container.querySelector("form"));
 
-    expect(header).toBe("bg-coal");
-    expect(history).toBe("bg-canvas");
-    expect(form).toBe("bg-sunken");
-    // The panel body itself is `paper` (via the shared `.card` class, not a
-    // Tailwind utility) — none of its three children may repeat it.
-    expect(new Set([header, history, form]).size).toBe(3);
+    expect(header).toBe("bg-coal-2");
+    expect(history).toBe("bg-coal");
+    expect(form).toBe("bg-coal-2");
+    // The panel body itself is `coal` (a Tailwind utility, issue #1007) —
+    // the history repeats it on purpose (it IS the panel body's own fill),
+    // but header and composer must not collapse into either the panel body
+    // or each other.
+    expect(new Set([header, form]).size).toBe(1);
+    expect(header).not.toBe(history);
   });
 
   it("mobile SHEET: header, history and composer keep the same surface split", () => {
@@ -248,6 +290,9 @@ describe("ChatWidget — four different surfaces, no white-on-white adjacency", 
 
     expect([header, history, form]).not.toContain("bg-white");
     expect([header, history, form]).not.toContain("bg-paper");
+    expect(header).toBe("bg-coal-2");
+    expect(history).toBe("bg-coal");
+    expect(form).toBe("bg-coal-2");
   });
 
   it("never renders the launcher on a white or paper fill", () => {
@@ -266,7 +311,16 @@ describe("compositeOver sanity", () => {
     expect(contrastRatio(loud, COAL)).toBeGreaterThan(contrastRatio(quiet, COAL));
   });
 
-  it("keeps coal-2 a real, distinct step from coal", () => {
+  it("keeps coal-2 and coal-3 real, distinct steps from coal", () => {
     expect(COAL_2).not.toBe(COAL);
+    expect(COAL_3).not.toBe(COAL);
+    expect(COAL_3).not.toBe(COAL_2);
+  });
+
+  // The reason the exceeded-limit counter and the alert box wear
+  // `cata-red-light` and not `state-bad` on the dark panel (issue #1007).
+  it("proves state-bad fails AA on coal where cata-red-light clears it", () => {
+    expect(contrastRatio(STATE_BAD, COAL)).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio(CATA_RED_LIGHT, COAL)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
   });
 });
