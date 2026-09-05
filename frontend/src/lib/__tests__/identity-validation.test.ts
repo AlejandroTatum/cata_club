@@ -10,6 +10,7 @@ import {
   emergencyPhoneDiffersRule,
   EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE,
   PERSON_NAME_PATTERN,
+  personNameError,
   personNameRule,
   EDAD_MINIMA_ALUMNO,
   EDAD_MAXIMA_ALUMNO,
@@ -324,6 +325,95 @@ describe("nombre de persona", () => {
 
     it("passes a valid single-word contact name (singular)", () => {
       expect(personNameRule("María", "El nombre del contacto de emergencia", { plural: false })).toBeNull();
+    });
+  });
+
+  // Issue #1042: las tres causas de rechazo compartían un único mensaje, que
+  // solo describe bien una de ellas ("juan  carlos" acusaba a un carácter
+  // cuando lo que sobra es un separador repetido).
+  describe("personNameError — distingue la causa real del rechazo (issue #1042)", () => {
+    it.each([
+      ["repeated-separator", "juan  carlos"], // doble espacio
+      ["repeated-separator", "juan--carlos"], // doble guion
+      ["repeated-separator", "o''brien"], // doble apóstrofe
+      ["repeated-separator", "juan··carlos"], // doble punto medio
+      ["separator-at-edge", "-juan"],
+      ["separator-at-edge", "juan-"],
+      ["separator-at-edge", "·juan"],
+      ["invalid-char", "juan carlos 3"], // dígito
+      ["invalid-char", "juan_carlos"], // guion bajo
+      ["invalid-char", "juan@carlos"], // arroba
+    ])("clasifica %s para %s", (reason, value) => {
+      expect(personNameError(value)).toBe(reason);
+    });
+
+    it("no reporta ninguna causa para un nombre válido", () => {
+      expect(personNameError("Pérez-Mora")).toBeNull();
+    });
+  });
+
+  describe("personNameRule nombra la causa real, no siempre un carácter (issue #1042)", () => {
+    it("nombra la repetición del separador, no un carácter", () => {
+      expect(personNameRule("juan  carlos", "Los apellidos")).toBe(
+        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+      );
+    });
+
+    it("nombra la repetición también con guiones dobles", () => {
+      expect(personNameRule("juan--carlos", "Los apellidos")).toBe(
+        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+      );
+    });
+
+    it("nombra la repetición también con apóstrofes dobles", () => {
+      expect(personNameRule("o''brien", "Los apellidos")).toBe(
+        "Los apellidos no pueden tener un espacio, guion, apóstrofe o punto medio repetido.",
+      );
+    });
+
+    it("nombra la posición cuando el separador abre el nombre", () => {
+      expect(personNameRule("-juan", "Los apellidos")).toBe(
+        "Los apellidos no pueden empezar ni terminar con un espacio, guion, apóstrofe o punto medio.",
+      );
+    });
+
+    it("nombra la posición cuando el separador cierra el nombre, en singular", () => {
+      expect(
+        personNameRule("juan-", "El nombre del contacto de emergencia", { plural: false }),
+      ).toBe(
+        "El nombre del contacto de emergencia no puede empezar ni terminar con un espacio, guion, apóstrofe o punto medio.",
+      );
+    });
+
+    it("sigue nombrando un carácter no permitido cuando esa es la causa real", () => {
+      expect(personNameRule("juan_carlos", "Los apellidos")).toBe(
+        "Los apellidos tienen un carácter que no reconocemos en un nombre de persona.",
+      );
+    });
+  });
+
+  describe("personNameRule — el conjunto aceptado/rechazado no cambia (issue #1042)", () => {
+    it.each([
+      "Pérez-Mora",
+      "D'Angelo",
+      "José Ñandú",
+      "María",
+      "Juan·Carlos",
+    ])("sigue aceptando %s", (value) => {
+      expect(personNameRule(value, "Los apellidos")).toBeNull();
+    });
+
+    it.each([
+      "juan  carlos",
+      "juan--carlos",
+      "o''brien",
+      "-juan",
+      "juan-",
+      "juan carlos 3",
+      "juan_carlos",
+      "juan@carlos",
+    ])("sigue rechazando %s", (value) => {
+      expect(personNameRule(value, "Los apellidos")).not.toBeNull();
     });
   });
 });
