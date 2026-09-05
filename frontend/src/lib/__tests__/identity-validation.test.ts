@@ -20,6 +20,7 @@ import {
   isPlausibleHumanAge,
   studentBirthDateBounds,
   PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_BYTES,
   isCommonPassword,
   passwordRule,
   PHONE_LOCAL_HINT,
@@ -536,6 +537,27 @@ describe("contraseña", () => {
     it("carries the subject through to the representative variant", () => {
       expect(passwordRule("abc", "La contraseña del representante")).toBe(
         `La contraseña del representante debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`,
+      );
+    });
+
+    // Issue #1043: bcrypt only hashes the first 72 BYTES of the password.
+    it("accepts a password at the exact 72-byte boundary", () => {
+      expect(passwordRule("x".repeat(72), "La contraseña")).toBeNull();
+    });
+
+    it("rejects a password one byte over the boundary, in bytes not characters", () => {
+      const message = passwordRule("x".repeat(73), "La contraseña");
+      expect(message).toContain(`${PASSWORD_MAX_BYTES} bytes`);
+      expect(message).not.toContain("72 caracteres");
+    });
+
+    it("measures multibyte characters in bytes, where the truncation actually surprises", () => {
+      // Each emoji is 4 UTF-8 bytes: 18 emoji = 72 bytes (right at the edge),
+      // 19 = 76 bytes (already over it). Measuring `.length` (UTF-16 code
+      // units) would let far more than 18 through.
+      expect(passwordRule("😀".repeat(18), "La contraseña")).toBeNull();
+      expect(passwordRule("😀".repeat(19), "La contraseña")).toContain(
+        `${PASSWORD_MAX_BYTES} bytes`,
       );
     });
   });

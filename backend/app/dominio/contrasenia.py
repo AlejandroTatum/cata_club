@@ -29,6 +29,22 @@ reglas en sí viven acá. Puro, sin imports cruzados de capa.
 
 LONGITUD_MINIMA_CONTRASENIA = 8
 
+# bcrypt (backend/app/seguridad/gestor_auth.py:21) solo considera los primeros
+# 72 BYTES de la contraseña: todo lo que exceda ese límite se ignora en
+# silencio al hashear, así que dos contraseñas distintas que compartan ese
+# prefijo abren la misma cuenta (issue #1043). El límite es del algoritmo, no
+# una regla de composición -- no reabre #230.
+#
+# Se mide en bytes UTF-8 (`len(valor.encode("utf-8"))`), nunca en caracteres
+# (`len(valor)`): bcrypt cuenta bytes y la persona cuenta caracteres. Con
+# tildes (2 bytes) o emoji (4 bytes) el corte real llega mucho antes que el
+# largo visible en pantalla -- 30 emoji son 120 bytes, pero bcrypt solo ve los
+# primeros 18 (72 bytes). Es un tope de ESCRITURA, no de verificación: una
+# contraseña larga ya hasheada antes de este cambio sigue permitiendo iniciar
+# sesión, porque el login no pasa por `validar_contrasenia` (compara contra
+# el hash existente, no acuña uno nuevo).
+LONGITUD_MAXIMA_CONTRASENIA_BYTES = 72
+
 _SECUENCIAS_DE_DIGITOS = (
     "12345678", "123456789", "1234567890", "87654321", "11111111", "00000000",
     "22222222", "33333333", "44444444", "55555555", "66666666", "77777777",
@@ -98,15 +114,22 @@ CONTRASENIAS_COMUNES = frozenset(
 
 def validar_contrasenia(contrasenia: str) -> None:
     """Lanza `ValueError` con mensaje en castellano si `contrasenia` no
-    cumple el piso de largo o está en la lista negra. No normaliza ni
-    devuelve nada -- el llamador conserva el valor tal como llegó (la
-    contraseña que se hashea es la que el usuario escribió, no una recortada
-    a los bordes)."""
+    cumple el piso de largo, supera el tope de bytes que bcrypt hashea, o
+    está en la lista negra. No normaliza ni devuelve nada -- el llamador
+    conserva el valor tal como llegó (la contraseña que se hashea es la que
+    el usuario escribió, no una recortada a los bordes)."""
     normalizada = contrasenia.strip()
     if len(normalizada) < LONGITUD_MINIMA_CONTRASENIA:
         raise ValueError(
             f"La contraseña debe tener al menos {LONGITUD_MINIMA_CONTRASENIA} "
             "caracteres."
+        )
+    if len(normalizada.encode("utf-8")) > LONGITUD_MAXIMA_CONTRASENIA_BYTES:
+        raise ValueError(
+            "La contraseña es demasiado larga: no puede superar "
+            f"{LONGITUD_MAXIMA_CONTRASENIA_BYTES} bytes de datos (los acentos "
+            "y emoji ocupan más de un byte cada uno, así que puede ser menos "
+            "caracteres de los que parece)."
         )
     if normalizada.lower() in CONTRASENIAS_COMUNES:
         raise ValueError(

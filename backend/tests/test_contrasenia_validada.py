@@ -85,6 +85,21 @@ def test_cada_uno_de_los_siete_campos_reales_aplica_la_misma_regla(dto_nombre):
     _construir(dto_nombre, "miclavefuerte1")  # no lanza
 
 
+# --- issue #1043: tope de 72 bytes, cableado en los mismos 7 campos --------
+_CONTRASENIA_QUE_SUPERA_72_BYTES = "x" * 73
+
+
+@pytest.mark.parametrize("dto_nombre", [
+    "EnrollmentRepresentanteDTO", "EnrollmentAlumnoDTO", "EnrollmentCredencialesDTO",
+    "AdminCrearCuentaDTO", "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
+    "RepresentadoCreateDTO",
+])
+def test_cada_uno_de_los_siete_campos_reales_rechaza_mas_de_72_bytes(dto_nombre):
+    with pytest.raises(ValidationError) as error:
+        _construir(dto_nombre, _CONTRASENIA_QUE_SUPERA_72_BYTES)
+    assert "72 bytes" in str(error.value)
+
+
 # --- Regresión: la lista negra no toca hashes ya guardados (issue #1017) ---
 def test_cuenta_previa_con_contrasenia_ahora_comun_sigue_pudiendo_loguearse(db_session, client):
     """Agregar la lista negra NO invalida ningún hash ya guardado: una

@@ -424,6 +424,21 @@ export function studentBirthDateBounds(today: Date = new Date()): { min: string;
 
 export const PASSWORD_MIN_LENGTH = 8;
 
+/**
+ * bcrypt (el hasheo que usa el backend) solo considera los primeros 72
+ * BYTES de la contraseña; todo lo que exceda ese límite se ignora en
+ * silencio al hashear (issue #1043). Se mide en bytes UTF-8, nunca en
+ * caracteres: con tildes (2 bytes) o emoji (4 bytes) el corte real llega
+ * mucho antes que el largo visible en pantalla. Mismo valor que
+ * `LONGITUD_MAXIMA_CONTRASENIA_BYTES` en `backend/app/dominio/contrasenia.py`.
+ */
+export const PASSWORD_MAX_BYTES = 72;
+
+/** Largo de `value` en bytes UTF-8 — lo que bcrypt realmente cuenta. */
+export function passwordByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 // The common-password list, kept as themed groups rather than one flat
 // array. The groups are how the list is actually maintained — you add a
 // keyboard walk next to the other keyboard walks — and each stays small
@@ -521,6 +536,9 @@ export function passwordRule(value: string, subject: string): string | null {
   const password = value.trim();
   if (password.length < PASSWORD_MIN_LENGTH) {
     return `${subject} debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  }
+  if (passwordByteLength(password) > PASSWORD_MAX_BYTES) {
+    return `${subject} es demasiado larga: no puede superar ${PASSWORD_MAX_BYTES} bytes de datos (los acentos y emoji ocupan más de un byte cada uno, así que puede ser menos caracteres de los que parece).`;
   }
   return isCommonPassword(password)
     ? `${subject} es una de las más usadas y fácil de adivinar; elija otra.`

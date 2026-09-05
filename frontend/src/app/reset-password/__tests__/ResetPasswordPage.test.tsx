@@ -99,11 +99,12 @@ function ruleItem(label: string): HTMLElement {
 }
 
 describe("buildPasswordRules", () => {
-  it("reports all three rules unmet for an empty form", () => {
+  it("reports all four rules unmet for an empty form", () => {
     expect(buildPasswordRules("", "")).toEqual([
       { label: "Al menos 8 caracteres", met: false },
       { label: "Las dos contraseñas coinciden", met: false },
       { label: "No es una de las contraseñas más usadas", met: false },
+      { label: "No es demasiado larga (los acentos y emoji ocupan más espacio)", met: false },
     ]);
   });
 
@@ -125,10 +126,10 @@ describe("buildPasswordRules", () => {
 
   it("does not invent an uppercase/number policy the backend does not enforce", () => {
     // The backend's contract is length + the shared denylist (issue #1017)
-    // — not composition rules. A stricter client would reject passwords the
-    // server accepts.
+    // and the shared byte ceiling (issue #1043) — not composition rules. A
+    // stricter client would reject passwords the server accepts.
     const rules = buildPasswordRules("alllowercase", "alllowercase");
-    expect(rules).toHaveLength(3);
+    expect(rules).toHaveLength(4);
     expect(rules.every((rule) => rule.met)).toBe(true);
   });
 
@@ -137,7 +138,7 @@ describe("buildPasswordRules", () => {
     // `COMMON_PASSWORDS` — the same gap #1017 closed on the backend: the
     // wizard already refused it, the reset screen did not.
     const rules = buildPasswordRules("12345678", "12345678");
-    expect(rules).toHaveLength(3);
+    expect(rules).toHaveLength(4);
     expect(rules[0].met).toBe(true); // length: 8 chars
     expect(rules[2]).toEqual({ label: "No es una de las contraseñas más usadas", met: false });
   });
@@ -145,6 +146,28 @@ describe("buildPasswordRules", () => {
   it("marks the denylist rule met for a non-common password of sufficient length", () => {
     const rules = buildPasswordRules("unaClaveSegura1", "unaClaveSegura1");
     expect(rules[2].met).toBe(true);
+  });
+
+  // --- issue #1043: bcrypt solo hashea los primeros 72 bytes UTF-8 --------
+  it("adds the shared byte-ceiling rule ported from identity-validation.ts (issue #1043)", () => {
+    const rules = buildPasswordRules("x".repeat(73), "x".repeat(73));
+    expect(rules).toHaveLength(4);
+    expect(rules[3]).toEqual({
+      label: "No es demasiado larga (los acentos y emoji ocupan más espacio)",
+      met: false,
+    });
+  });
+
+  it("marks the byte-ceiling rule met right at the 72-byte boundary", () => {
+    expect(buildPasswordRules("x".repeat(72), "x".repeat(72))[3].met).toBe(true);
+  });
+
+  it("measures multibyte characters in bytes, not in string length", () => {
+    // Each emoji is 4 UTF-8 bytes: 18 = 72 bytes (right at the edge), 19 =
+    // 76 bytes (already over it). This is the case the label's copy warns
+    // about: it looks like 19 characters, but bcrypt would see more.
+    expect(buildPasswordRules("😀".repeat(18), "😀".repeat(18))[3].met).toBe(true);
+    expect(buildPasswordRules("😀".repeat(19), "😀".repeat(19))[3].met).toBe(false);
   });
 });
 
