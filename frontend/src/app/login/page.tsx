@@ -46,11 +46,30 @@ function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Where an incomplete-activation session lands — named once so the toast
+ *  description below can never point somewhere `routeForSession` doesn't. */
+const ACTIVATION_GATE_ROUTE = "/login/activacion";
+
 function routeForSession(session: import("@/services/auth").AuthSession): string {
   // Issue #940: the gate decision (`isActivationComplete`) rules, not the two
   // raw facts — an admin/trainer without a membership has `activacionCompleta
   // === true` even though `altaPresencialCompletada` is false.
-  return isActivationComplete(session) ? getDefaultRoute(session.user.role) : "/login/activacion";
+  return isActivationComplete(session) ? getDefaultRoute(session.user.role) : ACTIVATION_GATE_ROUTE;
+}
+
+/**
+ * Issue #1044: the confirmation toast used to name a fixed destination —
+ * "Le llevamos a su panel" — written by `handleSubmit` BEFORE the real route
+ * had even been calculated. An account still stuck at the activation gate
+ * was told it was headed to its panel and landed on `/login/activacion`
+ * instead. The description is derived from the SAME route `setWelcome`
+ * receives right after, never from a constant, so the two can't drift apart
+ * again.
+ */
+function welcomeDescriptionFor(route: string): string {
+  return route === ACTIVATION_GATE_ROUTE
+    ? "Antes de entrar, le faltan un par de pasos."
+    : "Su sesión quedó iniciada. Le llevamos a su panel.";
 }
 
 /** Written once because two fields point at it through `aria-describedby`. */
@@ -272,12 +291,14 @@ function LoginPageContent(): React.ReactElement {
     // interruption for an event the user just caused and already expects.
     // A toast confirms without blocking, and carries the one thing the old
     // panel never said: where they are about to land.
+    const route = routeForSession(result.session);
     const firstName = firstNameOf(result.session.user.name);
     toast.showSuccess(firstName ? `Hola, ${firstName}` : "Sesión iniciada", {
-      description: "Su sesión quedó iniciada. Le llevamos a su panel.",
+      description: welcomeDescriptionFor(route),
     });
 
-    setWelcome({ route: routeForSession(result.session) });  }
+    setWelcome({ route });
+  }
 
   // Show loading during session hydration, and keep showing it while an
   // already-authenticated user is mid-redirect — otherwise the form paints

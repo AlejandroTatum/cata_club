@@ -67,6 +67,22 @@ import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navi
 
 const mockUseAuth = vi.mocked(useAuth);
 
+/**
+ * Issue #1044: the toast's supporting line must always match whichever route
+ * this same login actually redirects to, never a line written independently
+ * of it. This mirrors the production pairing in `welcomeDescriptionFor` —
+ * the tests below derive their expectation from the REDIRECT they just
+ * observed (`mockReplace`), not from an assumption about the fixture, so a
+ * regression that decouples the two (e.g. a description hardcoded back to
+ * the panel promise) fails here even if `routeForSession`'s own criteria
+ * change later.
+ */
+function expectedWelcomeDescriptionFor(destination: string): string {
+  return destination === "/login/activacion"
+    ? "Antes de entrar, le faltan un par de pasos."
+    : "Su sesión quedó iniciada. Le llevamos a su panel.";
+}
+
 /** Fill and submit the login form with the given credentials. */
 function submitLoginForm(email = "user@cataclub.com", password = "secret123"): void {
   fireEvent.change(screen.getByLabelText(/^Correo electrónico/), {
@@ -359,6 +375,11 @@ describe("LoginPage", () => {
       await vi.advanceTimersByTimeAsync(2000);
 
       expect(mockReplace).toHaveBeenCalledWith("/dashboard");
+      // Issue #1044: the toast fired moments earlier must have promised
+      // exactly this destination, not a line written ahead of it.
+      expect(mockShowSuccess).toHaveBeenCalledWith(expect.any(String), {
+        description: expectedWelcomeDescriptionFor("/dashboard"),
+      });
       vi.useRealTimers();
     });
 
@@ -381,6 +402,13 @@ describe("LoginPage", () => {
       await vi.advanceTimersByTimeAsync(2000);
 
       expect(mockReplace).toHaveBeenCalledWith("/login/activacion");
+      // Issue #1044: a session that lands on the gate must never be told
+      // it's headed to its panel — the regression this closes.
+      expect(mockShowSuccess).toHaveBeenCalledWith(expect.any(String), {
+        description: expectedWelcomeDescriptionFor("/login/activacion"),
+      });
+      const [, { description }] = mockShowSuccess.mock.calls[0];
+      expect(description).not.toContain("Le llevamos a su panel");
       vi.useRealTimers();
     });
   });
