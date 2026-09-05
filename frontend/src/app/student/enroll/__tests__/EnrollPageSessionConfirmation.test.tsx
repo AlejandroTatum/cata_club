@@ -39,7 +39,9 @@ import EnrollPage from "@/app/student/enroll/page";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { enrollStudent, fetchInstituciones, fetchTarifas } from "@/services/api";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
-import { completeSelfEnrollmentWizard } from "@/lib/__tests__/fill-enroll-student-step";
+import {
+  completeSelfEnrollmentWizard,
+} from "@/lib/__tests__/fill-enroll-student-step";
 import type { AuthSession } from "@/services/auth";
 
 // ---------------------------------------------------------------------------

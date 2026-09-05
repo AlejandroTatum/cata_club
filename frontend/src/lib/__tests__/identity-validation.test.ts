@@ -22,6 +22,8 @@ import {
   PASSWORD_MIN_LENGTH,
   isCommonPassword,
   passwordRule,
+  PHONE_LOCAL_HINT,
+  PHONE_ENROLL_LOCAL_HINT,
 } from "@/lib/identity-validation";
 
 // The backend test suite freezes "today" at 2029-01-01 (`FECHA_CONGELADA_HOY`
@@ -536,5 +538,29 @@ describe("contraseña", () => {
         `La contraseña del representante debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`,
       );
     });
+  });
+});
+
+describe("PHONE_LOCAL_HINT (#1028)", (): void => {
+  it("names Ecuador and says which local digits to type, leaving the code to the field's prefix", (): void => {
+    expect(PHONE_LOCAL_HINT).toBe(
+      "Escriba su número local de Ecuador: el celular empieza en 09; los fijos, en 0.",
+    );
+    // The +593 teaching moved INTO the field (`EcuadorPhonePrefix`); the hint
+    // would only repeat it.
+    expect(PHONE_LOCAL_HINT).not.toContain("593");
+    // And it stays the same numbering plan the formats hint has always taught.
+    expect(PHONE_LOCAL_HINT).toContain("09");
+    expect(PHONE_LOCAL_HINT).toContain("0");
+  });
+});
+
+describe("PHONE_ENROLL_LOCAL_HINT (#1028 review)", (): void => {
+  it("teaches the nine digits after +593 in the usted register, with the example", (): void => {
+    expect(PHONE_ENROLL_LOCAL_HINT).toBe(
+      "Escriba los 9 dígitos de su celular, sin el 0 inicial: por ejemplo, 991234567.",
+    );
+    expect(PHONE_ENROLL_LOCAL_HINT).toContain("991234567");
+    expect(PHONE_ENROLL_LOCAL_HINT).toContain("sin el 0");
   });
 });

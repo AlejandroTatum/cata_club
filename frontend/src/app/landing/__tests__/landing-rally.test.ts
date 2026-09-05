@@ -1,34 +1,43 @@
 /**
- * Geometry guards for the Valores rally (issue #637).
+ * Geometry guards for the Valores rally's scroll choreography (issue #637,
+ * corrected by #1026).
  *
  * The regression itself is only visible in a browser — it is a layout fact, and
- * `tests/e2e/landing.spec.ts` is where it is reproduced and where the fix is
- * proved. What lives here is the arithmetic that browser evidence produced, so
- * a later edit cannot quietly undo it: every fixture below is a real
- * measurement taken from the built page, not a plausible-looking number.
+ * `tests/e2e/landing.spec.ts` is where it was reproduced. What lives here is
+ * the arithmetic that browser evidence produced, so a later edit cannot quietly
+ * undo it: every fixture below is a real measurement taken from the built page,
+ * not a plausible-looking number.
  *
  *   390x844  section 1249px, values stacked one per row, each 172px
  *   844x390  section  884px, values in two columns, each 172px
  *  1024x768  section  874px, values in two columns, 172px then 146px
- *  1440x900  section  711px, all four values in one row, each 172px
+ *
+ * #1026 removed the rally's second choreography — the pin. Its transparent
+ * spacer padding showed the page's near-white background as a blank band under
+ * the yellow section on every viewport taller than the section (711px of
+ * section under 900px of viewport at 1440x900). The flowing choreography is
+ * the only one now, so the source-level guards at the foot of this file keep
+ * the pin and its dead decision machinery from coming back.
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   RALLY_FLOW_MIN_GAP,
-  RALLY_HIT_PROGRESS,
-  RALLY_VALUE_COUNT,
-  rallyCanPin,
   rallyFlowAnchorsPx,
-  rallyHitIndex,
   type RallyValueBox,
 } from "@/app/landing/landing-rally";
 
+const landingMotionSource = (): string =>
+  readFileSync(resolve(process.cwd(), "src/app/landing/LandingMotion.tsx"), "utf8");
+const landingRallySource = (): string =>
+  readFileSync(resolve(process.cwd(), "src/app/landing/landing-rally.ts"), "utf8");
+
 /** The measured layouts, as the rally sees them. */
-const LAYOUTS: { name: string; viewport: number; section: number; boxes: RallyValueBox[] }[] = [
+const LAYOUTS: { name: string; viewport: number; boxes: RallyValueBox[] }[] = [
   {
     name: "phone portrait 390x844",
     viewport: 844,
-    section: 1249,
     boxes: [
       { top: 3619, height: 172 },
       { top: 3819, height: 172 },
@@ -39,7 +48,6 @@ const LAYOUTS: { name: string; viewport: number; section: number; boxes: RallyVa
   {
     name: "phone landscape 844x390",
     viewport: 390,
-    section: 884,
     boxes: [
       { top: 2515, height: 172 },
       { top: 2515, height: 172 },
@@ -50,7 +58,6 @@ const LAYOUTS: { name: string; viewport: number; section: number; boxes: RallyVa
   {
     name: "tablet 1024x768",
     viewport: 768,
-    section: 874,
     boxes: [
       { top: 2399, height: 172 },
       { top: 2399, height: 172 },
@@ -60,64 +67,10 @@ const LAYOUTS: { name: string; viewport: number; section: number; boxes: RallyVa
   },
 ];
 
-describe("rallyCanPin", (): void => {
-  it("refuses to pin a section taller than the viewport", (): void => {
-    // Both phone viewports: pinned, values 02-04 were frozen below the fold for
-    // the whole scrub. This is the decision that stops that happening.
-    expect(rallyCanPin(1249, 844)).toBe(false);
-    expect(rallyCanPin(884, 390)).toBe(false);
-    expect(rallyCanPin(874, 768)).toBe(false);
-  });
-
-  it("keeps pinning the desktop section, which fits", (): void => {
-    expect(rallyCanPin(711, 900)).toBe(true);
-    // Exactly the viewport still fits — nothing is hidden.
-    expect(rallyCanPin(900, 900)).toBe(true);
-  });
-
-  it("treats an unmeasured section as unpinnable", (): void => {
-    // Better a section that scrolls than a pin taken on a height of zero.
-    expect(rallyCanPin(0, 844)).toBe(false);
-    expect(rallyCanPin(711, 0)).toBe(false);
-    expect(rallyCanPin(Number.NaN, 844)).toBe(false);
-  });
-});
-
-describe("RALLY_HIT_PROGRESS", (): void => {
-  it("carries one ascending progress stop per value card", (): void => {
-    // `LandingPage` renders four `ValueCard`s, 01 through 04. A list that fell
-    // out of step with them would strand the tail of the rally: progress is
-    // mapped back to an index by counting the stops it has passed.
-    expect(RALLY_VALUE_COUNT).toBe(4);
-    expect(RALLY_HIT_PROGRESS).toHaveLength(RALLY_VALUE_COUNT);
-    RALLY_HIT_PROGRESS.forEach((stop, index): void => {
-      expect(stop, `stop ${index} inside the scrub`).toBeGreaterThan(0);
-      expect(stop, `stop ${index} inside the scrub`).toBeLessThan(1);
-      if (index > 0) expect(stop).toBeGreaterThan(RALLY_HIT_PROGRESS[index - 1]);
-    });
-  });
-});
-
-describe("rallyHitIndex", (): void => {
-  it("reaches every value across the pinned scrub", (): void => {
-    expect(rallyHitIndex(0)).toBe(-1);
-    expect(rallyHitIndex(0.18)).toBe(-1);
-    RALLY_HIT_PROGRESS.forEach((stop, index): void => {
-      expect(rallyHitIndex(stop), `value ${index + 1} at its own stop`).toBe(index);
-    });
-    // The end of the scrub is 4/4, never 3/4 — the last value has to land.
-    expect(rallyHitIndex(1)).toBe(RALLY_VALUE_COUNT - 1);
-  });
-});
-
 describe("rallyFlowAnchorsPx", (): void => {
   for (const layout of LAYOUTS) {
     describe(layout.name, (): void => {
       const anchors = rallyFlowAnchorsPx(layout.boxes, layout.viewport);
-
-      it("does not pin, so these anchors are the ones that run", (): void => {
-        expect(rallyCanPin(layout.section, layout.viewport)).toBe(false);
-      });
 
       it("lights every value while that value is fully on screen", (): void => {
         // The whole of issue #637 in one assertion: the anchor is where the
@@ -155,5 +108,28 @@ describe("rallyFlowAnchorsPx", (): void => {
   it("shows as much as it can of a value taller than the viewport", (): void => {
     // No window exists at all here; the top of the viewport is the best offer.
     expect(rallyFlowAnchorsPx([{ top: 1000, height: 700 }], 500)).toEqual([0]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1026 — the pin is retired, and with it the blank band its transparent
+// spacer padding painted under the yellow section on tall viewports. These are
+// source-level guards in the house style: the pin must not come back through a
+// careless restore of one of its moving parts.
+// ---------------------------------------------------------------------------
+describe("the rally never pins again (#1026)", (): void => {
+  it("leaves no pin in the motion layer", (): void => {
+    const source = landingMotionSource();
+    expect(source).not.toContain("pin: true");
+    expect(source).not.toContain("rallyCanPin");
+    expect(source).not.toContain("rallyHitIndex");
+  });
+
+  it("keeps no pin decision machinery in the rally geometry", (): void => {
+    const source = landingRallySource();
+    expect(source).not.toContain("rallyCanPin");
+    expect(source).not.toContain("RALLY_HIT_PROGRESS");
+    // The flowing anchors are the whole choreography now.
+    expect(source).toContain("export function rallyFlowAnchorsPx");
   });
 });

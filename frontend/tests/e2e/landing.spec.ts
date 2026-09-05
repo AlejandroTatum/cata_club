@@ -549,25 +549,35 @@ test.describe("Landing page", () => {
     }
 
     /**
-     * The other half of the fix: nothing above changes what a desktop already
-     * does. At 1440x900 the section is 711px, it fits, and the original pinned
-     * choreography is exactly what has to keep running.
+     * #1026 removed the desktop pin too: Valores remains in document flow,
+     * so ScrollTrigger cannot add its tall pin spacer (the source of the white
+     * gap) before the immediately following Palmarés section.
      */
-    test("keeps the pinned desktop choreography", async ({ page }) => {
-      test.setTimeout(120_000);
+    test("keeps Values flow-only and contiguous with Palmarés on desktop", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
       await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
+      await page.locator(".landing-wins").scrollIntoViewIfNeeded();
 
-      const walk = await walkRally(page);
-
-      expect(walk.everPinned, "the section still pins on the desktop").toBe(true);
-      ["01", "02", "03", "04"].forEach((label, index) => {
-        expect(walk.activatedOnScreen[index], `value ${label} lit up while on screen on the desktop`).toBe(true);
+      const flow = await page.evaluate(() => {
+        const values = document.querySelector<HTMLElement>(".landing-values");
+        const palmares = document.querySelector<HTMLElement>(".landing-wins");
+        if (!values || !palmares) return null;
+        const valuesBox = values.getBoundingClientRect();
+        const palmaresBox = palmares.getBoundingClientRect();
+        return {
+          position: getComputedStyle(values).position,
+          hasPinSpacer: values.closest(".pin-spacer") !== null,
+          palmaresIsNextSection: values.nextElementSibling === palmares,
+          gapToPalmares: Math.round(palmaresBox.top - valuesBox.bottom),
+        };
       });
-      expect(walk.highestCounter, "counter reaches 4/4").toBe(4);
-      expect(walk.desyncs, "counter, hit and dim stay in step").toEqual([]);
-      expect(walk.maxPageOverflowPx, "no horizontal page scroll").toBeLessThanOrEqual(0);
+
+      expect(flow, "Values and Palmarés render").not.toBeNull();
+      expect(flow?.position, "Values stays in normal flow").not.toBe("fixed");
+      expect(flow?.hasPinSpacer, "Values has no generated pin spacer").toBe(false);
+      expect(flow?.palmaresIsNextSection, "Palmarés follows Values directly").toBe(true);
+      expect(flow?.gapToPalmares, "no spacer gap separates Values from Palmarés").toBe(0);
     });
 
     test("re-evaluates the rally after an orientation change", async ({ page }) => {
