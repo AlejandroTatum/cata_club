@@ -157,6 +157,26 @@ export function normalizeEcuadorianMobile(value: string): string {
 export const PHONE_FORMAT_HINT =
   "Celular: 09XXXXXXXX (también acepta +593… o 593…). Fijo: 0, código de área y 7 dígitos.";
 
+/**
+ * The hint for phone fields that carry the visual `+593` prefix
+ * (`EcuadorPhonePrefix` in `wizard-fields.tsx`, issue #1028). The field itself
+ * already shows the country — 🇪🇨 and the code — so this line only names the
+ * country for assistive technology and says which LOCAL digits to type; it
+ * deliberately does not repeat the accepted formats the way
+ * `PHONE_FORMAT_HINT` does. Same numbering plan, one instruction shorter.
+ */
+export const PHONE_LOCAL_HINT =
+  "Escriba su número local de Ecuador: el celular empieza en 09; los fijos, en 0.";
+
+/**
+ * The hint for the public self-service enrollment's own phone (#1028, review
+ * round 3): the field shows 🇪🇨 and the fixed `+593`, so the visitor's job is
+ * ONLY the nine mobile digits that follow — no leading `0`, no repeated
+ * `593`. The hint says exactly that, with the example the placeholder shows.
+ */
+export const PHONE_ENROLL_LOCAL_HINT =
+  "Escriba los 9 dígitos de su celular, sin el 0 inicial: por ejemplo, 991234567."
+
 export function phoneError(value: string): PhoneErrorReason | null {
   // Normalize BEFORE the separator strip below: an international mobile
   // number is converted to its local form first, so the digit/pattern check
