@@ -453,3 +453,47 @@ describe("AuthShell — the exit points at the previous step, not always at the 
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// `hideBack` (#1045) — the ONE screen that is not public.
+//
+// /login/activacion is the exception among the five screens this shell
+// serves: the person on it is already authenticated. The exit control this
+// file draws always names a step in the PUBLIC site (the landing, or
+// /login), and neither is where an authenticated person stuck at a gate
+// should go — landing leaves the session open behind them, and /login just
+// bounces them straight back here. The card's own "Cerrar sesión" is the
+// deliberate exit for that state, so this prop lets exactly that one screen
+// opt out of the corner control instead of showing a destination that is
+// wrong for it. It defaults to `false`, so the four public screens that
+// never pass it keep the exact behaviour every test above already pins.
+// ---------------------------------------------------------------------------
+
+function renderHiddenBackShell(): void {
+  render(
+    <AuthShell title="Active su cuenta" hideBack>
+      <button type="submit">Continuar</button>
+    </AuthShell>,
+  );
+}
+
+describe("AuthShell — hideBack lets one authenticated screen opt out", () => {
+  it("still shows the exit by default, unchanged for the public screens", () => {
+    renderShell();
+
+    expect(screen.getByRole("link", { name: /volver al inicio/i })).toBeInTheDocument();
+  });
+
+  it("renders no back control at all when hideBack is set", () => {
+    renderHiddenBackShell();
+
+    expect(screen.queryByRole("link", { name: /volver/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the brand cluster and its landmark even with the exit hidden", () => {
+    renderHiddenBackShell();
+
+    expect(screen.getByRole("banner", { name: "Marca de Cata Club" })).toBeInTheDocument();
+    expect(screen.getByTestId("auth-brand-cluster")).toBeInTheDocument();
+  });
+});
