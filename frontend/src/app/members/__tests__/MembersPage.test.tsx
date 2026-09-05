@@ -16,6 +16,7 @@ import MembersPage from "@/app/members/page";
 import type { MemberAccount, MemberStudentSummary } from "@/app/members/members-utils";
 import type { DescuentoCatalogo } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { expectSharedNativeDialogChain } from "./native-dialog-shell.assertions";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -285,19 +286,12 @@ describe("MembersPage — Editar member modal", () => {
   /**
    * Issues #856 and #1036: on iPhone the header and close button rendered
    * but the body collapsed or ran off-screen — see
-   * `NativeDialogShell.test.tsx`'s doc comment for the WebKit mechanics.
-   * `MemberEditDialog` is the third consumer of the shared
-   * `NATIVE_DIALOG_SHELL_CLASS`/`NATIVE_DIALOG_BODY_CLASS` pair but is not
-   * exported from `page.tsx`, so its own chain — from the `<dialog>` down to
-   * the scrolling body — is asserted here rather than in that file.
-   *
-   * #952 closed #856 by removing the shell's `h-fit` and adding the body's
-   * `min-h-0`, but the body still carried `flex-1` (`flex: 1 1 0%`), which is
-   * exactly what #1036 found still collapsing on a real iPhone: WebKit
-   * resolves that `0%` basis as a definite zero against the fixed dialog, so
-   * the body gets nothing to grow into. Measured on iOS 18.7 at a 695px
-   * viewport: `flex-1` → 196px dialog / 32px body (just the vertical
-   * padding); `flex-auto` (`flex: 1 1 auto`) → 665px dialog / 501px body.
+   * `native-dialog-shell.assertions.ts` for the WebKit mechanics and the
+   * iPhone measurement numbers. `MemberEditDialog` is the third consumer of
+   * the shared `NATIVE_DIALOG_SHELL_CLASS`/`NATIVE_DIALOG_BODY_CLASS` pair
+   * but is not exported from `page.tsx`, so its own chain — from the
+   * `<dialog>` down to the scrolling body — is asserted here rather than in
+   * `NativeDialogShell.test.tsx`.
    */
   it("gives the Editar dialog the same definite-height shell/body chain as Ficha médica and Pagos", async () => {
     render(
@@ -308,13 +302,7 @@ describe("MembersPage — Editar member modal", () => {
     const row = await findAccountRow();
     const dialog = await openModalAndWaitForRoles(row);
 
-    expect(dialog).not.toHaveClass("h-fit");
-    expect(dialog).toHaveClass("flex", "flex-col", "overflow-hidden");
-
-    const body = dialog.querySelector(".overflow-y-auto") as HTMLElement;
-    expect(body).toHaveClass("flex-auto", "min-h-0", "overflow-y-auto", "overscroll-contain");
-    expect(body).not.toHaveClass("flex-1");
-    expect(body.parentElement).toBe(dialog);
+    const body = expectSharedNativeDialogChain(dialog);
 
     const [header] = Array.from(dialog.children) as HTMLElement[];
     expect(header).toHaveClass("shrink-0");
@@ -323,18 +311,6 @@ describe("MembersPage — Editar member modal", () => {
     // up by position relative to `body` rather than assuming it is the last one.
     const footer = body.nextElementSibling as HTMLElement;
     expect(footer).toHaveClass("shrink-0");
-
-    // No intermediate wrapper between `body` and `dialog` reintroduces a
-    // second clip or an un-shrinkable flex child — same guard as the other
-    // two dialogs' shared-shell tests.
-    let node = body.parentElement;
-    while (node && node !== dialog) {
-      expect(node).not.toHaveClass("overflow-hidden");
-      if (node.classList.contains("flex-1")) {
-        expect(node).toHaveClass("min-h-0");
-      }
-      node = node.parentElement;
-    }
   });
 
   it("gives each rendering exactly one Editar trigger, and no inline role/status controls", async () => {
