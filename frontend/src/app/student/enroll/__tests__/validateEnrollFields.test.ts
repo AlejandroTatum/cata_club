@@ -23,7 +23,7 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     apellidos: "Pérez",
     fechaNacimiento: "2000-01-15",
     cedula: "1798765432",
-    telefono: "0991234567",
+    telefono: "991234567",
     correo: "juan@example.com",
     contrasenia: "password8",
     contraseniaConfirmacion: "password8",
@@ -99,12 +99,13 @@ describe("validateEnrollFields", () => {
   });
 
   it("accepts a phone typed with spaces but rejects a short one", () => {
-    expect(validateEnrollFields("personal", validForm({ telefono: "0981 000 010" })).telefono)
+    expect(validateEnrollFields("personal", validForm({ telefono: "991 234 567" })).telefono)
       .toBeUndefined();
-    expect(validateEnrollFields("personal", validForm({ telefono: "09810" })).telefono)
-      .toBe(
-        "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
-      );
+    // #1028 (review round 3): this step's phone is the nine digits after
+    // +593 — a short entry names the format instead of `phoneRule`'s wider
+    // celular-or-landline sentence.
+    expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
+      .toBe("Escriba los 9 dígitos de su celular después del +593 (por ejemplo, 991234567).");
   });
 
   it("blames the birth date for the minors rule on a self enrollment", () => {

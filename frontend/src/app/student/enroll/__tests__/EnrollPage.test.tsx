@@ -18,10 +18,37 @@ import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 import {
-  fillEnrollStudentStep,
+  fillEnrollStudentStep as fillEnrollStudentStepDouble,
   fillEnrollHealthStep,
-  completeSelfEnrollmentWizard,
 } from "@/lib/__tests__/fill-enroll-student-step";
+
+/**
+ * The shared double still enters the 10-digit local form (`0991234567`);
+ * #1028 (round 3) made this flow's editable value the NINE digits after the
+ * fixed `+593`. The rewrite happens AFTER the fill, exactly as a visitor
+ * correcting the field would — the wizard's own rule then validates the same
+ * shape it will receive in production.
+ */
+function fillEnrollStudentStep(): void {
+  fillEnrollStudentStepDouble();
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
+}
+
+/** The double's walk, retyped locally for the same reason as above: it must
+ * fill the nine-digit entry or the step-2 gate would refuse to open. */
+async function completeSelfEnrollmentWizard(): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  fillEnrollStudentStep();
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+  fillEnrollHealthStep();
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+
+  await screen.findByText(/inscripción completada/i);
+}
 import { enrollFieldId } from "@/app/student/enroll/enroll-utils";
 import { birthDatePartIds } from "@/components/wizard-fields";
 import { enrollStudent } from "@/services/api";
@@ -832,7 +859,7 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
     fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   }
 
@@ -916,5 +943,77 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
 
     expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
     expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1028, review round 2 — the public wizard's step-2 phone is LOCAL ONLY
+// (09XXXXXXXX). The 593/+593 forms are no longer normalized behind the
+// visitor's back: they stay as typed (digits only, capped) and the step rule
+// rejects them with the message that teaches the 09 format.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — step 2 takes only the 9 digits after +593 (#1028 review)", () => {
+  function goToStudentStepLocal(): void {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("valid 991234567 enables 'Siguiente'", () => {
+    goToStudentStepLocal();
+    fillEnrollStudentStep();
+
+    expect(screen.getByLabelText(/^Teléfono/)).toHaveValue("991234567");
+    expect(screen.queryByText(/no incluya el 0 inicial/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no repita el 593/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
+  });
+
+  it("rejects a leading-0 entry by name and keeps 'Siguiente' disabled", () => {
+    goToStudentStepLocal();
+    fillEnrollStudentStep();
+
+    const phone = screen.getByLabelText(/^Teléfono/);
+    fireEvent.change(phone, { target: { value: "0991234567" } });
+    fireEvent.blur(phone);
+
+    // No silent normalization: the 0-leading entry stays as typed.
+    expect(phone).toHaveValue("0991234567");
+    expect(
+      screen.getByText("No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+  });
+
+  it("rejects the 593 and +593 forms as repeated country codes", () => {
+    goToStudentStepLocal();
+    fillEnrollStudentStep();
+
+    const phone = screen.getByLabelText(/^Teléfono/);
+    fireEvent.change(phone, { target: { value: "+593991234567" } });
+    fireEvent.blur(phone);
+    expect(phone).toHaveValue("593991234567");
+    expect(
+      screen.getByText("No repita el 593: ya está en el campo. Escriba solo los 9 dígitos de su celular."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(phone, { target: { value: "593991234567" } });
+    fireEvent.blur(phone);
+    expect(screen.getByText(/no repita el 593/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+  });
+
+  it("submits the canonical local 09XXXXXXXX form the backend contract expects", async () => {
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+
+    await completeSelfEnrollmentWizard();
+
+    // The visitor typed 991234567 after the fixed +593; the wire carries the
+    // local 09XXXXXXXX form the contract has always expected.
+    expect(enrollStudent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        alumno: expect.objectContaining({ telefono: "0991234567" }),
+      }),
+    );
   });
 });
