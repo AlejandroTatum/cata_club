@@ -100,6 +100,8 @@ const F = {
   contraseniaRepresentante: "enroll-contrasenia-representante",
   contraseniaRepresentanteConfirmacion: "enroll-confirmar-contrasena-representante",
   tipoSangre: "enroll-tipo-sangre",
+  condicionesSalud: "enroll-condiciones-salud",
+  alergias: "enroll-alergias",
   contactoEmergencia: "enroll-contacto-emergencia",
   telefonoEmergencia: "enroll-telefono-emergencia",
 } as const;
@@ -1473,5 +1475,121 @@ test.describe("X · Robustez del envío", () => {
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
     await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
     await shot(page, "X03", "corregir-desde-resumen");
+  });
+});
+
+// ===========================================================================
+// D — Borrador en `sessionStorage` (caracterización, NO un contrato deseado)
+//
+// La ficha médica y las cédulas cargadas viven en `sessionStorage` hasta que
+// se cierra la pestaña, incluso después de un alta fallida: se auditó el
+// borrador y se decidió no tocarlo por ahora (queda en standby). Este bloque
+// no defiende ese comportamiento — lo fija tal como es hoy, para que si
+// alguien cambia el alcance del borrador (qué guarda, cuándo lo limpia) se
+// entere por un test que se pone rojo y no por un hallazgo de auditoría.
+// ===========================================================================
+
+test.describe("D · Borrador en sessionStorage tras un alta fallida", () => {
+  // `enroll-utils.ts` no exporta esta clave — se transcribe a propósito, con
+  // el mismo criterio que la tabla `F` de arriba: si alguien la cambia allá,
+  // este archivo tiene que enterarse rompiéndose.
+  const ENROLL_DRAFT_KEY = "cata_enroll_draft";
+
+  const DUPLICADO = MENSAJE_IDENTIDAD_DUPLICADA;
+
+  const HEALTH_NOTES = {
+    condicionesSalud: "Asma leve, controlada con inhalador",
+    alergias: "Alergia al polen",
+  };
+
+  async function readDraft(page: Page): Promise<Record<string, unknown> | null> {
+    const raw = await page.evaluate(
+      (key) => window.sessionStorage.getItem(key),
+      ENROLL_DRAFT_KEY,
+    );
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  }
+
+  test("D01 · un alta fallida deja identidad y ficha médica en sessionStorage, sin contraseñas", async ({
+    page,
+  }) => {
+    await enterFromLogin(page);
+    await goToPersonal(page, "Jugador");
+    await fillValidStudent(page);
+    await fillValidCredentials(page);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
+
+    await fillValidHealth(page);
+    await field(page, F.condicionesSalud).fill(HEALTH_NOTES.condicionesSalud);
+    await field(page, F.alergias).fill(HEALTH_NOTES.alergias);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
+
+    // Se fuerza un rechazo (cédula duplicada) — es el caso donde el borrador
+    // sobrevive, porque solo se limpia tras un alta EXITOSA.
+    await mockEnrollment(page, {
+      status: 400,
+      body: { detail: DUPLICADO, message: DUPLICADO },
+    });
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: /confirmar inscripción/i }).click();
+    await expect(stepAlert(page)).toContainText(DUPLICADO);
+
+    const draft = await readDraft(page);
+    expect(draft).not.toBeNull();
+
+    // El candado del #553 (extendido por el #876): ninguna contraseña ni su
+    // confirmación llega a `sessionStorage`. Esto es lo que hoy está bien.
+    for (const key of [
+      "contrasenia",
+      "contraseniaConfirmacion",
+      "contraseniaRepresentante",
+      "contraseniaRepresentanteConfirmacion",
+    ]) {
+      expect(draft).not.toHaveProperty(key);
+    }
+
+    // Lo que NO está bajo ningún candado: identidad y ficha médica quedan en
+    // claro en el borrador, cédula incluida.
+    expect(draft).toMatchObject({
+      cedula: VALID_STUDENT.cedula,
+      tipoSangre: VALID_HEALTH.tipoSangre,
+      condicionesSalud: HEALTH_NOTES.condicionesSalud,
+      alergias: HEALTH_NOTES.alergias,
+      contactoEmergencia: VALID_HEALTH.contacto,
+      telefonoEmergencia: VALID_HEALTH.telefono,
+    });
+
+    await shot(page, "D01", "borrador-sin-contrasenias-con-ficha-medica");
+
+    // Y ese borrador se restaura al recargar: la próxima carga de la MISMA
+    // pestaña vuelve a mostrar la cédula y la ficha médica, no un formulario
+    // en blanco. Como la contraseña no viaja en el borrador, el asistente no
+    // aterriza en "Tipo de inscripción": `furthestReachableIndex` salta
+    // directo al paso "Datos del estudiante", que queda incompleto por la
+    // contraseña faltante y por eso es donde el visitante retoma.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText(/recuperamos los datos/i)).toBeVisible();
+    await expect(field(page, F.cedula)).toHaveValue(VALID_STUDENT.cedula);
+    await expect(field(page, F.correo)).toHaveValue(VALID_CREDENTIALS.correo);
+    await expect(field(page, F.contrasenia)).toHaveValue("");
+    await expect(nextButton(page)).toBeDisabled();
+
+    // Se retipea la contraseña —tal como documenta el comentario de
+    // `stripEnrollPasswords`— y recién ahí el asistente deja avanzar.
+    await field(page, F.contrasenia).fill(VALID_CREDENTIALS.contrasenia);
+    await field(page, F.contraseniaConfirmacion).fill(VALID_CREDENTIALS.contraseniaConfirmacion);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
+    await expect(field(page, F.tipoSangre)).toHaveValue(VALID_HEALTH.tipoSangre);
+    await expect(field(page, F.condicionesSalud)).toHaveValue(HEALTH_NOTES.condicionesSalud);
+    await expect(field(page, F.alergias)).toHaveValue(HEALTH_NOTES.alergias);
+    await expect(field(page, F.contactoEmergencia)).toHaveValue(VALID_HEALTH.contacto);
+    await expect(field(page, F.telefonoEmergencia)).toHaveValue(VALID_HEALTH.telefono);
+    await shot(page, "D01", "borrador-restaurado-tras-recarga");
   });
 });
