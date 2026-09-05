@@ -73,6 +73,7 @@ import type { NumericFieldMode } from "@/lib/numeric-input";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
   buildEnrollmentRequest,
+  canonicalStudentPhone,
   clearEnrollDraft,
   describeStepBlocker,
   ENROLLMENT_TYPES,
@@ -489,7 +490,7 @@ function EnrollWizard(): React.ReactElement {
           apellidos: "Martinez",
           fechaNacimiento: "1990-05-20",
           cedula: "1798765432",
-          telefono: "0991234567",
+          telefono: "991234567",
           correo: "sofia@example.com",
           contrasenia: "password8",
           contraseniaConfirmacion: "password8",
@@ -504,7 +505,7 @@ function EnrollWizard(): React.ReactElement {
           apellidos: "Martinez",
           fechaNacimiento: "2015-06-15",
           cedula: "1723456719",
-          telefono: "0991234567",
+          telefono: "991234567",
           nombreRepresentante: "Sofia",
           apellidosRepresentante: "Martinez",
           cedulaRepresentante: "0998765432",
@@ -690,9 +691,12 @@ function EnrollWizard(): React.ReactElement {
             : "Ingrese los datos personales del estudiante a inscribir:"}
         </p>
 
+        {/* #1028 (review): this flow's phone is local-only — `09XXXXXXXX`, no
+            `593`/`+593` entry, no silent normalization. */}
         <PersonIdentityFields
           idPrefix="enroll"
           disabled={submitting}
+          phoneFormat="local"
           nombres={formData.nombres}
           apellidos={formData.apellidos}
           fechaNacimiento={formData.fechaNacimiento}
@@ -1134,7 +1138,7 @@ function EnrollWizard(): React.ReactElement {
             "personal",
           )}
           {summaryRow("Cédula", formData.cedula || "—", "personal", { duplicateCandidate: true })}
-          {summaryRow("Teléfono", formData.telefono || "—", "personal")}
+          {summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
           {isChild
             ? summaryRow(
                 "Institución",

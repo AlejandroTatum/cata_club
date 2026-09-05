@@ -12,12 +12,15 @@ function apiError(message: string, status: number, validationLoc?: string[]): Ap
 }
 
 function form(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
-  return { ...initialFormData, nombres: " Ana ", apellidos: " Pérez ", fechaNacimiento: "2000-01-15", cedula: "1712345678", telefono: "0991234567", correo: "ana@example.com", contrasenia: "password8", tipoSangre: BLOOD_TYPES.O_POSITIVO, contactoEmergencia: "María", telefonoEmergencia: "0997654321", ...overrides };
+  return { ...initialFormData, nombres: " Ana ", apellidos: " Pérez ", fechaNacimiento: "2000-01-15", cedula: "1712345678", telefono: "991234567", correo: "ana@example.com", contrasenia: "password8", tipoSangre: BLOOD_TYPES.O_POSITIVO, contactoEmergencia: "María", telefonoEmergencia: "0997654321", ...overrides };
 }
 
 describe("buildEnrollmentRequest", () => {
   it("builds the self contract with student credentials", () => {
     const request = buildEnrollmentRequest(form());
+    // #1028 (round 3): the visitor typed 991234567 after the fixed +593;
+    // the wire carries the canonical local 09XXXXXXXX the backend expects.
+    expect(request.alumno.telefono).toBe("0991234567");
     expect(request.alumno.nombres).toBe("Ana");
     expect(request.credencialesAlumno).toEqual({ correo: "ana@example.com", contrasenia: "password8" });
     expect(request.representante).toBeUndefined();

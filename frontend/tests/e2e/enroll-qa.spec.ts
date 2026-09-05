@@ -179,7 +179,7 @@ const VALID_STUDENT = {
   apellidos: "Pérez Mora",
   fechaNacimiento: isoYearsAgo(30),
   cedula: "1798765432",
-  telefono: "0991234567",
+  telefono: "991234567",
 };
 
 const VALID_CREDENTIALS = {
@@ -441,19 +441,22 @@ test.describe("P · Datos del estudiante (autoinscripción)", () => {
   });
 
   test("P11 · teléfono de 6 dígitos", async ({ page }) => {
+    // #1028 (round 3): este paso espera los 9 dígitos tras el +593; una
+    // entrada con 0 inicial se rechaza nombrando el error, sin normalizar.
     await fillAndBlur(page, F.telefono, "099123");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593.",
     );
     await shot(page, "P11", "telefono-corto");
   });
 
   test("P12 · teléfono con guiones: los separadores siguen siendo válidos", async ({ page }) => {
-    // La regla compartida (#229) ya no borra "todo lo que no sea dígito": tiene
-    // un allowlist explícito de separadores de tipeo (espacio, guion, paréntesis).
-    // "099-123-4567" limpia a 10 dígitos por ESE allowlist, no por un strip
-    // ciego, y sigue pasando — pero "099abc1234" ya no (ver V01).
-    await fillAndBlur(page, F.telefono, "099-123-4567");
+    // #1028 (round 3): la entrada de este paso son los 9 dígitos tras el
+    // +593, y la regla del paso tolera los separadores de tipeo (espacio,
+    // guion, paréntesis) igual que antes — "991-234-567" limpia a los
+    // mismos 9 dígitos y sigue pasando; lo que ya no pasa es repetir el
+    // 593 ni incluir el 0 inicial (ver P11/V01/V02).
+    await fillAndBlur(page, F.telefono, "991-234-567");
     await expectFieldValid(page, F.telefono);
     await shot(page, "P12", "telefono-con-guiones-valido");
   });
@@ -1328,24 +1331,23 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
   });
 
   test("V01 · un teléfono con letras adentro ahora se rechaza: ya no se descartan antes de medir", async ({ page }) => {
-    // La regla compartida (#229) rechaza cualquier carácter que no sea dígito
-    // o un separador de tipeo explícito (espacio, guion, paréntesis) — ya no
-    // borra "todo lo que no sea dígito" en silencio. "099abc1234" conserva las
-    // letras y falla por eso, no por el largo que quede después de limpiarlas.
+    // #1028 (round 3): las letras se descartan al medir y lo que queda
+    // empieza en 0 — el rechazo nombra el 0 inicial, el primer error que
+    // un visitante real necesita corregir.
     await fillAndBlur(page, F.telefono, "099abc1234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono solo puede contener dígitos y separadores (espacio, guion, paréntesis).",
+      "No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593.",
     );
     await shot(page, "V01", "telefono-con-letras-rechazado");
   });
 
   test("V02 · un teléfono de 7 dígitos ahora se rechaza: no existe en la numeración ecuatoriana", async ({ page }) => {
-    // La regla compartida (#229) solo acepta 10 dígitos empezando en 09
-    // (celular) o 9 dígitos empezando en 0 (fijo) — los únicos largos que el
-    // Plan Técnico Fundamental de Numeración de ARCOTEL admite.
+    // #1028 (round 3): el paso solo acepta los 9 dígitos del móvil tras el
+    // +593; un residuo corto con 0 inicial recibe el mensaje que enseña el
+    // formato esperado.
     await fillAndBlur(page, F.telefono, "0991234");
     await expect(fieldError(page, F.telefono)).toHaveText(
-      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      "No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593.",
     );
     await shot(page, "V02", "telefono-de-7-digitos-rechazado");
   });
