@@ -18,37 +18,10 @@ import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 import {
-  fillEnrollStudentStep as fillEnrollStudentStepDouble,
+  fillEnrollStudentStep,
   fillEnrollHealthStep,
+  completeSelfEnrollmentWizard,
 } from "@/lib/__tests__/fill-enroll-student-step";
-
-/**
- * The shared double still enters the 10-digit local form (`0991234567`);
- * #1028 (round 3) made this flow's editable value the NINE digits after the
- * fixed `+593`. The rewrite happens AFTER the fill, exactly as a visitor
- * correcting the field would — the wizard's own rule then validates the same
- * shape it will receive in production.
- */
-function fillEnrollStudentStep(): void {
-  fillEnrollStudentStepDouble();
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
-}
-
-/** The double's walk, retyped locally for the same reason as above: it must
- * fill the nine-digit entry or the step-2 gate would refuse to open. */
-async function completeSelfEnrollmentWizard(): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-  fillEnrollStudentStep();
-  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-
-  fillEnrollHealthStep();
-  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
-
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
-
-  await screen.findByText(/inscripción completada/i);
-}
 import { enrollFieldId } from "@/app/student/enroll/enroll-utils";
 import { birthDatePartIds } from "@/components/wizard-fields";
 import { enrollStudent } from "@/services/api";

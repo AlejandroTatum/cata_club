@@ -14,6 +14,11 @@
  * once the student- and health-step fills collapsed to one call each, the
  * three call sites that submit and wait for the confirmation screen were
  * left as an eleven-line clone of each other.
+ *
+ * #1028 (round 3): this flow's phone is the NINE digits after the fixed
+ * `+593`, so the fill rewrites the 10-digit entry to `991234567` right
+ * after filling it — exactly as a visitor correcting the field would, so
+ * the step-2 gate opens on the same shape it validates in production.
  */
 
 import { fireEvent, screen } from "@testing-library/react";
@@ -26,6 +31,8 @@ export function fillEnrollStudentStep(): void {
   fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+  // #1028 (round 3): the editable value is the 9 digits after the +593.
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
   fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
   fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
   fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
