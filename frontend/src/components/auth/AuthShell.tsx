@@ -325,15 +325,30 @@ export default function AuthShell({
          * flexible either side of it, exactly like the panel's light half.
          * It must not go back to spanning rows: `BackLink` moves out of that
          * flow instead, `absolute` against this panel (the nearest
-         * `relative` ancestor, one level up), so the exit keeps sitting at
-         * the panel's own top-left corner the way it always did, and never
-         * again contributes to the middle row's height. It stays inside this
-         * `<header>` for the landmark; it just no longer shares the header's
-         * box. The accessible name is Spanish, like every user-facing label
-         * in the product ("Marca de Cata Club").
+         * `relative` ancestor, one level up), so it never again contributes
+         * to the middle row's height. It stays inside this `<header>` for
+         * the landmark; it just no longer shares the header's box. The
+         * accessible name is Spanish, like every user-facing label in the
+         * product ("Marca de Cata Club").
+         *
+         * #1029: `absolute left-0 top-0` pinned the control flush to the
+         * panel's (0,0) — on top of the panel's own padding, and on viewports
+         * where the panel touches the screen edge, flush to the VIEWPORT —
+         * and the 10%-white box was easy to scroll past without noticing. The
+         * offsets are now the panel's own padding values (`px-6 py-8`,
+         * `split:px-14 split:py-12`), so the exit aligns with the panel's
+         * content column and gets the same air as everything else in the
+         * composition. `ring-white/20 ring-inset` gives the box a visible
+         * hairline AT REST — the tone draws its border only on hover, which is
+         * why the control read as part of the background — while the skin,
+         * hover behaviour and single-exit rule stay `BackLink`'s own.
          */}
         <header aria-label="Marca de Cata Club" className="row-start-2 grid">
-        <BackLink href={backHref} tone="coal" className="absolute left-0 top-0 z-[1]" />
+        <BackLink
+          href={backHref}
+          tone="coal"
+          className="absolute left-6 top-8 z-[1] ring-1 ring-inset ring-white/20 split:left-14 split:top-12"
+        />
 
         {/*
          * The centred cluster — `gap:22px`, and a measure that TRACKS THE
