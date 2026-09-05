@@ -130,3 +130,49 @@ describe("landing vertical space (#871)", (): void => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// #1026 — the Valores redesign. jsdom still cannot compute layout, so these
+// keep reading the authored stylesheet, same convention as the #871 block
+// above. What they lock is the redesign's three structural commitments: the
+// section BLEEDS into its black neighbours instead of cutting, the rally
+// counter presents as the scoreboard chip, and the value indices carry
+// scoreboard-size numerals. None of it moves the #871 vertical budget, which
+// is why the block above still passes untouched.
+// ---------------------------------------------------------------------------
+describe("Valores redesign (#1026)", (): void => {
+  it("blends both edges into the neighbouring black sections", (): void => {
+    const css = landingCss();
+    const blend = css.match(/\.landing-values::after \{[^}]*\}/);
+    expect(blend).not.toBeNull();
+    expect(blend![0]).toContain("linear-gradient(180deg, var(--landing-brand-black)");
+    expect(blend![0]).toContain("linear-gradient(0deg, var(--landing-brand-black)");
+    // The wash paints BEHIND the section's children, never over their text.
+    expect(blend![0]).toContain("z-index: 0");
+    expect(blend![0]).toContain("pointer-events: none");
+  });
+
+  it("presents the rally counter as the scoreboard chip", (): void => {
+    const css = landingCss();
+    const chip = ruleAt(css, ".landing-rally-count");
+    expect(chip).toContain("border-radius: 999px");
+    expect(chip).toContain("background: var(--landing-brand-black)");
+    expect(chip).toContain("color: var(--landing-brand-yellow)");
+    // The count itself carries the ball's orange, the hero accent.
+    expect(ruleAt(css, ".landing-rally-count b")).toContain("color: var(--landing-ball)");
+  });
+
+  it("raises the value index to the scoreboard numerals", (): void => {
+    const css = landingCss();
+    const index = ruleAt(css, ".landing-value .landing-index");
+    expect(index).toContain("font-size: clamp(36px, 3.4vw, 48px)");
+    expect(index).toContain("font-variant-numeric: tabular-nums");
+  });
+
+  it("draws the rally guide as the row's black spine, not a red scribble", (): void => {
+    const css = landingCss();
+    const guide = ruleAt(css, ".landing-rally-guide");
+    expect(guide).toContain("stroke: var(--landing-text-strong)");
+    expect(guide).toContain("stroke-width: 3");
+  });
+});
