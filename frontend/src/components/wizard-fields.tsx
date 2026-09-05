@@ -744,7 +744,7 @@ interface WizardNavigationProps {
 }
 
 /**
- * Why a disabled `Button` is disabled, printed right under it.
+ * Why a disabled `Button` is disabled, printed directly above it.
  *
  * `text-xs text-ink-3` (12.5px, the same grey as "10 dígitos, sin guiones.")
  * used to carry this line too — hallazgo #10: the one sentence that tells the
@@ -756,8 +756,19 @@ interface WizardNavigationProps {
  * `text-cata-red-dark` clears 7.74:1 on `paper` and 7.05:1 on `sunken` (AAA),
  * well past the audit's 7:1 floor and the reason it is not `state-bad`
  * (4.84:1 on `canvas`, under that floor).
+ *
+ * #1027 re-draws the GEOMETRY. The line used to live under its button inside
+ * a `max-w-xs` (320px) column, so the sentence wrapped into short lines that
+ * read as centred and competed with the buttons for the same corner. It now
+ * spans the footer's full width in its own row above the buttons,
+ * right-aligned so it still sits over the control it explains: short lists
+ * set on one line, and the narrow-screen fallback is an ordinary
+ * `[text-wrap:pretty]` wrap across the whole card instead of a squeeze. The
+ * copy is unchanged — `describeStepBlocker`'s sentence is asserted
+ * verbatim by `EnrollPage.test.tsx`.
  */
-const BLOCKED_REASON_CLASSES = "max-w-xs text-right text-base font-semibold text-cata-red-dark";
+const BLOCKED_REASON_CLASSES =
+  "mb-section text-right text-base font-semibold text-cata-red-dark [text-wrap:pretty]";
 
 /** Validation-errors alert + Atrás/Siguiente navigation chrome — shared by both wizards' step footer. The final step renders `submitButton` instead of "Siguiente". */
 export function WizardNavigation(props: WizardNavigationProps): ReactElement {
@@ -765,6 +776,16 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
     props.duplicateIdentityAudience !== undefined && props.formErrors.some(isDuplicateIdentityError)
       ? props.duplicateIdentityAudience
       : null;
+  // #1027 — exactly one reason line is live at a time: steps 2-4 explain a
+  // disabled "Siguiente", the final step explains a disabled submit. Rendering
+  // it once, above the whole footer row, is what lets it use the full width.
+  const blockedReason = !props.isLast
+    ? props.nextDisabled
+      ? props.nextBlockedReason
+      : undefined
+    : props.submitBlocked
+      ? props.submitBlockedReason
+      : undefined;
   return (
     <>
       {props.formErrors.length > 0 && (
@@ -795,35 +816,36 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
         </div>
       )}
 
-      <div className="mt-page flex items-start justify-between gap-3">
-        <div>
-          {!props.isFirst && (
-            <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
-              <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Atrás
-            </Button>
-          )}
-        </div>
-
-        <div className="flex flex-col items-end gap-1.5">
-          {!props.isLast ? (
-            <>
-              <Button variant="primary" onClick={props.onNext} disabled={props.nextDisabled}>
-                Siguiente
-                <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      {/*
+       * #1027 — the reason gets its own full-width row ABOVE the buttons:
+       * right-aligned over the control it explains, uncapped so a short list
+       * sets on one line, and wrapping with `text-pretty` across the whole
+       * card on narrow screens instead of breaking inside a 320px column.
+       * `mb-section` keeps reason and buttons one block — the gap between the
+       * parts of a block, not a new first-level step.
+       */}
+      <div className="mt-page">
+        {blockedReason && <p className={BLOCKED_REASON_CLASSES}>{blockedReason}</p>}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {!props.isFirst && (
+              <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
+                <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                Atrás
               </Button>
-              {props.nextDisabled && props.nextBlockedReason && (
-                <p className={BLOCKED_REASON_CLASSES}>{props.nextBlockedReason}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end">
+            {!props.isLast ? (
+                <Button variant="primary" onClick={props.onNext} disabled={props.nextDisabled}>
+                  Siguiente
+                  <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                </Button>
+              ) : (
+                props.submitButton
               )}
-            </>
-          ) : (
-            <>
-              {props.submitButton}
-              {props.submitBlocked && props.submitBlockedReason && (
-                <p className={BLOCKED_REASON_CLASSES}>{props.submitBlockedReason}</p>
-              )}
-            </>
-          )}
+          </div>
         </div>
       </div>
     </>
