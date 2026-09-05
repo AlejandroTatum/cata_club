@@ -33,10 +33,11 @@
  * @vitest-environment jsdom
  */
 
+import { useEffect, useState } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { enrollStudent, fetchInstituciones, fetchTarifas } from "@/services/api";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import {
@@ -296,6 +297,74 @@ describe("EnrollPage — the confirmation's session claim is conditional on a co
         // confirmation. Only cookies the browser really stored can answer it.
         expect(sessionCalls.length).toBeGreaterThanOrEqual(2);
       });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1041 — a logout earlier in the tab must not poison the NEXT
+// enrolment's confirmation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Logs out through the real `AuthProvider` (exactly as the header menu
+ * would) and only then mounts `EnrollPage`, mirroring the repro: sign out,
+ * then enrol again without reloading the tab.
+ */
+function EnrollAfterLogout(): React.ReactElement | null {
+  const { logout } = useAuth();
+  const [loggedOut, setLoggedOut] = useState(false);
+
+  useEffect(() => {
+    void logout().then(() => setLoggedOut(true));
+    // Runs once on mount — `logout` is stable across the provider's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!loggedOut) return null;
+  return <EnrollPage />;
+}
+
+describe("EnrollPage — a prior logout in the same tab must not block the next confirmation (#1041)", () => {
+  beforeEach(async () => {
+    vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/auth/logout") return jsonResponse({ ok: true });
+      if (url === "/api/auth/session") return jsonResponse(NEW_STUDENT_SESSION);
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(
+      <AuthProvider>
+        <EnrollAfterLogout />
+      </AuthProvider>,
+    );
+
+    // Wait for the logout round trip to settle and the wizard to mount —
+    // exactly the moment the buggy `loggingOutRef` used to stay stuck true.
+    await screen.findByRole("button", { name: /^Siguiente/ });
+    await completeSelfEnrollmentWizard();
+  });
+
+  // Criterio de aceptación: confirma la sesión y no muestra el cartel.
+  it("confirms the new session instead of blaming the browser's cookies", () => {
+    expect(screen.getByText(/su cuenta ya está creada y la sesión, iniciada/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ir a mi cuenta/i })).toHaveAttribute("href", "/student");
+    expect(screen.queryByTestId("enroll-session-not-confirmed")).not.toBeInTheDocument();
+  });
+
+  // Criterio de aceptación: la confirmación llega de verdad al backend — no
+  // basta con que la pantalla "adivine" que la sesión se guardó.
+  it("actually asks the backend to confirm the session, once per successful enrolment", async () => {
+    await waitFor(() => {
+      const sessionCallsAfterLogout = vi
+        .mocked(global.fetch)
+        .mock.calls.filter(([input]) => String(input) === "/api/auth/session");
+      // Mount hydration (post-logout, anonymous) plus the confirmation round
+      // trip after the enrolment — the absence of this second call is
+      // exactly what the bug looked like: no request, not a failed one.
+      expect(sessionCallsAfterLogout.length).toBeGreaterThanOrEqual(2);
     });
   });
 });

@@ -165,8 +165,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hadSessionRef = useRef(false);
   // Set synchronously at the start of logout() so any revalidation already
   // scheduled (interval tick / visibilitychange) bails out immediately
-  // instead of racing a new refresh in after logout begins.
+  // instead of racing a new refresh in after logout begins. Reset once
+  // logout's own request settles (see logout's `finally`) -- it means "a
+  // logout is IN FLIGHT", not "a logout ever happened in this tab".
   const loggingOutRef = useRef(false);
+  /**
+   * Monotonically increasing, bumped the moment `logout()` begins. Exists
+   * because `loggingOutRef` alone cannot tell a `revalidate()` that started
+   * BEFORE this logout from one that starts AFTER it ends — both read
+   * `false` once logout's `finally` resets the ref (issue #1041's own fix).
+   * `revalidate()` captures this counter when it starts and compares it
+   * again after its network round trip: if a logout began ANYWHERE in
+   * between, the answer it is holding is stale -- describing a session that
+   * no longer exists -- even though `loggingOutRef` itself has already gone
+   * back to `false` by the time the comparison runs. Without this, a
+   * `revalidate()` already in flight when the person clicks "Cerrar sesión"
+   * (the 5-minute interval, a `visibilitychange` tick) could resolve AFTER
+   * logout finishes and hand its now-authenticated answer to `setSession`,
+   * resurrecting the very session that was just closed.
+   */
+  const logoutEpochRef = useRef(0);
 
   // Mirror the current role to the API client (src/services/api.ts) so its
   // mock-mode `x-mock-role` header reflects the real session.
@@ -179,8 +197,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // nothing to write into state — `unauthenticated` is the honest answer,
     // and the one that keeps a caller from claiming a session either way.
     if (loggingOutRef.current) return { kind: "unauthenticated" };
+    // Captured BEFORE the network round trip: if a logout begins anywhere
+    // during the `await` below, this call's answer describes a session that
+    // no longer exists by the time it comes back, even though `logout()`'s
+    // own `finally` may have already reset `loggingOutRef` to `false` again.
+    const epochAtStart = logoutEpochRef.current;
     const outcome = await authService.getSession();
-    if (loggingOutRef.current) return outcome;
+    if (loggingOutRef.current || logoutEpochRef.current !== epochAtStart) return outcome;
     // A transient outage (503 / network failure) must NOT be treated as a
     // logout — only a genuine "unauthenticated" result clears the session.
     // Issue #454: it also must not stay invisible — flag it so
@@ -308,6 +331,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // logout's Max-Age=0 clear (see discardInFlightRefresh's own doc comment
     // for why this is a client-side mitigation, not a full guarantee).
     loggingOutRef.current = true;
+    // Bumped here, not in the `finally` below: any `revalidate()` whose
+    // `await` straddles this point — already in flight when the click
+    // landed — must find a DIFFERENT epoch than the one it captured, no
+    // matter when its own network round trip happens to resolve.
+    logoutEpochRef.current += 1;
     discardInFlightRefresh();
     try {
       await authService.logout();
@@ -325,6 +353,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // A logout that follows an outage must not carry the banner onto
       // /login — there is no session left for it to be reporting on.
       setPeriodicOutage(false);
+      // Issue #1041: this flag means "a logout is IN FLIGHT", not "a logout
+      // ever happened in this tab". Leaving it set past this point starved
+      // every LATER `revalidate()` (e.g. the public enrolment wizard's
+      // post-signup confirmation, which never goes through `login()`) of the
+      // network round trip that would have told it a NEW session was saved.
+      // Resetting it here does NOT reopen the race `loggingOutRef` was
+      // guarding against: a `revalidate()` that was already in flight when
+      // this logout began is still caught by `logoutEpochRef` above, even
+      // though it may resolve after this exact line runs.
+      loggingOutRef.current = false;
       /*
        * Navigate from HERE rather than leaving it to whatever rendered the
        * button. Until this line, landing on /login was only ever a side effect
