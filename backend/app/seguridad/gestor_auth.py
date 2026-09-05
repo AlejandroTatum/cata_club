@@ -66,6 +66,26 @@ class GestorAutenticacion:
         )
 
     @staticmethod
+    def claims_estandar(db: Session, usuario: "Usuario") -> dict:
+        """Claims que TODO emisor de tokens debe incluir -- login normal,
+        refresh, y el auto-login del alta pública -- sin importar cuál de los
+        tres arma el JWT.
+
+        Único lugar que calcula `roles` y `activacion_completa` (issue
+        #1040): antes de esto, `EnrollmentServicio._emitir_tokens` tenía su
+        propia lista de claims, copiada a mano, y el claim de activación
+        nunca llegó a existir ahí. Agregar o cambiar un claim acá alcanza
+        para que llegue a cada emisor, sin volver a duplicar la lista.
+        """
+        roles = [rol.tipo_rol.value for rol in usuario.roles]
+        return {
+            "sub": usuario.correo,
+            "persona_id": usuario.persona_id,
+            "roles": roles,
+            "activacion_completa": GestorAutenticacion.puede_acceder_modulos(db, usuario),
+        }
+
+    @staticmethod
     def obtener_hash_contrasenia(contrasenia: str) -> str:
         return pwd_context.hash(contrasenia)
 
