@@ -473,6 +473,16 @@ function EnrollWizard(): React.ReactElement {
 
   // ---- Demo helper — quick-fill for testing convenience ----
 
+  // The identities below are NOT arbitrary. They come from the manual QA
+  // dataset: each cedula was computed with the project's own check-digit
+  // algorithm (`backend/app/dominio/cedula.py`) and reserved for exactly one
+  // scenario — 1700500018 for the adult happy path, 1700500067/1700500075 for
+  // the representative and their child. Emails follow the `qa.<case>@` pattern
+  // so a run can be found afterwards with `WHERE correo LIKE 'qa.%'`.
+  //
+  // The previous values were made up by hand and shared one address between
+  // both buttons, so a filled form could not be traced back to the scenario it
+  // was testing. Keep these in sync with the QA dataset, not with each other.
   function fillDemoData(type: EnrollmentType): void {
     const base: Partial<EnrollFormData> = {
       contactoEmergencia: "Carlos Martinez",
@@ -488,11 +498,11 @@ function EnrollWizard(): React.ReactElement {
           nombres: "Sofia",
           apellidos: "Martinez",
           fechaNacimiento: "1990-05-20",
-          cedula: "1798765432",
+          cedula: "1700500018",
           telefono: "0991234567",
-          correo: "sofia@example.com",
-          contrasenia: "password8",
-          contraseniaConfirmacion: "password8",
+          correo: "qa.jugador@cataclub.com",
+          contrasenia: "CataClub2026",
+          contraseniaConfirmacion: "CataClub2026",
           ...base,
         });
         break;
@@ -503,16 +513,16 @@ function EnrollWizard(): React.ReactElement {
           nombres: "Lucas",
           apellidos: "Martinez",
           fechaNacimiento: "2015-06-15",
-          cedula: "1723456719",
+          cedula: "1700500075",
           telefono: "0991234567",
           nombreRepresentante: "Sofia",
           apellidosRepresentante: "Martinez",
-          cedulaRepresentante: "0998765432",
+          cedulaRepresentante: "1700500067",
           fechaNacimientoRepresentante: "1990-05-20",
           telefonoRepresentante: "0991234567",
-          correoRepresentante: "sofia@example.com",
-          contraseniaRepresentante: "password8",
-          contraseniaRepresentanteConfirmacion: "password8",
+          correoRepresentante: "qa.representante@cataclub.com",
+          contraseniaRepresentante: "CataClub2026",
+          contraseniaRepresentanteConfirmacion: "CataClub2026",
           ...base,
         });
         break;
