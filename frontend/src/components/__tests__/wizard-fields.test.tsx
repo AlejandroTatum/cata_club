@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { WizardNavigation } from "../wizard-fields";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { WizardNavigation, PersonIdentityFields } from "../wizard-fields";
+import { PHONE_LOCAL_HINT, PHONE_ENROLL_LOCAL_HINT } from "@/lib/identity-validation";
 
 // Component-level tests for `wizard-fields.tsx`. The JSX-free helpers
 // (`slugifyLabel`) stay in `wizard-fields.test.ts`; everything here renders
@@ -74,3 +75,109 @@ describe("WizardNavigation — the blocked reason's geometry (#1027)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// #1028 — the phone field of the identity step carries an Ecuador flag and a
+// fixed `+593` inside the control. The adornment is decoration with a job: it
+// replaces the hint text that used to teach the accepted formats, while the
+// value semantics (local number in, local number out, #855 normalization) are
+// untouched — those are `WizardInput`'s own tests.
+// ---------------------------------------------------------------------------
+
+describe("PersonIdentityFields — the +593 prefix treatment (#1028)", () => {
+  function renderIdentity(overrides: Partial<Parameters<typeof PersonIdentityFields>[0]> = {}): void {
+    render(
+      <PersonIdentityFields
+        idPrefix="p"
+        disabled={false}
+        nombres=""
+        apellidos=""
+        fechaNacimiento=""
+        cedula=""
+        telefono=""
+        onNombresChange={vi.fn()}
+        onApellidosChange={vi.fn()}
+        onFechaNacimientoChange={vi.fn()}
+        onCedulaChange={vi.fn()}
+        onTelefonoChange={vi.fn()}
+        {...overrides}
+      />,
+    );
+  }
+
+  it("rides the Ecuador mark and a fixed +593 inside the phone field's left edge (shared mode)", () => {
+    renderIdentity();
+
+    const phone = screen.getByLabelText(/^Teléfono/);
+    // The input clears the adornment with the shared padding step.
+    expect(phone.className).toContain("pl-20");
+
+    // The adornment is the field's decorative left half: the native Ecuador
+    // symbol (the first hand-drawn tricolor read as Colombia — the bands are
+    // identical) + the code. No hand-drawn flag rectangle may return.
+    const adornment = phone.parentElement?.querySelector<HTMLElement>("span[aria-hidden='true']");
+    expect(adornment).not.toBeNull();
+    expect(adornment?.textContent).toContain("🇪🇨");
+    expect(adornment?.textContent).toContain("+593");
+    expect(adornment?.querySelector("svg")).toBeNull();
+  });
+
+  it("keeps the label as the phone field's single accessible name", () => {
+    renderIdentity();
+
+    const phone = screen.getByLabelText(/^Teléfono/);
+    expect(phone).toHaveAttribute("id", "p-telefono");
+    // The description is the hint's message id — never the adornment, which is
+    // aria-hidden and contributes nothing assistive technology can hear.
+    expect(phone).toHaveAttribute("aria-describedby", "p-telefono-message");
+  });
+
+  it("swaps the format-teaching hint for the local-digits instruction (shared mode)", () => {
+    renderIdentity();
+
+    expect(screen.getByText(PHONE_LOCAL_HINT)).toBeInTheDocument();
+    expect(screen.queryByText(/también acepta \+593/i)).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // `phoneFormat="local"` — the public self-service enrollment. The field
+  // shows 🇪🇨 + the fixed `+593`, and the editable value is ONLY the nine
+  // mobile digits that follow: no leading 0, no repeated 593. The #855
+  // masking — the layer that silently normalized an autofilled `+593…` — is
+  // retired for this field so a duplicated entry stays as typed for the step
+  // rule to reject with its named message.
+  // -------------------------------------------------------------------------
+  it("shows the fixed flag + +593 prefix and the nine-digit hint in local mode", () => {
+    renderIdentity({ phoneFormat: "local" });
+
+    const phone = screen.getByLabelText(/^Teléfono/);
+    const adornment = phone.parentElement?.querySelector<HTMLElement>("span[aria-hidden='true']");
+    expect(adornment?.textContent).toContain("🇪🇨");
+    expect(adornment?.textContent).toContain("+593");
+    // The placeholder teaches the nine editable digits, no trunk 0.
+    expect(phone).toHaveAttribute("placeholder", "Por ejemplo: 991234567");
+    expect(screen.getByText(PHONE_ENROLL_LOCAL_HINT)).toBeInTheDocument();
+  });
+
+  it("strips non-digits but never normalizes or truncates in local mode", () => {
+    const onTelefonoChange = vi.fn();
+    renderIdentity({ phoneFormat: "local", onTelefonoChange });
+
+    const phone = screen.getByLabelText(/^Teléfono/);
+    // The autofill case: separators and the plus are stripped, the 593 form
+    // stays 593-leading and UNTRUNCATED — visibly wrong, for the rule to name.
+    fireEvent.change(phone, { target: { value: "+593 99 123 4567" } });
+    expect(onTelefonoChange).toHaveBeenLastCalledWith("593991234567");
+
+    // A leading-0 local form stays as typed — the rule rejects it by name.
+    fireEvent.change(phone, { target: { value: "0991234567" } });
+    expect(onTelefonoChange).toHaveBeenLastCalledWith("0991234567");
+
+    // The correct nine digits pass through exactly as typed.
+    fireEvent.change(phone, { target: { value: "991234567" } });
+    expect(onTelefonoChange).toHaveBeenLastCalledWith("991234567");
+
+    // Letters never land.
+    fireEvent.change(phone, { target: { value: "99a12345 67" } });
+    expect(onTelefonoChange).toHaveBeenLastCalledWith("991234567");
+  });
+});
