@@ -69,22 +69,21 @@ interface NativeDialogHandles {
  * asked the browser to size the dialog to its own content instead, the same
  * intrinsic sizing keyword CSS uses for a `<div>` with no height at all. Every
  * major engine mostly tolerates that when a flex-grow child inside asks for a
- * share of it (`NATIVE_DIALOG_BODY_CLASS`'s `flex-1`), but WebKit is the one
- * that resolves an indefinite-height flex container's `flex-basis` as if the
- * child had nothing to grow into: the body collapsed to its `min-height`
- * (browser default `auto`, i.e. its own content height with nowhere to
- * shrink), and on a tall form that pushed the footer off both the visible
- * area and the dialog's own clipped box. Header and close button stayed
- * visible because they are `shrink-0` siblings measured before the body ever
- * gets a size — exactly the report's "header renders, body does not".
+ * share of it, but WebKit is the one that resolves an indefinite-height flex
+ * container's `flex-basis` as if the child had nothing to grow into: the body
+ * collapsed to its `min-height` (browser default `auto`, i.e. its own content
+ * height with nowhere to shrink), and on a tall form that pushed the footer
+ * off both the visible area and the dialog's own clipped box. Header and
+ * close button stayed visible because they are `shrink-0` siblings measured
+ * before the body ever gets a size — exactly the report's "header renders,
+ * body does not".
  *
  * Removing `h-fit` leaves `height` at its CSS default, `auto` — genuinely
  * auto, not `fit-content` — bounded by the `max-h-[…]` above, which IS a
- * definite length (a `calc()` of concrete viewport/inset values). A definite
- * `max-height` on an `auto`-height flex container is what every engine,
- * WebKit included, needs to resolve the `flex-1` body against: short content
- * still shrink-wraps below the cap, and anything taller is clamped at the cap
- * with the excess going to the body's own scrollbar instead of off-screen.
+ * definite length (a `calc()` of concrete viewport/inset values). That gave
+ * the flex container a definite max-height to resolve the body against, but
+ * as issue #1036 found on a real device, it was not the whole story — see
+ * that section on `NATIVE_DIALOG_BODY_CLASS` below.
  */
 export const NATIVE_DIALOG_SHELL_CLASS =
   "fixed inset-x-0 top-[var(--dialog-viewport-top,0px)] " +
@@ -115,16 +114,46 @@ export const NATIVE_DIALOG_SHELL_CLASS =
  *
  * `min-h-0` (issue #856) is the other half of the shell's `h-fit` removal: a
  * flex item's `min-height` defaults to `auto`, which means "never shrink
- * below your content" — the opposite of what a `flex-1 overflow-y-auto`
- * scroll body needs. Without it, WebKit sized this body to fit its full,
- * unscrolled content and only THEN discovered there was no room left inside
- * the shell's `max-h-[…]`, so the overflow it clipped was the body itself
- * rather than something the body's own scrollbar could reach. `ChatWidget`'s
- * history pane (`ChatWidget.tsx`) already carries `min-h-0` next to its own
- * `flex-1 overflow-y-auto` for the identical reason.
+ * below your content" — the opposite of what an `overflow-y-auto` scroll
+ * body needs. Without it, WebKit sized this body to fit its full, unscrolled
+ * content and only THEN discovered there was no room left inside the shell's
+ * `max-h-[…]`, so the overflow it clipped was the body itself rather than
+ * something the body's own scrollbar could reach. `ChatWidget`'s history
+ * pane (`ChatWidget.tsx`) already carries `min-h-0` next to its own
+ * `flex-auto overflow-y-auto` for the identical reason. That part of #952's
+ * fix was correct and stays.
+ *
+ * ## Issue #1036: `flex-1`'s `0%` basis resolves as a definite zero
+ *
+ * #952 kept the grow class at `flex-1`, i.e. `flex: 1 1 0%` — a `0%`
+ * flex-basis. On desktop and Chromium that percentage is treated like
+ * `content` when the flex container's own height is itself indefinite or
+ * shrink-wrapping, so nothing looked wrong there. iOS Safari's WebKit does
+ * not do that: against this `position: fixed` dialog (`top`/`bottom`
+ * non-auto, `height: auto`), it resolves `0%` as a literal, definite zero.
+ * The body then contributes *zero* to the dialog's intrinsic height, the
+ * dialog shrink-wraps to header + footer + padding with no free space left
+ * for `flex-grow` to distribute, and the body ends up exactly at its own
+ * vertical padding.
+ *
+ * Measured on a real iPhone (iOS 18.7, `AppleWebKit/605.1.15`, 695px visual
+ * viewport) on a standalone page reproducing this exact shell/body CSS:
+ *
+ * | Body flex value | Dialog height | Body height | Result |
+ * | --- | --- | --- | --- |
+ * | `flex: 1 1 0%` (`flex-1`, before this fix) | 196px | 32px | collapsed |
+ * | `flex: 1 1 auto` (`flex-auto`, this fix) | 665px | 501px | correct |
+ * | `flex: 1 1 0px` (control) | 196px | 32px | collapsed |
+ *
+ * `flex-auto` (`flex: 1 1 auto`) is immune by construction: an `auto` basis
+ * is the element's own content size, which is never zero, so there is
+ * nothing for WebKit to resolve to a definite zero in the first place. The
+ * body still grows to fill the shell's `max-h-[…]` when content is short and
+ * still clips to its own scrollbar when content is tall — `flex-grow: 1` and
+ * `min-h-0` do that work regardless of the basis.
  */
 export const NATIVE_DIALOG_BODY_CLASS =
-  "flex-1 min-h-0 space-y-section overflow-y-auto overscroll-contain bg-canvas px-5 py-4";
+  "flex-auto min-h-0 space-y-section overflow-y-auto overscroll-contain bg-canvas px-5 py-4";
 
 /**
  * Wires a native `<dialog>` the way every modal on the Miembros page behaves:
