@@ -25,6 +25,8 @@ import {
   isValidCalendarDate,
   studentBirthDateBounds,
   PHONE_FORMAT_HINT,
+  PHONE_LOCAL_HINT,
+  PHONE_ENROLL_LOCAL_HINT,
 } from "@/lib/identity-validation";
 import { Button, buttonClasses } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
@@ -108,6 +110,15 @@ interface WizardInputProps {
   type?: string;
   required?: boolean;
   icon?: ReactNode;
+  /**
+   * Fixed adornment rendered INSIDE the control, left of the text — the
+   * system's way of showing a constant part of the value (#1028). When set,
+   * it replaces the leading icon: the adornment already names what the icon
+   * would, and the input grows a matching left padding (`pl-20`) to make
+   * room. Decorative by definition — the field's label stays the only
+   * accessible name.
+   */
+  prefix?: ReactNode;
   pattern?: string;
   maxLength?: number;
   minLength?: number;
@@ -201,6 +212,17 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
         <RequiredMarker required={opts.required} />
       </label>
       <div className="relative">
+        {opts.prefix && (
+          // #1028 — inset a step from the control's own edge so the field's
+          // focus/error border stays fully visible; the hairline is what
+          // separates the fixed part from the digits the visitor types.
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-1 left-1 flex w-[68px] items-center justify-center gap-1.5 border-r border-line-2"
+          >
+            {opts.prefix}
+          </span>
+        )}
         {opts.icon && (
           <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3">
             {opts.icon}
@@ -232,7 +254,7 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
              translucent red composites to 1.27–1.96:1, which the system already
              retired once as decoration rather than an indicator. The border
              alone is the state, and the shared focus ring marks focus. */
-          className={`input-field ${opts.icon ? "pl-10" : ""} ${isPassword ? "pr-10" : ""} ${
+          className={`input-field ${opts.prefix ? "pl-20" : opts.icon ? "pl-10" : ""} ${isPassword ? "pr-10" : ""} ${
             hasError ? "border-state-bad" : ""
           }`}
         />
@@ -552,6 +574,18 @@ interface PersonIdentityFieldsProps {
   onFieldBlur?: (field: keyof PersonIdentityErrors) => void;
   /** Extra content appended after the "Edad calculada" preview — e.g. `/student/enroll`'s minor-without-representative warning, which `/student/add-dependent` doesn't need. */
   renderAgeWarning?: (age: number) => ReactNode;
+  /**
+   * `"local"` (public self-service enrollment, #1028 review round 3): the
+   * field shows 🇪🇨 and the fixed `+593`, and the editable value is ONLY the
+   * nine mobile digits that follow (`991234567`) — a leading `0` or a
+   * repeated `593` is neither normalized nor accepted; the step's own rule
+   * rejects it with a message that names the mistake, and the payload is
+   * re-canonicalized to the local `09XXXXXXXX` form by
+   * `canonicalStudentPhone`. Omitted (default): the shared behavior — digits
+   * + separators, #855 normalization, the wider rule — which is what the
+   * dependent flow keeps.
+   */
+  phoneFormat?: "local";
 }
 
 /** How many digits an Ecuadorian cédula carries. Mirrors the backend's own rule. */
@@ -560,8 +594,40 @@ export const CEDULA_DIGITS = 10;
 /** The cédula field's resting hint — shared with `/student/enroll`'s representative fields, which render their own copy of `PersonIdentityFields`'s cédula input. */
 export const CEDULA_HINT = `${CEDULA_DIGITS} dígitos, sin guiones.`;
 
-/** The phone field's hint — shared by both `PersonIdentityFields`, `EmergencyContactFields`, and `/student/enroll`'s representative phone field. Text lives in `identity-validation.ts` (issue #855) so every consumer names the same accepted formats. */
+/** The phone field's hint — shared by `EmergencyContactFields`, `/student/enroll`'s representative phone field and `/admin/crear-cuenta`, which do NOT carry the visual prefix. Text lives in `identity-validation.ts` (issue #855) so every consumer names the same accepted formats. */
 export const PHONE_HINT = PHONE_FORMAT_HINT;
+
+/**
+ * #1028 — the Ecuador prefix that rides INSIDE a phone field: the native
+ * 🇪🇨 symbol and the fixed `+593`.
+ *
+ * The native emoji, not a hand-drawn tricolor: the first attempt drew
+ * yellow/blue/red bands, which is also (to the pixel band-for-band) the flag
+ * of Colombia — the one country it must not be mistaken for. The emoji is the
+ * platform's own Ecuador mark, crest and all, wherever color emoji fonts
+ * exist; where they don't (older Windows), it degrades to the letters "EC",
+ * which still name Ecuador. A font stack of the common color-emoji families
+ * keeps it in color on Linux. The code is FIXED: the enrollment flow's
+ * editable value is only the nine digits that follow (+593 991 234 567), and
+ * the dependent flow keeps its local-digits entry — in both, the code names
+ * the country rather than duplicating anything the visitor types. The whole
+ * thing is aria-hidden: the label stays the control's single accessible name,
+ * and each flow's hint carries what the picture cannot.
+ */
+export function EcuadorPhonePrefix(): ReactElement {
+  return (
+    <>
+      <span
+        role="img"
+        aria-hidden="true"
+        className="text-base leading-none [font-family:'Noto_Color_Emoji','Apple_Color_Emoji','Segoe_UI_Emoji',sans-serif]"
+      >
+        🇪🇨
+      </span>
+      <span className="text-xs font-semibold leading-none text-ink-2">+593</span>
+    </>
+  );
+}
 
 function digitCount(value: string): number {
   return value.replace(/\D/g, "").length;
@@ -581,6 +647,18 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
   // that rule only fires on blur, and this preview updates on every keystroke.
   const agePlausible = ageValid && isPlausibleHumanAge(age);
   const cedulaTyped = digitCount(props.cedula);
+  // `local` (public enrollment): digits only, capped at 10, and NEVER
+  // rewritten — a `593`-prefixed entry stays a `593`-prefixed entry so the
+  // step's own rule can reject it visibly (`enrollStudentPhoneRule`). This
+  // handler replaces the shared masking for this field, which is the layer
+  // that would have silently normalized the `593…` form (#855's behavior,
+  // retired for this flow on purpose).
+  const handleLocalPhoneChange = (raw: string): void => {
+    // Digits only — and deliberately NO cap and NO rewrite: a `593…` or
+    // `0…` entry must stay exactly as typed so the step rule can reject it
+    // with the message that names the mistake.
+    props.onTelefonoChange(raw.replace(/\D/g, ""));
+  };
   const birthDateBounds = studentBirthDateBounds();
   return (
     <>
@@ -620,13 +698,24 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           }
         />
       </div>
+      {/* #1028 (round 3) — the phone splits by flow. `local` (public
+          enrollment): the field shows 🇪🇨 and the fixed `+593`, and the visitor
+          types ONLY the nine mobile digits that follow — no leading 0, no
+          repeated 593. `numericMode` is deliberately DROPPED because it is the
+          layer that silently normalized an autofilled `+593…` (#855); this
+          flow's onChange only strips non-digits, so a duplicated entry stays
+          as typed for the step rule to reject with its named message. The
+          payload is re-canonicalized to the local `09XXXXXXXX` form at
+          `buildEnrollmentRequest` (`canonicalStudentPhone`). Default
+          (dependent flow): unchanged — masking, normalization, wider rule. */}
       <WizardInput
         idPrefix={idPrefix} field="telefono" disabled={disabled} label="Teléfono" value={props.telefono}
-        onChange={props.onTelefonoChange} placeholder={example("0991234567")} required
-        icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-        pattern="[0-9]+" inputMode="tel" numericMode="phone"
+        onChange={props.phoneFormat === "local" ? handleLocalPhoneChange : props.onTelefonoChange}
+        placeholder={example("991234567")} required
+        prefix={<EcuadorPhonePrefix />}
+        pattern="[0-9]+" inputMode="tel" numericMode={props.phoneFormat === "local" ? undefined : "phone"}
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
-        hint={PHONE_HINT}
+        hint={props.phoneFormat === "local" ? PHONE_ENROLL_LOCAL_HINT : PHONE_LOCAL_HINT}
         autoComplete="tel"
       />
       {/* `sunken`, not `canvas`. The surface ladder is canvas → sunken → paper,
@@ -744,7 +833,7 @@ interface WizardNavigationProps {
 }
 
 /**
- * Why a disabled `Button` is disabled, printed right under it.
+ * Why a disabled `Button` is disabled, printed directly above it.
  *
  * `text-xs text-ink-3` (12.5px, the same grey as "10 dígitos, sin guiones.")
  * used to carry this line too — hallazgo #10: the one sentence that tells the
@@ -756,8 +845,19 @@ interface WizardNavigationProps {
  * `text-cata-red-dark` clears 7.74:1 on `paper` and 7.05:1 on `sunken` (AAA),
  * well past the audit's 7:1 floor and the reason it is not `state-bad`
  * (4.84:1 on `canvas`, under that floor).
+ *
+ * #1027 re-draws the GEOMETRY. The line used to live under its button inside
+ * a `max-w-xs` (320px) column, so the sentence wrapped into short lines that
+ * read as centred and competed with the buttons for the same corner. It now
+ * spans the footer's full width in its own row above the buttons,
+ * right-aligned so it still sits over the control it explains: short lists
+ * set on one line, and the narrow-screen fallback is an ordinary
+ * `[text-wrap:pretty]` wrap across the whole card instead of a squeeze. The
+ * copy is unchanged — `describeStepBlocker`'s sentence is asserted
+ * verbatim by `EnrollPage.test.tsx`.
  */
-const BLOCKED_REASON_CLASSES = "max-w-xs text-right text-base font-semibold text-cata-red-dark";
+const BLOCKED_REASON_CLASSES =
+  "mb-section text-right text-base font-semibold text-cata-red-dark [text-wrap:pretty]";
 
 /** Validation-errors alert + Atrás/Siguiente navigation chrome — shared by both wizards' step footer. The final step renders `submitButton` instead of "Siguiente". */
 export function WizardNavigation(props: WizardNavigationProps): ReactElement {
@@ -765,6 +865,16 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
     props.duplicateIdentityAudience !== undefined && props.formErrors.some(isDuplicateIdentityError)
       ? props.duplicateIdentityAudience
       : null;
+  // #1027 — exactly one reason line is live at a time: steps 2-4 explain a
+  // disabled "Siguiente", the final step explains a disabled submit. Rendering
+  // it once, above the whole footer row, is what lets it use the full width.
+  const blockedReason = !props.isLast
+    ? props.nextDisabled
+      ? props.nextBlockedReason
+      : undefined
+    : props.submitBlocked
+      ? props.submitBlockedReason
+      : undefined;
   return (
     <>
       {props.formErrors.length > 0 && (
@@ -795,35 +905,36 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
         </div>
       )}
 
-      <div className="mt-page flex items-start justify-between gap-3">
-        <div>
-          {!props.isFirst && (
-            <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
-              <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Atrás
-            </Button>
-          )}
-        </div>
+      {/*
+       * #1027 — the reason gets its own full-width row ABOVE the buttons:
+       * right-aligned over the control it explains, uncapped so a short list
+       * sets on one line, and wrapping with `text-pretty` across the whole
+       * card on narrow screens instead of breaking inside a 320px column.
+       * `mb-section` keeps reason and buttons one block — the gap between the
+       * parts of a block, not a new first-level step.
+       */}
+      <div className="mt-page">
+        {blockedReason && <p className={BLOCKED_REASON_CLASSES}>{blockedReason}</p>}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {!props.isFirst && (
+              <Button variant="tertiary" onClick={props.onBack} disabled={props.submitting}>
+                <ChevronLeft size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                Atrás
+              </Button>
+            )}
+          </div>
 
-        <div className="flex flex-col items-end gap-1.5">
-          {!props.isLast ? (
-            <>
+          <div className="flex flex-col items-end">
+            {!props.isLast ? (
               <Button variant="primary" onClick={props.onNext} disabled={props.nextDisabled}>
                 Siguiente
                 <ChevronRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               </Button>
-              {props.nextDisabled && props.nextBlockedReason && (
-                <p className={BLOCKED_REASON_CLASSES}>{props.nextBlockedReason}</p>
-              )}
-            </>
-          ) : (
-            <>
-              {props.submitButton}
-              {props.submitBlocked && props.submitBlockedReason && (
-                <p className={BLOCKED_REASON_CLASSES}>{props.submitBlockedReason}</p>
-              )}
-            </>
-          )}
+            ) : (
+              props.submitButton
+            )}
+          </div>
         </div>
       </div>
     </>

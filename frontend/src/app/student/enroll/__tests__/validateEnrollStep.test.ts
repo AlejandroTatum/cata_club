@@ -23,7 +23,7 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     apellidos: "Pérez",
     fechaNacimiento: "2000-01-15",
     cedula: "1798765432",
-    telefono: "0991234567",
+    telefono: "991234567",
     correo: "juan@example.com",
     contrasenia: "password8",
     contraseniaConfirmacion: "password8",

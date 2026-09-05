@@ -7,8 +7,7 @@ import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
-import { rallyCanPin, rallyFlowAnchorsPx, rallyHitIndex } from "./landing-rally";
-import type { RallyValueBox } from "./landing-rally";
+import { rallyFlowAnchorsPx, type RallyValueBox } from "./landing-rally";
 import { buildServeTimeline } from "./landing-serve";
 import { registerSmoothScroll } from "@/lib/smooth-scroll";
 import Lenis from "lenis";
@@ -226,10 +225,12 @@ function playServe(): (() => void) | undefined {
   };
 }
 
-/* The rally lights the four Valores in turn as a ball scrubs along their guide.
-   It has two choreographies and picks between them by measurement, never by
-   breakpoint: pinned while the section fits the viewport, and scrolling
-   normally when it does not — see `landing-rally.ts` for why (issue #637).
+/* The rally lights the four Valores in turn as a ball scrubs along their
+   guide while the section scrolls through the viewport — its only
+   choreography now. The pinned variant was removed during #1026's review: its
+   transparent spacer padding showed the page's near-white background as a
+   blank band under the yellow section on every viewport taller than the
+   section. See `landing-rally.ts` for the geometry.
 
    (What used to sit here described `playMotto`, the next function down.) */
 function playRally(): (() => void) | undefined {
@@ -272,27 +273,10 @@ function playRally(): (() => void) | undefined {
       const fade = (visible: boolean): void => { gsap.to(ball, { opacity: visible ? 1 : 0, duration: 0.2 }); };
       const travel = { path: guide, align: guide, alignOrigin: [0.5, 0.5] as [number, number], start: 0, end: 1, autoRotate: false };
 
-      /* Pinned: the section is held still and the ball's own progress along the
-         guide decides which value is lit. Unchanged from the original rally —
-         it is what runs whenever the section fits the viewport. */
-      const buildPinned = (): (() => void) => {
-        const tween = gsap.to(ball, {
-          motionPath: travel,
-          ease: "none",
-          scrollTrigger: {
-            trigger: section, start: "top top", end: "+=1900", pin: true, scrub: 0.7,
-            onEnter(): void { fade(true); },
-            onLeaveBack(): void { fade(false); reach(-1); },
-          },
-          onUpdate(this: gsap.core.Tween): void { const progress = this.progress(); draw(progress); reach(rallyHitIndex(progress)); },
-        });
-        return (): void => { tween.scrollTrigger?.kill(true); tween.kill(); };
-      };
-
-      /* Unpinned: the section is taller than the viewport, so it scrolls
-         normally and each value is reached as it arrives — the only way all
-         four can be lit somewhere the visitor is actually looking. The ball
-         still scrubs the guide across the section's own travel. */
+      /* The flow choreography: the section scrolls normally — yellow meeting
+         the black trophy wall directly, no spacer, no blank band — and each
+         value is reached as it arrives, anchored where it is fully on screen.
+         The ball scrubs the guide across the section's own travel. */
       const buildFlow = (): (() => void) => {
         const tween = gsap.to(ball, {
           motionPath: travel,
@@ -325,35 +309,12 @@ function playRally(): (() => void) | undefined {
         return (): void => { cards.forEach((card): void => card.kill()); tween.scrollTrigger?.kill(); tween.kill(); };
       };
 
-      let teardown: (() => void) | undefined;
-      /* Measured only once the previous choreography has been reverted: a
-         pinned section reports the geometry the pin gave it, not its own. */
-      const layout = (): void => {
-        teardown?.();
-        rest();
-        teardown = rallyCanPin(section.getBoundingClientRect().height, window.innerHeight)
-          ? buildPinned()
-          : buildFlow();
-      };
-      layout();
-
-      /* Rotating a phone changes both the viewport height and — across the
-         768px/1024px breakpoints — the section's own height, so the pin
-         decision has to be taken again rather than kept from load. */
-      let pending: ReturnType<typeof setTimeout> | undefined;
-      const relayout = (): void => {
-        if (pending !== undefined) clearTimeout(pending);
-        pending = setTimeout((): void => { pending = undefined; layout(); ScrollTrigger.refresh(); }, 180);
-      };
-      window.addEventListener("resize", relayout);
-      window.addEventListener("orientationchange", relayout);
-
-      return (): void => {
-        if (pending !== undefined) clearTimeout(pending);
-        window.removeEventListener("resize", relayout);
-        window.removeEventListener("orientationchange", relayout);
-        teardown?.();
-      };
+      /* One choreography, chosen once. ScrollTrigger re-evaluates the
+         function-based starts on its own refresh, so resize and orientation
+         changes re-measure the anchors without listeners of ours — the pin
+         re-decision machinery that needed them is gone with the pin. */
+      rest();
+      return buildFlow();
     }
 
     function playMotto(): (() => void) | undefined {

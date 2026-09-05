@@ -111,7 +111,7 @@ function fillStudent(): void {
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
   fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
 }
 
 describe("the field ids are declared, not slugged from the label", () => {
@@ -328,7 +328,7 @@ describe("the summary reads as an inset panel, not a second white card", () => {
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
     fillBirthDate(enrollFieldId("fechaNacimiento"), "1990-05-20");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
     fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
     fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
     fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });

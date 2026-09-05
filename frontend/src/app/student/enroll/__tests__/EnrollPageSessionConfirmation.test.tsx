@@ -34,12 +34,37 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { enrollStudent, fetchInstituciones, fetchTarifas } from "@/services/api";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
-import { completeSelfEnrollmentWizard } from "@/lib/__tests__/fill-enroll-student-step";
+import {
+  fillEnrollStudentStep as fillEnrollStudentStepDouble,
+  fillEnrollHealthStep,
+} from "@/lib/__tests__/fill-enroll-student-step";
+
+/**
+ * The shared double's walk fills the student phone with the 10-digit local
+ * form, which #1028 (round 3) stopped accepting as an entry in this flow —
+ * the editable value is the nine digits after the fixed `+593`. The walk is
+ * retyped here with the rewrite applied right after the double's fill, the
+ * same way a visitor correcting the field would.
+ */
+async function completeSelfEnrollmentWizard(): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  fillEnrollStudentStepDouble();
+  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+  fillEnrollHealthStep();
+  fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+
+  await screen.findByText(/inscripción completada/i);
+}
 import type { AuthSession } from "@/services/auth";
 
 // ---------------------------------------------------------------------------

@@ -265,6 +265,29 @@ describe("AuthShell — the two halves share one vertical axis", () => {
     expect(back).not.toHaveClass("bg-sunken");
   });
 
+  // #1029 — `absolute left-0 top-0` sat the control flush against the
+  // panel's (0,0), ignoring the panel's own padding, so on screens where the
+  // coal panel reaches the viewport edge the exit hugged the SCREEN corner
+  // and — with no border at rest — read as part of the background. The
+  // offsets below ARE the panel's padding (`px-6 py-8` / `split:px-14
+  // split:py-12`), so the control aligns with the panel's content column,
+  // and the inset ring is the at-rest hairline that makes the box
+  // discoverable before anyone hovers it. Same control, same href, same
+  // derived label — one exit, easier to find.
+  it("sits the escape inside the panel's padding with an at-rest hairline (#1029)", () => {
+    renderShell();
+
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    expect(back.className).toContain("left-6");
+    expect(back.className).toContain("top-8");
+    expect(back.className).toContain("split:left-14");
+    expect(back.className).toContain("split:top-12");
+    expect(back.className).toContain("ring-white/20");
+    // The old flush-corner pinning is what this test retires.
+    expect(back.className).not.toContain("left-0");
+    expect(back.className).not.toContain("top-0");
+  });
+
   it("does not restate a focus ring the system rule already outranks", () => {
     // `globals.css` paints the focus indicator from a 0,3,0 selector, which
     // beats Tailwind's 0,2,0 `focus:*` utilities. The `focus:ring-[3px]

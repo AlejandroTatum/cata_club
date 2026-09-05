@@ -301,24 +301,44 @@
 
 /* #871: Valores and Logros each own a tighter structural gap than the rest of
    the sections — the base `.landing-section` rule (44px) stays untouched for
-   Motto, Schedule and Location, which are out of this issue's scope. */
+   Motto, Schedule and Location, which are out of this issue's scope.
+
+   #1026 redesign. The section is the ball's rally on the dark court: it sits
+   between two black grounds (#nosotros above, the trophy wall below), so its
+   edges BLEND into them instead of cutting — a 72px fade each way, which is
+   inside the section's own 76px padding so no text ever sits on the gradient.
+   The rally keeps its engine (hooks, pin/flow choreographies, reduced-motion
+   stillness) and sharpens its look: the counter becomes the scoreboard chip it
+   always described, the guide thickens, and the values read as its scoreboard —
+   bigger numerals, firmer rules. All locked #871 vertical decisions (rally
+   148px/-30px, gap 30px, card padding 26px, body 16px) are untouched. */
 .landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); gap: 30px; }
-    .landing-rally { position: relative; width: 100%; height: 148px; margin-bottom: -30px; pointer-events: none; }
-    .landing-rally svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-    .landing-rally-guide { fill: none; stroke: var(--landing-action); stroke-width: 2.5; stroke-linecap: round; opacity: 0.4; }
-    .landing-rally-count { position: absolute; left: 0; top: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 12px; letter-spacing: 2.6px; }
-    .landing-rally-count b { color: var(--landing-action); font-size: 15px; }
-    .landing-rally-ball { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--landing-ball); opacity: 0; pointer-events: none; }
-    .landing-rally-impact { position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid var(--landing-action); border-radius: 50%; opacity: 0; pointer-events: none; }
+/* The entrance and the exit: black dissolving into the yellow, both ways.
+   `z-index: 0` keeps the wash behind the section's children (z-index 1). */
+.landing-values::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(180deg, var(--landing-brand-black), transparent 72px), linear-gradient(0deg, var(--landing-brand-black), transparent 72px); }
+.landing-rally { position: relative; width: 100%; height: 148px; margin-bottom: -30px; pointer-events: none; }
+.landing-rally svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* The guide is black on this ground (red tops out at 3.5:1 here), drawn a
+   touch heavier so it reads as the row's spine and not a scribble. */
+.landing-rally-guide { fill: none; stroke: var(--landing-text-strong); stroke-width: 3; stroke-linecap: round; opacity: 0.4; }
+/* The scoreboard chip. Black pill, brand-yellow label, ball-orange count — the
+   same pairing the navbar and footer use on black, so "RALLY 0/4" reads as
+   equipment rather than as a stray caption floating over the section. */
+.landing-rally-count { position: absolute; left: 0; top: 0; display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--landing-brand-black); color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 11px; font-weight: 800; letter-spacing: 2.6px; }
+.landing-rally-count b { color: var(--landing-ball); font-size: 14px; letter-spacing: 0; }
+.landing-rally-ball { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--landing-ball); opacity: 0; pointer-events: none; }
+.landing-rally-impact { position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid var(--landing-text-strong); border-radius: 50%; opacity: 0; pointer-events: none; }
 .landing-value-row { gap: 0; }
 .landing-value { position: relative; flex: 1; min-width: 0; padding: 26px 28px 0 0; transition: opacity 300ms ease; }
 .landing-value + .landing-value { padding-right: 0; padding-left: 28px; border-left: 1px solid var(--landing-border); }
-.landing-value-rule { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 2px; background: var(--landing-action); }
-.landing-value .landing-index { display: block; font-size: 34px; letter-spacing: 0; line-height: 1; transition: color 300ms ease; }
-.landing-value:hover .landing-index { color: var(--landing-action); transform: scale(1.1); }
-    .landing-value.hit .landing-index { color: var(--landing-action); transform: scale(1.34); }
-    .landing-value.dim { opacity: 0.32; }
-.landing-value h3 { margin: 16px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: 17px; letter-spacing: 1px; text-transform: uppercase; }
+.landing-value-rule { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 3px; background: var(--landing-action); }
+/* Scoreboard numerals: the index IS the rally's hit order — the counter counts
+   against these — so it carries the weight of a scoreboard figure. */
+.landing-value .landing-index { display: block; font-size: clamp(36px, 3.4vw, 48px); letter-spacing: 0; line-height: 0.9; font-variant-numeric: tabular-nums; transition: color 300ms ease, transform 300ms ease; }
+.landing-value:hover .landing-index { color: var(--landing-action); transform: scale(1.06); }
+.landing-value.hit .landing-index { color: var(--landing-action); transform: scale(1.15); }
+.landing-value.dim { opacity: 0.32; }
+.landing-value h3 { margin: 14px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: clamp(18px, 1.5vw, 20px); letter-spacing: 1.2px; text-transform: uppercase; }
 .landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.65; }
 
 /* Section colour rhythm (issue #611): each content band owns a solid brand
@@ -337,14 +357,13 @@
 .landing-section#nosotros .landing-editorial-divider { background: color-mix(in srgb, var(--landing-surface) 22%, transparent); }
 .landing-section#nosotros .landing-editorial-media { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 16%, transparent); }
 
-/* On the yellow ground the accents invert: text/guides become brand black
+/* On the yellow ground the accents invert: text and rules become brand black
    (brand red only reaches ~3.5:1 there; black ~14.9:1), dividers turn to
-   translucent black, and the hover/hit index accent stops depending on red. */
+   translucent black, and the hover/hit index accent stops depending on red.
+   The rally's own styles above are already written for this ground — it only
+   ever renders inside this section. */
 .landing-values .landing-eyebrow,
 .landing-values .landing-value .landing-index { color: var(--landing-text-strong); }
-.landing-values .landing-rally-guide { stroke: var(--landing-text-strong); }
-.landing-values .landing-rally-count,
-.landing-values .landing-rally-count b { color: var(--landing-text-strong); }
 .landing-values .landing-value-rule { background: var(--landing-text-strong); }
 .landing-values .landing-value + .landing-value { border-color: color-mix(in srgb, var(--landing-brand-black) 18%, transparent); }
 .landing-values .landing-value:hover .landing-index,

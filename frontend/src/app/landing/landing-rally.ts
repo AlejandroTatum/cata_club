@@ -1,58 +1,27 @@
 /**
- * The geometry rules behind the Valores rally, kept out of `LandingMotion` so
- * they can be asserted without a browser.
+ * The geometry rules behind the Valores rally's scroll choreography, kept out
+ * of `LandingMotion` so they can be asserted without a browser.
  *
- * ## The regression these encode (issue #637)
+ * ## Why the rally never pins (issue #637's guarantee, #1026's correction)
  *
- * The rally pins the whole Valores section under a ball that scrubs along an
- * SVG guide, lighting value 01 -> 04 as it passes. Pinning freezes the section
- * with its top at the viewport top for the entire scrub, so whatever starts
- * below the fold stays below the fold until the pin releases.
+ * The rally once had a second choreography: on viewports where the section fit
+ * (711px of section against 900px of viewport at 1440x900), ScrollTrigger
+ * pinned it for +=1900px of scrub while a ball travelled the guide. The pin
+ * reserved that distance with transparent spacer padding — so on every viewport
+ * taller than the section, the strip below the yellow section showed the page's
+ * own near-white background: a blank band sitting there for the whole scrub.
+ * #1026's review caught it on screen.
  *
- * Measured on the built page: the section is 711px tall at 1440x900 (fits, the
- * choreography works), 1249px at 390x844, and 884px at 844x390. On both phone
- * viewports values 02-04 were reached — counter at 4/4, `hit` class applied,
- * `dim` cleared — entirely off screen. Nothing in the DOM was wrong, which is
- * why a class assertion or a screenshot of the top of the section would have
- * passed; the visitor simply never saw three of the four values light up.
- *
- * So the section may be pinned only while it fits, and when it does not, the
- * values are reached as they scroll past instead.
+ * The choreography that lights every value while the visitor is actually
+ * looking at it never needed the pin — that was #637's real finding: the
+ * original bug was values lighting OFF screen, and flowing anchors fix it
+ * without holding the section still. So the rally now has ONE choreography,
+ * the flowing one: the section scrolls normally — yellow meeting the black
+ * trophy wall directly, no spacer, no blank band — and each value is lit as it
+ * arrives, anchored inside the scroll window where it is fully on screen (see
+ * `rallyFlowAnchorsPx` for the window arithmetic and the measured layouts that
+ * shaped it).
  */
-
-/**
- * Scrub progress at which each value is reached while the section is pinned.
- *
- * One entry per value card, strictly ascending: the ball's progress is mapped
- * back to an index by counting how many of these it has passed, so a list that
- * drifted out of step with the cards would strand the tail of them.
- */
-export const RALLY_HIT_PROGRESS: readonly number[] = [0.19, 0.42, 0.62, 0.82];
-
-/** How many values the rally choreographs — the `ValueCard`s 01 through 04. */
-export const RALLY_VALUE_COUNT = RALLY_HIT_PROGRESS.length;
-
-/**
- * Whether the section can be pinned under the ball at this viewport.
- *
- * A section taller than the viewport cannot: pinned, its lower half is frozen
- * out of sight for the whole scrub. An unmeasured section (height 0, or a
- * viewport with no height) is treated as "cannot" — the unpinned choreography
- * degrades gracefully, a wrong pin hides content.
- */
-export function rallyCanPin(sectionHeight: number, viewportHeight: number): boolean {
-  if (!(sectionHeight > 0) || !(viewportHeight > 0)) return false;
-  return sectionHeight <= viewportHeight;
-}
-
-/** The value the ball has reached at `progress`, or -1 before the first hit. */
-export function rallyHitIndex(progress: number): number {
-  let reached = -1;
-  for (let index = 0; index < RALLY_HIT_PROGRESS.length; index += 1) {
-    if (progress >= RALLY_HIT_PROGRESS[index]) reached = index;
-  }
-  return reached;
-}
 
 /** A value's box in document coordinates: its top offset and its own height. */
 export interface RallyValueBox {
