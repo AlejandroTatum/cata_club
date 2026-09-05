@@ -1,10 +1,12 @@
 /**
- * Regression lock for issue #856: on several iPhone browsers, Ficha médica,
- * Pagos and Editar miembro opened with the header and close button visible
- * but the body collapsed or off-screen. jsdom cannot measure real layout, so
- * these tests assert the STRUCTURE that makes the height chain definite in
- * WebKit rather than the resulting pixels — see `useNativeDialog.ts`'s
- * updated doc comments for the CSS reasoning.
+ * Regression lock for issues #856 and #1036: on several iPhone browsers,
+ * Ficha médica, Pagos and Editar miembro opened with the header and close
+ * button visible but the body collapsed or off-screen. jsdom cannot measure
+ * real layout, so these tests assert the STRUCTURE that makes the height
+ * chain definite in WebKit rather than the resulting pixels — see
+ * `useNativeDialog.ts`'s doc comments for the CSS reasoning and
+ * `native-dialog-shell.assertions.ts` for the shared shell/body chain check
+ * and the full iPhone measurement numbers.
  *
  * `MedicalRecordDialog` and `PaymentsDialog` render the shared shell
  * directly and are exercised here with no students, which keeps both free of
@@ -22,6 +24,7 @@ import { NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "../useNativ
 import MedicalRecordDialog from "../MedicalRecordDialog";
 import PaymentsDialog from "../PaymentsDialog";
 import type { MemberAccount } from "../members-utils";
+import { expectSharedNativeDialogChain } from "./native-dialog-shell.assertions";
 
 const ACCOUNT: MemberAccount = {
   id: "1",
@@ -31,27 +34,6 @@ const ACCOUNT: MemberAccount = {
   telefono: "0999999999",
   estudiantes: [],
 };
-
-/**
- * Walks from the scroll container up to (but excluding) the `<dialog>`
- * itself, asserting no wrapper reintroduces the two shapes that break a
- * WebKit flex column: a second `overflow-hidden` boundary (only the shell
- * may clip), or a `flex-1` growing child with no `min-h-0` to let it shrink.
- * Passes trivially today because the body is a direct child of `<dialog>` in
- * all three components — it exists to catch a FUTURE intermediate wrapper,
- * the exact shape issue #856 warns could reintroduce the bug in only one of
- * the three dialogs.
- */
-function assertNoBrokenIntermediateWrapper(dialog: HTMLElement, scrollContainer: HTMLElement): void {
-  let node = scrollContainer.parentElement;
-  while (node && node !== dialog) {
-    expect(node).not.toHaveClass("overflow-hidden");
-    if (node.classList.contains("flex-1")) {
-      expect(node).toHaveClass("min-h-0");
-    }
-    node = node.parentElement;
-  }
-}
 
 describe("shared native dialog shell — definite height chain (issue #856)", () => {
   it("gives the shell a definite max-height instead of a fit-content one", () => {
@@ -72,7 +54,14 @@ describe("shared native dialog shell — definite height chain (issue #856)", ()
     // `min-h-0` overrides the flex default `min-height: auto`, which is what
     // stopped WebKit from ever handing this child less than its full,
     // unscrolled content height.
-    expect(NATIVE_DIALOG_BODY_CLASS).toMatch(/(?:^|\s)flex-1(?:\s|$)/);
+    //
+    // The grow basis must be `flex-auto` (`flex: 1 1 auto`), never `flex-1`
+    // (`flex: 1 1 0%`, issue #1036): on iOS WebKit a `0%` basis resolves as a
+    // definite zero against the `position: fixed` dialog, so the body ends up
+    // exactly at its 32px vertical padding instead of the 501px it measures
+    // with `flex-auto`.
+    expect(NATIVE_DIALOG_BODY_CLASS).not.toMatch(/(?:^|\s)flex-1(?:\s|$)/);
+    expect(NATIVE_DIALOG_BODY_CLASS).toMatch(/(?:^|\s)flex-auto(?:\s|$)/);
     expect(NATIVE_DIALOG_BODY_CLASS).toMatch(/(?:^|\s)min-h-0(?:\s|$)/);
     expect(NATIVE_DIALOG_BODY_CLASS).toMatch(/(?:^|\s)overflow-y-auto(?:\s|$)/);
     expect(NATIVE_DIALOG_BODY_CLASS).toMatch(/(?:^|\s)overscroll-contain(?:\s|$)/);
@@ -80,18 +69,11 @@ describe("shared native dialog shell — definite height chain (issue #856)", ()
 });
 
 describe("MedicalRecordDialog — shared shell chain (issue #856)", () => {
-  it("dialog has no fit-content height, and the body is a min-h-0 flex-1 scroll container", () => {
+  it("dialog has no fit-content height, and the body is a min-h-0 flex-auto scroll container", () => {
     render(<MedicalRecordDialog account={ACCOUNT} onClose={() => {}} />);
 
     const dialog = screen.getByRole("dialog");
-    expect(dialog).not.toHaveClass("h-fit");
-    expect(dialog).toHaveClass("flex", "flex-col", "overflow-hidden");
-
-    const body = dialog.querySelector(".overflow-y-auto") as HTMLElement;
-    expect(body).toHaveClass("flex-1", "min-h-0", "overflow-y-auto", "overscroll-contain");
-    expect(body.parentElement).toBe(dialog);
-
-    assertNoBrokenIntermediateWrapper(dialog, body);
+    expectSharedNativeDialogChain(dialog);
   });
 
   it("keeps the header and footer as shrink-0 siblings of the scrolling body", () => {
@@ -111,18 +93,11 @@ describe("PaymentsDialog — shared shell chain (issue #856)", () => {
     onMembresiaChanged: () => {},
   };
 
-  it("dialog has no fit-content height, and the body is a min-h-0 flex-1 scroll container", () => {
+  it("dialog has no fit-content height, and the body is a min-h-0 flex-auto scroll container", () => {
     render(<PaymentsDialog account={ACCOUNT} onClose={() => {}} {...membresiaCallbacks} />);
 
     const dialog = screen.getByRole("dialog");
-    expect(dialog).not.toHaveClass("h-fit");
-    expect(dialog).toHaveClass("flex", "flex-col", "overflow-hidden");
-
-    const body = dialog.querySelector(".overflow-y-auto") as HTMLElement;
-    expect(body).toHaveClass("flex-1", "min-h-0", "overflow-y-auto", "overscroll-contain");
-    expect(body.parentElement).toBe(dialog);
-
-    assertNoBrokenIntermediateWrapper(dialog, body);
+    expectSharedNativeDialogChain(dialog);
   });
 
   it("keeps the header and footer as shrink-0 siblings of the scrolling body", () => {
