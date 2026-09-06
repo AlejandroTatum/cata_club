@@ -150,11 +150,39 @@
 		# no existe ninguna directiva `print` en Permissions-Policy.
 		Permissions-Policy "accelerometer=(), bluetooth=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
 
-		# Content-Security-Policy: falta a propósito. Una CSP escrita a
-		# ciegas rompe Next.js (scripts inline, estilos, hidratación) y no
-		# se puede probar contra la app real en este momento. Tiene que
-		# construirse mirando lo que Next.js efectivamente inyecta y
-		# verificarse en un navegador -- no acá, no sin esa verificación.
+		# Content-Security-Policy -- fase 1 (issue #1069): report-only, no la
+		# cabecera que bloquea. Se construyó mirando lo que Next.js
+		# efectivamente inyecta, no a ciegas:
+		#
+		#   - `script-src 'self' 'unsafe-inline'`: verificado compilando la
+		#     app, el App Router inyecta 6 `<script>` inline SIN `src` y SIN
+		#     nonce en `/login` (el payload `self.__next_f.push(...)` del
+		#     streaming de RSC). Sin `'unsafe-inline'` la hidratación se
+		#     rompe. Pasar a modo estricto exige decidir entre conservar esto
+		#     (una CSP materialmente más débil) o construir plomería de
+		#     nonce en el middleware, que hoy no existe.
+		#   - `style-src 'self' 'unsafe-inline'`: hay `style={{...}}` inline
+		#     en 13 archivos del frontend (p. ej. `StatCard.tsx`,
+		#     `landing/HeroCarousel.tsx`).
+		#   - `img-src`: `res.cloudinary.com` sirve fotos de perfil y logos
+		#     de sponsors; `*.tile.openstreetmap.org` sirve los tiles del
+		#     mapa de la landing.
+		#   - `frame-src https://api.cloudinary.com`: los comprobantes de
+		#     pago en PDF se previsualizan en un `<iframe>` a Cloudinary.
+		#   - `connect-src 'self'`: todas las llamadas del navegador van
+		#     same-origin al BFF de Next (`frontend/src/services/api.ts`);
+		#     no hay fetch directo al backend ni a ningún tercero.
+		#   - `font-src 'self'`: las fuentes son self-hosted
+		#     (`next/font/local`, `frontend/src/lib/fonts.ts`), no hay CDN.
+		#   - `frame-ancestors 'none'` y `base-uri 'self'`: mismo espíritu
+		#     que `X-Frame-Options: DENY` de arriba, y evita que una
+		#     inyección reescriba la base de las URLs relativas.
+		#
+		# `report-uri` apunta al endpoint propio de la app
+		# (`frontend/src/app/api/csp-report/route.ts`), no a un proveedor
+		# externo: esta fase solo junta reportes reales para poder decidir
+		# el modo estricto sobre evidencia, no sobre una suposición.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https://res.cloudinary.com https://*.tile.openstreetmap.org; frame-src https://api.cloudinary.com; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; report-uri /api/csp-report"
 	}
 
 	# ── Indexación: solo el dominio de producción es indexable ────────────
