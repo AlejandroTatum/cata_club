@@ -104,6 +104,18 @@ const NEW_STUDENT_SESSION: AuthSession = {
   loggedInAt: "2026-08-27T10:00:00.000Z",
 };
 
+/**
+ * Issue #1055: the auto-login round trip can confirm — the browser DID keep
+ * the cookies — for an account the backend's own gate decision
+ * (`activacionCompleta`) still holds at `/login/activacion`. Omitted on
+ * `NEW_STUDENT_SESSION` above, where it defaults to complete (see
+ * `isActivationComplete`); set to `false` here on purpose.
+ */
+const UNACTIVATED_STUDENT_SESSION = {
+  ...NEW_STUDENT_SESSION,
+  activacionCompleta: false,
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -129,14 +141,22 @@ function jsonResponse(body: unknown, status = 200): Response {
  *                   src/app/api/auth/session/route.ts).
  * · "outage"      — a 503, which `fetchSession` maps to `outage` and which
  *                   says NOTHING about the cookies.
+ *
+ * `sessionOnKept` is the session the confirmation round trip finds when the
+ * cookies WERE kept — `NEW_STUDENT_SESSION` by default, overridable so a
+ * caller can exercise a session the backend's activation gate still holds
+ * (issue #1055).
  */
-function mockNetwork(sessionAfterEnrollment: "kept" | "dropped" | "outage"): void {
+function mockNetwork(
+  sessionAfterEnrollment: "kept" | "dropped" | "outage",
+  sessionOnKept: unknown = NEW_STUDENT_SESSION,
+): void {
   vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === "/api/auth/session") {
       if (sessionAfterEnrollment === "outage") return jsonResponse({ detail: "no disponible" }, 503);
       return sessionAfterEnrollment === "kept"
-        ? jsonResponse(NEW_STUDENT_SESSION)
+        ? jsonResponse(sessionOnKept)
         : jsonResponse({ authenticated: false });
     }
     throw new Error(`unexpected request: ${url}`);
@@ -300,6 +320,28 @@ describe("EnrollPage — the confirmation's session claim is conditional on a co
         // confirmation. Only cookies the browser really stored can answer it.
         expect(sessionCalls.length).toBeGreaterThanOrEqual(2);
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Issue #1055 — a CONFIRMED session is not necessarily an ACTIVATED one.
+  // `/student` sits behind `middleware.ts`'s activation gate, and the button
+  // used to point there regardless — the same silent bounce #717 fixed for
+  // an unconfirmed session, just one gate further in.
+  // -------------------------------------------------------------------------
+  describe("when the browser keeps the cookies but the account's activation is incomplete", () => {
+    beforeEach(async () => {
+      mockNetwork("kept", UNACTIVATED_STUDENT_SESSION);
+      await completeEnrollment();
+    });
+
+    it("does not offer a link into the protected account area", () => {
+      expect(screen.queryByRole("link", { name: /ir a mi cuenta/i })).not.toBeInTheDocument();
+    });
+
+    it("points the button at the activation gate instead of /student", () => {
+      const link = screen.getByRole("link", { name: /completar mi activación/i });
+      expect(link).toHaveAttribute("href", "/login/activacion");
     });
   });
 });
