@@ -46,6 +46,20 @@ def _redactar_detalle_sensible(detalle: str) -> str:
     return detalle
 
 
+# El correo del destinatario es dato de identificación personal (issue #1066)
+# y en este sistema muchos pertenecen a representantes de menores. Los logs
+# no tienen política de retención ni redacción, así que ningún log de nivel
+# INFO o superior puede llevar la dirección completa -- `X-Request-ID` ya
+# correlaciona sin necesidad de exponerla. Se conserva la primera letra y el
+# dominio (ej. "a***@dominio.com") porque eso alcanza para diagnóstico sin
+# identificar a la persona.
+def _enmascarar_correo(correo: Optional[str]) -> str:
+    if not correo or "@" not in correo:
+        return "***"
+    local, _, dominio = correo.partition("@")
+    return f"{local[0]}***@{dominio}" if local else f"***@{dominio}"
+
+
 # Primer dígito de la respuesta SMTP con el que el servidor declara un fallo
 # PERMANENTE (RFC 5321 §4.2.1: "5yz -- Permanent Negative Completion reply").
 # Un 4yz es transitorio (buzón lleno, greylisting, rate limit) y por eso NO
@@ -98,18 +112,24 @@ def _es_rechazo_permanente_de_destinatario(
     return True
 
 
-def _resumir_rechazo(exc: smtplib.SMTPRecipientsRefused) -> str:
+def _resumir_rechazo(exc: smtplib.SMTPRecipientsRefused, *, enmascarar: bool = False) -> str:
     """Texto de auditoría del rechazo: dirección, código y frase del
     proveedor. Es lo único que queda del episodio una vez que el lote
     siguió de largo, así que conserva el código -- "550" es lo que
-    distingue "esa dirección no existe" de "el buzón estaba lleno"."""
+    distingue "esa dirección no existe" de "el buzón estaba lleno".
+
+    `enmascarar=True` reemplaza la dirección por su versión enmascarada
+    (issue #1066): lo usa el log, nunca el `detalle_tecnico` que se persiste
+    en `Notificacion.last_error_redacted`, donde la dirección completa sigue
+    siendo la evidencia de auditoría."""
     partes = []
     for direccion, respuesta in (getattr(exc, "recipients", None) or {}).items():
         codigo = _codigo_de_respuesta(respuesta)
         detalle = respuesta[1] if isinstance(respuesta, (tuple, list)) and len(respuesta) > 1 else ""
         if isinstance(detalle, bytes):
             detalle = detalle.decode("utf-8", "replace")
-        partes.append(f"{direccion}: {codigo} {detalle}".strip())
+        direccion_mostrada = _enmascarar_correo(direccion) if enmascarar else direccion
+        partes.append(f"{direccion_mostrada}: {codigo} {detalle}".strip())
     return "; ".join(partes) or str(exc)
 
 
@@ -212,9 +232,12 @@ class ServicioNotificaciones:
             # vez de abortar el lote (issue #837).
             if _es_rechazo_permanente_de_destinatario(exc):
                 detalle = _redactar_detalle_sensible(_resumir_rechazo(exc))
+                detalle_log = _redactar_detalle_sensible(
+                    _resumir_rechazo(exc, enmascarar=True)
+                )
                 logger.warning(
                     "Destinatario rechazado de forma permanente por SMTP: %s (%s)",
-                    destinatario, detalle,
+                    _enmascarar_correo(destinatario), detalle_log,
                 )
                 raise DestinatarioRechazadoPermanentemente(
                     f"Destinatario rechazado por el servidor SMTP: {destinatario}",
@@ -242,12 +265,18 @@ class ServicioNotificaciones:
             # cualquier `OSError` genérico de la capa de transporte.
             _circuito_smtp.registrar_fallo()
             detalle = _redactar_detalle_sensible(str(exc))
-            logger.error("Fallo de transporte SMTP enviando a %s: %s", destinatario, detalle)
+            logger.error(
+                "Fallo de transporte SMTP enviando a %s: %s",
+                _enmascarar_correo(destinatario), detalle,
+            )
             raise ServicioNoDisponible(f"SMTP no disponible: {detalle}") from exc
         else:
             _circuito_smtp.registrar_exito()
 
-        logger.info("Correo enviado a %s con asunto '%s'", destinatario, asunto)
+        logger.info(
+            "Correo enviado a %s con asunto '%s'",
+            _enmascarar_correo(destinatario), asunto,
+        )
 
     def enviar_recuperacion_contrasenia(self, correo: str, token: str) -> None:
         """Envía el enlace de restablecimiento de contraseña al usuario.
@@ -277,7 +306,7 @@ class ServicioNotificaciones:
             "</body></html>"
         )
         self.enviar_correo(correo, asunto, texto, html)
-        logger.info("[RECUPERAR_CONTRASENIA] correo=%s", correo)
+        logger.info("[RECUPERAR_CONTRASENIA] correo=%s", _enmascarar_correo(correo))
 
     def enviar_verificacion_correo(self, correo: str, token: str) -> None:
         """Envía el enlace que prueba el control de la dirección (issue #790).
@@ -314,4 +343,4 @@ class ServicioNotificaciones:
             "</body></html>"
         )
         self.enviar_correo(correo, asunto, texto, html)
-        logger.info("[VERIFICAR_CORREO] correo=%s", correo)
+        logger.info("[VERIFICAR_CORREO] correo=%s", _enmascarar_correo(correo))
