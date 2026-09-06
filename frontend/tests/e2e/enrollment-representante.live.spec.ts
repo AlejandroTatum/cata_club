@@ -69,6 +69,33 @@
  * libre en vez de un rol. El resultado es el esperado -- BLOQUEADO -- así
  * que el test de la parte 3 afirma eso, no lo contrario.
  *
+ * ## Por qué la parte 1 y la parte 3 comparten un representante
+ *
+ * `POST /enrollment/` tiene `@limiter.limit("10/minute")` por IP (protección
+ * real contra abuso, no un límite de QA). La primera versión de este archivo
+ * inscribía SEIS identidades por corrida (dos por cada una de las tres
+ * partes salvo la 3, que ya usaba dos) y, sumadas a las dos altas que ya
+ * hacían `activacion.live.spec.ts`/`recuperacion-contrasenia.live.spec.ts`,
+ * dos corridas seguidas de la suite completa podían acumular más de diez
+ * altas en la ventana de 60s y disparar un 429 real -- reproducido con los
+ * logs del backend (`ratelimit 10 per 1 minute ... exceeded`). El síntoma en
+ * el test era engañoso: un timeout esperando "Inscripción completada" con el
+ * encabezado YA presente en el DOM, porque la alta simplemente tardaba en
+ * volver a intentar contra un límite que no iba a ceder dentro del test.
+ *
+ * La parte 1 (sin cuenta propia) y el lado "A" de la parte 3 (frontera de
+ * autorización) son la MISMA situación -- un representante con un
+ * dependiente sin cuenta propia -- así que comparten una única alta hecha
+ * una vez en `beforeAll` (`test.describe.serial`, para que la parte 1 corra
+ * antes y dependa del mismo estado que la parte 3 lee después). Sigue siendo
+ * DOS páginas/contextos de navegador distintos donde hace falta demostrar
+ * aislamiento real (representante A vs B en la parte 3), y cada corrida
+ * sigue generando identidades nuevas y únicas (`Date.now()` + cédula
+ * aleatoria) -- lo que se comparte es la alta DENTRO de una corrida, nunca
+ * entre corridas. Con esto la suite pasa de seis altas por corrida a TRES
+ * (una compartida para las partes 1+3, una para la parte 2, una para el
+ * representante B de la parte 3), la mitad de lo que hacía antes.
+ *
  * ## Cómo se corre
  *
  *     make qa-up      # backend + base sembrada + frontend, en localhost:3000
@@ -78,8 +105,8 @@
  * `e2e-live` cuando `E2E_LIVE=1`.
  */
 import { Buffer } from "node:buffer";
-import { expect, test, type Page } from "@playwright/test";
-import { enrollDependentViaWizard, newDependent, newRepresentative } from "./helpers/enrollment";
+import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { enrollDependentViaWizard, newDependent, newRepresentative, type NewDependent } from "./helpers/enrollment";
 
 /** Forma mínima de lo que `GET /api/student` devuelve -- solo lo que este archivo lee. */
 interface StudentPortalProbe {
@@ -127,37 +154,102 @@ async function fetchOwnStudentPortal(page: Page): Promise<StudentPortalProbe> {
   return response.json();
 }
 
-test.describe("Alta de un dependiente por un representante", () => {
-  test("un representante inscribe a un dependiente sin cuenta propia y lo ve en su panel", async ({ page }) => {
-    test.setTimeout(60_000);
-    const suffix = Date.now();
-    const representative = newRepresentative(`qa-rep-sin-cuenta-${suffix}@cataclub.com`);
-    const dependent = newDependent();
+/** Un representante con un dependiente sin cuenta propia, en un contexto de navegador propio. */
+async function enrollFreshRepresentative(
+  browser: Browser,
+  correoPrefix: string,
+  dependentOverrides: Partial<NewDependent> = {},
+): Promise<{ context: BrowserContext; page: Page; portal: StudentPortalProbe; dependent: NewDependent }> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const suffix = Date.now();
+  const representative = newRepresentative(`${correoPrefix}-${suffix}@cataclub.com`);
+  const dependent = newDependent(dependentOverrides);
+  await enrollDependentViaWizard(page, representative, dependent);
+  const portal = await fetchOwnStudentPortal(page);
+  return { context, page, portal, dependent };
+}
 
-    await enrollDependentViaWizard(page, representative, dependent);
+test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de autorización", () => {
+  // Compartido entre las dos partes de este bloque -- ver "Por qué la parte
+  // 1 y la parte 3 comparten un representante" en el encabezado del archivo:
+  // una sola alta real, reusada, en vez de una por test.
+  let contextA: BrowserContext;
+  let pageA: Page;
+  let portalA: StudentPortalProbe;
+  let dependienteA: NewDependent;
 
+  test.beforeAll(async ({ browser }) => {
+    // El backoff de `confirmEnrollmentWithRateLimitBackoff` (ver
+    // `helpers/enrollment.ts`) puede esperar hasta ~50s si choca con el rate
+    // limit real de `POST /enrollment/`; el timeout por defecto de un hook
+    // (30s) no le alcanza.
+    test.setTimeout(120_000);
+    const enrolled = await enrollFreshRepresentative(browser, "qa-rep-a");
+    contextA = enrolled.context;
+    pageA = enrolled.page;
+    portalA = enrolled.portal;
+    dependienteA = enrolled.dependent;
+  });
+
+  test.afterAll(async () => {
+    await contextA.close();
+  });
+
+  test("un representante inscribe a un dependiente sin cuenta propia y lo ve en su panel", async () => {
     // El dependiente existe y el representante -- con su propia sesión
     // recién autenticada -- lo ve: un solo representado, el que acaba de
     // inscribir. El nombre no se compara contra lo tipeado en el asistente
     // porque el backend lo normaliza a título ("QA Dependiente" queda "Qa
     // Dependiente"); el valor esperado sale siempre de la respuesta real.
-    const portal = await fetchOwnStudentPortal(page);
-    expect(portal.representados).toHaveLength(1);
-    expect(portal.representados[0].apellidos).toBe(dependent.apellidos);
+    expect(portalA.representados).toHaveLength(1);
+    expect(portalA.representados[0].apellidos).toBe(dependienteA.apellidos);
 
     // Documentado, no fingido: la PÁGINA `/student` queda detrás de la
     // puerta de activación para cualquier alta pública recién hecha (ver el
     // comentario del encabezado) -- el representante recién inscripto
     // aterriza en `/login/activacion`, igual que un Jugador autoinscrito en
     // `activacion.live.spec.ts`.
-    await page.goto("/student");
-    await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
+    await pageA.goto("/student");
+    await expect(pageA).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
   });
 
+  test("un representante no puede leer los datos del dependiente de otro representante", async ({ browser }) => {
+    // Mismo margen que el `beforeAll` de arriba -- ver su comentario.
+    test.setTimeout(120_000);
+    const dependienteAId = portalA.representados[0].personaId;
+
+    // Representante B, en un contexto de navegador SEPARADO -- ninguna
+    // cookie de A sobrevive al cambio de contexto, así que lo único que B
+    // puede usar para cruzar es el id numérico que su propia sesión conoce.
+    const { context: contextB, page: pageB, portal: portalB } = await enrollFreshRepresentative(browser, "qa-rep-b");
+    try {
+      // Punto de partida sano: B ve a SU PROPIO dependiente, nunca al de A.
+      expect(portalB.representados).toHaveLength(1);
+      expect(portalB.representados[0].personaId).not.toBe(dependienteAId);
+
+      // El cruce: B pide, con su PROPIA sesión autenticada, el portal del
+      // dependiente de A por id -- exactamente lo que un representante
+      // podría intentar cambiando el número en `?alumno=` de su propia URL.
+      // `pageB.request` comparte las cookies de `pageB` (la sesión real de
+      // B), a diferencia del fixture `request` suelto.
+      const cruce = await pageB.request.get(`/api/student?personaId=${dependienteAId}`);
+      expect(cruce.status()).toBe(403);
+      const cuerpoCruce = (await cruce.json()) as { message?: string };
+      expect(cuerpoCruce.message).toBe("Permisos insuficientes para esta operación");
+    } finally {
+      await contextB.close();
+    }
+  });
+});
+
+test.describe("Alta de un dependiente con cuenta propia", () => {
   test("un representante inscribe a un dependiente CON cuenta propia, que además inicia sesión por su cuenta", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
+    // Mismo margen que el `beforeAll` de "Alta de un dependiente sin cuenta
+    // propia..." -- ver su comentario sobre el backoff del rate limit.
+    test.setTimeout(120_000);
     const suffix = Date.now();
     const representative = newRepresentative(`qa-rep-con-cuenta-${suffix}@cataclub.com`);
     const credencialesDependiente = {
@@ -199,47 +291,5 @@ test.describe("Alta de un dependiente por un representante", () => {
     const primerNombre = seen.nombres.split(" ")[0];
     await expect(page.getByText(`Hola, ${primerNombre}`)).toBeVisible({ timeout: 20_000 });
     await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
-  });
-});
-
-test.describe("Frontera de autorización entre representantes", () => {
-  test("un representante no puede leer los datos del dependiente de otro representante", async ({ page, browser }) => {
-    test.setTimeout(90_000);
-    const suffix = Date.now();
-
-    // Representante A y su dependiente, en la sesión del test.
-    const representanteA = newRepresentative(`qa-rep-a-${suffix}@cataclub.com`);
-    const dependienteA = newDependent();
-    await enrollDependentViaWizard(page, representanteA, dependienteA);
-    const portalA = await fetchOwnStudentPortal(page);
-    const dependienteAId = portalA.representados[0].personaId;
-
-    // Representante B, en un contexto de navegador SEPARADO -- ninguna
-    // cookie de A sobrevive al cambio de contexto, así que lo único que B
-    // puede usar para cruzar es el id numérico que su propia sesión conoce.
-    const contextB = await browser.newContext();
-    const pageB = await contextB.newPage();
-    try {
-      const representanteB = newRepresentative(`qa-rep-b-${suffix}@cataclub.com`);
-      const dependienteB = newDependent();
-      await enrollDependentViaWizard(pageB, representanteB, dependienteB);
-      const portalB = await fetchOwnStudentPortal(pageB);
-
-      // Punto de partida sano: B ve a SU PROPIO dependiente, nunca al de A.
-      expect(portalB.representados).toHaveLength(1);
-      expect(portalB.representados[0].personaId).not.toBe(dependienteAId);
-
-      // El cruce: B pide, con su PROPIA sesión autenticada, el portal del
-      // dependiente de A por id -- exactamente lo que un representante
-      // podría intentar cambiando el número en `?alumno=` de su propia URL.
-      // `pageB.request` comparte las cookies de `pageB` (la sesión real de
-      // B), a diferencia del fixture `request` suelto.
-      const cruce = await pageB.request.get(`/api/student?personaId=${dependienteAId}`);
-      expect(cruce.status()).toBe(403);
-      const cuerpoCruce = (await cruce.json()) as { message?: string };
-      expect(cuerpoCruce.message).toBe("Permisos insuficientes para esta operación");
-    } finally {
-      await contextB.close();
-    }
   });
 });

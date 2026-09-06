@@ -11,7 +11,7 @@
 
 import { randomInt } from "node:crypto";
 
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { fillBirthDate } from "./birth-date";
 import { E2E_BASE_URL } from "../e2e-target";
 
@@ -309,15 +309,116 @@ export async function enrollDependentViaWizard(
   await page.locator(`#${FIELD_ID.telefonoEmergencia}`).fill("0987654321");
   await page.getByRole("button", { name: /siguiente/i }).click();
 
-  // Paso "Resumen y confirmación". `POST /enrollment/` hashea hasta DOS
-  // contraseñas con bcrypt acá (representante + dependiente, si trae cuenta
-  // propia) -- más lento que cualquier paso anterior, y esta función se
-  // llama dos veces seguidas en el spec de la frontera de autorización, así
-  // que un timeout ajustado al resto de los pasos flaqueaba bajo carga
-  // (suite completa, varias altas ya corridas) sin que la corrida tuviera
-  // nada mal: la pantalla de confirmación llegaba con los datos correctos,
-  // solo tarde.
+  // Paso "Resumen y confirmación".
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /confirmar inscripción/i }).click();
-  await page.getByRole("heading", { name: /inscripción completada/i }).waitFor({ timeout: 45_000 });
+  await confirmEnrollmentWithRateLimitBackoff(page);
+}
+
+/**
+ * El texto EXACTO que el asistente muestra cuando `POST /enrollment/`
+ * responde 429 (`@limiter.limit("10/minute")` por IP, real -- no un tope de
+ * QA). Transcrito, no importado: `getEnrollmentErrorMessage`
+ * (`src/services/api.ts`) es interno al bundle del cliente y no está pensado
+ * para reusarse desde un test.
+ */
+const MENSAJE_DEMASIADOS_INTENTOS = "Demasiados intentos. Espere un momento e intente nuevamente.";
+
+/** Cuántas veces reintentar "Confirmar inscripción" ante ese 429 real. */
+const MAX_INTENTOS_CONFIRMACION = 3;
+
+/**
+ * Espera entre reintentos. La ventana del limitador es de 60s; no se espera
+ * la ventana completa (alargaría cada spec de más) sino lo suficiente para
+ * que las llamadas más viejas de esa ventana deslizante hayan caducado.
+ */
+const ESPERA_ENTRE_INTENTOS_MS = 25_000;
+
+/**
+ * Clickea "Confirmar inscripción" y reintenta si el backend responde el 429
+ * real de `POST /enrollment/` -- un cliente real haría lo mismo; el sujeto
+ * de este helper es el alta por representante, no el rate limiting del
+ * endpoint. `enrollDependentViaWizard` se llama varias veces por corrida
+ * (hasta 3, ver el encabezado del spec que lo usa), y esa MISMA IP comparte
+ * el límite con `activacion.live.spec.ts`/`recuperacion-contrasenia.live.spec.ts`
+ * -- dos corridas seguidas de toda la suite `e2e-live` pueden acumular más
+ * de 10 altas en una ventana de 60s y disparar un 429 real (reproducido con
+ * los logs del backend: "ratelimit 10 per 1 minute ... exceeded").
+ *
+ * Si se agotan los reintentos, la falla nombra el 429 explícitamente -- nunca
+ * un timeout mudo esperando una pantalla de confirmación que no va a llegar
+ * mientras el límite siga vigente.
+ */
+async function confirmEnrollmentWithRateLimitBackoff(page: Page): Promise<void> {
+  const confirmButton = page.getByRole("button", { name: /confirmar inscripción/i });
+  const heading = page.getByRole("heading", { name: /inscripción completada/i });
+  const rateLimitAlert = page.getByText(MENSAJE_DEMASIADOS_INTENTOS);
+
+  for (let intento = 1; intento <= MAX_INTENTOS_CONFIRMACION; intento++) {
+    // Guardia defensiva: si un intento anterior ya había llegado a buen
+    // puerto (por ejemplo, una corrida previa de este mismo bucle detectó
+    // "bloqueado" por el aviso pero el envío subyacente terminó aceptándose
+    // igual, un poco después), acá no hay botón "Confirmar inscripción" que
+    // clickear -- clickear a ciegas es lo que producía un timeout de 120s
+    // esperando un botón que ya no existe, con la confirmación ya en pantalla.
+    if (await heading.isVisible()) return;
+
+    await confirmButton.click();
+
+    // Sondeo simple en vez de correr dos `waitFor` en paralelo (`Promise.race`):
+    // la que pierde la carrera queda corriendo en el fondo sin que nada la
+    // consuma, y si el envío es lento puede terminar "resolviendo tarde" sobre
+    // el estado de UN INTENTO POSTERIOR -- exactamente la condición de carrera
+    // que producía el timeout de arriba. Sondear un estado A LA VEZ no deja
+    // ninguna espera colgada entre intentos.
+    //
+    // `POST /enrollment/` hashea hasta DOS contraseñas con bcrypt (issue
+    // #826) -- más lento que cualquier paso anterior del asistente -- así
+    // que el caso feliz necesita más margen que un timeout genérico de 20s.
+    const resultado = await waitForOutcome(
+      [
+        { locator: heading, outcome: "exito" as const },
+        { locator: rateLimitAlert, outcome: "limitado" as const },
+      ],
+      45_000,
+    );
+
+    if (resultado === "exito") return;
+
+    if (resultado === "agotado") {
+      throw new Error(
+        `El asistente no llegó a "Inscripción completada" ni mostró el aviso de límite ` +
+          `("${MENSAJE_DEMASIADOS_INTENTOS}") dentro de 45s en el intento ${intento} de ${MAX_INTENTOS_CONFIRMACION}.`,
+      );
+    }
+
+    // resultado === "limitado"
+    if (intento === MAX_INTENTOS_CONFIRMACION) {
+      throw new Error(
+        `El alta chocó con el rate limit real de POST /enrollment/ ("${MENSAJE_DEMASIADOS_INTENTOS}") ` +
+          `${MAX_INTENTOS_CONFIRMACION} veces seguidas. No es un timeout mudo: el backend respondió 429 ` +
+          `(10 altas por minuto por IP) y el asistente lo mostró; se agotaron los reintentos.`,
+      );
+    }
+    await page.waitForTimeout(ESPERA_ENTRE_INTENTOS_MS);
+  }
+}
+
+/**
+ * Sondea, cada 500ms, cuál de varios `locator` se vuelve visible primero --
+ * sin dejar ninguna espera corriendo de fondo una vez que decide, a
+ * diferencia de correr un `waitFor` por candidato en paralelo (ver el
+ * comentario de `confirmEnrollmentWithRateLimitBackoff`).
+ */
+async function waitForOutcome<T extends string>(
+  candidates: Array<{ locator: Locator; outcome: T }>,
+  timeoutMs: number,
+): Promise<T | "agotado"> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const { locator, outcome } of candidates) {
+      if (await locator.isVisible()) return outcome;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return "agotado";
 }
