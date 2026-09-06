@@ -400,7 +400,7 @@ jobs:
         # `provenance: false` porque los attestations no son compatibles con
         # `load`. Cache de GitHub Actions (type=gha) con scope propio por
         # imagen para que las dos no se pisen entre sí.
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./backend
           load: true
@@ -423,7 +423,7 @@ jobs:
         #   NEXT_PUBLIC_USE_MOCKS: el que SÍ importa. `api.ts` lo lee con
         #     `!== "false"`, o sea que si queda sin definir la imagen sale con
         #     los mocks ENCENDIDOS. Se fija explícito a "false".
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./frontend
           load: true
