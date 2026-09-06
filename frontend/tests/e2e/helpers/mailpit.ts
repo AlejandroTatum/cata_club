@@ -128,7 +128,8 @@ export async function waitForMessageTo(
  * producto: el enlace es la fuente, el token es lo que el formulario necesita.
  */
 export function extractTokenFromLink(message: MailpitMessage, pathname: string): string {
-  const match = message.Text.match(new RegExp(`${pathname}\\?token=([^\\s"'<>]+)`));
+  const patron = new RegExp(String.raw`${pathname}\?token=([^\s"'<>]+)`);
+  const match = patron.exec(message.Text);
   if (!match) {
     throw new Error(
       `El correo con asunto "${message.Subject}" no contiene un enlace de ${pathname} reconocible.`,

@@ -9,6 +9,8 @@
  * rompiéndose, no seguir apuntando a un selector que dejó de existir.
  */
 
+import { randomInt } from "node:crypto";
+
 import type { APIRequestContext, Page } from "@playwright/test";
 import { fillBirthDate } from "./birth-date";
 import { E2E_BASE_URL } from "../e2e-target";
@@ -45,11 +47,14 @@ function checkDigitFor(nineDigits: string): number {
  * `unique` en la base, así que una corrida repetida sobre el mismo stack de
  * QA necesita una cédula que la corrida anterior no haya usado — el mismo
  * problema que `discounts.live.spec.ts` resuelve con un nombre `Date.now()`
- * para su descuento. `Math.random()` además del reloj evita que dos llamadas
+ * para su descuento. el sufijo aleatorio además del reloj evita que dos llamadas
  * en el mismo milisegundo (dos specs live arrancando casi juntos) colisionen.
  */
 export function uniqueValidCedula(): string {
-  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(-7);
+  // `randomInt` de `node:crypto` y no `Math.random()`: Sonar marca el
+  // generador pseudoaleatorio como sensible (S2245) y eso baja el rating de
+  // seguridad del código nuevo. Acá el CSPRNG no cuesta nada.
+  const suffix = `${Date.now()}${randomInt(1000)}`.slice(-7);
   const nineDigits = `17${suffix}`;
   return `${nineDigits}${checkDigitFor(nineDigits)}`;
 }
