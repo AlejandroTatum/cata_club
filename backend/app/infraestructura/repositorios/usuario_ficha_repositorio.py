@@ -42,7 +42,8 @@ class UsuarioRepositorio:
         self.db = db
 
     def obtener_por_correo(self, correo: str) -> Optional[Usuario]:
-        """Busca la cuenta SIN distinguir mayúsculas ni espacios al borde.
+        """Busca la cuenta SIN distinguir mayúsculas ni espacios al borde,
+        ni en el input ni en la columna.
 
         Una dirección de correo no distingue mayúsculas para el usuario que
         la tipea, pero `usuario.correo` guarda literalmente lo que se escribió
@@ -53,6 +54,20 @@ class UsuarioRepositorio:
         nada, así que el correo nunca llegaba y nada quedaba registrado
         (issue #764, reproducido contra QA: con `admin@cataclub.com` guardado,
         pedir `Admin@CataClub.com` devuelve 200 y cero filas en el outbox).
+
+        Issue #1023: el predicado también recorta la COLUMNA
+        (`func.btrim(Usuario.correo)`), no solo el input. Antes comparaba
+        `lower(correo) == lower(entrada.strip())`: una fila legada con
+        espacios al borde (solo alcanzable por una escritura que bypasee
+        `CorreoValidado`, que ya normaliza en cada alta/edición de la app)
+        quedaba agrupada como la MISMA identidad que su gemela sin espacios
+        en `ix_usuario_correo_lower` y en el audit
+        (`scripts/auditar_colisiones_correo.py`), pero inalcanzable por
+        ninguno de los cuatro caminos que resuelven una cuenta por correo.
+        Esta expresión tiene que ser IDÉNTICA a la del índice funcional
+        único de `modelos.py` (migración `f1023correobtrim`): si difieren,
+        el índice deja de poder servir esta consulta -- la más caliente del
+        sistema -- y cae a sequential scan.
 
         Normalizar acá y no en cada llamador es lo que mantiene coherentes los
         cuatro caminos que resuelven una cuenta por correo -- login, registro,
@@ -67,7 +82,7 @@ class UsuarioRepositorio:
         """
         return (
             self.db.query(Usuario)
-            .filter(func.lower(Usuario.correo) == correo.strip().lower())
+            .filter(func.lower(func.btrim(Usuario.correo)) == correo.strip().lower())
             .order_by(Usuario.id)
             .first()
         )

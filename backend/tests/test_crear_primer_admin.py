@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.dominio.enums import TipoRol
 from app.dominio.modelos import Base, Persona, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests._sqlite_btrim import registrar_btrim_sqlite
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "crear_primer_admin.py"
 CONTRASENIA_FUERTE = "una-clave-larga-y-unica-2026"
@@ -38,6 +39,7 @@ def _sesion_en_memoria():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    registrar_btrim_sqlite(engine)
     Base.metadata.create_all(bind=engine)
     return sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

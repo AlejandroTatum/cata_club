@@ -7,12 +7,23 @@ Cero escrituras demostrado, no asumido: `abrir_sesion_solo_lectura` abre
 la conexión en modo `READ ONLY` de Postgres, que rechaza cualquier
 escritura con un error del propio servidor.
 
-Reporta solo conteos, ids, un booleano de alcanzabilidad por fila (ver
-`detectar_colisiones`) y una huella HMAC-SHA256 no reversible por bucket
-(sal aleatoria por corrida, nunca persistida) -- nunca el correo.
+Reporta solo conteos, ids y una huella HMAC-SHA256 no reversible por
+bucket (sal aleatoria por corrida, nunca persistida) -- nunca el correo.
 Diseño reversible de normalización y criterios de revisión humana en
 `docs/operations/auditoria-colisiones-correo.md`; este script no aplica
 ninguno.
+
+Hasta la migración `f1023correobtrim` (issue #1023) este audit también
+reportaba, por fila, un booleano `alcanzables`: `obtener_por_correo`
+recortaba el input pero no la columna, así que una fila con espacios al
+borde caía en el mismo bucket que su gemela sin espacios pero era
+inalcanzable por las cuatro rutas que resuelven una cuenta por correo. Esa
+migración alineó el índice único y el predicado de runtime a la MISMA
+expresión (`lower(btrim(correo))`, la misma que agrupa este audit) -- ya
+no puede existir una fila de un bucket que el predicado real no alcance,
+así que el booleano se volvió una tautología (`True` para toda fila de
+todo bucket) y se retiró en vez de reportar una certeza que no aporta
+nada.
 
 Uso:
     uv run python scripts/auditar_colisiones_correo.py [--json]
@@ -50,34 +61,16 @@ def detectar_colisiones(session: Session) -> dict:
     """Agrupa `usuario` por `lower(btrim(correo))` en una única consulta
     agregada; reporta los buckets con más de una fila.
 
-    Misma expresión que `_CLAVE_CANONICA` en la migración
-    `d1016emailunico`: si difiriera, este audit reportaría "sin
+    Misma expresión que `_CLAVE_CANONICA` en las migraciones
+    `d1016emailunico` y `f1023correobtrim`, y que el predicado real de
+    `UsuarioFichaRepositorio.obtener_por_correo` desde esta última: si
+    difiriera de cualquiera de las tres, este audit reportaría "sin
     colisiones" en una base con duplicados que solo difieren en espacios,
-    y esa migración fallaría a mitad de transacción en el deploy que este
-    script está pensado para prevenir.
-
-    Esa clave de agrupación NO es la que resuelve una cuenta en runtime.
-    `UsuarioFichaRepositorio.obtener_por_correo` compara
-    `lower(correo) = lower(btrim(entrada))`: recorta la ENTRADA, no la
-    columna. Una fila legada con espacios al inicio o al fin cae en el
-    mismo bucket que su gemela sin espacios, pero ninguna de las cuatro
-    rutas que resuelven una cuenta por correo (login, registro,
-    recuperación y restablecimiento) puede alcanzarla. Por eso cada
-    bucket reporta `alcanzables`, un booleano por fila en el mismo orden
-    que `ids`: si quien reconcilia la colisión conserva la fila
-    inalcanzable, esa fila ocupa el único lugar canónico, el audit pasa a
-    reportar cero colisiones y el dueño de la cuenta no vuelve a
-    autenticarse nunca. El booleano dice si el valor almacenado ya está
-    en forma canónica para ese predicado; no revela el correo ni los
-    espacios."""
+    o dejaría de coincidir con lo que la aplicación resuelve en runtime."""
     with session.no_autoflush:
         total_usuarios = session.execute(select(func.count(Usuario.id))).scalar_one()
 
         correo_normalizado = func.lower(func.btrim(Usuario.correo))
-        # Predicado de runtime, no el de la migración: la fila es
-        # alcanzable solo si `lower(correo)` ya coincide con la clave
-        # canónica, es decir si no tiene espacios al inicio ni al fin.
-        alcanzable_en_runtime = func.lower(Usuario.correo) == correo_normalizado
         consulta = (
             select(
                 correo_normalizado.label("clave"),
@@ -88,9 +81,6 @@ def detectar_colisiones(session: Session) -> dict:
                 func.array_agg(
                     aggregate_order_by(Usuario.activo, Usuario.id.asc())
                 ).label("activos"),
-                func.array_agg(
-                    aggregate_order_by(alcanzable_en_runtime, Usuario.id.asc())
-                ).label("alcanzables"),
             )
             .group_by(correo_normalizado)
             .having(func.count(Usuario.id) > 1)
@@ -108,7 +98,6 @@ def detectar_colisiones(session: Session) -> dict:
             "cantidad": fila.cantidad,
             "ids": list(fila.ids),
             "activos": list(fila.activos),
-            "alcanzables": list(fila.alcanzables),
         })
         usuarios_en_colision += fila.cantidad
 
@@ -133,13 +122,10 @@ def formatear_texto(resultado: dict) -> str:
         f"Buckets en colisión: {resultado['buckets_en_colision']}",
         f"Usuarios en colisión: {resultado['usuarios_en_colision']}",
         "",
-        "alcanzables[i]=False: la búsqueda de runtime nunca resuelve esa "
-        "fila; conservarla deja la cuenta muerta.",
-        "",
     ]
     lineas += [
         f"  huella={b['huella']} cantidad={b['cantidad']} ids={b['ids']} "
-        f"activos={b['activos']} alcanzables={b['alcanzables']}"
+        f"activos={b['activos']}"
         for b in resultado["buckets"]
     ]
     return "\n".join(lineas)

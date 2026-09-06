@@ -238,8 +238,8 @@ class Rol(Base):
 class Usuario(Base):
     __tablename__ = "usuario"
     # Issue #827: `UsuarioRepositorio.obtener_por_correo` filtra por
-    # `func.lower(correo)`, no por `correo`. El unique implícito de la
-    # columna (más abajo) es un btree sensible a mayúsculas y no puede
+    # `func.lower(func.btrim(correo))`, no por `correo`. El unique implícito
+    # de la columna (más abajo) es un btree sensible a mayúsculas y no puede
     # servir ese predicado -- corre en CADA petición autenticada (vía
     # `GestorAutenticacion.decodificar_token`) y en cada login, así que el
     # sequential scan es sobre la consulta más caliente del sistema. Ver
@@ -253,8 +253,30 @@ class Usuario(Base):
     # distintas -- eso es lo que este índice funcional único cierra: dos
     # altas casi simultáneas con distinta capitalización de la MISMA
     # dirección ya no pueden las dos ganar el INSERT.
+    #
+    # Issue #1023: la expresión pasa a `lower(btrim(correo))` (migración
+    # `f1023correobtrim`). Antes era `lower(correo)` a secas -- SIN
+    # `btrim` -- mientras el predicado de `obtener_por_correo` sí recortaba
+    # el input. El índice y el predicado tienen que compartir la MISMA
+    # expresión: si difieren, o el predicado deja de poder usar el índice
+    # (regresión de performance en la consulta más caliente), o el índice
+    # deja pasar como filas distintas a dos correos que solo difieren en
+    # espacios al borde (el defecto que #1023 cierra).
+    #
+    # `func.btrim`, no `func.trim`: aunque Postgres trata ambas llamadas
+    # como la misma expresión al planificar, `test_drift_migraciones.py`
+    # compara el TEXTO de esta declaración contra el de la migración
+    # (`compare_metadata`, sin excepciones) -- `btrim` es lo que la
+    # migración escribe en su SQL crudo, y con `trim` esa prueba marca
+    # drift aunque el índice funcione igual. `btrim` no existe en SQLite;
+    # los motores en memoria de los tests de seed lo registran a mano
+    # (ver `tests/_sqlite_btrim.py`).
     __table_args__ = (
-        Index("ix_usuario_correo_lower", func.lower(Column("correo")), unique=True),
+        Index(
+            "ix_usuario_correo_lower",
+            func.lower(func.btrim(Column("correo"))),
+            unique=True,
+        ),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     correo: Mapped[str] = mapped_column(String(100), unique=True)
