@@ -152,6 +152,31 @@
  * propio `finally`) y rechaza cualquier pago pendiente de Pedro — mismo
  * mecanismo que `payments.live.spec.ts` ya usa para él.
  *
+ * ## El catálogo de descuentos también es basura acumulada — issue #1083
+ *
+ * `discounts.live.spec.ts` crea un descuento por corrida y nunca lo borra
+ * (no existe ningún DELETE — la baja es SUAVE vía `activo`, y un descuento
+ * inactivo igual ocupa una fila y cuenta para la paginación). Sobre un
+ * stack de QA de larga vida, el catálogo cruzó las 200 filas que `GET
+ * /descuentos` devuelve en una sola página: `discounts.live.spec.ts` y la
+ * versión anterior de este archivo (un descuento por test) empezaron a
+ * fallar porque el descuento recién creado —el de id más alto, ya que
+ * `DescuentoRepositorio.listar` ordena por `id ASC`— dejó de entrar en esa
+ * página. Es un defecto de PRODUCTO (`/discounts` no pagina ni busca, misma
+ * clase que el ya documentado en `/members`), reportado en el #1083 y
+ * fuera de alcance de este archivo arreglar.
+ *
+ * Lo que sí es alcance de este archivo: no empeorarlo más de lo necesario.
+ * `beforeAll` crea DOS descuentos por corrida (uno del 20%, reusado por los
+ * tests 1 y 2 — asignar/retirar no muta el catálogo — y uno del 100% para
+ * el test 3, que necesita un valor distinto), en vez de los tres que creaba
+ * antes. `findDiscountByName` (`helpers/find-discount.ts`) pagina de
+ * verdad para encontrar el propio recién creado, así que este archivo ya
+ * no depende de estar dentro de las primeras 200 filas — pero eso no ayuda
+ * a `discounts.live.spec.ts`, cuya aserción lee la pantalla admin real (lo
+ * correcto: es lo que un admin de verdad ve), y esa pantalla sí depende de
+ * esa primera página.
+ *
  * ## Cómo se corre
  *
  *     make qa-up      # backend + base sembrada + frontend, en localhost:3000
@@ -170,6 +195,7 @@ import { E2E_BASE_URL } from "./e2e-target";
 import { loginViaUi } from "./helpers/live-login";
 import { rejectPendingPayments } from "./helpers/pending-payments";
 import { registerCashPayment } from "./helpers/register-cash-payment";
+import { findDiscountByName } from "./helpers/find-discount";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const ADMIN_EMAIL = "admin@cataclub.com";
@@ -235,6 +261,31 @@ test.beforeEach(async ({ request }) => {
 });
 
 // ---------------------------------------------------------------------------
+// Descuentos compartidos entre los tres tests de este archivo — issue #1083
+// (hallazgo de producto: el catálogo admin no pagina, así que cada
+// descuento que la suite deja sin usar es basura que empuja al club real
+// más cerca del límite de 200 filas). Asignar/retirar un beneficio no muta
+// el descuento del catálogo, así que el mismo id sirve para más de un
+// test: 2 descuentos por corrida en vez de 3 (uno 20%, reusado por los
+// tests 1 y 2; uno 100%, para el test 3, que necesita un valor distinto).
+// ---------------------------------------------------------------------------
+
+let descuento20Id: number;
+let descuento100Id: number;
+
+test.beforeAll(async ({ browser }) => {
+  const adminContext = await browser.newContext();
+  const adminPage = await adminContext.newPage();
+  try {
+    await loginViaUi(adminPage, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
+    descuento20Id = await crearDescuentoPorcentaje(adminPage, nombreUnico("QA descuento 20"), 20);
+    descuento100Id = await crearDescuentoPorcentaje(adminPage, nombreUnico("QA descuento 100"), 100);
+  } finally {
+    await adminContext.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Flujo de UI — admin
 // ---------------------------------------------------------------------------
 
@@ -250,11 +301,11 @@ async function crearDescuentoPorcentaje(page: Page, nombre: string, porcentaje: 
   await page.getByRole("button", { name: "Crear", exact: true }).click();
   await expect(page.getByText("Descuento creado correctamente.")).toBeVisible({ timeout: 15_000 });
 
-  const catalogo = await page.request.get("/api/descuentos?limit=200");
-  expect(catalogo.ok(), `No se pudo leer el catálogo de descuentos: ${catalogo.status()}`).toBe(true);
-  const body = (await catalogo.json()) as { items: Array<{ id: number; nombre: string }> };
-  const creado = body.items.find((d) => d.nombre === nombre);
-  expect(creado, `El descuento "${nombre}" no aparece en el catálogo recién leído`).toBeTruthy();
+  // `findDiscountByName` pagina de verdad — ver su docstring: este entorno
+  // de QA compartido ya superó el tope de una sola página (issue de
+  // duplicación/paginación, PR de seguimiento del #1082).
+  const creado = await findDiscountByName(page.request, nombre);
+  expect(creado, `El descuento "${nombre}" no aparece en el catálogo completo`).toBeTruthy();
   return creado!.id;
 }
 
@@ -275,19 +326,15 @@ async function retirarBeneficio(page: Page, personaId: string): Promise<void> {
   expect(res.ok(), `No se pudo retirar el beneficio: ${res.status()} ${await res.text()}`).toBe(true);
 }
 
-/** El trío login-admin + crear descuento + asignarlo, idéntico en los tres
- *  tests de este archivo (issue de duplicación de SonarCloud, PR #1079) —
- *  solo cambia el porcentaje. Devuelve el id del descuento creado. */
-async function prepararBeneficio(
-  page: Page,
-  discountName: string,
-  porcentaje: number,
-  pedroId: string,
-): Promise<number> {
+/** Login-admin + asignar un descuento YA EXISTENTE — idéntico en los tres
+ *  tests de este archivo (issue de duplicación de SonarCloud, PR #1079)
+ *  salvo cuál descuento asignan. El descuento en sí se crea UNA sola vez
+ *  por corrida, en `beforeAll` (ver el encabezado del archivo, issue
+ *  #1083): asignar/retirar no lo mutan, así que el mismo catálogo sirve
+ *  para más de un test sin ensuciar más de lo necesario. */
+async function asignarBeneficioComoAdmin(page: Page, pedroId: string, descuentoId: number): Promise<void> {
   await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
-  const descuentoId = await crearDescuentoPorcentaje(page, discountName, porcentaje);
   await asignarBeneficio(page, pedroId, descuentoId);
-  return descuentoId;
 }
 
 /** Abre un contexto de navegador NUEVO (la sesión de Pedro es una identidad
@@ -343,11 +390,10 @@ test("un beneficio asignado a un alumno reduce el monto que paga, y la reducció
   browser,
 }) => {
   test.setTimeout(60_000);
-  const discountName = nombreUnico("QA descuento pago");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
   // Pedro paga "Mensual Adultos" ($40): 20% de descuento son $8, monto final $32.
-  await prepararBeneficio(page, discountName, 20, pedroId);
+  await asignarBeneficioComoAdmin(page, pedroId, descuento20Id);
 
   try {
     await comoPedro(browser, async (alumnoPage) => {
@@ -384,10 +430,9 @@ test("un beneficio asignado a un alumno reduce el monto que paga, y la reducció
 
 test("retirar el beneficio de un alumno restaura el monto completo en su siguiente pago", async ({ page, browser }) => {
   test.setTimeout(60_000);
-  const discountName = nombreUnico("QA descuento restaurado");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await prepararBeneficio(page, discountName, 20, pedroId);
+  await asignarBeneficioComoAdmin(page, pedroId, descuento20Id);
   // El camino inverso: retirar ANTES de que Pedro pague nada con este
   // beneficio — si el retiro no funcionara, el pago de abajo seguiría
   // saliendo descontado.
@@ -416,10 +461,9 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
   request,
 }) => {
   test.setTimeout(60_000);
-  const discountName = nombreUnico("QA beneficio total");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await prepararBeneficio(page, discountName, 100, pedroId);
+  await asignarBeneficioComoAdmin(page, pedroId, descuento100Id);
 
   // `request` ya quedó autenticado como admin en el `beforeEach` — se
   // reutiliza para leer el historial de Pedro antes y después, sin tocar la
