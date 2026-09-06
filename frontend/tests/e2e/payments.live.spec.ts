@@ -44,8 +44,9 @@
  * Igual que el resto de los `*.live.spec.ts`, solo lo recoge el proyecto
  * `e2e-live` cuando `E2E_LIVE=1`.
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
-import { E2E_BASE_URL } from "./e2e-target";
+import { test, expect } from "@playwright/test";
+import { rejectPendingPayments } from "./helpers/pending-payments";
+import { loginViaUi } from "./helpers/live-login";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const ADMIN_EMAIL = "admin@cataclub.com";
@@ -54,59 +55,19 @@ const STUDENT_EMAIL = "pedro@cataclub.com";
 const STUDENT_PASSWORD = "alumno123";
 const STUDENT_FULL_NAME = "Pedro Salgado";
 
-/**
- * Rechaza cualquier pago pendiente previo de `studentName` (limpieza previa a
- * la corrida, ver el encabezado del archivo). Tolerante a "no hay nada que
- * limpiar": con el stack recién sembrado la cola de pendientes de Pedro está
- * vacía y esto no hace nada.
- */
-async function rejectPendingPayments(
-  request: APIRequestContext,
-  studentName: string,
-): Promise<void> {
-  const login = await request.post(`${E2E_BASE_URL}/api/auth/login`, {
-    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-  });
-  if (!login.ok()) {
-    throw new Error(`No se pudo iniciar sesión como admin para la limpieza: ${login.status()}`);
-  }
-
-  const list = await request.get(`${E2E_BASE_URL}/api/payments`, {
-    params: { estadoPago: "PENDIENTE_VALIDACION" },
-  });
-  if (!list.ok()) {
-    throw new Error(`No se pudo leer la cola de pendientes: ${list.status()}`);
-  }
-
-  const body = (await list.json()) as { items?: Array<{ id: string; studentName: string }> };
-  for (const item of body.items ?? []) {
-    if (item.studentName !== studentName) continue;
-    const rejected = await request.put(`${E2E_BASE_URL}/api/payments/${item.id}`, {
-      data: {
-        action: "rejected",
-        rejectionReason: "Reinicio QA para repetir el flujo de pago",
-      },
-    });
-    if (!rejected.ok()) {
-      throw new Error(`No se pudo reiniciar el pago pendiente ${item.id}: ${rejected.status()}`);
-    }
-  }
-}
-
 test.beforeEach(async ({ request }) => {
-  await rejectPendingPayments(request, STUDENT_FULL_NAME);
+  // Extraído a `helpers/pending-payments.ts` (issue de duplicación de
+  // SonarCloud, PR #1079): `discount-payment-effect.live.spec.ts` necesita
+  // exactamente esta misma limpieza para Pedro.
+  await rejectPendingPayments(request, ADMIN_EMAIL, ADMIN_PASSWORD, STUDENT_FULL_NAME);
 });
 
 test("un socio registra un pago en efectivo y el historial lo conserva tras recargar", async ({ page }) => {
   // ── Login real: el BFF llama a FastAPI y devuelve cookies HttpOnly ──
-  await page.goto("/login");
-  await expect(page.getByLabel(/correo electrónico/i)).toBeVisible({ timeout: 20_000 });
-  await page.getByLabel(/correo electrónico/i).fill(STUDENT_EMAIL);
-  await page.getByRole("textbox", { name: /contraseña/i }).fill(STUDENT_PASSWORD);
-  await page.getByRole("button", { name: /iniciar sesión/i }).click();
-
-  // Un alumno mayor de edad aterriza en su portal, no en /dashboard.
-  await expect(page).toHaveURL(/\/student/, { timeout: 20_000 });
+  // Un alumno mayor de edad aterriza en su portal, no en /dashboard —
+  // extraído a `helpers/live-login.ts` (issue de duplicación de SonarCloud,
+  // PR #1079).
+  await loginViaUi(page, STUDENT_EMAIL, STUDENT_PASSWORD, /\/student/);
 
   // ── La pantalla de pagos ──
   await page.goto("/student/payments");

@@ -88,8 +88,50 @@
  * corrida de este archivo avanza la cobertura real de Pedro un mes más. Es
  * el mismo comportamiento irreversible que ya documentan
  * `PaymentHistorySection`/`BeneficioSection` ("los pagos históricos no
- * cambian"); no rompe ninguna aserción de este ni de otro spec, pero es
- * dato real que el entorno de QA conserva para siempre.
+ * cambian").
+ *
+ * **¿Se puede evitar usando otra persona del seed?** No — evaluado y
+ * descartado. `aplicar_beneficio_bonificado` (el método que este test
+ * ejercita) es "autoservicio del PAGADOR (dueño o su representante), NUNCA
+ * un ADMINISTRADOR 'por él'" (docstring propio, `membresia_pago_servicio.
+ * py`) — no hay forma de otorgarlo por API en nombre de un tercero, ni
+ * siquiera como admin. Eso exige una sesión que llegue de verdad a
+ * `/student/payments`, y ningún otro alumno del seed puede: los menores
+ * (Diego, Martín, Sofía, Ana, Luis, María) quedan bloqueados como
+ * `blockedAsMinor` al ver su PROPIO perfil, y sus representantes (Carlos,
+ * Laura) quedan bloqueados por el hallazgo (1) de más arriba — un bloqueo
+ * de BACKEND, no solo de ruteo: `GestorAutenticacion.decodificar_token`
+ * (`gestor_auth.py`) rechaza con 403 casi cualquier endpoint para una
+ * cuenta sin `activacion_completa`, `/personas/*` aparte. Pedro es
+ * literalmente el único sujeto posible para este test tal como está
+ * sembrada la base hoy.
+ *
+ * **Medido, no asumido:** confirmado contra la base real (`SELECT count(*),
+ * min(fecha_inicio), max(fecha_fin) FROM cobertura_bonificada WHERE
+ * persona_id = <Pedro>`) durante el desarrollo de este archivo — cada
+ * aplicación real agrega exactamente UNA fila con un mes de cobertura,
+ * encadenada a partir de la anterior (`_fecha_fin_maxima_combinada` ancla en
+ * el máximo ya otorgado, nunca en "hoy" una vez que ese máximo ya está en el
+ * futuro). Es lineal y predecible: la corrida N deja la cobertura de Pedro
+ * N meses más adelante que su estado original, ni un día más. Se corrió la
+ * suite completa CINCO veces seguidas sin resetear el stack (ver el PR) para
+ * confirmar que ese avance no afecta a `payments.live.spec.ts` ni a ningún
+ * otro spec — los 5 meses acumulados no rompieron ninguna aserción, porque
+ * ninguna otra pantalla o gate lee la fecha de cobertura como "cuán lejos
+ * en el futuro está": `registrar_pago` deriva su propio período desde el
+ * mismo ancla combinado y no tiene techo de fecha, solo un techo de MESES
+ * por pedido (`PagoCreateDTO.meses`, `le=12`), y `hasPendingPago`/
+ * `canRegisterHere` (frontend) no leen esa fecha en absoluto.
+ *
+ * **Señal a mirar si algún día esto rompe algo:** el único lugar donde una
+ * cobertura absurdamente lejana podría notarse es el rango de fechas que
+ * `payments.live.spec.ts` ve en pantalla ("Cubre" / `pago.fechaInicio` /
+ * `pago.fechaFin` de su propio pago) — si ese spec empezara a fallar sin
+ * ningún cambio de código, lo primero a revisar es `SELECT max(fecha_fin)
+ * FROM cobertura_bonificada WHERE persona_id = <Pedro>` contra la fecha de
+ * hoy: si la diferencia es de años en vez de meses, ahí está la causa, y
+ * limpiarla es una operación manual de base de datos (nunca un endpoint de
+ * baja nuevo — no es el alcance de este archivo).
  *
  * ## Estado que este archivo deja, y cómo lo tolera
  *
@@ -108,6 +150,8 @@
  */
 import { expect, test, request as apiRequestModule, type APIRequestContext, type Page } from "@playwright/test";
 import { E2E_BASE_URL } from "./e2e-target";
+import { loginViaUi } from "./helpers/live-login";
+import { rejectPendingPayments } from "./helpers/pending-payments";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const ADMIN_EMAIL = "admin@cataclub.com";
@@ -145,33 +189,11 @@ async function personaIdViaOwnLogin(email: string, password: string): Promise<st
 
 // ---------------------------------------------------------------------------
 // Limpieza de estado vía API — no es el flujo bajo prueba, es higiene entre
-// corridas (mismo criterio que `rejectPendingPayments` en payments.live.spec.ts).
+// corridas. `rejectPendingPayments` vive en `helpers/pending-payments.ts`
+// (issue de duplicación de SonarCloud, PR #1079): era casi un calco de la
+// versión local que tenía `payments.live.spec.ts`, así que ahora es una sola
+// copia que ambos specs reusan.
 // ---------------------------------------------------------------------------
-
-async function loginAsAdminApi(request: APIRequestContext): Promise<void> {
-  const login = await request.post(`${E2E_BASE_URL}/api/auth/login`, {
-    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-  });
-  expect(login.ok(), `No se pudo iniciar sesión como admin para la limpieza: ${login.status()}`).toBe(true);
-}
-
-/** Rechaza cualquier pago pendiente previo de `studentFullName` — mismo
- *  mecanismo que `payments.live.spec.ts` ya usa para Pedro, repetido acá
- *  porque cada archivo `.live.spec.ts` es responsable de su propia higiene. */
-async function rejectPendingPaymentsFor(request: APIRequestContext, studentFullName: string): Promise<void> {
-  const list = await request.get(`${E2E_BASE_URL}/api/payments`, {
-    params: { estadoPago: "PENDIENTE_VALIDACION" },
-  });
-  expect(list.ok(), `No se pudo leer la cola de pendientes: ${list.status()}`).toBe(true);
-  const body = (await list.json()) as { items?: Array<{ id: string; studentName: string }> };
-  for (const item of body.items ?? []) {
-    if (item.studentName !== studentFullName) continue;
-    const rejected = await request.put(`${E2E_BASE_URL}/api/payments/${item.id}`, {
-      data: { action: "rejected", rejectionReason: "Reinicio QA para repetir el flujo de descuento" },
-    });
-    expect(rejected.ok(), `No se pudo reiniciar el pago pendiente ${item.id}: ${rejected.status()}`).toBe(true);
-  }
-}
 
 /** Retira el beneficio activo de `personaId`, si una corrida anterior dejó uno
  *  (una interrumpida antes de su propio `finally`) — `BeneficioServicio.
@@ -190,23 +212,13 @@ async function retireActiveBenefitIfAny(request: APIRequestContext, personaId: s
 
 test.beforeEach(async ({ request }) => {
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
-  await loginAsAdminApi(request);
-  await rejectPendingPaymentsFor(request, PEDRO_FULL_NAME);
+  await rejectPendingPayments(request, ADMIN_EMAIL, ADMIN_PASSWORD, PEDRO_FULL_NAME);
   await retireActiveBenefitIfAny(request, pedroId);
 });
 
 // ---------------------------------------------------------------------------
 // Flujo de UI — admin
 // ---------------------------------------------------------------------------
-
-async function loginAsAdmin(page: Page): Promise<void> {
-  await page.goto("/login");
-  await expect(page.getByLabel(/correo electrónico/i)).toBeVisible({ timeout: 20_000 });
-  await page.getByLabel(/correo electrónico/i).fill(ADMIN_EMAIL);
-  await page.getByRole("textbox", { name: /contraseña/i }).fill(ADMIN_PASSWORD);
-  await page.getByRole("button", { name: /iniciar sesión/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
-}
 
 /** Crea un descuento porcentual desde `/discounts` — mismo flujo que
  *  `discounts.live.spec.ts`, parametrizado por valor — y devuelve su id
@@ -245,19 +257,6 @@ async function retirarBeneficio(page: Page, personaId: string): Promise<void> {
   expect(res.ok(), `No se pudo retirar el beneficio: ${res.status()} ${await res.text()}`).toBe(true);
 }
 
-// ---------------------------------------------------------------------------
-// Flujo de UI — Pedro (alumno adulto autogestionado)
-// ---------------------------------------------------------------------------
-
-async function loginAsPedro(page: Page): Promise<void> {
-  await page.goto("/login");
-  await expect(page.getByLabel(/correo electrónico/i)).toBeVisible({ timeout: 20_000 });
-  await page.getByLabel(/correo electrónico/i).fill(PEDRO_EMAIL);
-  await page.getByRole("textbox", { name: /contraseña/i }).fill(PEDRO_PASSWORD);
-  await page.getByRole("button", { name: /iniciar sesión/i }).click();
-  await expect(page).toHaveURL(/\/student/, { timeout: 20_000 });
-}
-
 test("un beneficio asignado a un alumno reduce el monto que paga, y la reducción persiste tras recargar", async ({
   page,
   browser,
@@ -266,7 +265,7 @@ test("un beneficio asignado a un alumno reduce el monto que paga, y la reducció
   const discountName = nombreUnico("QA descuento pago");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await loginAsAdmin(page);
+  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
   const descuentoId = await crearDescuentoPorcentaje(page, discountName, 20);
   // Pedro paga "Mensual Adultos" ($40): 20% de descuento son $8, monto final $32.
   await asignarBeneficio(page, pedroId, descuentoId);
@@ -274,7 +273,7 @@ test("un beneficio asignado a un alumno reduce el monto que paga, y la reducció
   const alumnoContext = await browser.newContext();
   const alumnoPage = await alumnoContext.newPage();
   try {
-    await loginAsPedro(alumnoPage);
+    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
     await alumnoPage.goto("/student/payments");
     const abrirFormulario = alumnoPage.getByRole("button", { name: "Registrar un pago" });
     await expect(abrirFormulario).toBeVisible({ timeout: 20_000 });
@@ -316,7 +315,7 @@ test("retirar el beneficio de un alumno restaura el monto completo en su siguien
   const discountName = nombreUnico("QA descuento restaurado");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await loginAsAdmin(page);
+  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
   const descuentoId = await crearDescuentoPorcentaje(page, discountName, 20);
   await asignarBeneficio(page, pedroId, descuentoId);
   // El camino inverso: retirar ANTES de que Pedro pague nada con este
@@ -327,7 +326,7 @@ test("retirar el beneficio de un alumno restaura el monto completo en su siguien
   const alumnoContext = await browser.newContext();
   const alumnoPage = await alumnoContext.newPage();
   try {
-    await loginAsPedro(alumnoPage);
+    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
     await alumnoPage.goto("/student/payments");
     const abrirFormulario = alumnoPage.getByRole("button", { name: "Registrar un pago" });
     await expect(abrirFormulario).toBeVisible({ timeout: 20_000 });
@@ -360,7 +359,7 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
   const discountName = nombreUnico("QA beneficio total");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await loginAsAdmin(page);
+  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
   const descuentoId = await crearDescuentoPorcentaje(page, discountName, 100);
   await asignarBeneficio(page, pedroId, descuentoId);
 
@@ -374,7 +373,7 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
   const alumnoContext = await browser.newContext();
   const alumnoPage = await alumnoContext.newPage();
   try {
-    await loginAsPedro(alumnoPage);
+    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
     await alumnoPage.goto("/student/payments");
 
     const cobertura = alumnoPage.locator("#membership-status-title");
