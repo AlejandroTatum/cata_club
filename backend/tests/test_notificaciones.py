@@ -407,6 +407,120 @@ def test_umbral_smtp_referencia_la_constante_no_un_literal():
 
 
 # ---------------------------------------------------------------------------
+# Enmascarado del correo del destinatario en los logs (issue #1066).
+#
+# El issue original cita tres sitios (líneas 250, 280 y 317), pero su propio
+# criterio de aceptación dice "ningún log de nivel INFO o superior", y hay
+# dos más que califican: el WARNING de rechazo permanente (~línea 215) y el
+# ERROR de fallo de transporte (~línea 245). Los cinco quedan cubiertos acá.
+# ---------------------------------------------------------------------------
+CORREO_COMPLETO = "persona.identificable@example.com"
+
+
+def _mock_smtp_exitoso(mock_smtp_cls):
+    mock_server = Mock()
+    mock_smtp_cls.return_value.__enter__ = Mock(return_value=mock_server)
+    mock_smtp_cls.return_value.__exit__ = Mock(return_value=False)
+    return mock_server
+
+
+def _accion_envio_exitoso(monkeypatch):
+    """Ejercita la línea 250 (`logger.info("Correo enviado a %s...")`)."""
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP"
+    ) as mock_smtp_cls:
+        _mock_smtp_exitoso(mock_smtp_cls)
+        ServicioNotificaciones().enviar_correo(CORREO_COMPLETO, "Asunto", "cuerpo")
+
+
+def _accion_rechazo_permanente(monkeypatch):
+    """Ejercita el WARNING de rechazo permanente (~línea 215), que el issue
+    original no citaba pero que es INFO-o-superior igual."""
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP",
+        side_effect=smtplib.SMTPRecipientsRefused(
+            {CORREO_COMPLETO: (550, "no such user")}
+        ),
+    ):
+        with pytest.raises(DestinatarioRechazadoPermanentemente):
+            ServicioNotificaciones().enviar_correo(CORREO_COMPLETO, "Asunto", "cuerpo")
+
+
+def _accion_fallo_transporte(monkeypatch):
+    """Ejercita el ERROR de fallo de transporte (~línea 245), tampoco citado
+    por el issue original."""
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP",
+        side_effect=OSError("fallo de red genérico"),
+    ):
+        with pytest.raises(ServicioNoDisponible):
+            ServicioNotificaciones().enviar_correo(CORREO_COMPLETO, "Asunto", "cuerpo")
+
+
+def _accion_recuperacion_contrasenia(monkeypatch):
+    """Ejercita la línea 280 (`[RECUPERAR_CONTRASENIA] correo=%s`)."""
+    monkeypatch.setattr(settings, "frontend_url", "https://app.test")
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP"
+    ) as mock_smtp_cls:
+        _mock_smtp_exitoso(mock_smtp_cls)
+        ServicioNotificaciones().enviar_recuperacion_contrasenia(
+            CORREO_COMPLETO, "token123"
+        )
+
+
+def _accion_verificacion_correo(monkeypatch):
+    """Ejercita la línea 317 (`[VERIFICAR_CORREO] correo=%s`)."""
+    monkeypatch.setattr(settings, "frontend_url", "https://app.test")
+    with patch(
+        "app.infraestructura.notificaciones_servicio.smtplib.SMTP"
+    ) as mock_smtp_cls:
+        _mock_smtp_exitoso(mock_smtp_cls)
+        ServicioNotificaciones().enviar_verificacion_correo(CORREO_COMPLETO, "token123")
+
+
+@pytest.mark.parametrize(
+    "accion",
+    [
+        _accion_envio_exitoso,
+        _accion_rechazo_permanente,
+        _accion_fallo_transporte,
+        _accion_recuperacion_contrasenia,
+        _accion_verificacion_correo,
+    ],
+    ids=[
+        "envio_exitoso_linea_250",
+        "rechazo_permanente_linea_215",
+        "fallo_transporte_linea_245",
+        "recuperacion_contrasenia_linea_280",
+        "verificacion_correo_linea_317",
+    ],
+)
+def test_ningun_log_de_envio_expone_el_correo_completo(monkeypatch, caplog, accion):
+    """Ninguno de los cinco sitios que registran actividad de correo puede
+    dejar la dirección completa en el log, sin importar el resultado del
+    envío (éxito, rechazo permanente o fallo de transporte)."""
+    _configurar_smtp(monkeypatch)
+    monkeypatch.setattr(notificaciones_servicio_mod.logger, "disabled", False)
+
+    with caplog.at_level(logging.DEBUG, logger="cataclub.notificaciones"):
+        accion(monkeypatch)
+
+    assert CORREO_COMPLETO not in caplog.text
+
+
+def test_enmascarar_correo_con_direccion_malformada_no_revienta():
+    """Sin `@`, o vacío/`None`, no hay forma de separar usuario y dominio;
+    el helper cae a un marcador fijo en vez de imprimir el valor crudo o
+    lanzar una excepción."""
+    from app.infraestructura.notificaciones_servicio import _enmascarar_correo
+
+    assert _enmascarar_correo("no-es-un-correo") == "***"
+    assert _enmascarar_correo("") == "***"
+    assert _enmascarar_correo(None) == "***"
+
+
+# ---------------------------------------------------------------------------
 # Candado sistémico: `Notificacion.mensaje` nunca revienta un INSERT
 # (hallazgo en vivo, 2026-08-11). Estos dos son unitarios y no tocan la BD:
 # `@validates` corre al ASIGNAR el atributo, no al hacer flush/commit.
