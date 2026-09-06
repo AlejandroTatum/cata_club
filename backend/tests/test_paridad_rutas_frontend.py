@@ -73,6 +73,22 @@ _KNOWN_BACKEND_CALL_FUNCS = (
 # alguna deja de usarse — así esta lista no puede quedarse desactualizada.
 _QUERY_SUFFIX_EXPRESSIONS = ("query", "queryString", "suffix", "request.nextUrl.search")
 
+# Expresiones `${...}` que abren un literal y nombran la base de un servicio
+# AJENO al backend de la app. La premisa de este archivo -- que todo
+# `/api/v1/...` en un test del frontend apunta a nuestro backend -- es cierta
+# salvo acá: Mailpit, el buzón del stack de QA, sirve su propia API bajo el
+# mismo prefijo `/api/v1` (`/api/v1/search`, `/api/v1/messages`). Sin esta
+# lista, un helper que lee correo desde un spec live hace fallar el test
+# afirmando que el frontend consume rutas que el backend no expone -- y tiene
+# razón: no las expone, son de otro servicio.
+#
+# Solo se saltean los literales que EMPIEZAN con `${<nombre>}`, o sea los que
+# nombran la base explícitamente. Una ruta nuestra escrita a secas
+# (`/api/v1/auth/login`) sigue verificándose igual.
+# `test_el_allowlist_de_bases_ajenas_sigue_haciendo_falta` falla si alguna
+# deja de usarse, para que esta lista no se quede desactualizada.
+_BASES_DE_SERVICIOS_AJENOS = ("MAILPIT_BASE_URL",)
+
 _LITERAL = r'(?:`([^`]*)`|"([^"]*)"|\'([^\']*)\')'
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
@@ -154,7 +170,11 @@ def _extraer_rutas_de_tests() -> list[RutaEncontrada]:
     """Every `/api/v1/...` string a frontend TEST asserts against a mocked
     `fetch` — regardless of host (`http://localhost:8000/...`,
     `http://backend/...`), and regardless of whether it lives under
-    `src/**/__tests__/**` or `frontend/tests/**`."""
+    `src/**/__tests__/**` or `frontend/tests/**`.
+
+    La única excepción son los literales que empiezan nombrando la base de un
+    servicio ajeno (`_BASES_DE_SERVICIOS_AJENOS`): esos `/api/v1/...` no son
+    nuestros y no tienen por qué estar en `app.openapi()`."""
     archivos = sorted(FRONTEND_ROOT.rglob("*.ts")) + sorted(FRONTEND_ROOT.rglob("*.tsx"))
     archivos = [f for f in archivos if "node_modules" not in f.parts]
     archivos = [
@@ -172,6 +192,8 @@ def _extraer_rutas_de_tests() -> list[RutaEncontrada]:
         rel = str(archivo.relative_to(REPO_ROOT))
         for m in literal_re.finditer(texto):
             crudo = m.group(1)
+            if any(crudo.startswith("${" + nombre + "}") for nombre in _BASES_DE_SERVICIOS_AJENOS):
+                continue
             idx = crudo.find("api/v1/")
             path = "/" + crudo[idx:]
             linea = texto.count("\n", 0, m.start()) + 1
@@ -294,6 +316,21 @@ def test_el_allowlist_de_sufijos_de_query_sigue_haciendo_falta():
         if ("${" + nombre + "}") not in texto_completo
     ]
     assert sin_uso == [], f"sufijos ya sin ningún uso real: {sin_uso}"
+
+
+def test_el_allowlist_de_bases_ajenas_sigue_haciendo_falta():
+    """Mismo criterio que el candado de arriba: una base ajena que ya nadie
+    usa es un agujero abierto en la verificación sin que nadie se entere."""
+    archivos = [
+        f for f in sorted(FRONTEND_ROOT.rglob("*.ts"))
+        if "node_modules" not in f.parts
+    ]
+    texto_completo = "\n".join(f.read_text() for f in archivos)
+    sin_uso = [
+        nombre for nombre in _BASES_DE_SERVICIOS_AJENOS
+        if ("${" + nombre + "}") not in texto_completo
+    ]
+    assert sin_uso == [], f"bases ajenas ya sin ningún uso real: {sin_uso}"
 
 
 # ---------------------------------------------------------------------------
