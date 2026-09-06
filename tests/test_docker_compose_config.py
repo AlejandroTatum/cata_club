@@ -958,6 +958,31 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
 
 
+def test_el_caddyfile_declara_la_csp_en_modo_report_only():
+    """Fase 1 de la CSP (issue #1069): `Content-Security-Policy-Report-Only`,
+    no la cabecera que bloquea. Una política escrita a ciegas rompe Next.js
+    (scripts inline sin nonce que el App Router inyecta -- verificado
+    compilando la app) y no hay reportes reales todavía, así que esta fase
+    solo observa: junta violaciones sin tumbar nada, mientras el modo
+    estricto queda pendiente de esos reportes.
+
+    El destino de los reportes (`report-uri`) tiene que apuntar al endpoint
+    propio de la app (`/api/csp-report`), no a un proveedor externo -- ver
+    `frontend/src/app/api/csp-report/route.ts`."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert "Content-Security-Policy-Report-Only" in contenido, (
+        "el Caddyfile no declara Content-Security-Policy-Report-Only"
+    )
+    assert "Content-Security-Policy \"" not in contenido, (
+        "el Caddyfile declara una Content-Security-Policy que SÍ bloquea; "
+        "esta fase es solo report-only"
+    )
+    assert "report-uri /api/csp-report" in contenido, (
+        "la Content-Security-Policy-Report-Only del Caddyfile no manda sus "
+        "reportes a /api/csp-report"
+    )
+
+
 # `handle` que enruta al backend, con su matcher. `handle` (y no un
 # `reverse_proxy` suelto con matcher) porque los bloques `handle` son
 # MUTUAMENTE EXCLUYENTES y se evalúan en el orden escrito: lo que no cae en el
