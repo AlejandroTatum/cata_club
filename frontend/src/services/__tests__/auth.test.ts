@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { login, fetchSession, logout, isValidAuthSession, authService, type AuthSession } from "../auth";
+import { discardInFlightAuthRequests } from "../api";
 
 function okResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -247,6 +248,56 @@ describe("fetchSession", () => {
     vi.mocked(global.fetch).mockResolvedValue(okResponse({ bogus: true }));
 
     expect(await fetchSession()).toEqual({ kind: "unauthenticated" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchSession — descarte al cerrar sesión (issue #1053)
+// ---------------------------------------------------------------------------
+
+describe("fetchSession — descarte al cerrar sesión (issue #1053)", () => {
+  /**
+   * Reproduce el orden real del defecto: la petición a /api/auth/session ya
+   * está en vuelo (el `fetch` salió) cuando algo dispara
+   * `discardInFlightAuthRequests` — el mismo descarte que `AuthContext`'s
+   * `logout()` llama antes de pedir el cierre de sesión. La respuesta con la
+   * cookie re-sellada nunca debe llegar a procesarse: un `fetch` real,
+   * abortado mientras está pendiente, jamás entrega sus cabeceras
+   * (`Set-Cookie` incluido) al navegador.
+   *
+   * Antes del arreglo, `fetchSession` no exponía ningún `AbortController`
+   * alcanzable desde afuera — este test falla porque la señal capturada
+   * nunca se aborta y la promesa de `fetchSession` queda colgada.
+   */
+  it("aborta una petición de sesión en vuelo cuando se descartan las peticiones de autenticación en curso", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce((_url, init) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        capturedSignal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    });
+
+    // La petición sale primero — todavía no hay ningún logout en curso.
+    const pending = fetchSession();
+    await Promise.resolve(); // deja que el `fetch` mockeado arranque y capture la señal.
+
+    // El logout empieza recién ahora: descarta toda petición de autenticación
+    // en vuelo, exactamente lo que `AuthContext`'s `logout()` hace antes de
+    // pedir /api/auth/logout.
+    discardInFlightAuthRequests();
+
+    expect(capturedSignal?.aborted).toBe(true);
+    // La respuesta jamás llega a procesarse — ni su cuerpo ni su Set-Cookie.
+    expect(await pending).toEqual({ kind: "outage" });
+  });
+
+  it("no aborta la petición si nadie descarta peticiones en curso (la sesión resuelve con normalidad)", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(okResponse(validSession));
+
+    expect(await fetchSession()).toEqual({ kind: "authenticated", session: validSession });
   });
 });
 

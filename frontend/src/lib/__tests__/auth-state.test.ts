@@ -167,7 +167,7 @@ vi.mock("@/services/api", () => ({
       authFailureListener = undefined;
     };
   },
-  discardInFlightRefresh: vi.fn(),
+  discardInFlightAuthRequests: vi.fn(),
   setCurrentMockRole: vi.fn(),
 }));
 

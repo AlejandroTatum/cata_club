@@ -52,7 +52,7 @@ vi.mock("@/services/api", () => ({
       authFailureListener = null;
     };
   },
-  discardInFlightRefresh: vi.fn(),
+  discardInFlightAuthRequests: vi.fn(),
   setCurrentMockRole: vi.fn(),
 }));
 
@@ -198,7 +198,7 @@ describe("AuthProvider loggingOutRef (issue #1041)", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar Sesión" }));
-    // The logout request is still in flight — discardInFlightRefresh already
+    // The logout request is still in flight — discardInFlightAuthRequests already
     // fired synchronously, and no concurrent refresh may resurrect the
     // access-token cookie before logout's own Max-Age=0 clear lands.
     mockGetSession.mockClear();

@@ -29,7 +29,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { AuthSession, LoginResult, SessionOutcome } from "@/services/auth";
 import { authService } from "@/services/auth";
-import { subscribeAuthFailure, discardInFlightRefresh, setCurrentMockRole } from "@/services/api";
+import { subscribeAuthFailure, discardInFlightAuthRequests, setCurrentMockRole } from "@/services/api";
 import { hydrateState } from "@/lib/auth-state";
 
 // ---------------------------------------------------------------------------
@@ -326,17 +326,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async (): Promise<void> => {
-    // Stop revalidation and discard any in-flight refresh BEFORE calling the
-    // logout route, so neither can resurrect the access-token cookie after
-    // logout's Max-Age=0 clear (see discardInFlightRefresh's own doc comment
-    // for why this is a client-side mitigation, not a full guarantee).
+    // Stop revalidation and discard every in-flight auth request (refresh,
+    // fetchSession) BEFORE calling the logout route, so none of them can
+    // resurrect the access-token cookie after logout's Max-Age=0 clear (see
+    // discardInFlightAuthRequests's own doc comment for why this is a
+    // client-side mitigation, not a full guarantee).
     loggingOutRef.current = true;
     // Bumped here, not in the `finally` below: any `revalidate()` whose
     // `await` straddles this point — already in flight when the click
     // landed — must find a DIFFERENT epoch than the one it captured, no
     // matter when its own network round trip happens to resolve.
     logoutEpochRef.current += 1;
-    discardInFlightRefresh();
+    discardInFlightAuthRequests();
     try {
       await authService.logout();
     } catch (err) {

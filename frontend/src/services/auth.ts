@@ -14,6 +14,7 @@
 
 import type { UserRole, Usuario } from "@/types/domain";
 import { userRolesFromBackendRoles } from "@/lib/auth-utils";
+import { registerInFlightAuthRequest } from "@/services/api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,8 +141,17 @@ function isNetworkFailure(value: Response | NetworkFailure): value is NetworkFai
   return (value as Partial<NetworkFailure>).networkError === true;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response | NetworkFailure> {
-  const controller = new AbortController();
+/**
+ * `controller` es opcional para que el llamador pueda quedarse con una
+ * referencia externa y abortarla por su cuenta (ver `fetchSession` abajo) —
+ * por default se crea uno propio, igual que antes, así que un llamador que
+ * no la necesita (p. ej. `login`) no cambia de comportamiento.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  controller: AbortController = new AbortController(),
+): Promise<Response | NetworkFailure> {
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
@@ -269,22 +279,38 @@ export type SessionOutcome =
  * The route itself attempts a refresh when the access token is missing or
  * near expiry. See `SessionOutcome` for how outage vs. unauthenticated is
  * distinguished.
+ *
+ * Issue #1053: this request is registered with `registerInFlightAuthRequest`
+ * for its whole lifetime. A call already in flight when `logout()` runs gets
+ * aborted by `discardInFlightAuthRequests` before its response — which the
+ * BFF may have refreshed and re-sealed with `Set-Cookie` — ever arrives, so
+ * it cannot resurrect the access-token cookie after logout's own Max-Age=0
+ * clear. `login()` deliberately does NOT register: it is always awaited by
+ * its own caller before any later `logout()` can start, so no background
+ * trigger can leave it in flight across a logout the way the periodic/
+ * visibilitychange revalidation calling this function can.
  */
 export async function fetchSession(): Promise<SessionOutcome> {
-  const response = await fetchWithTimeout("/api/auth/session", { method: "GET" });
-
-  if (isNetworkFailure(response) || response.status === 503) {
-    return { kind: "outage" };
-  }
-  if (!response.ok) {
-    return { kind: "unauthenticated" };
-  }
-
+  const controller = new AbortController();
+  const unregister = registerInFlightAuthRequest(controller);
   try {
-    const json: unknown = await response.json();
-    return isValidAuthSession(json) ? { kind: "authenticated", session: json } : { kind: "unauthenticated" };
-  } catch {
-    return { kind: "unauthenticated" };
+    const response = await fetchWithTimeout("/api/auth/session", { method: "GET" }, controller);
+
+    if (isNetworkFailure(response) || response.status === 503) {
+      return { kind: "outage" };
+    }
+    if (!response.ok) {
+      return { kind: "unauthenticated" };
+    }
+
+    try {
+      const json: unknown = await response.json();
+      return isValidAuthSession(json) ? { kind: "authenticated", session: json } : { kind: "unauthenticated" };
+    } catch {
+      return { kind: "unauthenticated" };
+    }
+  } finally {
+    unregister();
   }
 }
 
