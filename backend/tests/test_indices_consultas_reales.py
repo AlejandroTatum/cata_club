@@ -259,6 +259,36 @@ def test_indice_de_correo_lower_es_unico_en_postgres(db_session: Session):
     )
 
 
+# Issue #1023 (migración `f1023correobtrim`): un índice declarado con
+# `btrim` en `Base.metadata` no prueba que Postgres lo esté sirviendo --
+# `test_indice_de_consulta_real_existe_en_postgres` de arriba solo verifica
+# que la posición sea una expresión (`_EXPRESION`), sin comparar CUÁL. Se
+# lee `pg_get_indexdef` contra el catálogo real: si el índice quedara
+# declarado sobre `lower(correo)` a secas mientras el predicado de
+# `obtener_por_correo` filtra por `lower(btrim(correo))`, la consulta más
+# caliente del sistema dejaría de poder usarlo y caería a sequential scan
+# -- exactamente la regresión que la corrección de la premisa original de
+# este issue advirtió.
+def test_indice_de_correo_lower_usa_btrim_en_postgres(db_session: Session):
+    fila = db_session.execute(
+        text(
+            "SELECT pg_get_indexdef(indexrelid) FROM pg_index "
+            "WHERE indrelid = 'usuario'::regclass "
+            "AND indexrelid = 'ix_usuario_correo_lower'::regclass"
+        )
+    ).one_or_none()
+    assert fila is not None, (
+        "No se encontró `ix_usuario_correo_lower` en el catálogo de "
+        "Postgres para la tabla `usuario`."
+    )
+    assert "btrim" in fila[0], (
+        f"`ix_usuario_correo_lower` no usa `btrim` en su definición real "
+        f"({fila[0]!r}). El predicado de `obtener_por_correo` filtra por "
+        "`lower(btrim(correo))`; si el índice no comparte esa expresión "
+        "exacta, Postgres no puede usarlo para esa consulta."
+    )
+
+
 @pytest.mark.parametrize(
     ("tabla", "nombre"),
     _INDICES_RETIRADOS,

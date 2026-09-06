@@ -34,6 +34,7 @@ from app.dominio.modelos import (
     Usuario,
 )
 from tests._categoria_seed import LUN_SAB, sembrar_categorias
+from tests._sqlite_btrim import registrar_btrim_sqlite
 
 SEED_SCRIPT = Path(__file__).parents[1] / "scripts" / "seed_dev_base.py"
 
@@ -54,6 +55,7 @@ def _motor_en_memoria(modulo):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    registrar_btrim_sqlite(engine)
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     sembrar_categorias(TestingSessionLocal)

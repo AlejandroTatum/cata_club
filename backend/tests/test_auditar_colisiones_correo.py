@@ -15,6 +15,13 @@ dos filas colisionadas pueden convivir -- en vez de contra `db_session`
 (que corre siempre al HEAD migrado, donde ese `INSERT` ya lo rechaza la
 base).
 
+Issue #1023 (migración `f1023correobtrim`): el índice único pasó a ser
+sobre `lower(btrim(correo))`, la MISMA expresión que agrupa este audit.
+Desde esa migración, tampoco puede existir una colisión SOLO por espacios
+en una base al HEAD migrado -- por eso las pruebas de esa colisión, igual
+que las de capitalización, siembran contra el arnés en la revisión
+ANTERIOR a `f1023correobtrim`.
+
 Cubre detección correcta, cero fuga de PII en la salida, y cero
 escrituras demostrado (listener de sentencias + rechazo real del server)."""
 import os
@@ -38,6 +45,13 @@ from tests.fabricas_pagos import crear_persona_orm
 # corresponde a una base todavía no migrada, el escenario real que este
 # script audita.
 REVISION_SIN_INDICE_UNICO = "780ef12115e6"
+
+# Última revisión ANTES de que el índice único (y el predicado de
+# `obtener_por_correo`) incluyan `btrim` (issue #1023, migración
+# `f1023correobtrim`): el índice ya es único, pero solo sobre
+# `lower(correo)`, así que dos correos que difieren solo por espacios al
+# borde todavía pueden convivir en esta revisión.
+REVISION_SIN_BTRIM = "d1016emailunico"
 
 
 def _sembrar_usuario(arnes, id_: int, cedula: str, correo: str, activo: bool = True) -> int:
@@ -107,69 +121,36 @@ def test_detecta_bucket_triple(arnes_migracion):
     assert sorted(bucket["ids"]) == sorted([a, b, c])
 
 
-def test_detecta_colision_solo_por_espacios(db_session):
-    # `d1016emailunico` canonicaliza con `lower(btrim(correo))`, no solo
-    # `lower(correo)`; dos correos que difieren únicamente por espacios al
-    # inicio/fin no chocan con el índice único case-insensitive vigente
-    # (que no hace btrim) y por eso pueden convivir en una base al HEAD
-    # migrado -- exactamente el escenario que este audit tiene que atrapar
-    # antes de un deploy que canonicalice y falle a mitad de transacción.
-    persona_uno = crear_persona_orm(db_session, "1710034065")
-    persona_dos = crear_persona_orm(db_session, "1710034073")
-    db_session.add_all([
-        Usuario(correo="espacios@ejemplo.test", contrasenia="hash", persona_id=persona_uno.id),
-        Usuario(correo=" espacios@ejemplo.test ", contrasenia="hash", persona_id=persona_dos.id),
-    ])
-    db_session.commit()
+def test_detecta_colision_solo_por_espacios(arnes_migracion):
+    # Antes de `f1023correobtrim` el índice único es solo sobre
+    # `lower(correo)`, sin `btrim`; dos correos que difieren únicamente por
+    # espacios al inicio/fin no chocan con él y por eso pueden convivir en
+    # una base en esta revisión -- exactamente el escenario que este audit
+    # tiene que atrapar antes de un deploy que canonicalice y falle a
+    # mitad de transacción. Desde esa migración esta colisión ya no puede
+    # existir en una base al HEAD migrado (ver `test_migracion_correo_
+    # unico.py`), de ahí que se siembre contra el arnés en vez de contra
+    # `db_session`.
+    arnes_migracion.preparar(REVISION_SIN_BTRIM)
+    uno = _sembrar_usuario(arnes_migracion, 1, "1710034065", "espacios@ejemplo.test")
+    dos = _sembrar_usuario(arnes_migracion, 2, "1710034073", " espacios@ejemplo.test ")
 
-    resultado = detectar_colisiones(db_session)
+    resultado = _detectar(arnes_migracion)
 
     assert resultado["buckets_en_colision"] == 1
     assert resultado["usuarios_en_colision"] == 2
+    assert sorted(resultado["buckets"][0]["ids"]) == sorted([uno, dos])
 
 
-# --- Alcanzabilidad por la búsqueda de runtime -------------------------------
-
-def test_fila_con_espacios_se_reporta_inalcanzable_y_su_gemela_alcanzable(db_session):
-    # `obtener_por_correo` compara `lower(correo) = lower(btrim(entrada))`:
-    # recorta la ENTRADA, no la columna. La fila con espacios comparte
-    # bucket con su gemela, pero ninguna de las rutas que resuelven una
-    # cuenta por correo la alcanza. Si quien reconcilia la colisión
-    # conserva justo esa, el audit pasa a reportar cero colisiones y la
-    # cuenta queda muerta; por eso el reporte tiene que decir cuál es.
-    persona_uno = crear_persona_orm(db_session, "1710034065")
-    persona_dos = crear_persona_orm(db_session, "1710034073")
-    limpio = Usuario(correo="alcanzable@ejemplo.test", contrasenia="hash",
-                     persona_id=persona_uno.id)
-    con_espacios = Usuario(correo=" alcanzable@ejemplo.test ", contrasenia="hash",
-                           persona_id=persona_dos.id)
-    db_session.add_all([limpio, con_espacios])
-    db_session.commit()
-
-    resultado = detectar_colisiones(db_session)
-
-    bucket = resultado["buckets"][0]
-    por_id = dict(zip(bucket["ids"], bucket["alcanzables"]))
-    assert por_id[limpio.id] is True
-    assert por_id[con_espacios.id] is False
-    assert "alcanzables=" in formatear_texto(resultado)
-
-
-def test_colision_solo_por_mayusculas_reporta_ambas_alcanzables(arnes_migracion):
-    # `lower()` está a AMBOS lados del predicado de runtime, así que una
-    # variante de mayúsculas sí se resuelve: solo los espacios rompen la
-    # búsqueda. Este caso impide degradar el booleano a un genérico "el
-    # valor almacenado no está en forma canónica", que marcaría estas dos
-    # filas como muertas sin serlo.
-    arnes_migracion.preparar(REVISION_SIN_INDICE_UNICO)
-    uno = _sembrar_usuario(arnes_migracion, 1, "1710034065", "Mayus@Ejemplo.test")
-    dos = _sembrar_usuario(arnes_migracion, 2, "1710034073", "mayus@ejemplo.test")
-
-    bucket = _detectar(arnes_migracion)["buckets"][0]
-
-    por_id = dict(zip(bucket["ids"], bucket["alcanzables"]))
-    assert por_id[uno] is True
-    assert por_id[dos] is True
+# Issue #1023 (migración `f1023correobtrim`): este archivo tenía una
+# sección "Alcanzabilidad por la búsqueda de runtime" con un booleano
+# `alcanzables` por fila, que modelaba el predicado de `obtener_por_correo`
+# ANTES de esa migración (`lower(correo) == lower(btrim(entrada))`, que
+# recortaba el input pero no la columna). Esa migración alineó el índice
+# único y el predicado real a la MISMA expresión que agrupa este audit
+# (`lower(btrim(correo))`), así que toda fila de todo bucket es alcanzable
+# por construcción -- el booleano se volvió una tautología y se retiró del
+# audit (ver `detectar_colisiones`) junto con estos dos tests.
 
 
 def test_usuarios_no_colisionados_quedan_afuera(db_session):
