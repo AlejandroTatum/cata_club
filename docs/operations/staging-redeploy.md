@@ -111,9 +111,13 @@ actualizarla, creerle infla el rango y con él la evaluación de riesgo.
    camino.
 
    El gate vive en `backend/scripts/detectar_correos_duplicados.py`, pero **llegó
-   con el mismo PR que la migración** (#1021): si staging todavía corre un SHA
-   anterior, el script no existe dentro del contenedor y `exec` responde
-   `No such file or directory`. Eso no es una falla del entorno. En ese caso corre
+   26 minutos DESPUÉS que la migración**, en un PR separado (`d1016emailunico`
+   se mergeó por el PR #1019, el script por el PR #1021): si staging todavía
+   corre un SHA anterior al #1021, el script no existe dentro del contenedor y
+   `exec` responde `No such file or directory`. Eso no es una falla del
+   entorno, es el mismo orden invertido que atrapa el candado de
+   `backend/tests/test_migraciones_no_referencian_scripts_inexistentes.py`. En
+   ese caso corre
    la consulta equivalente, que usa la misma clave canónica que la migración
    (`_CLAVE_CANONICA = "lower(btrim(correo))"`) y devuelve solo conteos, sin
    volcar ningún correo:
@@ -129,6 +133,31 @@ actualizarla, creerle infla el rango y con él la evaluación de riesgo.
 
    La segunda columna debe ser `0`. Si no lo es, **detente**: hay que decidir a
    mano qué cuenta es la real. Ninguna se elige ni se fusiona automáticamente.
+
+### Convención: un script de precheck citado por una migración debe existir antes
+
+`d1016emailunico` citaba `scripts/detectar_correos_duplicados.py` en su
+docstring y en su mensaje de aborto desde el momento en que se mergeó (PR
+#1019), pero el script recién existió 26 minutos después, en un PR aparte
+(#1021, issue #1070). No fue un problema de empaquetado -- los diffs ya
+estaban separados -- sino de orden: una migración nunca debe citar un
+script de `scripts/*.py` que todavía no existe en `main`.
+
+La regla: si una migración de Alembic referencia un script de precheck o
+remediación (en su docstring, un comentario o un mensaje de error), ese
+script tiene que existir en `main` **antes** de mergear la migración que lo
+cita, nunca después. El PR que agrega el script va primero, o ambos van en
+el mismo PR -- pero jamás el script después.
+
+Esto NO aplica a un script de remediación posterior al aborto (como
+`scripts/remediar_rol_multiple.py`, que llegó en el mismo PR que
+`e762rolunico` porque documenta cómo resolver a mano un caso que la
+migración ya dejó registrado, no un precheck previo al deploy).
+
+El candado `backend/tests/test_migraciones_no_referencian_scripts_inexistentes.py`
+hace esta regla determinista: recorre `backend/alembic/versions/*.py`,
+extrae toda referencia literal a `scripts/*.py` y falla si el archivo
+citado no existe en el árbol.
 
 ## Ejecución en el host
 
