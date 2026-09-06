@@ -129,6 +129,153 @@ describe("AuthProvider logout", () => {
 });
 
 // ---------------------------------------------------------------------------
+// loggingOutRef (issue #1041)
+// ---------------------------------------------------------------------------
+
+/**
+ * `loggingOutRef` means "a logout is IN FLIGHT", not "a logout ever happened
+ * in this tab". `login()` was the only place that turned it back off, but
+ * the public enrolment wizard establishes a new session WITHOUT going
+ * through `login()` (it posts to /api/enrollment and calls `refreshSession`
+ * directly) — so after a logout, that ref stayed stuck true for the rest of
+ * the provider's life and every later `revalidate()` short-circuited to
+ * `unauthenticated` without ever reaching the network.
+ */
+function RefreshProbe() {
+  const { logout, refreshSession, isAuthenticated } = useAuth();
+  return (
+    <>
+      <button type="button" onClick={() => void logout()}>
+        Cerrar Sesión
+      </button>
+      <button type="button" onClick={() => void refreshSession()}>
+        Refrescar
+      </button>
+      <p>auth:{String(isAuthenticated)}</p>
+    </>
+  );
+}
+
+describe("AuthProvider loggingOutRef (issue #1041)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLogout.mockResolvedValue(undefined);
+    mockGetSession.mockResolvedValue({ kind: "unauthenticated" as const });
+  });
+
+  it("lets a later refreshSession reach the network once the logout has settled", async () => {
+    render(
+      <AuthProvider>
+        <RefreshProbe />
+      </AuthProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar Sesión" }));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+
+    mockGetSession.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Refrescar" }));
+
+    // Before the fix, this call never happened — `loggingOutRef` cut
+    // `revalidate()` off before it ever asked the backend anything, exactly
+    // like the enrolment wizard's confirmation round trip in production.
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps a logout in flight from being reverted by a concurrent refresh", async () => {
+    let resolveLogout: (() => void) | undefined;
+    mockLogout.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveLogout = () => resolve(undefined);
+        }),
+    );
+
+    render(
+      <AuthProvider>
+        <RefreshProbe />
+      </AuthProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar Sesión" }));
+    // The logout request is still in flight — discardInFlightRefresh already
+    // fired synchronously, and no concurrent refresh may resurrect the
+    // access-token cookie before logout's own Max-Age=0 clear lands.
+    mockGetSession.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Refrescar" }));
+
+    await Promise.resolve();
+    expect(mockGetSession).not.toHaveBeenCalled();
+
+    // Let the logout itself settle so no promise is left dangling past the
+    // test, then confirm it still finishes normally.
+    resolveLogout?.();
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+  });
+
+  /*
+   * The race an adversarial review found in this fix's first version: a
+   * `revalidate()` that is ALREADY in flight (the 5-minute interval, a
+   * `visibilitychange` tick) when the person clicks "Cerrar sesión" captures
+   * `loggingOutRef.current === false` on entry — logout has not started yet.
+   * Resetting that same ref in logout's `finally` (this issue's own fix) then
+   * meant the SECOND check, after this call's `await`, also read `false`,
+   * because by the time it runs logout has already finished settling. A
+   * stale "authenticated" answer that arrives after that point must still
+   * be rejected — this is the case the OTHER two tests in this block do not
+   * cover: both of them start the refresh DURING or AFTER the logout, never
+   * BEFORE it.
+   */
+  it("does not resurrect the session from a refresh that started before the logout and resolves after it", async () => {
+    let resolveGetSession: ((outcome: SessionOutcome) => void) | undefined;
+    mockGetSession.mockImplementation(
+      () =>
+        new Promise<SessionOutcome>((resolve) => {
+          resolveGetSession = resolve;
+        }),
+    );
+
+    render(
+      <AuthProvider>
+        <RefreshProbe />
+      </AuthProvider>,
+    );
+
+    // A revalidation starts while the tab is still authenticated — logout
+    // has not been clicked yet, so `loggingOutRef` is still `false`.
+    fireEvent.click(screen.getByRole("button", { name: "Refrescar" }));
+
+    // The person logs out WHILE that refresh is still waiting on the
+    // network. `authService.logout` resolves immediately (this block's
+    // default mock), so logout's own `finally` runs — and resets
+    // `loggingOutRef` to `false` — before the stale refresh ever settles.
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar Sesión" }));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+    await screen.findByText("auth:false");
+
+    // Only now does the stale refresh come back — with an answer describing
+    // the session that was just closed.
+    resolveGetSession?.({
+      kind: "authenticated",
+      session: {
+        user: { id: "1", name: "Admin", email: "admin@cataclub.com", role: "admin", representanteId: null, createdAt: "2026-01-01T00:00:00Z" },
+        roles: ["ADMINISTRADOR"],
+        loggedInAt: "2026-01-01T00:00:00Z",
+      },
+    });
+
+    // Give the stale `revalidate()` call's post-`await` continuation a turn
+    // to run. If it reinstates the session, this flips to "auth:true" and
+    // the person who just logged out is authenticated again.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("auth:false")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // sessionExpired (issue #353)
 // ---------------------------------------------------------------------------
 
