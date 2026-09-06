@@ -21,8 +21,7 @@ import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { getDefaultRoute } from "@/lib/auth-utils";
-import { isActivationComplete } from "@/lib/activation-reasons";
+import { ACTIVATION_GATE_ROUTE, routeForSession } from "@/lib/activation-reasons";
 import type { AuthErrorKind } from "@/services/auth";
 import { STATUS_MESSAGES } from "@/lib/error-message";
 import AuthShell, {
@@ -44,17 +43,6 @@ const WELCOME_HOLD_MS = 900;
 /** First name only — a toast is not the place for four surnames. */
 function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
-}
-
-/** Where an incomplete-activation session lands — named once so the toast
- *  description below can never point somewhere `routeForSession` doesn't. */
-const ACTIVATION_GATE_ROUTE = "/login/activacion";
-
-function routeForSession(session: import("@/services/auth").AuthSession): string {
-  // Issue #940: the gate decision (`isActivationComplete`) rules, not the two
-  // raw facts — an admin/trainer without a membership has `activacionCompleta
-  // === true` even though `altaPresencialCompletada` is false.
-  return isActivationComplete(session) ? getDefaultRoute(session.user.role) : ACTIVATION_GATE_ROUTE;
 }
 
 /**

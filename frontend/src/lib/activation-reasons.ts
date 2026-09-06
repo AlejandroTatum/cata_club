@@ -12,6 +12,7 @@
  * complete for pre-#858 (facts) / pre-#940 (decision) sessions.
  */
 import type { AuthSession } from "@/services/auth";
+import { getDefaultRoute } from "@/lib/auth-utils";
 
 export type ActivationSession = AuthSession & {
   correoVerificado?: boolean;
@@ -29,4 +30,23 @@ export function activationPendingReasons(session: ActivationSession): string[] {
   if (session.correoVerificado === false) reasons.push("correo");
   if (session.altaPresencialCompletada === false) reasons.push("inscripcion");
   return reasons;
+}
+
+/** Where an incomplete-activation session lands — named once so a toast
+ *  description or a confirmation link tied to it can never point somewhere
+ *  `routeForSession` doesn't. */
+export const ACTIVATION_GATE_ROUTE = "/login/activacion";
+
+/**
+ * The one place a session's post-auth destination is computed from the
+ * activation gate. Issue #940 wrote it for `/login`; issue #1055 moved it
+ * here because the enrolment confirmation had its own hardcoded `/student`
+ * and never asked the gate at all — a session whose auto-login round trip
+ * confirmed but whose activation had not was sent straight past it.
+ */
+export function routeForSession(session: ActivationSession): string {
+  // The gate decision (`isActivationComplete`) rules, not the two raw facts —
+  // an admin/trainer without a membership has `activacionCompleta === true`
+  // even though `altaPresencialCompletada` is false.
+  return isActivationComplete(session) ? getDefaultRoute(session.user.role) : ACTIVATION_GATE_ROUTE;
 }
