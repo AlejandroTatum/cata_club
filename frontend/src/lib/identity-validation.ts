@@ -260,6 +260,29 @@ export const PERSON_NAME_MIN_LENGTH = 3;
 export const PERSON_NAME_PATTERN =
   /^[A-Za-zÀ-ÖØ-öø-ɏ]+(?:[ '\-·][A-Za-zÀ-ÖØ-öø-ɏ]+)*$/;
 
+/** Letters and the four connectors, sin exigir la alternancia que sí exige `PERSON_NAME_PATTERN` — sirve para aislar la causa de un rechazo. */
+const PERSON_NAME_ALLOWED_CHARS_PATTERN = /^[A-Za-zÀ-ÖØ-öø-ɏ '\-·]*$/;
+
+/** Un separador abriendo o cerrando el valor. */
+const PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN = /^[ '\-·]|[ '\-·]$/;
+
+/**
+ * (issue #1042) `PERSON_NAME_PATTERN.test()` rechaza por tres causas
+ * distintas y, al delegar todo a un único booleano, la causa se pierde antes
+ * de poder nombrarla. Esta función la reconstruye, sin tocar qué se acepta:
+ * dado que el patrón solo admite letras y los cuatro separadores, un valor
+ * que lo cumple en composición (`PERSON_NAME_ALLOWED_CHARS_PATTERN`) pero no
+ * en forma solo puede fallar por un separador en el borde o por dos
+ * separadores seguidos — no hay una cuarta causa posible.
+ */
+export type PersonNameErrorReason = "repeated-separator" | "separator-at-edge" | "invalid-char";
+
+export function personNameError(value: string): PersonNameErrorReason | null {
+  if (PERSON_NAME_PATTERN.test(value)) return null;
+  if (!PERSON_NAME_ALLOWED_CHARS_PATTERN.test(value)) return "invalid-char";
+  return PERSON_NAME_SEPARATOR_AT_EDGE_PATTERN.test(value) ? "separator-at-edge" : "repeated-separator";
+}
+
 /**
  * `subject` is the noun phrase the message is built around, e.g.
  * `"Los apellidos"` (plural) or `"El nombre del contacto de emergencia"`
@@ -275,9 +298,15 @@ export function personNameRule(
   if (trimmed.length < PERSON_NAME_MIN_LENGTH) {
     return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LENGTH} caracteres.`;
   }
-  return PERSON_NAME_PATTERN.test(trimmed)
-    ? null
-    : `${subject} ${plural ? "tienen" : "tiene"} un carácter que no reconocemos en un nombre de persona.`;
+  const reason = personNameError(trimmed);
+  if (reason === null) return null;
+  if (reason === "repeated-separator") {
+    return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion, apóstrofe o punto medio repetido.`;
+  }
+  if (reason === "separator-at-edge") {
+    return `${subject} no ${plural ? "pueden" : "puede"} empezar ni terminar con un espacio, guion, apóstrofe o punto medio.`;
+  }
+  return `${subject} ${plural ? "tienen" : "tiene"} un carácter que no reconocemos en un nombre de persona.`;
 }
 
 // ---------------------------------------------------------------------------
