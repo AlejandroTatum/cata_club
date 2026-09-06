@@ -52,6 +52,38 @@ La URL lleva el token en el path, así que es un secreto: no va al crontab (que
 lee de un archivo de root y no la imprime en ningún camino, ni siquiera al
 fallar.
 
+## Logs de contenedores
+
+`docker-compose.prod.yml` declara `logging.driver: journald` en los ocho
+servicios del render (issue #1067): con el driver por defecto de Docker
+(`json-file`) el log vive DENTRO del filesystem efímero del contenedor, bajo
+su ID -- y cada despliegue recrea `backend`/`frontend` (imagen nueva) y cada
+cambio del `Caddyfile` recrea `caddy` (`refrescar_caddy`), así que un
+`docker logs <contenedor>` después de un redeploy no muestra nada de antes
+del último release. `journald` es un servicio del HOST: sobrevive al
+`docker rm`/recreate porque no depende del ciclo de vida del contenedor.
+
+Para consultar el log de un servicio, incluido el de un release anterior:
+
+```
+journalctl CONTAINER_NAME=<servicio> --since <ventana>
+```
+
+Por ejemplo, `journalctl CONTAINER_NAME=cata-club-backend-1 --since "48 hours ago"`.
+`<servicio>` es el nombre del contenedor tal como lo asigna Compose
+(`docker ps` lo confirma), no el nombre del servicio en el YAML.
+
+El `Caddyfile` agrega además un bloque `log { output stdout }` en el sitio
+único de producción: sin él, Caddy solo emitía sus propios logs de admin y
+arranque, nunca el access log del borde (quién pidió qué y qué devolvió el
+proxy). Con `journald` como driver, ese access log también persiste al
+redeploy.
+
+Lo que queda fuera de este repositorio: la retención real
+(`SystemMaxUse`, `MaxRetentionSec` en `journald.conf`) es configuración del
+host, y un destino centralizado fuera del host (por ejemplo un agregador
+externo) queda fuera de alcance por decisión del dueño del proyecto.
+
 ## Señales disponibles en el host
 
 - `scripts/ops/check-backup-freshness.sh --max-age-hours 26` sale `0` si existe

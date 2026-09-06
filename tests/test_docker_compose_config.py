@@ -982,6 +982,22 @@ def test_el_caddyfile_declara_la_csp_en_modo_report_only():
     )
 
 
+def test_el_caddyfile_declara_access_log():
+    """`caddy` es el único borde público del stack, y sin una directiva
+    `log` el Caddyfile no emite access log: lo único que se ve hoy son los
+    logs de admin y arranque de Caddy, nunca quién pegó a `/health/ready` ni
+    qué devolvió el proxy hacia el frontend (issue #1067). Con el driver de
+    logging ya en `journald` (ver
+    `test_todos_los_servicios_de_produccion_declaran_logging_journald`), un
+    access log acá persiste igual que cualquier otro log del stack -- esta
+    prueba solo exige que el CONTENIDO exista."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert re.search(r"^\s*log\b", contenido, re.MULTILINE), (
+        "el Caddyfile no declara un bloque `log` -- no hay access log del "
+        "único borde público del stack"
+    )
+
+
 # `handle` que enruta al backend, con su matcher. `handle` (y no un
 # `reverse_proxy` suelto con matcher) porque los bloques `handle` son
 # MUTUAMENTE EXCLUYENTES y se evalúan en el orden escrito: lo que no cae en el
