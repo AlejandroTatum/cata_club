@@ -66,6 +66,23 @@ class GestorAutenticacion:
         )
 
     @staticmethod
+    def decision_activacion(db: Session, usuario: "Usuario") -> bool:
+        """Único armado de la decisión de activación que consume el
+        frontend (issue #1056): tanto `claims_estandar` (claim del token)
+        como `auth_router.obtener_perfil` (campo de `/auth/me`) llaman a
+        ESTA función, nunca a `puede_acceder_modulos` cada uno por su lado.
+
+        Antes de esto, ambos caminos llegaban al mismo resultado llamando
+        por separado a `puede_acceder_modulos`: correcto hoy, pero dos
+        armados independientes de la misma pregunta -- agregar o cambiar
+        una condición de la compuerta exigía acordarse de tocar los dos.
+        Este método es ese único lugar; `puede_acceder_modulos` sigue
+        siendo la compuerta en sí, consumida además desde
+        `decodificar_token` para bloquear módulos del club.
+        """
+        return GestorAutenticacion.puede_acceder_modulos(db, usuario)
+
+    @staticmethod
     def claims_estandar(db: Session, usuario: "Usuario") -> dict:
         """Claims que TODO emisor de tokens debe incluir -- login normal,
         refresh, y el auto-login del alta pública -- sin importar cuál de los
@@ -82,7 +99,7 @@ class GestorAutenticacion:
             "sub": usuario.correo,
             "persona_id": usuario.persona_id,
             "roles": roles,
-            "activacion_completa": GestorAutenticacion.puede_acceder_modulos(db, usuario),
+            "activacion_completa": GestorAutenticacion.decision_activacion(db, usuario),
         }
 
     @staticmethod
