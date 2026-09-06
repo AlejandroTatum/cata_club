@@ -16,6 +16,7 @@ import {
   studentBirthDateRule,
   calculatePersonAge,
   isValidCalendarDate,
+  isMinorAge,
   EDAD_MAYORIA_EDAD,
   EDAD_MAXIMA_ALUMNO,
 } from "@/lib/identity-validation";
@@ -434,7 +435,7 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     if (boundsError) return boundsError;
     if (
       d.enrollmentType === ENROLLMENT_TYPES.SELF &&
-      calculatePersonAge(d.fechaNacimiento) < EDAD_MAYORIA_EDAD
+      isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
       return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
     }

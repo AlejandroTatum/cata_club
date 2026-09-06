@@ -8,6 +8,7 @@ import {
   calculatePersonAge,
   isValidCalendarDate,
   isFutureBirthDate,
+  isMinorAge,
   EDAD_MINIMA_ALUMNO,
   EDAD_MAXIMA_ALUMNO,
   EDAD_MAYORIA_EDAD,
@@ -268,14 +269,14 @@ function validatePersonal(data: CrearCuentaFormData): string[] {
   if (data.accountType && data.fechaNacimiento && isValidCalendarDate(data.fechaNacimiento)) {
     const age = calculatePersonAge(data.fechaNacimiento);
     if (ADULT_ACCOUNT_TYPES.includes(data.accountType)) {
-      if (age < EDAD_MAYORIA_EDAD || age > EDAD_MAXIMA_ALUMNO) {
+      if (isMinorAge(age) || age > EDAD_MAXIMA_ALUMNO) {
         errors.push(
           `Los jugadores, representantes y entrenadores deben tener entre ${EDAD_MAYORIA_EDAD} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`,
         );
       }
     }
     if (data.accountType === "MENOR") {
-      if (age >= EDAD_MAYORIA_EDAD) errors.push("La persona es mayor de edad. Use tipo Jugador o Representante.");
+      if (!isMinorAge(age)) errors.push("La persona es mayor de edad. Use tipo Jugador o Representante.");
       else if (age < EDAD_MINIMA_ALUMNO) errors.push(`La edad mínima es ${EDAD_MINIMA_ALUMNO} años.`);
       else if (age > EDAD_MAXIMA_ALUMNO) errors.push(`La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: ${age}).`);
     }
