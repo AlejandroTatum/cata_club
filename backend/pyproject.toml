@@ -43,6 +43,10 @@ dev = [
     # `uv sync --frozen`, así que un ruff global no estaría disponible ahí.
     "ruff>=0.15.12",
     "import-linter>=2.14",
+    # Auditoria de vulnerabilidades conocidas contra el lock (issue #1063).
+    # `uv` no tiene subcomando de audit propio; se instala como cualquier
+    # herramienta de dev, mismo patron que ruff e import-linter.
+    "pip-audit>=2.7.0",
 ]
 
 [tool.pytest.ini_options]
