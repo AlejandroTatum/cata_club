@@ -1269,15 +1269,36 @@ function makeDescuento(overrides: Partial<DescuentoCatalogo> = {}): DescuentoCat
 
 describe("fetchDescuentos", () => {
   // Paginated backend (issue #814): the endpoint answers the standard
-  // `{items, total, skip, limit}` envelope and the client requests one page
-  // at the backend's cap (limit=200), unwrapping `items` for its callers.
-  it("GETs /api/descuentos and unwraps the paginated envelope (active + inactive)", async () => {
-    const items = [makeDescuento(), makeDescuento({ id: 2, nombre: "Vieja", activo: false })];
-    vi.mocked(global.fetch).mockResolvedValue(okResponse({ items, total: 2, skip: 0, limit: 200 }));
+  // `{items, total, skip, limit}` envelope. A single page at the backend's
+  // cap (limit=200) used to be treated as the whole catalog — issue #1083:
+  // a discount created after 200 others (and every inactive one pushed past
+  // the cap by the "no delete, only deactivate" rule) never rendered, since
+  // rows are ordered by id and new ones always land at the end. Draining
+  // every page, the same `fetchInstituciones` already does, fixes both.
+  it("drains every page and terminates on an empty page even if `total` overstates the count", async () => {
+    const paginaUno = Array.from({ length: 200 }, (_, i) => makeDescuento({ id: i + 1, nombre: `Descuento ${i + 1}` }));
+    const masAllaDe200 = makeDescuento({ id: 201, nombre: "Recién creado" });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(okResponse({ items: paginaUno, total: 201, skip: 0, limit: 200 }))
+      .mockResolvedValueOnce(okResponse({ items: [masAllaDe200], total: 201, skip: 200, limit: 200 }))
+      .mockResolvedValueOnce(okResponse({ items: [], total: 201, skip: 201, limit: 200 }));
 
     const result = await fetchDescuentos();
 
-    expect(global.fetch).toHaveBeenCalledWith("/api/descuentos?limit=200", expect.anything());
+    expect(global.fetch).toHaveBeenNthCalledWith(1, "/api/descuentos?skip=0&limit=200", expect.anything());
+    expect(global.fetch).toHaveBeenNthCalledWith(2, "/api/descuentos?skip=200&limit=200", expect.anything());
+    expect(result).toContainEqual(masAllaDe200);
+    expect(result).toHaveLength(201);
+  });
+
+  it("issues exactly one request for a single-page catalog (active + inactive)", async () => {
+    const items = [makeDescuento(), makeDescuento({ id: 2, nombre: "Vieja", activo: false })];
+    vi.mocked(global.fetch).mockResolvedValueOnce(okResponse({ items, total: 2, skip: 0, limit: 200 }));
+
+    const result = await fetchDescuentos();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith("/api/descuentos?skip=0&limit=200", expect.anything());
     expect(result).toEqual(items);
   });
 });

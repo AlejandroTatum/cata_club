@@ -2091,15 +2091,26 @@ export interface ActualizarDescuentoInput {
  *  The list is the administration view (and the road to reactivating).
  *
  *  Paginated on the backend (issue #814): the standard `{items, total, skip,
- *  limit}` envelope. One page at the backend's cap (limit=200) — same as
- *  `fetchAlumnosPorHorario` — keeps this catalog's callers (this page and
- *  the /members Beneficio picker) working unchanged. */
+ *  limit}` envelope. A single page at the backend's cap (limit=200) used to
+ *  be treated as the whole catalog, so a discount created after 200 others
+ *  never showed up — rows are ordered by id, so new ones always land at the
+ *  end (issue #1083). This now drains every page, same pattern as
+ *  `fetchInstituciones`, keeping this catalog's callers (this page and the
+ *  /members Beneficio picker) working unchanged. */
 export async function fetchDescuentos(): Promise<DescuentoCatalogo[]> {
-  const { items } = await request<PaginatedEnvelope<DescuentoCatalogo>>(
-    apiEndpoint(`/descuentos?limit=${ROSTER_PAGE_LIMIT}`),
-    { method: "GET" },
-  );
-  return items;
+  const all: DescuentoCatalogo[] = [];
+  let skip = 0;
+  for (;;) {
+    const { items, total } = await request<PaginatedEnvelope<DescuentoCatalogo>>(
+      apiEndpoint(`/descuentos?skip=${skip}&limit=${ROSTER_PAGE_LIMIT}`),
+      { method: "GET" },
+    );
+    all.push(...items);
+    if (items.length === 0) break;
+    skip += items.length;
+    if (all.length >= total) break;
+  }
+  return all;
 }
 
 /** Admin-only: create a catalog discount — `POST /api/descuentos`. */
