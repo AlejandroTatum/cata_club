@@ -69,6 +69,26 @@ def test_cabeceras_de_seguridad_presentes_incluso_en_respuesta_401(client_sin_to
     )
 
 
+def test_cabeceras_de_seguridad_en_health_ready_no_duplican_las_de_caddy():
+    """`GET /health/ready` es la única ruta del backend que Caddy expone al
+    borde público (ver `test_el_caddyfile_expone_del_backend_solo_la_sonda_de_
+    readiness` en `tests/test_docker_compose_config.py`). Caddy ya decora esa
+    respuesta con su propio `header {...}` (issue #1068): como `reverse_proxy`
+    de Caddy AGREGA cabeceras en vez de pisarlas, si el middleware también las
+    pone acá salen duplicadas con valores distintos. Caddy queda como dueño
+    único de HSTS, X-Frame-Options, X-Content-Type-Options y Referrer-Policy
+    para esta ruta; el backend conserva su propio CSP, que Caddy no fija."""
+    with TestClient(app) as cliente:
+        respuesta = cliente.get("/health/ready")
+    assert "x-content-type-options" not in respuesta.headers
+    assert "x-frame-options" not in respuesta.headers
+    assert "referrer-policy" not in respuesta.headers
+    assert "strict-transport-security" not in respuesta.headers
+    assert respuesta.headers["content-security-policy"] == (
+        "default-src 'none'; frame-ancestors 'none'"
+    )
+
+
 # --- Manejador global de IntegrityError (PR1, sdd/borde-http-observable) ----
 _RUTA_DESCARTABLE = "/__prueba__/integrity-error"
 
