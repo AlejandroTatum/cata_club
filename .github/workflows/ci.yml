@@ -104,6 +104,14 @@ jobs:
         # (issue #832).
         run: uv run --frozen --no-build lint-imports
 
+      - name: Audit de vulnerabilidades (pip-audit)
+        # `uv` no tiene subcomando de audit propio; pip-audit vive en
+        # [dependency-groups.dev] igual que ruff e import-linter y audita el
+        # lock resuelto. Sin `continue-on-error`: una `high`/`critical` nueva
+        # tiene que poner el job en rojo, no quedar como alarma desenchufada
+        # (issue #1063).
+        run: uv run --frozen --no-build pip-audit
+
       - name: Run tests
         # Solo TEST_DATABASE_URL. `AMBIENTE` y `JWT_SECRET_KEY` los pone
         # `backend/tests/conftest.py` con `setdefault`, que es el único lugar
