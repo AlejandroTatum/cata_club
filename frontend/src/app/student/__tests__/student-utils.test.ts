@@ -62,24 +62,30 @@ describe("isRepresentative", () => {
 // ---------------------------------------------------------------------------
 
 describe("isMinor", () => {
-  it("returns true for a birth date younger than 18", () => {
+  // The age arithmetic and the 18-year threshold themselves are covered
+  // centrally by `calculatePersonAge` / `isMinorAge`
+  // (`@/lib/__tests__/identity-validation.test.ts`), frozen-date boundary
+  // included. What is left to check here is `isMinor`'s own contract: that it
+  // delegates to those shared functions, and its deliberate guard against a
+  // null/invalid birth date — never re-deriving the age math.
+  it("delegates a birth date younger than 18 to the shared calculation", () => {
     const today = new Date();
     const birthYear = today.getFullYear() - 15;
     expect(isMinor(`${birthYear}-06-15`)).toBe(true);
   });
 
-  it("returns false for a birth date 18 or older", () => {
+  it("delegates a birth date 18 or older to the shared calculation", () => {
     const today = new Date();
     const birthYear = today.getFullYear() - 20;
     expect(isMinor(`${birthYear}-06-15`)).toBe(false);
   });
 
-  it("returns false for null/undefined", () => {
+  it("returns false for null/undefined without ever calling the shared calculation", () => {
     expect(isMinor(null)).toBe(false);
     expect(isMinor(undefined)).toBe(false);
   });
 
-  it("returns false for empty string", () => {
+  it("returns false for empty string without ever calling the shared calculation", () => {
     expect(isMinor("")).toBe(false);
   });
 
@@ -90,11 +96,9 @@ describe("isMinor", () => {
   it("returns false for a calendar-invalid date instead of computing a bogus age", () => {
     const today = new Date();
     const birthYear = today.getFullYear() - 10;
-    // Feb 31 doesn't exist in any year. The old inline arithmetic only
-    // checked that year/month/day were integers, not that they formed a
-    // real calendar date, so a plausible-looking invalid date silently
-    // produced a small (and therefore falsely "true") age instead of
-    // being rejected.
+    // Feb 31 doesn't exist in any year. `calculatePersonAge` returns `NaN`
+    // for it, and `NaN < 18` is `false` — this only checks that `isMinor`
+    // still reads that `NaN` as "not a minor" rather than a bogus age.
     expect(isMinor(`${birthYear}-02-31`)).toBe(false);
   });
 });

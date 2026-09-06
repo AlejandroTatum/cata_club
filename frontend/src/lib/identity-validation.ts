@@ -319,6 +319,18 @@ export const EDAD_MAXIMA_ALUMNO = 74;
 export const EDAD_MAYORIA_EDAD = 18;
 
 /**
+ * Whether a computed age counts as menor de edad — the one comparison every
+ * caller of `EDAD_MAYORIA_EDAD` used to spell out inline (`student-utils.ts`,
+ * `enroll-utils.ts`, `crear-cuenta-utils.ts`). Deliberately number → boolean:
+ * it takes an already-computed age, never a birth date, so parsing stays
+ * `calculatePersonAge`'s job alone and this stays trivial to reuse from a
+ * caller that already has the age for another reason (issue #1074).
+ */
+export function isMinorAge(age: number): boolean {
+  return age < EDAD_MAYORIA_EDAD;
+}
+
+/**
  * Calculate age in whole years from an ISO `YYYY-MM-DD` string.
  *
  * Parses the date component-wise instead of via `new Date("YYYY-MM-DD")`

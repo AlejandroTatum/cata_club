@@ -12,7 +12,7 @@ import type {
   StudentSessionSummary,
 } from "@/services/api";
 import { CLUB_TIME_ZONE, calendarIsoDate, clubToday } from "@/lib/club-date";
-import { calculatePersonAge, EDAD_MAYORIA_EDAD } from "@/lib/identity-validation";
+import { calculatePersonAge, isMinorAge } from "@/lib/identity-validation";
 
 // ---------------------------------------------------------------------------
 // Age gate
@@ -20,15 +20,17 @@ import { calculatePersonAge, EDAD_MAYORIA_EDAD } from "@/lib/identity-validation
 
 /**
  * True when the persona is younger than 18 as of today. Delegates to
- * `calculatePersonAge` (`@/lib/identity-validation`) — the shared
- * component-wise calculation every wizard uses — rather than a private copy.
- * Returns `false` for invalid/empty/calendar-invalid dates (`calculatePersonAge`
- * returns `NaN` for those, and `NaN < 18` is `false`) so the portal does not
- * accidentally restrict access.
+ * `calculatePersonAge` and `isMinorAge` (`@/lib/identity-validation`) — the
+ * shared component-wise calculation and threshold every wizard uses — rather
+ * than a private copy. Returns `false` for invalid/empty/calendar-invalid
+ * dates (`calculatePersonAge` returns `NaN` for those, and `NaN < 18` is
+ * `false`) so the portal does not accidentally restrict access. That guard is
+ * this function's own: `isMinorAge` never sees a date, so it stays a pure
+ * numeric comparison shared with the wizards below.
  */
 export function isMinor(fechaNacimiento: string | null | undefined): boolean {
   if (!fechaNacimiento) return false;
-  return calculatePersonAge(fechaNacimiento) < EDAD_MAYORIA_EDAD;
+  return isMinorAge(calculatePersonAge(fechaNacimiento));
 }
 
 // ---------------------------------------------------------------------------
