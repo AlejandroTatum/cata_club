@@ -5,7 +5,12 @@
  * plus Next's own reserved names (`metadata`, `generateStaticParams`, …) — a
  * stray named export fails the build's generated route types, not just lint.
  */
-import { PASSWORD_MIN_LENGTH, isCommonPassword } from "@/lib/identity-validation";
+import {
+  PASSWORD_MAX_BYTES,
+  PASSWORD_MIN_LENGTH,
+  isCommonPassword,
+  passwordByteLength,
+} from "@/lib/identity-validation";
 
 /** The minimum the backend itself enforces — nothing more is invented here. */
 export const MIN_PASSWORD_LENGTH = PASSWORD_MIN_LENGTH;
@@ -54,6 +59,16 @@ export function buildPasswordRules(password: string, confirmPassword: string): P
     {
       label: "No es una de las contraseñas más usadas",
       met: trimmed.length > 0 && !isCommonPassword(trimmed),
+    },
+    {
+      // bcrypt (issue #1043) solo hashea los primeros 72 bytes UTF-8; una
+      // contraseña más larga que eso se acuñaría con un prefijo que no es lo
+      // que la persona escribió, sin ningún aviso. El ítem evita la palabra
+      // "bytes" -- quien lee esto no tiene por qué saber qué es un byte -- y
+      // evita a la vez prometer un número de CARACTERES, que sería falso
+      // para quien use tildes o emoji (cada uno pesa más que una letra).
+      label: "No es demasiado larga (los acentos y emoji ocupan más espacio)",
+      met: trimmed.length > 0 && passwordByteLength(trimmed) <= PASSWORD_MAX_BYTES,
     },
   ];
 }

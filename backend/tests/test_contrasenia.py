@@ -14,6 +14,7 @@ import pytest
 
 from app.dominio.contrasenia import (
     CONTRASENIAS_COMUNES,
+    LONGITUD_MAXIMA_CONTRASENIA_BYTES,
     LONGITUD_MINIMA_CONTRASENIA,
     validar_contrasenia,
 )
@@ -59,3 +60,48 @@ def test_comparacion_de_lista_negra_ignora_espacios_al_borde():
 def test_lista_negra_no_esta_vacia_y_esta_en_minusculas():
     assert len(CONTRASENIAS_COMUNES) > 50
     assert all(valor == valor.lower() for valor in CONTRASENIAS_COMUNES)
+
+
+# --- issue #1043: tope de bytes que bcrypt realmente hashea -----------------
+
+
+def test_tope_maximo_sigue_siendo_72_bytes():
+    # Fija el límite del algoritmo (bcrypt), no una decisión de composición
+    # -- no reabre #230.
+    assert LONGITUD_MAXIMA_CONTRASENIA_BYTES == 72
+
+
+def test_contrasenia_de_72_bytes_ascii_es_aceptada():
+    # Exactamente en el borde: no debe lanzar.
+    validar_contrasenia("a" * 72)
+
+
+def test_contrasenia_de_73_bytes_ascii_es_rechazada():
+    with pytest.raises(ValueError) as error:
+        validar_contrasenia("a" * 73)
+    assert "72 bytes" in str(error.value)
+
+
+def test_mensaje_de_tope_no_promete_caracteres():
+    # "72 caracteres" sería mentira para quien use tildes o emoji -- el
+    # límite que el mensaje declara tiene que ser en bytes, nunca en
+    # caracteres (puede mencionar la palabra al aclarar la diferencia).
+    with pytest.raises(ValueError) as error:
+        validar_contrasenia("a" * 73)
+    assert "72 caracteres" not in str(error.value)
+    assert "72 bytes" in str(error.value)
+
+
+def test_contrasenia_con_emoji_se_mide_en_bytes_no_en_caracteres():
+    # Cada emoji ocupa 4 bytes UTF-8: 18 emoji = 72 bytes (el borde exacto),
+    # 19 = 76 bytes (ya lo supera). Si se midiera `len()` (caracteres), 19
+    # emoji pasaría sin problema -- y es justo el caso que sorprende.
+    contrasenia_en_el_borde = "😀" * 18
+    assert len(contrasenia_en_el_borde) == 18
+    assert len(contrasenia_en_el_borde.encode("utf-8")) == 72
+    validar_contrasenia(contrasenia_en_el_borde)
+
+    contrasenia_que_excede = "😀" * 19
+    with pytest.raises(ValueError) as error:
+        validar_contrasenia(contrasenia_que_excede)
+    assert "72 bytes" in str(error.value)
