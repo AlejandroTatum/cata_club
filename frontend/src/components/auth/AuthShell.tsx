@@ -179,6 +179,21 @@ export interface AuthShellProps {
    * control says cannot drift from the place it goes.
    */
   backHref?: string;
+  /**
+   * Drops the corner exit entirely (#1045) — for the one screen this shell
+   * serves where the person is already authenticated, `/login/activacion`.
+   * Every `backHref` this file can point to names a step in the PUBLIC
+   * site, and neither fits an authenticated person stuck at a gate: the
+   * landing leaves their session open behind them, and `/login` just
+   * redirects them straight back. That screen's card already carries its
+   * own deliberate exit, "Cerrar sesión" — this prop lets it opt out of the
+   * competing one instead of showing a destination that is wrong for its
+   * state.
+   *
+   * Defaults to `false`, so the four public screens that never pass it keep
+   * the exit exactly as before.
+   */
+  hideBack?: boolean;
   /** The screen's form, rendered inside the elevated card. */
   children: React.ReactNode;
 }
@@ -191,6 +206,7 @@ export default function AuthShell({
   subtitle,
   note,
   backHref = "/",
+  hideBack = false,
   children,
 }: AuthShellProps): React.ReactElement {
   const years = yearsSinceFounding();
@@ -344,11 +360,13 @@ export default function AuthShell({
          * hover behaviour and single-exit rule stay `BackLink`'s own.
          */}
         <header aria-label="Marca de Cata Club" className="row-start-2 grid">
-        <BackLink
-          href={backHref}
-          tone="coal"
-          className="absolute left-6 top-8 z-[1] ring-1 ring-inset ring-white/20 split:left-14 split:top-12"
-        />
+        {!hideBack && (
+          <BackLink
+            href={backHref}
+            tone="coal"
+            className="absolute left-6 top-8 z-[1] ring-1 ring-inset ring-white/20 split:left-14 split:top-12"
+          />
+        )}
 
         {/*
          * The centred cluster — `gap:22px`, and a measure that TRACKS THE
