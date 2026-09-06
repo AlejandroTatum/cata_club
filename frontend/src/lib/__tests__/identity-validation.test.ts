@@ -14,6 +14,8 @@ import {
   personNameRule,
   EDAD_MINIMA_ALUMNO,
   EDAD_MAXIMA_ALUMNO,
+  EDAD_MAYORIA_EDAD,
+  isMinorAge,
   calculatePersonAge,
   isValidCalendarDate,
   isFutureBirthDate,
@@ -440,6 +442,28 @@ describe("edad del alumno", () => {
 
     it("does not cap implausible-but-real years — that is a domain rule, not a parsing concern", () => {
       expect(calculatePersonAge("1800-01-01", FROZEN_TODAY)).toBe(229);
+    });
+  });
+
+  describe("isMinorAge — frontera de mayoría de edad (issue #1074)", () => {
+    it("no es menor quien cumple 18 exactamente hoy", () => {
+      const age = calculatePersonAge("2011-01-01", FROZEN_TODAY);
+      expect(isMinorAge(age)).toBe(false);
+    });
+
+    it("no es menor quien cumplió 18 ayer", () => {
+      const age = calculatePersonAge("2010-12-31", FROZEN_TODAY);
+      expect(isMinorAge(age)).toBe(false);
+    });
+
+    it("es menor quien cumple 18 recién mañana", () => {
+      const age = calculatePersonAge("2011-01-02", FROZEN_TODAY);
+      expect(isMinorAge(age)).toBe(true);
+    });
+
+    it("coincide con EDAD_MAYORIA_EDAD como umbral", () => {
+      expect(isMinorAge(EDAD_MAYORIA_EDAD - 1)).toBe(true);
+      expect(isMinorAge(EDAD_MAYORIA_EDAD)).toBe(false);
     });
   });
 
