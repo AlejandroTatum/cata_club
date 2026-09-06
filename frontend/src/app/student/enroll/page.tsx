@@ -26,8 +26,9 @@ import {
   type TarifaPublica,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
-import type { SessionOutcome } from "@/services/auth";
+import type { AuthSession, SessionOutcome } from "@/services/auth";
 import { backHrefForRole } from "@/lib/auth-utils";
+import { isActivationComplete, routeForSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
@@ -171,6 +172,28 @@ function unconfirmedSessionNotice(kind: "unauthenticated" | "outage"): string {
     "Suele ocurrir cuando las cookies están bloqueadas o la ventana es de navegación privada. No repita la " +
     "inscripción: habilite las cookies para este sitio e inicie sesión con su correo y su contraseña."
   );
+}
+
+// ---------------------------------------------------------------------------
+// The account-area button, once the session round trip is confirmed
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the "Ir a mi cuenta" button points once the auto-login is confirmed,
+ * and what it says — issue #1055.
+ *
+ * A CONFIRMED session is not necessarily an ACTIVATED one: `/student` sits
+ * behind `middleware.ts`'s activation gate, and offering it to an account
+ * still stuck there is the same silent bounce #717 already fixed for an
+ * unconfirmed session — just one gate further in. `routeForSession` is the
+ * same gate `/login` already obeys (issue #940); this screen had never asked
+ * it and pointed at a hardcoded `/student` regardless.
+ */
+function accountAreaLinkFor(session: AuthSession): { href: string; label: string } {
+  const href = routeForSession(session);
+  return isActivationComplete(session)
+    ? { href, label: "Ir a mi cuenta" }
+    : { href, label: "Completar mi activación" };
 }
 
 // ---------------------------------------------------------------------------
@@ -1243,6 +1266,12 @@ function EnrollWizard(): React.ReactElement {
 
   // ---- Render ----
 
+  // #1055: `null` while unconfirmed (the honest destination is /login below)
+  // or if a session round trip claimed "authenticated" without ever handing
+  // back a session — that combination has not been observed, but a button
+  // must never be built from a session it does not have.
+  const accountAreaLink = sessionConfirmed && session ? accountAreaLinkFor(session) : null;
+
   return (
     // The public enrolment wizard reaches the user through no shell, so the
     // landmark is declared here — around BOTH branches, so the confirmation
@@ -1390,10 +1419,13 @@ function EnrollWizard(): React.ReactElement {
                     a confirmed session is offering a button whose only
                     outcome is a silent bounce to /login — which is exactly
                     what the reproduction produced. Unconfirmed, the honest
-                    destination IS /login. */}
-                {sessionConfirmed ? (
-                  <Link href="/student" className={buttonClasses("primary")}>
-                    Ir a mi cuenta
+                    destination IS /login.
+                    #1055: a CONFIRMED session can still be stuck at the
+                    activation gate — `accountAreaLink` is `null` for both
+                    cases, so this stays the same fallback either way. */}
+                {accountAreaLink ? (
+                  <Link href={accountAreaLink.href} className={buttonClasses("primary")}>
+                    {accountAreaLink.label}
                   </Link>
                 ) : (
                   <Link href="/login" className={buttonClasses("primary")}>
