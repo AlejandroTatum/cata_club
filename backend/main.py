@@ -318,13 +318,30 @@ app.add_middleware(_CorrelacionDeRequestMiddleware)
 # --- Cabeceras de seguridad ---------------------------------------------
 # Esta API solo devuelve JSON, así que un CSP de `default-src 'none'` es
 # seguro (no hay HTML/JS propio que necesite cargar nada).
+#
+# `/health/ready` es, hoy, la ÚNICA ruta del backend que Caddy expone al
+# borde público (lo fija el test estructural
+# `test_el_caddyfile_expone_del_backend_solo_la_sonda_de_readiness` en
+# `tests/test_docker_compose_config.py`), y el bloque `header {...}` sin
+# matcher del Caddyfile ya decora esa respuesta con HSTS, X-Frame-Options,
+# X-Content-Type-Options y Referrer-Policy (issue #1068). `reverse_proxy` de
+# Caddy AGREGA cabeceras en vez de pisar las que ya vienen en la respuesta
+# proxeada, así que si este middleware también las pusiera saldrían
+# duplicadas con valores distintos (dos `Strict-Transport-Security`, dos
+# `Referrer-Policy`). Caddy queda como dueño único de esas cuatro cabeceras
+# para todo lo que sale por el borde; el backend conserva su propio CSP, que
+# Caddy no fija a propósito (ver Caddyfile). Si el día de mañana se expone
+# otra ruta del backend además de `/health/ready`, hay que revisitar este
+# scoping por path.
 class _CabecerasDeSeguridadMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         respuesta: Response = await call_next(request)
+        respuesta.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        if request.url.path == "/health/ready":
+            return respuesta
         respuesta.headers["X-Content-Type-Options"] = "nosniff"
         respuesta.headers["X-Frame-Options"] = "DENY"
         respuesta.headers["Referrer-Policy"] = "no-referrer"
-        respuesta.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
         respuesta.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
         return respuesta
 
