@@ -12,49 +12,19 @@ Este test hace el round-trip REAL (login -> me) para una matriz de usuarios
 `activacion_completa` decodificado del access token contra el campo
 `activacionCompleta` del DTO, sin mockear la compuerta: si el cálculo
 volviera a divergir en alguno de los dos caminos, este test lo detecta.
-"""
-from datetime import date, datetime, timezone
-from decimal import Decimal
 
+El armado de usuarios (`_crear_usuario`) se reutiliza tal cual de
+`test_auth_activation.py` en vez de reimplementarse acá: ya cubre la misma
+matriz rol × correo_verificado × estado de membresía, y duplicar ese
+andamiaje sería exactamente el tipo de duplicación que este issue (#1056)
+busca evitar en el código de producción.
+"""
 import jwt
 import pytest
 
 from app.soporte_transversal.configuracion import settings
-from app.dominio.cedula import cedula_valida
-from app.dominio.enums import EstadoMembresia, TipoModalidad, TipoRol
-from app.dominio.modelos import Membresia, Persona, Rol, TipoMembresia, Usuario
-from app.seguridad.gestor_auth import GestorAutenticacion
-
-_CONTRASENIA = "clave12345"
-
-
-def _crear_usuario(db_session, *, correo, correo_verificado, estado_membresia, rol):
-    persona = Persona(
-        nombres="Cami", apellidos="Ruiz", cedula=cedula_valida(abs(hash(correo)) % 90000 + 100),
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-    )
-    plan = TipoMembresia(categoria="Mensual", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
-    db_session.add_all([persona, plan])
-    db_session.flush()
-    usuario = Usuario(
-        correo=correo,
-        contrasenia=GestorAutenticacion.obtener_hash_contrasenia(_CONTRASENIA),
-        persona_id=persona.id,
-        correo_verificado=correo_verificado,
-        roles=[Rol(tipo_rol=rol, descripcion=rol.value)],
-    )
-    db_session.add(usuario)
-    if estado_membresia is not None:
-        db_session.add(Membresia(
-            estado=estado_membresia,
-            monto_aplicado=Decimal("25.00"),
-            fecha_activacion=datetime.now(timezone.utc),
-            persona_id=persona.id,
-            tipo_membresia_id=plan.id,
-        ))
-    db_session.commit()
-    db_session.refresh(usuario)
-    return usuario
+from app.dominio.enums import EstadoMembresia, TipoRol
+from tests.test_auth_activation import _CONTRASENIA, _crear_usuario
 
 
 @pytest.mark.parametrize(
