@@ -1539,10 +1539,16 @@ def test_record_release_rechaza_una_imagen_que_no_usa_el_image_tag_pedido(tmp_pa
     assert not records.exists(), "quedó un registro con una imagen de otro SHA"
 
 
-def test_rollback_persists_the_target_sha_to_env_and_current_ledger(tmp_path):
+def _rollback_env(tmp_path) -> tuple[dict[str, str], Path, Path, Path]:
+    """Entorno hermético para `rollback-release.sh`, con los mismos
+    post-chequeos que `deploy.sh` corre tras un `up -d`: recreación acotada de
+    Caddy, salud de celery-worker/celery-beat y el readiness público por el
+    borde (issue #1064). El stub de `docker` reusa el mismo patrón
+    `${VAR-default}` de `_deploy_env` (issue #791): sin overrides, todo sale
+    sano."""
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nOTHER=value\n")
+    (stack / ".env").write_text("IMAGE_TAG=abcdef1\nDOMINIO=staging.example.test\n")
     records = tmp_path / "releases"
     records.mkdir()
     (records / "current.env").write_text(
@@ -1554,21 +1560,81 @@ def test_rollback_persists_the_target_sha_to_env_and_current_ledger(tmp_path):
     )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text("#!/usr/bin/env bash\nexit 0\n")
+    docker_log = tmp_path / "docker.log"
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'printf \'%s\\n\' "$*" >> "$DOCKER_LOG"\n'
+        'case " $* " in\n'
+        '  *" ps --format json "*)\n'
+        '    if [ -n "${CELERY_WORKER_STATE-running}" ]; then\n'
+        '      printf \'{"Service":"celery-worker","State":"%s","Health":"%s"}\\n\' '
+        '"${CELERY_WORKER_STATE-running}" "${CELERY_WORKER_HEALTH-healthy}"\n'
+        '    fi\n'
+        '    if [ -n "${CELERY_BEAT_STATE-running}" ]; then\n'
+        '      printf \'{"Service":"celery-beat","State":"%s","Health":"%s"}\\n\' '
+        '"${CELERY_BEAT_STATE-running}" "${CELERY_BEAT_HEALTH-healthy}"\n'
+        '    fi\n'
+        '    if [ -n "${CADDY_STATE-running}" ]; then\n'
+        '      printf \'{"Service":"caddy","State":"%s","Health":"%s"}\\n\' '
+        '"${CADDY_STATE-running}" "${CADDY_HEALTH-healthy}"\n'
+        '    fi ;;\n'
+        '  *borde*) if [ "${CADDY_SIRVE_HTML:-0}" = "1" ]; then\n'
+        '      echo "/health/ready por el borde devolvió HTML del frontend, no JSON" >&2; exit 1\n'
+        '    fi\n'
+        '    echo \'{"estado": "listo"}\' ;;\n'
+        '  *"inspect ping"*) exit "${CELERY_PING_EXIT:-0}" ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
     (bin_dir / "docker").chmod(0o755)
+    env = {
+        "STACK_DIR": str(stack),
+        "RELEASE_RECORD_DIR": str(records),
+        "DOCKER_LOG": str(docker_log),
+        "SERVICIO_HEALTH_MAX_INTENTOS": "1",
+        "SERVICIO_HEALTH_INTERVALO_SEGUNDOS": "0",
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+    }
+    return env, stack, records, docker_log
+
+
+def test_rollback_persists_the_target_sha_to_env_and_current_ledger(tmp_path):
+    env, stack, records, _ = _rollback_env(tmp_path)
 
     result = run_script(
-        "scripts/ops/rollback-release.sh",
-        "deadbee",
-        "--confirm-rollback",
-        env={
-            "STACK_DIR": str(stack),
-            "RELEASE_RECORD_DIR": str(records),
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        },
+        "scripts/ops/rollback-release.sh", "deadbee", "--confirm-rollback", env=env
     )
 
     assert result.returncode == 0, result.stderr
+    assert "IMAGE_TAG=deadbee" in (stack / ".env").read_text()
+    assert "IMAGE_TAG=deadbee" in (records / "current.env").read_text()
+
+
+@pytest.mark.parametrize(
+    "env_extra,mensaje",
+    [
+        pytest.param(
+            {"CADDY_SIRVE_HTML": "1"}, "por el borde público", id="readiness-borde-html"
+        ),
+        pytest.param({"CELERY_PING_EXIT": "1"}, "ping de control", id="celery-ping-falla"),
+    ],
+)
+def test_rollback_aborta_si_un_post_chequeo_falla(tmp_path, env_extra, mensaje):
+    """Issue #1064: `rollback-release.sh` terminaba sin correr ninguno de los
+    post-chequeos que `deploy.sh` sí exige antes de dar un release por bueno
+    -- Caddy, celery y el readiness público por el borde. Un rollback bajo
+    presión podía quedar 'completado' con el sitio roto o con Caddy sirviendo
+    la configuración anterior (#849)."""
+    env, stack, records, _ = _rollback_env(tmp_path)
+    env.update(env_extra)
+
+    result = run_script(
+        "scripts/ops/rollback-release.sh", "deadbee", "--confirm-rollback", env=env
+    )
+
+    assert result.returncode != 0, result.stdout
+    assert mensaje in result.stderr
+    # El `die` deja evidencia, no la tapa: el estado ya persistido no se borra.
     assert "IMAGE_TAG=deadbee" in (stack / ".env").read_text()
     assert "IMAGE_TAG=deadbee" in (records / "current.env").read_text()
 

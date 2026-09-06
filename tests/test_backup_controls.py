@@ -69,6 +69,14 @@ def test_rollback_requires_confirmation_before_touching_compose(tmp_path):
 
 
 def test_rollback_replaces_current_record_only_after_guarded_compose_run(tmp_path):
+    """Issue #1064: desde que el rollback corre `refrescar_caddy`, `check_celery`
+    y `verificar_readiness_publica` tras el `up -d`, un stub de `docker` que
+    solo `exit 0` incondicional deja a `esperar_servicio_saludable` esperando
+    150s a un `caddy` que nunca reporta `healthy` -- el mismo problema que
+    `_rollback_env` (tests/test_release_controls.py) ya resuelve con un stub
+    por casos. Acá se reusa el mismo patrón `${VAR-default}`: sin overrides,
+    Caddy y celery-worker/celery-beat salen sanos y el readiness por el borde
+    contesta JSON, así que el camino feliz sigue terminando en 0."""
     records = tmp_path / "releases"
     records.mkdir()
     (records / "current.env").write_text(
@@ -79,10 +87,35 @@ def test_rollback_replaces_current_record_only_after_guarded_compose_run(tmp_pat
     )
     stack = tmp_path / "stack"
     stack.mkdir()
-    (stack / ".env").write_text("IMAGE_TAG=abcdef2\n")
+    (stack / ".env").write_text(
+        "IMAGE_TAG=abcdef2\nDOMINIO=staging.example.test\n"
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text("#!/usr/bin/env bash\nexit 0\n")
+    (bin_dir / "docker").write_text(
+        "#!/usr/bin/env bash\n"
+        'case " $* " in\n'
+        '  *" ps --format json "*)\n'
+        '    if [ -n "${CELERY_WORKER_STATE-running}" ]; then\n'
+        '      printf \'{"Service":"celery-worker","State":"%s","Health":"%s"}\\n\' '
+        '"${CELERY_WORKER_STATE-running}" "${CELERY_WORKER_HEALTH-healthy}"\n'
+        '    fi\n'
+        '    if [ -n "${CELERY_BEAT_STATE-running}" ]; then\n'
+        '      printf \'{"Service":"celery-beat","State":"%s","Health":"%s"}\\n\' '
+        '"${CELERY_BEAT_STATE-running}" "${CELERY_BEAT_HEALTH-healthy}"\n'
+        '    fi\n'
+        '    if [ -n "${CADDY_STATE-running}" ]; then\n'
+        '      printf \'{"Service":"caddy","State":"%s","Health":"%s"}\\n\' '
+        '"${CADDY_STATE-running}" "${CADDY_HEALTH-healthy}"\n'
+        '    fi ;;\n'
+        '  *borde*) if [ "${CADDY_SIRVE_HTML:-0}" = "1" ]; then\n'
+        '      echo "/health/ready por el borde devolvió HTML del frontend, no JSON" >&2; exit 1\n'
+        '    fi\n'
+        '    echo \'{"estado": "listo"}\' ;;\n'
+        '  *"inspect ping"*) exit "${CELERY_PING_EXIT:-0}" ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
     (bin_dir / "docker").chmod(0o755)
 
     result = run_script(
@@ -92,6 +125,8 @@ def test_rollback_replaces_current_record_only_after_guarded_compose_run(tmp_pat
         env={
             "STACK_DIR": str(stack),
             "RELEASE_RECORD_DIR": str(records),
+            "SERVICIO_HEALTH_MAX_INTENTOS": "1",
+            "SERVICIO_HEALTH_INTERVALO_SEGUNDOS": "0",
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
         },
     )
