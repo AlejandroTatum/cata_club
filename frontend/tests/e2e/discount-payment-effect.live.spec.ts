@@ -185,7 +185,6 @@
 import {
   expect,
   test,
-  request as apiRequestModule,
   type APIRequestContext,
   type Browser,
   type Locator,
@@ -193,6 +192,7 @@ import {
 } from "@playwright/test";
 import { E2E_BASE_URL } from "./e2e-target";
 import { loginViaUi } from "./helpers/live-login";
+import { personaIdViaOwnLogin } from "./helpers/persona-lookup";
 import { rejectPendingPayments } from "./helpers/pending-payments";
 import { registerCashPayment } from "./helpers/register-cash-payment";
 import { findDiscountByName } from "./helpers/find-discount";
@@ -212,24 +212,9 @@ function nombreUnico(prefijo: string): string {
   return `${prefijo} ${Date.now()}`;
 }
 
-/** Resuelve el `persona_id` propio iniciando sesión como el alumno mismo —
- *  `/api/members` no sirve para esto en este entorno (ver el encabezado del
- *  archivo), pero la respuesta de `POST /api/auth/login` ya trae el id. Usa
- *  un contexto DESCARTABLE, nunca el `request` de admin del `beforeEach` ni
- *  el de `page` — pisaría la sesión de admin que ambos necesitan después. */
-async function personaIdViaOwnLogin(email: string, password: string): Promise<string> {
-  const ctx = await apiRequestModule.newContext({ baseURL: E2E_BASE_URL });
-  try {
-    const res = await ctx.post("/api/auth/login", { data: { email, password } });
-    expect(res.ok(), `No se pudo iniciar sesión como ${email} para resolver su persona_id: ${res.status()}`).toBe(
-      true,
-    );
-    const body = (await res.json()) as { user: { id: string } };
-    return body.user.id;
-  } finally {
-    await ctx.dispose();
-  }
-}
+// `personaIdViaOwnLogin` vive en `helpers/persona-lookup.ts` (issue de
+// duplicación de SonarCloud): `transfer-payment-comprobante.live.spec.ts`
+// necesita la MISMA resolución de persona_id.
 
 // ---------------------------------------------------------------------------
 // Limpieza de estado vía API — no es el flujo bajo prueba, es higiene entre
