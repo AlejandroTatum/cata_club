@@ -14,8 +14,12 @@ case "$TARGET_TAG" in
 esac
 [ "$CONFIRM" = "--confirm-rollback" ] || { echo "ERROR: se requiere --confirm-rollback; no se ejecuta ningún cambio" >&2; exit 2; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STACK_DIR="${STACK_DIR:-/opt/cata-club}"
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
+COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+# shellcheck source=../deploy/lib/post-checks.sh
+source "$SCRIPT_DIR/../deploy/lib/post-checks.sh"
 CURRENT_RECORD="$RELEASE_RECORD_DIR/current.env"
 TARGET_RECORD="$RELEASE_RECORD_DIR/${TARGET_TAG}.env"
 [ -f "$CURRENT_RECORD" ] || die "no hay registro de release actual; no se ejecuta ningún cambio"
@@ -57,10 +61,26 @@ persist_project_env() {
 log "Rollback de aplicación a ${TARGET_TAG}; no se ejecutará alembic downgrade"
 (
   cd "$STACK_DIR"
-  IMAGE_TAG="$TARGET_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-  IMAGE_TAG="$TARGET_TAG" docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+  IMAGE_TAG="$TARGET_TAG" docker compose "${COMPOSE_FILES[@]}" pull
+  IMAGE_TAG="$TARGET_TAG" docker compose "${COMPOSE_FILES[@]}" up -d
 )
 persist_project_env
 cp "$TARGET_RECORD" "$CURRENT_RECORD"
 chmod 600 "$CURRENT_RECORD"
+
+# Mismos post-chequeos que `deploy.sh` corre tras un `up -d` (issue #1064): el
+# rollback es el camino que se usa bajo presión, después de que un deploy
+# salió mal, y hasta acá tenía MENOS candados que el camino normal. Se abortan
+# ruidosamente ante cualquier falla, con el mismo criterio fail-closed: la
+# imagen y el ledger YA quedaron persistidos arriba, así que un `die` acá deja
+# evidencia (el registro apunta al SHA objetivo) en vez de tapar el estado
+# real. Se deja fuera a propósito `do_checks` entero (deploy.sh): el chequeo
+# de `/docs` deshabilitado, la frescura del backup y el smoke del chatbot no
+# son sobre la salud del borde tras un rollback.
+(
+  cd "$STACK_DIR"
+  refrescar_caddy
+  check_celery
+  verificar_readiness_publica
+)
 log "Rollback de aplicación completado. Registrar/validar el estado antes de otro cambio."

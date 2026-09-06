@@ -11,7 +11,7 @@ STACK_DIR="${STACK_DIR:-/opt/cata-club}"
 IMAGE_TAG="${IMAGE_TAG:-}"
 MIGRATION_COMPATIBILITY="${MIGRATION_COMPATIBILITY:-}"
 # Mismo default que scripts/ops/record-release.sh:11 y
-# scripts/ops/rollback-release.sh:18: los tres tienen que mirar el mismo
+# scripts/ops/rollback-release.sh:19: los tres tienen que mirar el mismo
 # directorio para que "current.env" signifique lo mismo en los tres.
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-/var/lib/cata-club/releases}"
 CURRENT_RELEASE_RECORD="$RELEASE_RECORD_DIR/current.env"
@@ -86,7 +86,7 @@ esac
 # casos. La señal real es si YA existe un release registrado para este stack:
 # `record-release.sh` (scripts/ops/record-release.sh:44-46) escribe
 # "${RELEASE_RECORD_DIR}/current.env" en cada deploy exitoso, y
-# `rollback-release.sh:24` ya lo lee como el registro autoritativo del último
+# `rollback-release.sh:23` ya lo lee como el registro autoritativo del último
 # release. Si ese archivo existe, hubo un deploy previo: la base tiene que
 # estar arriba, y que no lo esté es una falla, no un primer aprovisionamiento.
 # Si no existe, no hay evidencia de ningún release previo: recién ahí se
