@@ -333,6 +333,32 @@ let refreshPromise: Promise<boolean> | null = null;
 let refreshController: AbortController | null = null;
 
 /**
+ * Registro de controladores de peticiones de autenticación en curso —
+ * cualquier fetch cuya respuesta pueda sellar una cookie de sesión se anota
+ * acá con `registerInFlightAuthRequest` para que `discardInFlightAuthRequests`
+ * pueda cortarlo sin conocerlo por nombre.
+ *
+ * Issue #1053: antes de este registro, el refresh (`refreshController`,
+ * abajo) tenía su propio descarte y `fetchSession` (src/services/auth.ts) no
+ * tenía ninguno — nadie se acordó de sumarle uno cuando se escribió. Un
+ * registro compartido hace que sumar una petición nueva sea, por
+ * construcción, sumarla también al descarte: no depende de que quien la
+ * escriba se acuerde de tocar `logout()`.
+ */
+const inFlightAuthControllers = new Set<AbortController>();
+
+/**
+ * Anota `controller` como perteneciente a una petición de autenticación en
+ * curso. Devuelve la función para sacarlo del registro cuando la petición
+ * termina (gane o pierda la carrera) — el llamador SIEMPRE debe invocarla en
+ * su propio `finally`.
+ */
+export function registerInFlightAuthRequest(controller: AbortController): () => void {
+  inFlightAuthControllers.add(controller);
+  return () => inFlightAuthControllers.delete(controller);
+}
+
+/**
  * De-duplicated refresh: concurrent 401s across requests share one
  * in-flight /api/auth/refresh call instead of each independently
  * triggering a refresh (avoids a refresh storm).
@@ -340,10 +366,12 @@ let refreshController: AbortController | null = null;
 function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshController = new AbortController();
+    const unregister = registerInFlightAuthRequest(refreshController);
     refreshPromise = fetch("/api/auth/refresh", { method: "POST", signal: refreshController.signal })
       .then((res) => res.ok)
       .catch(() => false)
       .finally(() => {
+        unregister();
         refreshPromise = null;
         refreshController = null;
       });
@@ -352,14 +380,21 @@ function refreshAccessToken(): Promise<boolean> {
 }
 
 /**
- * Abort any in-flight refresh so it can never land a Set-Cookie after an
- * explicit logout has cleared the access-token cookie (Max-Age=0) — call
- * this right before POSTing /api/auth/logout. This only closes the race on
- * the client; a full server-side guarantee would need session versioning,
- * which is out of scope here.
+ * Aborta toda petición de autenticación en curso (hoy: el refresh y
+ * `fetchSession`) para que ninguna pueda terminar sellando una cookie
+ * después de que un logout explícito ya borró la de acceso (Max-Age=0) —
+ * llamar esto justo antes de hacer POST a /api/auth/logout. Este es el ÚNICO
+ * punto que logout() necesita llamar: quien registre una petición nueva con
+ * `registerInFlightAuthRequest` queda cubierto sin tocar esta función.
+ *
+ * Esto solo cierra la carrera del lado del cliente — si la respuesta ya
+ * había llegado con sus cabeceras antes de este abort, el navegador puede
+ * haber aplicado el `Set-Cookie` igual. Una garantía completa del lado del
+ * servidor (invalidar el refresh al cerrar sesión) es otro alcance.
  */
-export function discardInFlightRefresh(): void {
-  refreshController?.abort();
+export function discardInFlightAuthRequests(): void {
+  inFlightAuthControllers.forEach((controller) => controller.abort());
+  inFlightAuthControllers.clear();
   refreshPromise = null;
 }
 

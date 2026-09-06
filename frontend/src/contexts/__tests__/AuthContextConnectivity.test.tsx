@@ -42,7 +42,7 @@ vi.mock("@/services/auth", () => ({
 
 vi.mock("@/services/api", () => ({
   subscribeAuthFailure: () => () => {},
-  discardInFlightRefresh: vi.fn(),
+  discardInFlightAuthRequests: vi.fn(),
   setCurrentMockRole: vi.fn(),
 }));
 

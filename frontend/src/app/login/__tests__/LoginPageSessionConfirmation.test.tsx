@@ -44,7 +44,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/services/api", () => ({
   subscribeAuthFailure: () => () => undefined,
-  discardInFlightRefresh: vi.fn(),
+  discardInFlightAuthRequests: vi.fn(),
+  // La sesión real de `@/services/auth` (no mockeada en este archivo) llama
+  // esto en cada `fetchSession` — sin un stub, la petición nunca se resuelve.
+  registerInFlightAuthRequest: vi.fn(() => vi.fn()),
   setCurrentMockRole: vi.fn(),
 }));
 
