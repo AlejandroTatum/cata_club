@@ -148,10 +148,18 @@
  *     make qa-up      # backend + base sembrada + frontend, en localhost:3000
  *     make qa-live
  */
-import { expect, test, request as apiRequestModule, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  request as apiRequestModule,
+  type APIRequestContext,
+  type Browser,
+  type Page,
+} from "@playwright/test";
 import { E2E_BASE_URL } from "./e2e-target";
 import { loginViaUi } from "./helpers/live-login";
 import { rejectPendingPayments } from "./helpers/pending-payments";
+import { registerCashPayment } from "./helpers/register-cash-payment";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const ADMIN_EMAIL = "admin@cataclub.com";
@@ -257,6 +265,37 @@ async function retirarBeneficio(page: Page, personaId: string): Promise<void> {
   expect(res.ok(), `No se pudo retirar el beneficio: ${res.status()} ${await res.text()}`).toBe(true);
 }
 
+/** El trío login-admin + crear descuento + asignarlo, idéntico en los tres
+ *  tests de este archivo (issue de duplicación de SonarCloud, PR #1079) —
+ *  solo cambia el porcentaje. Devuelve el id del descuento creado. */
+async function prepararBeneficio(
+  page: Page,
+  discountName: string,
+  porcentaje: number,
+  pedroId: string,
+): Promise<number> {
+  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
+  const descuentoId = await crearDescuentoPorcentaje(page, discountName, porcentaje);
+  await asignarBeneficio(page, pedroId, descuentoId);
+  return descuentoId;
+}
+
+/** Abre un contexto de navegador NUEVO (la sesión de Pedro es una identidad
+ *  distinta de la de admin que `page` ya tiene abierta), inicia sesión como
+ *  Pedro, corre `run`, y siempre cierra el contexto — mismo esqueleto en los
+ *  tres tests de este archivo (issue de duplicación de SonarCloud, PR
+ *  #1079). */
+async function comoPedro<T>(browser: Browser, run: (alumnoPage: Page) => Promise<T>): Promise<T> {
+  const alumnoContext = await browser.newContext();
+  const alumnoPage = await alumnoContext.newPage();
+  try {
+    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
+    return await run(alumnoPage);
+  } finally {
+    await alumnoContext.close();
+  }
+}
+
 test("un beneficio asignado a un alumno reduce el monto que paga, y la reducción persiste tras recargar", async ({
   page,
   browser,
@@ -265,47 +304,38 @@ test("un beneficio asignado a un alumno reduce el monto que paga, y la reducció
   const discountName = nombreUnico("QA descuento pago");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
-  const descuentoId = await crearDescuentoPorcentaje(page, discountName, 20);
   // Pedro paga "Mensual Adultos" ($40): 20% de descuento son $8, monto final $32.
-  await asignarBeneficio(page, pedroId, descuentoId);
+  await prepararBeneficio(page, discountName, 20, pedroId);
 
-  const alumnoContext = await browser.newContext();
-  const alumnoPage = await alumnoContext.newPage();
   try {
-    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
-    await alumnoPage.goto("/student/payments");
-    const abrirFormulario = alumnoPage.getByRole("button", { name: "Registrar un pago" });
-    await expect(abrirFormulario).toBeVisible({ timeout: 20_000 });
-    await abrirFormulario.click();
-    await alumnoPage.getByLabel("Forma de pago").selectOption("EFECTIVO");
-    await alumnoPage.getByRole("button", { name: "Registrar pago", exact: true }).click();
-    await alumnoPage.getByRole("button", { name: "Confirmar y registrar" }).click();
+    await comoPedro(browser, async (alumnoPage) => {
+      await alumnoPage.goto("/student/payments");
+      await registerCashPayment(alumnoPage);
 
-    // El monto REAL que el backend calculó (`nuevoPago.monto`), no una
-    // previsualización del cliente — ver el comentario de `RenewPaymentForm`.
-    await expect(alumnoPage.getByText("$32,00 por el período")).toBeVisible({ timeout: 15_000 });
+      // El monto REAL que el backend calculó (`nuevoPago.monto`), no una
+      // previsualización del cliente — ver el comentario de `RenewPaymentForm`.
+      await expect(alumnoPage.getByText("$32,00 por el período")).toBeVisible({ timeout: 15_000 });
 
-    // Persistencia: recargar y leer el desglose desde la fila del historial,
-    // nunca del estado local del formulario que ya se cerró.
-    await alumnoPage.reload();
-    const table = alumnoPage.getByTestId("student-payments-table");
-    // Corridas previas de este mismo spec dejan pagos RECHAZADOS que también
-    // llevan su descuento congelado (`descuento_valor_aplicado` sobrevive al
-    // rechazo) — `pago-descuento` sin acotar resuelve más de uno. El botón
-    // "Detalle" de la fila más nueva (`.first()`, orden desc por fecha) sabe
-    // exactamente qué panel abre vía su propio `aria-controls`.
-    const detalleBoton = table.getByRole("button", { name: "Detalle" }).first();
-    await detalleBoton.click();
-    const panelId = await detalleBoton.getAttribute("aria-controls");
-    expect(panelId, "El botón Detalle no declaró aria-controls").toBeTruthy();
-    const detalle = alumnoPage.locator(`#${panelId}`).getByTestId("pago-descuento");
-    await expect(detalle).toBeVisible();
-    await expect(detalle).toContainText("$40,00"); // precio de lista, tachado
-    await expect(detalle).toContainText("−$8,00 (20%)"); // U+2212, no un guión — ver PagoDetailPanel
-    await expect(detalle).toContainText("$32,00"); // monto final
+      // Persistencia: recargar y leer el desglose desde la fila del historial,
+      // nunca del estado local del formulario que ya se cerró.
+      await alumnoPage.reload();
+      const table = alumnoPage.getByTestId("student-payments-table");
+      // Corridas previas de este mismo spec dejan pagos RECHAZADOS que también
+      // llevan su descuento congelado (`descuento_valor_aplicado` sobrevive al
+      // rechazo) — `pago-descuento` sin acotar resuelve más de uno. El botón
+      // "Detalle" de la fila más nueva (`.first()`, orden desc por fecha) sabe
+      // exactamente qué panel abre vía su propio `aria-controls`.
+      const detalleBoton = table.getByRole("button", { name: "Detalle" }).first();
+      await detalleBoton.click();
+      const panelId = await detalleBoton.getAttribute("aria-controls");
+      expect(panelId, "El botón Detalle no declaró aria-controls").toBeTruthy();
+      const detalle = alumnoPage.locator(`#${panelId}`).getByTestId("pago-descuento");
+      await expect(detalle).toBeVisible();
+      await expect(detalle).toContainText("$40,00"); // precio de lista, tachado
+      await expect(detalle).toContainText("−$8,00 (20%)"); // U+2212, no un guión — ver PagoDetailPanel
+      await expect(detalle).toContainText("$32,00"); // monto final
+    });
   } finally {
-    await alumnoContext.close();
     await retirarBeneficio(page, pedroId);
   }
 });
@@ -315,25 +345,15 @@ test("retirar el beneficio de un alumno restaura el monto completo en su siguien
   const discountName = nombreUnico("QA descuento restaurado");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
-  const descuentoId = await crearDescuentoPorcentaje(page, discountName, 20);
-  await asignarBeneficio(page, pedroId, descuentoId);
+  await prepararBeneficio(page, discountName, 20, pedroId);
   // El camino inverso: retirar ANTES de que Pedro pague nada con este
   // beneficio — si el retiro no funcionara, el pago de abajo seguiría
   // saliendo descontado.
   await retirarBeneficio(page, pedroId);
 
-  const alumnoContext = await browser.newContext();
-  const alumnoPage = await alumnoContext.newPage();
-  try {
-    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
+  await comoPedro(browser, async (alumnoPage) => {
     await alumnoPage.goto("/student/payments");
-    const abrirFormulario = alumnoPage.getByRole("button", { name: "Registrar un pago" });
-    await expect(abrirFormulario).toBeVisible({ timeout: 20_000 });
-    await abrirFormulario.click();
-    await alumnoPage.getByLabel("Forma de pago").selectOption("EFECTIVO");
-    await alumnoPage.getByRole("button", { name: "Registrar pago", exact: true }).click();
-    await alumnoPage.getByRole("button", { name: "Confirmar y registrar" }).click();
+    await registerCashPayment(alumnoPage);
 
     // Sin beneficio vigente, el monto real vuelve a ser el de lista ($40).
     await expect(alumnoPage.getByText("$40,00 por el período")).toBeVisible({ timeout: 15_000 });
@@ -345,9 +365,7 @@ test("retirar el beneficio de un alumno restaura el monto completo en su siguien
     // Sin descuento, sin voucher, sin rechazo: la fila no tiene nada que
     // desplegar (`pagoHasDetail`), así que no hay botón "Detalle" que abrir.
     await expect(primeraFila).not.toContainText("Detalle");
-  } finally {
-    await alumnoContext.close();
-  }
+  });
 });
 
 test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago, y la pantalla del alumno no lo refleja", async ({
@@ -359,9 +377,7 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
   const discountName = nombreUnico("QA beneficio total");
   const pedroId = await personaIdViaOwnLogin(PEDRO_EMAIL, PEDRO_PASSWORD);
 
-  await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
-  const descuentoId = await crearDescuentoPorcentaje(page, discountName, 100);
-  await asignarBeneficio(page, pedroId, descuentoId);
+  await prepararBeneficio(page, discountName, 100, pedroId);
 
   // `request` ya quedó autenticado como admin en el `beforeEach` — se
   // reutiliza para leer el historial de Pedro antes y después, sin tocar la
@@ -370,42 +386,40 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
     .get(`${E2E_BASE_URL}/api/membresias/pagos/persona/${pedroId}`)
     .then((r) => r.json())) as unknown[];
 
-  const alumnoContext = await browser.newContext();
-  const alumnoPage = await alumnoContext.newPage();
   try {
-    await loginViaUi(alumnoPage, PEDRO_EMAIL, PEDRO_PASSWORD, /\/student/);
-    await alumnoPage.goto("/student/payments");
+    await comoPedro(browser, async (alumnoPage) => {
+      await alumnoPage.goto("/student/payments");
 
-    const cobertura = alumnoPage.locator("#membership-status-title");
-    await expect(cobertura).toBeVisible({ timeout: 20_000 });
-    const coberturaAntes = await cobertura.textContent();
+      const cobertura = alumnoPage.locator("#membership-status-title");
+      await expect(cobertura).toBeVisible({ timeout: 20_000 });
+      const coberturaAntes = await cobertura.textContent();
 
-    // Domain fact verificado en el código real (`PaymentsContent.isFullBenefit`):
-    // un beneficio del 100% reemplaza el formulario de pago por "Aplicar mi
-    // beneficio" — nunca se llega a `RenewPaymentForm`/`registrarPago`.
-    const abrirAplicar = alumnoPage.getByRole("button", { name: "Aplicar mi beneficio" });
-    await expect(abrirAplicar).toBeVisible({ timeout: 20_000 });
-    await abrirAplicar.click();
-    await alumnoPage.getByRole("button", { name: "Aplicar beneficio", exact: true }).click();
-    await alumnoPage.getByRole("button", { name: "Confirmar y aplicar" }).click();
+      // Domain fact verificado en el código real (`PaymentsContent.isFullBenefit`):
+      // un beneficio del 100% reemplaza el formulario de pago por "Aplicar mi
+      // beneficio" — nunca se llega a `RenewPaymentForm`/`registrarPago`.
+      const abrirAplicar = alumnoPage.getByRole("button", { name: "Aplicar mi beneficio" });
+      await expect(abrirAplicar).toBeVisible({ timeout: 20_000 });
+      await abrirAplicar.click();
+      await alumnoPage.getByRole("button", { name: "Aplicar beneficio", exact: true }).click();
+      await alumnoPage.getByRole("button", { name: "Confirmar y aplicar" }).click();
 
-    await expect(alumnoPage.getByText("cobertura activa")).toBeVisible({ timeout: 15_000 });
-    await expect(alumnoPage.getByText("No se generó ningún pago: el beneficio cubrió el 100%.")).toBeVisible();
+      await expect(alumnoPage.getByText("cobertura activa")).toBeVisible({ timeout: 15_000 });
+      await expect(alumnoPage.getByText("No se generó ningún pago: el beneficio cubrió el 100%.")).toBeVisible();
 
-    // HALLAZGO: `resolveCoverageEnd` (student-utils.ts) solo mira `Pago`s
-    // APROBADOS — la `CoberturaBonificada` recién otorgada vive en una tabla
-    // aparte que `fetchPagosDePersona` nunca toca, así que la pantalla del
-    // propio alumno sigue mostrando exactamente la misma fecha de cobertura
-    // que antes de aplicar el beneficio, pese a que el toast de arriba
-    // acaba de confirmar un período nuevo. No es un defecto que este spec
-    // arregle — es el comportamiento real, para que el dueño del producto
-    // decida si el frontend debe unificar las dos fuentes de cobertura.
-    await alumnoPage.reload();
-    await expect(alumnoPage.locator("#membership-status-title")).toHaveText(coberturaAntes ?? "", {
-      timeout: 20_000,
+      // HALLAZGO: `resolveCoverageEnd` (student-utils.ts) solo mira `Pago`s
+      // APROBADOS — la `CoberturaBonificada` recién otorgada vive en una tabla
+      // aparte que `fetchPagosDePersona` nunca toca, así que la pantalla del
+      // propio alumno sigue mostrando exactamente la misma fecha de cobertura
+      // que antes de aplicar el beneficio, pese a que el toast de arriba
+      // acaba de confirmar un período nuevo. No es un defecto que este spec
+      // arregle — es el comportamiento real, para que el dueño del producto
+      // decida si el frontend debe unificar las dos fuentes de cobertura.
+      await alumnoPage.reload();
+      await expect(alumnoPage.locator("#membership-status-title")).toHaveText(coberturaAntes ?? "", {
+        timeout: 20_000,
+      });
     });
   } finally {
-    await alumnoContext.close();
     // Ver el encabezado del archivo: un beneficio del 100% le cambia a Pedro
     // el botón de pago entero — `payments.live.spec.ts` corre después y
     // necesita encontrarlo sin beneficio activo, pase o falle esta aserción.

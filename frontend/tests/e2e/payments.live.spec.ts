@@ -47,6 +47,7 @@
 import { test, expect } from "@playwright/test";
 import { rejectPendingPayments } from "./helpers/pending-payments";
 import { loginViaUi } from "./helpers/live-login";
+import { registerCashPayment } from "./helpers/register-cash-payment";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const ADMIN_EMAIL = "admin@cataclub.com";
@@ -74,15 +75,11 @@ test("un socio registra un pago en efectivo y el historial lo conserva tras reca
   // Sin pago pendiente previo (la limpieza lo garantiza), el formulario ofrece
   // "Registrar un pago". Si las credenciales o la membresía sembrada cambiaran,
   // la corrida muere acá y no en una aserción sobre el formulario.
-  await expect(page.getByRole("button", { name: "Registrar un pago" })).toBeVisible({
-    timeout: 20_000,
-  });
-
-  // ── La mutación: EFECTIVO, el único método sin comprobante ──
-  await page.getByRole("button", { name: "Registrar un pago" }).click();
-  await page.getByLabel("Forma de pago").selectOption("EFECTIVO");
-  await page.getByRole("button", { name: "Registrar pago", exact: true }).click();
-  await page.getByRole("button", { name: "Confirmar y registrar" }).click();
+  //
+  // ── La mutación: EFECTIVO, el único método sin comprobante — extraído a
+  // `helpers/register-cash-payment.ts` (issue de duplicación de SonarCloud,
+  // PR #1079).
+  await registerCashPayment(page);
 
   // ── Lo que ningún spec mockeado podía comprobar (1): el toast de éxito ──
   await expect(page.getByText("Pago registrado y en revisión")).toBeVisible({
