@@ -106,32 +106,41 @@
  * literalmente el único sujeto posible para este test tal como está
  * sembrada la base hoy.
  *
- * **Medido, no asumido:** confirmado contra la base real (`SELECT count(*),
- * min(fecha_inicio), max(fecha_fin) FROM cobertura_bonificada WHERE
- * persona_id = <Pedro>`) durante el desarrollo de este archivo — cada
- * aplicación real agrega exactamente UNA fila con un mes de cobertura,
- * encadenada a partir de la anterior (`_fecha_fin_maxima_combinada` ancla en
- * el máximo ya otorgado, nunca en "hoy" una vez que ese máximo ya está en el
- * futuro). Es lineal y predecible: la corrida N deja la cobertura de Pedro
- * N meses más adelante que su estado original, ni un día más. Se corrió la
- * suite completa CINCO veces seguidas sin resetear el stack (ver el PR) para
- * confirmar que ese avance no afecta a `payments.live.spec.ts` ni a ningún
- * otro spec — los 5 meses acumulados no rompieron ninguna aserción, porque
- * ninguna otra pantalla o gate lee la fecha de cobertura como "cuán lejos
- * en el futuro está": `registrar_pago` deriva su propio período desde el
- * mismo ancla combinado y no tiene techo de fecha, solo un techo de MESES
- * por pedido (`PagoCreateDTO.meses`, `le=12`), y `hasPendingPago`/
- * `canRegisterHere` (frontend) no leen esa fecha en absoluto.
+ * **Medido, no asumido — pero medir la tasa no bastaba.** La
+ * primera versión de este archivo confirmó que la cobertura de Pedro avanza
+ * un mes por corrida, de forma lineal, y concluyó que 5 corridas seguidas sin
+ * rotura alcanzaban como evidencia. Esa conclusión estaba incompleta: lo que
+ * hacía falta medir no era LA TASA, sino QUÉ depende del valor acumulado. Con
+ * 17 coberturas otorgadas (y, tras el módulo 6 de pago con comprobante,
+ * `PR #1080`, un `Pago` real APROBADO con fecha lejana), el test se puso
+ * ROJO en horas, no en la corrida 30 — `#membership-status-title` pasó a
+ * mostrar "Pagado hasta el 06/08/2028" en vez del placeholder "Todavía no
+ * hay ningún pago aprobado" que el test esperaba de memoria.
  *
- * **Señal a mirar si algún día esto rompe algo:** el único lugar donde una
- * cobertura absurdamente lejana podría notarse es el rango de fechas que
- * `payments.live.spec.ts` ve en pantalla ("Cubre" / `pago.fechaInicio` /
- * `pago.fechaFin` de su propio pago) — si ese spec empezara a fallar sin
- * ningún cambio de código, lo primero a revisar es `SELECT max(fecha_fin)
- * FROM cobertura_bonificada WHERE persona_id = <Pedro>` contra la fecha de
- * hoy: si la diferencia es de años en vez de meses, ahí está la causa, y
- * limpiarla es una operación manual de base de datos (nunca un endpoint de
- * baja nuevo — no es el alcance de este archivo).
+ * El defecto real no era la deriva: era una carrera en el test. `coberturaAntes`
+ * se leía apenas `#membership-status-title` se volvía visible — pero
+ * `toBeVisible()` en el `<h2>` no dice que `pagosState` (el fetch que decide
+ * QUÉ texto mostrar) ya resolvió; mismo error que este repo ya documentó para
+ * una imagen lazy ("toBeVisible() no dice que la imagen cargó"). Con Pedro
+ * sin cobertura, el placeholder del primer render y el valor real coincidían
+ * — la carrera era invisible. En cuanto hubo algo real que mostrar, capturaba
+ * el placeholder viejo, y la comparación posterior (que SÍ correspondía al
+ * valor cargado) siempre iba a diferir. El arreglo (`leerTextoEstable`, ver
+ * su docstring en el test) espera a que DOS lecturas consecutivas del texto
+ * coincidan antes de darlo por bueno — ni `page.waitForLoadState(
+ * "networkidle")` (práctica desalentada de Playwright que SonarCloud marcó
+ * como code smell en el primer intento de este fix) ni esperar a que un
+ * indicador de carga puntual desaparezca (se puede leer en falso si el
+ * indicador todavía no llegó a montarse) alcanzaban. El test ahora pasa
+ * igual con Pedro sin cobertura que con Pedro cubierto hasta 2028, porque
+ * compara la pantalla contra SÍ MISMA (antes/después), nunca contra
+ * una cadena literal ni contra el placeholder.
+ *
+ * La deriva en sí sigue existiendo y sigue siendo real (`_fecha_fin_maxima_
+ * combinada` ancla en el máximo ya otorgado, nunca en "hoy" una vez que ese
+ * máximo ya está en el futuro: cada corrida dejó exactamente un mes más), y
+ * este archivo NO la limpia (ver la sección de arriba) — pero desde este fix
+ * el test ya no NECESITA que esa deriva se mantenga acotada para pasar.
  *
  * ## Estado que este archivo deja, y cómo lo tolera
  *
@@ -154,6 +163,7 @@ import {
   request as apiRequestModule,
   type APIRequestContext,
   type Browser,
+  type Locator,
   type Page,
 } from "@playwright/test";
 import { E2E_BASE_URL } from "./e2e-target";
@@ -296,6 +306,38 @@ async function comoPedro<T>(browser: Browser, run: (alumnoPage: Page) => Promise
   }
 }
 
+/**
+ * Lee `locator.textContent()` recién cuando el valor se ESTABILIZA (dos
+ * lecturas consecutivas iguales) — ni "el elemento existe" ni "el elemento
+ * es visible" prueban que el fetch detrás terminó. Issue #1081: capturar el
+ * texto apenas el `<h2>` se vuelve visible leía el placeholder del primer
+ * render ("Todavía no hay ningún pago aprobado"), no el valor real que
+ * `pagosState` todavía estaba resolviendo — invisible mientras Pedro no
+ * tenía cobertura (el placeholder y el valor real coincidían), visible en
+ * cuanto dejó de coincidir. `page.waitForLoadState("networkidle")` quedó
+ * descartado (SonarCloud lo marca como práctica desalentada de Playwright,
+ * issue conocido) y esperar a que un indicador de carga puntual desaparezca
+ * puede leerse en falso si todavía no llegó a montarse — comparar dos
+ * lecturas sucesivas no depende de ninguna de las dos cosas.
+ */
+async function leerTextoEstable(locator: Locator, timeoutMs = 20_000): Promise<string> {
+  let anterior: string | null = null;
+  let huboLectura = false;
+  await expect
+    .poll(
+      async () => {
+        const actual = await locator.textContent();
+        const estable = huboLectura && actual === anterior;
+        anterior = actual;
+        huboLectura = true;
+        return estable;
+      },
+      { timeout: timeoutMs },
+    )
+    .toBe(true);
+  return anterior ?? "";
+}
+
 test("un beneficio asignado a un alumno reduce el monto que paga, y la reducción persiste tras recargar", async ({
   page,
   browser,
@@ -388,11 +430,23 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
 
   try {
     await comoPedro(browser, async (alumnoPage) => {
+      // `toBeVisible()` en el <h2> NO dice que el fetch de pagos resolvió —
+      // mismo error ya documentado en este repo para una imagen lazy
+      // ("toBeVisible() no dice que la imagen cargó"): el `<h2>` se monta
+      // con `coverageEnd = null` (placeholder "Todavía no hay ningún pago
+      // aprobado") apenas el portal carga, y `pagosState` sigue en
+      // `"loading"` un instante más. Con Pedro sin cobertura esa carrera era
+      // invisible (el placeholder Y el valor real coincidían); en cuanto
+      // hubo un pago/cobertura real que mostrar, capturaba el placeholder
+      // viejo en vez del valor real (hallazgo en vivo, PR #1082).
       await alumnoPage.goto("/student/payments");
 
       const cobertura = alumnoPage.locator("#membership-status-title");
       await expect(cobertura).toBeVisible({ timeout: 20_000 });
-      const coberturaAntes = await cobertura.textContent();
+      // `leerTextoEstable` (ver su docstring) espera a que el valor deje de
+      // cambiar entre dos lecturas — la única forma de saber que `pagosState`
+      // ya resolvió sin depender de un indicador de carga puntual.
+      const coberturaAntes = await leerTextoEstable(cobertura);
 
       // Domain fact verificado en el código real (`PaymentsContent.isFullBenefit`):
       // un beneficio del 100% reemplaza el formulario de pago por "Aplicar mi
@@ -414,8 +468,12 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
       // acaba de confirmar un período nuevo. No es un defecto que este spec
       // arregle — es el comportamiento real, para que el dueño del producto
       // decida si el frontend debe unificar las dos fuentes de cobertura.
+      // Distinto de la lectura de arriba: acá SÍ hay un valor objetivo
+      // conocido (`coberturaAntes`), así que `toHaveText` reintenta solo por
+      // sí mismo hasta que el fetch post-reload resuelva y el texto lo
+      // iguale (o venza el timeout si de verdad cambió).
       await alumnoPage.reload();
-      await expect(alumnoPage.locator("#membership-status-title")).toHaveText(coberturaAntes ?? "", {
+      await expect(alumnoPage.locator("#membership-status-title")).toHaveText(coberturaAntes, {
         timeout: 20_000,
       });
     });
