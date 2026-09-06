@@ -8,6 +8,22 @@
 - Operador/host: `deploy@104.248.115.57`
 - Checkout remoto: `/opt/cata-club`
 
+**Qué corre staging ahora mismo lo dice el propio staging, no este archivo.** El
+endpoint de health devuelve el SHA desplegado, y esa es la única fuente que no se
+desactualiza sola:
+
+```bash
+curl --fail --silent https://staging.cataclub.com/api/health
+# {"status":"ok","sha":"<sha-desplegado>"}
+```
+
+Deriva de ahí el rango real (`git log --oneline <sha-desplegado>..HEAD` y
+`git diff --name-only --diff-filter=A <sha-desplegado>..HEAD --
+backend/alembic/versions/`). La sección «Última verificación» del final es una
+foto del último redeploy documentado: sirve como evidencia de que el
+procedimiento funcionó, **no** como estado actual. Si alguien desplegó sin
+actualizarla, creerle infla el rango y con él la evaluación de riesgo.
+
 ## Flujo manual, siempre con SHA
 
 1. En una máquina segura, parte de un checkout limpio. Verifica el commit objetivo
@@ -42,22 +58,23 @@
 
    ```bash
    ./scripts/backup/restore-check.sh /ruta/al/backup.dump.age \
-     --expect-revision a790verifcorreo \
+     --expect-revision 780ef12115e6 \
      --identity ~/.config/cataclub/backup-age-identity.txt
    ```
 
 4. Clasifica la migración antes de tocar el host: `none`,
-   `backward-compatible` o `manual-review-required`. Para esta redeploy, el
-   rango probado fue `c556legal01->e762rolunico->a790verifcorreo`; la revisión
-   terminó en `a790verifcorreo`. Si es manual, crea fuera del repositorio el
-   artefacto exacto exigido por [provisioning.md](provisioning.md), con estos
+   `backward-compatible` o `manual-review-required`. El rango se deriva del SHA
+   que sirve staging (ver arriba), nunca de este ejemplo. En el último redeploy
+   documentado el rango fue `780ef12115e6->d1016emailunico->f1023correobtrim` y
+   se clasificó `backward-compatible`. Si es manual, crea fuera del repositorio
+   el artefacto exacto exigido por [provisioning.md](provisioning.md), con estos
    campos y valores ligados al SHA:
 
    ```text
    IMAGE_TAG=<sha-de-imagen>
-   MIGRATION_RANGE=c556legal01->e762rolunico->a790verifcorreo
-   CURRENT_REVISION=c556legal01
-   PENDING_MIGRATIONS=e762rolunico,a790verifcorreo
+   MIGRATION_RANGE=780ef12115e6->d1016emailunico->f1023correobtrim
+   CURRENT_REVISION=780ef12115e6
+   PENDING_MIGRATIONS=d1016emailunico,f1023correobtrim
    RESTORE_CHECK=passed
    MAINTENANCE_WINDOW=planned
    APPROVED_BY=<identificador-del-revisor>
@@ -85,6 +102,33 @@
      uv run python scripts/remediar_rol_multiple.py --usuario-id <id> --keep-role <ROL>
    # repetir con --aplicar únicamente tras revisar la salida
    ```
+
+6. Precheck de correos duplicados, obligatorio si el rango incluye
+   `d1016emailunico` o `f1023correobtrim`. Las dos migraciones crean un índice
+   ÚNICO sobre `lower(btrim(correo))` y **abortan sin tocar nada** si encuentran
+   una colisión preexistente, así que fallan seguras; este precheck no es la red,
+   es el tiempo para reconciliar antes de que el deploy se detenga a mitad de
+   camino.
+
+   El gate vive en `backend/scripts/detectar_correos_duplicados.py`, pero **llegó
+   con el mismo PR que la migración** (#1021): si staging todavía corre un SHA
+   anterior, el script no existe dentro del contenedor y `exec` responde
+   `No such file or directory`. Eso no es una falla del entorno. En ese caso corre
+   la consulta equivalente, que usa la misma clave canónica que la migración
+   (`_CLAVE_CANONICA = "lower(btrim(correo))"`) y devuelve solo conteos, sin
+   volcar ningún correo:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T db \
+     sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F "|" -c "SELECT
+       (SELECT count(*) FROM usuario),
+       (SELECT count(*) FROM (SELECT lower(btrim(correo)) k FROM usuario
+          GROUP BY 1 HAVING count(*)>1) x),
+       (SELECT count(*) FROM usuario WHERE correo <> lower(btrim(correo)));"'
+   ```
+
+   La segunda columna debe ser `0`. Si no lo es, **detente**: hay que decidir a
+   mano qué cuenta es la real. Ninguna se elige ni se fusiona automáticamente.
 
 ## Ejecución en el host
 
@@ -179,6 +223,16 @@ probado dejó Beat operativo, dispatch correcto, cero duplicados y restore OK.
 
 ## Última verificación
 
-- SHA: `76fe1ecaf802877fb13f8b6fff59acd8d9703ab4`
-- Evidencia: 7 servicios saludables, Alembic `a790verifcorreo`, restore local OK,
-  cero duplicados y Beat/dispatch OK. Fecha: 2026-08-30.
+Actualiza esta sección en el mismo PR que sigue a cada redeploy. Quedó sin tocar
+entre `76fe1eca` (2026-08-30) y `77db42c3` (2026-09-03), y el rango derivado de
+ella pasó a ser 131 commits y 8 migraciones cuando los reales eran 23 y 2.
+
+- SHA: `e25e8d44ca26952f30ba1df0a3139fa5f2c64daf`
+- Rango de migración: `780ef12115e6->d1016emailunico->f1023correobtrim`,
+  clasificado `backward-compatible`.
+- Evidencia: 7 servicios saludables, Alembic `f1023correobtrim` confirmado en el
+  contenedor y en `alembic_version`, índice único efectivo
+  (`ix_usuario_correo_lower` sobre `lower(btrim((correo)::text))`), precheck de
+  correos con 0 colisiones sobre 13 usuarios, restore-check en entorno desechable
+  OK contra `780ef12115e6`, health por el borde sirviendo el SHA desplegado,
+  landing HTTP 200 y `celery inspect ping` con 1 nodo. Fecha: 2026-09-06.
