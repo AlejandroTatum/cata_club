@@ -445,11 +445,21 @@ class EnrollmentServicio:
         return usuario
 
     def _emitir_tokens(self, usuario: Usuario) -> dict:
-        """Emite el par access + refresh tokens para auto-login."""
-        roles = [rol.tipo_rol.value for rol in usuario.roles]
-        claims = {"sub": usuario.correo, "persona_id": usuario.persona_id, "roles": roles}
+        """Emite el par access + refresh tokens para auto-login.
+
+        Usa `GestorAutenticacion.claims_estandar` -- el mismo cálculo que el
+        login normal -- en vez de armar su propia lista de claims: era esa
+        duplicación la que dejaba a este emisor sin `activacion_completa`
+        (issue #1040), así que una cuenta recién autoinscripta con el correo
+        sin verificar entraba a los módulos en su primera sesión.
+        """
+        claims = GestorAutenticacion.claims_estandar(self.db, usuario)
         access = GestorAutenticacion.crear_token_acceso(claims, version_sesion=usuario.version_sesion)
-        refresh_claims = {"sub": usuario.correo, "persona_id": usuario.persona_id}
+        refresh_claims = {
+            "sub": claims["sub"],
+            "persona_id": claims["persona_id"],
+            "activacion_completa": claims["activacion_completa"],
+        }
         refresh = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
         return {
             "access_token": access,
