@@ -115,7 +115,9 @@ async def obtener_perfil(
         ),
         # Issue #940: la MISMA decisión que lleva el claim del token, para que
         # el frontend la consuma en vez de recomputarla de los dos hechos.
-        "activacion_completa": GestorAutenticacion.puede_acceder_modulos(db, usuario),
+        # Issue #1056: `decision_activacion` es el único armado de esta
+        # decisión -- `claims_estandar` (claim del token) lo llama igual.
+        "activacion_completa": GestorAutenticacion.decision_activacion(db, usuario),
     }
 
 
