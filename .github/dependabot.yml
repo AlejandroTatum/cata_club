@@ -1,16 +1,67 @@
 version: 2
 updates:
+  # Los updates de tipo "major" quedan afuera de todos los ecosistemas (ver
+  # bloque "ignore" en cada uno) porque suelen tocar contratos que un CI verde
+  # no alcanza a cubrir: un salto de major en una librería de hasheo de
+  # contraseñas o en el compilador del lenguaje exige revisión humana antes de
+  # mergear, no solo tests en verde. Los updates "minor" y "patch" se agrupan
+  # en un único PR por ecosistema para no inundar la cola de revisión con un
+  # PR por dependencia.
+  #
+  # Aclaración importante: este "ignore" aplica solo al canal de version
+  # updates (los PRs automáticos por dependencia desactualizada). No deja al
+  # repo sin parches de seguridad de un major: esos llegan por el canal
+  # separado de "dependabot_security_updates", que hoy está "disabled" en la
+  # configuración del repositorio, pendiente de que el dueño lo habilite. Son
+  # dos mecanismos independientes de Dependabot; no confundirlos ni "arreglar"
+  # este ignore para intentar cubrir seguridad con él.
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "uv"
     directory: "/backend"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      uv-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
