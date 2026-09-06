@@ -622,6 +622,100 @@ def test_ningun_healthcheck_de_produccion_sondea_localhost():
         )
 
 
+# Servicios que el sidecar de autoheal (issue #1061) tiene que reiniciar
+# cuando su healthcheck los marca `unhealthy`. `celery-beat` declara
+# `restart: unless-stopped`, que fuera de Swarm solo cubre la muerte del
+# proceso -- no el `unhealthy` que reporta su propio healthcheck de mtime
+# (ver `scripts/deploy/deploy.sh:324-326`). `celery-worker` comparte el
+# mismo riesgo con su sonda de `inspect ping`.
+SERVICIOS_VIGILADOS_POR_AUTOHEAL = ("celery-worker", "celery-beat")
+
+
+def test_el_sidecar_de_autoheal_vigila_solo_beat_y_worker():
+    """Se eligió un sidecar de `docker-compose.yml` (`willfarrell/autoheal`)
+    en vez de un cron: `scripts/deploy/deploy.sh` solo hace `docker compose
+    pull` en cada despliegue y nunca vuelve a correr `install-cron`, así que
+    un arreglo instalado por cron queda escrito en el repo pero MUERTO en el
+    host hasta que alguien entra a mano. El sidecar, en cambio, se activa
+    solo en el próximo `up`/recreate.
+
+    `AUTOHEAL_CONTAINER_LABEL` acota qué vigila: sin ella, autoheal reinicia
+    CUALQUIER contenedor `unhealthy` del stack, incluidos los que no son
+    suyos (p. ej. `caddy`, cuyo healthcheck contra la API de administración
+    puede fallar por razones ajenas a un cuelgue real)."""
+    config = _config_produccion()
+    autoheal = config["services"].get("autoheal")
+    assert autoheal is not None, (
+        "no existe el servicio 'autoheal' en el render de producción: sin "
+        "él, `celery-beat`/`celery-worker` quedan `unhealthy` para siempre "
+        "entre despliegues (issue #1061)"
+    )
+
+    etiqueta = (autoheal.get("environment") or {}).get("AUTOHEAL_CONTAINER_LABEL")
+    assert etiqueta, (
+        "'autoheal' no declara `AUTOHEAL_CONTAINER_LABEL`: sin ella vigila "
+        "TODO el stack en vez de acotarse a los servicios que le tocan"
+    )
+
+    for nombre, datos in config["services"].items():
+        vigilado = (datos.get("labels") or {}).get(etiqueta) == "true"
+        if nombre in SERVICIOS_VIGILADOS_POR_AUTOHEAL:
+            assert vigilado, (
+                f"'{nombre}' no lleva la etiqueta '{etiqueta}=true': "
+                f"autoheal no lo va a reiniciar si queda `unhealthy`"
+            )
+        else:
+            assert not vigilado, (
+                f"'{nombre}' lleva la etiqueta '{etiqueta}=true' sin ser uno "
+                f"de los servicios que autoheal debe vigilar "
+                f"({SERVICIOS_VIGILADOS_POR_AUTOHEAL}): su alcance tiene que "
+                f"quedar acotado"
+            )
+
+
+def test_el_sidecar_de_autoheal_monta_el_socket_de_docker_de_solo_lectura():
+    """El socket de Docker equivale a acceso root sobre el host: cualquier
+    contenedor que lo monte puede levantar uno privilegiado y escapar.
+    Montarlo en solo lectura (`:ro`) NO elimina ese riesgo -- autoheal sigue
+    necesitando (y teniendo) permiso para pedir el reinicio de un contenedor
+    a través del socket, que es tráfico sobre la conexión, no una escritura
+    del ARCHIVO -- pero al menos impide que el propio sidecar reemplace,
+    trunque o borre el archivo del socket. Es el riesgo aceptado a cambio de
+    automatizar el reinicio (documentado también en el compose)."""
+    config = _config_produccion()
+    autoheal = config["services"].get("autoheal")
+    assert autoheal is not None, "no existe el servicio 'autoheal'"
+    montajes = autoheal.get("volumes", [])
+    montajes_socket = [m for m in montajes if m.get("target") == "/var/run/docker.sock"]
+    assert montajes_socket, (
+        "'autoheal' no monta `/var/run/docker.sock`: sin él no puede pedirle "
+        "nada al daemon de Docker"
+    )
+    assert all(m.get("read_only") for m in montajes_socket), (
+        "'autoheal' monta el socket de Docker en lectura/escritura -- tiene "
+        "que ser `:ro`"
+    )
+
+
+def test_la_imagen_de_autoheal_esta_pineada_a_una_version_exacta():
+    """Mismo criterio que el resto de las imágenes de este compose
+    (`caddy:2.8-alpine`, `postgres:16-alpine`): un `latest` móvil deja que
+    un `pull` sin aviso cambie de versión un proceso con acceso equivalente
+    a root sobre el host."""
+    config = _config_produccion()
+    autoheal = config["services"].get("autoheal")
+    assert autoheal is not None, "no existe el servicio 'autoheal'"
+    imagen = autoheal.get("image", "")
+    assert not imagen.endswith(":latest"), (
+        f"'autoheal' resolvió a {imagen!r}: no puede quedar pineado a "
+        f"`latest`"
+    )
+    assert re.search(r":\d+\.\d+(\.\d+)?$", imagen), (
+        f"'autoheal' resolvió a {imagen!r}: la imagen tiene que pinear una "
+        f"versión exacta"
+    )
+
+
 def test_overlay_de_produccion_no_declara_ninguna_clave_build():
     config = _config_produccion()
     servicios_con_build = [
