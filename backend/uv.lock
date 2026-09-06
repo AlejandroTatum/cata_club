@@ -241,16 +241,16 @@ wheels = [
 
 [[package]]
 name = "cloudinary"
-version = "1.45.0"
+version = "1.46.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/5b/d17312bcebe524fc28a4b9032fc158737e991cde49cef7f86d18593c50c9/cloudinary-1.45.0.tar.gz", hash = "sha256:711404bfbdf87965afbefdb747ae78a03188b513846cccb0c1f8a8c612e375ba", size = 192094, upload-time = "2026-07-01T10:10:29.688Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/da/a837db79b7a233611583a0040a04ebc0c835e04e38878a4b2ca58cbe3ab9/cloudinary-1.46.2.tar.gz", hash = "sha256:491ebf4f66ded86a7cff31151e85056520e5a184caf42c7de71b3025da358b95", size = 232297, upload-time = "2026-08-27T15:07:58.353Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/6d/5419a09c4ec2b7baf2723fbfc823bfbfea9ceeac177b30e01250ed23da2c/cloudinary-1.45.0-py3-none-any.whl", hash = "sha256:46c333101811841cf446c46054f4d9b507c2fa34c25152d1e922586c3b746196", size = 149030, upload-time = "2026-07-01T10:10:28.561Z" },
+    { url = "https://files.pythonhosted.org/packages/32/98/e68ad32066b7900200e23a457c600296ce1f8fb768f161fdbb03e5ed2633/cloudinary-1.46.2-py3-none-any.whl", hash = "sha256:c552d819cd76cb7cd3c15a8a5ea23557ed6ad0ded661ad4b3f3b46ff353fc391", size = 192542, upload-time = "2026-08-27T15:07:57.191Z" },
 ]
 
 [[package]]
