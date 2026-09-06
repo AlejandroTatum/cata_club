@@ -168,6 +168,14 @@ services:
   celery-worker:
     image: ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # Etiqueta que el sidecar `autoheal` de más abajo usa para acotar su
+    # vigilancia a este servicio (ver `AUTOHEAL_CONTAINER_LABEL`, issue
+    # #1061). Sin ella, `restart: unless-stopped` no cubre que el
+    # healthcheck de abajo marque este contenedor `unhealthy` -- fuera de
+    # Swarm, Compose solo reinicia por la muerte del proceso, nunca por ese
+    # estado (`scripts/deploy/deploy.sh:324-326`).
+    labels:
+      cata-club.autoheal: "true"
     environment: *backend_env
     depends_on:
       db:
@@ -206,6 +214,11 @@ services:
   celery-beat:
     image: ghcr.io/alejandrotatum/cata_club-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # Mismo motivo que la de `celery-worker`: este servicio es justo el que
+    # motivó el sidecar `autoheal` (issue #1061) -- su healthcheck de mtime
+    # de más abajo era el que podía quedar `unhealthy` para siempre.
+    labels:
+      cata-club.autoheal: "true"
     environment: *backend_env
     depends_on:
       db:
@@ -249,6 +262,65 @@ services:
       # beat escribe el schedule al arrancar, tras conectar con el broker.
       start_period: 90s
       retries: 3
+
+  # Sidecar de autorreparación (issue #1061): `celery-beat` y `celery-worker`
+  # declaran `restart: unless-stopped`, pero fuera de Swarm esa política SOLO
+  # reinicia un contenedor que MUERE -- no uno que el healthcheck marca
+  # `unhealthy` (lo documenta el propio repo en
+  # `scripts/deploy/deploy.sh:324-326`). Sin nada que actúe sobre ese estado,
+  # un beat colgado -- mtime de `celerybeat-schedule` congelado -- podía
+  # quedar `unhealthy` para siempre entre despliegues, sin reiniciarse ni
+  # avisar.
+  #
+  # Sidecar de compose, NO un cron: `scripts/deploy/deploy.sh` solo hace
+  # `docker compose pull` en cada despliegue y nunca vuelve a correr
+  # `install-cron`, así que un arreglo instalado por cron queda escrito en el
+  # repo pero MUERTO en el host hasta que alguien entra a mano. Este servicio,
+  # en cambio, se activa solo en el próximo `up`/recreate, igual que
+  # cualquier otro cambio de este archivo.
+  #
+  # `AUTOHEAL_CONTAINER_LABEL` acota la vigilancia a los dos servicios de
+  # arriba (etiqueta `cata-club.autoheal=true`): sin esto, autoheal reinicia
+  # CUALQUIER contenedor `unhealthy` del stack, incluido `caddy`, cuyo
+  # healthcheck no tiene nada que ver con un cuelgue real de este sidecar.
+  autoheal:
+    # Versión exacta, nunca `latest`: este contenedor monta el socket de
+    # Docker (ver más abajo) y un `pull` sin aviso no puede cambiarle de
+    # versión al proceso con más privilegio de todo el stack.
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: cata-club.autoheal
+      # Mismo intervalo que los healthchecks que vigila: no tiene sentido
+      # sondear más seguido que la frecuencia con la que esos healthchecks
+      # se re-evalúan.
+      AUTOHEAL_INTERVAL: "30"
+    volumes:
+      # RIESGO ACEPTADO: montar el socket de Docker equivale a dar acceso de
+      # root sobre el HOST -- cualquier contenedor con este socket puede
+      # levantar uno privilegiado (`--privileged` o con el propio socket
+      # montado) y escapar. Se acepta acá porque es el único mecanismo que
+      # permite reiniciar un contenedor `unhealthy` sin un agente dentro de
+      # cada imagen, y el alcance queda acotado por
+      # `AUTOHEAL_CONTAINER_LABEL` a los dos servicios de arriba.
+      #
+      # `:ro` NO elimina ese riesgo -- autoheal igual puede pedir el
+      # reinicio de un contenedor, porque eso es tráfico sobre la conexión
+      # del socket, no una escritura del archivo -- pero impide que el
+      # propio sidecar reemplace, trunque o borre el archivo del socket.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      # La imagen ya trae este healthcheck en su propio Dockerfile
+      # (`HEALTHCHECK CMD pgrep -f autoheal`); se repite acá explícito para
+      # que `test_todos_los_servicios_de_larga_duracion_declaran_healthcheck`
+      # también lo vea en el render de `docker compose config` -- ese
+      # comando no hereda el `HEALTHCHECK` de la imagen, solo lo que declara
+      # este archivo.
+      test: ["CMD-SHELL", "pgrep -f autoheal || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   frontend:
     restart: unless-stopped
