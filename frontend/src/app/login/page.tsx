@@ -23,7 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { ACTIVATION_GATE_ROUTE, routeForSession } from "@/lib/activation-reasons";
 import type { AuthErrorKind } from "@/services/auth";
-import { STATUS_MESSAGES } from "@/lib/error-message";
+import { REDIRECT_REASON_MESSAGES, redirectReasonFrom } from "@/lib/redirect-reason";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
   AUTH_LABEL_CLASSES,
@@ -141,15 +141,16 @@ function LoginPageContent(): React.ReactElement {
   const { login, isAuthenticated, isLoading, session } = useAuth();
   const toast = useToast();
   /**
-   * Issue #353: `ProtectedRoute` names an involuntary session loss in the
-   * redirect itself (`?motivo=sesion-expirada`, set only when
-   * `AuthContext`'s `sessionExpired` was true) — an ordinary unauthenticated
-   * visit or an explicit logout carries no such param. Read once; there is
-   * nothing to keep in sync with, the query string does not change under
-   * this form.
+   * Issue #353/#1057: `?motivo=` names WHY an involuntary redirect landed
+   * here — `ProtectedRoute` sets `sesion-expirada` on a failed
+   * refresh-and-retry, `/login/activacion` sets `correo-verificado` when the
+   * person's own session ends the instant their verification lands. An
+   * ordinary unauthenticated visit or an explicit logout carries no such
+   * param. Read once; there is nothing to keep in sync with, the query
+   * string does not change under this form.
    */
   const searchParams = useSearchParams();
-  const sessionExpired = searchParams.get("motivo") === "sesion-expirada";
+  const redirectReason = redirectReasonFrom(searchParams.get("motivo"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -312,17 +313,17 @@ function LoginPageContent(): React.ReactElement {
 
   return (
     <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar">
-      {/* Issue #353: a redirect that lost the admin's session mid-form used
-          to land here with nothing to explain it — the toast on a FAILED
-          login names what went wrong, but nothing said anything about an
+      {/* Issue #353/#1057: a redirect that lost the admin's session mid-form,
+          or landed here right after a successful email verification, used to
+          arrive with nothing to explain it — the toast on a FAILED login
+          names what went wrong, but nothing said anything about an
           involuntary bounce that happened before this screen even loaded.
           A static banner, not a toast: the admin needs to still see it while
-          reading the form, not catch it before it fades. Reuses
-          `STATUS_MESSAGES[401]` — the same sentence the rest of the app
-          already shows for an expired session, not a new one invented here. */}
-      {sessionExpired && (
+          reading the form, not catch it before it fades. The exact sentence
+          per reason lives once in `REDIRECT_REASON_MESSAGES`, not here. */}
+      {redirectReason && (
         <p role="status" className="rounded-ctl border border-line-2 bg-canvas px-3.5 py-2.5 text-sm text-ink-2">
-          {STATUS_MESSAGES[401]}
+          {REDIRECT_REASON_MESSAGES[redirectReason]}
         </p>
       )}
       {/* The session that never was. `role="alert"` and not `status`: unlike

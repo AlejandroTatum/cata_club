@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, CircleAlert, Mail, MapPin } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/contexts/ToastContext";
 import { reenviarVerificacionCorreo, verificarCorreo } from "@/services/api";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { activationPendingReasons, isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import { extractVerificationToken } from "@/lib/verification-token";
 import { toUserMessage } from "@/lib/error-message";
+import { withRedirectReason } from "@/lib/redirect-reason";
 import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES, AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
 import { Button, buttonClasses } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
@@ -69,7 +69,17 @@ function ActivationCheck({
 function ActivationPageContent(): React.ReactElement {
   const router = useRouter();
   const { session, isAuthenticated, isLoading, refreshSession, logout } = useAuth();
-  const toast = useToast();
+  /**
+   * Set synchronously the instant `verifyEmailInline` learns its OWN session
+   * ended mid-request (`result.kind === "unauthenticated"`) — read by the
+   * guard effect below, the one that actually fires the redirect once
+   * `isAuthenticated` flips false. A ref, not state: the guard effect must
+   * see the true value the first time it reruns after that flip, and a
+   * state write from this component could commit in a separate render from
+   * `AuthContext`'s own `setSession(null)` (#1057; replaces the toast #1045
+   * used for the same case — see `lib/redirect-reason.ts`).
+   */
+  const correoVerificadoAlCerrarSesionRef = useRef(false);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
@@ -85,7 +95,9 @@ function ActivationPageContent(): React.ReactElement {
   useEffect((): void => {
     if (isLoading) return;
     if (!isAuthenticated || !activation) {
-      router.replace("/login");
+      router.replace(
+        correoVerificadoAlCerrarSesionRef.current ? withRedirectReason("/login", "correo-verificado") : "/login",
+      );
       return;
     }
     // Issue #940: the backend's gate decision rules the redirect — not the
@@ -125,12 +137,16 @@ function ActivationPageContent(): React.ReactElement {
    * operation succeeded. But `activation` goes null the instant that happens,
    * and the guard effect above sends this screen to /login on its own — any
    * message set on THIS component's local state would be thrown away with it
-   * before the redirect even paints. The toast survives that: it is
-   * root-mounted in `app/layout.tsx`, outside the page tree `router.replace`
-   * swaps out, so it is still on screen after the jump to /login. That is
-   * also why this is a toast and not a query-param banner on /login the way
-   * `?motivo=sesion-expirada` works for an involuntary logout — that page is
-   * out of scope for this change.
+   * before the redirect even paints. `correoVerificadoAlCerrarSesionRef`
+   * survives that: the guard effect reads it the moment it fires the
+   * redirect and carries the news in the URL itself
+   * (`?motivo=correo-verificado`), the same mechanism `?motivo=
+   * sesion-expirada` already uses for an involuntary logout (#353) — see
+   * `lib/redirect-reason.ts`. A toast was used here until #1057 unified the
+   * two: it worked (root-mounted in `app/layout.tsx`, so it survived the
+   * `router.replace`) but only because `login/page.tsx` was reserved by
+   * parallel work at the time (#1044), and a query param also survives a
+   * full page reload, which a toast does not.
    *
    * Every failure `verificarCorreo` itself can throw reads the same,
    * deliberately: `confirmar_verificacion_correo` answers a dead token, a
@@ -156,7 +172,7 @@ function ActivationPageContent(): React.ReactElement {
           "Su correo quedó verificado. No pudimos actualizar esta pantalla — use «Consultar estado nuevamente» para verlo reflejado.",
         );
       } else if (result.kind === "unauthenticated") {
-        toast.showSuccess("Su correo quedó verificado. Vuelva a iniciar sesión para continuar.");
+        correoVerificadoAlCerrarSesionRef.current = true;
       }
     } catch {
       setVerifyError(
