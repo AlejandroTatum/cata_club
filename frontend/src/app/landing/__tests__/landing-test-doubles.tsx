@@ -2,7 +2,7 @@
  * Shared render doubles and global stubs for tests that mount `LandingPage`
  * (or a slice of it) under jsdom.
  *
- * `landing-image-delivery.test.tsx`, `landing-editorial-symmetry.test.tsx`
+ * `landing-image-delivery.test.tsx`, `landing-mission-vision-pillars.test.tsx`
  * and `landing-knowledge-parity.test.tsx` all need the same
  * `fetch`/`ResizeObserver`/`matchMedia` stubs and the same
  * `cleanup`/`vi.unstubAllGlobals` teardown; the first two also need the same

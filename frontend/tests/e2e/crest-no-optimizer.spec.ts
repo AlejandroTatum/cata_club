@@ -45,16 +45,15 @@ function trackCrestOptimizerRequests(page: Page): string[] {
 }
 
 test.describe("crest never requests the image optimizer (issue #681)", () => {
-  test("landing page: navbar, hero paddle, and Motto paddle", async ({ page }) => {
+  test("landing page: navbar and Motto paddle", async ({ page }) => {
     const hits = trackCrestOptimizerRequests(page);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
-    // The hero paddle crest is above the fold and loads on its own; the
-    // Motto paddle crest is below it and needs a scroll to come into view
-    // (and, on `main`, to fire its lazy-loaded optimizer request) before its
+    // The navbar crest is above the fold and loads on its own; the Motto
+    // paddle crest is below it and needs a scroll to come into view (and,
+    // on `main`, to fire its lazy-loaded optimizer request) before its
     // absence can be asserted honestly.
-    await page.locator("[data-serve-paddle] img").waitFor();
     await page.locator("[data-motto-paddle] img").scrollIntoViewIfNeeded();
     // Give any in-flight request a moment to actually reach the network
     // layer before reading the tally.

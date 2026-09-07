@@ -5,7 +5,7 @@
 
 - URL pública: <https://staging.cataclub.com/>
 - Health: <https://staging.cataclub.com/api/health>
-- Operador/host: `deploy@104.248.115.57`
+- Operador/host: el usuario y la IP viven en el repo privado de operaciones (`cata_club-docs`), no en este archivo público
 - Checkout remoto: `/opt/cata-club`
 
 **Qué corre staging ahora mismo lo dice el propio staging, no este archivo.** El

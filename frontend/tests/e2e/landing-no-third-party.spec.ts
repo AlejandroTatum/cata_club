@@ -56,7 +56,7 @@ test.describe("landing contacts no third party (issue #709)", () => {
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
-    await page.locator("[data-serve-paddle] img").waitFor();
+    await page.locator(".landing-hero h1").waitFor();
     // Long enough that the eager map on `main` has fired its tiles and marker;
     // reading the tally any sooner would let the old behaviour pass.
     await page.waitForTimeout(3_000);

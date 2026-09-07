@@ -72,14 +72,12 @@ describe("landing images declare the width they are actually rendered at", (): v
   it("keeps the thumbnail sizes free of vw units, which would raise the srcset floor to 640", (): void => {
     const { container } = render(<LandingPage />);
 
-    for (const selector of [".landing-editorial-media img", ".landing-map-inset img"]) {
-      const images = Array.from(container.querySelectorAll<HTMLImageElement>(selector));
-      expect(images.length).toBeGreaterThan(0);
-      for (const img of images) {
-        const sizes = img.getAttribute("sizes");
-        expect(sizes, `${img.getAttribute("src")} declares no sizes at all`).toBeTruthy();
-        expect(sizes ?? "").not.toMatch(/vw/);
-      }
+    const images = Array.from(container.querySelectorAll<HTMLImageElement>(".landing-map-inset img"));
+    expect(images.length).toBeGreaterThan(0);
+    for (const img of images) {
+      const sizes = img.getAttribute("sizes");
+      expect(sizes, `${img.getAttribute("src")} declares no sizes at all`).toBeTruthy();
+      expect(sizes ?? "").not.toMatch(/vw/);
     }
   });
 });
