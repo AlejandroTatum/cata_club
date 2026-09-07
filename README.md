@@ -276,8 +276,8 @@ Los controles ejecutables provider-neutral están en este checkout:
 preflight, releases y rollback guardado; [`docs/operations/staging-redeploy.md`](docs/operations/staging-redeploy.md)
 contiene el runbook ejecutable para redeploy manual de staging; y
 [`docs/operations/monitoring.md`](docs/operations/monitoring.md) documenta los
-dos monitores externos (readiness HTTPS y heartbeat del backup, en UptimeRobot)
-y deja explícito que la réplica off-host sigue pendiente.
+dos monitores externos (readiness HTTPS y heartbeat del backup y de Celery, en
+UptimeRobot) y deja explícito que la réplica off-host sigue pendiente.
 
 ## Documentación
 

@@ -39,10 +39,8 @@ const CAMPO_A_SNAKE: Record<string, string> = {
   fechaFin: "fecha_fin",
 };
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { pagoId: string } },
-): Promise<NextResponse> {
+export async function POST(request: NextRequest, props: { params: Promise<{ pagoId: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const pagoId = parseNumericRouteParam(params.pagoId, "pago", { requireInteger: true });
   if (pagoId instanceof NextResponse) return pagoId;
 

@@ -31,7 +31,7 @@ function requestWithFile(file: File): NextRequest {
 describe("POST /api/membresias/pagos/[pagoId]/voucher — rejected file type", () => {
   it("explains the problem in a sentence that passes the user-facing text gate", async () => {
     const file = new File(["contenido"], "nota.txt", { type: "text/plain" });
-    const response = await POST(requestWithFile(file), { params: { pagoId: "1" } });
+    const response = await POST(requestWithFile(file), { params: Promise.resolve({ pagoId: "1" }) });
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { message: string };

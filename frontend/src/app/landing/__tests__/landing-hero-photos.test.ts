@@ -29,8 +29,8 @@ const MAX_HERO_BYTES = 600 * 1024;
 
 /** Pinned from the sources as shipped. Recompression must not resize them. */
 const EXPECTED_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "/landing/hero-community.jpg": { width: 2048, height: 1536 },
   "/landing/hero-competition.jpg": { width: 1536, height: 2048 },
+  "/landing/hero-community.jpg": { width: 2048, height: 1536 },
   "/landing/hero-training.jpg": { width: 2048, height: 1536 },
 };
 
@@ -60,6 +60,20 @@ function readJpegSize(bytes: Buffer): { width: number; height: number } {
 describe("landing hero photo sources", (): void => {
   it("lists exactly the three carousel photos", (): void => {
     expect(HERO_PHOTOS.map((photo): string => photo.src)).toEqual(Object.keys(EXPECTED_DIMENSIONS));
+  });
+
+  it("opens on the two-students photo, then community, then training", (): void => {
+    expect(HERO_PHOTOS.map((photo): string => photo.src)).toEqual([
+      "/landing/hero-competition.jpg",
+      "/landing/hero-community.jpg",
+      "/landing/hero-training.jpg",
+    ]);
+  });
+
+  it("never carries a caption field — captions were retired for this carousel", (): void => {
+    HERO_PHOTOS.forEach((photo): void => {
+      expect(Object.keys(photo)).not.toContain("caption");
+    });
   });
 
   it.each(HERO_PHOTOS.map((photo): string => photo.src))(

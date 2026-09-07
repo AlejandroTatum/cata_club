@@ -58,7 +58,7 @@ afterEach(() => {
 
 describe("PUT /api/groups/horarios/[id]", () => {
   it("returns 401 when no access token cookie is present", async () => {
-    const response = await PUT(putRequest({ categoria: "COMPETITIVO" }), { params: { id: "1" } });
+    const response = await PUT(putRequest({ categoria: "COMPETITIVO" }), { params: Promise.resolve({ id: "1" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -70,7 +70,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
     const access = makeJwt(3600);
     const response = await PUT(
       putRequest({ categoria: "COMPETITIVO", dia_semana: "LUNES" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
     const body = await response.json();
 
@@ -91,7 +91,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
 
     const access = makeJwt(3600);
     await PUT(putRequest({ dia_semana: "MARTES" }, `${ACCESS_TOKEN_COOKIE}=${access}`, "7"), {
-      params: { id: "7" },
+      params: Promise.resolve({ id: "7" }),
     });
 
     expect(forwardedBody()).toEqual({ dia_semana: "MARTES" });
@@ -106,7 +106,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
         { categoria: "COMPETITIVO", hora_inicio: "18:00", hora_fin: "20:00", nivel_ranking_id: 3 },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
       ),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
 
     expect(forwardedBody()).toEqual({ categoria: "COMPETITIVO" });
@@ -115,7 +115,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
   it("returns 400 when the payload carries no updatable field", async () => {
     const access = makeJwt(3600);
     const response = await PUT(putRequest({}, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(response.status).toBe(400);
@@ -127,7 +127,7 @@ describe("PUT /api/groups/horarios/[id]", () => {
 
     const access = makeJwt(3600);
     const response = await PUT(putRequest({ categoria: "COMPETITIVO" }, `${ACCESS_TOKEN_COOKIE}=${access}`, "999"), {
-      params: { id: "999" },
+      params: Promise.resolve({ id: "999" }),
     });
     const body = await response.json();
 

@@ -88,14 +88,14 @@ describe("PUT /api/payments/[id] — input validation", () => {
       headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${validAccess}` },
     });
 
-    const response = await PUT(request, { params: { id: "42" } });
+    const response = await PUT(request, { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 when action is missing", async () => {
-    const response = await PUT(putRequest({}), { params: { id: "42" } });
+    const response = await PUT(putRequest({}), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -104,14 +104,14 @@ describe("PUT /api/payments/[id] — input validation", () => {
   });
 
   it("returns 400 when action is unknown", async () => {
-    const response = await PUT(putRequest({ action: "bogus" }), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "bogus" }), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 when rejecting without a rejectionReason", async () => {
-    const response = await PUT(putRequest({ action: "rejected" }), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "rejected" }), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -122,7 +122,7 @@ describe("PUT /api/payments/[id] — input validation", () => {
   it("returns 400 when rejectionReason is whitespace-only", async () => {
     const response = await PUT(
       putRequest({ action: "rejected", rejectionReason: "   " }),
-      { params: { id: "42" } },
+      { params: Promise.resolve({ id: "42" }) },
     );
 
     expect(response.status).toBe(400);
@@ -130,7 +130,7 @@ describe("PUT /api/payments/[id] — input validation", () => {
   });
 
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await PUT(putRequest({ action: "approved" }, null), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "approved" }, null), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -145,7 +145,7 @@ describe("PUT /api/payments/[id] — approve", () => {
       .mockResolvedValueOnce(jsonResponse(membresia))
       .mockResolvedValueOnce(jsonResponse(tipos));
 
-    const response = await PUT(putRequest({ action: "approved" }), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "approved" }), { params: Promise.resolve({ id: "42" }) });
     const body = await response.json();
 
     expect(global.fetch).toHaveBeenNthCalledWith(
@@ -183,7 +183,7 @@ describe("PUT /api/payments/[id] — approve", () => {
       .mockResolvedValueOnce(jsonResponse(membresia))
       .mockResolvedValueOnce(jsonResponse(tipos));
 
-    const response = await PUT(putRequest({ action: "approved" }), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "approved" }), { params: Promise.resolve({ id: "42" }) });
     const body = await response.json();
 
     expect(body.studentName).toBe("Estudiante");
@@ -200,7 +200,7 @@ describe("PUT /api/payments/[id] — reject", () => {
 
     const response = await PUT(
       putRequest({ action: "rejected", rejectionReason: "  Monto incorrecto  " }),
-      { params: { id: "42" } },
+      { params: Promise.resolve({ id: "42" }) },
     );
     const body = await response.json();
 
@@ -223,7 +223,7 @@ describe("PUT /api/payments/[id] — backend error propagation", () => {
       jsonResponse({ detail: "El pago ya fue validado" }, 409),
     );
 
-    const response = await PUT(putRequest({ action: "approved" }), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "approved" }), { params: Promise.resolve({ id: "42" }) });
     const body = await response.json();
 
     expect(response.status).toBe(409);
@@ -234,7 +234,7 @@ describe("PUT /api/payments/[id] — backend error propagation", () => {
   it("returns 404 when the backend reports the payment doesn't exist", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Pago no encontrado" }, 404));
 
-    const response = await PUT(putRequest({ action: "approved" }), { params: { id: "999" } });
+    const response = await PUT(putRequest({ action: "approved" }), { params: Promise.resolve({ id: "999" }) });
     const body = await response.json();
 
     expect(response.status).toBe(404);
@@ -244,7 +244,7 @@ describe("PUT /api/payments/[id] — backend error propagation", () => {
   it("returns 503 when the backend is unreachable", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 
-    const response = await PUT(putRequest({ action: "approved" }), { params: { id: "42" } });
+    const response = await PUT(putRequest({ action: "approved" }), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(503);
   });
@@ -262,7 +262,7 @@ describe("GET /api/payments/[id]", () => {
       .mockResolvedValueOnce(jsonResponse(membresia))
       .mockResolvedValueOnce(jsonResponse(tipos));
 
-    const response = await GET(getRequest(), { params: { id: "42" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "42" }) });
     const body = await response.json();
 
     expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe(
@@ -294,14 +294,14 @@ describe("GET /api/payments/[id]", () => {
       .mockResolvedValueOnce(jsonResponse(membresia))
       .mockResolvedValueOnce(jsonResponse(tipos));
 
-    const response = await GET(getRequest(), { params: { id: "42" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "42" }) });
     const body = await response.json();
 
     expect(body.validationStatus).toBe("pendiente");
   });
 
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await GET(getRequest(null), { params: { id: "42" } });
+    const response = await GET(getRequest(null), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -310,7 +310,7 @@ describe("GET /api/payments/[id]", () => {
   it("returns 404 when the backend reports the payment doesn't exist", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Pago no encontrado" }, 404));
 
-    const response = await GET(getRequest(), { params: { id: "999" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "999" }) });
     const body = await response.json();
 
     expect(response.status).toBe(404);
@@ -320,7 +320,7 @@ describe("GET /api/payments/[id]", () => {
   it("returns 503 when the backend is unreachable", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 
-    const response = await GET(getRequest(), { params: { id: "42" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(503);
   });

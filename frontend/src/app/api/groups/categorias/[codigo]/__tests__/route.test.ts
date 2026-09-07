@@ -62,7 +62,7 @@ async function putCategoria(body: unknown): Promise<Response> {
   vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ codigo: "PREINFANTIL" }));
   const access = makeJwt(3600);
   return PUT(putRequest(body, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-    params: { codigo: "PREINFANTIL" },
+    params: Promise.resolve({ codigo: "PREINFANTIL" }),
   });
 }
 
@@ -78,7 +78,7 @@ afterEach(() => {
 
 describe("PUT /api/groups/categorias/[codigo]", () => {
   it("returns 401 when no access token cookie is present", async () => {
-    const response = await PUT(putRequest({ nombre: "Preinfantil A" }), { params: { codigo: "PREINFANTIL" } });
+    const response = await PUT(putRequest({ nombre: "Preinfantil A" }), { params: Promise.resolve({ codigo: "PREINFANTIL" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -93,7 +93,7 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
         { nombre: "Preinfantil A", hora_inicio: "15:00", hora_fin: "16:00", dias: ["LUNES"] },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
       ),
-      { params: { codigo: "PREINFANTIL" } },
+      { params: Promise.resolve({ codigo: "PREINFANTIL" }) },
     );
     const body = await response.json();
 
@@ -114,7 +114,7 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
 
     const access = makeJwt(3600);
     await PUT(putRequest({ nombre: "Preinfantil A" }, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { codigo: "PREINFANTIL" },
+      params: Promise.resolve({ codigo: "PREINFANTIL" }),
     });
 
     expect(forwardedBody()).toEqual({ nombre: "Preinfantil A" });
@@ -145,7 +145,7 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
   it("returns 400 when the payload carries no updatable field", async () => {
     const access = makeJwt(3600);
     const response = await PUT(putRequest({}, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { codigo: "PREINFANTIL" },
+      params: Promise.resolve({ codigo: "PREINFANTIL" }),
     });
 
     expect(response.status).toBe(400);
@@ -160,7 +160,7 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
     const access = makeJwt(3600);
     const response = await PUT(
       putRequest({ dias: ["MARTES"] }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { codigo: "PREINFANTIL" } },
+      { params: Promise.resolve({ codigo: "PREINFANTIL" }) },
     );
     const body = await response.json();
 
@@ -171,7 +171,7 @@ describe("PUT /api/groups/categorias/[codigo]", () => {
 
 describe("DELETE /api/groups/categorias/[codigo]", () => {
   it("returns 401 when no access token cookie is present", async () => {
-    const response = await DELETE(deleteRequest(), { params: { codigo: "PREINFANTIL" } });
+    const response = await DELETE(deleteRequest(), { params: Promise.resolve({ codigo: "PREINFANTIL" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -181,7 +181,7 @@ describe("DELETE /api/groups/categorias/[codigo]", () => {
 
     const access = makeJwt(3600);
     const response = await DELETE(deleteRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { codigo: "PREINFANTIL" },
+      params: Promise.resolve({ codigo: "PREINFANTIL" }),
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -201,7 +201,7 @@ describe("DELETE /api/groups/categorias/[codigo]", () => {
 
     const access = makeJwt(3600);
     const response = await DELETE(deleteRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { codigo: "PREINFANTIL" },
+      params: Promise.resolve({ codigo: "PREINFANTIL" }),
     });
     const body = await response.json();
 

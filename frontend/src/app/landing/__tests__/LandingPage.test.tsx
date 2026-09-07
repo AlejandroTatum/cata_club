@@ -300,7 +300,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
+  it("renders the arrival inset photo", (): void => {
     render(<LandingPage />);
 
     const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
@@ -309,32 +309,31 @@ describe("LandingPage", (): void => {
     expect(arrival).toHaveAttribute("height", "1200");
     expect(arrival).toHaveAttribute("loading", "lazy");
     expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
-
-    const mission = screen.getByRole("img", { name: /el club reúne a su comunidad en un entrenamiento/i });
-    expect(mission).toHaveAttribute("src", "/landing/photo-community.jpeg");
-    const vision = screen.getByRole("img", { name: /el equipo y entrenadores de cata club posan en el área de entrenamiento/i });
-    expect(vision).toHaveAttribute("src", "/landing/vision-team-1329.jpg");
   });
 
-  it("alternates Mission and Vision editorial blocks: photo left/text right, then text left/photo right", (): void => {
+  it("renders Mission and Vision as two typographic pillars, no photos (v2 redesign)", (): void => {
     render(<LandingPage />);
-    const articles = screen.getByRole("heading", { name: "Nuestra Misión" }).parentElement
-      ? [
-          screen.getByRole("heading", { name: "Nuestra Misión" }).closest(".landing-editorial-item"),
-          screen.getByRole("heading", { name: "Nuestra Visión" }).closest(".landing-editorial-item"),
-        ]
-      : [];
-    const [missionItem, visionItem] = articles as HTMLElement[];
+
+    const missionItem = screen.getByRole("heading", { name: "Nuestra Misión" }).closest(".landing-pillar");
+    const visionItem = screen.getByRole("heading", { name: "Nuestra Visión" }).closest(".landing-pillar");
     expect(missionItem).not.toBeNull();
     expect(visionItem).not.toBeNull();
 
-    const missionChildren = Array.from(missionItem.children);
-    const visionChildren = Array.from(visionItem.children);
-    // Mission leads with the photo (left), then the copy; Vision is inverted.
-    expect(missionChildren[0]?.classList.contains("landing-editorial-media")).toBe(true);
-    expect(missionChildren[1]?.classList.contains("landing-editorial-copy")).toBe(true);
-    expect(visionChildren[0]?.classList.contains("landing-editorial-copy")).toBe(true);
-    expect(visionChildren[1]?.classList.contains("landing-editorial-media")).toBe(true);
+    const section = document.querySelector("#nosotros") as HTMLElement;
+    expect(within(section).queryByRole("img")).not.toBeInTheDocument();
+
+    expect(within(missionItem as HTMLElement).getByText(
+      "Promover el tenis de mesa mediante formación deportiva de calidad.",
+    )).toHaveClass("landing-lead");
+    expect(within(missionItem as HTMLElement).getByText(
+      "Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.",
+    )).toBeInTheDocument();
+    expect(within(visionItem as HTMLElement).getByText(
+      "Ser un club líder y referente deportivo a nivel provincial y nacional.",
+    )).toHaveClass("landing-lead");
+    expect(within(visionItem as HTMLElement).getByText(
+      "Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.",
+    )).toBeInTheDocument();
   });
 
   it("shows an honest empty sponsor message when public GET /api/sponsors returns none", async (): Promise<void> => {
@@ -550,64 +549,13 @@ describe("LandingPage", (): void => {
     expect(copy.children[0].tagName).toBe("H1");
   });
 
-  it("keeps both hero balls and the crested paddle", (): void => {
+  it("keeps the hero carousel's crossing ball", (): void => {
     render(<LandingPage />);
 
     const hero = document.querySelector(".landing-hero") as HTMLElement;
-    const paddle = hero.querySelector("[data-serve-paddle]");
 
-    expect(document.querySelectorAll("[data-serve-ball]")).toHaveLength(1);
-    expect(hero.querySelector("[data-serve-ball]")).not.toBeNull();
     expect(document.querySelectorAll("[data-frame-ball]")).toHaveLength(1);
     expect(hero.querySelector("[data-frame-ball]")).not.toBeNull();
-    expect(paddle).not.toBeNull();
-    expect(paddle?.querySelector(".landing-paddle-crest")).not.toBeNull();
-  });
-
-  /**
-   * The paddle that produces the serve (issue #640).
-   *
-   * Two things are asserted together because either one alone would pass while
-   * the feature was broken. The paddle has to EXIST in the markup the server
-   * sends, since that markup is the whole composition whenever the motion layer
-   * never loads — the static state is not a degraded mode here, it is the hit
-   * frozen at the moment of contact. And it has to be the club's own paddle:
-   * the shape and the crest that `Motto` already renders (issue #642), not a
-   * second, generic mark drawn only for the hero.
-   *
-   * It is also asserted to be a direct child of the hero, exactly like the ball,
-   * because that shared positioning context is what lets one pair of CSS
-   * anchors keep the two on the same vertical axis.
-   */
-  it("stands the club's crested paddle under the hero's serve ball", (): void => {
-    render(<LandingPage />);
-
-    const hero = document.querySelector(".landing-hero") as HTMLElement;
-    const paddle = hero.querySelector("[data-serve-paddle]") as HTMLElement;
-
-    expect(document.querySelectorAll("[data-serve-paddle]")).toHaveLength(1);
-    expect(paddle).not.toBeNull();
-    expect(paddle).toHaveAttribute("aria-hidden", "true");
-    expect(paddle.parentElement).toBe(hero);
-
-    // The same shape class the Motto paddle uses, so the two cannot diverge.
-    expect(paddle.classList.contains("landing-paddle")).toBe(true);
-
-    const crest = paddle.querySelector(".landing-paddle-crest") as HTMLImageElement;
-    expect(crest).not.toBeNull();
-    expect(crest.getAttribute("src")).toBe("/brand/cata-club-crest-256.png");
-    // Decorative: the hero already names the club in text above it.
-    expect(crest.getAttribute("alt")).toBe("");
-  });
-
-  it("ships the paddle in the server markup, so the still composition needs no JS", (): void => {
-    const html = renderToStaticMarkup(<LandingPage />);
-
-    expect(html).toContain("data-serve-paddle");
-    expect(html).toContain("data-serve-ball");
-    expect(html).toContain("data-frame-ball");
-    expect(html).toContain("landing-paddle-crest");
-    expect(motionMount).not.toHaveBeenCalled();
   });
 
   it("states the founding year in the hero note as 'Desde 2013', not 'Fundado en 2013'", (): void => {
@@ -719,6 +667,23 @@ describe("LandingPage", (): void => {
       fireEvent.click(next);
 
       expect(slides[1]).toHaveAttribute("data-active", "true");
+    });
+
+    it("counts the slide position next to the arrows, and updates it on a press", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+      const counter = hero.querySelector(".landing-hero-counter") as HTMLElement;
+
+      expect(counter).toHaveAttribute("aria-live", "polite");
+      expect(counter).toHaveTextContent(`01 / ${String(HERO_PHOTOS.length).padStart(2, "0")}`);
+      expect(counter).toHaveTextContent(`Foto 1 de ${HERO_PHOTOS.length}`);
+
+      fireEvent.click(next);
+
+      expect(counter).toHaveTextContent(`02 / ${String(HERO_PHOTOS.length).padStart(2, "0")}`);
+      expect(counter).toHaveTextContent(`Foto 2 de ${HERO_PHOTOS.length}`);
     });
   });
 
@@ -991,7 +956,7 @@ describe("LandingPage", (): void => {
 
     const prioritized = Array.from(document.querySelectorAll("img[data-priority='true']"));
     expect(prioritized).toHaveLength(1);
-    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-community.jpg");
+    expect(prioritized[0]).toHaveAttribute("src", HERO_PHOTOS[0].src);
   });
 
   /**
@@ -1011,49 +976,50 @@ describe("LandingPage", (): void => {
   /**
    * The icon chips are gone on purpose. A 40x40 tinted square holding a generic
    * glyph is the visual signature of a bought template, and it was repeated six
-   * times. Rank is now carried by an index, scale, and a single rule.
+   * times. Rank is now carried by an index and a scale jump alone.
    */
-  it("ranks the editorial blocks by index and typography rather than icon chips", (): void => {
+  it("ranks the mission/vision pillars by index and typography rather than icon chips", (): void => {
     render(<LandingPage />);
 
-    const blocks = Array.from(document.querySelectorAll(".landing-editorial-item"));
+    const blocks = Array.from(document.querySelectorAll(".landing-pillar"));
     expect(blocks).toHaveLength(2);
-    expect(document.querySelectorAll(".landing-editorial-item svg")).toHaveLength(0);
+    expect(document.querySelectorAll(".landing-pillar svg")).toHaveLength(0);
     expect(blocks.map((block): string | null => block.querySelector(".landing-index")?.textContent ?? null))
       .toEqual(["01", "02"]);
   });
 
-  it("numbers every value instead of giving it an icon", (): void => {
+  it("numbers each value on a black tile instead of giving it an icon", (): void => {
     render(<LandingPage />);
 
-    const values = Array.from(document.querySelectorAll(".landing-value"));
-    expect(values).toHaveLength(4);
-    expect(document.querySelectorAll(".landing-value svg")).toHaveLength(0);
-    expect(values.map((value): string | null => value.querySelector(".landing-index")?.textContent ?? null))
-      .toEqual(["01", "02", "03", "04"]);
+    const tiles = Array.from(document.querySelectorAll(".landing-tablero-tile"));
+    expect(tiles).toHaveLength(4);
+    expect(document.querySelectorAll(".landing-tablero-tile svg")).toHaveLength(0);
+    expect(tiles.map((tile): string | null => tile.textContent)).toEqual(["01", "02", "03", "04"]);
+    tiles.forEach((tile): void => {
+      expect(tile).toHaveAttribute("aria-hidden", "true");
+    });
   });
 
   it("keeps each value's heading and description together in its own article", (): void => {
     render(<LandingPage />);
 
-    const values = Array.from(document.querySelectorAll(".landing-value"));
+    const values = Array.from(document.querySelectorAll(".landing-tablero-item"));
+    expect(values).toHaveLength(4);
     values.forEach((value): void => {
       expect(value.querySelector("h3")?.textContent).toBeTruthy();
       expect(value.querySelector("p")?.textContent).toBeTruthy();
+      expect(value.hasAttribute("data-reveal")).toBe(true);
     });
   });
 
-  it("renders the rally guide, ball, impact, counter, and four motion hooks", (): void => {
-        render(<LandingPage />);
-        const rally = document.querySelector("[data-rally]");
-        expect(rally).toHaveAttribute("aria-hidden", "true");
-        expect(rally?.querySelector("[data-rally-guide]")).toBeInTheDocument();
-        expect(rally?.querySelector("[data-rally-ball]")).toBeInTheDocument();
-        expect(rally?.querySelector("[data-rally-impact]")).toBeInTheDocument();
-        expect(rally?.querySelector("[data-rally-counter]")).toHaveTextContent("0");
-        expect(document.querySelectorAll("[data-value]")).toHaveLength(4);
-        expect(document.querySelectorAll(".landing-value[data-reveal]")).toHaveLength(0);
-      });
+  it("renders the values tablero without any rally, ball, or dimming hooks", (): void => {
+    render(<LandingPage />);
+
+    expect(document.querySelector("[data-rally]")).toBeNull();
+    expect(document.querySelectorAll("[data-value]")).toHaveLength(0);
+    const cue = document.querySelector(".landing-tablero-cue");
+    expect(cue).toHaveAttribute("href", "#logros");
+  });
 
       it("gives every footer service link its own destination", (): void => {
     render(<LandingPage />);

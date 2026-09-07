@@ -32,20 +32,33 @@ devuelve cuerpo). El HEAD existe porque el plan gratuito de UptimeRobot sondea
 con ese método y elegirlo es un control pago: sin un handler propio la sonda
 recibía `405` (issue #862), porque FastAPI no deriva HEAD del GET.
 
-### 2. Heartbeat del backup (¿el backup sigue vivo?)
+### 2. Heartbeat de backup, Celery y memoria (¿siguen vivos?)
 
 Un monitor tipo *heartbeat* (dead-man's-switch) con período de 24 h y tolerancia
 suficiente para cubrir la corrida de las 07:00.
 
-El cron de las 07:00 corre `check-backup-freshness.sh` y **solo si sale 0**
-encadena `notify-heartbeat.sh`, que pingea la URL del heartbeat. El
-encadenamiento es `&&`, nunca `;`: con el dump ausente (exit 1) o vencido
-(exit 2) el ping NO sale, y UptimeRobot alerta por la ausencia.
+El cron de las 07:00 corre `check-backup-freshness.sh` y, **solo si sale 0**,
+encadena `check-celery-health.sh` (issue #1061) y `check-memory.sh` (issue
+#1071) y, **solo si los tres salen 0**, `notify-heartbeat.sh`, que pingea la
+URL del heartbeat. El encadenamiento es `&&`, nunca `;`: con el dump ausente
+(exit 1) o vencido (exit 2), con celery-worker/celery-beat `unhealthy` o con
+la memoria al límite, el ping NO sale, y UptimeRobot alerta por la ausencia.
+
+`check-celery-health.sh` reutiliza el mismo chequeo que ya gatea un
+deploy/rollback (`check_celery` en `scripts/deploy/lib/post-checks.sh`): los
+healthchecks de `docker-compose.yml` para celery-worker (`inspect ping -d`) y
+celery-beat (freshness de `celerybeat-schedule`, refrescada cada 30s). El
+sidecar `autoheal` (issue #1091) reinicia un contenedor que Compose deja
+`unhealthy` para siempre fuera de Swarm, pero eso es reparación local: sin
+este cron, nada externo se enteraba si igual quedaba enfermo entre
+despliegues.
 
 Que la alerta sea la AUSENCIA del ping es lo que hace que esto sirva. Cubre a la
-vez el backup vencido, el cron desinstalado, el disco lleno y el host apagado —
-ninguno de los cuales puede reportarse a sí mismo. Un chequeo que tuviera que
-enviar su propia alerta se callaría en todos esos casos.
+vez el backup vencido, Celery atascado, la memoria al límite, el cron
+desinstalado, el disco lleno y el host apagado — ninguno de los cuales puede
+reportarse a sí mismo. Un
+chequeo que tuviera que enviar su propia alerta se callaría en todos esos
+casos.
 
 La URL lleva el token en el path, así que es un secreto: no va al crontab (que
 `crontab -l` lista sin privilegios) ni a ningún log. `notify-heartbeat.sh` la
@@ -154,13 +167,17 @@ solo.
 
 - `scripts/ops/check-backup-freshness.sh --max-age-hours 26` sale `0` si existe
   un dump reciente, `1` si no existe y `2` si supera el RPO.
+- `scripts/ops/check-celery-health.sh` sale `0` si celery-worker y celery-beat
+  están `healthy` y el broker responde al ping de control; distinto de 0 si
+  cualquiera de los dos está `unhealthy`, ausente o no responde (issue #1061).
 - `scripts/ops/check-memory.sh` sale `0` si todos los contenedores en
   ejecución están por debajo del 90% de su `mem_limit` y la memoria disponible
   del host (`MemAvailable` de `/proc/meminfo`) está en o sobre el umbral
   (256 MiB por default, `--min-available-mb` para cambiarlo). Se encadena con
   `&&` antes de `notify-heartbeat.sh` en el cron de las 07:00, igual que
-  `check-backup-freshness.sh`: un contenedor cerca de su límite o un host sin
-  margen corta el ping, y la ausencia del ping es la alerta.
+  `check-backup-freshness.sh` y `check-celery-health.sh`: un contenedor cerca
+  de su límite o un host sin margen corta el ping, y la ausencia del ping es
+  la alerta.
 - `scripts/ops/notify-heartbeat.sh` pingea el heartbeat externo. Sale distinto
   de 0 si el archivo de la URL falta, está vacío o el ping no sale.
 - `scripts/ops/preflight-production.sh` valida la configuración de Compose y la

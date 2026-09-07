@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe("PATCH /api/ranking/notificaciones/:id/leer", () => {
   it("returns 401 when the access-token cookie is missing", async () => {
-    const response = await PATCH(patchRequest(""), { params: { id: "1" } });
+    const response = await PATCH(patchRequest(""), { params: Promise.resolve({ id: "1" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -51,7 +51,7 @@ describe("PATCH /api/ranking/notificaciones/:id/leer", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(notificacionLeida));
 
     const response = await PATCH(patchRequest(`${ACCESS_TOKEN_COOKIE}=abc123`), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -72,7 +72,7 @@ describe("PATCH /api/ranking/notificaciones/:id/leer", () => {
     );
 
     const response = await PATCH(patchRequest(`${ACCESS_TOKEN_COOKIE}=abc123`), {
-      params: { id: "999" },
+      params: Promise.resolve({ id: "999" }),
     });
 
     expect(response.status).toBe(403);
@@ -82,7 +82,7 @@ describe("PATCH /api/ranking/notificaciones/:id/leer", () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
 
     const response = await PATCH(patchRequest(`${ACCESS_TOKEN_COOKIE}=abc123`), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(response.status).toBe(503);

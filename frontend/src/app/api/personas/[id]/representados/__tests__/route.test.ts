@@ -72,14 +72,14 @@ afterEach(() => {
 
 describe("POST /api/personas/[id]/representados", () => {
   it("returns 400 when the persona id is not a number", async () => {
-    const response = await POST(postRequest("abc", validPayload), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", validPayload), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await POST(postRequest("5", validPayload), { params: { id: "5" } });
+    const response = await POST(postRequest("5", validPayload), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -91,7 +91,7 @@ describe("POST /api/personas/[id]/representados", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", validPayload, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -127,7 +127,7 @@ describe("POST /api/personas/[id]/representados", () => {
     const access = makeJwt(3600);
     await POST(
       postRequest("5", payloadWithoutFicha, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(global.fetch).toHaveBeenNthCalledWith(
@@ -153,7 +153,7 @@ describe("POST /api/personas/[id]/representados", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", validPayload, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(403);
@@ -165,7 +165,7 @@ describe("POST /api/personas/[id]/representados", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", validPayload, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(422);
@@ -187,7 +187,7 @@ describe("POST /api/personas/[id]/representados", () => {
     const access = makeJwt(3600);
     await POST(
       postRequest("5", payloadWithCredentials, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(global.fetch).toHaveBeenNthCalledWith(
@@ -221,7 +221,7 @@ describe("POST /api/personas/[id]/representados", () => {
     const access = makeJwt(3600);
     await POST(
       postRequest("5", validPayload, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     const [, options] = vi.mocked(global.fetch).mock.calls[0];
@@ -239,7 +239,7 @@ describe("POST /api/personas/[id]/representados", () => {
       body: "not-json",
     });
 
-    const response = await POST(request, { params: { id: "5" } });
+    const response = await POST(request, { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
