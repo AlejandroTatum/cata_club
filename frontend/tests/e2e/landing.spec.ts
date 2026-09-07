@@ -383,6 +383,14 @@ test.describe("Landing page", () => {
    * "reached" off screen because nothing moves as the page scrolls.
    */
   test.describe("values tablero", () => {
+    /** Every `.landing-tablero-item h3`'s top, rounded, in DOM order. */
+    const readTitleTops = (page: import("@playwright/test").Page): Promise<number[]> =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>(".landing-tablero-item h3")).map(
+          (h3) => Math.round(h3.getBoundingClientRect().top),
+        ),
+      );
+
     test("renders four tiles and four items with every title sharing the same top, on desktop", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
@@ -391,12 +399,23 @@ test.describe("Landing page", () => {
       await expect(page.locator(".landing-tablero-tile")).toHaveCount(4);
       await expect(page.locator(".landing-tablero-item")).toHaveCount(4);
 
-      const tops = await page.evaluate(() =>
-        Array.from(document.querySelectorAll<HTMLElement>(".landing-tablero-item h3")).map(
-          (h3) => Math.round(h3.getBoundingClientRect().top),
-        ),
-      );
-      expect(new Set(tops).size, `every title shares one top edge, got ${JSON.stringify(tops)}`).toBe(1);
+      // `LandingMotion.tsx` staggers each `.landing-tablero-item` in with
+      // `gsap.from([data-reveal], { y: 40, opacity: 0, stagger: 0.1, ... })`;
+      // the LAST item finishes last, so its opacity settling at 1 is the
+      // explicit signal the whole group has stopped moving — the poll below
+      // is not the only guard against measuring mid-animation.
+      await expect(page.locator(".landing-tablero-item").last()).toHaveCSS("opacity", "1");
+
+      // Grid alignment is a layout fact once settled, not a race — but a
+      // slower CI runner can still catch the tail of the stagger, so poll
+      // instead of reading once. The unique, sorted tops are the message
+      // Playwright prints on timeout, e.g. "[501,517,532]".
+      await expect
+        .poll(
+          async () => JSON.stringify([...new Set(await readTitleTops(page))].sort((a, b) => a - b)),
+          { timeout: 10_000, message: "every title shares one top edge once the reveal settles" },
+        )
+        .toMatch(/^\[\d+\]$/);
 
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -409,14 +428,17 @@ test.describe("Landing page", () => {
       await page.goto("/");
       await page.locator(".landing-tablero").scrollIntoViewIfNeeded();
 
-      const tops = await page.evaluate(() =>
-        Array.from(document.querySelectorAll<HTMLElement>(".landing-tablero-item h3")).map(
-          (h3) => Math.round(h3.getBoundingClientRect().top),
-        ),
-      );
-      expect(tops[0], "first pair shares a top edge").toBe(tops[1]);
-      expect(tops[2], "second pair shares a top edge").toBe(tops[3]);
-      expect(tops[0], "the two pairs sit at different heights").not.toBe(tops[2]);
+      await expect(page.locator(".landing-tablero-item").last()).toHaveCSS("opacity", "1");
+
+      await expect
+        .poll(async () => JSON.stringify(await readTitleTops(page)), {
+          timeout: 10_000,
+          message: "each pair shares a top edge once the reveal settles",
+        })
+        .toMatch(/^\[(\d+),\1,(\d+),\2\]$/);
+
+      const settledTops = await readTitleTops(page);
+      expect(settledTops[0], "the two pairs sit at different heights").not.toBe(settledTops[2]);
 
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
