@@ -388,7 +388,7 @@ case "$cmd" in
         "       único que avisa si se cae el host entero y el cron con él." \
         "       Creá el archivo (la URL NO va en el crontab, que cualquiera" \
         "       lista con 'crontab -l') y repetí:" \
-        "         sudo install -d -m 700 \$(dirname ${HEARTBEAT_URL_FILE})" \
+        "         sudo install -d -m 750 \$(dirname ${HEARTBEAT_URL_FILE})" \
         "         printf '%s\\n' 'https://...' | sudo tee ${HEARTBEAT_URL_FILE}" \
         "         sudo chmod 640 ${HEARTBEAT_URL_FILE}" \
         "       Ver docs/operations/provisioning.md.")"

@@ -21,6 +21,7 @@ Todo es hermético: `aws` es un doble en el PATH que hace round-trip real sobre
 el cuerpo que recibe. Ni red, ni credenciales reales, ni bucket real.
 """
 
+import base64
 import hashlib
 import os
 import shlex
@@ -125,6 +126,11 @@ def run_script(script: str, *args: str, env: dict[str, str] | None = None):
 requiere_age = pytest.mark.skipif(
     shutil.which("age") is None or shutil.which("age-keygen") is None,
     reason="requiere `age` y `age-keygen` en PATH (CI los instala)",
+)
+
+requiere_no_root = pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="corriendo como root: chmod 000 no bloquea la lectura del archivo",
 )
 
 
@@ -465,6 +471,79 @@ def test_check_config_con_la_replica_desactivada_sale_cero(tmp_path):
     assert resultado.returncode == 0, resultado.stderr
 
 
+@requiere_no_root
+def test_check_config_falla_si_el_archivo_de_configuracion_existe_pero_no_se_puede_leer(
+    tmp_path,
+):
+    """Archivo ilegible != archivo ausente.
+
+    Antes, un `/etc/cataclub` en `700` (el directorio no se puede atravesar)
+    hacía que `leer_config` devolviera vacío en silencio y la réplica quedara
+    "desactivada" sin ningún error, con `--check-config` en verde. El defecto
+    real es de permisos, no de configuración ausente: tiene que fallar fuerte
+    y nombrar el archivo.
+    """
+    config = tmp_path / "b2.env"
+    config.write_text("BACKUP_B2_ENABLED=1\n")
+    config.chmod(0o000)
+    try:
+        resultado = run_script(
+            "scripts/backup/upload-b2.sh",
+            "--check-config",
+            env=_entorno_b2(tmp_path, BACKUP_B2_CONFIG_FILE=str(config)),
+        )
+    finally:
+        config.chmod(0o600)
+
+    assert resultado.returncode == 2, resultado.stdout
+    assert str(config) in resultado.stderr
+    assert "750" in resultado.stderr
+    assert "640" in resultado.stderr
+    assert _argv(tmp_path) == ""
+
+
+@requiere_no_root
+def test_la_subida_falla_si_el_archivo_de_configuracion_existe_pero_no_se_puede_leer(
+    tmp_path,
+):
+    artefacto = _artefacto_cifrado(tmp_path)
+    config = tmp_path / "b2.env"
+    config.write_text("BACKUP_B2_ENABLED=1\n")
+    config.chmod(0o000)
+    try:
+        resultado = run_script(
+            "scripts/backup/upload-b2.sh",
+            str(artefacto),
+            env=_entorno_b2(tmp_path, BACKUP_B2_CONFIG_FILE=str(config)),
+        )
+    finally:
+        config.chmod(0o600)
+
+    assert resultado.returncode == 2, resultado.stdout
+    assert str(config) in resultado.stderr
+    assert _argv(tmp_path) == ""
+
+
+def test_check_config_con_el_archivo_ausente_sigue_desactivando_la_replica_sin_error(
+    tmp_path,
+):
+    """El comportamiento de "archivo ausente" no cambia: solo se endurece el
+
+    caso de archivo presente pero ilegible.
+    """
+    resultado = run_script(
+        "scripts/backup/upload-b2.sh",
+        "--check-config",
+        env=_entorno_b2(
+            tmp_path,
+            BACKUP_B2_ENABLED="0",
+            BACKUP_B2_CONFIG_FILE=str(tmp_path / "no-existe" / "b2.env"),
+        ),
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+
+
 def test_rechaza_un_argumento_desconocido(tmp_path):
     resultado = run_script(
         "scripts/backup/upload-b2.sh", "--subir-todo", env=_entorno_b2(tmp_path)
@@ -507,9 +586,31 @@ def test_sube_el_artefacto_y_lo_verifica_contra_el_objeto_remoto(tmp_path):
     assert "--bucket cataclub-backups-test" in argv
     assert clave in argv
     assert f"sha256={hashlib.sha256(contenido).hexdigest()}" in argv
+    md5_b64 = base64.b64encode(hashlib.md5(contenido).digest()).decode()
+    assert f"--content-md5 {md5_b64}" in argv
 
     # La retención local no cambia: replicar no borra nada del disco.
     assert artefacto.read_bytes() == contenido
+
+
+def test_el_content_md5_va_en_base64_para_buckets_con_object_lock(tmp_path):
+    """S3 y B2 exigen `Content-MD5` en todo `PutObject` a un bucket con Object
+
+    Lock. Sin este encabezado B2 corta la conexión antes de responder; la CLI
+    no lo agrega sola porque el script fija los checksums en `when_required`.
+    El valor va en base64, no en hexadecimal (así lo exige la cabecera HTTP
+    `Content-MD5`, RFC 1864).
+    """
+    contenido = b"age-encryption.org/v1\notro-contenido-distinto"
+    artefacto = _artefacto_cifrado(tmp_path, contenido)
+
+    resultado = run_script(
+        "scripts/backup/upload-b2.sh", str(artefacto), env=_entorno_b2(tmp_path)
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    esperado = base64.b64encode(hashlib.md5(contenido).digest()).decode()
+    assert f"--content-md5 {esperado}" in _argv(tmp_path)
 
 
 def test_publica_un_recibo_atomico_solo_despues_de_verificar_la_replica(tmp_path):

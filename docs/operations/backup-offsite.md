@@ -34,8 +34,13 @@ Es el mismo reparto que `backup-recipients.txt`.
 
 ```bash
 ssh <host>
-sudo apt-get install -y awscli
-sudo install -d -m 700 /etc/cataclub
+# El paquete `awscli` no tiene candidato de instalación en Ubuntu/Debian
+# recientes (E: Package 'awscli' has no installation candidate); se usa el
+# instalador oficial de AWS CLI v2.
+curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+sudo /tmp/aws/install
+sudo install -d -m 750 /etc/cataclub
 sudo install -o root -g "$(id -gn)" -m 640 /dev/null /etc/cataclub/b2-backup.env
 sudo tee /etc/cataclub/b2-backup.env >/dev/null <<'EOF'
 BACKUP_B2_ENABLED=1
@@ -48,8 +53,13 @@ BACKUP_B2_APPLICATION_KEY=<application-key>
 EOF
 ```
 
-- Permisos `640` y dueño root, igual que `heartbeat-url.txt`: el usuario que
-  corre el cron necesita leerlo; nadie más en el host tiene por qué.
+- El directorio es `750`, no `700`: el usuario del cron necesita ATRAVESARLO
+  para llegar al archivo. Con `700` el grupo no puede entrar aunque el archivo
+  sea `640`, `leer_config` lo ve como ilegible y la réplica queda "desactivada"
+  en silencio (sin este cambio, `upload-b2.sh` ahora falla fuerte en ese caso).
+- Permisos `640` y dueño root en el archivo, igual que `heartbeat-url.txt`: el
+  usuario que corre el cron necesita leerlo; nadie más en el host tiene por
+  qué.
 - El endpoint y la región salen de la pantalla del bucket en B2. La región es
   la que aparece dentro del endpoint (`s3.<region>.backblazeb2.com`).
 - El archivo se **parsea** `CLAVE=valor`; no se hace `source`. Una línea de más
