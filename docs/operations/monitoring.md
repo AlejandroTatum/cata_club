@@ -84,10 +84,61 @@ Lo que queda fuera de este repositorio: la retención real
 host, y un destino centralizado fuera del host (por ejemplo un agregador
 externo) queda fuera de alcance por decisión del dueño del proyecto.
 
+## Memoria: medición y disparador de resize (issue #1071)
+
+El único host tiene 1.9 GiB de RAM utilizables y **no tiene swap**: cuando la
+memoria se agota, el que actúa es el OOM killer del kernel, no `mem_limit` de
+Compose. `mem_limit` solo decide QUÉ contenedor cae primero dentro de su
+propio cgroup; no reserva nada y no evita que el host entero se quede sin
+memoria si la suma real de todos los servicios crece.
+
+Medición tomada en el host de producción, de noche y sin carga
+(2026-09-07 ~04:00 UTC):
+
+```
+               total        used        free      shared  buff/cache   available
+Mem:           1.9Gi       1.1Gi       157Mi        25Mi       930Mi       870Mi
+Swap:             0B          0B          0B
+
+NAME                        MEM USAGE / LIMIT   MEM %
+cata-club-caddy-1           16.23MiB / 96MiB    16.91%
+cata-club-celery-worker-1   214MiB / 320MiB     66.87%
+cata-club-frontend-1        97.28MiB / 256MiB   38.00%
+cata-club-celery-beat-1     124.6MiB / 160MiB   77.86%
+cata-club-backend-1         186.3MiB / 320MiB   58.23%
+cata-club-redis-1           4.809MiB / 64MiB    7.51%
+cata-club-db-1              55.89MiB / 320MiB   17.47%
+```
+
+`celery-beat` era el más ajustado del stack (78% en reposo, sin ningún pico de
+tarea programada todavía) por eso subió su `mem_limit` de 160m a 224m (ver
+`docker-compose.prod.yml`). La suma de todos los `mem_limit` de producción
+pasó de 1568m a 1632m, todavía por debajo de los 2048m del droplet.
+
+**Decisión:** se mantiene el droplet de 2 GiB por ahora. El disparador para
+pasar al plan de 4 GiB es cualquiera de estos dos, el que ocurra primero:
+
+- `check-memory.sh` falla (exit distinto de 0, y por lo tanto corta el
+  heartbeat de las 07:00) durante **dos días consecutivos**.
+- Un servicio queda OOM-killed **una sola vez**:
+  `docker inspect --format '{{.State.OOMKilled}}' <contenedor>` devuelve
+  `true`.
+
+No hay una tercera condición: un solo fallo aislado de `check-memory.sh` (por
+ejemplo, un pico puntual durante un despliegue) no dispara el resize por sí
+solo.
+
 ## Señales disponibles en el host
 
 - `scripts/ops/check-backup-freshness.sh --max-age-hours 26` sale `0` si existe
   un dump reciente, `1` si no existe y `2` si supera el RPO.
+- `scripts/ops/check-memory.sh` sale `0` si todos los contenedores en
+  ejecución están por debajo del 90% de su `mem_limit` y la memoria disponible
+  del host (`MemAvailable` de `/proc/meminfo`) está en o sobre el umbral
+  (256 MiB por default, `--min-available-mb` para cambiarlo). Se encadena con
+  `&&` antes de `notify-heartbeat.sh` en el cron de las 07:00, igual que
+  `check-backup-freshness.sh`: un contenedor cerca de su límite o un host sin
+  margen corta el ping, y la ausencia del ping es la alerta.
 - `scripts/ops/notify-heartbeat.sh` pingea el heartbeat externo. Sale distinto
   de 0 si el archivo de la URL falta, está vacío o el ping no sale.
 - `scripts/ops/preflight-production.sh` valida la configuración de Compose y la
