@@ -43,6 +43,16 @@ considerarse un release válido. Ese registro lleva **exactamente una**
 json`. `rollback-release.sh` también actualiza `.env` al SHA registrado que
 restaura.
 
+**Visibilidad de las imágenes.** Las imágenes de GHCR son públicas por decisión
+registrada el 2026-09-07 (#1073), no por omisión. El repositorio de código ya es
+público y las imágenes solo contienen su build: las variables `NEXT_PUBLIC_*`
+que lleva el frontend son públicas por definición y ningún secreto entra en la
+imagen (viajan por `.env` en el host). Hacerlas privadas obligaría a un
+`docker login` con token de solo lectura en el host y a un preflight que aborte
+si falta, más piezas que fallan solas de madrugada por una ganancia nula. La
+decisión se revisa si el repositorio pasa a privado o si alguna imagen empieza
+a incluir material que no esté ya en el repositorio.
+
 ### Remediar un checkout o `.env` obsoleto
 
 Si el preflight falla por desalineación, detente: no ejecutes `pull/up` manual ni
