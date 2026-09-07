@@ -33,7 +33,7 @@ import {
 } from "@/lib/server/backend-client";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 function parsePersonaId(id: string): number | null {
@@ -67,7 +67,7 @@ async function respondFromProxy(
 }
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = parsePersonaId(context.params.id);
+  const personaId = parsePersonaId((await context.params).id);
   if (personaId === null) return invalidIdResponse();
 
   const result = await backendFetchAuthed(request, `/personas/${personaId}/beneficio`, {
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = parsePersonaId(context.params.id);
+  const personaId = parsePersonaId((await context.params).id);
   if (personaId === null) return invalidIdResponse();
 
   let descuentoId: number;
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = parsePersonaId(context.params.id);
+  const personaId = parsePersonaId((await context.params).id);
   if (personaId === null) return invalidIdResponse();
 
   const result = await backendFetchAuthed(request, `/personas/${personaId}/beneficio`, {

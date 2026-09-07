@@ -54,7 +54,7 @@ afterEach(() => {
 
 describe("PATCH /api/attendance/records/[id]/correct — input validation", () => {
   it("returns 400 for a non-numeric id without calling the backend", async () => {
-    const response = await PATCH(patchRequest(validBody), { params: { id: "abc" } });
+    const response = await PATCH(patchRequest(validBody), { params: Promise.resolve({ id: "abc" }) });
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -65,25 +65,25 @@ describe("PATCH /api/attendance/records/[id]/correct — input validation", () =
       body: "not json {",
       headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${validAccess}` },
     });
-    const response = await PATCH(request, { params: { id: "501" } });
+    const response = await PATCH(request, { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 for an unknown estado", async () => {
-    const response = await PATCH(patchRequest({ ...validBody, estado: "bogus" }), { params: { id: "501" } });
+    const response = await PATCH(patchRequest({ ...validBody, estado: "bogus" }), { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 when motivo is empty", async () => {
-    const response = await PATCH(patchRequest({ estado: "present", motivo: "   " }), { params: { id: "501" } });
+    const response = await PATCH(patchRequest({ estado: "present", motivo: "   " }), { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await PATCH(patchRequest(validBody, null), { params: { id: "501" } });
+    const response = await PATCH(patchRequest(validBody, null), { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -116,7 +116,7 @@ describe("PATCH /api/attendance/records/[id]/correct — success", () => {
       }),
     );
 
-    const response = await PATCH(patchRequest(validBody), { params: { id: "501" } });
+    const response = await PATCH(patchRequest(validBody), { params: Promise.resolve({ id: "501" }) });
     const body = await response.json();
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -144,7 +144,7 @@ describe("PATCH /api/attendance/records/[id]/correct — error propagation", () 
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({ detail: "No se puede corregir una asistencia de hace más de 30 días." }, 400),
     );
-    const response = await PATCH(patchRequest(validBody), { params: { id: "501" } });
+    const response = await PATCH(patchRequest(validBody), { params: Promise.resolve({ id: "501" }) });
     const body = await response.json();
     expect(response.status).toBe(400);
     expect(body.message).toContain("30 días");
@@ -152,7 +152,7 @@ describe("PATCH /api/attendance/records/[id]/correct — error propagation", () 
 
   it("returns 404 when the backend reports the row doesn't exist", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Asistencia no encontrada" }, 404));
-    const response = await PATCH(patchRequest(validBody), { params: { id: "999" } });
+    const response = await PATCH(patchRequest(validBody), { params: Promise.resolve({ id: "999" }) });
     expect(response.status).toBe(404);
   });
 });

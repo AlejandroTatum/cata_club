@@ -75,10 +75,8 @@ function parseUpdateBody(value: unknown): ParsedUpdateBody | { error: string } {
   return { error: "Acción inválida. Use 'approved' o 'rejected'." };
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   let rawBody: unknown;
   try {
     rawBody = await request.json();
@@ -136,10 +134,8 @@ export async function PUT(
  * caching: this exists specifically to be trusted over whatever the caller's
  * last optimistic guess was.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const pagoResult = await backendFetchAuthed(request, `/membresias/pagos/${params.id}`);
   if (!pagoResult.ok) {
     return NextResponse.json({ message: "No se pudo consultar el pago." }, { status: pagoResult.status });

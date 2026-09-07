@@ -49,13 +49,13 @@ afterEach(() => {
 
 describe("GET /api/attendance/records/[id]/corrections", () => {
   it("returns 400 for a non-numeric id without calling the backend", async () => {
-    const response = await GET(getRequest(), { params: { id: "abc" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "abc" }) });
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await GET(getRequest(null), { params: { id: "501" } });
+    const response = await GET(getRequest(null), { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe("GET /api/attendance/records/[id]/corrections", () => {
       ]),
     );
 
-    const response = await GET(getRequest(), { params: { id: "501" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "501" }) });
     const body = await response.json();
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -101,7 +101,7 @@ describe("GET /api/attendance/records/[id]/corrections", () => {
 
   it("returns 403 when the backend refuses a non-admin", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Permisos insuficientes" }, 403));
-    const response = await GET(getRequest(), { params: { id: "501" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "501" }) });
     expect(response.status).toBe(403);
   });
 });

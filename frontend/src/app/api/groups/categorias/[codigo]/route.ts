@@ -28,10 +28,8 @@ interface ActualizarCategoriaBody {
   edades?: unknown;
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { codigo: string } },
-): Promise<NextResponse> {
+export async function PUT(request: NextRequest, props: { params: Promise<{ codigo: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const accessToken = extractAccessToken(request);
   if (!accessToken) return unauthorizedResponse();
 
@@ -67,10 +65,8 @@ export async function PUT(
   });
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { codigo: string } },
-): Promise<NextResponse> {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ codigo: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const accessToken = extractAccessToken(request);
   if (!accessToken) return unauthorizedResponse();
 

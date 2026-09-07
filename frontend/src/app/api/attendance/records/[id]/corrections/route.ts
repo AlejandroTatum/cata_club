@@ -15,7 +15,7 @@ import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backen
 import { ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND, type BackendEstadoAsistencia } from "@/lib/server/attendance-adapter";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 interface BackendCorreccionEntry {
@@ -29,7 +29,8 @@ interface BackendCorreccionEntry {
   estadoJustificativoAnterior?: boolean | null;
 }
 
-export async function GET(request: NextRequest, { params }: RouteContext): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: RouteContext): Promise<NextResponse> {
+  const params = await props.params;
   const asistenciaId = Number(params.id);
   if (!Number.isInteger(asistenciaId) || asistenciaId <= 0) {
     return NextResponse.json({ message: "El id de asistencia no es válido." }, { status: 400 });

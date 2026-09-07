@@ -45,6 +45,33 @@ export function badRequestResponse(message: string): NextResponse {
   return NextResponse.json({ message }, { status: 400 });
 }
 
+/**
+ * Parse a route param as a numeric id, or return the 400 to send back
+ * immediately when it isn't one. Centralizes the `Number(...)` +
+ * `Number.isNaN` check that most `[id]` route handlers repeat — each call
+ * site only names the entity for the error message (e.g. "persona",
+ * "membresía").
+ *
+ * Usage: `const id = parseNumericIdOrBadRequest((await context.params).id, "persona");
+ * if (id instanceof NextResponse) return id;`
+ *
+ * `requireInteger` opts into `Number.isInteger` instead of `Number.isNaN` —
+ * a few call sites (pago ids) already rejected non-integer values like
+ * "5.5", so the default `Number.isNaN` check would silently loosen them.
+ */
+export function parseNumericIdOrBadRequest(
+  rawId: string,
+  entityLabel: string,
+  options?: { requireInteger?: boolean },
+): number | NextResponse {
+  const id = Number(rawId);
+  const invalid = options?.requireInteger ? !Number.isInteger(id) : Number.isNaN(id);
+  if (invalid) {
+    return badRequestResponse(`El id de ${entityLabel} no es válido.`);
+  }
+  return id;
+}
+
 /** Return a 504 `NextResponse` for backend timeout. */
 export function timeoutResponse(): NextResponse {
   return NextResponse.json(

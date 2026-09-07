@@ -42,7 +42,7 @@ describe("GET /api/membresias/[id]/deuda", () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse(deuda));
 
-    const response = await GET(getRequest("9", `${ACCESS_TOKEN_COOKIE}=token`), { params: { id: "9" } });
+    const response = await GET(getRequest("9", `${ACCESS_TOKEN_COOKIE}=token`), { params: Promise.resolve({ id: "9" }) });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(deuda);
@@ -51,7 +51,7 @@ describe("GET /api/membresias/[id]/deuda", () => {
   });
 
   it("rejects a non-numeric id with 400 without calling the backend", async () => {
-    const response = await GET(getRequest("abc"), { params: { id: "abc" } });
+    const response = await GET(getRequest("abc"), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
@@ -64,7 +64,7 @@ describe("GET /api/membresias/[id]/deuda", () => {
 
     const response = await GET(
       getRequest("9", `${ACCESS_TOKEN_COOKIE}=token`),
-      { params: { id: "9" } },
+      { params: Promise.resolve({ id: "9" }) },
     );
 
     expect(response.status).toBe(403);

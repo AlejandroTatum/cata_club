@@ -59,14 +59,14 @@ afterEach(() => {
 
 describe("POST /api/personas/[id]/vincular-representado", () => {
   it("returns 400 when the persona id is not a number", async () => {
-    const response = await POST(postRequest("abc", { cedula: "1723456789" }), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", { cedula: "1723456789" }), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await POST(postRequest("5", { cedula: "1723456789" }), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { cedula: "1723456789" }), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { cedula: 123 }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(400);
@@ -91,7 +91,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
       body: "not-json",
     });
 
-    const response = await POST(request, { params: { id: "5" } });
+    const response = await POST(request, { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { cedula: "1723456789" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -127,7 +127,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { cedula: "1723456789" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(403);
@@ -146,7 +146,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { cedula: "1799999999" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -160,7 +160,7 @@ describe("POST /api/personas/[id]/vincular-representado", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { cedula: "1799999999" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(429);

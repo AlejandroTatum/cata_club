@@ -10,16 +10,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const membresiaId = Number(context.params.id);
-  if (Number.isNaN(membresiaId)) {
-    return NextResponse.json({ message: "El id de membresía no es válido." }, { status: 400 });
-  }
+  const membresiaId = parseNumericIdOrBadRequest((await context.params).id, "membresía");
+  if (membresiaId instanceof NextResponse) return membresiaId;
 
   let body: unknown;
   try {
