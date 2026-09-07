@@ -128,6 +128,11 @@ requiere_age = pytest.mark.skipif(
     reason="requiere `age` y `age-keygen` en PATH (CI los instala)",
 )
 
+requiere_no_root = pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="corriendo como root: chmod 000 no bloquea la lectura del archivo",
+)
+
 
 # --- Dobles ------------------------------------------------------------------
 
@@ -461,6 +466,79 @@ def test_check_config_con_la_replica_desactivada_sale_cero(tmp_path):
         "scripts/backup/upload-b2.sh",
         "--check-config",
         env=_entorno_b2(tmp_path, BACKUP_B2_ENABLED="0"),
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+
+
+@requiere_no_root
+def test_check_config_falla_si_el_archivo_de_configuracion_existe_pero_no_se_puede_leer(
+    tmp_path,
+):
+    """Archivo ilegible != archivo ausente.
+
+    Antes, un `/etc/cataclub` en `700` (el directorio no se puede atravesar)
+    hacía que `leer_config` devolviera vacío en silencio y la réplica quedara
+    "desactivada" sin ningún error, con `--check-config` en verde. El defecto
+    real es de permisos, no de configuración ausente: tiene que fallar fuerte
+    y nombrar el archivo.
+    """
+    config = tmp_path / "b2.env"
+    config.write_text("BACKUP_B2_ENABLED=1\n")
+    config.chmod(0o000)
+    try:
+        resultado = run_script(
+            "scripts/backup/upload-b2.sh",
+            "--check-config",
+            env=_entorno_b2(tmp_path, BACKUP_B2_CONFIG_FILE=str(config)),
+        )
+    finally:
+        config.chmod(0o600)
+
+    assert resultado.returncode == 2, resultado.stdout
+    assert str(config) in resultado.stderr
+    assert "750" in resultado.stderr
+    assert "640" in resultado.stderr
+    assert _argv(tmp_path) == ""
+
+
+@requiere_no_root
+def test_la_subida_falla_si_el_archivo_de_configuracion_existe_pero_no_se_puede_leer(
+    tmp_path,
+):
+    artefacto = _artefacto_cifrado(tmp_path)
+    config = tmp_path / "b2.env"
+    config.write_text("BACKUP_B2_ENABLED=1\n")
+    config.chmod(0o000)
+    try:
+        resultado = run_script(
+            "scripts/backup/upload-b2.sh",
+            str(artefacto),
+            env=_entorno_b2(tmp_path, BACKUP_B2_CONFIG_FILE=str(config)),
+        )
+    finally:
+        config.chmod(0o600)
+
+    assert resultado.returncode == 2, resultado.stdout
+    assert str(config) in resultado.stderr
+    assert _argv(tmp_path) == ""
+
+
+def test_check_config_con_el_archivo_ausente_sigue_desactivando_la_replica_sin_error(
+    tmp_path,
+):
+    """El comportamiento de "archivo ausente" no cambia: solo se endurece el
+
+    caso de archivo presente pero ilegible.
+    """
+    resultado = run_script(
+        "scripts/backup/upload-b2.sh",
+        "--check-config",
+        env=_entorno_b2(
+            tmp_path,
+            BACKUP_B2_ENABLED="0",
+            BACKUP_B2_CONFIG_FILE=str(tmp_path / "no-existe" / "b2.env"),
+        ),
     )
 
     assert resultado.returncode == 0, resultado.stderr

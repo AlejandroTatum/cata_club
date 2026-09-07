@@ -82,6 +82,25 @@ esac
 # --- Configuracion -----------------------------------------------------------
 CONFIG_FILE="${BACKUP_B2_CONFIG_FILE:-/etc/cataclub/b2-backup.env}"
 
+# Un archivo AUSENTE es "replica desactivada", una decision valida. Un archivo
+# que EXISTE pero no se puede leer es un problema de permisos, no de
+# configuracion: antes `leer_config` lo trataba igual que un archivo ausente
+# ([ -r ] || return 0) y la replica quedaba "desactivada" en silencio, con
+# `--check-config` en verde. El caso real fue `/etc/cataclub` en 700: el grupo
+# del usuario del cron no puede ATRAVESAR el directorio aunque el archivo sea
+# `640`. Se verifica ANTES de resolver ninguna variable, en los dos modos.
+verificar_config_legible() {
+  [ -e "$CONFIG_FILE" ] || return 0
+  [ -r "$CONFIG_FILE" ] && return 0
+  fatal "$(printf '%s\n' \
+    "el archivo de configuracion existe pero no se puede leer: ${CONFIG_FILE}" \
+    "       Revisar permisos: el directorio necesita 750 (el grupo del" \
+    "       usuario del cron tiene que poder atravesarlo) y el archivo 640," \
+    "       dueño root y grupo del usuario que corre el cron." \
+    "       Ver docs/operations/backup-offsite.md")"
+}
+verificar_config_legible
+
 # Se PARSEA `CLAVE=valor`; no se hace `source`. Un `source` convertiria un
 # archivo de configuracion en ejecucion de codigo con el usuario del cron, y
 # este es justamente el archivo que mas manos toca durante el aprovisionamiento.
