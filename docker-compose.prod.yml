@@ -77,7 +77,7 @@ x-imagen-frontend: &imagen_frontend "ghcr.io/alejandrotatum/cata_club-frontend:$
 services:
   # Valores de arranque del presupuesto de memoria (decisión de diseño 4.6):
   # db 320m | redis 64m | backend 320m | celery-worker 320m | celery-beat
-  # 160m | autoheal 32m | frontend 256m | caddy 96m. Suman 1568m sobre los
+  # 224m | autoheal 32m | frontend 256m | caddy 96m. Suman 1632m sobre los
   # 2048m del droplet, dejando margen para el sistema operativo y los picos.
   # `mem_limit` (no `deploy.resources.limits`, ver arriba) es lo único que
   # `docker compose up` honra fuera de Swarm.
@@ -146,7 +146,13 @@ services:
 
   celery-beat:
     image: *imagen_backend
-    mem_limit: 160m
+    # Subió de 160m a 224m (issue #1071): la medición de `docker stats` en el
+    # droplet real, de noche y sin carga, lo mostró en 124.6MiB/160m (78% en
+    # reposo, el más alto de los ocho servicios) -- sin margen para el pico
+    # que agrega cada disparo de tarea programada. 224m no es una medición de
+    # carga, es el mismo criterio que ya usa `caddy` (96m): un techo con
+    # margen sobre un uso en reposo ya alto.
+    mem_limit: 224m
     environment:
       AMBIENTE: production
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
@@ -156,7 +162,7 @@ services:
 
   # Sidecar de autorreparación (issue #1061, ver docker-compose.yml): un
   # proceso liviano de vigilancia, sin margen que pedir -- 32m alcanza de
-  # sobra y deja el presupuesto total (ver el cálculo de arriba) en 1568m,
+  # sobra y deja el presupuesto total (ver el cálculo de arriba) en 1632m,
   # todavía por debajo de los 2048m del droplet.
   autoheal:
     mem_limit: 32m
