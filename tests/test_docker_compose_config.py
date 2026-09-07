@@ -1519,10 +1519,12 @@ def test_mailpit_no_aparece_en_el_render_de_produccion():
 
 
 # Presupuesto de memoria de un droplet de 2GB (decisión de diseño 4.6/4.7,
-# sdd/production-readiness): 1600m deja margen sobre los valores de arranque
-# (1440m) para el sistema operativo y los picos, y pone en rojo cualquier
-# servicio nuevo sin límite o cualquier límite inflado.
-_LIMITE_TOTAL_DE_MEMORIA_BYTES = 1600 * 1024 * 1024
+# sdd/production-readiness): 1664m deja margen sobre los valores de arranque
+# (1632m, tras subir `celery-beat` de 160m a 224m -- issue #1071, medición de
+# `docker stats` en el droplet real) para el sistema operativo y los picos, y
+# pone en rojo cualquier servicio nuevo sin límite o cualquier límite
+# inflado.
+_LIMITE_TOTAL_DE_MEMORIA_BYTES = 1664 * 1024 * 1024
 
 
 def test_cada_servicio_de_produccion_declara_mem_limit_y_no_se_pasa_del_presupuesto():

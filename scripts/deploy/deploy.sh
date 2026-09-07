@@ -399,19 +399,19 @@ case "$cmd" in
     # dejando el monitor externo en alerta por una herramienta ausente y no por
     # un backup vencido -- la alarma correcta por el motivo equivocado.
     command -v curl >/dev/null 2>&1 || die "falta 'curl' en el host (apt-get install -y curl); el heartbeat no podría pingear"
-    log "Instalando cron de backup (03:30) y de frescura + salud de Celery + heartbeat (07:00) tras confirmación explícita del operador"
-    # La verificación de frescura y la de Celery escriben 1-2 líneas por día
-    # cada una en el mismo log del backup, para no multiplicar archivos sin
-    # rotación.
+    log "Instalando cron de backup (03:30) y de frescura + salud de Celery + memoria + heartbeat (07:00) tras confirmación explícita del operador"
+    # La verificación de frescura, la de Celery y la de memoria escriben 1-2
+    # líneas por día cada una en el mismo log del backup, para no multiplicar
+    # archivos sin rotación.
     #
-    # El heartbeat cuelga de dos `&&`, nunca de un `;`: se pingea SOLO si LOS
-    # DOS chequeos anteriores salieron 0. `check-backup-freshness.sh` sale 1
+    # El heartbeat cuelga de tres `&&`, nunca de un `;`: se pingea SOLO si LOS
+    # TRES chequeos anteriores salieron 0. `check-backup-freshness.sh` sale 1
     # sin ningún dump y 2 con un dump vencido; `check-celery-health.sh`
     # (issue #1061) sale distinto de 0 si celery-worker o celery-beat quedaron
     # `unhealthy` entre despliegues -- el sidecar `autoheal` (issue #1091) los
     # reinicia, pero nada externo se enteraba si igual quedaban enfermos. En
-    # los tres casos el ping tiene que FALTAR: la ausencia del ping es lo que
-    # dispara la alarma. Un `;` en cualquiera de los dos eslabones pondría el
+    # los cuatro casos el ping tiene que FALTAR: la ausencia del ping es lo que
+    # dispara la alarma. Un `;` en cualquiera de los tres eslabones pondría el
     # monitor en verde justo cuando hay que alertar, que es peor que no
     # monitorear: daría una garantía falsa. El `cd` también está encadenado
     # con `&&`, así que un STACK_DIR que ya no existe tampoco pingea.
@@ -420,17 +420,25 @@ case "$cmd" in
     # preflight-production.sh: el umbral del RPO se declara en un solo lugar del
     # repo y no queda a merced del default interno del script.
     #
+    # `check-memory.sh` cuelga del mismo `&&` que `check-backup-freshness.sh`
+    # y `check-celery-health.sh`, ANTES del heartbeat (issue #1071): un
+    # contenedor sobre el 90% de su
+    # `mem_limit` o un host con poca memoria disponible tiene que cortar el
+    # ping igual que un backup vencido -- la ausencia del ping es la única
+    # alarma, y no hay notificador propio que agregar acá.
+    #
     # La URL del heartbeat NO aparece acá: `notify-heartbeat.sh` la lee de un
     # archivo de root. `crontab -l` no pide privilegios, y quien lea esa URL
     # puede pingear a mano y dejar la alarma en verde con el backup muerto.
     (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' || true
      printf '30 3 * * * cd %s && ./scripts/backup/backup-db.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
-     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/check-celery-health.sh >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
-       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
+     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/check-celery-health.sh >> %s 2>&1 && ./scripts/ops/check-memory.sh >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
+       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
     ) | crontab -
     crontab -l | grep 'backup-db.sh' >/dev/null || die "el cron de backup no quedó instalado"
     crontab -l | grep 'check-backup-freshness.sh' >/dev/null || die "el cron de frescura no quedó instalado"
     crontab -l | grep 'check-celery-health.sh' >/dev/null || die "el cron no quedó con la verificación de salud de Celery"
+    crontab -l | grep 'check-memory.sh' >/dev/null || die "el cron de memoria no quedó instalado"
     crontab -l | grep 'notify-heartbeat.sh' >/dev/null || die "el cron no quedó con el ping de heartbeat"
     ;;
 esac

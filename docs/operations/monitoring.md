@@ -32,17 +32,17 @@ devuelve cuerpo). El HEAD existe porque el plan gratuito de UptimeRobot sondea
 con ese método y elegirlo es un control pago: sin un handler propio la sonda
 recibía `405` (issue #862), porque FastAPI no deriva HEAD del GET.
 
-### 2. Heartbeat del backup y de Celery (¿siguen vivos?)
+### 2. Heartbeat de backup, Celery y memoria (¿siguen vivos?)
 
 Un monitor tipo *heartbeat* (dead-man's-switch) con período de 24 h y tolerancia
 suficiente para cubrir la corrida de las 07:00.
 
 El cron de las 07:00 corre `check-backup-freshness.sh` y, **solo si sale 0**,
-encadena `check-celery-health.sh` (issue #1061) y, **solo si ese también sale
-0**, `notify-heartbeat.sh`, que pingea la URL del heartbeat. El encadenamiento
-es `&&`, nunca `;`: con el dump ausente (exit 1) o vencido (exit 2), o con
-celery-worker/celery-beat `unhealthy`, el ping NO sale, y UptimeRobot alerta
-por la ausencia.
+encadena `check-celery-health.sh` (issue #1061) y `check-memory.sh` (issue
+#1071) y, **solo si los tres salen 0**, `notify-heartbeat.sh`, que pingea la
+URL del heartbeat. El encadenamiento es `&&`, nunca `;`: con el dump ausente
+(exit 1) o vencido (exit 2), con celery-worker/celery-beat `unhealthy` o con
+la memoria al límite, el ping NO sale, y UptimeRobot alerta por la ausencia.
 
 `check-celery-health.sh` reutiliza el mismo chequeo que ya gatea un
 deploy/rollback (`check_celery` en `scripts/deploy/lib/post-checks.sh`): los
@@ -54,8 +54,9 @@ este cron, nada externo se enteraba si igual quedaba enfermo entre
 despliegues.
 
 Que la alerta sea la AUSENCIA del ping es lo que hace que esto sirva. Cubre a la
-vez el backup vencido, Celery atascado, el cron desinstalado, el disco lleno y
-el host apagado — ninguno de los cuales puede reportarse a sí mismo. Un
+vez el backup vencido, Celery atascado, la memoria al límite, el cron
+desinstalado, el disco lleno y el host apagado — ninguno de los cuales puede
+reportarse a sí mismo. Un
 chequeo que tuviera que enviar su propia alerta se callaría en todos esos
 casos.
 
@@ -96,6 +97,72 @@ Lo que queda fuera de este repositorio: la retención real
 host, y un destino centralizado fuera del host (por ejemplo un agregador
 externo) queda fuera de alcance por decisión del dueño del proyecto.
 
+## Memoria: medición y disparador de resize (issue #1071)
+
+El único host tiene 1.9 GiB de RAM utilizables. Con `mem_limit` de Compose
+nada más, cuando la memoria del host se agota el que actúa es el OOM killer
+del kernel: `mem_limit` solo decide QUÉ contenedor cae primero dentro de su
+propio cgroup, no reserva nada y no evita que el host entero se quede sin
+memoria si la suma real de todos los servicios crece.
+
+Medición tomada en el host de producción, de noche y sin carga, **antes de
+agregar el swapfile de abajo** (2026-09-07 ~04:00 UTC):
+
+```
+               total        used        free      shared  buff/cache   available
+Mem:           1.9Gi       1.1Gi       157Mi        25Mi       930Mi       870Mi
+Swap:             0B          0B          0B
+
+NAME                        MEM USAGE / LIMIT   MEM %
+cata-club-caddy-1           16.23MiB / 96MiB    16.91%
+cata-club-celery-worker-1   214MiB / 320MiB     66.87%
+cata-club-frontend-1        97.28MiB / 256MiB   38.00%
+cata-club-celery-beat-1     124.6MiB / 160MiB   77.86%
+cata-club-backend-1         186.3MiB / 320MiB   58.23%
+cata-club-redis-1           4.809MiB / 64MiB    7.51%
+cata-club-db-1              55.89MiB / 320MiB   17.47%
+```
+
+`celery-beat` era el más ajustado del stack (78% en reposo, sin ningún pico de
+tarea programada todavía) por eso subió su `mem_limit` de 160m a 224m (ver
+`docker-compose.prod.yml`). La suma de todos los `mem_limit` de producción
+pasó de 1568m a 1632m, todavía por debajo de los 2048m del droplet.
+
+### Swapfile de 1 GiB como red de seguridad
+
+El host tiene un swapfile de 1 GiB desde el 2026-09-07: no evita un pico de
+memoria, pero lo convierte en lentitud en vez de en un OOM kill directo. Se
+creó con:
+
+```
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Con `vm.swappiness=10` en `/etc/sysctl.d/99-swappiness.conf` (`sudo sysctl -p
+/etc/sysctl.d/99-swappiness.conf` para aplicarlo sin reiniciar): un swappiness
+bajo hace que el kernel recurra al swap solo bajo presión real de memoria, no
+para páginas frías de uso normal -- el swap es la red de seguridad, no la
+memoria de trabajo cotidiana del stack.
+
+**Decisión:** se mantiene el droplet de 2 GiB por ahora, con este swap como
+colchón. El disparador para pasar al plan de 4 GiB (~20 USD/mes, solo
+CPU/RAM, para que el cambio sea reversible) es cualquiera de estos dos, el que
+ocurra primero:
+
+- `check-memory.sh` falla (exit distinto de 0, y por lo tanto corta el
+  heartbeat de las 07:00) durante **dos días consecutivos**.
+- Un servicio queda OOM-killed **una sola vez**:
+  `docker inspect --format '{{.State.OOMKilled}}' <contenedor>` devuelve
+  `true`.
+
+No hay una tercera condición: un solo fallo aislado de `check-memory.sh` (por
+ejemplo, un pico puntual durante un despliegue) no dispara el resize por sí
+solo.
+
 ## Señales disponibles en el host
 
 - `scripts/ops/check-backup-freshness.sh --max-age-hours 26` sale `0` si existe
@@ -103,6 +170,14 @@ externo) queda fuera de alcance por decisión del dueño del proyecto.
 - `scripts/ops/check-celery-health.sh` sale `0` si celery-worker y celery-beat
   están `healthy` y el broker responde al ping de control; distinto de 0 si
   cualquiera de los dos está `unhealthy`, ausente o no responde (issue #1061).
+- `scripts/ops/check-memory.sh` sale `0` si todos los contenedores en
+  ejecución están por debajo del 90% de su `mem_limit` y la memoria disponible
+  del host (`MemAvailable` de `/proc/meminfo`) está en o sobre el umbral
+  (256 MiB por default, `--min-available-mb` para cambiarlo). Se encadena con
+  `&&` antes de `notify-heartbeat.sh` en el cron de las 07:00, igual que
+  `check-backup-freshness.sh` y `check-celery-health.sh`: un contenedor cerca
+  de su límite o un host sin margen corta el ping, y la ausencia del ping es
+  la alerta.
 - `scripts/ops/notify-heartbeat.sh` pingea el heartbeat externo. Sale distinto
   de 0 si el archivo de la URL falta, está vacío o el ping no sale.
 - `scripts/ops/preflight-production.sh` valida la configuración de Compose y la
