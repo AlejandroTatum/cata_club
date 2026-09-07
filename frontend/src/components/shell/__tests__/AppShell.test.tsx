@@ -511,7 +511,7 @@ describe("AppShell", (): void => {
     render(<AppShell title="Dashboard">{null}</AppShell>);
 
     const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
-    expect(faq.querySelector(".lucide-circle-help")).not.toBeNull();
+    expect(faq.querySelector(".lucide-circle-question-mark")).not.toBeNull();
     expect(faq.querySelector(".lucide-book-open")).toBeNull();
   });
 
