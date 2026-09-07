@@ -374,253 +374,118 @@ test.describe("Landing page", () => {
   });
 
   /**
-   * The Valores rally (issue #594) pins the whole section under a ball that
-   * scrubs along an SVG guide, lighting each value as it passes. Issue #637
-   * reported that on a phone the rally "only reaches value 01" and that value
-   * 04 falls outside the viewport.
-   *
-   * The cause is geometric, so only a real browser can see it: at 390x844 the
-   * Valores section is ~1249px tall. Pinning freezes it with its top at the
-   * viewport top, so values 03 and 04 sit below the fold for the ENTIRE 1900px
-   * scrub. The counter still climbs to 4/4 and the `hit` class still lands on
-   * every card — off screen, where nobody can see it. Asserting the counter,
-   * or the class, or a screenshot of the top of the section would all have
-   * passed on the broken build.
-   *
-   * So the assertion is the one the reader actually cares about: each value is
-   * activated at a moment when that value is on screen.
+   * The Valores rally (issue #594) used to pin the whole section under a ball
+   * scrubbing an SVG guide. Issue #637 found it left values off screen on a
+   * phone; the fix chosen here is not a better scrub — it is no scrub at all.
+   * The approved prototype (`landing-valores-b-tablero.html`) replaces it with
+   * a static tablero: four numeral tiles and four value articles sharing one
+   * CSS grid, so every title lines up by construction and nothing can be
+   * "reached" off screen because nothing moves as the page scrolls.
    */
-  test.describe("values rally", () => {
-    /** Runs in the page: one frame of rally state, measured, never inferred. */
-    const sampleRally = (): {
-      atEnd: boolean;
-      counter: string;
-      pageOverflowPx: number;
-      pinned: boolean;
-      sectionTop: number;
-      sectionBottom: number;
-      cards: { hit: boolean; dim: boolean; onScreen: boolean; opacity: string }[];
-    } => {
-      const root = document.documentElement;
-      const section = document.querySelector(".landing-values");
-      const rect = section?.getBoundingClientRect();
-      const viewport = window.innerHeight;
-      return {
-        atEnd: window.scrollY + viewport >= root.scrollHeight - 2,
-        counter: document.querySelector("[data-rally-counter]")?.textContent?.trim() ?? "",
-        pageOverflowPx: root.scrollWidth - root.clientWidth,
-        // ScrollTrigger pins by fixing the element in place; nothing else on
-        // this page makes the section `fixed`.
-        pinned: section ? getComputedStyle(section).position === "fixed" : false,
-        sectionTop: rect ? Math.round(rect.top) : Number.NaN,
-        sectionBottom: rect ? Math.round(rect.bottom) : Number.NaN,
-        cards: Array.from(document.querySelectorAll<HTMLElement>(".landing-values [data-value]")).map(
-          (card) => {
-            const box = card.getBoundingClientRect();
-            return {
-              hit: card.classList.contains("hit"),
-              dim: card.classList.contains("dim"),
-              // Fully inside the viewport — a card half off the fold is not a
-              // card the visitor saw light up.
-              onScreen: box.top >= 0 && box.bottom <= viewport,
-              opacity: getComputedStyle(card).opacity,
-            };
-          },
+  test.describe("values tablero", () => {
+    /** Every `.landing-tablero-item h3`'s top, rounded, in DOM order. */
+    const readTitleTops = (page: import("@playwright/test").Page): Promise<number[]> =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>(".landing-tablero-item h3")).map(
+          (h3) => Math.round(h3.getBoundingClientRect().top),
         ),
-      };
-    };
+      );
 
-    type RallyWalk = {
-      /** Per value: did it carry `hit` while fully on screen at least once? */
-      activatedOnScreen: boolean[];
-      /** Per value: did it carry `hit` at any point, on screen or not? */
-      activatedAnywhere: boolean[];
-      highestCounter: number;
-      maxPageOverflowPx: number;
-      /** Was the section ever pinned — the desktop choreography's signature? */
-      everPinned: boolean;
-      /** Frames where the counter, `hit` and `dim` disagreed with each other. */
-      desyncs: string[];
-      cardCount: number;
-    };
-
-    /**
-     * Scrolls the page through the Valores section with real wheel input —
-     * Lenis owns the scroll, so `window.scrollTo` would be fighting it — and
-     * records what the rally did on the way.
-     */
-    async function walkRally(page: import("@playwright/test").Page): Promise<RallyWalk> {
-      const walk: RallyWalk = {
-        activatedOnScreen: [],
-        activatedAnywhere: [],
-        highestCounter: 0,
-        maxPageOverflowPx: 0,
-        everPinned: false,
-        desyncs: [],
-        cardCount: 0,
-      };
-
-      const record = (frame: ReturnType<typeof sampleRally>): void => {
-        walk.cardCount = frame.cards.length;
-        if (walk.activatedOnScreen.length === 0) {
-          walk.activatedOnScreen = frame.cards.map(() => false);
-          walk.activatedAnywhere = frame.cards.map(() => false);
-        }
-        walk.maxPageOverflowPx = Math.max(walk.maxPageOverflowPx, frame.pageOverflowPx);
-        if (frame.pinned) walk.everPinned = true;
-        const counter = Number.parseInt(frame.counter, 10);
-        if (Number.isFinite(counter)) walk.highestCounter = Math.max(walk.highestCounter, counter);
-        frame.cards.forEach((card, index) => {
-          if (card.hit) walk.activatedAnywhere[index] = true;
-          if (card.hit && card.onScreen) walk.activatedOnScreen[index] = true;
-        });
-        // Ball, impact and card state all move through one `reach(index)` call,
-        // so the counter and the classes may never disagree about which value
-        // the ball is on.
-        const lit = frame.cards.findIndex((card) => card.hit);
-        if (lit >= 0) {
-          if (counter !== lit + 1) walk.desyncs.push(`counter=${frame.counter} but value ${lit + 1} is lit`);
-          // Everything after the lit value stays dimmed; nothing before it does.
-          const wrongDim = frame.cards.findIndex((card, index) => card.dim !== (index > lit));
-          if (wrongDim >= 0) walk.desyncs.push(`value ${wrongDim + 1} dim=${frame.cards[wrongDim].dim} with value ${lit + 1} lit`);
-        }
-      };
-
-      // Approach: coarse steps, stopping a full coarse step short of the
-      // section. Handing over any later let one 600px stride carry a 390px
-      // viewport clean past the window in which value 01 is lit — the walk
-      // would have reported the bug it was still sampling too coarsely to see.
-      const viewport = page.viewportSize()!.height;
-      for (let step = 0; step < 40; step += 1) {
-        const frame = await page.evaluate(sampleRally);
-        record(frame);
-        if (frame.atEnd || frame.sectionTop <= viewport + 800) break;
-        await page.mouse.wheel(0, 600);
-        await page.waitForTimeout(70);
-      }
-
-      // Traverse: fine steps, so a value that is only lit for one card-height
-      // of scroll is still sampled while it is on screen.
-      for (let step = 0; step < 90; step += 1) {
-        const frame = await page.evaluate(sampleRally);
-        record(frame);
-        if (frame.atEnd || frame.sectionBottom < 0) break;
-        await page.mouse.wheel(0, 70);
-        await page.waitForTimeout(100);
-      }
-
-      return walk;
-    }
-
-    const PHONES = [
-      { label: "portrait", width: 390, height: 844 },
-      { label: "landscape", width: 844, height: 390 },
-    ];
-
-    for (const phone of PHONES) {
-      test(`activates all four values while each is on screen (${phone.label} ${phone.width}x${phone.height})`, async ({
-        page,
-      }) => {
-        test.setTimeout(120_000);
-        await page.setViewportSize({ width: phone.width, height: phone.height });
-        await page.goto("/");
-        await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
-
-        const walk = await walkRally(page);
-
-        expect(walk.cardCount, "four values render").toBe(4);
-        // The regression, stated plainly. On the build that shipped it, this
-        // failed at value 03 in portrait and at value 01 in landscape, each
-        // time with `lit anywhere=true` — the class was applied, off screen.
-        ["01", "02", "03", "04"].forEach((label, index) => {
-          expect(
-            walk.activatedOnScreen[index],
-            `value ${label} lit up while on screen (${phone.label}); lit anywhere=${walk.activatedAnywhere[index]}`,
-          ).toBe(true);
-        });
-        expect(walk.highestCounter, "counter reaches 4/4").toBe(4);
-        expect(walk.desyncs, "counter, hit and dim stay in step").toEqual([]);
-        expect(walk.maxPageOverflowPx, "no horizontal page scroll").toBeLessThanOrEqual(0);
-        // The mechanism, named: a section this much taller than the phone
-        // viewport must not be pinned, because pinning is what put three of the
-        // four values off screen.
-        expect(walk.everPinned, "the section never pins on a phone").toBe(false);
-      });
-    }
-
-    /**
-     * #1026 removed the desktop pin too: Valores remains in document flow,
-     * so ScrollTrigger cannot add its tall pin spacer (the source of the white
-     * gap) before the immediately following Palmarés section.
-     */
-    test("keeps Values flow-only and contiguous with Palmarés on desktop", async ({ page }) => {
+    test("renders four tiles and four items with every title sharing the same top, on desktop", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
-      await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
-      await page.locator(".landing-wins").scrollIntoViewIfNeeded();
+      await page.locator(".landing-tablero").scrollIntoViewIfNeeded();
 
-      const flow = await page.evaluate(() => {
-        const values = document.querySelector<HTMLElement>(".landing-values");
-        const palmares = document.querySelector<HTMLElement>(".landing-wins");
-        if (!values || !palmares) return null;
-        const valuesBox = values.getBoundingClientRect();
-        const palmaresBox = palmares.getBoundingClientRect();
-        return {
-          position: getComputedStyle(values).position,
-          hasPinSpacer: values.closest(".pin-spacer") !== null,
-          palmaresIsNextSection: values.nextElementSibling === palmares,
-          gapToPalmares: Math.round(palmaresBox.top - valuesBox.bottom),
-        };
-      });
+      await expect(page.locator(".landing-tablero-tile")).toHaveCount(4);
+      await expect(page.locator(".landing-tablero-item")).toHaveCount(4);
 
-      expect(flow, "Values and Palmarés render").not.toBeNull();
-      expect(flow?.position, "Values stays in normal flow").not.toBe("fixed");
-      expect(flow?.hasPinSpacer, "Values has no generated pin spacer").toBe(false);
-      expect(flow?.palmaresIsNextSection, "Palmarés follows Values directly").toBe(true);
-      expect(flow?.gapToPalmares, "no spacer gap separates Values from Palmarés").toBe(0);
+      // `LandingMotion.tsx` staggers each `.landing-tablero-item` in with
+      // `gsap.from([data-reveal], { y: 40, opacity: 0, stagger: 0.1, ... })`;
+      // the LAST item finishes last, so its opacity settling at 1 is the
+      // explicit signal the whole group has stopped moving — the poll below
+      // is not the only guard against measuring mid-animation.
+      await expect(page.locator(".landing-tablero-item").last()).toHaveCSS("opacity", "1");
+
+      // Grid alignment is a layout fact once settled, not a race — but a
+      // slower CI runner can still catch the tail of the stagger, so poll
+      // instead of reading once. The unique, sorted tops are the message
+      // Playwright prints on timeout, e.g. "[501,517,532]".
+      await expect
+        .poll(
+          async () => JSON.stringify([...new Set(await readTitleTops(page))].sort((a, b) => a - b)),
+          { timeout: 10_000, message: "every title shares one top edge once the reveal settles" },
+        )
+        .toMatch(/^\[\d+\]$/);
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, "no horizontal page scroll").toBeLessThanOrEqual(0);
     });
 
-    test("re-evaluates the rally after an orientation change", async ({ page }) => {
-      test.setTimeout(120_000);
+    test("pairs its two-column titles by top edge on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
-      await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
-      await walkRally(page);
+      await page.locator(".landing-tablero").scrollIntoViewIfNeeded();
 
-      // Rotate mid-visit without reloading: the rally has to rebuild against
-      // the new geometry rather than keep the layout it measured on load.
-      await page.setViewportSize({ width: 844, height: 390 });
-      await page.waitForTimeout(600);
-      await page.mouse.wheel(0, -20_000);
-      await page.waitForTimeout(600);
+      await expect(page.locator(".landing-tablero-item").last()).toHaveCSS("opacity", "1");
 
-      const walk = await walkRally(page);
-      ["01", "02", "03", "04"].forEach((label, index) => {
-        expect(walk.activatedOnScreen[index], `value ${label} lit up while on screen after rotating`).toBe(true);
-      });
-      expect(walk.maxPageOverflowPx, "no horizontal page scroll after rotating").toBeLessThanOrEqual(0);
+      await expect
+        .poll(async () => JSON.stringify(await readTitleTops(page)), {
+          timeout: 10_000,
+          message: "each pair shares a top edge once the reveal settles",
+        })
+        .toMatch(/^\[(\d+),\1,(\d+),\2\]$/);
+
+      const settledTops = await readTitleTops(page);
+      expect(settledTops[0], "the two pairs sit at different heights").not.toBe(settledTops[2]);
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, "no horizontal page scroll").toBeLessThanOrEqual(0);
     });
 
-    test("leaves every value legible on a phone under reduced motion", async ({ page }) => {
+    test("keeps every value visible and legible under reduced motion, no rally hooks in the DOM", async ({ page }) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
 
-      const values = page.locator(".landing-values [data-value]");
-      await expect(values).toHaveCount(4);
-      for (const label of ["01", "02", "03", "04"]) {
-        const card = values.filter({ hasText: label });
-        await card.scrollIntoViewIfNeeded();
-        await expect(card).toBeVisible();
-        // Reduced motion must not leave a value stranded at the 0.32 opacity
-        // `dim` gives it, nor pinned off screen.
-        await expect(card).not.toHaveClass(/\bdim\b/);
-        await expect(card).toHaveCSS("opacity", "1");
+      expect(await page.locator("[data-rally]").count(), "no rally element ever renders").toBe(0);
+
+      const items = page.locator(".landing-tablero-item");
+      await expect(items).toHaveCount(4);
+      for (const title of ["Respeto", "Disciplina", "Esfuerzo", "Compañerismo"]) {
+        const item = items.filter({ hasText: title });
+        await item.scrollIntoViewIfNeeded();
+        await expect(item).toBeVisible();
+        await expect(item).toHaveCSS("opacity", "1");
       }
+
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow, "no horizontal page scroll under reduced motion").toBeLessThanOrEqual(0);
+    });
+
+    test("sends the scroll cue to the real Palmarés section, contiguous with Valores", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+
+      const cue = page.locator(".landing-tablero-cue");
+      await expect(cue).toHaveAttribute("href", "#logros");
+
+      const flow = await page.evaluate(() => {
+        const values = document.querySelector<HTMLElement>(".landing-values");
+        const palmares = document.querySelector<HTMLElement>("#logros");
+        if (!values || !palmares) return null;
+        return { palmaresIsNextSection: values.nextElementSibling === palmares };
+      });
+      expect(flow, "Values and Palmarés render").not.toBeNull();
+      expect(flow?.palmaresIsNextSection, "Palmarés follows Values directly").toBe(true);
+
+      await cue.click();
+      await expect(page).toHaveURL(/#logros$/);
     });
   });
 
@@ -774,31 +639,39 @@ test.describe("Landing page", () => {
   });
 
   /**
-   * The hero dropped its own brand mark ("Tenis de Mesa · Cata Club") because
-   * the navbar lockup right above it already names the club. Deleting an
-   * element is the easy half; the space it occupied is the half that regresses.
+   * Hero spacing under the editorial redesign.
    *
-   * Neither viewport can be reasoned about from the other, because the hero is
-   * a different layout in each:
+   * This block used to measure a two-column grid (photo framed in its own
+   * column, `aspect-ratio: 6/5`, height set by the frame) after the hero's
+   * duplicate brand mark was removed from it — "does the copy's rowGap widen
+   * enough to close the resulting slack". That grid is gone: the photo is
+   * now a full-bleed background behind the copy (`.landing-hero-carousel`,
+   * `position: absolute`), and the copy is bottom-anchored over it with
+   * `align-items: end`. "Slack above/below the copy" and "gap between copy
+   * and frame" no longer describe anything the CSS does, so a spec that kept
+   * asserting them next to the old accepted ranges was pinning numbers with
+   * no design behind them, and started failing (`copyRowGap` 30 vs a floor
+   * of 36; `headlineInset` 277/400 vs a ceiling of 100) the moment the
+   * editorial hero replaced the grid.
    *
-   *   - Desktop is a two-column grid whose height is set by the photo frame
-   *     (`aspect-ratio: 6/5` over its own column), NOT by the copy. So the copy
-   *     column cannot shrink the hero — it just floats, vertically centred,
-   *     inside a band it no longer fills. Removing 62px of copy turned ~58px of
-   *     slack above and below into ~89px: that is the "empty gap" this measures.
-   *     The fix is the responsive `gap` on `.landing-hero-copy`, which hands the
-   *     reclaimed height back to the copy's own rhythm.
-   *   - Mobile stacks the same grid into rows, so the copy's height IS the row's
-   *     height and no slack can open at all. The risk there is the opposite one:
-   *     with the brand gone the headline sat 64px under a sticky navbar and
-   *     crowded it, so the hero's top padding absorbs part of the reclaim.
+   * What still matters, and is asserted here instead:
    *
-   * Both numbers are measured in a real browser after layout and fonts settle.
-   * jsdom computes none of this — it has no box model for `aspect-ratio`,
-   * `clamp()` or grid — which is why these assertions live here and not in
-   * `LandingPage.test.tsx`.
+   *   - The duplicate brand mark stays gone (unchanged from before).
+   *   - Desktop: the copy sits flush against the hero's own bottom padding —
+   *     the entire point of `align-items: end` — rather than floating with a
+   *     gap that would only appear if that alignment regressed.
+   *   - Mobile: the headline starts right where the top padding ends, and
+   *     that padding (400px) is tuned to clear the mobile photo band's fixed
+   *     height (360px, see `.landing-hero-carousel`'s mobile rule) with a
+   *     small margin — a regression here means the band and the padding
+   *     drifted apart, which either overlaps the copy or opens a gap.
+   *
+   * Both numbers are measured in a real browser after layout and fonts
+   * settle. jsdom computes none of this — it has no box model for
+   * `clamp()`, `position: absolute` or `align-items` — which is why these
+   * assertions live here and not in `LandingPage.test.tsx`.
    */
-  test.describe("hero spacing after the duplicate brand was removed", () => {
+  test.describe("hero spacing under the editorial redesign", () => {
     /** Hero box metrics that only exist once a real engine has laid it out. */
     const measureHero = async (page: import("@playwright/test").Page) => {
       await page.goto("/");
@@ -807,290 +680,42 @@ test.describe("Landing page", () => {
       return page.evaluate(() => {
         const hero = document.querySelector(".landing-hero") as HTMLElement;
         const copy = document.querySelector(".landing-hero-copy") as HTMLElement;
-        const frame = document.querySelector(".landing-hero-frame") as HTMLElement;
         const headline = hero.querySelector("h1") as HTMLElement;
         const heroStyle = getComputedStyle(hero);
         const heroBox = hero.getBoundingClientRect();
         const copyBox = copy.getBoundingClientRect();
-        // The hero's content box: what the two grid columns actually share.
-        const contentTop = heroBox.top + parseFloat(heroStyle.paddingTop);
-        const contentBottom = heroBox.bottom - parseFloat(heroStyle.paddingBottom);
         return {
           heroText: hero.textContent ?? "",
           brandCount: hero.querySelectorAll(".landing-hero-brand").length,
-          copyRowGap: parseFloat(getComputedStyle(copy).rowGap),
-          contentHeight: contentBottom - contentTop,
-          copyHeight: copyBox.height,
-          slackAbove: copyBox.top - contentTop,
-          slackBelow: contentBottom - copyBox.bottom,
+          // How far the copy's own bottom edge sits from the hero's bottom
+          // padding line — 0 when `align-items: end` is doing its job.
+          copyBottomGap: (heroBox.bottom - parseFloat(heroStyle.paddingBottom)) - copyBox.bottom,
           headlineInset: headline.getBoundingClientRect().top - heroBox.top,
-          copyToFrame: frame.getBoundingClientRect().top - copyBox.bottom,
         };
       });
     };
 
-    test("closes the desktop slack instead of leaving a hole where the brand was", async ({ page }) => {
+    test("keeps the copy flush against the hero's own bottom padding on desktop", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       const hero = await measureHero(page);
 
       expect(hero.brandCount).toBe(0);
       expect(hero.heroText).not.toMatch(/tenis de mesa/i);
-
-      // The mechanism: the copy's internal rhythm opens up on wide viewports so
-      // the column keeps its presence. At 22px (the old flat value) the numbers
-      // below cannot hold once the brand is gone.
-      expect(hero.copyRowGap).toBeGreaterThanOrEqual(36);
-
-      // The outcome: measured slack stays at the pre-removal ~58px rather than
-      // ballooning to ~89px, and stays even top-to-bottom.
-      expect(hero.slackAbove).toBeLessThanOrEqual(64);
-      expect(hero.slackBelow).toBeLessThanOrEqual(64);
-      expect(Math.abs(hero.slackAbove - hero.slackBelow)).toBeLessThanOrEqual(2);
-      // Same statement as a ratio, so a future taller frame cannot pass by
-      // growing the band while the copy stands still.
-      expect(hero.copyHeight / hero.contentHeight).toBeGreaterThanOrEqual(0.74);
+      expect(Math.abs(hero.copyBottomGap)).toBeLessThanOrEqual(1);
     });
 
-    test("keeps the mobile headline clear of the navbar without reopening the gap", async ({ page }) => {
+    test("keeps the mobile headline clear of the photo band without opening a second gap", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       const hero = await measureHero(page);
 
       expect(hero.brandCount).toBe(0);
       expect(hero.heroText).not.toMatch(/tenis de mesa/i);
 
-      // Stacked, there is no band to fill, so the desktop widening must not
-      // leak down here and push the copy apart.
-      expect(hero.copyRowGap).toBeLessThanOrEqual(24);
-
-      // The headline breathes under the sticky navbar (floor) without
-      // re-creating the void the brand used to fill (ceiling).
-      expect(hero.headlineInset).toBeGreaterThanOrEqual(72);
-      expect(hero.headlineInset).toBeLessThanOrEqual(100);
-
-      // And the copy still meets the photo on the grid's own row gap — no
-      // second hole opening between the two stacked halves.
-      expect(hero.copyToFrame).toBeGreaterThanOrEqual(36);
-      expect(hero.copyToFrame).toBeLessThanOrEqual(44);
-    });
-  });
-
-  /**
-   * The paddle under the hero's serve ball (issue #640).
-   *
-   * Two separate claims live here and neither implies the other:
-   *
-   *   - WHERE the paddle is. Measured through `offsetLeft`/`offsetTop`, which
-   *     are layout values and therefore blind to the transforms GSAP writes —
-   *     a sample taken mid-flight reads the same as one taken at rest. Both
-   *     elements are direct children of `.landing-hero`, so they share one
-   *     offset parent and the numbers are directly comparable.
-   *   - WHEN the paddle is square to the ball. That one cannot be measured from
-   *     a still: it is a relationship over time, so the real timeline is
-   *     sampled frame by frame in the real browser and the pair is checked at
-   *     the frames where contact actually happens. A paddle that had drifted
-   *     out of phase would still be in the right PLACE — it would simply be
-   *     swinging at nothing — which is why the geometry test cannot stand in
-   *     for this one.
-   *
-   * `landing-serve.test.ts` proves the same phase lock against the timeline's
-   * own clock; what this adds is that the browser really runs it, at a real
-   * viewport, inside the hero's bounds.
-   */
-  test.describe("hero serve paddle", () => {
-    /** The two layouts the hero actually has: a two-column grid, and stacked. */
-    const VIEWPORTS = [
-      { name: "desktop", width: 1440, height: 900 },
-      { name: "phone", width: 390, height: 844 },
-    ];
-
-    /** Transform-blind layout facts about the ball/paddle pair. */
-    const measureServe = (page: import("@playwright/test").Page) =>
-      page.evaluate(() => {
-        const hero = document.querySelector(".landing-hero") as HTMLElement;
-        const ball = document.querySelector("[data-serve-ball]") as HTMLElement;
-        const paddle = document.querySelector("[data-serve-paddle]") as HTMLElement;
-        const root = document.documentElement;
-        return {
-          // Comparable offsets require one shared offset parent, so this is a
-          // precondition of every number below rather than a nicety.
-          sharedOffsetParent: ball.offsetParent === hero && paddle.offsetParent === hero,
-          ballCentreX: ball.offsetLeft + ball.offsetWidth / 2,
-          paddleCentreX: paddle.offsetLeft + paddle.offsetWidth / 2,
-          // Negative = the ball rests slightly into the face, which is contact.
-          contactGap: paddle.offsetTop - (ball.offsetTop + ball.offsetHeight),
-          ballWidth: ball.offsetWidth,
-          paddleWidth: paddle.offsetWidth,
-          paddleBottomInHero: hero.clientHeight - (paddle.offsetTop + paddle.offsetHeight),
-          pageOverflowPx: root.scrollWidth - root.clientWidth,
-        };
-      });
-
-    /**
-     * Records the live serve for ~1.6s — more than one full cycle — reading the
-     * transforms the motion layer writes, never the classes it sets.
-     */
-    const sampleServe = (page: import("@playwright/test").Page) =>
-      page.evaluate(
-        () =>
-          new Promise<{ ty: number; rot: number; ballTopInHero: number }[]>((resolve) => {
-            const hero = document.querySelector(".landing-hero") as HTMLElement;
-            const ball = document.querySelector("[data-serve-ball]") as HTMLElement;
-            const paddle = document.querySelector("[data-serve-paddle]") as HTMLElement;
-            // `transform: none` is not a matrix string — DOMMatrix rejects it.
-            const matrixOf = (element: HTMLElement): DOMMatrixReadOnly => {
-              const value = getComputedStyle(element).transform;
-              return value === "none" ? new DOMMatrixReadOnly() : new DOMMatrixReadOnly(value);
-            };
-            const samples: { ty: number; rot: number; ballTopInHero: number }[] = [];
-            const started = performance.now();
-            const tick = (now: number): void => {
-              const paddleMatrix = matrixOf(paddle);
-              samples.push({
-                ty: matrixOf(ball).m42,
-                rot: (Math.atan2(paddleMatrix.b, paddleMatrix.a) * 180) / Math.PI,
-                ballTopInHero:
-                  ball.getBoundingClientRect().top - hero.getBoundingClientRect().top,
-              });
-              if (now - started >= 1600) resolve(samples);
-              else requestAnimationFrame(tick);
-            };
-            requestAnimationFrame(tick);
-          }),
-      );
-
-    /** Resolves once the motion layer has loaded and is actually moving the ball. */
-    const waitForServe = async (page: import("@playwright/test").Page): Promise<void> => {
-      await page.waitForFunction(
-        () => {
-          const ball = document.querySelector("[data-serve-ball]");
-          if (!ball) return false;
-          const value = getComputedStyle(ball).transform;
-          return value !== "none" && value !== "matrix(1, 0, 0, 1, 0, 0)";
-        },
-        null,
-        { timeout: 20_000 },
-      );
-    };
-
-    for (const viewport of VIEWPORTS) {
-      test(`stands the paddle under the ball's path on ${viewport.name}`, async ({ page }) => {
-        await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await page.goto("/");
-        await page.locator("[data-serve-paddle]").waitFor();
-        const serve = await measureServe(page);
-
-        expect(serve.sharedOffsetParent).toBe(true);
-        // On the ball's own vertical axis: the trajectory is straight up, so
-        // "aligned with the path" is exactly "same centre".
-        expect(Math.abs(serve.ballCentreX - serve.paddleCentreX)).toBeLessThanOrEqual(1);
-        // Beneath it, and touching — not floating below with a gap, and not
-        // swallowing the ball either.
-        expect(serve.contactGap).toBeGreaterThanOrEqual(-4);
-        expect(serve.contactGap).toBeLessThanOrEqual(6);
-        // A face the ball could actually be struck by.
-        expect(serve.paddleWidth).toBeGreaterThan(serve.ballWidth);
-        // Clear of the hero's bottom edge, so the whole paddle is on screen.
-        expect(serve.paddleBottomInHero).toBeGreaterThanOrEqual(12);
-        expect(serve.pageOverflowPx).toBeLessThanOrEqual(0);
-      });
-
-      test(`keeps ball and paddle in phase on ${viewport.name}`, async ({ page }) => {
-        await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await page.goto("/");
-        await waitForServe(page);
-        const samples = await sampleServe(page);
-
-        const apex = samples.reduce((lowest, sample) => (sample.ty < lowest.ty ? sample : lowest));
-        // The serve really runs — without this the checks below are vacuous.
-        expect(apex.ty).toBeLessThanOrEqual(-60);
-        // ...and the paddle is swung away while the ball is up there.
-        expect(Math.abs(apex.rot)).toBeGreaterThanOrEqual(10);
-
-        // Every frame where the ball is on the face, the face is square to it.
-        const contacts = samples.filter((sample) => Math.abs(sample.ty) <= 6);
-        expect(contacts.length).toBeGreaterThanOrEqual(3);
-        const offSquare = contacts.filter((sample) => Math.abs(sample.rot) > 3);
-        expect(offSquare).toEqual([]);
-
-        // ...and the mirror of it: a paddle sitting square while the ball is
-        // still in the air has finished its swing early and is waiting at a
-        // contact that has not happened. Checking only the frames above would
-        // pass that, because those frames would look perfect.
-        const idleInFlight = samples.filter(
-          (sample) => Math.abs(sample.ty) > 10 && Math.abs(sample.rot) <= 0.5,
-        );
-        expect(idleInFlight).toEqual([]);
-
-        // The flight stays inside the hero: `overflow: hidden` would otherwise
-        // hide the top of the arc instead of failing.
-        const highest = Math.min(...samples.map((sample) => sample.ballTopInHero));
-        expect(highest).toBeGreaterThanOrEqual(0);
-      });
-
-      test(`holds the still composition under reduced motion on ${viewport.name}`, async ({ page }) => {
-        await page.emulateMedia({ reducedMotion: "reduce" });
-        await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await page.goto("/");
-        await page.locator("[data-serve-paddle]").waitFor();
-
-        // Nothing moves...
-        const transforms = await page.evaluate(() => {
-          const flat = (selector: string): string => {
-            const value = getComputedStyle(document.querySelector(selector) as HTMLElement).transform;
-            return value === "none" ? "matrix(1, 0, 0, 1, 0, 0)" : value;
-          };
-          return { ball: flat("[data-serve-ball]"), paddle: flat("[data-serve-paddle]") };
-        });
-        expect(transforms.ball).toBe("matrix(1, 0, 0, 1, 0, 0)");
-        expect(transforms.paddle).toBe("matrix(1, 0, 0, 1, 0, 0)");
-
-        // ...and what is left standing is the hit itself: the ball at rest on a
-        // square face, which is the same frame the animation passes through.
-        const serve = await measureServe(page);
-        expect(Math.abs(serve.ballCentreX - serve.paddleCentreX)).toBeLessThanOrEqual(1);
-        expect(serve.contactGap).toBeGreaterThanOrEqual(-4);
-        expect(serve.contactGap).toBeLessThanOrEqual(6);
-        expect(serve.pageOverflowPx).toBeLessThanOrEqual(0);
-      });
-    }
-
-    test("carries the club crest on the paddle face", async ({ page }) => {
-      await page.setViewportSize({ width: 1440, height: 900 });
-      await page.goto("/");
-
-      const crest = page.locator("[data-serve-paddle] img");
-      // `cata-club-crest-256.png`, not `.../_next/image?url=...`: issue #681,
-      // see the "never asks the image optimizer" lock below this test — this
-      // is the plain static asset path, unwrapped, because that lock is what
-      // keeps this asset off the one route that was ever proven to hang.
-      await expect(crest).toHaveAttribute("src", "/brand/cata-club-crest-256.png");
-
-      // `toBeVisible` only proves CSS visibility. The bytes have to have
-      // arrived before `naturalWidth` means anything, or a lazy image reports 0
-      // and every ratio computed from it comes out NaN.
-      //
-      // The scroll goes through `evaluate` rather than `scrollIntoViewIfNeeded`
-      // because that helper waits for the element to be STABLE, and this one
-      // lives inside a paddle that is never still — it retried itself to a
-      // timeout. `evaluate` runs no actionability check, so the guard survives
-      // the very animation this suite exists to assert.
-      await crest.evaluate((image: HTMLImageElement) => {
-        image.scrollIntoView({ block: "center" });
-        return (
-          image.complete ||
-          new Promise((resolve, reject) => {
-            image.addEventListener("load", resolve, { once: true });
-            image.addEventListener("error", reject, { once: true });
-          })
-        );
-      });
-      const drawn = await crest.evaluate((image: HTMLImageElement) => ({
-        naturalWidth: image.naturalWidth,
-        rendered: image.getBoundingClientRect().width,
-      }));
-
-      expect(drawn.naturalWidth).toBeGreaterThan(0);
-      expect(drawn.rendered).toBeGreaterThan(0);
+      // The band is 360px tall; the headline should start within a small
+      // margin past its bottom edge, never inside it and never far below it.
+      expect(hero.headlineInset).toBeGreaterThanOrEqual(360);
+      expect(hero.headlineInset).toBeLessThanOrEqual(420);
+      expect(Math.abs(hero.copyBottomGap)).toBeLessThanOrEqual(1);
     });
   });
 

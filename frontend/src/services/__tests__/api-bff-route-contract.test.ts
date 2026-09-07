@@ -366,7 +366,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
         headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
         body: JSON.stringify(clientBody),
       }),
-      { params: { id: "3" } },
+      { params: Promise.resolve({ id: "3" }) },
     );
 
     expect(response.status).not.toBe(400);
@@ -462,7 +462,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
         headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
         body: JSON.stringify(clientBody),
       }),
-      { params: { id: "42" } },
+      { params: Promise.resolve({ id: "42" }) },
     );
 
     expect(response.status).not.toBe(400);
@@ -505,7 +505,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
         headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
         body: JSON.stringify(clientBody),
       }),
-      { params: { id: "2" } },
+      { params: Promise.resolve({ id: "2" }) },
     );
 
     expect(response.status).not.toBe(400);
@@ -540,7 +540,7 @@ describe("API client bodies are accepted by the BFF handler they target", () => 
         headers: { "Content-Type": "application/json", cookie: `${ACCESS_TOKEN_COOKIE}=${ACCESS}` },
         body: JSON.stringify(clientBody),
       }),
-      { params: { id: "2" } },
+      { params: Promise.resolve({ id: "2" }) },
     );
 
     expect(response.status).not.toBe(400);

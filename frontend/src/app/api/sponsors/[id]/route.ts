@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   if (!/^\d+$/.test(params.id)) {
     return NextResponse.json({ message: "Identificador de patrocinador inválido." }, { status: 400 });
   }

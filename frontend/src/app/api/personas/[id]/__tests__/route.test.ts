@@ -56,7 +56,7 @@ afterEach(() => {
 
 describe("PATCH /api/personas/[id]", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await PATCH(patchRequest("5", { telefonoContacto: "0998765432" }), { params: { id: "5" } });
+    const response = await PATCH(patchRequest("5", { telefonoContacto: "0998765432" }), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -68,7 +68,7 @@ describe("PATCH /api/personas/[id]", () => {
     const access = makeJwt(3600);
     const response = await PATCH(
       patchRequest("5", { telefonoContacto: "0998765432" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -90,7 +90,7 @@ describe("PATCH /api/personas/[id]", () => {
     const access = makeJwt(3600);
     const response = await PATCH(
       patchRequest("5", { telefonoContacto: "0998765432" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(403);

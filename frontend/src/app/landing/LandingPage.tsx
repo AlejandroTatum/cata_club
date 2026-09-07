@@ -26,7 +26,7 @@ import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
-import { EDITORIAL_MEDIA_SIZES, MAP_INSET_SIZES } from "./landing-image-sizes";
+import { MAP_INSET_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
@@ -36,7 +36,6 @@ interface SectionHeaderProps {
 }
 
 interface ValueCardProps {
-  index: string;
   title: string;
   children: React.ReactNode;
 }
@@ -52,8 +51,8 @@ interface ValueCardProps {
 const ENROLL_HREF = "/student/enroll";
 
 /**
- * The club crest, everywhere it appears on this page (navbar, hero paddle,
- * Motto paddle) — see issue #681. A real CI trace proved Next's built-in
+ * The club crest, everywhere it appears on this page (navbar, Motto paddle)
+ * — see issue #681. A real CI trace proved Next's built-in
  * `/_next/image` optimizer can get one specific request/cache-key stuck
  * forever (`status: -1`, no response, ever — confirmed across three separate
  * fresh page loads in the same server process), which no client-side retry
@@ -194,32 +193,13 @@ function Hero(): React.ReactElement {
   return (
     <header className="landing-hero" id="inicio" data-motion-section data-testid="motion-section">
       <span className="landing-halftone" aria-hidden="true" />
-      <span className="landing-ribbon landing-ribbon-top" aria-hidden="true" />
-      <span className="landing-hero-serve-ball" aria-hidden="true" data-serve-ball />
-      {/* The paddle that produces that serve. It reuses `.landing-paddle` and
-          `.landing-paddle-crest` — the exact shape and crest the Motto section
-          renders — so the hero borrows the club's own mark instead of adding a
-          second, generic one beside it. `landing.css` anchors the pair from a
-          single origin so they cannot be positioned apart, and
-          `landing-serve.ts` puts them on one timeline so they cannot fall out
-          of phase. At rest — JS never loaded, or reduced motion — the ball
-          standing square on the face IS the impact, so the still frame states
-          the same thing the animation does. */}
-      <span className="landing-paddle landing-hero-serve-paddle" aria-hidden="true" data-serve-paddle>
-        {/* `unoptimized`, same asset and same reason as the navbar lockup
-            above (see `CREST_SRC`) — no `/_next/image` request means no
-            optimizer work to size at all, so 84 here is just the element's
-            own box hint, not a srcset lever. */}
-        <Image className="landing-paddle-crest" src={CREST_SRC} alt="" width={84} height={84} unoptimized />
-        <i />
-      </span>
       {/* No brand mark here. The navbar lockup sits directly above this copy
           and already names the club, so a second one only duplicated the
           identity and ate the vertical space the headline wants. `landing.css`
           hands that height back to the copy's own rhythm rather than leaving
           it as slack — see `.landing-hero-copy`'s gap. */}
       <div className="landing-hero-copy">
-        <h1 className="landing-display" data-split>FORMANDO <span>CAMPEONES</span> PARA LA VIDA</h1>
+        <h1 className="landing-display" data-split>FORMANDO <span className="landing-hero-accent">CAMPEONES</span> PARA LA VIDA</h1>
         <p>Únete a nuestro club, donde la técnica y el carácter forjan en cada punto.</p>
         <div className="landing-hero-actions">
           <Link className="landing-button" href={ENROLL_HREF}>Inscríbete <ArrowRight aria-hidden="true" /></Link>
@@ -261,73 +241,37 @@ function MissionVision(): React.ReactElement {
       data-testid="motion-section"
     >
       <SectionHeader eyebrow="Quiénes somos" title="Misión y Visión" />
-      <div className="landing-editorial">
-        <article className="landing-editorial-item" data-reveal>
-          {/* Approved editorial photo: the community the club forms. Mission
-              leads with the image (left); the copy follows (right). */}
-          <figure className="landing-editorial-media">
-            <Image
-              src="/landing/photo-community.jpeg"
-              alt="El club reúne a su comunidad en un entrenamiento"
-              width={1200}
-              height={900}
-              loading="lazy"
-              sizes={EDITORIAL_MEDIA_SIZES}
-            />
-          </figure>
-          <div className="landing-editorial-copy">
-            <span className="landing-index" aria-hidden="true">01</span>
-            <span className="landing-index-label" aria-hidden="true">Propósito</span>
-            <h3>Nuestra Misión</h3>
-            {/* Drawn in by the motion layer; the only movement in the block, so
-                it reads as emphasis rather than decoration. */}
-            <span className="landing-rule" aria-hidden="true" data-rule />
-            <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
-            <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
-          </div>
+      <div className="landing-pillars">
+        <article className="landing-pillar" data-reveal>
+          <span className="landing-index" aria-hidden="true">01</span>
+          <span className="landing-index-label" aria-hidden="true">Propósito</span>
+          <h3>Nuestra Misión</h3>
+          <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
+          <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
         </article>
-        {/* Owned by the wrapper, not by either column (issue #863) — a
-            direct child of `.landing-editorial` so it stays centred and
-            full-height regardless of which half's copy happens to run
-            longer. See `.landing-editorial-divider` in landing.css. */}
-        <span className="landing-editorial-divider" aria-hidden="true" />
-        <article className="landing-editorial-item" data-reveal>
-          {/* Vision inverts the grid: copy leads (left), photo follows (right). */}
-          <div className="landing-editorial-copy">
-            <span className="landing-index" aria-hidden="true">02</span>
-            <span className="landing-index-label" aria-hidden="true">Horizonte</span>
-            <h3>Nuestra Visión</h3>
-            <span className="landing-rule" aria-hidden="true" data-rule />
-            <p className="landing-lead">Ser un club líder y referente deportivo a nivel provincial y nacional.</p>
-            <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
-          </div>
-          {/* Approved editorial photo: the squad heading for the selections. */}
-          <figure className="landing-editorial-media">
-            <Image
-              src="/landing/vision-team-1329.jpg"
-              alt="El equipo y entrenadores de Cata Club posan en el área de entrenamiento"
-              width={1600}
-              height={1200}
-              loading="lazy"
-              sizes={EDITORIAL_MEDIA_SIZES}
-            />
-          </figure>
+        <article className="landing-pillar" data-reveal>
+          <span className="landing-index" aria-hidden="true">02</span>
+          <span className="landing-index-label" aria-hidden="true">Horizonte</span>
+          <h3>Nuestra Visión</h3>
+          <p className="landing-lead">Ser un club líder y referente deportivo a nivel provincial y nacional.</p>
+          <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
         </article>
       </div>
     </section>
   );
 }
 
-/** Decorative guide stage animated by `playRally` in LandingMotion.tsx. */
-    function Rally(): React.ReactElement {
-      return <div className="landing-rally" data-rally aria-hidden="true"><svg viewBox="0 0 1200 190" preserveAspectRatio="none"><path className="landing-rally-guide" data-rally-guide d="M -60 170 Q 45 26 150 170 Q 300 26 450 170 Q 600 26 750 170 Q 900 26 1050 170 Q 1150 60 1270 170" /></svg><span className="landing-rally-ball" data-rally-ball /><span className="landing-rally-impact" data-rally-impact /><span className="landing-rally-count">RALLY <b data-rally-counter>0</b>/4</span></div>;
-    }
+/** Decorative numeral tile — one per value, sharing one grid row with the
+ * three others so every value's title starts at the same top edge by
+ * construction. Replaces the scroll-scrubbed rally, rejected for breaking on
+ * mobile and for the ball motif itself. */
+function ValueTile({ index }: { index: string }): React.ReactElement {
+  return <span className="landing-tablero-tile" aria-hidden="true">{index}</span>;
+}
 
-    function ValueCard({ index, title, children }: ValueCardProps): React.ReactElement {
+function ValueCard({ title, children }: ValueCardProps): React.ReactElement {
   return (
-    <article className="landing-value" data-value>
-      <span className="landing-value-rule" aria-hidden="true" />
-      <span className="landing-index" aria-hidden="true">{index}</span>
+    <article className="landing-tablero-item" data-reveal>
       <h3>{title}</h3>
       <p>{children}</p>
     </article>
@@ -338,13 +282,17 @@ function Values(): React.ReactElement {
   return (
     <section className="landing-section landing-values" id="valores" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Lo que nos mueve" title="Nuestros Valores" />
-      <Rally />
-      <div className="landing-value-row">
-        <ValueCard index="01" title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
-        <ValueCard index="02" title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
-        <ValueCard index="03" title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
-        <ValueCard index="04" title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
+      <div className="landing-tablero">
+        <ValueTile index="01" />
+        <ValueTile index="02" />
+        <ValueTile index="03" />
+        <ValueTile index="04" />
+        <ValueCard title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
+        <ValueCard title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
+        <ValueCard title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
+        <ValueCard title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
       </div>
+      <a className="landing-tablero-cue" href="#logros">Logros del club <span aria-hidden="true">↓</span></a>
     </section>
   );
 }

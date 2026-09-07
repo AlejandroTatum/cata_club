@@ -20,11 +20,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseNumericRouteParam, proxyMembresiaAction } from "@/lib/server/proxy-membresia-action";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const membresiaId = parseNumericRouteParam(context.params.id, "membresía");
+  const membresiaId = parseNumericRouteParam((await context.params).id, "membresía");
   if (membresiaId instanceof NextResponse) return membresiaId;
 
   let body: unknown;

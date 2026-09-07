@@ -87,7 +87,7 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
 
     const response = await POST(
       postRequest("9", { monto: "40.00", motivo: "Ajuste de tipeo" }),
-      { params: { pagoId: "9" } },
+      { params: Promise.resolve({ pagoId: "9" }) },
     );
 
     expect(response.status).toBe(201);
@@ -108,7 +108,7 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
         fechaInicio: "2026-08-01",
         motivo: "Corrección completa",
       }),
-      { params: { pagoId: "9" } },
+      { params: Promise.resolve({ pagoId: "9" }) },
     );
 
     const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
@@ -121,28 +121,28 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
   });
 
   it("rejects a non-numeric pagoId with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("abc", { motivo: "x" }), { params: { pagoId: "abc" } });
+    const response = await POST(postRequest("abc", { motivo: "x" }), { params: Promise.resolve({ pagoId: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects invalid JSON with 400 without calling the backend", async () => {
-    const response = await POST(postRawRequest("9", "{no-json"), { params: { pagoId: "9" } });
+    const response = await POST(postRawRequest("9", "{no-json"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects a missing motivo with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("9", { monto: "40.00" }), { params: { pagoId: "9" } });
+    const response = await POST(postRequest("9", { monto: "40.00" }), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects an empty motivo with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("9", { motivo: "   " }), { params: { pagoId: "9" } });
+    const response = await POST(postRequest("9", { motivo: "   " }), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -151,7 +151,7 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
   it("relays the backend's 403 when the caller is not an administrator", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await POST(postRequest("9", { motivo: "x" }), { params: { pagoId: "9" } });
+    const response = await POST(postRequest("9", { motivo: "x" }), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(403);
   });
@@ -162,7 +162,7 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
   it("relays the backend's 409 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Conflicto" }, 409));
 
-    const response = await POST(postRequest("9", { motivo: "x" }), { params: { pagoId: "9" } });
+    const response = await POST(postRequest("9", { motivo: "x" }), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(409);
   });
@@ -170,7 +170,7 @@ describe("POST /api/membresias/pagos/[pagoId]/corregir", () => {
   it("relays the backend's 422 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
 
-    const response = await POST(postRequest("9", { motivo: "x" }), { params: { pagoId: "9" } });
+    const response = await POST(postRequest("9", { motivo: "x" }), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(422);
   });

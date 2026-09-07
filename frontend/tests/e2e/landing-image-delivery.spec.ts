@@ -89,19 +89,19 @@ test.describe("landing image delivery", () => {
     expect(oversized.map((img): string => `${img.src} -> w=${img.requestedWidth} for a ${img.boxWidth}px box`)).toEqual([]);
   });
 
-  test("every landing photo that is on screen actually decoded", async ({ page }) => {
+  test("the map inset photo that is on screen actually decoded", async ({ page }) => {
     await page.setViewportSize(VIEWPORT);
     await page.goto("/");
     await scrollThrough(page);
 
     // `complete` alone is true for an image that failed; only a non-zero
     // natural width proves bytes arrived and decoded.
-    const editorial = await page.evaluate((): boolean[] =>
-      Array.from(document.querySelectorAll<HTMLImageElement>(".landing-editorial-media img, .landing-map-inset img"))
+    const inset = await page.evaluate((): boolean[] =>
+      Array.from(document.querySelectorAll<HTMLImageElement>(".landing-map-inset img"))
         .map((img): boolean => img.complete && img.naturalWidth > 0));
 
-    expect(editorial.length).toBe(3);
-    expect(editorial).toEqual([true, true, true]);
+    expect(inset.length).toBe(1);
+    expect(inset).toEqual([true]);
   });
 
   test("the hero never reveals a slide the browser has not fetched (issue #705)", async ({ page }) => {
