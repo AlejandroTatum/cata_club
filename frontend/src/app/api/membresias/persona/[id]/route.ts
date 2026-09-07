@@ -6,16 +6,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = Number((await context.params).id);
-  if (Number.isNaN(personaId)) {
-    return NextResponse.json({ message: "El id de persona no es válido." }, { status: 400 });
-  }
+  const personaId = parseNumericIdOrBadRequest((await context.params).id, "persona");
+  if (personaId instanceof NextResponse) return personaId;
 
   const result = await backendFetchAuthed(request, `/membresias/persona/${personaId}`);
 

@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
 import type { PersonaResponse } from "@/types/domain";
 
 interface RouteContext {
@@ -29,10 +30,8 @@ interface RouteContext {
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = Number((await context.params).id);
-  if (Number.isNaN(personaId)) {
-    return NextResponse.json({ message: "El id de persona no es válido." }, { status: 400 });
-  }
+  const personaId = parseNumericIdOrBadRequest((await context.params).id, "persona");
+  if (personaId instanceof NextResponse) return personaId;
 
   let cedula: string;
   try {
