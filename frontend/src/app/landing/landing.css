@@ -13,7 +13,7 @@
   /* Darker fuchsia for fuchsia-as-TEXT on white: 5.87:1, where
      --landing-brand-fuchsia only reaches 4.03:1. */
   --landing-brand-fuchsia-strong: #c2185b;
-  /* Accent reserved for the hero's ball choreographies. */
+  /* Accent reserved for the hero carousel's crossing-ball choreography. */
   --landing-ball: #ff6a13;
   --landing-bg-base: #f9fafb;
   --landing-surface-base: #ffffff;
@@ -114,23 +114,25 @@
 /* @touch-target Rides on `.landing-button-quiet` and lowers it; still 44px. */
 .landing-nav-cta { min-height: 44px; padding: 12px 22px; font-size: 13px; }
 
-.landing-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr); align-items: center; gap: 52px; padding: 76px var(--landing-gutter) 88px; overflow: hidden; background: var(--landing-action); }
-.landing-ribbon { position: absolute; width: 440px; height: 190px; pointer-events: none; border-radius: 50%; border-bottom: 28px solid var(--landing-highlight); box-shadow: 0 14px 0 color-mix(in srgb, var(--landing-surface) 42%, transparent), 0 34px 0 var(--landing-brand-red-strong); }
-.landing-ribbon-top { top: -100px; right: -80px; transform: rotate(27deg); }
-/* The gap is responsive because the hero is two different layouts.
-   Wide, it is a two-column grid whose height comes from the photo frame's
-   `aspect-ratio` over its own column — the copy cannot shrink the section, it
-   can only sit centred inside a band it does not fill. Dropping the duplicated
-   brand mark freed ~62px of copy, and at a flat 22px every one of them would
-   have become slack: ~58px of emptiness above and below the copy grew to ~89px.
-   So above ~760px the reclaimed height goes back into the copy's own rhythm.
-   Narrow, the grid stacks and the copy IS the row height, so there is no band
-   and nothing to fill — the 22px floor keeps mobile exactly as it was. */
-.landing-hero-copy { position: relative; z-index: 14; display: flex; flex-direction: column; align-items: flex-start; gap: clamp(22px, 3vw, 42px); }
+.landing-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; min-height: min(88vh, 860px); padding: 72px var(--landing-gutter) 64px; overflow: hidden; background: var(--landing-action); }
+/* Editorial hero: the photo is the section's background on the right and the
+   copy sits on top of it, bottom-left, so the headline is the largest object
+   on the page — not a label beside a framed picture. The copy IS the row
+   height; `min-height` only guarantees the photo enough stage on tall
+   viewports. */
+.landing-hero-copy { position: relative; z-index: 14; display: flex; flex-direction: column; align-items: flex-start; gap: clamp(22px, 2.4vw, 30px); max-width: 1180px; }
 .landing-hero .landing-eyebrow { color: var(--landing-on-action); }
-.landing-hero h1 { max-width: 610px; color: var(--landing-on-action); font-size: clamp(38px, 3.35vw, 48px); line-height: 1.15; }
-.landing-hero h1 span { color: var(--landing-highlight); }
-.landing-hero-copy > p { max-width: 560px; color: var(--landing-on-action); font-size: 19px; line-height: 1.6; }
+/* The headline sits entirely on the red block behind the hard seam below —
+   the photo never passes under it — so it is set in the surface colour and
+   only one word carries the accent: three yellow lines over the photo were
+   noise, not emphasis, back when the seam was still a fade. The clamp is
+   tuned down from the display ceiling this hero used to reach for so the
+   longest line, "PARA LA VIDA", always clears `.landing-hero-carousel`'s
+   slanted left edge at 1280/1440/1920 — see that rule's comment for the
+   numbers behind the trade-off. */
+.landing-hero h1 { max-width: 7em; color: var(--landing-on-action); font-size: clamp(56px, 5.7vw, 110px); line-height: 0.92; letter-spacing: -0.04em; }
+.landing-hero-accent { color: var(--landing-highlight); }
+.landing-hero-copy > p { max-width: 34ch; color: var(--landing-on-action); font-size: 20px; line-height: 1.55; }
 .landing-hero-actions { display: flex; gap: 16px; }
 .landing-hero .landing-button { background: var(--landing-highlight); color: var(--landing-on-highlight); }
 .landing-hero .landing-button:hover { background: var(--landing-brand-fuchsia); color: var(--landing-on-highlight); }
@@ -150,28 +152,35 @@
 .landing-ticker-item b { color: var(--landing-action); font-size: 16px; }
 @keyframes landing-ticker-marquee { to { transform: translateX(-50%); } }
 
-.landing-hero-frame { position: relative; z-index: 10; padding: 14px; border-radius: 20px; background: var(--landing-brand-black); box-shadow: 14px 14px 0 color-mix(in srgb, var(--landing-brand-black) 28%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 8%, transparent); }
-.landing-hero-screen { position: relative; aspect-ratio: 6 / 5; overflow: hidden; border-radius: 14px; background: var(--landing-brand-black); box-shadow: inset 0 0 0 2px var(--landing-highlight); }
-.landing-hero-screen::after { content: ""; position: absolute; z-index: 5; inset: 0; background: radial-gradient(ellipse, transparent 55%, color-mix(in srgb, var(--landing-brand-black) 45%, transparent)); pointer-events: none; }
+/* The carousel is the hero's right-hand stage: absolutely positioned so the
+   copy's height rules the section and the photo fills whatever is left. The
+   left edge is a hard diagonal seam instead of a fade — the polygon below
+   clips away the box's own bottom-left corner, so the section's red
+   background (`.landing-hero`'s own `background`) shows through with no
+   overlay and the photo reads clean. The cut leans forward, wider at the
+   bottom (14% of the box) than at the top (0%), because the bottom is where
+   the headline's longest line, "PARA LA VIDA", sits: at a 44% inset the
+   seam's bottom edge lands at ~51.8vw, which clears that line's estimated
+   width (gutter plus ~7.44em at the h1's clamp) by 14–21px at 1280, 1440 and
+   1920 — the widths this hero is checked against. Every hook `HeroCarousel`
+   and the GSAP layer rely on (`.landing-hero-frame`, `.landing-hero-screen`,
+   the slide and the frame-ball) is kept — only their boxes changed. */
+.landing-hero-carousel { position: absolute; inset: 0 0 0 44%; z-index: 3; clip-path: polygon(0 0, 100% 0, 100% 100%, 14% 100%); }
+.landing-hero-frame { position: absolute; inset: 0; }
+.landing-hero-screen { position: absolute; inset: 0; overflow: hidden; background: var(--landing-brand-black); }
 /* Baseline: instant swap via `data-active`; the GSAP wipe writes clip-path. */
 .landing-hero-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; clip-path: inset(0% 0% 0% 100%); opacity: 0; }
 .landing-hero-slide[data-active="true"] { clip-path: inset(0% 0% 0% 0%); opacity: 1; }
 /* The crossing ball inside the screen during a tab switch; GSAP animates it in. */
 .landing-hero-frameball { position: absolute; left: 0; top: 0; z-index: 5; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--landing-ball); box-shadow: 0 8px 18px color-mix(in srgb, var(--landing-brand-black) 55%, transparent), inset -4px -5px 0 color-mix(in srgb, var(--landing-brand-black) 14%, transparent); opacity: 0; pointer-events: none; }
-/* Round 3 of human review on PR #870: the arrows must not touch the photo at
-   all, so the frame's own box can no longer be the only thing in this
-   column — `.landing-hero-carousel` is a small grid that reserves real
-   column space for each arrow instead of overlaying them, which is what let
-   them straddle the border in round 2. Below 768px (the breakpoint the hero
-   itself already stacks at) that reserved space would cost the photo more
-   width than it has to spare, so the grid re-flows: the frame keeps the
-   full row and both arrows move to a centred row underneath instead. */
-.landing-hero-carousel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "prev frame next"; align-items: center; gap: 16px; }
-.landing-hero-carousel .landing-hero-frame { grid-area: frame; min-width: 0; }
-.landing-hero-nav-prev { grid-area: prev; }
-.landing-hero-nav-next { grid-area: next; }
+/* The arrows sit in the hero's top-right corner, over the photo's quietest
+   band, clear of the headline (bottom-left). PR #870's rule that they never
+   touch the photo's border no longer applies: with the photo at full bleed
+   there is no border to straddle. */
+.landing-hero-nav-next { right: var(--landing-gutter); }
+.landing-hero-nav-prev { right: calc(var(--landing-gutter) + 60px); }
 /* @touch-target Matches the 44px floor every other tappable control here uses. */
-.landing-hero-nav { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--landing-brand-black) 82%, transparent); color: var(--landing-surface); cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
+.landing-hero-nav { position: absolute; top: 36px; z-index: 20; display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--landing-surface) 55%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--landing-brand-black) 82%, transparent); color: var(--landing-surface); cursor: pointer; transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
 .landing-hero-nav:hover { background: var(--landing-highlight); border-color: var(--landing-highlight); color: var(--landing-on-highlight); }
 /* `--landing-focus` is near-black, invisible against this button's own
    near-black rest state — swapped for the hero's existing yellow accent
@@ -179,31 +188,14 @@
    the bezel and the button's dark fill alike. */
 .landing-hero-nav:focus-visible { outline: 3px solid var(--landing-highlight); outline-offset: 3px; }
 .landing-hero-nav svg { width: 18px; height: 18px; }
-/* The serve: a ball resting on the club's paddle, bottom-right of the hero.
-   ONE anchor drives both. The paddle sits on `--landing-serve-y`; the ball's
-   own offsets are derived from that same origin, so "beneath and on the same
-   axis" is arithmetic rather than two clamps that agree until one is edited.
-   Everything here is the pose at the moment of impact, which is also what a
-   visitor sees when the motion layer never loads — `playServe` animates away
-   from it and returns to it, and reduced motion simply keeps it. */
-.landing-hero { --landing-serve-x: clamp(28px, 8vw, 132px); --landing-serve-y: clamp(26px, 5vw, 68px); --landing-serve-ball: clamp(28px, 3vw, 38px); --landing-serve-face: clamp(46px, 5vw, 62px); --landing-serve-contact: 2px; }
-/* Centres line up because the ball is inset by half the difference in width. */
-.landing-hero-serve-ball { position: absolute; right: calc(var(--landing-serve-x) + (var(--landing-serve-face) - var(--landing-serve-ball)) / 2); bottom: calc(var(--landing-serve-y) + var(--landing-serve-face) - var(--landing-serve-contact)); z-index: 12; width: var(--landing-serve-ball); height: var(--landing-serve-ball); border: 2px solid color-mix(in srgb, var(--landing-brand-black) 38%, transparent); border-radius: 50%; background: var(--landing-surface); box-shadow: 0 7px 15px color-mix(in srgb, var(--landing-brand-black) 42%, transparent), inset -5px -5px 0 color-mix(in srgb, var(--landing-brand-black) 12%, transparent); pointer-events: none; will-change: transform; }
-/* Two classes deep on purpose: `.landing-paddle` further down owns the shape
-   and is a later rule, so a single class here would lose its own position,
-   width and height to it. The handle's offsets are the Motto paddle's exact
-   numbers rewritten as ratios of the face, so they hold at every hero size. */
-.landing-hero .landing-hero-serve-paddle { position: absolute; right: var(--landing-serve-x); bottom: var(--landing-serve-y); z-index: 11; width: var(--landing-serve-face); height: var(--landing-serve-face); pointer-events: none; will-change: transform; }
-.landing-hero .landing-hero-serve-paddle i { right: calc(var(--landing-serve-face) * -0.16); bottom: calc(var(--landing-serve-face) * -0.11); width: calc(var(--landing-serve-face) * 0.5); height: calc(var(--landing-serve-face) * 0.18); }
-/* The hero paddle drops the 13px dot `.landing-paddle::after` draws, because
-   here there is already a real ball: `[data-serve-ball]` is the one the serve
-   animation moves, and the two together read as two balls rather than one
-   shot. Scoped, not deleted — on the Motto paddle that dot is the only ball
-   there is, and paddle-plus-ball is the sport's own icon. Two classes deep
-   for the same reason as the rule above, which is also what makes this beat
-   `.landing-paddle::after` without `!important`: (0,2,1) over (0,1,1), so
-   source order does not come into it. */
-.landing-hero .landing-hero-serve-paddle::after { content: none; }
+/* The `01 / 03` position counter sits left of the arrow pair, on the same
+   dark band, in the hero's own label voice: Barlow (inherited from
+   `.landing-page`), uppercase tracking and `--landing-on-action` like
+   `.landing-eyebrow` gets inside the hero, plus tabular figures so the
+   digits do not shift the slash sideways as they change. `118px` clears
+   both 44px arrows and the 60px gap `.landing-hero-nav-prev` already opens
+   between them and the gutter, plus 14px of its own breathing room. */
+.landing-hero-counter { position: absolute; top: 36px; right: calc(var(--landing-gutter) + 118px); z-index: 20; display: flex; align-items: center; height: 44px; color: var(--landing-on-action); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 
 /* Warm band, distinct from ENTRENAMIENTOS' white surface below it (issue
    #691), closed off with a hairline so the boundary reads on every screen
@@ -614,15 +606,20 @@
      headline used to start ~114px below the hero's edge and would otherwise
      have landed at 64px, crowding the sticky navbar it sits right under.
      The bottom stays at 64px so the section still ends up ~46px shorter. */
-  .landing-hero { min-height: auto; grid-template-columns: 1fr; padding: 80px var(--landing-gutter) 64px; }
+  /* Stacked, the photo becomes a fixed-height band across the top of the hero
+     instead of the section's full background — there is no room here for the
+     copy to sit over it the way it does on desktop. The band's bottom edge
+     is cut on the same hard diagonal as the desktop seam, no fade and no
+     overlay; the hero's top padding clears the band with room to spare so
+     the copy always starts on solid red. */
+  .landing-hero { min-height: auto; padding: 400px var(--landing-gutter) 56px; }
   .landing-hero-copy { align-items: flex-start; }
-  /* Reserving side columns here would eat into the one thing this breakpoint
-     was meant to give the photo back: its full stacked-row width. The frame
-     keeps that whole row and the arrows drop to a centred row underneath,
-     never touching the photo either way. */
-  .landing-hero-carousel { grid-template-columns: 1fr 1fr; grid-template-areas: "frame frame" "prev next"; row-gap: 14px; }
-  .landing-hero-nav-prev { justify-self: end; }
-  .landing-hero-nav-next { justify-self: start; }
+  .landing-hero-carousel { inset: 0 0 auto 0; height: 360px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 86%); }
+  .landing-hero-nav { top: 20px; }
+  .landing-hero-nav-prev { right: calc(var(--landing-gutter) + 56px); }
+  /* Same arithmetic as the desktop rule, shifted 4px to match the narrower
+     mobile gap `.landing-hero-nav-prev` opens above. */
+  .landing-hero-counter { top: 20px; right: calc(var(--landing-gutter) + 114px); }
   .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 12px; padding: 42px 20px; }
   .landing-stat strong { font-size: 38px; }
   .landing-page { --landing-gutter: 24px; }
@@ -675,12 +672,6 @@
   .landing-sponsors-track { animation: none; transform: none; }
   .landing-ticker-track { animation: none; transform: none; }
       .landing-motto [data-motto-paddle], .landing-motto [data-motto-copy], .landing-motto [data-motto-cta], .landing-motto .landing-stars { opacity: 1 !important; transform: none !important; }
-  /* The serve keeps its composition and loses only the movement: the ball
-     stays standing on a square paddle face, which is the frame the animation
-     exists to show. `playServe` never runs under this query, so this is the
-     guard for a transform left inline by a run that started before the
-     preference changed — author `!important` outbids GSAP's inline write. */
-  .landing-hero [data-serve-ball], .landing-hero [data-serve-paddle] { opacity: 1 !important; transform: none !important; }
   /* `ScheduleSelector` already withholds the `--animate`/`--pop` classes once
      its own `useReducedMotion` hook reads this same preference; these rules
      are the CSS-only backstop for the same two keyframes. */

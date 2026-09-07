@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { HERO_PHOTOS } from "./landing-hero-photos";
@@ -35,6 +35,21 @@ const IDLE_SLIDE_REACH = 2;
 /** Deadline for the idle release, so a permanently busy page still gets it. */
 const IDLE_RELEASE_TIMEOUT_MS = 2000;
 
+/**
+ * How long an untouched slide stays up before auto-advancing.
+ *
+ * The interval effect below depends on `current`, so every advance — auto or
+ * manual — tears it down and starts a fresh one: there is no drift to
+ * accumulate and a manual arrow press always buys a full interval of quiet
+ * before the next auto-advance, for free, from the dependency array alone.
+ */
+const AUTO_ADVANCE_INTERVAL_MS = 6000;
+
+/** Zero-pads a 1-based slide position for the `01 / 03` counter. */
+function padSlidePosition(position: number): string {
+  return String(position).padStart(2, "0");
+}
+
 type IdleWindow = Window & {
   requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
   cancelIdleCallback?: (handle: number) => void;
@@ -45,10 +60,18 @@ type IdleWindow = Window & {
  * buttons swap the active slide synchronously with no GSAP, so it works
  * before the motion runtime loads and under reduced motion. The
  * `landing:hero-slide-change` event additively hooks GSAP's wipe crossing.
+ *
+ * Auto-advance reuses the exact same `go` the arrows call, so a timer tick
+ * is indistinguishable from a "next" press to every consumer downstream —
+ * the wipe, the slide-reach release, the event detail. It never runs at all
+ * under `prefers-reduced-motion: reduce`, and it pauses whenever the pointer
+ * is over the carousel or focus is inside it.
  */
 export default function HeroCarousel(): React.ReactElement {
   const [current, setCurrent] = useState(0);
   const [slideReach, setSlideReach] = useState(PRIORITY_SLIDE_REACH);
+  const [hovering, setHovering] = useState(false);
+  const [focused, setFocused] = useState(false);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const previousRef = useRef(0);
 
@@ -75,14 +98,30 @@ export default function HeroCarousel(): React.ReactElement {
     previousRef.current = current;
   }, [current]);
 
-  const go = (index: number): void => {
+  const go = useCallback((index: number): void => {
     const next = ((index % HERO_PHOTOS.length) + HERO_PHOTOS.length) % HERO_PHOTOS.length;
     setSlideReach(HERO_PHOTOS.length);
     setCurrent(next);
-  };
+  }, []);
+
+  useEffect((): (() => void) | undefined => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    if (hovering || focused) return undefined;
+
+    const id = window.setInterval((): void => {
+      go(current + 1);
+    }, AUTO_ADVANCE_INTERVAL_MS);
+    return (): void => window.clearInterval(id);
+  }, [current, hovering, focused, go]);
 
   return (
-    <div className="landing-hero-carousel">
+    <div
+      className="landing-hero-carousel"
+      onMouseEnter={(): void => setHovering(true)}
+      onMouseLeave={(): void => setHovering(false)}
+      onFocus={(): void => setFocused(true)}
+      onBlur={(): void => setFocused(false)}
+    >
       <button
         type="button"
         className="landing-hero-nav landing-hero-nav-prev"
@@ -91,6 +130,14 @@ export default function HeroCarousel(): React.ReactElement {
       >
         <ChevronLeft aria-hidden="true" />
       </button>
+      {/* `aria-hidden` on the digits: the sibling `sr-only` sentence is what
+          assistive tech actually reads, so the digits are not read twice. */}
+      <div className="landing-hero-counter" aria-live="polite">
+        <span aria-hidden="true">
+          {padSlidePosition(current + 1)} / {padSlidePosition(HERO_PHOTOS.length)}
+        </span>
+        <span className="sr-only">{`Foto ${current + 1} de ${HERO_PHOTOS.length}`}</span>
+      </div>
       <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
         <div className="landing-hero-screen">
           <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
@@ -104,7 +151,14 @@ export default function HeroCarousel(): React.ReactElement {
               priority={index === 0}
               loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
               quality={90}
-              sizes="(max-width: 768px) 86vw, (max-width: 1024px) 496px, 592px"
+              /* The carousel spans from `.landing-hero-carousel`'s 44% desktop
+                 inset to the viewport's right edge — roughly 56% of it,
+                 rounded up to 60vw for the diagonal seam's safety margin —
+                 and the full viewport width on mobile, not the old framed
+                 6:5 photo's 496/592px box. Matching `sizes` to that box
+                 keeps Next from serving a ~640px candidate that the browser
+                 then stretches well past 1200px on wide desktops. */
+              sizes="(max-width: 768px) 100vw, 60vw"
               style={{ objectPosition: photo.objectPosition }}
               data-slide={index}
               data-active={index === current}
