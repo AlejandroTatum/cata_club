@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { canAccess, getDefaultRoute } from "@/lib/auth-utils";
+import { withRedirectReason } from "@/lib/redirect-reason";
 import type { UserRole } from "@/types/domain";
 import ErrorState from "@/components/ui/ErrorState";
 
@@ -62,7 +63,7 @@ export default function ProtectedRoute({
       // mid-request) names itself in the redirect so /login can say WHY —
       // an ordinary unauthenticated visit or an explicit logout() carries no
       // such reason and stays silent, exactly as before.
-      router.replace(sessionExpired ? `${redirectTo}?motivo=sesion-expirada` : redirectTo);
+      router.replace(sessionExpired ? withRedirectReason(redirectTo, "sesion-expirada") : redirectTo);
       return;
     }
 

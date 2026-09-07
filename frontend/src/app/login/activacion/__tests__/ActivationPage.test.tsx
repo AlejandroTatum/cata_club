@@ -39,15 +39,6 @@ vi.mock("@/services/api", () => ({
   reenviarVerificacionCorreo: (...args: unknown[]) => mockReenviarVerificacionCorreo(...args),
 }));
 
-const mockShowSuccess = vi.fn();
-vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({
-    showToast: vi.fn(),
-    showError: vi.fn(),
-    showSuccess: mockShowSuccess,
-  }),
-}));
-
 // Same stub as LoginPage.test.tsx: only the content under test matters here,
 // not the shell's own layout. Wrapped in a spy (#1045) so the tests below can
 // assert on the props ActivationPage hands the shell — `hideBack` in
@@ -66,7 +57,7 @@ vi.mock("@/components/auth/AuthShell", async () => {
 });
 
 import { useAuth } from "@/contexts/AuthContext";
-import { createAuthenticatedAuth, createMockSession } from "@/components/__tests__/test-utils";
+import { createAuthenticatedAuth, createMockSession, createUnauthenticatedAuth } from "@/components/__tests__/test-utils";
 import type { ActivationSession } from "@/lib/activation-reasons";
 
 const mockUseAuth = vi.mocked(useAuth);
@@ -78,7 +69,6 @@ beforeEach(() => {
   mockVerificarCorreo.mockReset();
   mockReenviarVerificacionCorreo.mockReset();
   mockReenviarVerificacionCorreo.mockResolvedValue({ mensaje: "Enviado." });
-  mockShowSuccess.mockClear();
 });
 
 describe("ActivationPage", () => {
@@ -243,22 +233,31 @@ describe("ActivationPage — verifying the email in place (#1045)", () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
   });
 
-  // Review finding on #1050: the verification can succeed in the backend at
-  // the exact moment the person's OWN session ends (expired, or a logout in
-  // another tab) — `refreshSession()` then answers "unauthenticated", the
-  // guard effect sends this screen to /login on its own, and a message set
-  // on THIS page's local state would be thrown away with it before anyone
-  // reads it. The news has to survive that redirect.
+  // Review finding on #1050, unified with `/login`'s own mechanism in #1057:
+  // the verification can succeed in the backend at the exact moment the
+  // person's OWN session ends (expired, or a logout in another tab) —
+  // `refreshSession()` then answers "unauthenticated", the guard effect
+  // sends this screen to /login on its own, and a message set on THIS page's
+  // local state would be thrown away with it before anyone reads it. The
+  // news has to survive that redirect — carried in the URL, the same way
+  // `?motivo=sesion-expirada` already does for #353, instead of a toast.
   it("still says the verification worked when the session ends at that exact moment", async () => {
     mockVerificarCorreo.mockResolvedValue(undefined);
-    const mockRefreshSession = vi.fn().mockResolvedValue({ kind: "unauthenticated" });
-    renderPending(pendingSession(), { refreshSession: mockRefreshSession });
+    // Mirrors what `AuthContext`'s real `revalidate()` does on this outcome —
+    // it clears the session itself, which is what actually flips
+    // `isAuthenticated` and lets the guard effect fire the redirect below.
+    const mockRefreshSession = vi.fn().mockImplementation(async () => {
+      mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+      return { kind: "unauthenticated" };
+    });
+    const { rerender } = renderPending(pendingSession(), { refreshSession: mockRefreshSession });
 
     await submitToken("token-valido");
 
-    await waitFor(() =>
-      expect(mockShowSuccess).toHaveBeenCalledWith(expect.stringMatching(/verificad.*iniciar sesión/i)),
-    );
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login?motivo=correo-verificado"));
   });
 
   // AC4 — the condition that is not resolved here reads differently from the one that is.

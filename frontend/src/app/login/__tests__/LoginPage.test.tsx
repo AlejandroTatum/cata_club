@@ -159,6 +159,23 @@ describe("LoginPage", () => {
   });
 
   /**
+   * Issue #1057: `/login/activacion` used to carry this same news via a
+   * toast (#1045) instead of this page's own `?motivo=` mechanism — the two
+   * are unified here, so the redirect names the reason the same way #353's
+   * session-expired bounce does.
+   */
+  it("names the reason when it arrives via a just-verified-email bounce (?motivo=correo-verificado)", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+    resetTestHistory("/login?motivo=correo-verificado");
+
+    render(<LoginPage />);
+
+    expect(
+      screen.getByText("Su correo quedó verificado. Vuelva a iniciar sesión para continuar."),
+    ).toBeInTheDocument();
+  });
+
+  /**
    * WCAG 2.2 SC 2.5.8 (Target Size, Minimum) — 24x24 CSS px. Measured at
    * 390x844 the login screen carried the two smallest targets in the product:
    * the password toggle at 16x16 (a bare 16px icon in an unpadded button) and
