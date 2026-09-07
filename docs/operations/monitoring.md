@@ -32,30 +32,77 @@ devuelve cuerpo). El HEAD existe porque el plan gratuito de UptimeRobot sondea
 con ese método y elegirlo es un control pago: sin un handler propio la sonda
 recibía `405` (issue #862), porque FastAPI no deriva HEAD del GET.
 
-### 2. Heartbeat del backup (¿el backup sigue vivo?)
+### 2. Heartbeat del backup y de Celery (¿siguen vivos?)
 
 Un monitor tipo *heartbeat* (dead-man's-switch) con período de 24 h y tolerancia
 suficiente para cubrir la corrida de las 07:00.
 
-El cron de las 07:00 corre `check-backup-freshness.sh` y **solo si sale 0**
-encadena `notify-heartbeat.sh`, que pingea la URL del heartbeat. El
-encadenamiento es `&&`, nunca `;`: con el dump ausente (exit 1) o vencido
-(exit 2) el ping NO sale, y UptimeRobot alerta por la ausencia.
+El cron de las 07:00 corre `check-backup-freshness.sh` y, **solo si sale 0**,
+encadena `check-celery-health.sh` (issue #1061) y, **solo si ese también sale
+0**, `notify-heartbeat.sh`, que pingea la URL del heartbeat. El encadenamiento
+es `&&`, nunca `;`: con el dump ausente (exit 1) o vencido (exit 2), o con
+celery-worker/celery-beat `unhealthy`, el ping NO sale, y UptimeRobot alerta
+por la ausencia.
+
+`check-celery-health.sh` reutiliza el mismo chequeo que ya gatea un
+deploy/rollback (`check_celery` en `scripts/deploy/lib/post-checks.sh`): los
+healthchecks de `docker-compose.yml` para celery-worker (`inspect ping -d`) y
+celery-beat (freshness de `celerybeat-schedule`, refrescada cada 30s). El
+sidecar `autoheal` (issue #1091) reinicia un contenedor que Compose deja
+`unhealthy` para siempre fuera de Swarm, pero eso es reparación local: sin
+este cron, nada externo se enteraba si igual quedaba enfermo entre
+despliegues.
 
 Que la alerta sea la AUSENCIA del ping es lo que hace que esto sirva. Cubre a la
-vez el backup vencido, el cron desinstalado, el disco lleno y el host apagado —
-ninguno de los cuales puede reportarse a sí mismo. Un chequeo que tuviera que
-enviar su propia alerta se callaría en todos esos casos.
+vez el backup vencido, Celery atascado, el cron desinstalado, el disco lleno y
+el host apagado — ninguno de los cuales puede reportarse a sí mismo. Un
+chequeo que tuviera que enviar su propia alerta se callaría en todos esos
+casos.
 
 La URL lleva el token en el path, así que es un secreto: no va al crontab (que
 `crontab -l` lista sin privilegios) ni a ningún log. `notify-heartbeat.sh` la
 lee de un archivo de root y no la imprime en ningún camino, ni siquiera al
 fallar.
 
+## Logs de contenedores
+
+`docker-compose.prod.yml` declara `logging.driver: journald` en los ocho
+servicios del render (issue #1067): con el driver por defecto de Docker
+(`json-file`) el log vive DENTRO del filesystem efímero del contenedor, bajo
+su ID -- y cada despliegue recrea `backend`/`frontend` (imagen nueva) y cada
+cambio del `Caddyfile` recrea `caddy` (`refrescar_caddy`), así que un
+`docker logs <contenedor>` después de un redeploy no muestra nada de antes
+del último release. `journald` es un servicio del HOST: sobrevive al
+`docker rm`/recreate porque no depende del ciclo de vida del contenedor.
+
+Para consultar el log de un servicio, incluido el de un release anterior:
+
+```
+journalctl CONTAINER_NAME=<servicio> --since <ventana>
+```
+
+Por ejemplo, `journalctl CONTAINER_NAME=cata-club-backend-1 --since "48 hours ago"`.
+`<servicio>` es el nombre del contenedor tal como lo asigna Compose
+(`docker ps` lo confirma), no el nombre del servicio en el YAML.
+
+El `Caddyfile` agrega además un bloque `log { output stdout }` en el sitio
+único de producción: sin él, Caddy solo emitía sus propios logs de admin y
+arranque, nunca el access log del borde (quién pidió qué y qué devolvió el
+proxy). Con `journald` como driver, ese access log también persiste al
+redeploy.
+
+Lo que queda fuera de este repositorio: la retención real
+(`SystemMaxUse`, `MaxRetentionSec` en `journald.conf`) es configuración del
+host, y un destino centralizado fuera del host (por ejemplo un agregador
+externo) queda fuera de alcance por decisión del dueño del proyecto.
+
 ## Señales disponibles en el host
 
 - `scripts/ops/check-backup-freshness.sh --max-age-hours 26` sale `0` si existe
   un dump reciente, `1` si no existe y `2` si supera el RPO.
+- `scripts/ops/check-celery-health.sh` sale `0` si celery-worker y celery-beat
+  están `healthy` y el broker responde al ping de control; distinto de 0 si
+  cualquiera de los dos está `unhealthy`, ausente o no responde (issue #1061).
 - `scripts/ops/notify-heartbeat.sh` pingea el heartbeat externo. Sale distinto
   de 0 si el archivo de la URL falta, está vacío o el ping no sale.
 - `scripts/ops/preflight-production.sh` valida la configuración de Compose y la

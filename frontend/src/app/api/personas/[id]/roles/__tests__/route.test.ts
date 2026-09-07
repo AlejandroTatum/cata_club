@@ -68,7 +68,7 @@ afterEach(() => {
 
 describe("GET /api/personas/[id]/roles", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await GET(getRequest("5"), { params: { id: "5" } });
+    const response = await GET(getRequest("5"), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe("GET /api/personas/[id]/roles", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(rolesResponse));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -94,7 +94,7 @@ describe("GET /api/personas/[id]/roles", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
   });
@@ -102,7 +102,7 @@ describe("GET /api/personas/[id]/roles", () => {
 
 describe("POST /api/personas/[id]/roles", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await POST(postRequest("5", { tipoRol: "ENTRENADOR" }), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { tipoRol: "ENTRENADOR" }), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe("POST /api/personas/[id]/roles", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { tipoRol: "ENTRENADOR" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -136,7 +136,7 @@ describe("POST /api/personas/[id]/roles", () => {
     const access = makeJwt(3600);
     const response = await POST(
       postRequest("5", { tipoRol: "ENTRENADOR" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(403);
@@ -146,7 +146,7 @@ describe("POST /api/personas/[id]/roles", () => {
 describe("DELETE /api/personas/[id]/roles", () => {
   it("returns 400 when tipoRol query param is missing", async () => {
     const access = makeJwt(3600);
-    const response = await DELETE(deleteRequest("5", null, `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await DELETE(deleteRequest("5", null, `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -158,7 +158,7 @@ describe("DELETE /api/personas/[id]/roles", () => {
     const access = makeJwt(3600);
     const response = await DELETE(
       deleteRequest("5", "ENTRENADOR", `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -180,7 +180,7 @@ describe("DELETE /api/personas/[id]/roles", () => {
     const access = makeJwt(3600);
     const response = await DELETE(
       deleteRequest("5", "ENTRENADOR", `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(403);

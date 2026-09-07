@@ -43,7 +43,7 @@ afterEach(() => {
 
 describe("GET /api/groups/horarios/[id]/alumnos", () => {
   it("returns 401 when no access token cookie is present", async () => {
-    const response = await GET(getRequest(), { params: { id: "1" } });
+    const response = await GET(getRequest(), { params: Promise.resolve({ id: "1" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -71,7 +71,7 @@ describe("GET /api/groups/horarios/[id]/alumnos", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(alumnos));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "1" } });
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "1" }) });
     const body = await response.json();
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -86,7 +86,7 @@ describe("GET /api/groups/horarios/[id]/alumnos", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([]));
 
     const access = makeJwt(3600);
-    await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "7" } });
+    await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "7" }) });
 
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/asistencias/horarios/7/alumnos",
@@ -101,7 +101,7 @@ describe("GET /api/groups/horarios/[id]/alumnos", () => {
 
     const access = makeJwt(3600);
     await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`, "?skip=10&limit=200"), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -114,7 +114,7 @@ describe("GET /api/groups/horarios/[id]/alumnos", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ message: "No encontrado" }, 404));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "999" } });
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "999" }) });
     const body = await response.json();
 
     expect(response.status).toBe(404);

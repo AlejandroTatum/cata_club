@@ -23,10 +23,8 @@ import { patchCatalogResource } from "@/lib/server/bff-helpers";
 
 const UPDATABLE_FIELDS = ["categoria", "precio", "modalidad"] as const;
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   return patchCatalogResource(request, {
     id: params.id,
     buildPath: (id) => `/membresias/tipos/${id}`,

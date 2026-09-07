@@ -30,38 +30,15 @@ function pxIn(rule: string, prop: string): number {
 
 describe("landing vertical space (#871)", (): void => {
   describe("Valores", (): void => {
-    it("shrinks the rally stage from 190px to the 140-155px window", (): void => {
+    it("keeps each tile a fixed 176px stage for its numeral, no rally stage above it", (): void => {
       const css = landingCss();
-      const height = pxIn(ruleAt(css, ".landing-rally"), "height");
-      expect(height).toBeGreaterThanOrEqual(140);
-      expect(height).toBeLessThanOrEqual(155);
+      const height = pxIn(ruleAt(css, ".landing-tablero-tile"), "height");
+      expect(height).toBe(176);
     });
 
-    it("tightens the section's own structural gap to 28-32px", (): void => {
+    it("keeps the value body at 16px", (): void => {
       const css = landingCss();
-      const gap = pxIn(ruleAt(css, ".landing-values"), "gap");
-      expect(gap).toBeGreaterThanOrEqual(28);
-      expect(gap).toBeLessThanOrEqual(32);
-    });
-
-    it("trims each value card's top padding to 24-28px on desktop and tablet", (): void => {
-      const css = landingCss();
-      const desktopTop = pxIn(ruleAt(css, ".landing-value"), "padding");
-      expect(desktopTop).toBeGreaterThanOrEqual(24);
-      expect(desktopTop).toBeLessThanOrEqual(28);
-
-      const tabletRule = ruleAt(css, ".landing-value, .landing-value + .landing-value");
-      const tabletTop = pxIn(tabletRule, "padding");
-      expect(tabletTop).toBeGreaterThanOrEqual(24);
-      expect(tabletTop).toBeLessThanOrEqual(28);
-    });
-
-    it("keeps the value body at 16px and the rally's own pin anchor untouched", (): void => {
-      const css = landingCss();
-      expect(ruleAt(css, ".landing-value p")).toContain("font-size: 16px");
-      // The negative margin that lets the ball's guide overlap the cards below
-      // it is part of the pin/flow choreography — not a target of this issue.
-      expect(pxIn(ruleAt(css, ".landing-rally"), "margin-bottom")).toBe(-30);
+      expect(ruleAt(css, ".landing-tablero-item p")).toContain("font-size: 16px");
     });
   });
 
@@ -132,47 +109,45 @@ describe("landing vertical space (#871)", (): void => {
 });
 
 // ---------------------------------------------------------------------------
-// #1026 — the Valores redesign. jsdom still cannot compute layout, so these
-// keep reading the authored stylesheet, same convention as the #871 block
-// above. What they lock is the redesign's three structural commitments: the
-// section BLEEDS into its black neighbours instead of cutting, the rally
-// counter presents as the scoreboard chip, and the value indices carry
-// scoreboard-size numerals. None of it moves the #871 vertical budget, which
-// is why the block above still passes untouched.
+// Valores tablero redesign — the scroll-scrubbed rally (ball, guide,
+// scoreboard counter, dimming) was rejected for breaking on mobile and for
+// the ball motif itself. Approved prototype `landing-valores-b-tablero.html`
+// replaces it with a static scoreboard: one grid gives every tile the same
+// top edge as every other tile BY CONSTRUCTION, so nothing has to scrub
+// anything into alignment. jsdom still cannot compute layout, so these keep
+// reading the authored stylesheet, same convention as the #871 block above.
 // ---------------------------------------------------------------------------
-describe("Valores redesign (#1026)", (): void => {
-  it("blends both edges into the neighbouring black sections", (): void => {
+describe("Valores tablero redesign", (): void => {
+  it("blends only its bottom edge into the trophy wall below — the top is a hard seam against #nosotros' v2 white ground", (): void => {
     const css = landingCss();
     const blend = css.match(/\.landing-values::after \{[^}]*\}/);
     expect(blend).not.toBeNull();
-    expect(blend![0]).toContain("linear-gradient(180deg, var(--landing-brand-black)");
+    expect(blend![0]).not.toContain("linear-gradient(180deg, var(--landing-brand-black)");
     expect(blend![0]).toContain("linear-gradient(0deg, var(--landing-brand-black)");
     // The wash paints BEHIND the section's children, never over their text.
     expect(blend![0]).toContain("z-index: 0");
     expect(blend![0]).toContain("pointer-events: none");
   });
 
-  it("presents the rally counter as the scoreboard chip", (): void => {
+  it("carries no rally, ball, guide, counter, or dimming rules", (): void => {
     const css = landingCss();
-    const chip = ruleAt(css, ".landing-rally-count");
-    expect(chip).toContain("border-radius: 999px");
-    expect(chip).toContain("background: var(--landing-brand-black)");
-    expect(chip).toContain("color: var(--landing-brand-yellow)");
-    // The count itself carries the ball's orange, the hero accent.
-    expect(ruleAt(css, ".landing-rally-count b")).toContain("color: var(--landing-ball)");
+    expect(css).not.toContain(".landing-rally");
+    expect(css).not.toContain(".landing-value.dim");
+    expect(css).not.toContain(".landing-value.hit");
   });
 
-  it("raises the value index to the scoreboard numerals", (): void => {
+  it("presents the numeral in brand yellow on a black tile, tabular so digits never shift width", (): void => {
     const css = landingCss();
-    const index = ruleAt(css, ".landing-value .landing-index");
-    expect(index).toContain("font-size: clamp(36px, 3.4vw, 48px)");
-    expect(index).toContain("font-variant-numeric: tabular-nums");
+    const tile = ruleAt(css, ".landing-tablero-tile");
+    expect(tile).toContain("background: var(--landing-brand-black)");
+    expect(tile).toContain("color: var(--landing-highlight)");
+    expect(tile).toContain("font-variant-numeric: tabular-nums");
   });
 
-  it("draws the rally guide as the row's black spine, not a red scribble", (): void => {
+  it("both grid rows share one four-column track, so every title starts at the same top", (): void => {
     const css = landingCss();
-    const guide = ruleAt(css, ".landing-rally-guide");
-    expect(guide).toContain("stroke: var(--landing-text-strong)");
-    expect(guide).toContain("stroke-width: 3");
+    const grid = ruleAt(css, ".landing-tablero");
+    expect(grid).toContain("display: grid");
+    expect(grid).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
   });
 });

@@ -63,7 +63,7 @@ afterEach(() => {
 
 describe("GET /api/fichas-medicas/persona/[id]", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await GET(getRequest("5"), { params: { id: "5" } });
+    const response = await GET(getRequest("5"), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -73,7 +73,7 @@ describe("GET /api/fichas-medicas/persona/[id]", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaMedica));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -91,7 +91,7 @@ describe("GET /api/fichas-medicas/persona/[id]", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
   });
@@ -99,7 +99,7 @@ describe("GET /api/fichas-medicas/persona/[id]", () => {
 
 describe("PATCH /api/fichas-medicas/persona/[id]", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await PATCH(patchRequest("5", { tipoSangre: "A_POSITIVO" }), { params: { id: "5" } });
+    const response = await PATCH(patchRequest("5", { tipoSangre: "A_POSITIVO" }), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
         },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
       ),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
     const body = await response.json();
 
@@ -149,7 +149,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
     const access = makeJwt(3600);
     const response = await PATCH(
       patchRequest("5", { tipoSangre: "A_POSITIVO" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(403);
@@ -168,7 +168,7 @@ describe("PATCH /api/fichas-medicas/persona/[id]", () => {
         { alergias: null, contactoEmergencia: null, telefonoEmergencia: null },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
       ),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(global.fetch).toHaveBeenNthCalledWith(
@@ -208,7 +208,7 @@ describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the c
     const access = makeJwt(3600);
     const response = await PATCH(
       patchRequest("5", { tipoSangre: "DESCONOCIDO" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(422);
@@ -224,7 +224,7 @@ describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the c
     const access = makeJwt(3600);
     const response = await PATCH(
       patchRequest("5", { alergias: "Polen" }, `${ACCESS_TOKEN_COOKIE}=${access}`),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(400);
@@ -243,7 +243,7 @@ describe("PATCH /api/fichas-medicas/persona/[id] — #643 rejections reach the c
         { tipoSangre: "O_POSITIVO", telefonoEmergencia: "0997654321" },
         `${ACCESS_TOKEN_COOKIE}=${access}`,
       ),
-      { params: { id: "5" } },
+      { params: Promise.resolve({ id: "5" }) },
     );
 
     expect(response.status).toBe(200);

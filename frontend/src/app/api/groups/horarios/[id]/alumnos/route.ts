@@ -11,10 +11,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractAccessToken, proxyToBackend, unauthorizedResponse } from "@/lib/server/bff-helpers";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const accessToken = extractAccessToken(request);
   if (!accessToken) return unauthorizedResponse();
 

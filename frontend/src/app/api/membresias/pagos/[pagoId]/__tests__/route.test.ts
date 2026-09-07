@@ -51,7 +51,7 @@ describe("GET /api/membresias/pagos/[pagoId]", () => {
     };
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(pago));
 
-    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+    const response = await GET(getRequest("9"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(pago);
@@ -62,7 +62,7 @@ describe("GET /api/membresias/pagos/[pagoId]", () => {
   });
 
   it("rejects a non-numeric pagoId with 400 without calling the backend", async () => {
-    const response = await GET(getRequest("abc"), { params: { pagoId: "abc" } });
+    const response = await GET(getRequest("abc"), { params: Promise.resolve({ pagoId: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe("GET /api/membresias/pagos/[pagoId]", () => {
   it("relays the backend's 403 when the caller has no relation to the pago", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+    const response = await GET(getRequest("9"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(403);
   });
@@ -79,7 +79,7 @@ describe("GET /api/membresias/pagos/[pagoId]", () => {
   it("relays the backend's 404 when the pago does not exist", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No encontrado" }, 404));
 
-    const response = await GET(getRequest("999"), { params: { pagoId: "999" } });
+    const response = await GET(getRequest("999"), { params: Promise.resolve({ pagoId: "999" }) });
 
     expect(response.status).toBe(404);
   });

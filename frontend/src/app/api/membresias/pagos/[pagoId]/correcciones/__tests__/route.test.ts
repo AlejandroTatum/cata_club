@@ -55,7 +55,7 @@ describe("GET /api/membresias/pagos/[pagoId]/correcciones", () => {
     ];
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(correcciones));
 
-    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+    const response = await GET(getRequest("9"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(correcciones);
@@ -66,7 +66,7 @@ describe("GET /api/membresias/pagos/[pagoId]/correcciones", () => {
   });
 
   it("rejects a non-numeric pagoId with 400 without calling the backend", async () => {
-    const response = await GET(getRequest("abc"), { params: { pagoId: "abc" } });
+    const response = await GET(getRequest("abc"), { params: Promise.resolve({ pagoId: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe("GET /api/membresias/pagos/[pagoId]/correcciones", () => {
   it("relays the backend's 403 when the caller is not an administrator", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+    const response = await GET(getRequest("9"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(403);
   });
@@ -86,7 +86,7 @@ describe("GET /api/membresias/pagos/[pagoId]/correcciones", () => {
   it("relays the backend's 409 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Conflicto" }, 409));
 
-    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+    const response = await GET(getRequest("9"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(409);
   });
@@ -94,7 +94,7 @@ describe("GET /api/membresias/pagos/[pagoId]/correcciones", () => {
   it("relays the backend's 422 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
 
-    const response = await GET(getRequest("9"), { params: { pagoId: "9" } });
+    const response = await GET(getRequest("9"), { params: Promise.resolve({ pagoId: "9" }) });
 
     expect(response.status).toBe(422);
   });

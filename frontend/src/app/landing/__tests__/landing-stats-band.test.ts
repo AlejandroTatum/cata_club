@@ -65,7 +65,7 @@ describe("landing stats band separation", (): void => {
 
   it("reduces the background grid's contrast on the stats band relative to other sections", (): void => {
     const css = landingCss();
-    const generalMatch = css.match(/\.landing-section:not\(\.landing-motto\)::before \{[^}]*var\(--landing-brand-black\)\s*([\d.]+)%/);
+    const generalMatch = css.match(/\.landing-section:not\(\.landing-motto\):not\(\.landing-values\)::before \{[^}]*var\(--landing-brand-black\)\s*([\d.]+)%/);
     const statsMatch = css.match(/\.landing-stats::before \{[^}]*var\(--landing-brand-black\)\s*([\d.]+)%/);
     expect(generalMatch).toBeTruthy();
     expect(statsMatch).toBeTruthy();

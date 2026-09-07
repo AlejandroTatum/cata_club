@@ -62,7 +62,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
   });
 
   it("returns 401 without an access-token cookie", async () => {
-    const response = await PATCH(patchRequest({ precio: "40.00" }), { params: { id: "1" } });
+    const response = await PATCH(patchRequest({ precio: "40.00" }), { params: Promise.resolve({ id: "1" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -70,7 +70,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
 
   it("returns 400 for a non-numeric id without calling the backend", async () => {
     const response = await PATCH(patchRequest({ precio: "40.00" }, TOKEN()), {
-      params: { id: "abc" },
+      params: Promise.resolve({ id: "abc" }),
     });
 
     expect(response.status).toBe(400);
@@ -84,7 +84,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
       body: "{no-json",
     });
 
-    const response = await PATCH(request, { params: { id: "1" } });
+    const response = await PATCH(request, { params: Promise.resolve({ id: "1" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -92,7 +92,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
 
   it("returns 400 when the body carries none of the updatable fields", async () => {
     const response = await PATCH(patchRequest({ otraCosa: 1 }, TOKEN()), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(response.status).toBe(400);
@@ -106,7 +106,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
 
     const response = await PATCH(
       patchRequest({ precio: "40.00", id: 99, montoAplicado: 7 }, TOKEN()),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
 
     expect(response.status).toBe(200);
@@ -124,7 +124,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
     );
 
     const response = await PATCH(patchRequest({ precio: "40.00" }, TOKEN()), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(response.status).toBe(404);
@@ -137,7 +137,7 @@ describe("PATCH /api/membresias/tipos/[id]", () => {
     );
 
     const response = await PATCH(patchRequest({ precio: "40.00" }, TOKEN()), {
-      params: { id: "1" },
+      params: Promise.resolve({ id: "1" }),
     });
 
     expect(response.status).toBe(403);

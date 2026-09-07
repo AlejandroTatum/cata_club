@@ -82,6 +82,25 @@ esac
 # --- Configuracion -----------------------------------------------------------
 CONFIG_FILE="${BACKUP_B2_CONFIG_FILE:-/etc/cataclub/b2-backup.env}"
 
+# Un archivo AUSENTE es "replica desactivada", una decision valida. Un archivo
+# que EXISTE pero no se puede leer es un problema de permisos, no de
+# configuracion: antes `leer_config` lo trataba igual que un archivo ausente
+# ([ -r ] || return 0) y la replica quedaba "desactivada" en silencio, con
+# `--check-config` en verde. El caso real fue `/etc/cataclub` en 700: el grupo
+# del usuario del cron no puede ATRAVESAR el directorio aunque el archivo sea
+# `640`. Se verifica ANTES de resolver ninguna variable, en los dos modos.
+verificar_config_legible() {
+  [ -e "$CONFIG_FILE" ] || return 0
+  [ -r "$CONFIG_FILE" ] && return 0
+  fatal "$(printf '%s\n' \
+    "el archivo de configuracion existe pero no se puede leer: ${CONFIG_FILE}" \
+    "       Revisar permisos: el directorio necesita 750 (el grupo del" \
+    "       usuario del cron tiene que poder atravesarlo) y el archivo 640," \
+    "       dueño root y grupo del usuario que corre el cron." \
+    "       Ver docs/operations/backup-offsite.md")"
+}
+verificar_config_legible
+
 # Se PARSEA `CLAVE=valor`; no se hace `source`. Un `source` convertiria un
 # archivo de configuracion en ejecucion de codigo con el usuario del cron, y
 # este es justamente el archivo que mas manos toca durante el aprovisionamiento.
@@ -145,12 +164,16 @@ if [ "${#faltantes[@]}" -gt 0 ]; then
 fi
 
 command -v sha256sum >/dev/null 2>&1 || fatal "falta 'sha256sum'; no se puede verificar la replica"
+command -v openssl >/dev/null 2>&1 || fatal "falta 'openssl'; no se puede calcular el Content-MD5 que exige Object Lock"
 
 if [ "$MODO" = "verificar-config" ]; then
   command -v "$AWS_BIN" >/dev/null 2>&1 \
     || fatal "$(printf '%s\n' \
       "no se encontro el cliente S3 (${AWS_BIN})." \
-      "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
+      "       Instalalo con el instalador oficial de AWS CLI v2 (el paquete" \
+      "       apt no tiene candidato en Ubuntu/Debian recientes):" \
+      "         curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip" \
+      "         unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install")"
   # Verificacion sin red y sin credenciales al aire: solo dice que lo que el
   # cron va a encontrar a las 03:30 esta completo. `install-cron` la usa para
   # no instalar un cron cuya replica falla todas las noches.
@@ -177,6 +200,13 @@ esac
 NOMBRE="$(basename "$ARTEFACTO")"
 TAMANO_LOCAL="$(wc -c < "$ARTEFACTO" | tr -d ' ')"
 SHA_LOCAL="$(sha256sum "$ARTEFACTO" | cut -d' ' -f1)"
+# Content-MD5 en base64 (RFC 1864), no en hexadecimal: es lo que exige la
+# cabecera HTTP. Un bucket con Object Lock (S3 y la implementacion de B2) lo
+# requiere en todo PutObject; sin el, B2 corta la conexion antes de responder,
+# y los ajustes de checksum de mas arriba (when_required) hacen que la CLI no
+# agregue ninguno por su cuenta. No reemplaza al sha256 propio: es lo que pide
+# el proveedor, no lo que verifica este script.
+MD5_LOCAL="$(openssl dgst -md5 -binary "$ARTEFACTO" | base64)"
 RECIBO="${ARTEFACTO}.b2-receipt"
 
 if [ "$MODO" = "verificar-recibo" ]; then
@@ -195,7 +225,10 @@ fi
 command -v "$AWS_BIN" >/dev/null 2>&1 \
   || fatal "$(printf '%s\n' \
     "no se encontro el cliente S3 (${AWS_BIN})." \
-    "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
+    "       Instalalo con el instalador oficial de AWS CLI v2 (el paquete" \
+    "       apt no tiene candidato en Ubuntu/Debian recientes):" \
+    "         curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip" \
+    "         unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install")"
 
 # --- Un entorno que no es produccion no escribe en el bucket de produccion ---
 # El error caro es silencioso en la direccion peligrosa: un staging apuntado al
@@ -263,6 +296,7 @@ if ! salida="$(aws_b2 s3api put-object \
     --key "$CLAVE" \
     --body "$ARTEFACTO" \
     --content-type application/octet-stream \
+    --content-md5 "$MD5_LOCAL" \
     --metadata "sha256=${SHA_LOCAL}" 2>&1)"; then
   printf '%s\n' "$(redactar "$salida")" >&2
   fatal_operativo "fallo la subida de ${NOMBRE} a s3://${BUCKET}/${CLAVE}"
