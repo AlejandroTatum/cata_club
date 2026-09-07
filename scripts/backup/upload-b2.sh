@@ -170,7 +170,10 @@ if [ "$MODO" = "verificar-config" ]; then
   command -v "$AWS_BIN" >/dev/null 2>&1 \
     || fatal "$(printf '%s\n' \
       "no se encontro el cliente S3 (${AWS_BIN})." \
-      "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
+      "       Instalalo con el instalador oficial de AWS CLI v2 (el paquete" \
+      "       apt no tiene candidato en Ubuntu/Debian recientes):" \
+      "         curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip" \
+      "         unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install")"
   # Verificacion sin red y sin credenciales al aire: solo dice que lo que el
   # cron va a encontrar a las 03:30 esta completo. `install-cron` la usa para
   # no instalar un cron cuya replica falla todas las noches.
@@ -222,7 +225,10 @@ fi
 command -v "$AWS_BIN" >/dev/null 2>&1 \
   || fatal "$(printf '%s\n' \
     "no se encontro el cliente S3 (${AWS_BIN})." \
-    "       Instalalo: apt-get install -y awscli  (o el instalador oficial de AWS CLI v2)")"
+    "       Instalalo con el instalador oficial de AWS CLI v2 (el paquete" \
+    "       apt no tiene candidato en Ubuntu/Debian recientes):" \
+    "         curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip" \
+    "         unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install")"
 
 # --- Un entorno que no es produccion no escribe en el bucket de produccion ---
 # El error caro es silencioso en la direccion peligrosa: un staging apuntado al
