@@ -86,14 +86,14 @@ externo) queda fuera de alcance por decisión del dueño del proyecto.
 
 ## Memoria: medición y disparador de resize (issue #1071)
 
-El único host tiene 1.9 GiB de RAM utilizables y **no tiene swap**: cuando la
-memoria se agota, el que actúa es el OOM killer del kernel, no `mem_limit` de
-Compose. `mem_limit` solo decide QUÉ contenedor cae primero dentro de su
-propio cgroup; no reserva nada y no evita que el host entero se quede sin
+El único host tiene 1.9 GiB de RAM utilizables. Con `mem_limit` de Compose
+nada más, cuando la memoria del host se agota el que actúa es el OOM killer
+del kernel: `mem_limit` solo decide QUÉ contenedor cae primero dentro de su
+propio cgroup, no reserva nada y no evita que el host entero se quede sin
 memoria si la suma real de todos los servicios crece.
 
-Medición tomada en el host de producción, de noche y sin carga
-(2026-09-07 ~04:00 UTC):
+Medición tomada en el host de producción, de noche y sin carga, **antes de
+agregar el swapfile de abajo** (2026-09-07 ~04:00 UTC):
 
 ```
                total        used        free      shared  buff/cache   available
@@ -115,8 +115,30 @@ tarea programada todavía) por eso subió su `mem_limit` de 160m a 224m (ver
 `docker-compose.prod.yml`). La suma de todos los `mem_limit` de producción
 pasó de 1568m a 1632m, todavía por debajo de los 2048m del droplet.
 
-**Decisión:** se mantiene el droplet de 2 GiB por ahora. El disparador para
-pasar al plan de 4 GiB es cualquiera de estos dos, el que ocurra primero:
+### Swapfile de 1 GiB como red de seguridad
+
+El host tiene un swapfile de 1 GiB desde el 2026-09-07: no evita un pico de
+memoria, pero lo convierte en lentitud en vez de en un OOM kill directo. Se
+creó con:
+
+```
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Con `vm.swappiness=10` en `/etc/sysctl.d/99-swappiness.conf` (`sudo sysctl -p
+/etc/sysctl.d/99-swappiness.conf` para aplicarlo sin reiniciar): un swappiness
+bajo hace que el kernel recurra al swap solo bajo presión real de memoria, no
+para páginas frías de uso normal -- el swap es la red de seguridad, no la
+memoria de trabajo cotidiana del stack.
+
+**Decisión:** se mantiene el droplet de 2 GiB por ahora, con este swap como
+colchón. El disparador para pasar al plan de 4 GiB (~20 USD/mes, solo
+CPU/RAM, para que el cambio sea reversible) es cualquiera de estos dos, el que
+ocurra primero:
 
 - `check-memory.sh` falla (exit distinto de 0, y por lo tanto corta el
   heartbeat de las 07:00) durante **dos días consecutivos**.
