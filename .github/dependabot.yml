@@ -11,9 +11,9 @@ updates:
   # Aclaración importante: este "ignore" aplica solo al canal de version
   # updates (los PRs automáticos por dependencia desactualizada). No deja al
   # repo sin parches de seguridad de un major: esos llegan por el canal
-  # separado de "dependabot_security_updates", que hoy está "disabled" en la
-  # configuración del repositorio, pendiente de que el dueño lo habilite. Son
-  # dos mecanismos independientes de Dependabot; no confundirlos ni "arreglar"
+  # separado de "dependabot_security_updates", que está habilitado en la
+  # configuración del repositorio. Son dos mecanismos independientes de
+  # Dependabot; no confundirlos ni "arreglar"
   # este ignore para intentar cubrir seguridad con él.
   - package-ecosystem: "npm"
     directory: "/frontend"
