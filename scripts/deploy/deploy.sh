@@ -415,16 +415,23 @@ case "$cmd" in
     # preflight-production.sh: el umbral del RPO se declara en un solo lugar del
     # repo y no queda a merced del default interno del script.
     #
+    # `check-memory.sh` cuelga del mismo `&&` que `check-backup-freshness.sh`,
+    # ANTES del heartbeat (issue #1071): un contenedor sobre el 90% de su
+    # `mem_limit` o un host con poca memoria disponible tiene que cortar el
+    # ping igual que un backup vencido -- la ausencia del ping es la única
+    # alarma, y no hay notificador propio que agregar acá.
+    #
     # La URL del heartbeat NO aparece acá: `notify-heartbeat.sh` la lee de un
     # archivo de root. `crontab -l` no pide privilegios, y quien lea esa URL
     # puede pingear a mano y dejar la alarma en verde con el backup muerto.
     (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' || true
      printf '30 3 * * * cd %s && ./scripts/backup/backup-db.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
-     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
-       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
+     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/check-memory.sh >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
+       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
     ) | crontab -
     crontab -l | grep 'backup-db.sh' >/dev/null || die "el cron de backup no quedó instalado"
     crontab -l | grep 'check-backup-freshness.sh' >/dev/null || die "el cron de frescura no quedó instalado"
+    crontab -l | grep 'check-memory.sh' >/dev/null || die "el cron de memoria no quedó instalado"
     crontab -l | grep 'notify-heartbeat.sh' >/dev/null || die "el cron no quedó con el ping de heartbeat"
     ;;
 esac
