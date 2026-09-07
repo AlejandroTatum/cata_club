@@ -399,17 +399,22 @@ case "$cmd" in
     # dejando el monitor externo en alerta por una herramienta ausente y no por
     # un backup vencido -- la alarma correcta por el motivo equivocado.
     command -v curl >/dev/null 2>&1 || die "falta 'curl' en el host (apt-get install -y curl); el heartbeat no podría pingear"
-    log "Instalando cron de backup (03:30) y de frescura + heartbeat (07:00) tras confirmación explícita del operador"
-    # La verificación de frescura escribe 1-2 líneas por día en el mismo log
-    # del backup para no multiplicar archivos sin rotación.
+    log "Instalando cron de backup (03:30) y de frescura + salud de Celery + heartbeat (07:00) tras confirmación explícita del operador"
+    # La verificación de frescura y la de Celery escriben 1-2 líneas por día
+    # cada una en el mismo log del backup, para no multiplicar archivos sin
+    # rotación.
     #
-    # El heartbeat cuelga de un `&&`, nunca de un `;`: se pingea SOLO si el
-    # chequeo salió 0. `check-backup-freshness.sh` sale 1 sin ningún dump y 2
-    # con un dump vencido, y en los dos casos el ping tiene que FALTAR -- la
-    # ausencia del ping es lo que dispara la alarma. Un `;` pondría el monitor
-    # en verde justo cuando hay que alertar, que es peor que no monitorear:
-    # daría una garantía falsa. El `cd` también está encadenado con `&&`, así
-    # que un STACK_DIR que ya no existe tampoco pingea.
+    # El heartbeat cuelga de dos `&&`, nunca de un `;`: se pingea SOLO si LOS
+    # DOS chequeos anteriores salieron 0. `check-backup-freshness.sh` sale 1
+    # sin ningún dump y 2 con un dump vencido; `check-celery-health.sh`
+    # (issue #1061) sale distinto de 0 si celery-worker o celery-beat quedaron
+    # `unhealthy` entre despliegues -- el sidecar `autoheal` (issue #1091) los
+    # reinicia, pero nada externo se enteraba si igual quedaban enfermos. En
+    # los tres casos el ping tiene que FALTAR: la ausencia del ping es lo que
+    # dispara la alarma. Un `;` en cualquiera de los dos eslabones pondría el
+    # monitor en verde justo cuando hay que alertar, que es peor que no
+    # monitorear: daría una garantía falsa. El `cd` también está encadenado
+    # con `&&`, así que un STACK_DIR que ya no existe tampoco pingea.
     #
     # `--max-age-hours` explícito, en paridad con `do_checks` y con
     # preflight-production.sh: el umbral del RPO se declara en un solo lugar del
@@ -420,11 +425,12 @@ case "$cmd" in
     # puede pingear a mano y dejar la alarma en verde con el backup muerto.
     (crontab -l 2>/dev/null | grep -v -e 'backup-db.sh' -e 'check-backup-freshness.sh' || true
      printf '30 3 * * * cd %s && ./scripts/backup/backup-db.sh >> %s 2>&1\n' "$STACK_DIR" "$BACKUP_CRON_LOG"
-     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
-       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
+     printf '0 7 * * * cd %s && ./scripts/ops/check-backup-freshness.sh --max-age-hours %s >> %s 2>&1 && ./scripts/ops/check-celery-health.sh >> %s 2>&1 && ./scripts/ops/notify-heartbeat.sh >> %s 2>&1\n' \
+       "$STACK_DIR" "${BACKUP_MAX_AGE_HOURS:-26}" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG" "$BACKUP_CRON_LOG"
     ) | crontab -
     crontab -l | grep 'backup-db.sh' >/dev/null || die "el cron de backup no quedó instalado"
     crontab -l | grep 'check-backup-freshness.sh' >/dev/null || die "el cron de frescura no quedó instalado"
+    crontab -l | grep 'check-celery-health.sh' >/dev/null || die "el cron no quedó con la verificación de salud de Celery"
     crontab -l | grep 'notify-heartbeat.sh' >/dev/null || die "el cron no quedó con el ping de heartbeat"
     ;;
 esac
