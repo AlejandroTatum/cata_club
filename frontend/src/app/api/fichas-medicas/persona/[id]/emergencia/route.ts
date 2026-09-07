@@ -13,11 +13,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { proxyBackendGet } from "@/lib/server/backend-client";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = Number(context.params.id);
+  const personaId = Number((await context.params).id);
   if (Number.isNaN(personaId)) {
     return NextResponse.json({ message: "El id de persona no es válido." }, { status: 400 });
   }

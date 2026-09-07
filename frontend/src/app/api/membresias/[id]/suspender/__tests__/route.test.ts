@@ -57,7 +57,7 @@ describe("POST /api/membresias/[id]/suspender", () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse(membresiaSuspendida));
 
-    const response = await POST(postRequest("3", { motivo: "Ausencia prolongada" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { motivo: "Ausencia prolongada" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(membresiaSuspendida);
@@ -72,7 +72,7 @@ describe("POST /api/membresias/[id]/suspender", () => {
 
     await POST(
       postRequest("3", { motivo: "Ausencia", fechaEfectiva: "2026-08-01T00:00:00Z" }),
-      { params: { id: "3" } },
+      { params: Promise.resolve({ id: "3" }) },
     );
 
     const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
@@ -83,28 +83,28 @@ describe("POST /api/membresias/[id]/suspender", () => {
   });
 
   it("rejects a non-numeric membresia id with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("abc", { motivo: "x" }), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", { motivo: "x" }), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects invalid JSON with 400 without calling the backend", async () => {
-    const response = await POST(postRawRequest("3", "{no-json"), { params: { id: "3" } });
+    const response = await POST(postRawRequest("3", "{no-json"), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects a missing motivo with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("3", {}), { params: { id: "3" } });
+    const response = await POST(postRequest("3", {}), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects an empty motivo with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("3", { motivo: "" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { motivo: "" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ describe("POST /api/membresias/[id]/suspender", () => {
       jsonResponse({ message: "Solo una membresía activa puede suspenderse." }, 400),
     );
 
-    const response = await POST(postRequest("3", { motivo: "x" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { motivo: "x" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
   });
@@ -123,7 +123,7 @@ describe("POST /api/membresias/[id]/suspender", () => {
   it("relays the backend's 403 when the caller is not an administrator", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await POST(postRequest("3", { motivo: "x" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { motivo: "x" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(403);
   });
@@ -134,7 +134,7 @@ describe("POST /api/membresias/[id]/suspender", () => {
   it("relays the backend's 409 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Conflicto" }, 409));
 
-    const response = await POST(postRequest("3", { motivo: "x" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { motivo: "x" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(409);
   });
@@ -142,7 +142,7 @@ describe("POST /api/membresias/[id]/suspender", () => {
   it("relays the backend's 422 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
 
-    const response = await POST(postRequest("3", { motivo: "x" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { motivo: "x" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(422);
   });

@@ -52,7 +52,7 @@ afterEach(() => {
 
 describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await GET(getRequest("5"), { params: { id: "5" } });
+    const response = await GET(getRequest("5"), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -61,7 +61,7 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
   it("returns 400 without calling the backend when the id is not a number", async () => {
     const access = makeJwt(3600);
     const response = await GET(getRequest("abc", `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "abc" },
+      params: Promise.resolve({ id: "abc" }),
     });
 
     expect(response.status).toBe(400);
@@ -72,7 +72,7 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(fichaEmergencia));
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -89,7 +89,7 @@ describe("GET /api/fichas-medicas/persona/[id]/emergencia", () => {
     );
 
     const access = makeJwt(3600);
-    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: { id: "5" } });
+    const response = await GET(getRequest("5", `${ACCESS_TOKEN_COOKIE}=${access}`), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
   });

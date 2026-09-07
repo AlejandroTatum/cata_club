@@ -58,7 +58,7 @@ describe("POST /api/membresias/[id]/regularizar-deuda", () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse(pagoRegularizado, 201));
 
-    const response = await POST(postRequest("3", payload), { params: { id: "3" } });
+    const response = await POST(postRequest("3", payload), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(pagoRegularizado);
@@ -69,7 +69,7 @@ describe("POST /api/membresias/[id]/regularizar-deuda", () => {
   });
 
   it("rejects a non-numeric id with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("abc", payload), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", payload), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe("POST /api/membresias/[id]/regularizar-deuda", () => {
       jsonResponse({ message: "El período indicado ya está cubierto por un pago aprobado." }, 400),
     );
 
-    const response = await POST(postRequest("3", payload), { params: { id: "3" } });
+    const response = await POST(postRequest("3", payload), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
   });

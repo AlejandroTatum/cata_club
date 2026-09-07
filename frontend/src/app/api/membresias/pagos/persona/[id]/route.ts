@@ -14,10 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const result = await backendFetchAuthed(request, `/membresias/pagos/persona/${encodeURIComponent(params.id)}`);
   if (!result.ok) {
     return NextResponse.json(

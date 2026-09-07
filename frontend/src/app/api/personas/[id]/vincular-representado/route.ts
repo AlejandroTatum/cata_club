@@ -25,11 +25,11 @@ import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backen
 import type { PersonaResponse } from "@/types/domain";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const personaId = Number(context.params.id);
+  const personaId = Number((await context.params).id);
   if (Number.isNaN(personaId)) {
     return NextResponse.json({ message: "El id de persona no es válido." }, { status: 400 });
   }

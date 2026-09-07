@@ -85,14 +85,14 @@ afterEach(() => {
 
 describe("GET /api/personas/[id]/beneficio", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await GET(getRequest("5"), { params: { id: "5" } });
+    const response = await GET(getRequest("5"), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 for a non-numeric id without calling the backend", async () => {
-    const response = await GET(getRequest("abc", TOKEN()), { params: { id: "abc" } });
+    const response = await GET(getRequest("abc", TOKEN()), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe("GET /api/personas/[id]/beneficio", () => {
   it("calls GET /personas/{id}/beneficio and returns the active benefit", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(beneficioResponse));
 
-    const response = await GET(getRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await GET(getRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -116,7 +116,7 @@ describe("GET /api/personas/[id]/beneficio", () => {
   it("returns null when the persona has no active benefit", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(null));
 
-    const response = await GET(getRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await GET(getRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -126,7 +126,7 @@ describe("GET /api/personas/[id]/beneficio", () => {
   it("relays the backend's 403 with its own message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await GET(getRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await GET(getRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
     expect((await response.json()).message).toBe("No autorizado");
@@ -135,7 +135,7 @@ describe("GET /api/personas/[id]/beneficio", () => {
   it("relays the backend's 404 with its own message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Persona no encontrada" }, 404));
 
-    const response = await GET(getRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await GET(getRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(404);
     expect((await response.json()).message).toBe("Persona no encontrada");
@@ -144,35 +144,35 @@ describe("GET /api/personas/[id]/beneficio", () => {
 
 describe("POST /api/personas/[id]/beneficio", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await POST(postRequest("5", { descuentoId: 2 }), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { descuentoId: 2 }), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 for a non-numeric id without calling the backend", async () => {
-    const response = await POST(postRequest("abc", { descuentoId: 2 }, TOKEN()), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", { descuentoId: 2 }, TOKEN()), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 for invalid JSON without calling the backend", async () => {
-    const response = await POST(postRawRequest("5", "{no-json", TOKEN()), { params: { id: "5" } });
+    const response = await POST(postRawRequest("5", "{no-json", TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 when descuentoId is missing without calling the backend", async () => {
-    const response = await POST(postRequest("5", {}, TOKEN()), { params: { id: "5" } });
+    const response = await POST(postRequest("5", {}, TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 when descuentoId is not a number without calling the backend", async () => {
-    const response = await POST(postRequest("5", { descuentoId: "2" }, TOKEN()), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { descuentoId: "2" }, TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe("POST /api/personas/[id]/beneficio", () => {
   it("calls POST /personas/{id}/beneficio with snake_case body and returns 201", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(beneficioResponse, 201));
 
-    const response = await POST(postRequest("5", { descuentoId: 2 }, TOKEN()), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { descuentoId: 2 }, TOKEN()), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(201);
@@ -199,7 +199,7 @@ describe("POST /api/personas/[id]/beneficio", () => {
   it("relays the backend's 403 with its own message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await POST(postRequest("5", { descuentoId: 2 }, TOKEN()), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { descuentoId: 2 }, TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
     expect((await response.json()).message).toBe("No autorizado");
@@ -208,7 +208,7 @@ describe("POST /api/personas/[id]/beneficio", () => {
   it("relays the backend's 404 with its own message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Descuento no encontrado" }, 404));
 
-    const response = await POST(postRequest("5", { descuentoId: 2 }, TOKEN()), { params: { id: "5" } });
+    const response = await POST(postRequest("5", { descuentoId: 2 }, TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(404);
     expect((await response.json()).message).toBe("Descuento no encontrado");
@@ -217,14 +217,14 @@ describe("POST /api/personas/[id]/beneficio", () => {
 
 describe("DELETE /api/personas/[id]/beneficio", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
-    const response = await DELETE(deleteRequest("5"), { params: { id: "5" } });
+    const response = await DELETE(deleteRequest("5"), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 for a non-numeric id without calling the backend", async () => {
-    const response = await DELETE(deleteRequest("abc", TOKEN()), { params: { id: "abc" } });
+    const response = await DELETE(deleteRequest("abc", TOKEN()), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe("DELETE /api/personas/[id]/beneficio", () => {
   it("calls DELETE /personas/{id}/beneficio and returns the retired benefit", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(beneficioResponse));
 
-    const response = await DELETE(deleteRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await DELETE(deleteRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -248,7 +248,7 @@ describe("DELETE /api/personas/[id]/beneficio", () => {
   it("relays the backend's 403 with its own message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await DELETE(deleteRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await DELETE(deleteRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(403);
     expect((await response.json()).message).toBe("No autorizado");
@@ -257,7 +257,7 @@ describe("DELETE /api/personas/[id]/beneficio", () => {
   it("relays the backend's 404 with its own message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "La persona no tiene un beneficio activo" }, 404));
 
-    const response = await DELETE(deleteRequest("5", TOKEN()), { params: { id: "5" } });
+    const response = await DELETE(deleteRequest("5", TOKEN()), { params: Promise.resolve({ id: "5" }) });
 
     expect(response.status).toBe(404);
     expect((await response.json()).message).toBe("La persona no tiene un beneficio activo");

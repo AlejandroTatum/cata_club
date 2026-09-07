@@ -12,11 +12,11 @@ import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backen
 import type { DeudaMembresia } from "@/services/api";
 
 interface RouteContext {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const membresiaId = Number(context.params.id);
+  const membresiaId = Number((await context.params).id);
   if (Number.isNaN(membresiaId)) {
     return NextResponse.json({ message: "El id de membresía no es válido." }, { status: 400 });
   }

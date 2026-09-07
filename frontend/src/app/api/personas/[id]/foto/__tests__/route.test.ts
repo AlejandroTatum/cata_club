@@ -66,7 +66,7 @@ afterEach(() => {
 describe("POST /api/personas/[id]/foto", () => {
   it("returns 401 without calling the backend when no auth cookie is present", async () => {
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
-    const response = await POST(fotoRequest("42", archivo), { params: { id: "42" } });
+    const response = await POST(fotoRequest("42", archivo), { params: Promise.resolve({ id: "42" }) });
 
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe("POST /api/personas/[id]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
     const response = await POST(fotoRequest("abc", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "abc" },
+      params: Promise.resolve({ id: "abc" }),
     });
 
     expect(response.status).toBe(400);
@@ -86,7 +86,7 @@ describe("POST /api/personas/[id]/foto", () => {
   it("returns 400 without calling the backend when no file is attached", async () => {
     const access = makeJwt(3600);
     const response = await POST(fotoRequest("42", null, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "42" },
+      params: Promise.resolve({ id: "42" }),
     });
 
     expect(response.status).toBe(400);
@@ -99,7 +99,7 @@ describe("POST /api/personas/[id]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
     const response = await POST(fotoRequest("42", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "42" },
+      params: Promise.resolve({ id: "42" }),
     });
     const body = await response.json();
 
@@ -124,7 +124,7 @@ describe("POST /api/personas/[id]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "archivo.pdf", { type: "application/pdf" });
     const response = await POST(fotoRequest("42", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "42" },
+      params: Promise.resolve({ id: "42" }),
     });
 
     expect(response.status).toBe(400);
@@ -146,7 +146,7 @@ describe("POST /api/personas/[id]/foto", () => {
     const access = makeJwt(3600);
     const archivo = new File(["contenido"], "foto.jpg", { type: "image/jpeg" });
     const response = await POST(fotoRequest("42", archivo, `${ACCESS_TOKEN_COOKIE}=${access}`), {
-      params: { id: "42" },
+      params: Promise.resolve({ id: "42" }),
     });
     const body = await response.json();
 

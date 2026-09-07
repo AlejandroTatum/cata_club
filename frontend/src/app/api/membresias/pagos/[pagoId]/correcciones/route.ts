@@ -12,10 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { pagoId: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ pagoId: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const pagoId = Number(params.pagoId);
   if (!Number.isInteger(pagoId)) {
     return NextResponse.json({ message: "El id de pago no es válido." }, { status: 400 });

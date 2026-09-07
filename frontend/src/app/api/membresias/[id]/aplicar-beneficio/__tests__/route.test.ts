@@ -71,7 +71,7 @@ describe("POST /api/membresias/[id]/aplicar-beneficio", () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse(coberturaBonificada, 201));
 
-    const response = await POST(postRequest("3", { meses: 1 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { meses: 1 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(coberturaBonificada);
@@ -82,21 +82,21 @@ describe("POST /api/membresias/[id]/aplicar-beneficio", () => {
   });
 
   it("rejects a non-numeric membresia id with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("abc", { meses: 1 }), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", { meses: 1 }), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
   });
 
   it("rejects invalid JSON with 400 without calling the backend", async () => {
-    const response = await POST(postRawRequest("3", "{no-json"), { params: { id: "3" } });
+    const response = await POST(postRawRequest("3", "{no-json"), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
   });
 
   it("rejects a missing/non-numeric meses with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("3", { meses: "1" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { meses: "1" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe("POST /api/membresias/[id]/aplicar-beneficio", () => {
       jsonResponse({ message: "El beneficio vigente no cubre el 100% de este período." }, 400),
     );
 
-    const response = await POST(postRequest("3", { meses: 1 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { meses: 1 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
   });
@@ -115,7 +115,7 @@ describe("POST /api/membresias/[id]/aplicar-beneficio", () => {
   it("relays the backend's 403 when the caller is neither owner nor representative", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await POST(postRequest("3", { meses: 1 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { meses: 1 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(403);
   });
@@ -126,7 +126,7 @@ describe("POST /api/membresias/[id]/aplicar-beneficio", () => {
   it("relays the backend's 409 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Conflicto" }, 409));
 
-    const response = await POST(postRequest("3", { meses: 1 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { meses: 1 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(409);
   });
@@ -134,7 +134,7 @@ describe("POST /api/membresias/[id]/aplicar-beneficio", () => {
   it("relays the backend's 422 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
 
-    const response = await POST(postRequest("3", { meses: 1 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { meses: 1 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(422);
   });

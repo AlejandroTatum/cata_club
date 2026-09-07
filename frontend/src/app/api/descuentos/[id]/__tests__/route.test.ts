@@ -42,7 +42,7 @@ describe("PATCH /api/descuentos/[id]", () => {
   });
 
   it("returns 401 without an access-token cookie", async () => {
-    const response = await PATCH(patchRequest({ activo: false }), { params: { id: "1" } });
+    const response = await PATCH(patchRequest({ activo: false }), { params: Promise.resolve({ id: "1" }) });
     expect(response.status).toBe(401);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -51,7 +51,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     const token = makeJwt(3600);
     const response = await PATCH(
       patchRequest({ activo: false }, `${ACCESS_TOKEN_COOKIE}=${token}`),
-      { params: { id: "abc" } },
+      { params: Promise.resolve({ id: "abc" }) },
     );
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -61,7 +61,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     const token = makeJwt(3600);
     const response = await PATCH(
       patchRequest({ otra: "cosa" }, `${ACCESS_TOKEN_COOKIE}=${token}`),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     const token = makeJwt(3600);
     const response = await PATCH(
       patchRequest({ activo: false }, `${ACCESS_TOKEN_COOKIE}=${token}`),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
 
     expect(response.status).toBe(200);
@@ -92,7 +92,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     const token = makeJwt(3600);
     const response = await PATCH(
       patchRequest({ porcentaje: null, monto: 10 }, `${ACCESS_TOKEN_COOKIE}=${token}`),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
 
     expect(response.status).toBe(200);
@@ -109,7 +109,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     const token = makeJwt(3600);
     const response = await PATCH(
       patchRequest({ monto: 5 }, `${ACCESS_TOKEN_COOKIE}=${token}`),
-      { params: { id: "1" } },
+      { params: Promise.resolve({ id: "1" }) },
     );
 
     expect(response.status).toBe(400);
@@ -124,7 +124,7 @@ describe("PATCH /api/descuentos/[id]", () => {
     const token = makeJwt(3600);
     const response = await PATCH(
       patchRequest({ activo: false }, `${ACCESS_TOKEN_COOKIE}=${token}`),
-      { params: { id: "999" } },
+      { params: Promise.resolve({ id: "999" }) },
     );
     expect(response.status).toBe(404);
   });

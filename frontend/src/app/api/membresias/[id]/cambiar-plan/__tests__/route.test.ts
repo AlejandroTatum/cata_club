@@ -54,7 +54,7 @@ describe("POST /api/membresias/[id]/cambiar-plan", () => {
     const fetchMock = vi.mocked(global.fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse(membresiaConPlanNuevo));
 
-    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(membresiaConPlanNuevo);
@@ -64,21 +64,21 @@ describe("POST /api/membresias/[id]/cambiar-plan", () => {
   });
 
   it("rejects a non-numeric membresia id with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("abc", { nuevoTipoMembresiaId: 7 }), { params: { id: "abc" } });
+    const response = await POST(postRequest("abc", { nuevoTipoMembresiaId: 7 }), { params: Promise.resolve({ id: "abc" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects invalid JSON with 400 without calling the backend", async () => {
-    const response = await POST(postRawRequest("3", "{no-json"), { params: { id: "3" } });
+    const response = await POST(postRawRequest("3", "{no-json"), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects a missing/non-numeric nuevoTipoMembresiaId with 400 without calling the backend", async () => {
-    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: "7" }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: "7" }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
@@ -89,7 +89,7 @@ describe("POST /api/membresias/[id]/cambiar-plan", () => {
       jsonResponse({ message: "La membresía ya tiene asignado ese tipo de membresía." }, 400),
     );
 
-    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 5 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 5 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(400);
   });
@@ -97,7 +97,7 @@ describe("POST /api/membresias/[id]/cambiar-plan", () => {
   it("relays the backend's 403 when the caller is not an administrator", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "No autorizado" }, 403));
 
-    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(403);
   });
@@ -108,7 +108,7 @@ describe("POST /api/membresias/[id]/cambiar-plan", () => {
   it("relays the backend's 409 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Conflicto" }, 409));
 
-    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(409);
   });
@@ -116,7 +116,7 @@ describe("POST /api/membresias/[id]/cambiar-plan", () => {
   it("relays the backend's 422 as-is", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ detail: "Entidad no procesable" }, 422));
 
-    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: { id: "3" } });
+    const response = await POST(postRequest("3", { nuevoTipoMembresiaId: 7 }), { params: Promise.resolve({ id: "3" }) });
 
     expect(response.status).toBe(422);
   });

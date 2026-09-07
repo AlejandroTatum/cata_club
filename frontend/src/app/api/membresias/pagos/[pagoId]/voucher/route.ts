@@ -11,14 +11,14 @@ import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
 
 interface RouteContext {
-  params: { pagoId: string };
+  params: Promise<{ pagoId: string }>;
 }
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const pagoId = Number(context.params.pagoId);
+  const pagoId = Number((await context.params).pagoId);
   if (Number.isNaN(pagoId)) {
     return NextResponse.json({ message: "El id de pago no es válido." }, { status: 400 });
   }

@@ -13,10 +13,8 @@ import { ACCESS_TOKEN_COOKIE, getBackendApiUrl } from "@/lib/server/auth";
 
 const BACKEND_TIMEOUT_MS = 10_000;
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   const accessToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   if (!accessToken) {
     return NextResponse.json({ message: "No autenticado." }, { status: 401 });
