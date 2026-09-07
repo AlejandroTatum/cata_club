@@ -205,7 +205,10 @@
    the ink than plain white, so the line opacity drops to keep the grid as
    quiet here as it is everywhere else. */
 .landing-stats::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 1.4%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 1.4%, transparent) 0 1px,transparent 1px 22px); }
-.landing-section:not(.landing-motto)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
+/* Valores keeps a flat yellow ground (approved prototype
+   `landing-valores-b-tablero.html`) — the grid texture every other section
+   carries would fight the tablero's own black-tile grid. */
+.landing-section:not(.landing-motto):not(.landing-values)::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,color-mix(in srgb, var(--landing-brand-black) 2.2%, transparent) 0 1px,transparent 1px 22px); }
 .landing-stat { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 .landing-stat strong, .landing-section-header h2 { color: var(--landing-text-strong); }
 .landing-stat strong { font-size: 48px; }
@@ -219,19 +222,19 @@
 .landing-section-header .landing-eyebrow { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
 .landing-section-header .landing-eyebrow::before { content: ""; width: 34px; height: 2px; background: currentColor; }
 .landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; letter-spacing: -0.02em; text-transform: uppercase; }
-.landing-value-row, .landing-location-row { display: flex; width: 100%; gap: 24px; }
+.landing-location-row { display: flex; width: 100%; gap: 24px; }
 
 /* Mission/Vision pillars — v2 redesign (issue #611 rhythm; approved
    prototype `landing-mision-vision-v2-texto.html`). Two typographic
    columns, no photography: rank comes from an index, a scale jump and a
    hairline top border — no tinted icon chip, no photo, no centred divider.
-   `.landing-index` is shared with the Values cards below (`.landing-value
-   .landing-index` overrides its size there), so this block's own scale is
-   applied through `.landing-pillars .landing-index` rather than the shared
-   base rule. `.landing-index-label` is exclusive to this section and is
-   rewritten outright — the old version's `::before` em-dash separator
-   belonged to the previous side-by-side layout and has no place once the
-   index and the label stack. */
+   This block's own scale is applied through `.landing-pillars .landing-index`
+   rather than the shared base rule below, which the Values tablero does not
+   use — its numerals live in `.landing-tablero-tile` instead.
+   `.landing-index-label` is exclusive to this section and is rewritten
+   outright — the old version's `::before` em-dash separator belonged to the
+   previous side-by-side layout and has no place once the index and the label
+   stack. */
 .landing-pillars { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
 .landing-pillar { border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
@@ -246,48 +249,47 @@
    the sections — the base `.landing-section` rule (44px) stays untouched for
    Motto, Schedule and Location, which are out of this issue's scope.
 
-   #1026 redesign. The section is the ball's rally on the dark court: it sits
-   above the trophy wall below, which is still black, so its bottom edge
-   BLENDS into it instead of cutting — a 72px fade, inside the section's own
-   76px padding so no text ever sits on the gradient. The rally keeps its
-   engine (hooks, pin/flow choreographies, reduced-motion stillness) and
-   sharpens its look: the counter becomes the scoreboard chip it always
-   described, the guide thickens, and the values read as its scoreboard —
-   bigger numerals, firmer rules. All locked #871 vertical decisions (rally
-   148px/-30px, gap 30px, card padding 26px, body 16px) are untouched.
+   Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
+   scoreboard counter, dimming) was rejected for breaking on mobile and for
+   the ball motif itself. The approved prototype
+   (`landing-valores-b-tablero.html`) replaces it with a static tablero: four
+   black numeral tiles and four value articles share ONE CSS grid, so every
+   title starts at the same top edge by construction — nothing has to scrub
+   anything into alignment, so nothing can break the way the rally did.
+   `gap: 0` on the section itself: the tablero and the cue below it carry
+   their own `margin-top` (40px / 48px, the prototype's own rhythm) instead
+   of stacking a flex gap on top of it.
+
+   The section still sits above the trophy wall below, which is still black,
+   so its bottom edge BLENDS into it instead of cutting — a 72px fade, inside
+   the section's own 76px padding so no text ever sits on the gradient.
 
    Mission/Vision's v2 redesign turned #nosotros white (issue #611 rhythm
    below), so the section's TOP edge is now a hard seam against another
    white band — no fade needed there anymore. */
-.landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); gap: 30px; }
+.landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); gap: 0; }
 /* Only the exit fades: the yellow dissolving into the trophy wall's black
    below. `z-index: 0` keeps the wash behind the section's children (z-index
    1). */
 .landing-values::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(0deg, var(--landing-brand-black), transparent 72px); }
-.landing-rally { position: relative; width: 100%; height: 148px; margin-bottom: -30px; pointer-events: none; }
-.landing-rally svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-/* The guide is black on this ground (red tops out at 3.5:1 here), drawn a
-   touch heavier so it reads as the row's spine and not a scribble. */
-.landing-rally-guide { fill: none; stroke: var(--landing-text-strong); stroke-width: 3; stroke-linecap: round; opacity: 0.4; }
-/* The scoreboard chip. Black pill, brand-yellow label, ball-orange count — the
-   same pairing the navbar and footer use on black, so "RALLY 0/4" reads as
-   equipment rather than as a stray caption floating over the section. */
-.landing-rally-count { position: absolute; left: 0; top: 0; display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--landing-brand-black); color: var(--landing-brand-yellow); font-family: var(--font-landing-barlow), sans-serif; font-size: 11px; font-weight: 800; letter-spacing: 2.6px; }
-.landing-rally-count b { color: var(--landing-ball); font-size: 14px; letter-spacing: 0; }
-.landing-rally-ball { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--landing-ball); opacity: 0; pointer-events: none; }
-.landing-rally-impact { position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid var(--landing-text-strong); border-radius: 50%; opacity: 0; pointer-events: none; }
-.landing-value-row { gap: 0; }
-.landing-value { position: relative; flex: 1; min-width: 0; padding: 26px 28px 0 0; transition: opacity 300ms ease; }
-.landing-value + .landing-value { padding-right: 0; padding-left: 28px; border-left: 1px solid var(--landing-border); }
-.landing-value-rule { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 3px; background: var(--landing-action); }
-/* Scoreboard numerals: the index IS the rally's hit order — the counter counts
-   against these — so it carries the weight of a scoreboard figure. */
-.landing-value .landing-index { display: block; font-size: clamp(36px, 3.4vw, 48px); letter-spacing: 0; line-height: 0.9; font-variant-numeric: tabular-nums; transition: color 300ms ease, transform 300ms ease; }
-.landing-value:hover .landing-index { color: var(--landing-action); transform: scale(1.06); }
-.landing-value.hit .landing-index { color: var(--landing-action); transform: scale(1.15); }
-.landing-value.dim { opacity: 0.32; }
-.landing-value h3 { margin: 14px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: clamp(18px, 1.5vw, 20px); letter-spacing: 1.2px; text-transform: uppercase; }
-.landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.65; }
+
+/* The scoreboard strip: tiles as one real grid row, value text as the next
+   real grid row — a row's top edge is a single shared value across every one
+   of its columns, so the four titles align without bottom-aligning anything
+   or scrubbing a ball into position. The tile→text gap is each item's own
+   `margin-top`, not the grid's `row-gap`: mobile reorders the eight children
+   into explicit rows below, and a per-item margin is what lets it hold a
+   different gap between the two value pairs than it holds inside one. */
+.landing-tablero { display: grid; width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 2px; align-items: start; margin-top: 40px; }
+.landing-tablero-tile { display: flex; align-items: flex-end; height: 176px; padding: 20px; background: var(--landing-brand-black); color: var(--landing-highlight); font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(72px, 7vw, 120px); line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; transition: transform 200ms ease; }
+.landing-tablero-tile:hover { transform: translateY(-6px); }
+.landing-tablero-item { margin-top: 18px; }
+.landing-tablero-item h3 { margin: 0; font-family: var(--font-landing-barlow); font-weight: 800; font-size: 22px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--landing-text-strong); }
+.landing-tablero-item p { margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: color-mix(in srgb, var(--landing-brand-black) 82%, var(--landing-highlight)); }
+
+/* @touch-target The quiet scroll cue into the black Logros band below. */
+.landing-tablero-cue { display: inline-flex; align-items: center; gap: 12px; min-height: 48px; margin-top: 36px; align-self: flex-end; font-family: var(--font-landing-barlow); font-weight: 700; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--landing-text-strong); text-decoration: none; }
+.landing-tablero-cue::after { content: ""; width: 34px; height: 3px; background: currentColor; }
 
 /* Section colour rhythm (issue #611, v2 redesign): each content band owns a
    solid brand ground so the page scans white (Horarios) -> white
@@ -299,17 +301,11 @@
    reads on white. */
 .landing-section#nosotros { background: var(--landing-surface); color: var(--landing-text-strong); }
 
-/* On the yellow ground the accents invert: text and rules become brand black
-   (brand red only reaches ~3.5:1 there; black ~14.9:1), dividers turn to
-   translucent black, and the hover/hit index accent stops depending on red.
-   The rally's own styles above are already written for this ground — it only
-   ever renders inside this section. */
-.landing-values .landing-eyebrow,
-.landing-values .landing-value .landing-index { color: var(--landing-text-strong); }
-.landing-values .landing-value-rule { background: var(--landing-text-strong); }
-.landing-values .landing-value + .landing-value { border-color: color-mix(in srgb, var(--landing-brand-black) 18%, transparent); }
-.landing-values .landing-value:hover .landing-index,
-.landing-values .landing-value.hit .landing-index { color: var(--landing-text-strong); }
+/* The base eyebrow is brand red, which only reaches ~3.5:1 on this yellow
+   ground (black reaches ~14.9:1), so Valores overrides it to brand black. The
+   tablero's own classes above already write their colours directly for this
+   ground and need no such override. */
+.landing-values .landing-eyebrow { color: var(--landing-text-strong); }
 
 /* Logros / Palmarés. Dark trophy wall: the club's results read as a record on
    black, mirroring the approved prototype's "wins" presentation while keeping
@@ -529,11 +525,6 @@
   .landing-hero { gap: 40px; }
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
-  /* Two up. The vertical dividers go with the single row that justified them —
-     wrapped, they would strand a rule at the start of the second row. Each
-     value's own top rule already separates it. */
-  .landing-value-row { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; }
-  .landing-value, .landing-value + .landing-value { padding: 26px 0 0; border-left: 0; }
   /* Keep the trophy wall's three columns from crowding at tablet width. */
   .landing-palmares-row { grid-template-columns: 190px minmax(0, 1fr) 118px; gap: 20px; }
   .landing-contact { width: 360px; }
@@ -576,7 +567,25 @@
   .landing-carousel { --landing-slide-height: 340px; }
   .landing-section, .landing-footer { padding: 64px 24px; }
   .landing-location-row { flex-direction: column; }
-  .landing-value-row { grid-template-columns: 1fr; }
+  /* Two columns, reordered into tile,tile / text,text / tile,tile / text,text
+     instead of the auto-flow's tile-pair / tile-pair / text-pair / text-pair
+     block — same reorder the approved prototype uses. Only the second tile
+     pair gets the 32px gap above it, separating the two value pairs; the
+     22px tile→text gap comes from `.landing-tablero-item`'s own margin,
+     unchanged from desktop. */
+  .landing-tablero { margin-top: 36px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing-tablero > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .landing-tablero > :nth-child(2) { grid-column: 2; grid-row: 1; }
+  .landing-tablero > :nth-child(3) { grid-column: 1; grid-row: 3; margin-top: 32px; }
+  .landing-tablero > :nth-child(4) { grid-column: 2; grid-row: 3; margin-top: 32px; }
+  .landing-tablero > :nth-child(5) { grid-column: 1; grid-row: 2; }
+  .landing-tablero > :nth-child(6) { grid-column: 2; grid-row: 2; }
+  .landing-tablero > :nth-child(7) { grid-column: 1; grid-row: 4; }
+  .landing-tablero > :nth-child(8) { grid-column: 2; grid-row: 4; }
+  .landing-tablero-tile { height: 140px; padding: 16px; font-size: clamp(56px, 16vw, 80px); }
+  .landing-tablero-item h3 { font-size: 19px; }
+  .landing-tablero-item p { font-size: 15px; margin-top: 10px; }
+  .landing-tablero-cue { align-self: flex-start; }
   .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are

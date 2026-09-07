@@ -1,34 +1,34 @@
 /**
- * Vertical space, measured (issue #871).
+ * Vertical space, measured (issue #871; Valores rewritten as a tablero).
  *
- * Valores, Logros and the CTA final each reserve less structural space now —
- * a smaller rally stage, tighter section gaps, tighter ask/warning padding,
- * a tighter Logros row rhythm and a shorter CTA padding. None of it touches
- * copy, colour, typography or image sizing, so a unit test reading the
- * stylesheet (`landing-vertical-space.test.ts`) can lock the literal values,
- * but only a real browser can say what those literals actually PRODUCE once
- * flex/grid layout, web fonts and real content settle — which is what this
- * file measures.
+ * Valores, Logros and the CTA final each reserve less structural space than
+ * the original template — tighter section gaps, tighter ask/warning padding,
+ * a tighter Logros row rhythm and a shorter CTA padding. Valores itself later
+ * dropped the scroll-scrubbed rally (ball, guide, scoreboard counter,
+ * dimming) for a static tablero of four numeral tiles: it does not scrub
+ * anything into place, so it cannot break the way the rally did on mobile.
+ * None of it touches copy, colour, typography or image sizing, so a unit
+ * test reading the stylesheet (`landing-vertical-space.test.ts`) can lock the
+ * literal values, but only a real browser can say what those literals
+ * actually PRODUCE once flex/grid layout, web fonts and real content
+ * settle — which is what this file measures.
  *
  * Recorded, not only asserted — the same convention `content-measure.spec.ts`
- * uses: the before/after numbers below were captured with the exact same
- * pipeline this file runs (`pnpm exec playwright test`), once against
- * `origin/main` and once against this branch, so a future reader can see what
- * the sections used to cost without re-running the comparison.
+ * uses: the numbers below were captured with the exact same pipeline this
+ * file runs (`pnpm exec playwright test`), so a future reader can see what
+ * the sections cost without re-running the measurement.
  *
- *   Section (desktop 1440x900)   before   after
- *   .landing-values                711px   633px
- *   .landing-rally                 190px   148px
- *   .landing-wins                 1372px  1314px
- *   .landing-motto                 432px   384px
- *   document.scrollHeight         8478px  8294px
+ *   Section (desktop 1440x900)          height
+ *   .landing-values (tablero)            701px
+ *   .landing-wins                       1314px
+ *   .landing-motto                       384px
+ *   document.scrollHeight               6672px
  *
- *   Section (mobile 390x844)     before   after
- *   .landing-values               1249px  1147px
- *   .landing-rally                 190px   148px
- *   .landing-wins                 2468px  2418px
- *   .landing-motto                 462px   438px
- *   document.scrollHeight        10404px 10228px
+ *   Section (mobile 390x844)            height
+ *   .landing-values (tablero)            941px
+ *   .landing-wins                       2418px
+ *   .landing-motto                       438px
+ *   document.scrollHeight               9548px
  */
 import { test, expect } from "@playwright/test";
 
@@ -37,13 +37,20 @@ const VIEWPORTS = [
   { width: 390, height: 844, name: "mobile" },
 ] as const;
 
-/** Ceilings with headroom over the "after" numbers above, so a rendering
+/** Ceilings with headroom over the measured numbers above, so a rendering
  *  quirk (font metrics, sub-pixel rounding) never fails this on its own —
- *  only a real regression past the approved range does. Each ceiling still
- *  sits comfortably under the matching "before" number. */
+ *  only a real regression past the approved range does.
+ *
+ *  `desktop.valores` moved from #871's 660px to 709px (701px measured + 8px
+ *  headroom, same convention as every other ceiling here): the tablero's four
+ *  200px-class tiles plus their text row cost more vertical space than the
+ *  rally's single 148px stage did, even after trimming the tile to 176px, the
+ *  tile→text gap to 18px and the cue's `margin-top` to 36px — the numbers
+ *  `landing-vertical-space.test.ts` locks. Nothing else in #871's approved
+ *  range moved. */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 660, rally: 156, logros: 1340, cta: 400, scrollHeight: 8400 },
-  mobile: { valores: 1170, rally: 156, logros: 2440, cta: 450, scrollHeight: 10300 },
+  desktop: { valores: 709, logros: 1340, cta: 400, scrollHeight: 8400 },
+  mobile: { valores: 1170, logros: 2440, cta: 450, scrollHeight: 10300 },
 };
 
 test.describe("landing vertical space", () => {
@@ -62,7 +69,6 @@ test.describe("landing vertical space", () => {
         };
         return {
           valores: heightOf(".landing-values"),
-          rally: heightOf(".landing-rally"),
           logros: heightOf(".landing-wins"),
           cta: heightOf(".landing-motto"),
           scrollHeight: document.documentElement.scrollHeight,
@@ -78,8 +84,6 @@ test.describe("landing vertical space", () => {
       const ceilings = CEILINGS[vp.name];
       expect(heights.valores, `.landing-values height at ${vp.name}`).not.toBeNull();
       expect(heights.valores as number, `.landing-values height at ${vp.name}`).toBeLessThanOrEqual(ceilings.valores);
-      expect(heights.rally as number, `.landing-rally height at ${vp.name}`).toBeGreaterThanOrEqual(140);
-      expect(heights.rally as number, `.landing-rally height at ${vp.name}`).toBeLessThanOrEqual(ceilings.rally);
       expect(heights.logros as number, `.landing-wins height at ${vp.name}`).toBeLessThanOrEqual(ceilings.logros);
       expect(heights.cta as number, `.landing-motto height at ${vp.name}`).toBeLessThanOrEqual(ceilings.cta);
       expect(heights.scrollHeight, `document scrollHeight at ${vp.name}`).toBeLessThanOrEqual(ceilings.scrollHeight);

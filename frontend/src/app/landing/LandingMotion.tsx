@@ -3,11 +3,8 @@
 import { useEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { MotionPathPlugin } from "gsap/MotionPathPlugin";
-import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
-import { rallyFlowAnchorsPx, type RallyValueBox } from "./landing-rally";
 import { registerSmoothScroll } from "@/lib/smooth-scroll";
 import Lenis from "lenis";
 
@@ -203,99 +200,7 @@ function enhanceTicker(track: HTMLElement): () => void {
   };
 }
 
-/* The rally lights the four Valores in turn as a ball scrubs along their
-   guide while the section scrolls through the viewport — its only
-   choreography now. The pinned variant was removed during #1026's review: its
-   transparent spacer padding showed the page's near-white background as a
-   blank band under the yellow section on every viewport taller than the
-   section. See `landing-rally.ts` for the geometry.
-
-   (What used to sit here described `playMotto`, the next function down.) */
-function playRally(): (() => void) | undefined {
-      const section = document.querySelector<HTMLElement>(".landing-values");
-      const guide = section?.querySelector<SVGPathElement>("[data-rally-guide]");
-      const ball = section?.querySelector<HTMLElement>("[data-rally-ball]");
-      const impact = section?.querySelector<HTMLElement>("[data-rally-impact]");
-      const stage = section?.querySelector<HTMLElement>("[data-rally]");
-      const counter = section?.querySelector<HTMLElement>("[data-rally-counter]");
-      const values = section ? gsap.utils.toArray<HTMLElement>("[data-value]", section) : [];
-      if (!section || !guide || !ball || !impact || !stage || !counter || values.length === 0) return undefined;
-
-      let reached = -1;
-      /* The single place ball, impact, counter and card state move together —
-         both choreographies below route every hit through it, so they cannot
-         drift apart. */
-      const reach = (index: number): void => {
-        if (index === reached) return;
-        reached = index;
-        counter.textContent = String(Math.max(0, index + 1));
-        values.forEach((value, i): void => { value.classList.toggle("hit", i === index); value.classList.toggle("dim", i > index); });
-        if (index < 0) return;
-        const rule = values[index].querySelector<HTMLElement>(".landing-value-rule");
-        if (rule) gsap.to(rule, { scaleX: 1, duration: 0.5, ease: "power3.out", overwrite: true });
-        const b = ball.getBoundingClientRect();
-        const s = stage.getBoundingClientRect();
-        gsap.set(impact, { x: b.left - s.left + b.width / 2, y: b.top - s.top + b.height / 2, opacity: 1, scale: 0.4 });
-        gsap.to(impact, { scale: 2.6, opacity: 0, duration: 0.55, ease: "power2.out" });
-      };
-
-      const rest = (): void => {
-        reached = -1;
-        counter.textContent = "0";
-        gsap.set(guide, { drawSVG: "0%" });
-        gsap.set(ball, { opacity: 0 });
-        gsap.set(values.map((value): Element | null => value.querySelector(".landing-value-rule")), { scaleX: 0 });
-        values.forEach((value): void => { value.classList.remove("hit"); value.classList.add("dim"); });
-      };
-      const draw = (progress: number): void => { gsap.set(guide, { drawSVG: `0% ${(progress * 100).toFixed(2)}%` }); };
-      const fade = (visible: boolean): void => { gsap.to(ball, { opacity: visible ? 1 : 0, duration: 0.2 }); };
-      const travel = { path: guide, align: guide, alignOrigin: [0.5, 0.5] as [number, number], start: 0, end: 1, autoRotate: false };
-
-      /* The flow choreography: the section scrolls normally — yellow meeting
-         the black trophy wall directly, no spacer, no blank band — and each
-         value is reached as it arrives, anchored where it is fully on screen.
-         The ball scrubs the guide across the section's own travel. */
-      const buildFlow = (): (() => void) => {
-        const tween = gsap.to(ball, {
-          motionPath: travel,
-          ease: "none",
-          scrollTrigger: {
-            trigger: section, start: "top bottom", end: "bottom top", scrub: 0.7,
-            onToggle(self: ScrollTrigger): void { fade(self.isActive); },
-          },
-          onUpdate(this: gsap.core.Tween): void { draw(this.progress()); },
-        });
-        /* Read from layout on every refresh rather than assumed from the
-           breakpoint: how many columns the values are in, and how tall each one
-           is, are CSS decisions, and measuring is the only honest way to ask
-           what they currently are. */
-        const anchors = (): number[] => rallyFlowAnchorsPx(
-          values.map((value): RallyValueBox => {
-            const box = value.getBoundingClientRect();
-            return { top: box.top + window.scrollY, height: box.height };
-          }),
-          window.innerHeight,
-        );
-        const cards = values.map((value, index): ScrollTrigger => ScrollTrigger.create({
-          trigger: value,
-          start: (): string => `top ${Math.round(anchors()[index])}px`,
-          end: "bottom top",
-          onEnter: (): void => reach(index),
-          onEnterBack: (): void => reach(index),
-          onLeaveBack: (): void => reach(index - 1),
-        }));
-        return (): void => { cards.forEach((card): void => card.kill()); tween.scrollTrigger?.kill(); tween.kill(); };
-      };
-
-      /* One choreography, chosen once. ScrollTrigger re-evaluates the
-         function-based starts on its own refresh, so resize and orientation
-         changes re-measure the anchors without listeners of ours — the pin
-         re-decision machinery that needed them is gone with the pin. */
-      rest();
-      return buildFlow();
-    }
-
-    function playMotto(): (() => void) | undefined {
+function playMotto(): (() => void) | undefined {
   const motto = document.querySelector<HTMLElement>("[data-motto]");
   if (!motto) return undefined;
 
@@ -322,7 +227,7 @@ function playRally(): (() => void) | undefined {
 
 export default function LandingMotion(): null {
   useEffect((): (() => void) => {
-    gsap.registerPlugin(ScrollTrigger, MotionPathPlugin, DrawSVGPlugin, SplitText);
+    gsap.registerPlugin(ScrollTrigger, SplitText);
     const media = gsap.matchMedia();
     let lenis: Lenis | null = null;
     /*
@@ -347,7 +252,6 @@ export default function LandingMotion(): null {
       let teardownCarousel: (() => void) | undefined;
       let teardownHeroCarousel: (() => void) | undefined;
       let teardownTicker: (() => void) | undefined;
-      let teardownRally: (() => void) | undefined;
       let teardownMotto: (() => void) | undefined;
 
       const context = gsap.context((): void => {
@@ -370,7 +274,7 @@ export default function LandingMotion(): null {
         });
 
         gsap.utils.toArray<HTMLElement>("[data-motion-section]").forEach((section): void => {
-          const targets = section.querySelectorAll<HTMLElement>("[data-reveal]:not([data-value])");
+          const targets = section.querySelectorAll<HTMLElement>("[data-reveal]");
           if (targets.length > 0) {
             /*
              * `stagger: 0.1` is correct for a section that reveals a LIST of
@@ -404,7 +308,7 @@ export default function LandingMotion(): null {
          * count-up made — would leave them invisible whenever a trigger fails
          * to fire.
          */
-        gsap.utils.toArray<HTMLElement>("[data-rule]:not(.landing-value-rule)").forEach((rule): void => {
+        gsap.utils.toArray<HTMLElement>("[data-rule]").forEach((rule): void => {
           gsap.from(rule, {
             width: 0,
             duration: 0.7,
@@ -415,7 +319,6 @@ export default function LandingMotion(): null {
         });
 
 
-        teardownRally = playRally();
         teardownMotto = playMotto();
 
         const ticker = document.querySelector<HTMLElement>("[data-credentials-ticker]");
@@ -439,7 +342,6 @@ export default function LandingMotion(): null {
         teardownCarousel?.();
         teardownHeroCarousel?.();
         teardownTicker?.();
-        teardownRally?.();
         teardownMotto?.();
         split?.revert();
         context.revert();
@@ -448,7 +350,6 @@ export default function LandingMotion(): null {
 
     media.add("(prefers-reduced-motion: reduce)", (): void => {
       gsap.set("[data-reveal], [data-media-reveal], [data-rule]", { clearProps: "all" });
-          document.querySelectorAll("[data-value]").forEach((value): void => value.classList.remove("dim", "hit"));
     });
 
     return (): void => {
