@@ -988,37 +988,38 @@ describe("LandingPage", (): void => {
       .toEqual(["01", "02"]);
   });
 
-  it("numbers every value instead of giving it an icon", (): void => {
+  it("numbers each value on a black tile instead of giving it an icon", (): void => {
     render(<LandingPage />);
 
-    const values = Array.from(document.querySelectorAll(".landing-value"));
-    expect(values).toHaveLength(4);
-    expect(document.querySelectorAll(".landing-value svg")).toHaveLength(0);
-    expect(values.map((value): string | null => value.querySelector(".landing-index")?.textContent ?? null))
-      .toEqual(["01", "02", "03", "04"]);
+    const tiles = Array.from(document.querySelectorAll(".landing-tablero-tile"));
+    expect(tiles).toHaveLength(4);
+    expect(document.querySelectorAll(".landing-tablero-tile svg")).toHaveLength(0);
+    expect(tiles.map((tile): string | null => tile.textContent)).toEqual(["01", "02", "03", "04"]);
+    tiles.forEach((tile): void => {
+      expect(tile).toHaveAttribute("aria-hidden", "true");
+    });
   });
 
   it("keeps each value's heading and description together in its own article", (): void => {
     render(<LandingPage />);
 
-    const values = Array.from(document.querySelectorAll(".landing-value"));
+    const values = Array.from(document.querySelectorAll(".landing-tablero-item"));
+    expect(values).toHaveLength(4);
     values.forEach((value): void => {
       expect(value.querySelector("h3")?.textContent).toBeTruthy();
       expect(value.querySelector("p")?.textContent).toBeTruthy();
+      expect(value.hasAttribute("data-reveal")).toBe(true);
     });
   });
 
-  it("renders the rally guide, ball, impact, counter, and four motion hooks", (): void => {
-        render(<LandingPage />);
-        const rally = document.querySelector("[data-rally]");
-        expect(rally).toHaveAttribute("aria-hidden", "true");
-        expect(rally?.querySelector("[data-rally-guide]")).toBeInTheDocument();
-        expect(rally?.querySelector("[data-rally-ball]")).toBeInTheDocument();
-        expect(rally?.querySelector("[data-rally-impact]")).toBeInTheDocument();
-        expect(rally?.querySelector("[data-rally-counter]")).toHaveTextContent("0");
-        expect(document.querySelectorAll("[data-value]")).toHaveLength(4);
-        expect(document.querySelectorAll(".landing-value[data-reveal]")).toHaveLength(0);
-      });
+  it("renders the values tablero without any rally, ball, or dimming hooks", (): void => {
+    render(<LandingPage />);
+
+    expect(document.querySelector("[data-rally]")).toBeNull();
+    expect(document.querySelectorAll("[data-value]")).toHaveLength(0);
+    const cue = document.querySelector(".landing-tablero-cue");
+    expect(cue).toHaveAttribute("href", "#logros");
+  });
 
       it("gives every footer service link its own destination", (): void => {
     render(<LandingPage />);

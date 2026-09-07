@@ -36,7 +36,6 @@ interface SectionHeaderProps {
 }
 
 interface ValueCardProps {
-  index: string;
   title: string;
   children: React.ReactNode;
 }
@@ -262,16 +261,17 @@ function MissionVision(): React.ReactElement {
   );
 }
 
-/** Decorative guide stage animated by `playRally` in LandingMotion.tsx. */
-    function Rally(): React.ReactElement {
-      return <div className="landing-rally" data-rally aria-hidden="true"><svg viewBox="0 0 1200 190" preserveAspectRatio="none"><path className="landing-rally-guide" data-rally-guide d="M -60 170 Q 45 26 150 170 Q 300 26 450 170 Q 600 26 750 170 Q 900 26 1050 170 Q 1150 60 1270 170" /></svg><span className="landing-rally-ball" data-rally-ball /><span className="landing-rally-impact" data-rally-impact /><span className="landing-rally-count">RALLY <b data-rally-counter>0</b>/4</span></div>;
-    }
+/** Decorative numeral tile — one per value, sharing one grid row with the
+ * three others so every value's title starts at the same top edge by
+ * construction. Replaces the scroll-scrubbed rally, rejected for breaking on
+ * mobile and for the ball motif itself. */
+function ValueTile({ index }: { index: string }): React.ReactElement {
+  return <span className="landing-tablero-tile" aria-hidden="true">{index}</span>;
+}
 
-    function ValueCard({ index, title, children }: ValueCardProps): React.ReactElement {
+function ValueCard({ title, children }: ValueCardProps): React.ReactElement {
   return (
-    <article className="landing-value" data-value>
-      <span className="landing-value-rule" aria-hidden="true" />
-      <span className="landing-index" aria-hidden="true">{index}</span>
+    <article className="landing-tablero-item" data-reveal>
       <h3>{title}</h3>
       <p>{children}</p>
     </article>
@@ -282,13 +282,17 @@ function Values(): React.ReactElement {
   return (
     <section className="landing-section landing-values" id="valores" data-motion-section data-testid="motion-section">
       <SectionHeader eyebrow="Lo que nos mueve" title="Nuestros Valores" />
-      <Rally />
-      <div className="landing-value-row">
-        <ValueCard index="01" title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
-        <ValueCard index="02" title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
-        <ValueCard index="03" title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
-        <ValueCard index="04" title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
+      <div className="landing-tablero">
+        <ValueTile index="01" />
+        <ValueTile index="02" />
+        <ValueTile index="03" />
+        <ValueTile index="04" />
+        <ValueCard title="Respeto">Honramos a rivales, compañeros y entrenadores en cada encuentro.</ValueCard>
+        <ValueCard title="Disciplina">El progreso nace de la constancia y el entrenamiento diario.</ValueCard>
+        <ValueCard title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
+        <ValueCard title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
       </div>
+      <a className="landing-tablero-cue" href="#logros">Logros del club <span aria-hidden="true">↓</span></a>
     </section>
   );
 }

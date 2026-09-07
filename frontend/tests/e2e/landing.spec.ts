@@ -374,253 +374,118 @@ test.describe("Landing page", () => {
   });
 
   /**
-   * The Valores rally (issue #594) pins the whole section under a ball that
-   * scrubs along an SVG guide, lighting each value as it passes. Issue #637
-   * reported that on a phone the rally "only reaches value 01" and that value
-   * 04 falls outside the viewport.
-   *
-   * The cause is geometric, so only a real browser can see it: at 390x844 the
-   * Valores section is ~1249px tall. Pinning freezes it with its top at the
-   * viewport top, so values 03 and 04 sit below the fold for the ENTIRE 1900px
-   * scrub. The counter still climbs to 4/4 and the `hit` class still lands on
-   * every card — off screen, where nobody can see it. Asserting the counter,
-   * or the class, or a screenshot of the top of the section would all have
-   * passed on the broken build.
-   *
-   * So the assertion is the one the reader actually cares about: each value is
-   * activated at a moment when that value is on screen.
+   * The Valores rally (issue #594) used to pin the whole section under a ball
+   * scrubbing an SVG guide. Issue #637 found it left values off screen on a
+   * phone; the fix chosen here is not a better scrub — it is no scrub at all.
+   * The approved prototype (`landing-valores-b-tablero.html`) replaces it with
+   * a static tablero: four numeral tiles and four value articles sharing one
+   * CSS grid, so every title lines up by construction and nothing can be
+   * "reached" off screen because nothing moves as the page scrolls.
    */
-  test.describe("values rally", () => {
-    /** Runs in the page: one frame of rally state, measured, never inferred. */
-    const sampleRally = (): {
-      atEnd: boolean;
-      counter: string;
-      pageOverflowPx: number;
-      pinned: boolean;
-      sectionTop: number;
-      sectionBottom: number;
-      cards: { hit: boolean; dim: boolean; onScreen: boolean; opacity: string }[];
-    } => {
-      const root = document.documentElement;
-      const section = document.querySelector(".landing-values");
-      const rect = section?.getBoundingClientRect();
-      const viewport = window.innerHeight;
-      return {
-        atEnd: window.scrollY + viewport >= root.scrollHeight - 2,
-        counter: document.querySelector("[data-rally-counter]")?.textContent?.trim() ?? "",
-        pageOverflowPx: root.scrollWidth - root.clientWidth,
-        // ScrollTrigger pins by fixing the element in place; nothing else on
-        // this page makes the section `fixed`.
-        pinned: section ? getComputedStyle(section).position === "fixed" : false,
-        sectionTop: rect ? Math.round(rect.top) : Number.NaN,
-        sectionBottom: rect ? Math.round(rect.bottom) : Number.NaN,
-        cards: Array.from(document.querySelectorAll<HTMLElement>(".landing-values [data-value]")).map(
-          (card) => {
-            const box = card.getBoundingClientRect();
-            return {
-              hit: card.classList.contains("hit"),
-              dim: card.classList.contains("dim"),
-              // Fully inside the viewport — a card half off the fold is not a
-              // card the visitor saw light up.
-              onScreen: box.top >= 0 && box.bottom <= viewport,
-              opacity: getComputedStyle(card).opacity,
-            };
-          },
+  test.describe("values tablero", () => {
+    /** Every `.landing-tablero-item h3`'s top, rounded, in DOM order. */
+    const readTitleTops = (page: import("@playwright/test").Page): Promise<number[]> =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>(".landing-tablero-item h3")).map(
+          (h3) => Math.round(h3.getBoundingClientRect().top),
         ),
-      };
-    };
+      );
 
-    type RallyWalk = {
-      /** Per value: did it carry `hit` while fully on screen at least once? */
-      activatedOnScreen: boolean[];
-      /** Per value: did it carry `hit` at any point, on screen or not? */
-      activatedAnywhere: boolean[];
-      highestCounter: number;
-      maxPageOverflowPx: number;
-      /** Was the section ever pinned — the desktop choreography's signature? */
-      everPinned: boolean;
-      /** Frames where the counter, `hit` and `dim` disagreed with each other. */
-      desyncs: string[];
-      cardCount: number;
-    };
-
-    /**
-     * Scrolls the page through the Valores section with real wheel input —
-     * Lenis owns the scroll, so `window.scrollTo` would be fighting it — and
-     * records what the rally did on the way.
-     */
-    async function walkRally(page: import("@playwright/test").Page): Promise<RallyWalk> {
-      const walk: RallyWalk = {
-        activatedOnScreen: [],
-        activatedAnywhere: [],
-        highestCounter: 0,
-        maxPageOverflowPx: 0,
-        everPinned: false,
-        desyncs: [],
-        cardCount: 0,
-      };
-
-      const record = (frame: ReturnType<typeof sampleRally>): void => {
-        walk.cardCount = frame.cards.length;
-        if (walk.activatedOnScreen.length === 0) {
-          walk.activatedOnScreen = frame.cards.map(() => false);
-          walk.activatedAnywhere = frame.cards.map(() => false);
-        }
-        walk.maxPageOverflowPx = Math.max(walk.maxPageOverflowPx, frame.pageOverflowPx);
-        if (frame.pinned) walk.everPinned = true;
-        const counter = Number.parseInt(frame.counter, 10);
-        if (Number.isFinite(counter)) walk.highestCounter = Math.max(walk.highestCounter, counter);
-        frame.cards.forEach((card, index) => {
-          if (card.hit) walk.activatedAnywhere[index] = true;
-          if (card.hit && card.onScreen) walk.activatedOnScreen[index] = true;
-        });
-        // Ball, impact and card state all move through one `reach(index)` call,
-        // so the counter and the classes may never disagree about which value
-        // the ball is on.
-        const lit = frame.cards.findIndex((card) => card.hit);
-        if (lit >= 0) {
-          if (counter !== lit + 1) walk.desyncs.push(`counter=${frame.counter} but value ${lit + 1} is lit`);
-          // Everything after the lit value stays dimmed; nothing before it does.
-          const wrongDim = frame.cards.findIndex((card, index) => card.dim !== (index > lit));
-          if (wrongDim >= 0) walk.desyncs.push(`value ${wrongDim + 1} dim=${frame.cards[wrongDim].dim} with value ${lit + 1} lit`);
-        }
-      };
-
-      // Approach: coarse steps, stopping a full coarse step short of the
-      // section. Handing over any later let one 600px stride carry a 390px
-      // viewport clean past the window in which value 01 is lit — the walk
-      // would have reported the bug it was still sampling too coarsely to see.
-      const viewport = page.viewportSize()!.height;
-      for (let step = 0; step < 40; step += 1) {
-        const frame = await page.evaluate(sampleRally);
-        record(frame);
-        if (frame.atEnd || frame.sectionTop <= viewport + 800) break;
-        await page.mouse.wheel(0, 600);
-        await page.waitForTimeout(70);
-      }
-
-      // Traverse: fine steps, so a value that is only lit for one card-height
-      // of scroll is still sampled while it is on screen.
-      for (let step = 0; step < 90; step += 1) {
-        const frame = await page.evaluate(sampleRally);
-        record(frame);
-        if (frame.atEnd || frame.sectionBottom < 0) break;
-        await page.mouse.wheel(0, 70);
-        await page.waitForTimeout(100);
-      }
-
-      return walk;
-    }
-
-    const PHONES = [
-      { label: "portrait", width: 390, height: 844 },
-      { label: "landscape", width: 844, height: 390 },
-    ];
-
-    for (const phone of PHONES) {
-      test(`activates all four values while each is on screen (${phone.label} ${phone.width}x${phone.height})`, async ({
-        page,
-      }) => {
-        test.setTimeout(120_000);
-        await page.setViewportSize({ width: phone.width, height: phone.height });
-        await page.goto("/");
-        await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
-
-        const walk = await walkRally(page);
-
-        expect(walk.cardCount, "four values render").toBe(4);
-        // The regression, stated plainly. On the build that shipped it, this
-        // failed at value 03 in portrait and at value 01 in landscape, each
-        // time with `lit anywhere=true` — the class was applied, off screen.
-        ["01", "02", "03", "04"].forEach((label, index) => {
-          expect(
-            walk.activatedOnScreen[index],
-            `value ${label} lit up while on screen (${phone.label}); lit anywhere=${walk.activatedAnywhere[index]}`,
-          ).toBe(true);
-        });
-        expect(walk.highestCounter, "counter reaches 4/4").toBe(4);
-        expect(walk.desyncs, "counter, hit and dim stay in step").toEqual([]);
-        expect(walk.maxPageOverflowPx, "no horizontal page scroll").toBeLessThanOrEqual(0);
-        // The mechanism, named: a section this much taller than the phone
-        // viewport must not be pinned, because pinning is what put three of the
-        // four values off screen.
-        expect(walk.everPinned, "the section never pins on a phone").toBe(false);
-      });
-    }
-
-    /**
-     * #1026 removed the desktop pin too: Valores remains in document flow,
-     * so ScrollTrigger cannot add its tall pin spacer (the source of the white
-     * gap) before the immediately following Palmarés section.
-     */
-    test("keeps Values flow-only and contiguous with Palmarés on desktop", async ({ page }) => {
+    test("renders four tiles and four items with every title sharing the same top, on desktop", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
-      await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
-      await page.locator(".landing-wins").scrollIntoViewIfNeeded();
+      await page.locator(".landing-tablero").scrollIntoViewIfNeeded();
 
-      const flow = await page.evaluate(() => {
-        const values = document.querySelector<HTMLElement>(".landing-values");
-        const palmares = document.querySelector<HTMLElement>(".landing-wins");
-        if (!values || !palmares) return null;
-        const valuesBox = values.getBoundingClientRect();
-        const palmaresBox = palmares.getBoundingClientRect();
-        return {
-          position: getComputedStyle(values).position,
-          hasPinSpacer: values.closest(".pin-spacer") !== null,
-          palmaresIsNextSection: values.nextElementSibling === palmares,
-          gapToPalmares: Math.round(palmaresBox.top - valuesBox.bottom),
-        };
-      });
+      await expect(page.locator(".landing-tablero-tile")).toHaveCount(4);
+      await expect(page.locator(".landing-tablero-item")).toHaveCount(4);
 
-      expect(flow, "Values and Palmarés render").not.toBeNull();
-      expect(flow?.position, "Values stays in normal flow").not.toBe("fixed");
-      expect(flow?.hasPinSpacer, "Values has no generated pin spacer").toBe(false);
-      expect(flow?.palmaresIsNextSection, "Palmarés follows Values directly").toBe(true);
-      expect(flow?.gapToPalmares, "no spacer gap separates Values from Palmarés").toBe(0);
+      // `LandingMotion.tsx` staggers each `.landing-tablero-item` in with
+      // `gsap.from([data-reveal], { y: 40, opacity: 0, stagger: 0.1, ... })`;
+      // the LAST item finishes last, so its opacity settling at 1 is the
+      // explicit signal the whole group has stopped moving — the poll below
+      // is not the only guard against measuring mid-animation.
+      await expect(page.locator(".landing-tablero-item").last()).toHaveCSS("opacity", "1");
+
+      // Grid alignment is a layout fact once settled, not a race — but a
+      // slower CI runner can still catch the tail of the stagger, so poll
+      // instead of reading once. The unique, sorted tops are the message
+      // Playwright prints on timeout, e.g. "[501,517,532]".
+      await expect
+        .poll(
+          async () => JSON.stringify([...new Set(await readTitleTops(page))].sort((a, b) => a - b)),
+          { timeout: 10_000, message: "every title shares one top edge once the reveal settles" },
+        )
+        .toMatch(/^\[\d+\]$/);
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, "no horizontal page scroll").toBeLessThanOrEqual(0);
     });
 
-    test("re-evaluates the rally after an orientation change", async ({ page }) => {
-      test.setTimeout(120_000);
+    test("pairs its two-column titles by top edge on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
-      await expect(page.locator(".landing-values [data-value]")).toHaveCount(4);
-      await walkRally(page);
+      await page.locator(".landing-tablero").scrollIntoViewIfNeeded();
 
-      // Rotate mid-visit without reloading: the rally has to rebuild against
-      // the new geometry rather than keep the layout it measured on load.
-      await page.setViewportSize({ width: 844, height: 390 });
-      await page.waitForTimeout(600);
-      await page.mouse.wheel(0, -20_000);
-      await page.waitForTimeout(600);
+      await expect(page.locator(".landing-tablero-item").last()).toHaveCSS("opacity", "1");
 
-      const walk = await walkRally(page);
-      ["01", "02", "03", "04"].forEach((label, index) => {
-        expect(walk.activatedOnScreen[index], `value ${label} lit up while on screen after rotating`).toBe(true);
-      });
-      expect(walk.maxPageOverflowPx, "no horizontal page scroll after rotating").toBeLessThanOrEqual(0);
+      await expect
+        .poll(async () => JSON.stringify(await readTitleTops(page)), {
+          timeout: 10_000,
+          message: "each pair shares a top edge once the reveal settles",
+        })
+        .toMatch(/^\[(\d+),\1,(\d+),\2\]$/);
+
+      const settledTops = await readTitleTops(page);
+      expect(settledTops[0], "the two pairs sit at different heights").not.toBe(settledTops[2]);
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, "no horizontal page scroll").toBeLessThanOrEqual(0);
     });
 
-    test("leaves every value legible on a phone under reduced motion", async ({ page }) => {
+    test("keeps every value visible and legible under reduced motion, no rally hooks in the DOM", async ({ page }) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
 
-      const values = page.locator(".landing-values [data-value]");
-      await expect(values).toHaveCount(4);
-      for (const label of ["01", "02", "03", "04"]) {
-        const card = values.filter({ hasText: label });
-        await card.scrollIntoViewIfNeeded();
-        await expect(card).toBeVisible();
-        // Reduced motion must not leave a value stranded at the 0.32 opacity
-        // `dim` gives it, nor pinned off screen.
-        await expect(card).not.toHaveClass(/\bdim\b/);
-        await expect(card).toHaveCSS("opacity", "1");
+      expect(await page.locator("[data-rally]").count(), "no rally element ever renders").toBe(0);
+
+      const items = page.locator(".landing-tablero-item");
+      await expect(items).toHaveCount(4);
+      for (const title of ["Respeto", "Disciplina", "Esfuerzo", "Compañerismo"]) {
+        const item = items.filter({ hasText: title });
+        await item.scrollIntoViewIfNeeded();
+        await expect(item).toBeVisible();
+        await expect(item).toHaveCSS("opacity", "1");
       }
+
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow, "no horizontal page scroll under reduced motion").toBeLessThanOrEqual(0);
+    });
+
+    test("sends the scroll cue to the real Palmarés section, contiguous with Valores", async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+
+      const cue = page.locator(".landing-tablero-cue");
+      await expect(cue).toHaveAttribute("href", "#logros");
+
+      const flow = await page.evaluate(() => {
+        const values = document.querySelector<HTMLElement>(".landing-values");
+        const palmares = document.querySelector<HTMLElement>("#logros");
+        if (!values || !palmares) return null;
+        return { palmaresIsNextSection: values.nextElementSibling === palmares };
+      });
+      expect(flow, "Values and Palmarés render").not.toBeNull();
+      expect(flow?.palmaresIsNextSection, "Palmarés follows Values directly").toBe(true);
+
+      await cue.click();
+      await expect(page).toHaveURL(/#logros$/);
     });
   });
 
