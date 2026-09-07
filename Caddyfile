@@ -223,4 +223,17 @@
 	# para que las dos capas coincidan.
 	@no_es_el_dominio_indexable not host {$DOMINIO_INDEXABLE:ninguno.invalid}
 	header @no_es_el_dominio_indexable X-Robots-Tag "noindex, nofollow"
+
+	# ── Access log del único borde público ────────────────────────────────
+	#
+	# Sin esta directiva, Caddy solo emite sus propios logs de admin y
+	# arranque -- nunca quién pegó a `/health/ready`, ni qué devolvió el
+	# proxy hacia el frontend (issue #1067). `output stdout` (el default) es
+	# a propósito: el driver de logging del servicio `caddy` en
+	# `docker-compose.prod.yml` es `journald`, que captura stdout/stderr del
+	# contenedor -- escribir acá a un archivo dentro del contenedor volvería
+	# a atar el log al ciclo de vida que este mismo cambio busca romper.
+	log {
+		output stdout
+	}
 }

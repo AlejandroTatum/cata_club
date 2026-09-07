@@ -766,27 +766,26 @@ def test_el_render_de_produccion_solo_caddy_publica_puertos_y_son_80_443():
 # ─── Ingress (Caddy) y rotación de logs ──────────────────────────────────
 
 
-def test_todos_los_servicios_de_produccion_declaran_logging_acotado():
-    """Sin rotación, `json-file` (el driver por defecto de Docker) escribe
-    logs sin límite: el disco de 50GB del droplet se llena en silencio, y
-    Postgres es el primer servicio en morir sin espacio (no puede escribir
-    WAL). Cada servicio del render -- incluido `caddy` -- tiene que declarar
-    `max-size` y `max-file` no vacíos."""
+def test_todos_los_servicios_de_produccion_declaran_logging_journald():
+    """`json-file` guarda el log DENTRO del filesystem del contenedor, bajo
+    el ID que Docker le asigna. Cada despliegue recrea backend y frontend
+    (imagen nueva) y cada cambio de `Caddyfile` recrea `caddy`
+    (`refrescar_caddy`): el ID muere con el contenedor y `json-file` se
+    lleva el log entero con él (issue #1067) -- un rollback motivado por un
+    incidente borra la evidencia del incidente que lo motivó.
+
+    `journald` es un servicio del HOST, no del contenedor: sobrevive al
+    `docker rm`/recreate porque no vive en el filesystem efímero de la
+    imagen. Cada entrada queda etiquetada con `CONTAINER_NAME`, así que
+    sigue siendo consultable por servicio después del redeploy (ver
+    `docs/operations/monitoring.md`). Cada servicio del render -- incluido
+    `caddy` -- tiene que declarar el driver `journald`."""
     config = _config_produccion()
     for nombre, datos in config["services"].items():
         logging_cfg = datos.get("logging") or {}
-        opciones = logging_cfg.get("options") or {}
-        assert logging_cfg.get("driver") == "json-file", (
-            f"'{nombre}' no declara `logging.driver: json-file` en el render "
+        assert logging_cfg.get("driver") == "journald", (
+            f"'{nombre}' no declara `logging.driver: journald` en el render "
             f"de producción: {logging_cfg}"
-        )
-        assert opciones.get("max-size"), (
-            f"'{nombre}' no declara `logging.options.max-size` en el render "
-            f"de producción"
-        )
-        assert opciones.get("max-file"), (
-            f"'{nombre}' no declara `logging.options.max-file` en el render "
-            f"de producción"
         )
 
 
@@ -980,6 +979,22 @@ def test_el_caddyfile_declara_la_csp_en_modo_report_only():
     assert "report-uri /api/csp-report" in contenido, (
         "la Content-Security-Policy-Report-Only del Caddyfile no manda sus "
         "reportes a /api/csp-report"
+    )
+
+
+def test_el_caddyfile_declara_access_log():
+    """`caddy` es el único borde público del stack, y sin una directiva
+    `log` el Caddyfile no emite access log: lo único que se ve hoy son los
+    logs de admin y arranque de Caddy, nunca quién pegó a `/health/ready` ni
+    qué devolvió el proxy hacia el frontend (issue #1067). Con el driver de
+    logging ya en `journald` (ver
+    `test_todos_los_servicios_de_produccion_declaran_logging_journald`), un
+    access log acá persiste igual que cualquier otro log del stack -- esta
+    prueba solo exige que el CONTENIDO exista."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+    assert re.search(r"^\s*log\b", contenido, re.MULTILINE), (
+        "el Caddyfile no declara un bloque `log` -- no hay access log del "
+        "único borde público del stack"
     )
 
 

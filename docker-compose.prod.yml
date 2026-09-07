@@ -28,11 +28,14 @@
 #     `mem_limit`: es lo que `docker compose up` honra fuera de Swarm, a
 #     diferencia de `deploy.resources.limits`, que Compose solo aplica en
 #     modo Swarm y por eso no tiene ningún efecto en este despliegue.
-#   - Rotación de logs (`logging:`) en los siete servicios del render: sin
-#     ella, `json-file` (el driver por defecto de Docker) escribe sin límite
-#     y el disco de 50GB del droplet se llena en silencio -- Postgres es el
-#     primer servicio en morir sin espacio (no puede escribir WAL). Ver el
-#     cálculo de presupuesto más abajo, junto a la primera declaración.
+#   - Driver de logging `journald` (`logging:`) en los ocho servicios del
+#     render: con `json-file` (el driver por defecto de Docker) el log vive
+#     DENTRO del filesystem efímero del contenedor, bajo su ID -- y cada
+#     despliegue recrea backend/frontend (imagen nueva) y cada cambio del
+#     Caddyfile recrea `caddy` (`refrescar_caddy`), así que el log muere con
+#     el contenedor. `journald` es un servicio del host: sobrevive al
+#     `docker rm`/recreate y queda etiquetado por `CONTAINER_NAME` (issue
+#     #1067; ver `docs/operations/monitoring.md`).
 #   - Tag de imagen EXPLÍCITO e inmutable (`IMAGE_TAG`, anclas de acá abajo):
 #     el overlay se niega a renderizar sin él, en vez de caer al `latest`
 #     móvil que la base deja como default de desarrollo.
@@ -85,13 +88,10 @@ services:
   # medido: es un techo con margen, no un número derivado de una prueba de
   # carga.
   #
-  # Presupuesto de rotación de logs, común a los siete servicios de abajo:
-  # `max-size: "10m"` x `max-file: "3"` = 30MB tope por servicio x 7 =
-  # 210MB máximo total, muy por debajo de los 50GB del disco del droplet
-  # (51200MB) -- deja margen de sobra incluso si varios servicios rotan a la
-  # vez. Sin esto, `json-file` (el driver por defecto de Docker) escribe sin
-  # límite y el disco se llena en silencio: Postgres es el primer servicio en
-  # morir sin espacio (no puede escribir WAL).
+  # `logging.driver: journald` en los ocho servicios de abajo (issue #1067):
+  # la retención real (`SystemMaxUse`, `MaxRetentionSec`) es configuración
+  # del host, en `journald.conf`, y este repositorio no la gestiona -- ver
+  # `docs/operations/monitoring.md`.
   db:
     # La base compone DATABASE_URL para los servicios Python. No puede
     # inicializarse primero con los defaults de desarrollo: aunque Settings
@@ -104,18 +104,12 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:?Error: define POSTGRES_DB en el entorno de producción}"
     mem_limit: 320m
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   redis:
     mem_limit: 64m
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   backend:
     image: *imagen_backend
@@ -138,10 +132,7 @@ services:
       # explícitamente si su proveedor no lo soporta.
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   celery-worker:
     image: *imagen_backend
@@ -151,10 +142,7 @@ services:
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   celery-beat:
     image: *imagen_backend
@@ -164,10 +152,7 @@ services:
       CORS_ORIGENES: "${CORS_ORIGENES:?Error: define CORS_ORIGENES en el entorno de producción (origen real del frontend, no localhost)}"
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   # Sidecar de autorreparación (issue #1061, ver docker-compose.yml): un
   # proceso liviano de vigilancia, sin margen que pedir -- 32m alcanza de
@@ -176,19 +161,13 @@ services:
   autoheal:
     mem_limit: 32m
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   frontend:
     image: *imagen_frontend
     mem_limit: 256m
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
   # Ingress único del stack de producción. Imagen oficial con tag fijo (nunca
   # `latest`: un `docker compose pull` sin aviso no debe poder cambiar de
@@ -266,10 +245,7 @@ services:
       retries: 5
       start_period: 10s
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: journald
 
 volumes:
   caddy_data:
