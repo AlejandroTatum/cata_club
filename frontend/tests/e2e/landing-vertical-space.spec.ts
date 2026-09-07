@@ -18,17 +18,22 @@
  * file runs (`pnpm exec playwright test`), so a future reader can see what
  * the sections cost without re-running the measurement.
  *
+ * `.landing-wins` dropped sharply again once Logros was redesigned (issue
+ * #657's follow-up) from the five-row placeholder trophy wall to a single
+ * documented result told as a feature story plus a four-photo podios row —
+ * see `landing-logros-d-historia.html`.
+ *
  *   Section (desktop 1440x900)          height
  *   .landing-values (tablero)            701px
- *   .landing-wins                       1314px
+ *   .landing-wins                        788px
  *   .landing-motto                       384px
- *   document.scrollHeight               6672px
+ *   document.scrollHeight               6146px
  *
  *   Section (mobile 390x844)            height
  *   .landing-values (tablero)            941px
- *   .landing-wins                       2418px
+ *   .landing-wins                       1067px
  *   .landing-motto                       438px
- *   document.scrollHeight               9548px
+ *   document.scrollHeight               8197px
  */
 import { test, expect } from "@playwright/test";
 
@@ -47,10 +52,15 @@ const VIEWPORTS = [
  *  rally's single 148px stage did, even after trimming the tile to 176px, the
  *  tile→text gap to 18px and the cue's `margin-top` to 36px — the numbers
  *  `landing-vertical-space.test.ts` locks. Nothing else in #871's approved
- *  range moved. */
+ *  range moved.
+ *
+ *  `logros` and `scrollHeight` both dropped hard with the Logros redesign
+ *  (feature story + podios row replacing the five-row placeholder wall);
+ *  the ceilings below carry the same headroom convention over the
+ *  `<MEASURED_*>` numbers recorded in the file header above. */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 709, logros: 1340, cta: 400, scrollHeight: 8400 },
-  mobile: { valores: 1170, logros: 2440, cta: 450, scrollHeight: 10300 },
+  desktop: { valores: 709, logros: 820, cta: 400, scrollHeight: 7300 },
+  mobile: { valores: 1170, logros: 1160, cta: 450, scrollHeight: 8600 },
 };
 
 test.describe("landing vertical space", () => {
@@ -94,59 +104,63 @@ test.describe("landing vertical space", () => {
   }
 
   /**
-   * The row rhythm, not just the container's declared `gap`: flexbox `gap`
-   * only produces the requested distance when nothing else (an image's own
-   * intrinsic size, a border) pushes rows apart, so this reads the real
-   * distance between two rendered rows instead of trusting the CSS literal.
+   * The redesigned Logros geometry: one feature photo at its fixed height,
+   * four podios photos in a hard-edged row, none of them shrunk to buy the
+   * section its lower budget. Every geometry read waits for the section's
+   * own reveal (`opacity: 1` on its last `[data-reveal]`) via `expect.poll`
+   * first — a one-shot read straight after `scrollIntoView` raced the
+   * reveal transition and failed in CI on exactly that pattern (PR #1127).
    */
-  test("tightens the Logros row rhythm without shrinking the trophy photos", async ({ page }, testInfo) => {
+  test("keeps the feature photo and the four podios at their fixed heights", async ({ page }, testInfo) => {
     await page.goto("/");
-    const rows = page.locator(".landing-palmares-row");
-    await expect(rows).toHaveCount(5);
+    await page.locator("#logros").scrollIntoViewIfNeeded();
+
+    const podiosReveal = page.locator("#logros .landing-podios-block[data-reveal]");
+    await expect.poll(async () => podiosReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
 
     const desktopMetrics = await page.evaluate(() => {
-      const nodes = Array.from(document.querySelectorAll<HTMLElement>(".landing-palmares-row"));
-      const gaps = nodes.slice(1).map((row, index) => {
-        const previous = nodes[index].getBoundingClientRect();
-        const current = row.getBoundingClientRect();
-        return current.top - previous.bottom;
-      });
-      const photo = document.querySelector<HTMLElement>(".landing-palmares-photo");
-      return { gaps, photoWidth: photo ? photo.getBoundingClientRect().width : null };
+      const feature = document.querySelector<HTMLElement>(".landing-logro-photo");
+      const podios = Array.from(document.querySelectorAll<HTMLElement>(".landing-podios > li"));
+      return {
+        featureHeight: feature ? feature.getBoundingClientRect().height : null,
+        podiosCount: podios.length,
+        podiosHeights: podios.map((li) => li.getBoundingClientRect().height),
+      };
     });
 
-    await testInfo.attach("row-rhythm-desktop", {
+    await testInfo.attach("logros-geometry-desktop", {
       body: JSON.stringify(desktopMetrics, null, 2),
       contentType: "application/json",
     });
 
-    for (const gap of desktopMetrics.gaps) {
-      expect(gap, "desktop row-to-row gap").toBeGreaterThanOrEqual(6);
-      expect(gap, "desktop row-to-row gap").toBeLessThanOrEqual(9);
+    expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBe(380);
+    expect(desktopMetrics.podiosCount, "podios count").toBe(4);
+    for (const height of desktopMetrics.podiosHeights) {
+      expect(height, "podio photo height on desktop").toBe(150);
     }
-    // 210px columns on desktop (untouched by this issue) — proof the space
-    // was not resolved by shrinking the photo first.
-    expect(desktopMetrics.photoWidth as number, "trophy photo width on desktop").toBeGreaterThanOrEqual(190);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
-    const mobileGaps = await page.evaluate(() => {
-      const nodes = Array.from(document.querySelectorAll<HTMLElement>(".landing-palmares-row"));
-      return nodes.slice(1).map((row, index) => {
-        const previous = nodes[index].getBoundingClientRect();
-        const current = row.getBoundingClientRect();
-        return current.top - previous.bottom;
-      });
+    await page.locator("#logros").scrollIntoViewIfNeeded();
+    await expect.poll(async () => podiosReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+
+    const mobileMetrics = await page.evaluate(() => {
+      const feature = document.querySelector<HTMLElement>(".landing-logro-photo");
+      const podios = Array.from(document.querySelectorAll<HTMLElement>(".landing-podios > li"));
+      return {
+        featureHeight: feature ? feature.getBoundingClientRect().height : null,
+        podiosHeights: podios.map((li) => li.getBoundingClientRect().height),
+      };
     });
 
-    await testInfo.attach("row-rhythm-mobile", {
-      body: JSON.stringify(mobileGaps, null, 2),
+    await testInfo.attach("logros-geometry-mobile", {
+      body: JSON.stringify(mobileMetrics, null, 2),
       contentType: "application/json",
     });
 
-    for (const gap of mobileGaps) {
-      expect(gap, "mobile row-to-row gap").toBeGreaterThanOrEqual(9);
-      expect(gap, "mobile row-to-row gap").toBeLessThanOrEqual(11);
+    expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBe(160);
+    for (const height of mobileMetrics.podiosHeights) {
+      expect(height, "podio photo height on mobile").toBe(120);
     }
   });
 

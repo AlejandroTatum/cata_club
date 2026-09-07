@@ -43,40 +43,34 @@ describe("landing vertical space (#871)", (): void => {
   });
 
   describe("Logros", (): void => {
-    it("tightens the section's own structural gap to 28-32px", (): void => {
+    it("keeps the section's own structural gap at 28-32px", (): void => {
       const css = landingCss();
       const gap = pxIn(ruleAt(css, ".landing-wins"), "gap");
       expect(gap).toBeGreaterThanOrEqual(28);
       expect(gap).toBeLessThanOrEqual(32);
     });
 
-    it("shrinks the ask/warning banners' vertical padding to 14-16px", (): void => {
+    it("trims the section's own padding well below the shared 76px convention", (): void => {
       const css = landingCss();
-      const askTop = pxIn(ruleAt(css, ".landing-palmares-ask"), "padding");
-      expect(askTop).toBeGreaterThanOrEqual(14);
-      expect(askTop).toBeLessThanOrEqual(16);
-      // Already inside the window before this issue — proved unchanged.
-      const warningTop = pxIn(ruleAt(css, ".landing-demo-warning"), "padding");
-      expect(warningTop).toBeGreaterThanOrEqual(14);
-      expect(warningTop).toBeLessThanOrEqual(16);
+      const rule = ruleAt(css, ".landing-wins");
+      expect(pxIn(rule, "padding-top")).toBeLessThanOrEqual(24);
+      expect(pxIn(rule, "padding-bottom")).toBeLessThanOrEqual(6);
     });
 
-    it("tightens the row rhythm to 7-8px on desktop, keeping 10px on mobile", (): void => {
+    it("keeps the feature photo at a fixed 380px height on desktop, 160px on mobile", (): void => {
       const css = landingCss();
-      const desktopGap = pxIn(ruleAt(css, ".landing-palmares"), "gap");
-      expect(desktopGap).toBeGreaterThanOrEqual(7);
-      expect(desktopGap).toBeLessThanOrEqual(8);
+      expect(pxIn(ruleAt(css, ".landing-logro-photo"), "height")).toBe(380);
 
       const mobileBlock = css.indexOf("@media (max-width: 768px)");
-      const mobileGap = pxIn(ruleAt(css, ".landing-palmares", mobileBlock), "gap");
-      expect(mobileGap).toBe(10);
+      expect(pxIn(ruleAt(css, ".landing-logro-photo", mobileBlock), "height")).toBe(160);
     });
 
-    it("leaves the trophy photo columns untouched — the fix never shrinks images first", (): void => {
+    it("keeps the podios row at 150px on desktop, 120px on mobile", (): void => {
       const css = landingCss();
-      // 210px desktop / 190px tablet / stacked on mobile: none of these are the
-      // issue's concern, and none of them changed.
-      expect(ruleAt(css, ".landing-palmares-row")).toContain("grid-template-columns: 210px minmax(0, 1fr) 124px");
+      expect(pxIn(ruleAt(css, ".landing-podios li"), "height")).toBe(150);
+
+      const mobileBlock = css.indexOf("@media (max-width: 768px)");
+      expect(pxIn(ruleAt(css, ".landing-podios li", mobileBlock), "height")).toBe(120);
     });
   });
 

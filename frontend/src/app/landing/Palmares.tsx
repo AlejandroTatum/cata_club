@@ -1,135 +1,103 @@
-"use client";
-
-import { useState } from "react";
 import Image from "next/image";
-import { AlertTriangle, Medal as MedalIcon } from "lucide-react";
 import {
-  DEMO_PALMARES,
-  isPalmaresRowComplete,
-  MEDAL_LABELS,
-  PALMARES,
-  palmaresPhotoSrc,
-  type PalmaresMedal,
-  type PalmaresRow,
-} from "./landing-palmares";
+  LOGRO_DESTACADO,
+  logroPhotoSrc,
+  MAS_PODIOS,
+  PODIO_DIMENSIONS,
+} from "./landing-logros";
 
-/**
- * Real, meaningful copy — not a quiet chip. This is a real text node in the
- * accessible tree (`role="alert"`), asserted on directly by the test suite,
- * because a screenshot with the demo toggle left on would show a real club
- * claiming medals, years, and competitions it never actually won.
- */
-const DEMO_WARNING_TEXT =
-  "Datos de ejemplo — resultados ficticios: el club NO ganó esto. Los años, medallas y torneos de abajo no ocurrieron; se muestran solo para revisar el diseño de la sección.";
-
-interface PalmaresMedalBadgeProps {
-  medal: PalmaresMedal;
+interface LogroFactProps {
+  label: string;
+  value: string;
 }
 
-/**
- * `part` (participación) deliberately gets no color and no medal icon — it
- * is not a medal, so giving it the same gold/silver/bronze treatment would
- * misrepresent it as one.
- */
-function PalmaresMedalBadge({ medal }: PalmaresMedalBadgeProps): React.ReactElement {
-  if (medal === "") {
-    return <span className="landing-medal landing-medal-pending">medalla</span>;
-  }
-  if (medal === "part") {
-    return <span className="landing-medal landing-medal-part">{MEDAL_LABELS.part}</span>;
-  }
+/** One dt/dd pair of the feature's fact sheet. `Año` and `Resultado` are the
+ * only two facts that ever call this with an empty `value` filtered out
+ * upstream — see `Palmares`'s conditional rendering below. */
+function LogroFact({ label, value }: LogroFactProps): React.ReactElement {
   return (
-    <span className={`landing-medal landing-medal-${medal}`}>
-      <MedalIcon aria-hidden="true" />
-      {MEDAL_LABELS[medal]}
-    </span>
-  );
-}
-
-interface PalmaresRowItemProps {
-  row: PalmaresRow;
-}
-
-/**
- * One documented (or pending) result. Any single empty field puts the whole
- * row in the `pending` state — reusing the app's existing dashed-border,
- * muted-ink idiom for "not filled in yet" (see `AttendanceRosterRow.tsx` /
- * `MarkAttendanceStep.tsx` / the enrollment wizard's empty state), restated
- * here in `landing.css`'s own token vocabulary since the landing page never
- * consumes the shared Tailwind design tokens for anything but `sr-only`.
- */
-function PalmaresRowItem({ row }: PalmaresRowItemProps): React.ReactElement {
-  const complete = isPalmaresRowComplete(row);
-  return (
-    <article className={`landing-palmares-row${complete ? "" : " pending"}`}>
-      <span className="landing-palmares-photo">
-        <Image src={palmaresPhotoSrc(row.photo)} alt="" width={240} height={160} loading="lazy" />
-      </span>
-      <span className="landing-palmares-body">
-        <span className="landing-palmares-year">{row.year || "año"}</span>
-        <b>{row.event || "competencia"}</b>
-        <span className="landing-palmares-venue">{row.venue || "sede y categoría"}</span>
-      </span>
-      <PalmaresMedalBadge medal={row.medal} />
-    </article>
+    <div className="landing-logro-fact">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
   );
 }
 
 /**
- * Logros / Palmarés. A client component (state for the demo toggle) split
- * out of the server-rendered `LandingPage.tsx`, the same way `Gallery.tsx`
- * owns the carousel's lightbox state.
+ * Logros. A server component — the retired demo toggle was the only reason
+ * this needed client state, and it is gone. The section now tells the
+ * club's one documented, out-of-country result as a short story with a fact
+ * sheet (approved prototype `landing-logros-d-historia.html`, issue #657's
+ * follow-up), instead of a five-row placeholder trophy wall.
  *
- * The toggle defaults to OFF — an explicit product override of the approved
- * prototype, which defaulted it on behind a quiet chip. The prototype's demo
- * rows are entirely fabricated (medals, years, and competitions the club
- * never actually won), so shipping them by default would show a real club
- * claiming results it never won. Real, mostly-empty `PALMARES` data renders
- * first; switching the toggle on both swaps to `DEMO_PALMARES` AND raises
- * the warning banner above — the two are never independent.
+ * `Año` and `Resultado` render only when the club has actually supplied
+ * them — see `LOGRO_DESTACADO` in `landing-logros.ts`. They are empty today,
+ * so neither fact renders; never fill them with a placeholder value.
  */
 export default function Palmares(): React.ReactElement {
-  const [demoOn, setDemoOn] = useState(false);
-  const rows = demoOn ? DEMO_PALMARES : PALMARES;
-
   return (
     <section className="landing-section landing-wins" id="logros" data-motion-section data-testid="motion-section">
       <header className="landing-section-header" data-reveal>
         <span className="landing-eyebrow">Nuestra vitrina</span>
         <h2>Logros</h2>
-        <p>El registro del club: año, puesto, competencia y sede. La foto es la prueba, no el titular.</p>
       </header>
 
-      {/* Scoped to this section, next to its own header — NOT a page-wide
-       * bar; only the toggle concept carries over from the prototype. */}
-      <div className="landing-palmares-toggle">
-        <label>
-          <input
-            type="checkbox"
-            checked={demoOn}
-            onChange={(event): void => setDemoOn(event.target.checked)}
+      <article className="landing-logro" data-reveal>
+        <figure className="landing-logro-photo">
+          <Image
+            src={logroPhotoSrc(LOGRO_DESTACADO.photo)}
+            alt=""
+            width={934}
+            height={1000}
+            sizes="(max-width: 768px) 100vw, 34vw"
+            loading="lazy"
           />
-          Ver datos de ejemplo
-        </label>
-      </div>
+          <span className="landing-logro-index" aria-hidden="true">01</span>
+        </figure>
 
-      {demoOn ? (
-        <p role="alert" className="landing-demo-warning">
-          <AlertTriangle aria-hidden="true" />
-          <b>{DEMO_WARNING_TEXT}</b>
-        </p>
-      ) : (
-        <p className="landing-palmares-ask">
-          <b>Para completar · pedido al club</b>
-          <span>
-            Sólo el Sudamericano está documentado en el repositorio, y sin año ni puesto. Cada fila necesita año,
-            puesto, competencia y sede. Con eso, la sección se completa sola.
-          </span>
-        </p>
-      )}
+        <div className="landing-logro-story">
+          <p className="landing-logro-kicker">{LOGRO_DESTACADO.kicker}</p>
+          <h3 className="landing-logro-title">
+            <span>Sudamericano</span>
+            <br />
+            <span>Sub-11 y Sub-13</span>
+          </h3>
+          <p>{LOGRO_DESTACADO.story}</p>
+          <dl className="landing-logro-facts">
+            <LogroFact label="Competencia" value={LOGRO_DESTACADO.event} />
+            <LogroFact label="Sede" value={LOGRO_DESTACADO.venue} />
+            <LogroFact label="Representación" value={LOGRO_DESTACADO.representation} />
+            <LogroFact label="Categorías" value={LOGRO_DESTACADO.categories} />
+            {LOGRO_DESTACADO.year !== "" && <LogroFact label="Año" value={LOGRO_DESTACADO.year} />}
+            {LOGRO_DESTACADO.result !== "" && <LogroFact label="Resultado" value={LOGRO_DESTACADO.result} />}
+          </dl>
+        </div>
+      </article>
 
-      <div className="landing-palmares">
-        {rows.map((row, index): React.ReactElement => <PalmaresRowItem key={`${row.photo}-${index}`} row={row} />)}
+      <div className="landing-podios-block" data-reveal>
+        <p className="landing-podios-label">
+          <span>Más podios del club</span>
+        </p>
+        <ul className="landing-podios">
+          {MAS_PODIOS.map((photo, index): React.ReactElement => {
+            const dimensions = PODIO_DIMENSIONS[photo];
+            return (
+              <li key={photo}>
+                <Image
+                  src={logroPhotoSrc(photo)}
+                  alt=""
+                  width={dimensions.width}
+                  height={dimensions.height}
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  loading="lazy"
+                />
+                <span className="landing-podios-index" aria-hidden="true">
+                  {String(index + 2).padStart(2, "0")}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </section>
   );
