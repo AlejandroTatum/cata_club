@@ -1855,6 +1855,46 @@ def test_install_cron_encadena_el_heartbeat_solo_a_un_chequeo_exitoso(tmp_path):
     )
 
 
+def test_install_cron_encadena_la_salud_de_celery_antes_del_heartbeat(tmp_path):
+    """El heartbeat también debe faltar si Celery quedó atascado entre
+    despliegues (issue #1061). El sidecar `autoheal` (issue #1091) ya
+    reinicia un contenedor `unhealthy`, pero nada externo se enteraba si
+    igual se quedaba enfermo. Se reutiliza el MISMO dead-man's-switch de la
+    frescura del backup en vez de un proveedor de alertas nuevo:
+    `check-celery-health.sh` cuelga del mismo `&&` que gobierna el ping, como
+    último eslabón antes de `notify-heartbeat.sh`.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _stub_crontab(bin_dir)
+    _stub_age(bin_dir)
+
+    result = run_script(
+        "scripts/deploy/deploy.sh",
+        "install-cron",
+        "--confirm-install-cron",
+        env=_entorno_install_cron(tmp_path, bin_dir),
+    )
+
+    assert result.returncode == 0, result.stderr
+    linea = _linea_de_frescura(tmp_path / "crontab")
+    eslabones = linea.split("&&")
+    assert any("check-backup-freshness.sh" in e for e in eslabones)
+    assert any("check-celery-health.sh" in e for e in eslabones)
+    assert any("notify-heartbeat.sh" in e for e in eslabones)
+    indice_heartbeat = next(
+        i for i, e in enumerate(eslabones) if "notify-heartbeat.sh" in e
+    )
+    assert indice_heartbeat == len(eslabones) - 1, (
+        f"el heartbeat tiene que ser el ÚLTIMO eslabón del `&&`, así que "
+        f"cualquier chequeo anterior en rojo lo silencia: {linea!r}"
+    )
+    assert ";" not in linea, (
+        "un `;` pingearía también con Celery enfermo: el dead-man's-switch "
+        "solo sirve si el ping falta cuando algo falla"
+    )
+
+
 def test_install_cron_nunca_escribe_la_url_del_heartbeat_en_el_crontab(tmp_path):
     """`crontab -l` no pide privilegios; el archivo del heartbeat es de root.
 
