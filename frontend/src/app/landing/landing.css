@@ -26,21 +26,12 @@
   --landing-third-party-whatsapp: #25d366;
   --landing-third-party-facebook: #1877f2;
   --landing-third-party-instagram: #e1306c;
-  /* Trophy-wall (vitrina) tones: quiet text and neutral medal states on the
-     section's dark ground (--landing-brand-black). Distinct in both role and
-     value from --landing-text-muted-base, which is calibrated for the light
-     --landing-bg-base ground instead. The "-fill" pair is the darker shade
-     each medal's color-mix() background/border draws from; the plain token
-     is the lighter accent used for its text and year colour. */
-  --landing-vitrina-subtitle: #cfd4da;
+  /* Logros' dark ground (--landing-brand-black): quiet text and photo
+     placeholder fill, distinct in both role and value from
+     --landing-text-muted-base, which is calibrated for the light
+     --landing-bg-base ground instead. */
   --landing-vitrina-text-muted: #b9c0c8;
   --landing-vitrina-photo-bg: #151515;
-  --landing-medal-plata: #d6dbe1;
-  --landing-medal-plata-fill: #c9ced5;
-  --landing-medal-bronce: #e0995a;
-  --landing-medal-bronce-fill: #cd7f32;
-  --landing-medal-part: #9aa2ab;
-  --landing-medal-pending: #7d848c;
   /* Warm light grey for the stats band (issue #691): the palette's existing
      near-white (--landing-bg-base: #f9fafb) is blue-tinted (hue ~210deg),
      the opposite of what the section needs to read as a distinct, warm
@@ -307,55 +298,40 @@
    ground and need no such override. */
 .landing-values .landing-eyebrow { color: var(--landing-text-strong); }
 
-/* Logros / Palmarés. Dark trophy wall: the club's results read as a record on
-   black, mirroring the approved prototype's "wins" presentation while keeping
-   this implementation's own data behavior and default-off demo toggle. */
-.landing-wins { background: var(--landing-brand-black); color: var(--landing-surface); gap: 30px; }
+/* Logros. Dark ground, one documented result told as a short story with a
+   fact sheet (approved prototype `landing-logros-d-historia.html`), instead
+   of the retired five-row placeholder trophy wall and its default-off demo
+   toggle. Padding trimmed well below the shared `.landing-section` 76px
+   convention — the fact sheet needs real vertical room, so every
+   non-mandated gap gives it back. */
+.landing-wins { background: var(--landing-brand-black); color: var(--landing-surface); gap: 30px; padding-top: 24px; padding-bottom: 6px; }
 .landing-wins .landing-section-header h2 { color: var(--landing-surface); }
 .landing-wins .landing-eyebrow { color: var(--landing-highlight); }
-.landing-wins .landing-section-header p { color: var(--landing-vitrina-subtitle); }
-.landing-palmares-toggle { display: flex; width: 100%; justify-content: flex-end; }
-.landing-palmares-toggle label { display: inline-flex; align-items: center; gap: 10px; color: var(--landing-vitrina-text-muted); font-size: 13px; font-weight: 700; letter-spacing: 0.4px; cursor: pointer; }
-.landing-palmares-toggle input { width: 18px; height: 18px; accent-color: var(--landing-action); cursor: pointer; }
-/* The "please fill this in" ask, shown whenever the demo toggle is off. Dark
-   ground: a dashed highlight ring, the same idiom the pending rows use. */
-.landing-palmares-ask { display: flex; width: 100%; flex-direction: column; gap: 6px; padding: 16px 22px; border: 2px dashed color-mix(in srgb, var(--landing-highlight) 40%, transparent); border-radius: 14px; background: transparent; }
-.landing-palmares-ask b { color: var(--landing-highlight); font-family: var(--font-landing-barlow), sans-serif; font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; }
-.landing-palmares-ask span { color: var(--landing-vitrina-text-muted); font-size: 14.5px; line-height: 1.55; }
-/* The demo warning, restyled for the trophy wall's dark ground rather than the
-   app-wide destructive alert (whose light red tokens were illegible on black). */
-.landing-demo-warning { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; background: color-mix(in srgb, var(--landing-surface) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 30%, transparent); color: var(--landing-vitrina-text-muted); font-size: 14px; font-weight: 600; line-height: 1.5; }
-.landing-demo-warning svg { width: 20px; height: 20px; flex: none; color: var(--landing-highlight); }
-.landing-demo-warning b { color: var(--landing-surface); font-weight: 800; }
-.landing-palmares { display: flex; width: 100%; flex-direction: column; gap: 8px; }
-.landing-palmares-row { display: grid; grid-template-columns: 210px minmax(0, 1fr) 124px; gap: 22px; align-items: center; width: 100%; padding: 11px 18px 11px 11px; border: 0; border-radius: 16px; background: color-mix(in srgb, var(--landing-surface) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 9%, transparent); transition: background-color 260ms ease, box-shadow 260ms ease; }
-.landing-palmares-row:hover { background: color-mix(in srgb, var(--landing-surface) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 34%, transparent); }
-.landing-palmares-photo { position: relative; aspect-ratio: 3 / 2; border-radius: 11px; overflow: hidden; background: var(--landing-vitrina-photo-bg); }
-.landing-palmares-photo img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 620ms cubic-bezier(.22,1,.36,1); }
-.landing-palmares-row:hover .landing-palmares-photo img { transform: scale(1.05); }
-.landing-palmares-row.pending .landing-palmares-photo { opacity: 0.5; }
-/* The year carries the row now, scanning down like a record; it borrows its
-   medal's colour so a gold result reads gold before the pill does. */
-.landing-palmares-year { display: block; color: var(--landing-highlight); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(34px, 3.6vw, 52px); line-height: 0.9; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
-.landing-palmares-row:has(.landing-medal-oro) .landing-palmares-year { color: var(--landing-highlight); }
-.landing-palmares-row:has(.landing-medal-plata) .landing-palmares-year { color: var(--landing-medal-plata); }
-.landing-palmares-row:has(.landing-medal-bronce) .landing-palmares-year { color: var(--landing-medal-bronce); }
-.landing-palmares-row:has(.landing-medal-part) .landing-palmares-year { color: var(--landing-medal-part); }
-.landing-palmares-row.pending .landing-palmares-year { color: var(--landing-medal-pending); }
-.landing-palmares-body { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 7px; }
-.landing-palmares-body b { color: var(--landing-surface); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(15px, 1.5vw, 19px); line-height: 1.25; letter-spacing: 0.5px; text-transform: uppercase; text-wrap: balance; }
-.landing-palmares-body .landing-palmares-venue { color: var(--landing-vitrina-text-muted); font-size: 14px; line-height: 1.5; }
-.landing-palmares-row.pending .landing-palmares-body b, .landing-palmares-row.pending .landing-palmares-body .landing-palmares-venue { color: var(--landing-medal-pending); }
-.landing-medal { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 6px 14px 6px 10px; border-radius: 999px; font-family: var(--font-landing-barlow), sans-serif; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; white-space: nowrap; }
-.landing-medal svg { width: 15px; height: 20px; flex: none; }
-/* The placement carries the metal in its own colour. Gold is the brand yellow
-   already — the palette had the medal in it the whole time. */
-.landing-medal-oro { background: color-mix(in srgb, var(--landing-highlight) 16%, transparent); color: var(--landing-highlight); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-highlight) 44%, transparent); }
-.landing-medal-plata { background: color-mix(in srgb, var(--landing-medal-plata-fill) 14%, transparent); color: var(--landing-medal-plata); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-medal-plata-fill) 38%, transparent); }
-.landing-medal-bronce { background: color-mix(in srgb, var(--landing-medal-bronce-fill) 18%, transparent); color: var(--landing-medal-bronce); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-medal-bronce-fill) 46%, transparent); }
-/* Participación is not a medal — outlined and muted, no fill. */
-.landing-medal-part { background: transparent; color: var(--landing-medal-part); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 20%, transparent); }
-.landing-medal-pending { background: transparent; color: var(--landing-medal-pending); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 20%, transparent); text-transform: none; }
+.landing-logro { display: grid; grid-template-columns: 5fr 7fr; column-gap: 48px; align-items: stretch; width: 100%; }
+.landing-logro-photo { position: relative; margin: 0; width: 100%; height: 380px; overflow: hidden; background: var(--landing-vitrina-photo-bg); }
+.landing-logro-photo img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+.landing-logro-index { position: absolute; top: 10px; left: 10px; font-weight: 700; font-size: 12px; letter-spacing: 3px; color: var(--landing-highlight); }
+.landing-logro-story { display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+.landing-logro-kicker { margin: 0; font-weight: 700; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--landing-highlight); }
+/* The headline breaks on an explicit two-span/<br> pair instead of the
+   browser's own line-wrap, so it never breaks mid-phrase. */
+.landing-logro-title { margin: 0; font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; line-height: 0.95; font-size: clamp(30px, 3.4vw, 50px); color: var(--landing-surface); }
+.landing-logro-title span { white-space: nowrap; }
+.landing-logro-story > p { margin: 0; max-width: 52ch; font-weight: 400; font-size: 18px; line-height: 1.6; color: color-mix(in srgb, var(--landing-surface) 82%, transparent); }
+.landing-logro-facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 32px; }
+.landing-logro-fact { border-top: 1px solid color-mix(in srgb, var(--landing-surface) 22%, transparent); padding-top: 3px; }
+.landing-logro-fact dt { margin: 0 0 1px; font-weight: 700; font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--landing-vitrina-text-muted); }
+.landing-logro-fact dd { margin: 0; font-weight: 600; font-size: 17px; color: var(--landing-surface); }
+/* Secondary row: the other four photos, index only, no captions. */
+.landing-podios-block { display: flex; width: 100%; flex-direction: column; gap: 4px; }
+.landing-podios-label { display: flex; align-items: center; gap: 12px; margin: 40px 0 0; }
+.landing-podios-label::before { content: ""; width: 34px; height: 3px; background: var(--landing-highlight); flex: none; }
+.landing-podios-label span { font-weight: 700; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--landing-highlight); }
+.landing-podios { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; width: 100%; }
+.landing-podios li { position: relative; margin: 0; height: 150px; overflow: hidden; }
+.landing-podios img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; transition: transform 200ms ease; }
+.landing-podios li:hover img { transform: scale(1.03); }
+.landing-podios-index { position: absolute; top: 10px; left: 10px; font-weight: 700; font-size: 12px; letter-spacing: 3px; color: var(--landing-highlight); }
 
 .landing-motto { gap: 22px; padding: 60px 14vw; background: var(--landing-action); }
 .landing-motto .landing-halftone { mask-image: radial-gradient(circle at 4% 96%,var(--landing-brand-black),transparent 42%); }
@@ -525,8 +501,6 @@
   .landing-hero { gap: 40px; }
   .landing-page { --landing-gutter: 48px; }
   .landing-section, .landing-stats, .landing-footer { padding-inline: 48px; }
-  /* Keep the trophy wall's three columns from crowding at tablet width. */
-  .landing-palmares-row { grid-template-columns: 190px minmax(0, 1fr) 118px; gap: 20px; }
   .landing-contact { width: 360px; }
   .landing-sponsors-copy { --landing-sponsor-gap: 14px; }
 }
@@ -612,12 +586,16 @@
   .landing-sponsor { height: 168px; }
   .landing-footer-top { flex-direction: column; gap: 36px; }
   .landing-footer nav { width: 100%; }
-  /* Restores the 10px row-to-row rhythm the desktop tightened to 8px — this
-     issue only asks for the desktop reduction (#871). */
-  .landing-palmares { gap: 10px; }
-  .landing-palmares-row { grid-template-columns: 1fr; gap: 14px; padding: 12px; }
-  .landing-palmares-year { font-size: 22px; }
-  .landing-medal { justify-self: start; }
+  .landing-wins { padding-top: 22px; padding-bottom: 14px; }
+  .landing-logro { grid-template-columns: 1fr; row-gap: 12px; }
+  .landing-logro-photo { height: 160px; }
+  .landing-logro-story { gap: 12px; }
+  .landing-logro-title { font-size: clamp(28px, 7vw, 40px); }
+  .landing-logro-story > p { font-size: 16px; line-height: 1.55; }
+  .landing-logro-facts { grid-template-columns: 1fr; gap: 8px; }
+  .landing-podios-label { margin: 18px 0 0; }
+  .landing-podios { grid-template-columns: repeat(2, 1fr); }
+  .landing-podios li { height: 120px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
