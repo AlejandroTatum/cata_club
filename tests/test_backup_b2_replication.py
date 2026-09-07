@@ -21,6 +21,7 @@ Todo es hermético: `aws` es un doble en el PATH que hace round-trip real sobre
 el cuerpo que recibe. Ni red, ni credenciales reales, ni bucket real.
 """
 
+import base64
 import hashlib
 import os
 import shlex
@@ -507,9 +508,31 @@ def test_sube_el_artefacto_y_lo_verifica_contra_el_objeto_remoto(tmp_path):
     assert "--bucket cataclub-backups-test" in argv
     assert clave in argv
     assert f"sha256={hashlib.sha256(contenido).hexdigest()}" in argv
+    md5_b64 = base64.b64encode(hashlib.md5(contenido).digest()).decode()
+    assert f"--content-md5 {md5_b64}" in argv
 
     # La retención local no cambia: replicar no borra nada del disco.
     assert artefacto.read_bytes() == contenido
+
+
+def test_el_content_md5_va_en_base64_para_buckets_con_object_lock(tmp_path):
+    """S3 y B2 exigen `Content-MD5` en todo `PutObject` a un bucket con Object
+
+    Lock. Sin este encabezado B2 corta la conexión antes de responder; la CLI
+    no lo agrega sola porque el script fija los checksums en `when_required`.
+    El valor va en base64, no en hexadecimal (así lo exige la cabecera HTTP
+    `Content-MD5`, RFC 1864).
+    """
+    contenido = b"age-encryption.org/v1\notro-contenido-distinto"
+    artefacto = _artefacto_cifrado(tmp_path, contenido)
+
+    resultado = run_script(
+        "scripts/backup/upload-b2.sh", str(artefacto), env=_entorno_b2(tmp_path)
+    )
+
+    assert resultado.returncode == 0, resultado.stderr
+    esperado = base64.b64encode(hashlib.md5(contenido).digest()).decode()
+    assert f"--content-md5 {esperado}" in _argv(tmp_path)
 
 
 def test_publica_un_recibo_atomico_solo_despues_de_verificar_la_replica(tmp_path):

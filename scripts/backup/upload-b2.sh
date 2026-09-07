@@ -145,6 +145,7 @@ if [ "${#faltantes[@]}" -gt 0 ]; then
 fi
 
 command -v sha256sum >/dev/null 2>&1 || fatal "falta 'sha256sum'; no se puede verificar la replica"
+command -v openssl >/dev/null 2>&1 || fatal "falta 'openssl'; no se puede calcular el Content-MD5 que exige Object Lock"
 
 if [ "$MODO" = "verificar-config" ]; then
   command -v "$AWS_BIN" >/dev/null 2>&1 \
@@ -177,6 +178,13 @@ esac
 NOMBRE="$(basename "$ARTEFACTO")"
 TAMANO_LOCAL="$(wc -c < "$ARTEFACTO" | tr -d ' ')"
 SHA_LOCAL="$(sha256sum "$ARTEFACTO" | cut -d' ' -f1)"
+# Content-MD5 en base64 (RFC 1864), no en hexadecimal: es lo que exige la
+# cabecera HTTP. Un bucket con Object Lock (S3 y la implementacion de B2) lo
+# requiere en todo PutObject; sin el, B2 corta la conexion antes de responder,
+# y los ajustes de checksum de mas arriba (when_required) hacen que la CLI no
+# agregue ninguno por su cuenta. No reemplaza al sha256 propio: es lo que pide
+# el proveedor, no lo que verifica este script.
+MD5_LOCAL="$(openssl dgst -md5 -binary "$ARTEFACTO" | base64)"
 RECIBO="${ARTEFACTO}.b2-receipt"
 
 if [ "$MODO" = "verificar-recibo" ]; then
@@ -263,6 +271,7 @@ if ! salida="$(aws_b2 s3api put-object \
     --key "$CLAVE" \
     --body "$ARTEFACTO" \
     --content-type application/octet-stream \
+    --content-md5 "$MD5_LOCAL" \
     --metadata "sha256=${SHA_LOCAL}" 2>&1)"; then
   printf '%s\n' "$(redactar "$salida")" >&2
   fatal_operativo "fallo la subida de ${NOMBRE} a s3://${BUCKET}/${CLAVE}"
