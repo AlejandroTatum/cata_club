@@ -8,7 +8,6 @@ import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
 import { rallyFlowAnchorsPx, type RallyValueBox } from "./landing-rally";
-import { buildServeTimeline } from "./landing-serve";
 import { registerSmoothScroll } from "@/lib/smooth-scroll";
 import Lenis from "lenis";
 
@@ -204,27 +203,6 @@ function enhanceTicker(track: HTMLElement): () => void {
   };
 }
 
-/* The hero's serve: the white ball, and the paddle underneath that hits it.
-   Both halves share one repeating timeline built in `landing-serve.ts`, which
-   is where the phase lock between them is documented and asserted. Nothing
-   else on the page touches either element. */
-function playServe(): (() => void) | undefined {
-  const serveBall = document.querySelector<HTMLElement>("[data-serve-ball]");
-  if (!serveBall) return undefined;
-  const paddle = document.querySelector<HTMLElement>("[data-serve-paddle]");
-
-  const serve = buildServeTimeline(serveBall, paddle);
-
-  return (): void => {
-    serve.kill();
-    /* Hand the pair back to the stylesheet rather than leaving them frozen
-       wherever the timeline stopped. Their CSS rest position is the moment of
-       impact — the same composition reduced motion gets — so a torn-down serve
-       still reads as a serve. */
-    gsap.set(paddle ? [serveBall, paddle] : serveBall, { clearProps: "transform" });
-  };
-}
-
 /* The rally lights the four Valores in turn as a ball scrubs along their
    guide while the section scrolls through the viewport — its only
    choreography now. The pinned variant was removed during #1026's review: its
@@ -369,7 +347,6 @@ export default function LandingMotion(): null {
       let teardownCarousel: (() => void) | undefined;
       let teardownHeroCarousel: (() => void) | undefined;
       let teardownTicker: (() => void) | undefined;
-      let teardownServe: (() => void) | undefined;
       let teardownRally: (() => void) | undefined;
       let teardownMotto: (() => void) | undefined;
 
@@ -438,7 +415,6 @@ export default function LandingMotion(): null {
         });
 
 
-        teardownServe = playServe();
         teardownRally = playRally();
         teardownMotto = playMotto();
 
@@ -463,7 +439,6 @@ export default function LandingMotion(): null {
         teardownCarousel?.();
         teardownHeroCarousel?.();
         teardownTicker?.();
-        teardownServe?.();
         teardownRally?.();
         teardownMotto?.();
         split?.revert();

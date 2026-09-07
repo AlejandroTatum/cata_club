@@ -550,64 +550,13 @@ describe("LandingPage", (): void => {
     expect(copy.children[0].tagName).toBe("H1");
   });
 
-  it("keeps both hero balls and the crested paddle", (): void => {
+  it("keeps the hero carousel's crossing ball", (): void => {
     render(<LandingPage />);
 
     const hero = document.querySelector(".landing-hero") as HTMLElement;
-    const paddle = hero.querySelector("[data-serve-paddle]");
 
-    expect(document.querySelectorAll("[data-serve-ball]")).toHaveLength(1);
-    expect(hero.querySelector("[data-serve-ball]")).not.toBeNull();
     expect(document.querySelectorAll("[data-frame-ball]")).toHaveLength(1);
     expect(hero.querySelector("[data-frame-ball]")).not.toBeNull();
-    expect(paddle).not.toBeNull();
-    expect(paddle?.querySelector(".landing-paddle-crest")).not.toBeNull();
-  });
-
-  /**
-   * The paddle that produces the serve (issue #640).
-   *
-   * Two things are asserted together because either one alone would pass while
-   * the feature was broken. The paddle has to EXIST in the markup the server
-   * sends, since that markup is the whole composition whenever the motion layer
-   * never loads — the static state is not a degraded mode here, it is the hit
-   * frozen at the moment of contact. And it has to be the club's own paddle:
-   * the shape and the crest that `Motto` already renders (issue #642), not a
-   * second, generic mark drawn only for the hero.
-   *
-   * It is also asserted to be a direct child of the hero, exactly like the ball,
-   * because that shared positioning context is what lets one pair of CSS
-   * anchors keep the two on the same vertical axis.
-   */
-  it("stands the club's crested paddle under the hero's serve ball", (): void => {
-    render(<LandingPage />);
-
-    const hero = document.querySelector(".landing-hero") as HTMLElement;
-    const paddle = hero.querySelector("[data-serve-paddle]") as HTMLElement;
-
-    expect(document.querySelectorAll("[data-serve-paddle]")).toHaveLength(1);
-    expect(paddle).not.toBeNull();
-    expect(paddle).toHaveAttribute("aria-hidden", "true");
-    expect(paddle.parentElement).toBe(hero);
-
-    // The same shape class the Motto paddle uses, so the two cannot diverge.
-    expect(paddle.classList.contains("landing-paddle")).toBe(true);
-
-    const crest = paddle.querySelector(".landing-paddle-crest") as HTMLImageElement;
-    expect(crest).not.toBeNull();
-    expect(crest.getAttribute("src")).toBe("/brand/cata-club-crest-256.png");
-    // Decorative: the hero already names the club in text above it.
-    expect(crest.getAttribute("alt")).toBe("");
-  });
-
-  it("ships the paddle in the server markup, so the still composition needs no JS", (): void => {
-    const html = renderToStaticMarkup(<LandingPage />);
-
-    expect(html).toContain("data-serve-paddle");
-    expect(html).toContain("data-serve-ball");
-    expect(html).toContain("data-frame-ball");
-    expect(html).toContain("landing-paddle-crest");
-    expect(motionMount).not.toHaveBeenCalled();
   });
 
   it("states the founding year in the hero note as 'Desde 2013', not 'Fundado en 2013'", (): void => {
@@ -719,6 +668,23 @@ describe("LandingPage", (): void => {
       fireEvent.click(next);
 
       expect(slides[1]).toHaveAttribute("data-active", "true");
+    });
+
+    it("counts the slide position next to the arrows, and updates it on a press", (): void => {
+      render(<LandingPage />);
+
+      const hero = document.querySelector(".landing-hero") as HTMLElement;
+      const next = within(hero).getByRole("button", { name: "Foto siguiente" });
+      const counter = hero.querySelector(".landing-hero-counter") as HTMLElement;
+
+      expect(counter).toHaveAttribute("aria-live", "polite");
+      expect(counter).toHaveTextContent(`01 / ${String(HERO_PHOTOS.length).padStart(2, "0")}`);
+      expect(counter).toHaveTextContent(`Foto 1 de ${HERO_PHOTOS.length}`);
+
+      fireEvent.click(next);
+
+      expect(counter).toHaveTextContent(`02 / ${String(HERO_PHOTOS.length).padStart(2, "0")}`);
+      expect(counter).toHaveTextContent(`Foto 2 de ${HERO_PHOTOS.length}`);
     });
   });
 
@@ -991,7 +957,7 @@ describe("LandingPage", (): void => {
 
     const prioritized = Array.from(document.querySelectorAll("img[data-priority='true']"));
     expect(prioritized).toHaveLength(1);
-    expect(prioritized[0]).toHaveAttribute("src", "/landing/hero-community.jpg");
+    expect(prioritized[0]).toHaveAttribute("src", HERO_PHOTOS[0].src);
   });
 
   /**
