@@ -141,11 +141,11 @@ describe("landing vertical space (#871)", (): void => {
 // is why the block above still passes untouched.
 // ---------------------------------------------------------------------------
 describe("Valores redesign (#1026)", (): void => {
-  it("blends both edges into the neighbouring black sections", (): void => {
+  it("blends only its bottom edge into the trophy wall below — the top is a hard seam against #nosotros' v2 white ground", (): void => {
     const css = landingCss();
     const blend = css.match(/\.landing-values::after \{[^}]*\}/);
     expect(blend).not.toBeNull();
-    expect(blend![0]).toContain("linear-gradient(180deg, var(--landing-brand-black)");
+    expect(blend![0]).not.toContain("linear-gradient(180deg, var(--landing-brand-black)");
     expect(blend![0]).toContain("linear-gradient(0deg, var(--landing-brand-black)");
     // The wash paints BEHIND the section's children, never over their text.
     expect(blend![0]).toContain("z-index: 0");

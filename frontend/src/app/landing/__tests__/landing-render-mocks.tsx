@@ -1,6 +1,6 @@
 /**
  * Registers the `next/image` / `LandingMap` / `LandingMotion` mocks that
- * `landing-image-delivery.test.tsx` and `landing-editorial-symmetry.test.tsx`
+ * `landing-image-delivery.test.tsx` and `landing-mission-vision-pillars.test.tsx`
  * both need, from the doubles in `landing-test-doubles.tsx`.
  *
  * Import this module (for any binding, or just for its side effect) BEFORE

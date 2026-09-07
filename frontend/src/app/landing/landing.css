@@ -218,77 +218,28 @@
 .landing-section-header { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 16px; }
 .landing-section-header .landing-eyebrow { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
 .landing-section-header .landing-eyebrow::before { content: ""; width: 34px; height: 2px; background: currentColor; }
-.landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-barlow); font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; text-transform: uppercase; }
+.landing-section-header h2 { max-width: 15ch; font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; letter-spacing: -0.02em; text-transform: uppercase; }
 .landing-value-row, .landing-location-row { display: flex; width: 100%; gap: 24px; }
 
-/* Editorial blocks. Rank comes from an index, a scale jump and one rule —
-   no tinted icon chip, and no <hr> pretending to be structure.
-
-   Issue #863: the two halves used to centre their own copy independently
-   (`align-items: center`, computed per item) and the divider was a
-   `border-left` on the second `.landing-editorial-item` — a column's
-   property standing in for the wrapper's. Both are now anchored on
-   `.landing-editorial` itself: `align-items: start` top-aligns text on both
-   sides regardless of which copy runs longer, and the divider is its own
-   direct child (`.landing-editorial-divider`), stretched full-height and
-   held exactly centred by two equal `1fr` tracks either side of it — never a
-   property of either half. */
-.landing-editorial { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 44px; align-items: start; }
-.landing-editorial-divider { align-self: stretch; width: 1px; background: var(--landing-border); }
-.landing-editorial-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: start; }
+/* Mission/Vision pillars — v2 redesign (issue #611 rhythm; approved
+   prototype `landing-mision-vision-v2-texto.html`). Two typographic
+   columns, no photography: rank comes from an index, a scale jump and a
+   hairline top border — no tinted icon chip, no photo, no centred divider.
+   `.landing-index` is shared with the Values cards below (`.landing-value
+   .landing-index` overrides its size there), so this block's own scale is
+   applied through `.landing-pillars .landing-index` rather than the shared
+   base rule. `.landing-index-label` is exclusive to this section and is
+   rewritten outright — the old version's `::before` em-dash separator
+   belonged to the previous side-by-side layout and has no place once the
+   index and the label stack. */
+.landing-pillars { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.landing-pillar { border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
-.landing-index-label { color: var(--landing-text-muted); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
-.landing-index-label::before { content: "—"; margin: 0 8px; }
-.landing-editorial-item h3 { margin-top: 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: clamp(22px, 2.4vw, 32px); line-height: 1.1; text-transform: uppercase; }
-/* Sized here, animated from 0 by the motion layer, so it is already drawn
-   when that layer never runs or the visitor prefers reduced motion. */
-.landing-rule { display: block; width: 64px; height: 3px; margin: 20px 0 22px; background: var(--landing-action); }
-.landing-editorial-item p { max-width: 46ch; color: var(--landing-text); font-size: 17.5px; line-height: 1.72; }
-.landing-editorial-item p + p { margin-top: 16px; }
-/* Issue #996: matching h3 tops was not enough — Mission's lead ("Promover el
-   tenis de mesa mediante formación deportiva de calidad.", 65 chars) wraps an
-   extra line against Vision's ("Ser un club líder y referente provincial y
-   nacional.", 51 chars) at 1280/1366/1600, and everything below the lead
-   inherited that extra 31.5px (the lead's own line-height) because each half
-   stacked its own copy independently. `min-height` on the lead was rejected:
-   it caps at whatever line count is measured today and silently breaks the
-   day either copy grows past it.
-   Fixed at the source instead: `.landing-editorial` owns five named rows
-   (eyebrow/title/rule/lead/body) and both halves place their matching piece
-   in the same row via `subgrid`, so a row's height is always the taller of
-   its two occupants — the shorter side's row grows to match instead of the
-   taller side's overflow pushing only its own column down. Scoped to
-   >= 769px: below that the two halves already stack vertically (one column,
-   sequential rows) and sharing rows across them is meaningless.
-   `.landing-editorial-item`'s own `gap: 36px` (above) is a `row-gap`+
-   `column-gap` shorthand, written back when the item had a single implicit
-   row and `row-gap` had nothing to act on. Subgridding five rows into that
-   same item gave `row-gap` four boundaries to fill — 4 × 36px = 144px added
-   on top of the shared-row fix itself, measured live with no visible reason
-   (issue #1005's CI failure: `document.scrollHeight` 37px over the #871/#985
-   ceiling). `row-gap: 0` below restores the item to column-gap-only, which
-   is all it was ever meant to be at this width; the shared rows still absorb
-   Mission's extra line exactly as before, just without the phantom padding
-   that was never part of the fix. */
-@media (min-width: 769px) {
-  .landing-editorial { grid-template-rows: repeat(5, auto); }
-  .landing-editorial-divider { grid-row: 1 / -1; }
-  .landing-editorial-item { grid-template-rows: subgrid; grid-row: 1 / -1; row-gap: 0; }
-  .landing-editorial-media { grid-row: 1 / -1; }
-  .landing-editorial-copy { display: grid; grid-template-columns: auto 1fr; grid-template-rows: subgrid; grid-row: 1 / -1; }
-  .landing-editorial-copy .landing-index { grid-row: 1; grid-column: 1; }
-  .landing-editorial-copy .landing-index-label { grid-row: 1; grid-column: 2; }
-  .landing-editorial-item h3 { grid-row: 2; grid-column: 1 / -1; }
-  .landing-editorial-item .landing-rule { grid-row: 3; grid-column: 1 / -1; }
-  .landing-editorial-item .landing-lead { grid-row: 4; grid-column: 1 / -1; }
-  .landing-editorial-item p:not(.landing-lead) { grid-row: 5; grid-column: 1 / -1; }
-}
-/* The approved editorial photos sit on a token-light card so the jpegs read as
-   photographs, not as bleeding edges — and the 4/3 stage keeps both blocks the
-   same height at every breakpoint. */
-.landing-editorial-media { margin-top: 0; border-radius: 16px; overflow: hidden; background: var(--landing-bg-base); box-shadow: inset 0 0 0 1px var(--landing-border); }
-.landing-editorial-media img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
-.landing-lead { color: var(--landing-text-strong); font-family: var(--font-landing-playfair), Georgia, serif; font-size: 21px !important; font-weight: 600; line-height: 1.5 !important; }
+.landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
+.landing-index-label { display: block; margin-top: 4px; color: var(--landing-text-strong); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
+.landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
+.landing-lead { margin: 18px 0 0; max-width: 30ch; color: var(--landing-text-strong); font-weight: 600; font-size: 22px; line-height: 1.35; }
+.landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 44ch; color: var(--landing-text); font-size: 17px; line-height: 1.7; }
 .landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
 /* #871: Valores and Logros each own a tighter structural gap than the rest of
@@ -296,18 +247,23 @@
    Motto, Schedule and Location, which are out of this issue's scope.
 
    #1026 redesign. The section is the ball's rally on the dark court: it sits
-   between two black grounds (#nosotros above, the trophy wall below), so its
-   edges BLEND into them instead of cutting — a 72px fade each way, which is
-   inside the section's own 76px padding so no text ever sits on the gradient.
-   The rally keeps its engine (hooks, pin/flow choreographies, reduced-motion
-   stillness) and sharpens its look: the counter becomes the scoreboard chip it
-   always described, the guide thickens, and the values read as its scoreboard —
+   above the trophy wall below, which is still black, so its bottom edge
+   BLENDS into it instead of cutting — a 72px fade, inside the section's own
+   76px padding so no text ever sits on the gradient. The rally keeps its
+   engine (hooks, pin/flow choreographies, reduced-motion stillness) and
+   sharpens its look: the counter becomes the scoreboard chip it always
+   described, the guide thickens, and the values read as its scoreboard —
    bigger numerals, firmer rules. All locked #871 vertical decisions (rally
-   148px/-30px, gap 30px, card padding 26px, body 16px) are untouched. */
+   148px/-30px, gap 30px, card padding 26px, body 16px) are untouched.
+
+   Mission/Vision's v2 redesign turned #nosotros white (issue #611 rhythm
+   below), so the section's TOP edge is now a hard seam against another
+   white band — no fade needed there anymore. */
 .landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); gap: 30px; }
-/* The entrance and the exit: black dissolving into the yellow, both ways.
-   `z-index: 0` keeps the wash behind the section's children (z-index 1). */
-.landing-values::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(180deg, var(--landing-brand-black), transparent 72px), linear-gradient(0deg, var(--landing-brand-black), transparent 72px); }
+/* Only the exit fades: the yellow dissolving into the trophy wall's black
+   below. `z-index: 0` keeps the wash behind the section's children (z-index
+   1). */
+.landing-values::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(0deg, var(--landing-brand-black), transparent 72px); }
 .landing-rally { position: relative; width: 100%; height: 148px; margin-bottom: -30px; pointer-events: none; }
 .landing-rally svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 /* The guide is black on this ground (red tops out at 3.5:1 here), drawn a
@@ -333,21 +289,15 @@
 .landing-value h3 { margin: 14px 0 10px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-size: clamp(18px, 1.5vw, 20px); letter-spacing: 1.2px; text-transform: uppercase; }
 .landing-value p { color: var(--landing-text); font-size: 16px; line-height: 1.65; }
 
-/* Section colour rhythm (issue #611): each content band owns a solid brand
-   ground so the page scans white (Horarios) -> brand black (Mision/Vision) ->
-   yellow (Valores) as it descends, instead of three near-identical greys.
-   Text stays >= WCAG AA on every ground: Horarios was already dark-on-white;
-   the black and yellow grounds restate their text, indices and rules below. */
-.landing-section#nosotros { background: var(--landing-footer); color: var(--landing-surface); }
-.landing-section#nosotros .landing-eyebrow { color: var(--landing-highlight); }
-.landing-section#nosotros .landing-index,
-.landing-section#nosotros .landing-index-label { color: var(--landing-highlight-soft); }
-.landing-section#nosotros .landing-section-header h2,
-.landing-section#nosotros .landing-editorial-item h3,
-.landing-section#nosotros .landing-editorial-item p,
-.landing-section#nosotros .landing-lead { color: var(--landing-surface); }
-.landing-section#nosotros .landing-editorial-divider { background: color-mix(in srgb, var(--landing-surface) 22%, transparent); }
-.landing-section#nosotros .landing-editorial-media { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--landing-surface) 16%, transparent); }
+/* Section colour rhythm (issue #611, v2 redesign): each content band owns a
+   solid brand ground so the page scans white (Horarios) -> white
+   (Misión/Visión) -> yellow (Valores) as it descends. #nosotros used to be
+   brand black; the v2 typographic redesign moved its accent onto a single
+   red index number instead, so the ground itself went back to the same
+   white token Horarios uses (`--landing-surface`) and needs no colour
+   overrides of its own — every child already defaults to a colour that
+   reads on white. */
+.landing-section#nosotros { background: var(--landing-surface); color: var(--landing-text-strong); }
 
 /* On the yellow ground the accents invert: text and rules become brand black
    (brand red only reaches ~3.5:1 there; black ~14.9:1), dividers turn to
@@ -627,13 +577,7 @@
   .landing-section, .landing-footer { padding: 64px 24px; }
   .landing-location-row { flex-direction: column; }
   .landing-value-row { grid-template-columns: 1fr; }
-  /* Stacked, the divider has to turn from a vertical rule between two
-     columns into a horizontal one between two rows — the wrapper's own
-     `row-gap` opens the space on both of its sides, so the line still reads
-     as owned by the wrapper rather than by whichever half stacks first. */
-  .landing-editorial { grid-template-columns: 1fr; row-gap: 34px; }
-  .landing-editorial-item { grid-template-columns: 1fr; gap: 26px; }
-  .landing-editorial-divider { width: 100%; height: 1px; align-self: auto; }
+  .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are
      desktop-only reads, so both drop rather than crowd a 44px-tall pill. */

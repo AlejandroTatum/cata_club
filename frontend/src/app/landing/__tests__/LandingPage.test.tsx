@@ -300,7 +300,7 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("renders the arrival inset and the Mission/Vision approved editorial photos", (): void => {
+  it("renders the arrival inset photo", (): void => {
     render(<LandingPage />);
 
     const arrival = screen.getByRole("img", { name: /entrada de cata club/i });
@@ -309,32 +309,31 @@ describe("LandingPage", (): void => {
     expect(arrival).toHaveAttribute("height", "1200");
     expect(arrival).toHaveAttribute("loading", "lazy");
     expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
-
-    const mission = screen.getByRole("img", { name: /el club reúne a su comunidad en un entrenamiento/i });
-    expect(mission).toHaveAttribute("src", "/landing/photo-community.jpeg");
-    const vision = screen.getByRole("img", { name: /el equipo y entrenadores de cata club posan en el área de entrenamiento/i });
-    expect(vision).toHaveAttribute("src", "/landing/vision-team-1329.jpg");
   });
 
-  it("alternates Mission and Vision editorial blocks: photo left/text right, then text left/photo right", (): void => {
+  it("renders Mission and Vision as two typographic pillars, no photos (v2 redesign)", (): void => {
     render(<LandingPage />);
-    const articles = screen.getByRole("heading", { name: "Nuestra Misión" }).parentElement
-      ? [
-          screen.getByRole("heading", { name: "Nuestra Misión" }).closest(".landing-editorial-item"),
-          screen.getByRole("heading", { name: "Nuestra Visión" }).closest(".landing-editorial-item"),
-        ]
-      : [];
-    const [missionItem, visionItem] = articles as HTMLElement[];
+
+    const missionItem = screen.getByRole("heading", { name: "Nuestra Misión" }).closest(".landing-pillar");
+    const visionItem = screen.getByRole("heading", { name: "Nuestra Visión" }).closest(".landing-pillar");
     expect(missionItem).not.toBeNull();
     expect(visionItem).not.toBeNull();
 
-    const missionChildren = Array.from(missionItem.children);
-    const visionChildren = Array.from(visionItem.children);
-    // Mission leads with the photo (left), then the copy; Vision is inverted.
-    expect(missionChildren[0]?.classList.contains("landing-editorial-media")).toBe(true);
-    expect(missionChildren[1]?.classList.contains("landing-editorial-copy")).toBe(true);
-    expect(visionChildren[0]?.classList.contains("landing-editorial-copy")).toBe(true);
-    expect(visionChildren[1]?.classList.contains("landing-editorial-media")).toBe(true);
+    const section = document.querySelector("#nosotros") as HTMLElement;
+    expect(within(section).queryByRole("img")).not.toBeInTheDocument();
+
+    expect(within(missionItem as HTMLElement).getByText(
+      "Promover el tenis de mesa mediante formación deportiva de calidad.",
+    )).toHaveClass("landing-lead");
+    expect(within(missionItem as HTMLElement).getByText(
+      "Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.",
+    )).toBeInTheDocument();
+    expect(within(visionItem as HTMLElement).getByText(
+      "Ser un club líder y referente deportivo a nivel provincial y nacional.",
+    )).toHaveClass("landing-lead");
+    expect(within(visionItem as HTMLElement).getByText(
+      "Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.",
+    )).toBeInTheDocument();
   });
 
   it("shows an honest empty sponsor message when public GET /api/sponsors returns none", async (): Promise<void> => {
@@ -977,14 +976,14 @@ describe("LandingPage", (): void => {
   /**
    * The icon chips are gone on purpose. A 40x40 tinted square holding a generic
    * glyph is the visual signature of a bought template, and it was repeated six
-   * times. Rank is now carried by an index, scale, and a single rule.
+   * times. Rank is now carried by an index and a scale jump alone.
    */
-  it("ranks the editorial blocks by index and typography rather than icon chips", (): void => {
+  it("ranks the mission/vision pillars by index and typography rather than icon chips", (): void => {
     render(<LandingPage />);
 
-    const blocks = Array.from(document.querySelectorAll(".landing-editorial-item"));
+    const blocks = Array.from(document.querySelectorAll(".landing-pillar"));
     expect(blocks).toHaveLength(2);
-    expect(document.querySelectorAll(".landing-editorial-item svg")).toHaveLength(0);
+    expect(document.querySelectorAll(".landing-pillar svg")).toHaveLength(0);
     expect(blocks.map((block): string | null => block.querySelector(".landing-index")?.textContent ?? null))
       .toEqual(["01", "02"]);
   });
