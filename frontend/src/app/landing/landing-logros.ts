@@ -114,13 +114,15 @@ export const ACHIEVEMENT_GROUPS: AchievementGroup[] = [
 ];
 
 /** Compatibility shape retained until the legacy Palmares component is replaced. */
-export type LogroDestacado = AchievementGroup & {
+export type LogroDestacado = Omit<AchievementGroup, "venue"> & {
+  venue: string;
   event: string;
   representation: string;
   categories: string;
 };
 export const LOGRO_DESTACADO: LogroDestacado = {
   ...ACHIEVEMENT_GROUPS[0],
+  venue: "Asunción, Paraguay",
   event: "Sudamericano Sub-11 y Sub-13",
   representation: "Selección de Ecuador",
   categories: "Sub-11 y Sub-13",
