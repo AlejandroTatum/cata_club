@@ -65,6 +65,14 @@ describe("ScheduleSelector", (): void => {
     expect(litBallLabels()).toEqual(["L", "M", "X", "J", "V"]);
   });
 
+  it("does not repeat the day sentence beneath the main time", (): void => {
+    renderCard();
+    const panel = screen.getByRole("tabpanel");
+    expect(panel.querySelector(".landing-schedule-time")).not.toHaveTextContent(WEEKDAYS);
+    expect(within(panel).getByText("Días")).toBeInTheDocument();
+    expect(within(panel).getByLabelText(WEEKDAYS)).toBeInTheDocument();
+  });
+
   it("lights only L, X, V for a category running Monday, Wednesday and Friday", (): void => {
     renderCard();
     fireEvent.click(screen.getByRole("tab", { name: /infantil/i }));
