@@ -104,27 +104,25 @@ test.describe("landing vertical space", () => {
   }
 
   /**
-   * The redesigned Logros geometry: one feature photo at its fixed height,
-   * four podios photos in a hard-edged row, none of them shrunk to buy the
-   * section its lower budget. Every geometry read waits for the section's
-   * own reveal (`opacity: 1` on its last `[data-reveal]`) via `expect.poll`
-   * first — a one-shot read straight after `scrollIntoView` raced the
-   * reveal transition and failed in CI on exactly that pattern (PR #1127).
+   * The redesigned Logros geometry: one feature photo at its fixed height and
+   * a horizontally scrollable competition selector whose tabs retain a useful
+   * touch target. Every geometry read waits for the feature's own reveal via
+   * `expect.poll`; a one-shot read after `scrollIntoView` races the transition.
    */
-  test("keeps the feature photo and the four podios at their fixed heights", async ({ page }, testInfo) => {
+  test("keeps the feature photo and competition tabs at their intended heights", async ({ page }, testInfo) => {
     await page.goto("/");
     await page.locator("#logros").scrollIntoViewIfNeeded();
 
-    const podiosReveal = page.locator("#logros .landing-podios-block[data-reveal]");
-    await expect.poll(async () => podiosReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+    const logroReveal = page.locator("#logros .landing-logro[data-reveal]");
+    await expect.poll(async () => logroReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
 
     const desktopMetrics = await page.evaluate(() => {
       const feature = document.querySelector<HTMLElement>(".landing-logro-photo");
-      const podios = Array.from(document.querySelectorAll<HTMLElement>(".landing-podios > li"));
+      const tabs = Array.from(document.querySelectorAll<HTMLElement>(".landing-logro-tab"));
       return {
         featureHeight: feature ? feature.getBoundingClientRect().height : null,
-        podiosCount: podios.length,
-        podiosHeights: podios.map((li) => li.getBoundingClientRect().height),
+        tabCount: tabs.length,
+        tabHeights: tabs.map((tab) => tab.getBoundingClientRect().height),
       };
     });
 
@@ -134,22 +132,22 @@ test.describe("landing vertical space", () => {
     });
 
     expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBe(380);
-    expect(desktopMetrics.podiosCount, "podios count").toBe(4);
-    for (const height of desktopMetrics.podiosHeights) {
-      expect(height, "podio photo height on desktop").toBe(150);
+    expect(desktopMetrics.tabCount, "competition tab count").toBe(7);
+    for (const height of desktopMetrics.tabHeights) {
+      expect(height, "competition tab touch target on desktop").toBeGreaterThanOrEqual(94);
     }
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await page.locator("#logros").scrollIntoViewIfNeeded();
-    await expect.poll(async () => podiosReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+    await expect.poll(async () => logroReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
 
     const mobileMetrics = await page.evaluate(() => {
       const feature = document.querySelector<HTMLElement>(".landing-logro-photo");
-      const podios = Array.from(document.querySelectorAll<HTMLElement>(".landing-podios > li"));
+      const tabs = Array.from(document.querySelectorAll<HTMLElement>(".landing-logro-tab"));
       return {
         featureHeight: feature ? feature.getBoundingClientRect().height : null,
-        podiosHeights: podios.map((li) => li.getBoundingClientRect().height),
+        tabHeights: tabs.map((tab) => tab.getBoundingClientRect().height),
       };
     });
 
@@ -159,8 +157,8 @@ test.describe("landing vertical space", () => {
     });
 
     expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBe(160);
-    for (const height of mobileMetrics.podiosHeights) {
-      expect(height, "podio photo height on mobile").toBe(120);
+    for (const height of mobileMetrics.tabHeights) {
+      expect(height, "competition tab touch target on mobile").toBeGreaterThanOrEqual(94);
     }
   });
 
