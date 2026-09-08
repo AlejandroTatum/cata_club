@@ -130,7 +130,6 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
         <DigitRun text={start} animate={animate} />
         <span className="landing-schedule-dash">–</span>
         <DigitRun text={end} animate={animate} />
-        <small>{main.days}</small>
       </p>
 
       <span className="landing-schedule-label">Días</span>
