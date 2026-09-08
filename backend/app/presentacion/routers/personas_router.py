@@ -73,17 +73,26 @@ router = APIRouter(prefix="/personas", tags=["Personas"])
 )
 @limiter.limit("20/minute")
 async def crear_cuenta_admin(
-    request: Request, datos: AdminCrearCuentaDTO, db: Session = Depends(obtener_sesion)
+    request: Request,
+    datos: AdminCrearCuentaDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(["ADMINISTRADOR"])),
 ):
-    """Crea Persona + Usuario + Rol en un solo request (JUGADOR / REPRESENTANTE / MENOR).
-    Retorna { persona_id, usuario_id, correo } -- issue #1015: sin tokens de
-    auto-login, el llamador es el ADMINISTRADOR autenticado, no la cuenta
-    recién creada."""
+    """Crea la cuenta y, opcionalmente, el primer pago en una transacción.
+
+    Sin pago inicial la cuenta queda sin membresía y sin acceso de alumno;
+    el mismo flujo solo activa acceso cuando el administrador registra y
+    valida el pago EFECTIVO seleccionado.
+    """
     # `run_in_threadpool` (issue #826, mismo motivo que `registro` en
     # auth_router.py): `crear_cuenta` hashea con bcrypt (cientos de ms de CPU
     # pura), y un cómputo no cede el event loop ni con un driver async. Ver el
     # candado en `tests/test_bloqueo_del_event_loop.py`.
-    return await run_in_threadpool(AdminCuentaServicio(db).crear_cuenta, datos)
+    return await run_in_threadpool(
+        AdminCuentaServicio(db).crear_cuenta,
+        datos,
+        actor_persona_id=token_payload.get("persona_id"),
+    )
 
 
 @router.post(
