@@ -129,7 +129,7 @@ export const LOGRO_DESTACADO: LogroDestacado = {
 };
 
 /** Existing demo photos, reused as provisional visual references only. */
-export const MAS_PODIOS: string[] = ACHIEVEMENT_GROUPS.slice(1).map(({ photo }): string => photo);
+export const MAS_PODIOS: string[] = ACHIEVEMENT_GROUPS.slice(1, 5).map(({ photo }): string => photo);
 
 export const PODIO_DIMENSIONS: Record<string, { width: number; height: number }> = {
   "photo-southamerican": { width: 934, height: 1000 },
