@@ -17,9 +17,6 @@
  *    identifier (issue #999: an earlier version of this sentence named
  *    neither field, and a visitor who fixed the one they guessed wrong kept
  *    reading the same generic text after colliding on the other).
- *  - The admin panel (`POST /personas/admin/cuentas`, ADMINISTRADOR-only)
- *    keeps the precise wording — an operator who can already list the whole
- *    roster learns nothing new from it, and needs to know what to correct.
  *
  * Matching is still on the message text because that is all the BFF forwards:
  * every duplicate case shares HTTP 400 with a dozen unrelated validation
@@ -39,9 +36,10 @@ export const MENSAJE_IDENTIDAD_DUPLICADA =
   "Alguno de los datos ingresados, cédula o correo, ya pertenece a una cuenta registrada.";
 
 const PATRONES_IDENTIDAD_DUPLICADA = [
-  // Generic message — public, representative and registration flows.
+  // Generic message — all supported public and representative flows.
   /alguno de los datos ingresados, c[eé]dula o correo, ya pertenece a una cuenta registrada/i,
-  // Precise messages — kept for the admin panel.
+  // Legacy clients may still return these variants; recognizing them does not
+  // expose or restore the retired account-creation capability.
   /ya existe una persona con la c[eé]dula/i,
   /el correo (del representante )?ya est[aá] en uso/i,
 ];

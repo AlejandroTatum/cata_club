@@ -15,7 +15,7 @@ la segunda. Estos tests simulan la carrera anulando el pre-check con
 responde_igual_por_chequeo_o_por_constraint`: dos llamadas secuenciales,
 ninguna "ve" a la otra, y la base es quien tiene que atajar la segunda.
 
-En `admin_cuenta_servicio.py`, `auth_servicio.py` y `persona_servicio.py`
+En `auth_servicio.py` y `persona_servicio.py`
 (`crear_representado`) el `IntegrityError` de la carrera no estaba
 atrapado en absoluto ANTES de este PR -- ver ADR-3 y ADR-6. En
 `enrollment_servicio.py` el catch ya existía (issue #999); acá solo se
@@ -34,9 +34,7 @@ from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Usuario
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
-from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO
 from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
@@ -101,67 +99,7 @@ def test_autoinscripcion_race_case_variant_deja_una_sola_fila(db_session, monkey
     assert _contar_usuarios_por_correo(db_session, "carrera@example.com") == 1
 
 
-# --- 2. Panel admin (POST /personas/admin/cuentas), correo ------------------
-
-def test_admin_wizard_race_case_variant_de_correo_da_entidad_duplicada(db_session, monkeypatch):
-    """ADR-3: `admin_cuenta_servicio.py` no tenía NINGÚN catch de
-    `IntegrityError` antes de este PR -- la carrera caía en el genérico
-    409 de `main.py`. Acá se prueba a nivel de servicio: sin el catch, el
-    `IntegrityError` crudo se propaga y el test falla con ESE error, no
-    con `EntidadDuplicada`."""
-    _bypass_correo(monkeypatch)
-    servicio = AdminCuentaServicio(db_session)
-
-    def _datos(correo: str, cedula: str) -> AdminCrearCuentaDTO:
-        return AdminCrearCuentaDTO(
-            nombres="Nueva", apellidos="Cuenta", cedula=cedula,
-            fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-            correo=correo, contrasenia="password8",
-            tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
-        )
-
-    ganadora = servicio.crear_cuenta(_datos("Wizard@Example.com", cedula_valida(703)))
-    assert ganadora["usuario_id"] is not None
-
-    with pytest.raises(EntidadDuplicada) as error:
-        servicio.crear_cuenta(_datos("wizard@example.com", cedula_valida(704)))
-    assert "correo" in error.value.mensaje.lower()
-
-    assert _contar_usuarios_por_correo(db_session, "wizard@example.com") == 1
-
-
-# --- 3. Panel admin, cedula (folds in one item from #942) -------------------
-
-def test_admin_wizard_race_de_cedula_da_entidad_duplicada_no_generica(db_session, monkeypatch):
-    """ADR-6: el mismo `try/except` que ADR-3 agrega también cubre
-    `persona.cedula` -- un item de #942, no todo el issue."""
-    _bypass_cedula(monkeypatch)
-    servicio = AdminCuentaServicio(db_session)
-    cedula_disputada = cedula_valida(705)
-
-    def _datos(correo: str) -> AdminCrearCuentaDTO:
-        return AdminCrearCuentaDTO(
-            nombres="Nueva", apellidos="Cuenta", cedula=cedula_disputada,
-            fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-            correo=correo, contrasenia="password8",
-            tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
-        )
-
-    ganadora = servicio.crear_cuenta(_datos("primero.cedula@example.com"))
-    assert ganadora["persona_id"] is not None
-
-    with pytest.raises(EntidadDuplicada) as error:
-        servicio.crear_cuenta(_datos("segundo.cedula@example.com"))
-    assert "cédula" in error.value.mensaje
-    assert cedula_disputada in error.value.mensaje
-
-    total = db_session.execute(
-        select(func.count(Persona.id)).where(Persona.cedula == cedula_disputada)
-    ).scalar_one()
-    assert total == 1
-
-
-# --- 4. POST /auth/registro, correo ------------------------------------------
+# --- 2. POST /auth/registro, correo ------------------------------------------
 
 def test_auth_registro_race_case_variant_de_correo_da_entidad_duplicada(db_session, monkeypatch):
     """ADR-3: `auth_servicio.py` tampoco atrapaba `IntegrityError` antes de
@@ -194,7 +132,7 @@ def test_auth_registro_race_case_variant_de_correo_da_entidad_duplicada(db_sessi
     assert _contar_usuarios_por_correo(db_session, "registro@example.com") == 1
 
 
-# --- 5. POST /personas/{id}/representados, correo ----------------------------
+# --- 3. POST /personas/{id}/representados, correo ----------------------------
 
 def test_crear_representado_race_case_variant_de_correo_da_entidad_duplicada(
     db_session, monkeypatch
@@ -233,45 +171,7 @@ def test_crear_representado_race_case_variant_de_correo_da_entidad_duplicada(
     assert _contar_usuarios_por_correo(db_session, "depende@example.com") == 1
 
 
-# --- 6. El campo que se nombra sale del NOMBRE de la restricción ------------
-
-def test_race_de_correo_no_se_confunde_con_cedula_por_el_texto_del_error(
-    db_session, monkeypatch
-):
-    """El despacho por campo lee `error.orig.diag.constraint_name`, no
-    `str(error.orig)`.
-
-    Ese texto trae pegada la línea `DETAIL:` de psycopg, que ECHOA el valor
-    en conflicto: con un `in str(...)`, un correo cuya parte local contiene
-    literalmente `persona_cedula_key` -- el guion bajo es legal en un
-    `EmailStr` y `admin_cuenta_schemas.py` no normaliza -- hacía que una
-    carrera de CORREO se despachara por la rama de CÉDULA y respondiera
-    nombrando el campo equivocado, con una cédula que nadie disputó."""
-    _bypass_correo(monkeypatch)
-    servicio = AdminCuentaServicio(db_session)
-    correo_trampa = "persona_cedula_key@example.com"
-
-    def _datos(cedula: str) -> AdminCrearCuentaDTO:
-        return AdminCrearCuentaDTO(
-            nombres="Nueva", apellidos="Cuenta", cedula=cedula,
-            fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-            correo=correo_trampa, contrasenia="password8",
-            tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
-        )
-
-    cedula_perdedora = cedula_valida(711)
-    ganadora = servicio.crear_cuenta(_datos(cedula_valida(712)))
-    assert ganadora["usuario_id"] is not None
-
-    with pytest.raises(EntidadDuplicada) as error:
-        servicio.crear_cuenta(_datos(cedula_perdedora))
-    assert error.value.mensaje == "El correo ya está en uso por otra cuenta"
-    assert cedula_perdedora not in error.value.mensaje
-
-    assert _contar_usuarios_por_correo(db_session, correo_trampa) == 1
-
-
-# --- 7. POST /personas/{id}/representados, cedula ----------------------------
+# --- 4. POST /personas/{id}/representados, cedula ----------------------------
 
 def test_crear_representado_race_de_cedula_da_entidad_duplicada(db_session, monkeypatch):
     """ADR-6: `crear_representado` valida la cédula en

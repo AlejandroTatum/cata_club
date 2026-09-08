@@ -16,7 +16,6 @@ from pydantic import ValidationError
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoSangre
 from app.dominio.telefono import MENSAJE_TELEFONO_EMERGENCIA_IGUAL
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.auth_schemas import ActualizarPerfilPropioDTO, RegistroUsuarioDTO
 from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
@@ -58,7 +57,7 @@ def _assert_rechaza_por_telefono_emergencia_igual(construir):
     """Issue #860: agrupa el `pytest.raises` + el assert del mensaje,
     reusado por los tres DTOs que comparan teléfono personal vs. de
     emergencia (`RepresentadoCreateDTO`, `EnrollmentCreateDTO`,
-    `AdminCrearCuentaDTO`) en vez de repetir el mismo bloque en cada uno."""
+    `EnrollmentCreateDTO`) en vez de repetir el mismo bloque en cada uno."""
     with pytest.raises(ValidationError) as error:
         construir()
     assert MENSAJE_TELEFONO_EMERGENCIA_IGUAL in str(error.value)
@@ -325,67 +324,6 @@ class TestEnrollmentCreateDTO:
     def test_rechaza_telefono_emergencia_igual_o_equivalente_al_del_alumno(self, telefono_emergencia):
         _assert_rechaza_por_telefono_emergencia_igual(
             lambda: EnrollmentCreateDTO(**self._base(telefono_emergencia=telefono_emergencia))
-        )
-
-
-class TestAdminCrearCuentaDTO:
-    def _base(self, **overrides):
-        datos = dict(
-            tipo_cuenta="JUGADOR", nombres="Ana", apellidos="Ríos",
-            cedula=CEDULA_VALIDA, fecha_nacimiento=FECHA_NACIMIENTO_ADULTO,
-            telefono=TELEFONO_VALIDO, correo="ana@example.com",
-            contrasenia="unaClave123",
-            # Issue #730: `tipo_cuenta="JUGADOR"` es un alumno y ya no se da
-            # de alta sin ficha médica. Esta clase mide cédula y teléfono, no
-            # la ficha.
-            #
-            # Issue #860: el teléfono de emergencia tiene que ser DISTINTO
-            # del personal de arriba — antes reusaba el mismo `TELEFONO_
-            # VALIDO`, exactamente el fixture que el issue pide reemplazar.
-            ficha_medica=dict(
-                tipo_sangre="O_POSITIVO", enfermedades=[],
-                contacto_emergencia="María Torres",
-                telefono_emergencia=TELEFONO_EMERGENCIA_VALIDO,
-            ),
-        )
-        datos.update(overrides)
-        return datos
-
-    def test_acepta_datos_validos(self):
-        AdminCrearCuentaDTO(**self._base())
-
-    def test_rechaza_cedula_invalida(self):
-        with pytest.raises(ValidationError):
-            AdminCrearCuentaDTO(**self._base(cedula=CEDULA_INVALIDA))
-
-    def test_rechaza_telefono_invalido(self):
-        with pytest.raises(ValidationError):
-            AdminCrearCuentaDTO(**self._base(telefono=TELEFONO_INVALIDO))
-
-    def test_rechaza_telefono_contacto_invalido(self):
-        with pytest.raises(ValidationError):
-            AdminCrearCuentaDTO(**self._base(telefono_contacto=TELEFONO_INVALIDO))
-
-    # --- Issue #860: el teléfono de emergencia no puede repetir el personal -
-
-    def _con_telefono_emergencia(self, telefono_emergencia: str) -> dict:
-        return self._base(
-            ficha_medica=dict(
-                tipo_sangre="O_POSITIVO", enfermedades=[],
-                contacto_emergencia="María Torres",
-                telefono_emergencia=telefono_emergencia,
-            ),
-        )
-
-    def test_sin_ficha_medica_no_hay_nada_que_comparar(self):
-        # REPRESENTANTE no exige ficha médica (#730); sin ella, la
-        # comparación del #860 no tiene con qué compararse.
-        AdminCrearCuentaDTO(**self._base(tipo_cuenta="REPRESENTANTE", ficha_medica=None))
-
-    @pytest.mark.parametrize("telefono_emergencia", FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO)
-    def test_rechaza_telefono_emergencia_igual_o_equivalente_al_personal(self, telefono_emergencia):
-        _assert_rechaza_por_telefono_emergencia_igual(
-            lambda: AdminCrearCuentaDTO(**self._con_telefono_emergencia(telefono_emergencia))
         )
 
 

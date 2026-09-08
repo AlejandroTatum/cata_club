@@ -15,10 +15,7 @@ Reglas verificadas:
      issue #999) pero no repite el identificador ni revela CUÁL de los dos
      coincidió (si los dos mensajes difirieran, cada uno sería un oráculo
      del otro).
-  2. El panel de administración, que es autenticado y solo ADMINISTRADOR,
-     conserva el mensaje preciso: ahí no hay divulgación (quien lo lee ya puede
-     listar el padrón completo) y el operador necesita saber qué corregir.
-  3. El texto genérico está fijado en el detector del frontend
+  2. El texto genérico está fijado en el detector del frontend
      (`frontend/src/lib/duplicate-identity.ts`), que decide por texto si ofrece
      los enlaces de "iniciar sesión" / "recuperar contraseña".
 """
@@ -37,13 +34,11 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentCredencialesDTO,
     EnrollmentRepresentanteDTO,
 )
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO,
     RepresentadoCreateDTO,
 )
-from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.servicios_negocio.persona_servicio import PersonaServicio
@@ -266,38 +261,6 @@ def test_crear_representado_con_correo_duplicado_no_divulga(db_session):
     with pytest.raises(EntidadDuplicada) as error:
         PersonaServicio(db_session).crear_representado(representante.id, datos)
     _afirmar_generico(error.value.mensaje)
-
-
-# --- 4. Panel de administración: mensaje preciso a propósito ---------------
-
-def test_panel_admin_conserva_el_mensaje_preciso_por_cedula(db_session):
-    """`POST /personas/admin/cuentas` exige rol ADMINISTRADOR. Quien lo llama
-    ya puede listar el padrón entero, así que decir qué campo chocó no divulga
-    nada nuevo y le ahorra adivinar cuál de los dos corregir."""
-    _sembrar_persona_con_cuenta(db_session)
-    datos = AdminCrearCuentaDTO(
-        nombres="Nueva", apellidos="Cuenta", cedula=CEDULA_OCUPADA,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-        correo="libre@example.com", contrasenia="password8",
-        tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
-    )
-    with pytest.raises(EntidadDuplicada) as error:
-        AdminCuentaServicio(db_session).crear_cuenta(datos)
-    assert "cédula" in error.value.mensaje
-    assert CEDULA_OCUPADA in error.value.mensaje
-
-
-def test_panel_admin_conserva_el_mensaje_preciso_por_correo(db_session):
-    _sembrar_persona_con_cuenta(db_session)
-    datos = AdminCrearCuentaDTO(
-        nombres="Nueva", apellidos="Cuenta", cedula="1798765432",
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-        correo=CORREO_OCUPADO, contrasenia="password8",
-        tipo_cuenta="JUGADOR", ficha_medica=dict(_FICHA),
-    )
-    with pytest.raises(EntidadDuplicada) as error:
-        AdminCuentaServicio(db_session).crear_cuenta(datos)
-    assert "correo" in error.value.mensaje.lower()
 
 
 # --- 5. Contrato con el detector del frontend ------------------------------

@@ -9,7 +9,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.dominio.modelos import FichaMedica, Persona
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentFichaMedicaDTO, EnrollmentRepresentanteDTO
 from app.servicios_negocio.dtos.persona_schemas import FichaMedicaCreateDTO, PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO
 
@@ -25,14 +24,12 @@ def _instanciar(dto_cls):
     solo arma el payload mínimo válido de cada uno."""
     if dto_cls is EnrollmentRepresentanteDTO:
         return dto_cls(**_PERSONA_KWARGS, **_CREDENCIALES)
-    if dto_cls is AdminCrearCuentaDTO:
-        return dto_cls(tipo_cuenta="ENTRENADOR", **_PERSONA_KWARGS, **_CREDENCIALES)
     return dto_cls(**_PERSONA_KWARGS)
 
 
 @pytest.mark.parametrize("dto_cls", [
     PersonaCreateDTO, RepresentadoCreateDTO, EnrollmentAlumnoDTO,
-    EnrollmentRepresentanteDTO, AdminCrearCuentaDTO,
+    EnrollmentRepresentanteDTO,
 ])
 def test_dto_de_creacion_normaliza_nombres_y_apellidos(dto_cls):
     dto = _instanciar(dto_cls)

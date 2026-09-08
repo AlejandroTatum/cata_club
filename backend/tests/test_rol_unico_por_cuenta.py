@@ -10,9 +10,8 @@ Qué fija este archivo, y por qué cada cosa:
      anterior sin dejar rastro de quién lo decidió.
   2. Un duplicado del MISMO rol sigue siendo el rechazo de duplicado que ya
      existía (no se degrada a la regla nueva, que dice otra cosa).
-  3. Los cuatro caminos de alta que el issue nombra -- endpoint admin,
-     alta administrativa de cuentas, inscripción pública y membresía --
-     cierran contra la misma regla. Antes cada uno tenía su propio
+  3. Los caminos de alta que siguen vigentes -- inscripción pública y
+     membresía -- cierran contra la misma regla. Antes cada uno tenía su propio
      `_asignar_rol` que solo miraba duplicados del mismo rol, así que dos
      flujos independientes podían acumular roles distintos sin que ninguno
      de los dos viera al otro.
@@ -30,7 +29,6 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoModalidad, TipoRol
 from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import Membresia, Persona, Rol, TipoMembresia, Usuario
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentCreateDTO,
@@ -39,7 +37,6 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentRepresentanteDTO,
 )
 from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaCreateDTO
-from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio
 from app.servicios_negocio.rol_servicio import RolServicio
@@ -176,50 +173,7 @@ def test_endpoint_admin_de_roles_rechaza_el_segundo_rol(client, db_session):
     assert lectura.json()["roles"] == [TipoRol.ADMINISTRADOR.value]
 
 
-# --- 3b. Alta administrativa de cuentas ------------------------------------
-
-def _payload_admin(**overrides) -> dict:
-    datos = {
-        "tipo_cuenta": "JUGADOR",
-        "nombres": "Carlos",
-        "apellidos": "Ruiz",
-        "cedula": cedula_valida(710),
-        "fecha_nacimiento": "1995-06-15",
-        "telefono": "0991234567",
-        "correo": "carlos762@test.com",
-        "contrasenia": "clave12345",
-        "ficha_medica": {
-            "tipo_sangre": "O_POSITIVO",
-            "enfermedades": [],
-            "contacto_emergencia": "María Torres",
-            "telefono_emergencia": "0991112233",
-        },
-    }
-    datos.update(overrides)
-    return datos
-
-
-@pytest.mark.parametrize("tipo_cuenta,rol_esperado", [
-    ("JUGADOR", TipoRol.ALUMNO),
-    ("REPRESENTANTE", TipoRol.REPRESENTANTE),
-    ("ENTRENADOR", TipoRol.ENTRENADOR),
-])
-def test_alta_admin_deja_exactamente_un_rol(db_session, tipo_cuenta, rol_esperado):
-    """`REPRESENTANTE` es el caso que cambia: `ROLES_POR_TIPO_CUENTA` le
-    otorgaba REPRESENTANTE **y** ALUMNO, o sea que el alta administrativa
-    fabricaba una cuenta multirol de fábrica."""
-    datos = AdminCrearCuentaDTO(**_payload_admin(
-        tipo_cuenta=tipo_cuenta, correo=f"{tipo_cuenta.lower()}762@test.com",
-    ))
-
-    AdminCuentaServicio(db_session).crear_cuenta(datos)
-
-    usuario = db_session.query(Usuario).filter(
-        Usuario.correo == f"{tipo_cuenta.lower()}762@test.com"
-    ).one()
-    assert _tipos(usuario) == {rol_esperado}
-
-
+# --- 3b. Inscripción pública ------------------------------------------------
 # --- 3c. Inscripción pública ------------------------------------------------
 
 def _ficha_dto() -> EnrollmentFichaMedicaDTO:

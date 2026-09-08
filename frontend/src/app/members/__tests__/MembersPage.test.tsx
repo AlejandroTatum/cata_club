@@ -331,6 +331,19 @@ describe("MembersPage — Editar member modal", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("does not expose the legacy admin account-creation entry point", async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    await findAccountRow();
+
+    expect(screen.queryByRole("link", { name: /crear cuenta/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /inscripci/i })).not.toBeInTheDocument();
+  });
+
   it("shows contact and membership on the phone card instead of hiding them", async () => {
     render(
       <ToastProvider>
