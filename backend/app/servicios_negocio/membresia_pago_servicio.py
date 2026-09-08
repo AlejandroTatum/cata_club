@@ -235,7 +235,7 @@ class MembresiaServicio:
             self.db.refresh(resultado)
         return resultado
 
-    def crear_membresia(self, datos: MembresiaCreateDTO) -> Membresia:
+    def crear_membresia(self, datos: MembresiaCreateDTO, *, commit: bool = True) -> Membresia:
         if not self.repo_persona.obtener_por_id(datos.persona_id):
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         tipo = self.repo_tipo.obtener_por_id(datos.tipo_membresia_id)
@@ -284,8 +284,9 @@ class MembresiaServicio:
         # `asignar_alumno_si_corresponde` ya no comitea por su cuenta (issue
         # #831): forma parte de esta misma transacción.
         RolServicio(self.db).asignar_alumno_si_corresponde(datos.persona_id)
-        self.db.commit()
-        if inspeccionar_orm(membresia).expired:
+        if commit:
+            self.db.commit()
+        if commit and inspeccionar_orm(membresia).expired:
             self.db.refresh(membresia)
         return membresia
 
@@ -469,6 +470,8 @@ class PagoServicio:
         datos: PagoCreateDTO,
         persona_id_solicitante: int | None = None,
         roles_solicitante: list[str] | None = None,
+        *,
+        commit: bool = True,
     ) -> Pago:
         """
         Autorización primero, existencia después (para no filtrar existencia
@@ -681,7 +684,8 @@ class PagoServicio:
         # inválida para cualquier uso posterior.
         try:
             resultado = self.repo.crear(pago)
-            self.db.commit()
+            if commit:
+                self.db.commit()
         except IntegrityError as error:
             self.db.rollback()
             if "uq_pago_pendiente_por_membresia" in str(error.orig):
@@ -691,7 +695,7 @@ class PagoServicio:
         # crear_representado`): este método corre dentro de
         # `run_in_threadpool` y el router arma la respuesta (`pago_a_
         # response_dto`) DESPUÉS, ya en el event loop.
-        if inspeccionar_orm(resultado).expired:
+        if commit and inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
         return resultado
 
@@ -1944,7 +1948,13 @@ class PagoServicio:
         return items, total
 
     def validar_pago(
-        self, pago_id: int, datos: PagoValidarDTO, actor_persona_id: int | None,
+        self,
+        pago_id: int,
+        datos: PagoValidarDTO,
+        actor_persona_id: int | None,
+        *,
+        commit: bool = True,
+        notificar: bool = True,
     ) -> Pago:
         """
         Regla de negocio:
@@ -2056,6 +2066,7 @@ class PagoServicio:
             datos.motivo_excepcion_sin_comprobante if requiere_motivo_excepcion else None
         )
 
+        aviso_ok = True
         if datos.estado_pago == EstadoPago.APROBADO:
             # `pago.fecha_inicio`/`fecha_fin` NO se tocan acá (issue #400):
             # Administración no puede editar la cobertura al aprobar, así
@@ -2081,31 +2092,35 @@ class PagoServicio:
                 # `repo.guardar_cambios(pago)` comiteaba acá adentro, ya
                 # separado del `flush()` de `_activar_membresia_con_red_de_
                 # seguridad` -- ahora se confirman juntos.
-                self.db.commit()
+                if commit:
+                    self.db.commit()
             except IntegrityError as error:
                 self.db.rollback()
                 if "uq_membresia_activa_por_persona" in str(error.orig):
                     raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
                 raise
-            aviso_ok = self._crear_notificacion_pago(
-                pago=pago,
-                tipo=TipoNotificacion.PAGO_APROBADO,
-                mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
-            )
-            # Último paso, ya con la aprobación commiteada: si el broker está
-            # caído, el método loguea y NO propaga (ver su docstring).
-            self._disparar_generacion_comprobante_pdf(pago_id)
+            if commit and notificar:
+                aviso_ok = self._crear_notificacion_pago(
+                    pago=pago,
+                    tipo=TipoNotificacion.PAGO_APROBADO,
+                    mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
+                )
+                # Último paso, ya con la aprobación commiteada: si el broker está
+                # caído, el método loguea y NO propaga (ver su docstring).
+                self._disparar_generacion_comprobante_pdf(pago_id)
         else:
             # EstadoPago.RECHAZADO: el estado de Membresia no cambia; el rechazo
             # queda registrado únicamente en Pago.estado_pago y Pago.motivo_rechazo.
             self.repo.guardar_cambios(pago)
-            self.db.commit()
+            if commit:
+                self.db.commit()
             motivo = f": {pago.motivo_rechazo}" if pago.motivo_rechazo else ""
-            aviso_ok = self._crear_notificacion_pago(
-                pago=pago,
-                tipo=TipoNotificacion.PAGO_RECHAZADO,
-                mensaje=f"Su pago fue rechazado{motivo}.",
-            )
+            if commit and notificar:
+                aviso_ok = self._crear_notificacion_pago(
+                    pago=pago,
+                    tipo=TipoNotificacion.PAGO_RECHAZADO,
+                    mensaje=f"Su pago fue rechazado{motivo}.",
+                )
         # Issue #826/#451 (ver el comentario de `PersonaServicio.
         # crear_representado`): este método corre dentro de
         # `run_in_threadpool` y el router arma la respuesta (`pago_a_
@@ -2113,7 +2128,7 @@ class PagoServicio:
         # el atributo transitorio de abajo: `refresh()` solo recarga
         # columnas mapeadas, nunca toca atributos Python sueltos, pero
         # hacerlo en este orden evita cualquier ambigüedad.
-        if inspeccionar_orm(pago).expired:
+        if commit and inspeccionar_orm(pago).expired:
             self.db.refresh(pago)
         # Atributo transitorio, no una columna de `Pago`: `PagoResponseDTO`
         # (from_attributes=True) lo lee por `getattr` para que el 200 que

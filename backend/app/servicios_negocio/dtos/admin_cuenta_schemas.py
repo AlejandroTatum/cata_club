@@ -32,6 +32,18 @@ from app.servicios_negocio.dtos.validadores import (
 TIPOS_CUENTA_ALUMNO = ("JUGADOR", "MENOR")
 
 
+class AdminPagoInicialDTO(BaseModel):
+    """Optional first payment performed in the same admin operation.
+
+    The first-payment shortcut is intentionally cash-only: EFECTIVO has no
+    voucher or transfer reference, so the admin can validate it at the
+    counter without inventing payment evidence.
+    """
+    tipo_membresia_id: int = Field(..., gt=0)
+    meses: int = Field(..., gt=0, le=12)
+    tipo_pago: Literal["EFECTIVO"] = "EFECTIVO"
+
+
 class AdminCrearCuentaDTO(BaseModel):
     """Payload del endpoint POST /admin/cuentas.
 
@@ -62,6 +74,18 @@ class AdminCrearCuentaDTO(BaseModel):
     # requerido de Pydantic contesta `"Field required"`, y ese texto llega
     # crudo al navegador vía `main.py::_validation_exception_handler`.
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
+
+    # Optional same-act enrollment. When absent, account creation alone
+    # deliberately leaves the student without access to club modules.
+    pago_inicial: Optional[AdminPagoInicialDTO] = None
+
+    @model_validator(mode="after")
+    def _pago_inicial_solo_para_alumnos(self) -> "AdminCrearCuentaDTO":
+        if self.pago_inicial is not None and self.tipo_cuenta not in TIPOS_CUENTA_ALUMNO:
+            raise ValueError(
+                "El pago inicial solo está disponible para jugadores y menores."
+            )
+        return self
 
     @model_validator(mode="after")
     def _ficha_medica_obligatoria_para_alumnos(self) -> "AdminCrearCuentaDTO":

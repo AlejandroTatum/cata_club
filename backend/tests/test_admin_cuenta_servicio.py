@@ -14,13 +14,14 @@ Cubre:
   - Validación Pydantic: cédula 10 dígitos, correo válido, contraseña >= 8 chars.
 """
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import TipoRol
-from app.dominio.modelos import Persona, Usuario
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago, TipoRol
+from app.dominio.modelos import Membresia, Pago, Persona, TipoMembresia, Usuario
 from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 
@@ -436,3 +437,75 @@ def test_persona_y_usuario_persisten_correctamente(db_session):
     # La contraseña se almacena hasheada, nunca en texto plano
     assert usuario.contrasenia != "clave12345"
     assert len(usuario.contrasenia) > 20
+
+
+# --- First-payment same-act path (#1004) ---------------------------------------
+
+
+def _crear_plan_y_actor(db_session):
+    actor = Persona(
+        nombres="Admin", apellidos="Club", cedula=cedula_valida(110),
+        fecha_nacimiento=date(1980, 1, 1), telefono="0990000011",
+    )
+    plan = TipoMembresia(
+        categoria="Mensual Adultos", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL,
+    )
+    db_session.add_all([actor, plan])
+    db_session.commit()
+    return actor, plan
+
+
+def test_crear_cuenta_con_pago_efectivo_activa_y_audita_en_la_misma_operacion(db_session):
+    actor, plan = _crear_plan_y_actor(db_session)
+    datos = AdminCrearCuentaDTO(**_base_payload(
+        pago_inicial={"tipo_membresia_id": plan.id, "meses": 2},
+    ))
+
+    result = AdminCuentaServicio(db_session).crear_cuenta(datos, actor_persona_id=actor.id)
+
+    assert result["access_activated"] is True
+    assert result["membership_status"] == EstadoMembresia.ACTIVA.value
+    assert result["payment_status"] == EstadoPago.APROBADO.value
+    membresia = db_session.query(Membresia).filter_by(persona_id=result["persona_id"]).one()
+    pago = db_session.query(Pago).filter_by(membresia_id=membresia.id).one()
+    assert membresia.estado == EstadoMembresia.ACTIVA
+    assert pago.tipo_pago == TipoPago.EFECTIVO
+    assert pago.estado_pago == EstadoPago.APROBADO
+    assert pago.meses_comprados == 2
+    assert pago.monto == Decimal("50.00")
+    assert pago.validado_por_persona_id == actor.id
+
+
+def test_crear_cuenta_sin_pago_no_habilita_acceso(db_session):
+    result = AdminCuentaServicio(db_session).crear_cuenta(
+        AdminCrearCuentaDTO(**_base_payload())
+    )
+
+    assert result["access_activated"] is False
+    assert result["membership_status"] is None
+    assert result["payment_status"] is None
+    assert db_session.query(Membresia).filter_by(persona_id=result["persona_id"]).count() == 0
+
+
+def test_pago_inicial_no_deja_registros_parciales_si_falla(db_session):
+    datos = AdminCrearCuentaDTO(**_base_payload(
+        cedula=cedula_valida(111), correo="fallo@test.com",
+        pago_inicial={"tipo_membresia_id": 999999, "meses": 1},
+    ))
+
+    with pytest.raises(Exception):
+        AdminCuentaServicio(db_session).crear_cuenta(datos, actor_persona_id=1)
+
+    assert db_session.query(Persona).filter_by(cedula=cedula_valida(111)).count() == 0
+    assert db_session.query(Usuario).filter_by(correo="fallo@test.com").count() == 0
+
+
+def test_pago_inicial_solo_esta_disponible_para_jugadores_y_menores():
+    with pytest.raises(ValidationError):
+        AdminCrearCuentaDTO(**_base_payload(
+            tipo_cuenta="REPRESENTANTE", pago_inicial={"tipo_membresia_id": 1, "meses": 1},
+        ))
+    with pytest.raises(ValidationError):
+        AdminCrearCuentaDTO(**_base_payload(
+            tipo_cuenta="ENTRENADOR", pago_inicial={"tipo_membresia_id": 1, "meses": 1},
+        ))

@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades
-from app.dominio.enums import TipoRol
+from app.dominio.enums import EstadoPago, TipoPago, TipoRol
 from app.dominio.excepciones import EntidadDuplicada, EntidadNoEncontrada, OperacionInvalida
 from app.dominio.rol_unico import exigir_rol_unico
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -29,6 +29,10 @@ from app.infraestructura.repositorios.restricciones_identidad import (
     IdentidadEnConflicto, identidad_en_conflicto,
 )
 from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+from app.servicios_negocio.dtos.membresia_pago_schemas import (
+    MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
+)
+from app.servicios_negocio.membresia_pago_servicio import MembresiaServicio, PagoServicio
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import (
     _calcular_edad, EDAD_MINIMA_ALUMNO, EDAD_MAXIMA_ALUMNO, EDAD_MAYORIA_EDAD,
@@ -72,11 +76,13 @@ class AdminCuentaServicio:
         self.repo_ficha = FichaMedicaRepositorio(db)
         self.repo_rol = RolRepositorio(db)
 
-    def crear_cuenta(self, datos: AdminCrearCuentaDTO) -> dict:
+    def crear_cuenta(
+        self, datos: AdminCrearCuentaDTO, actor_persona_id: int | None = None,
+    ) -> dict:
         """
         Flujo completo de creación de cuenta admin.
 
-        Retorna: { persona_id, usuario_id, correo }. Issue #1015: NO emite
+        Retorna identidad y estado real de membresía/pago. Issue #1015: NO emite
         tokens de acceso/refresco -- el llamador es el ADMINISTRADOR
         autenticado que hace el alta, nunca la cuenta recién creada, así que
         un par de tokens acá sería un par de credenciales vivas y sin dueño
@@ -203,10 +209,41 @@ class AdminCuentaServicio:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
                 self.repo_ficha.crear(ficha)
 
-            # 9. Un solo commit para toda la operación (issue #831): antes,
-            # Persona, Usuario, cada asignación de rol y la FichaMedica
-            # comiteaban por separado -- si el último paso fallaba, los
-            # anteriores ya habían quedado persistidos.
+            membresia = None
+            pago = None
+            if datos.pago_inicial is not None:
+                if actor_persona_id is None:
+                    raise OperacionInvalida(
+                        "No se pudo identificar al administrador que registra el pago."
+                    )
+                membresia = MembresiaServicio(self.db).crear_membresia(
+                    MembresiaCreateDTO(
+                        persona_id=persona.id,
+                        tipo_membresia_id=datos.pago_inicial.tipo_membresia_id,
+                    ),
+                    commit=False,
+                )
+                pago_servicio = PagoServicio(self.db)
+                pago = pago_servicio.registrar_pago(
+                    PagoCreateDTO(
+                        meses=datos.pago_inicial.meses,
+                        tipo_pago=TipoPago.EFECTIVO,
+                        persona_id=persona.id,
+                        membresia_id=membresia.id,
+                    ),
+                    persona_id_solicitante=actor_persona_id,
+                    roles_solicitante=[TipoRol.ADMINISTRADOR.value],
+                    commit=False,
+                )
+                pago = pago_servicio.validar_pago(
+                    pago.id,
+                    PagoValidarDTO(estado_pago=EstadoPago.APROBADO),
+                    actor_persona_id=actor_persona_id,
+                    commit=False,
+                    notificar=False,
+                )
+
+            # One commit covers identity, membership, payment, and approval.
             self.db.commit()
         except IntegrityError as error:
             self.db.rollback()
@@ -234,13 +271,23 @@ class AdminCuentaServicio:
             # con lo que no reconocía. Adivinar el campo sería peor que no
             # nombrarlo.
             raise
+        except Exception:
+            # Domain validation can fail after the account has been flushed
+            # (for example, a missing tariff). Keep the operation all-or-
+            # nothing instead of leaving pending rows in this Session.
+            self.db.rollback()
+            raise
 
-        # 10. Devolver la identidad creada (issue #1015: sin tokens -- ver
-        # el docstring de este método).
+        # 10. Return the identity plus the real activation outcome.
         return {
             "persona_id": persona.id,
             "usuario_id": usuario.id,
             "correo": usuario.correo,
+            "membership_id": membresia.id if membresia else None,
+            "membership_status": membresia.estado.value if membresia else None,
+            "payment_id": pago.id if pago else None,
+            "payment_status": pago.estado_pago.value if pago else None,
+            "access_activated": bool(pago and pago.estado_pago == EstadoPago.APROBADO),
         }
 
     def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
