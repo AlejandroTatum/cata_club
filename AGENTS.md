@@ -28,14 +28,18 @@ worktree.
 For user-authorized implementation work in Pi, that authorization covers the
 end-to-end delivery workflow in `CLAUDE.md`: use an isolated worktree and branch
 with one writer/integrator, run applicable focused and canonical validation,
-commit conventionally, push, and open a PR. Squash-merge only when all required
-CI is green, the PR is mergeable against fresh `main`, and post-merge `main` CI
-is green; then delete the local branch and worktree and prune worktrees.
+commit conventionally, push, and open a PR. For a standard PR targeting `main`,
+enable GitHub auto-merge with squash; branch protection must require all checks
+and a branch current with `main`. Never enable auto-merge on an intermediate
+stacked PR whose base is another feature branch. After the automatic merge,
+confirm post-merge `main` CI is green, then delete the local branch and worktree
+and prune worktrees.
 
 This standing authorization never permits force-pushes, red or pending CI
-merges, direct `main` commits, production deployment or configuration changes,
-destructive actions, scope expansion, or bypassing human or product decisions.
-If validation or CI fails, stop safely and report it rather than delivering.
+merges, manual bypass of branch protection, direct `main` commits, production
+deployment or configuration changes, destructive actions, scope expansion, or
+bypassing human or product decisions. If validation or CI fails, stop safely and
+report it rather than delivering; do not disable auto-merge safeguards.
 
 ## Validation
 
