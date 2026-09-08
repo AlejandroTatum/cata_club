@@ -16,6 +16,10 @@ from app.dominio.mensajes import (
     MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_IDENTIDAD_DUPLICADA,
     MENSAJE_VINCULACION_NO_DISPONIBLE,
 )
+from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
+from app.dominio.representados_alcanzables import (
+    exigir_representante_destino_alcanzable, exigir_sin_representados_menores_activos,
+)
 from app.dominio.rol_unico import exigir_rol_unico
 from app.soporte_transversal.tiempo import hoy_club
 from app.soporte_transversal.firma_archivos import es_firma_valida
@@ -46,18 +50,19 @@ logger = logging.getLogger("cataclub.servicios.personas")
 # servicio de dominio, no en el ORM ni en el router.
 EDAD_MINIMA_ALUMNO = 5
 EDAD_MAXIMA_ALUMNO = 74
-EDAD_MAYORIA_EDAD = 18
+# `EDAD_MAYORIA_EDAD` se movió a `app.dominio.reglas_negocio` (issue #1139):
+# `rol_servicio.cambiar_estado_cuenta` también la necesita y no puede
+# importarla desde acá sin armar un ciclo (ver el comentario de ese
+# módulo). Se re-importa con el mismo nombre para no tocar los cinco
+# módulos externos que ya hacen `from persona_servicio import
+# EDAD_MAYORIA_EDAD`.
 
 
 def _calcular_edad(fecha_nacimiento: date, referencia: date | None = None) -> int:
     # Día del CLUB, no del contenedor: un cumpleaños ocurre a la medianoche
     # LOCAL, y de esta edad depende si el alumno necesita representante legal.
     # Con `date.today()` (UTC) el alumno "cumplía años" cinco horas antes.
-    ref = referencia or hoy_club()
-    anos = ref.year - fecha_nacimiento.year
-    if (ref.month, ref.day) < (fecha_nacimiento.month, fecha_nacimiento.day):
-        anos -= 1
-    return anos
+    return calcular_edad(fecha_nacimiento, referencia or hoy_club())
 
 
 # --- INS-2: freno progresivo de intentos de vinculación ---------------------
@@ -286,6 +291,7 @@ class PersonaServicio:
         correo" en "puedo leer y escribir la ficha médica de un menor".
         """
         self._exigir_correo_verificado_del_representante(representante_id)
+        self._exigir_representante_destino_alcanzable(representante_id)
 
         try:
             representado = self._resolver_representado_elegible(representante_id, datos.cedula)
@@ -347,6 +353,14 @@ class PersonaServicio:
         cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
         if cuenta is not None and not cuenta.correo_verificado:
             raise PermisosInsuficientes(MENSAJE_CORREO_SIN_VERIFICAR, seguro_mostrar=True)
+
+    def _exigir_representante_destino_alcanzable(self, representante_id: int) -> None:
+        """Issue #1139: cierra el mismo invariante que `RolServicio.
+        cambiar_estado_cuenta` y `cambiar_estado`, pero por la otra puerta --
+        nada impedía vincular a un representado a una cuenta YA desactivada,
+        dejándolo en el mismo estado prohibido sin pasar por ninguna baja."""
+        cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
+        exigir_representante_destino_alcanzable(representante_id, cuenta)
 
     def _resolver_representado_elegible(self, representante_id: int, cedula: str) -> Persona:
         """Devuelve la Persona elegible para ser vinculada, o levanta
@@ -537,6 +551,14 @@ class PersonaServicio:
         if not activo and usuario is not None:
             RolServicio(self.db)._asegurar_que_queda_otro_administrador(
                 usuario, "dar de baja a esta persona"
+            )
+            # Issue #1139: la baja lógica también apaga el `Usuario` (línea de
+            # abajo), así que puede dejar a un menor representado sin nadie
+            # que pueda acceder a su ficha exactamente igual que
+            # `cambiar_estado_cuenta` -- mismo invariante, mismo mensaje.
+            exigir_sin_representados_menores_activos(
+                persona_id, self.repo.listar_representados(persona_id),
+                hoy_club(), "dar de baja a esta persona",
             )
             usuario.activo = False
             # Criterio unificado (issue #4): la baja lógica RETIRA acceso

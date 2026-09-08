@@ -4,10 +4,12 @@ from app.dominio.modelos import Usuario
 from app.dominio.enums import TipoRol
 from app.dominio.etiquetas import rol_en_castellano
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
+from app.dominio.representados_alcanzables import exigir_sin_representados_menores_activos
 from app.dominio.rol_unico import exigir_rol_unico
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
+from app.soporte_transversal.tiempo import hoy_club
 
 
 class RolServicio:
@@ -185,6 +187,12 @@ class RolServicio:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if not activo:
             self._asegurar_que_queda_otro_administrador(usuario, "desactivar esta cuenta")
+            # Issue #1139: desactivar esta cuenta no puede dejar a un menor
+            # representado sin nadie que pueda acceder a su ficha.
+            exigir_sin_representados_menores_activos(
+                persona_id, self.repo_persona.listar_representados(persona_id),
+                hoy_club(), "desactivar esta cuenta",
+            )
             # Criterio unificado (issue #4): desactivar RETIRA acceso, así que
             # además del flag se invalidan las sesiones activas. Reactivar NO
             # bombea: devolver el acceso no invalida nada (y los tokens
