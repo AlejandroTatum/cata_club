@@ -65,12 +65,14 @@ describe("landing vertical space (#871)", (): void => {
       expect(pxIn(ruleAt(css, ".landing-logro-photo", mobileBlock), "height")).toBe(160);
     });
 
-    it("keeps the podios row at 150px on desktop, 120px on mobile", (): void => {
+    it("keeps the carousel thumbnail row compact on desktop and mobile", (): void => {
       const css = landingCss();
-      expect(pxIn(ruleAt(css, ".landing-podios li"), "height")).toBe(150);
+      expect(pxIn(ruleAt(css, ".landing-logro-tab"), "min-height")).toBe(94);
+      expect(ruleAt(css, ".landing-logro-tablist")).toContain("padding: 3px 2px 8px");
 
       const mobileBlock = css.indexOf("@media (max-width: 768px)");
-      expect(pxIn(ruleAt(css, ".landing-podios li", mobileBlock), "height")).toBe(120);
+      expect(ruleAt(css, ".landing-logro", mobileBlock)).toContain("display: flex");
+      expect(ruleAt(css, ".landing-logro", mobileBlock)).toContain("flex-direction: column");
     });
   });
 

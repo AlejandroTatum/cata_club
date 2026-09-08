@@ -1,20 +1,19 @@
+"use client";
+
+import { useCallback, useEffect, useState, type FocusEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
-import {
-  LOGRO_DESTACADO,
-  logroPhotoSrc,
-  MAS_PODIOS,
-  PODIO_DIMENSIONS,
-} from "./landing-logros";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ACHIEVEMENT_GROUPS, logroPhotoSrc, PODIO_DIMENSIONS, type AchievementGroup } from "./landing-logros";
+
+const AUTO_ADVANCE_INTERVAL_MS = 10_000;
 
 interface LogroFactProps {
   label: string;
-  value: string;
+  value?: string;
 }
 
-/** One dt/dd pair of the feature's fact sheet. `Año` and `Resultado` are the
- * only two facts that ever call this with an empty `value` filtered out
- * upstream — see `Palmares`'s conditional rendering below. */
-function LogroFact({ label, value }: LogroFactProps): React.ReactElement {
+function LogroFact({ label, value }: LogroFactProps): React.ReactElement | null {
+  if (!value) return null;
   return (
     <div className="landing-logro-fact">
       <dt>{label}</dt>
@@ -23,82 +22,193 @@ function LogroFact({ label, value }: LogroFactProps): React.ReactElement {
   );
 }
 
-/**
- * Logros. A server component — the retired demo toggle was the only reason
- * this needed client state, and it is gone. The section now tells the
- * club's one documented, out-of-country result as a short story with a fact
- * sheet (approved prototype `landing-logros-d-historia.html`, issue #657's
- * follow-up), instead of a five-row placeholder trophy wall.
- *
- * `Año` and `Resultado` render only when the club has actually supplied
- * them — see `LOGRO_DESTACADO` in `landing-logros.ts`. They are empty today,
- * so neither fact renders; never fill them with a placeholder value.
- */
+function nextIndex(current: number, offset: number): number {
+  return (current + offset + ACHIEVEMENT_GROUPS.length) % ACHIEVEMENT_GROUPS.length;
+}
+
 export default function Palmares(): React.ReactElement {
+  const [current, setCurrent] = useState(0);
+  const [resetVersion, setResetVersion] = useState(0);
+  const [hovering, setHovering] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const selected = ACHIEVEMENT_GROUPS[current];
+
+  useEffect((): (() => void) => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return (): void => {};
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = (): void => setReducedMotion(media.matches);
+    update();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", update);
+      return (): void => media.removeEventListener("change", update);
+    }
+    media.addListener?.(update);
+    return (): void => media.removeListener?.(update);
+  }, []);
+
+  useEffect((): (() => void) | undefined => {
+    if (reducedMotion || paused || hovering || focused) return undefined;
+    const timer = window.setInterval((): void => {
+      setCurrent((index): number => nextIndex(index, 1));
+    }, AUTO_ADVANCE_INTERVAL_MS);
+    return (): void => window.clearInterval(timer);
+  }, [focused, hovering, paused, reducedMotion, resetVersion]);
+
+  const select = useCallback((index: number): void => {
+    setCurrent(index);
+    setResetVersion((version): number => version + 1);
+  }, []);
+
+  const move = useCallback((offset: number): void => {
+    setCurrent((index): number => nextIndex(index, offset));
+    setResetVersion((version): number => version + 1);
+  }, []);
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const next = nextIndex(index, 1);
+      select(next);
+      document.getElementById(`landing-logro-tab-${next}`)?.focus();
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const previous = nextIndex(index, -1);
+      select(previous);
+      document.getElementById(`landing-logro-tab-${previous}`)?.focus();
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      const destination = event.key === "Home" ? 0 : ACHIEVEMENT_GROUPS.length - 1;
+      select(destination);
+      document.getElementById(`landing-logro-tab-${destination}`)?.focus();
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      select(index);
+    }
+  };
+
+  const handleBlur = (event: FocusEvent<HTMLElement>): void => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+  };
+
   return (
-    <section className="landing-section landing-wins" id="logros" data-motion-section data-testid="motion-section">
+    <section
+      className="landing-section landing-wins"
+      id="logros"
+      data-motion-section
+      data-testid="motion-section"
+      aria-label="Logros deportivos"
+      aria-roledescription="carousel"
+      role="region"
+      onMouseEnter={(): void => setHovering(true)}
+      onMouseLeave={(): void => setHovering(false)}
+      onFocus={(): void => setFocused(true)}
+      onBlur={handleBlur}
+    >
       <header className="landing-section-header" data-reveal>
         <span className="landing-eyebrow">Nuestra vitrina</span>
         <h2>Logros</h2>
       </header>
 
-      <article className="landing-logro" data-reveal>
+      <article
+        className="landing-logro"
+        id="landing-logro-panel"
+        role="group"
+        aria-roledescription="slide"
+        aria-label={`Logro ${current + 1} de ${ACHIEVEMENT_GROUPS.length}: ${selected.title}`}
+        aria-live="polite"
+        data-reveal
+      >
         <figure className="landing-logro-photo">
           <Image
-            src={logroPhotoSrc(LOGRO_DESTACADO.photo)}
-            alt=""
-            width={934}
-            height={1000}
-            sizes="(max-width: 768px) 100vw, 34vw"
+            src={logroPhotoSrc(selected.photo)}
+            alt={`${selected.title} — imagen de referencia provisional`}
+            width={PODIO_DIMENSIONS[selected.photo].width}
+            height={PODIO_DIMENSIONS[selected.photo].height}
+            sizes="(max-width: 768px) 100vw, 42vw"
             loading="lazy"
           />
-          <span className="landing-logro-index" aria-hidden="true">01</span>
+          <span className="landing-logro-index" aria-hidden="true">
+            {String(current + 1).padStart(2, "0")}
+          </span>
         </figure>
 
         <div className="landing-logro-story">
-          <p className="landing-logro-kicker">{LOGRO_DESTACADO.kicker}</p>
-          <h3 className="landing-logro-title">
-            <span>Sudamericano</span>
-            <br />
-            <span>Sub-11 y Sub-13</span>
-          </h3>
-          <p>{LOGRO_DESTACADO.story}</p>
+          <p className="landing-logro-kicker">{selected.kicker}</p>
+          <h3 className="landing-logro-title">{selected.title}</h3>
+          <p>{selected.story}</p>
           <dl className="landing-logro-facts">
-            <LogroFact label="Competencia" value={LOGRO_DESTACADO.event} />
-            <LogroFact label="Sede" value={LOGRO_DESTACADO.venue} />
-            <LogroFact label="Representación" value={LOGRO_DESTACADO.representation} />
-            <LogroFact label="Categorías" value={LOGRO_DESTACADO.categories} />
-            {LOGRO_DESTACADO.year !== "" && <LogroFact label="Año" value={LOGRO_DESTACADO.year} />}
-            {LOGRO_DESTACADO.result !== "" && <LogroFact label="Resultado" value={LOGRO_DESTACADO.result} />}
+            <LogroFact label="Competencia" value={selected.competition} />
+            <LogroFact label="Año" value={selected.year} />
+            <LogroFact label="Resultado" value={selected.result} />
+            <LogroFact label="Sede" value={selected.venue} />
+            <LogroFact label="Categorías" value={selected.category} />
+            <LogroFact label="Deportistas" value={selected.athletes} />
           </dl>
+          <p className="landing-logro-source-note">
+            Imágenes de referencia provisionales; no constituyen evidencia de eventos.
+          </p>
+        </div>
+
+        <div className="landing-logro-controls" aria-label="Controles de logros">
+          <span className="landing-logro-position" aria-live="polite">
+            {current + 1} / {ACHIEVEMENT_GROUPS.length}
+          </span>
+          <button type="button" className="landing-logro-control" aria-label="Logro anterior" onClick={(): void => move(-1)}>
+            <ChevronLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="landing-logro-control landing-logro-control-pause"
+            aria-label={paused ? "Reanudar logros" : "Pausar logros"}
+            aria-pressed={paused}
+            onClick={(): void => {
+              setPaused((value): boolean => !value);
+              setResetVersion((version): number => version + 1);
+            }}
+          >
+            {paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+            <span>{paused ? "Reanudar" : "Pausar"}</span>
+          </button>
+          <button type="button" className="landing-logro-control" aria-label="Logro siguiente" onClick={(): void => move(1)}>
+            <ChevronRight aria-hidden="true" />
+          </button>
         </div>
       </article>
 
-      <div className="landing-podios-block" data-reveal>
-        <p className="landing-podios-label">
-          <span>Más podios del club</span>
-        </p>
-        <ul className="landing-podios">
-          {MAS_PODIOS.map((photo, index): React.ReactElement => {
-            const dimensions = PODIO_DIMENSIONS[photo];
-            return (
-              <li key={photo}>
-                <Image
-                  src={logroPhotoSrc(photo)}
-                  alt=""
-                  width={dimensions.width}
-                  height={dimensions.height}
-                  sizes="(max-width: 768px) 50vw, 25vw"
-                  loading="lazy"
-                />
-                <span className="landing-podios-index" aria-hidden="true">
-                  {String(index + 2).padStart(2, "0")}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <nav className="landing-logro-thumbnails" aria-label="Competencias">
+        <div className="landing-logro-tablist" role="tablist" aria-label="Seleccionar competencia">
+          {ACHIEVEMENT_GROUPS.map((group: AchievementGroup, index: number): React.ReactElement => (
+            <button
+              key={group.id}
+              id={`landing-logro-tab-${index}`}
+              type="button"
+              className="landing-logro-tab"
+              role="tab"
+              aria-selected={index === current}
+              aria-current={index === current ? "true" : undefined}
+              aria-controls="landing-logro-panel"
+              tabIndex={index === current ? 0 : -1}
+              onClick={(): void => select(index)}
+              onKeyDown={(event): void => handleTabKeyDown(event, index)}
+            >
+              <span className="landing-logro-tab-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+              <Image
+                src={logroPhotoSrc(group.photo)}
+                alt=""
+                width={PODIO_DIMENSIONS[group.photo].width}
+                height={PODIO_DIMENSIONS[group.photo].height}
+                sizes="96px"
+                loading="lazy"
+                aria-hidden="true"
+              />
+              <span>{group.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
     </section>
   );
 }
