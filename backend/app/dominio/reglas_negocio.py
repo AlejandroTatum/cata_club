@@ -5,7 +5,7 @@ precisamente cuando AMBAS capas lo necesitan: `dominio` no depende de
 ninguna de las dos, así que importar desde acá nunca arma un ciclo. Ver el
 caso que originó este archivo justo abajo.
 """
-from datetime import time
+from datetime import date, time
 
 # Issue #262, recreado desde cero para la corrección explícita del issue
 # #389 (slice 2): el mecanismo previo (rol + este mismo tope) fue eliminado
@@ -53,3 +53,25 @@ HORA_MAXIMA_ENTRENAMIENTO = time(22, 0)
 # club, que entrena de lunes a sábado: un `< 6` la dejaría sin poder
 # guardarse.
 MAXIMO_DIAS_POR_CATEGORIA = 6
+
+# Issue #1139: `RolServicio.cambiar_estado_cuenta` necesita esta misma
+# frontera para el nuevo invariante "no dejar a un menor con
+# representante_id apuntando a una cuenta inactiva" -- pero `rol_servicio`
+# NO puede importarla desde `persona_servicio` (donde vivía hasta acá): esta
+# ya importa `RolServicio` (issue #762), y el import cruzado armaría
+# exactamente el ciclo que ese módulo evita a propósito. `persona_servicio`
+# sigue siendo dueño de `EDAD_MINIMA_ALUMNO`/`EDAD_MAXIMA_ALUMNO`, que
+# ningún otro módulo necesita; solo la frontera de mayoría de edad se movió.
+EDAD_MAYORIA_EDAD = 18
+
+
+def calcular_edad(fecha_nacimiento: date, referencia: date) -> int:
+    """Edad cumplida en la fecha `referencia`. Sin default: cada llamador
+    decide su propio "hoy" (`hoy_club()` en el camino de negocio, una fecha
+    fija en los tests) -- este módulo de `dominio` no puede importar
+    `soporte_transversal.tiempo` sin arriesgar el mismo tipo de ciclo que
+    esta función existe para evitar."""
+    anos = referencia.year - fecha_nacimiento.year
+    if (referencia.month, referencia.day) < (fecha_nacimiento.month, fecha_nacimiento.day):
+        anos -= 1
+    return anos
