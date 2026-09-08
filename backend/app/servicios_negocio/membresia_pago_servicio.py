@@ -2006,49 +2006,15 @@ class PagoServicio:
           - No aplica si el pago YA tiene voucher: ese es el camino de
             siempre (revisar el comprobante adjunto), sin cambios acá.
         """
-        if actor_persona_id is None:
-            raise PermisosInsuficientes(
-                "No se pudo identificar al administrador que aprueba o "
-                "rechaza este pago.",
-                detalle_tecnico=f"pago_id={pago_id} token sin persona_id",
-            )
+        self._exigir_actor_identificado(actor_persona_id, pago_id)
 
         pago = self.repo.obtener_por_id_con_bloqueo(pago_id)
-        if not pago:
-            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+        self._exigir_pago_en_validacion(pago, pago_id)
 
-        if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
-            raise OperacionInvalida(
-                "Solo un pago pendiente de validación puede aprobarse o "
-                f"rechazarse; este pago ya está "
-                f"{estado_de_pago_en_castellano(pago.estado_pago)}.",
-                detalle_tecnico=f"pago_id={pago_id} estado_pago={pago.estado_pago.value}",
-            )
-
-        # Ver docstring: excepción auditada, angosta a propósito (aprobar +
-        # TRANSFERENCIA + sin voucher). El chequeo va ACÁ, antes de tocar el
-        # pago, para que un motivo faltante lo rechace limpio (400) sin
-        # dejar ningún efecto secundario a medias.
-        if datos.estado_pago == EstadoPago.APROBADO:
-            membresia = self.repo_membresia.obtener_por_id(pago.membresia_id)
-            if membresia is None:
-                raise EntidadNoEncontrada(f"Membresía con id {pago.membresia_id} no encontrada")
-            self._exigir_membresia_financieramente_operativa(membresia)
-
-        requiere_motivo_excepcion = (
-            datos.estado_pago == EstadoPago.APROBADO
-            and pago.tipo_pago == TipoPago.TRANSFERENCIA
-            and not pago.voucher_url
+        self._exigir_membresia_operativa_al_aprobar(pago, datos)
+        requiere_motivo_excepcion = self._exigir_motivo_excepcion_sin_comprobante(
+            pago, datos, pago_id,
         )
-        if requiere_motivo_excepcion and (
-            datos.motivo_excepcion_sin_comprobante is None
-            or not datos.motivo_excepcion_sin_comprobante.strip()
-        ):
-            raise OperacionInvalida(
-                "Debe indicar el motivo de la excepción para aprobar una "
-                "transferencia sin comprobante adjunto.",
-                detalle_tecnico=f"pago_id={pago_id} tipo_pago=TRANSFERENCIA voucher_url=None",
-            )
 
         pago.estado_pago = datos.estado_pago
         pago.motivo_rechazo = datos.motivo_rechazo
@@ -2068,59 +2034,9 @@ class PagoServicio:
 
         aviso_ok = True
         if datos.estado_pago == EstadoPago.APROBADO:
-            # `pago.fecha_inicio`/`fecha_fin` NO se tocan acá (issue #400):
-            # Administración no puede editar la cobertura al aprobar, así
-            # que lo que sigue usando `pago.fecha_inicio` es SIEMPRE lo que
-            # `registrar_pago` derivó del monto base y la cuota vigente en
-            # el momento del registro -- nunca un valor que el admin haya
-            # podido pisar en este paso.
-            membresia = pago.membresia
-            # Flush pending changes before counting active family memberships.
-            # With autoflush=False, the ACTIVA state set above is not visible
-            # to subsequent DB queries unless we explicitly flush. The 4th-family
-            # gratuity rule (E04-RF002) depends on an accurate count, which
-            # includes the membership we just activated. El flush (y su red
-            # de seguridad ante `uq_membresia_activa_por_persona`) vive en
-            # `_activar_membresia_con_red_de_seguridad`, compartida con
-            # `aplicar_beneficio_bonificado` (issue #400/4d) -- ver su
-            # docstring.
-            self._activar_membresia_con_red_de_seguridad(membresia, pago.fecha_inicio)
-            try:
-                self._aplicar_regla_familiar_si_corresponde(membresia, pago)
-                self.repo.guardar_cambios(pago)
-                # Un solo commit para membresía + pago (issue #831): antes,
-                # `repo.guardar_cambios(pago)` comiteaba acá adentro, ya
-                # separado del `flush()` de `_activar_membresia_con_red_de_
-                # seguridad` -- ahora se confirman juntos.
-                if commit:
-                    self.db.commit()
-            except IntegrityError as error:
-                self.db.rollback()
-                if "uq_membresia_activa_por_persona" in str(error.orig):
-                    raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
-                raise
-            if commit and notificar:
-                aviso_ok = self._crear_notificacion_pago(
-                    pago=pago,
-                    tipo=TipoNotificacion.PAGO_APROBADO,
-                    mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
-                )
-                # Último paso, ya con la aprobación commiteada: si el broker está
-                # caído, el método loguea y NO propaga (ver su docstring).
-                self._disparar_generacion_comprobante_pdf(pago_id)
+            aviso_ok = self._aprobar_pago(pago, pago_id, commit=commit, notificar=notificar)
         else:
-            # EstadoPago.RECHAZADO: el estado de Membresia no cambia; el rechazo
-            # queda registrado únicamente en Pago.estado_pago y Pago.motivo_rechazo.
-            self.repo.guardar_cambios(pago)
-            if commit:
-                self.db.commit()
-            motivo = f": {pago.motivo_rechazo}" if pago.motivo_rechazo else ""
-            if commit and notificar:
-                aviso_ok = self._crear_notificacion_pago(
-                    pago=pago,
-                    tipo=TipoNotificacion.PAGO_RECHAZADO,
-                    mensaje=f"Su pago fue rechazado{motivo}.",
-                )
+            aviso_ok = self._rechazar_pago(pago, commit=commit, notificar=notificar)
         # Issue #826/#451 (ver el comentario de `PersonaServicio.
         # crear_representado`): este método corre dentro de
         # `run_in_threadpool` y el router arma la respuesta (`pago_a_
@@ -2137,6 +2053,140 @@ class PagoServicio:
         # `_crear_notificacion_pago`).
         pago.aviso_no_enviado = not aviso_ok
         return pago
+
+    # --- Guardias y ramas de validar_pago (issue #458/#459) ------------------
+    def _exigir_actor_identificado(self, actor_persona_id: int | None, pago_id: int) -> None:
+        """Autoría fail-closed (issue #458): sin `persona_id` verificable en el
+        JWT no se aprueba ni se rechaza nada. 403 (`PermisosInsuficientes`) y
+        no 500: no es un bug del servidor, es que no se pudo verificar la
+        identidad de quien pide la operación."""
+        if actor_persona_id is None:
+            raise PermisosInsuficientes(
+                "No se pudo identificar al administrador que aprueba o "
+                "rechaza este pago.",
+                detalle_tecnico=f"pago_id={pago_id} token sin persona_id",
+            )
+
+    def _exigir_pago_en_validacion(self, pago: Pago | None, pago_id: int) -> None:
+        """Existencia + guardia de estado (auditoría, hallazgo 5): la fila
+        llega leída con `SELECT ... FOR UPDATE`, así que dos validaciones
+        concurrentes del mismo pago se serializan y la perdedora recibe
+        `OperacionInvalida` (400) en vez de re-aprobar."""
+        if not pago:
+            raise EntidadNoEncontrada(f"Pago con id {pago_id} no encontrado")
+
+        if pago.estado_pago != EstadoPago.PENDIENTE_VALIDACION:
+            raise OperacionInvalida(
+                "Solo un pago pendiente de validación puede aprobarse o "
+                f"rechazarse; este pago ya está "
+                f"{estado_de_pago_en_castellano(pago.estado_pago)}.",
+                detalle_tecnico=f"pago_id={pago_id} estado_pago={pago.estado_pago.value}",
+            )
+
+    def _exigir_membresia_operativa_al_aprobar(self, pago: Pago, datos: PagoValidarDTO) -> None:
+        """Guardia de solo-lectura financiera, SOLO cuando se aprueba: resolver
+        la membresía (404 si no existe) y exigirla operativa; al rechazar no
+        se activa la membresía ni se mueve dinero, así que no se toca."""
+        if datos.estado_pago != EstadoPago.APROBADO:
+            return
+        membresia = self.repo_membresia.obtener_por_id(pago.membresia_id)
+        if membresia is None:
+            raise EntidadNoEncontrada(f"Membresía con id {pago.membresia_id} no encontrada")
+        self._exigir_membresia_financieramente_operativa(membresia)
+
+    def _exigir_motivo_excepcion_sin_comprobante(
+        self, pago: Pago, datos: PagoValidarDTO, pago_id: int,
+    ) -> bool:
+        """Excepción auditada sin comprobante (issue #459), angosta a
+        propósito (aprobar + TRANSFERENCIA + sin voucher): exige un motivo no
+        vacío y devuelve si la excepción aplica -- es la ÚNICA condición bajo
+        la que `motivo_excepcion_sin_comprobante` se persiste en la columna.
+        El chequeo corre ANTES de tocar el pago, para que un motivo faltante
+        lo rechace limpio (400) sin dejar ningún efecto secundario a medias."""
+        requiere_motivo_excepcion = (
+            datos.estado_pago == EstadoPago.APROBADO
+            and pago.tipo_pago == TipoPago.TRANSFERENCIA
+            and not pago.voucher_url
+        )
+        if requiere_motivo_excepcion and (
+            datos.motivo_excepcion_sin_comprobante is None
+            or not datos.motivo_excepcion_sin_comprobante.strip()
+        ):
+            raise OperacionInvalida(
+                "Debe indicar el motivo de la excepción para aprobar una "
+                "transferencia sin comprobante adjunto.",
+                detalle_tecnico=f"pago_id={pago_id} tipo_pago=TRANSFERENCIA voucher_url=None",
+            )
+        return requiere_motivo_excepcion
+
+    def _aprobar_pago(self, pago: Pago, pago_id: int, *, commit: bool, notificar: bool) -> bool:
+        """Rama APROBADO de `validar_pago`: activa la membresía, aplica la
+        gratuidad familiar (E04-RF002), persiste y comitea, y recién entonces
+        notifica y dispara el comprobante PDF. Devuelve `aviso_ok` (True si
+        la notificación no llegó a correr)."""
+        # `pago.fecha_inicio`/`fecha_fin` NO se tocan acá (issue #400):
+        # Administración no puede editar la cobertura al aprobar, así
+        # que lo que sigue usando `pago.fecha_inicio` es SIEMPRE lo que
+        # `registrar_pago` derivó del monto base y la cuota vigente en
+        # el momento del registro -- nunca un valor que el admin haya
+        # podido pisar en este paso.
+        membresia = pago.membresia
+        # Flush pending changes before counting active family memberships.
+        # With autoflush=False, the ACTIVA state set above is not visible
+        # to subsequent DB queries unless we explicitly flush. The 4th-family
+        # gratuity rule (E04-RF002) depends on an accurate count, which
+        # includes the membership we just activated. El flush (y su red
+        # de seguridad ante `uq_membresia_activa_por_persona`) vive en
+        # `_activar_membresia_con_red_de_seguridad`, compartida con
+        # `aplicar_beneficio_bonificado` (issue #400/4d) -- ver su
+        # docstring.
+        self._activar_membresia_con_red_de_seguridad(membresia, pago.fecha_inicio)
+        try:
+            self._aplicar_regla_familiar_si_corresponde(membresia, pago)
+            self._persistir_pago_validado(pago, commit=commit)
+        except IntegrityError as error:
+            self.db.rollback()
+            if "uq_membresia_activa_por_persona" in str(error.orig):
+                raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA) from error
+            raise
+        aviso_ok = True
+        if commit and notificar:
+            aviso_ok = self._crear_notificacion_pago(
+                pago=pago,
+                tipo=TipoNotificacion.PAGO_APROBADO,
+                mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
+            )
+            # Último paso, ya con la aprobación commiteada: si el broker está
+            # caído, el método loguea y NO propaga (ver su docstring).
+            self._disparar_generacion_comprobante_pdf(pago_id)
+        return aviso_ok
+
+    def _rechazar_pago(self, pago: Pago, *, commit: bool, notificar: bool) -> bool:
+        """Rama RECHAZADO de `validar_pago`: el estado de Membresia no cambia;
+        el rechazo queda registrado únicamente en Pago.estado_pago y
+        Pago.motivo_rechazo. Devuelve `aviso_ok` (True si la notificación no
+        llegó a correr)."""
+        self._persistir_pago_validado(pago, commit=commit)
+        motivo = f": {pago.motivo_rechazo}" if pago.motivo_rechazo else ""
+        aviso_ok = True
+        if commit and notificar:
+            aviso_ok = self._crear_notificacion_pago(
+                pago=pago,
+                tipo=TipoNotificacion.PAGO_RECHAZADO,
+                mensaje=f"Su pago fue rechazado{motivo}.",
+            )
+        return aviso_ok
+
+    def _persistir_pago_validado(self, pago: Pago, *, commit: bool) -> None:
+        """`guardar_cambios` (solo flush) + commit condicional, compartido por
+        las dos ramas de `validar_pago`. En la rama APROBADO el commit es UNO
+        SOLO para membresía + pago (issue #831): antes,
+        `repo.guardar_cambios(pago)` comiteaba acá adentro, ya separado del
+        `flush()` de `_activar_membresia_con_red_de_seguridad` -- ahora se
+        confirman juntos."""
+        self.repo.guardar_cambios(pago)
+        if commit:
+            self.db.commit()
 
     # --- Activación compartida (issue #400/4d) -------------------------------
     def _activar_membresia_con_red_de_seguridad(
