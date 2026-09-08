@@ -503,12 +503,9 @@ def test_el_upsert_por_patch_crea_una_ficha_completa(client, db_session):
 # Los caminos de enrollment
 # ---------------------------------------------------------------------------
 #
-# `EnrollmentFichaMedicaDTO` lo consumen TRES servicios —
-# `enrollment_servicio` (alta pública), `persona_servicio` (representados) y
-# `admin_cuenta_servicio` (alta por admin) — así que la regla entra una vez y
-# vale en los tres. Se prueban los tres igual: un DTO compartido es
-# exactamente la clase de cosa que alguien reescribe creyendo que solo la usa
-# un camino.
+# `EnrollmentFichaMedicaDTO` lo consumen los servicios de enrollment y
+# representados, así que la regla entra una vez y vale en ambos. Se prueban
+# los dos igual para evitar que un camino se despegue del otro.
 
 def _dto_ficha_enrollment(**overrides) -> dict:
     cuerpo = {
@@ -642,17 +639,9 @@ def test_el_alta_de_un_representado_acepta_una_ficha_completa(client, db_session
     assert resp.status_code == 201
 
 
-def test_el_alta_por_admin_rechaza_desconocido(db_session):
-    """`AdminCrearCuentaDTO.ficha_medica` reusa el mismo DTO otra vez."""
+def test_la_ficha_desconocida_se_rechaza_en_enrollment():
     from pydantic import ValidationError
-
-    from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
+    from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
 
     with pytest.raises(ValidationError):
-        AdminCrearCuentaDTO(
-            tipo_cuenta="JUGADOR", nombres="Ana", apellidos="Torres",
-            cedula=cedula_valida(740), fecha_nacimiento="1990-01-01",
-            telefono="0991234567", correo="ana740@cataclub.test",
-            contrasenia="password8",
-            ficha_medica=_dto_ficha_enrollment(tipo_sangre="DESCONOCIDO"),
-        )
+        EnrollmentFichaMedicaDTO(**_dto_ficha_enrollment(tipo_sangre="DESCONOCIDO"))

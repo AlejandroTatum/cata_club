@@ -540,11 +540,11 @@ class TestElCandadoMira:
         # que se le pasa a `run_in_threadpool`, esta lista quedaría vacía y la
         # regla de arriba pasaría por la razón equivocada.
         #
-        # Medido sobre este commit: 13 referencias envueltas. La cota estaba en
-        # 9 cuando eran 11, y ya no mordía; se sube a lo medido. Envolver un
-        # sitio nuevo la deja verde (solo puede crecer); DESENVOLVER uno, o
-        # perder una primitiva de la lista, la pone roja.
-        assert len(ENVUELTAS) >= 13
+        # Medido sobre este commit: 12 referencias envueltas. La cota bajó de
+        # 13 al eliminar el endpoint de creación directa de cuentas; las 12
+        # rutas bloqueantes que siguen existiendo deben conservar su envoltura.
+        # DESENVOLVER una, o perder una primitiva de la lista, pone roja la prueba.
+        assert len(ENVUELTAS) >= 12
         nombres = {(modulo.split(".")[-1], handler) for modulo, handler, _ in ENVUELTAS}
         assert ("membresias_pagos_router", "subir_voucher") in nombres
         assert ("chatbot_router", "consultar") in nombres

@@ -15,7 +15,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+
 import { createPortal } from "react-dom";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -24,7 +24,6 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Badge,
   Button,
-  buttonClasses,
   DataBox,
   DataRow,
   EmptyState,
@@ -56,12 +55,10 @@ import {
   Building2,
   Stethoscope,
   Loader2,
-  Plus,
   ToggleLeft,
   ToggleRight,
   Pencil,
   X,
-  UserPlus,
   Wallet,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
@@ -960,12 +957,6 @@ export default function MembersPage(): React.ReactElement {
         // everything explaining HOW it works lives behind "Ver ayuda" — which
         // is why the note about the 200-record cap is not repeated here.
         subtitle="Las cuentas que pagan y los jugadores que tienen a cargo."
-        actions={
-          <Link href="/admin/crear-cuenta" className={buttonClasses("primary", "sm")}>
-            <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Crear cuenta
-          </Link>
-        }
       >
         {error && (
           <ErrorState
@@ -1059,9 +1050,9 @@ export default function MembersPage(): React.ReactElement {
 
         {/* Search + filter chips. They used to sit loose on the canvas as two
             unrelated rows; `FilterPanel` frames them and fixes their order.
-            "Crear cuenta" used to sit in the search row too — the screen's
-            primary action, at the end of a control that filters. It lives in
-            the header's `actions` slot now — see `AppShellProps.actions`. */}
+            Account creation is intentionally absent: new members use the
+            public enrollment flow, while this screen remains focused on
+            roles, account status, memberships, and payments. */}
         <FilterPanel
           label="Filtros de miembros"
           search={

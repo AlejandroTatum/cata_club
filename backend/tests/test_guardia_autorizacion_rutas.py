@@ -320,8 +320,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
-    ("POST", "/personas/admin/cuentas"): frozenset({"ADMINISTRADOR"}),
-    ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
+        ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     # Issue #398: solo el club (ADMINISTRADOR) concede un beneficio -- el
     # propio beneficiario nunca puede pedirlo (ver docstring del endpoint).
     ("POST", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),

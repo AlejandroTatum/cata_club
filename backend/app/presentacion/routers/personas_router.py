@@ -18,9 +18,7 @@ from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
-from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.beneficio_schemas import (
     AsignacionDescuentoCreateDTO, AsignacionDescuentoResponseDTO,
 )
@@ -53,37 +51,6 @@ def _personas_a_filas(personas) -> list[list[str]]:
     return filas
 
 router = APIRouter(prefix="/personas", tags=["Personas"])
-
-
-# --- Flujo 1: creación de cuenta completa desde el admin --------------------
-# Rate-limited (D6-c): acuña una identidad nueva (Persona + Usuario + Rol), la
-# misma categoría que `POST /auth/registro` (D1: "acuñar identidades nuevas
-# exige POST /auth/registro, que está limitado -- eso cierra el lazo"). Mismo
-# tier que `registro` (20/min): es su equivalente admin-driven, no una
-# operación masiva. El límite protege el ACUÑADO de identidades en sí --
-# desde el issue #1015 este endpoint ya NO devuelve tokens de auto-login, así
-# que no confundir el límite con "hay tokens que proteger": si algún día se
-# quita el límite, sigue siendo un acuñado de identidades sin freno.
-# `registrar_persona` (abajo) NO se decora porque solo crea una Persona --
-# ninguna credencial, ninguna identidad nueva que acuñar.
-@router.post(
-    "/admin/cuentas",
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
-)
-@limiter.limit("20/minute")
-async def crear_cuenta_admin(
-    request: Request, datos: AdminCrearCuentaDTO, db: Session = Depends(obtener_sesion)
-):
-    """Crea Persona + Usuario + Rol en un solo request (JUGADOR / REPRESENTANTE / MENOR).
-    Retorna { persona_id, usuario_id, correo } -- issue #1015: sin tokens de
-    auto-login, el llamador es el ADMINISTRADOR autenticado, no la cuenta
-    recién creada."""
-    # `run_in_threadpool` (issue #826, mismo motivo que `registro` en
-    # auth_router.py): `crear_cuenta` hashea con bcrypt (cientos de ms de CPU
-    # pura), y un cómputo no cede el event loop ni con un driver async. Ver el
-    # candado en `tests/test_bloqueo_del_event_loop.py`.
-    return await run_in_threadpool(AdminCuentaServicio(db).crear_cuenta, datos)
 
 
 @router.post(
@@ -506,8 +473,7 @@ async def crear_representado(
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
     # `run_in_threadpool` (issue #826): si el representado trae credenciales
-    # propias, `crear_representado` hashea con bcrypt. Mismo bloqueo de CPU que
-    # `crear_cuenta_admin`.
+    # propias, `crear_representado` hashea con bcrypt.
     return await run_in_threadpool(
         PersonaServicio(db).crear_representado, persona_id, datos,
     )
