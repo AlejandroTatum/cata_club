@@ -212,27 +212,47 @@ está en `backend/scripts/RUNBOOK_reset_db.md`.
 
 ## Testing
 
-Usá los targets de Make como ruta canónica; la suite del backend corre contra
-PostgreSQL real en `db-test`, no SQLite.
+Corré primero el test más enfocado que cubra tu cambio. Antes de subir una
+rama o abrir un PR, elegí una lane explícita:
+
+| Cambio | Comando | Cubre localmente |
+|---|---|---|
+| Backend o migraciones | `make pre-pr LANE=backend` | Guard de `.env` trackeados, Ruff, import-linter, pip-audit, pytest sobre PostgreSQL real y todos los tests raíz. |
+| Frontend | `make pre-pr LANE=frontend` | Guard de `.env` trackeados, audit, typecheck, lint, una sola corrida con cobertura, build y Playwright E2E. |
+| Compose, scripts raíz o CI config | `make pre-pr LANE=integration` | Guard de `.env` trackeados y todos los tests raíz, incluido el contrato de Compose; no reproduce la paridad de imágenes de producción. |
+| Cambio transversal | `make pre-pr LANE=full` | Guard de `.env` trackeados, lane backend y lane frontend. |
+
+`make pre-pr` sin `LANE`, o con una lane desconocida, falla antes de correr
+checks. Cada lane válida ejecuta el guard de `.env` trackeados exactamente una
+vez. Las lanes requieren las dependencias locales ya instaladas y Docker para
+la lane backend. El preflight inicia `db-test` si hace falta; la suite usa
+PostgreSQL real en el puerto `5436`, no SQLite, y ese servicio es single-tenant.
+
+La lane backend exige `age` antes de iniciar los tests para que los controles de
+backup de los tests raíz no queden salteados. Instalalo por fuera de la
+verificación si falta; la lane no modifica toolchains. La lane frontend tampoco
+instala dependencias ni navegadores: una vez por máquina (y de nuevo solo si
+cambia la versión de Playwright), ejecutá antes:
 
 ```bash
-make test             # backend + frontend + gates raíz seleccionados
-make test-root        # todos los tests de tests/ (Compose, Alembic y QA)
-make ci-backend       # análogo local parcial del job backend de CI
+cd frontend
+pnpm install
+pnpm exec playwright install chromium
 ```
 
-`make test` no incluye todos los checks de `tests/`; `make test-root` sí. El
-preflight de backend levanta `db-test` si hace falta y mantiene la clave JWT
-de descarte solo para la interpolación de Compose. `db-test` publica el
-puerto `5436` y es single-tenant: no compartas ese servicio entre corridas
-concurrentes.
+Si falta una dependencia o Chromium, la lane falla con un mensaje de setup en
+vez de descargar o instalar durante la verificación.
 
-Para las suites específicas del frontend o E2E, consultá sus instrucciones:
+### Límites de la verificación local
 
-```bash
-cd frontend && pnpm test
-cd frontend && pnpm exec playwright test
-```
+Las lanes son predictivas, no una afirmación de paridad total con GitHub
+Actions. `integration` se limita a los contratos raíz y de Compose: no reproduce
+el job `docker-images` (build y arranque de la pila de producción, diagnósticos y
+publicación en GHCR). Tampoco reproduce `migraciones-desde-cero` contra su
+servicio PostgreSQL vacío y aislado. Registrá esos gates exactos como omitidos
+en la evidencia del cambio. Después del push, el monitoreo remoto de CI lo hace
+el agente de fondo de Pi `gentle-ai-monitor`, no un target de Make;
+`gentle-ai-verify` se limita a la verificación local.
 
 ### E2E contra el backend real
 
@@ -240,12 +260,7 @@ cd frontend && pnpm exec playwright test
 no necesita Docker y prueba el render del cliente. Los specs `*.live.spec.ts`
 son los que atraviesan un backend de verdad y verifican lo que pasa *después*
 de un envío (toast de éxito y estado persistido tras recargar). Requieren el
-entorno de QA levantado:
-
-```bash
-make qa-up
-make qa-live
-```
+entorno de QA de la sección anterior; con el stack listo, ejecutá `make qa-live`.
 
 Quedan fuera de la suite por defecto a propósito: `playwright.config.ts` solo
 declara el proyecto `e2e-live` cuando `E2E_LIVE=1`.

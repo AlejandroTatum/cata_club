@@ -1,7 +1,9 @@
 .PHONY: help dev dev-backend dev-frontend test test-backend test-backend-preflight \
        test-root ci-backend test-frontend test-compose test-qa-guard \
        test-qa-recovery-delivery test-diagnostico-horarios \
-       lint lint-backend lint-frontend typecheck build build-frontend \
+       pre-pr pre-pr-guard-secrets pre-pr-backend pre-pr-frontend \
+         pre-pr-integration pre-pr-full \
+         lint lint-backend lint-frontend typecheck build build-frontend \
        install install-backend install-frontend \
        docker-up docker-down docker-build \
        migrate migrate-create db-reset seed seed-bulk clean \
@@ -47,12 +49,82 @@ test: test-backend-preflight test-compose test-qa-guard test-frontend ## Run bac
 # `make test` cubre la suite del backend, frontend y algunos gates raíz, pero
 # NO incluye todos los tests de `tests/`; usá `make test-root` para eso.
 
+# ─── Pre-PR lanes ──────────────────────────────────────────────────────────────
+# Select a lane explicitly: a missing or unknown lane must not quietly run a
+# smaller check set. See README.md for the change-to-lane matrix and limitations.
+pre-pr: ## Run an explicit pre-PR lane (LANE=backend|frontend|integration|full)
+	@if [ -z "$(LANE)" ]; then \
+		echo "Error: LANE is required. Use: make pre-pr LANE={backend|frontend|integration|full}" >&2; \
+		exit 2; \
+	fi
+	@case "$(LANE)" in \
+		backend) $(MAKE) pre-pr-guard-secrets && $(MAKE) pre-pr-backend ;; \
+		frontend) $(MAKE) pre-pr-guard-secrets && $(MAKE) pre-pr-frontend ;; \
+		integration) $(MAKE) pre-pr-guard-secrets && $(MAKE) pre-pr-integration ;; \
+		full) $(MAKE) pre-pr-guard-secrets && $(MAKE) pre-pr-full ;; \
+		*) echo "Error: unknown LANE '$(LANE)'. Use: backend, frontend, integration, or full." >&2; exit 2 ;; \
+	esac
+
+# Match the tracked-.env policy of CI's `guard-secretos` job. This target needs
+# Bash for the NUL-delimited Git file list used by the workflow.
+pre-pr-guard-secrets: SHELL := /bin/bash
+pre-pr-guard-secrets: ## Check that no real .env file is tracked (CI guard policy)
+	@set -euo pipefail; \
+	IFS=$$'\n' read -r -d '' -a tracked < <(git ls-files -z | tr '\0' '\n') || true; \
+	bad=(); \
+	for f in "$${tracked[@]}"; do \
+		case "$$f" in \
+			*.example) ;; \
+			.env|.env.*|*/.env|*/.env.*) bad+=("$$f") ;; \
+		esac; \
+	done; \
+	if [ "$${#bad[@]}" -gt 0 ]; then \
+		printf 'Error: real .env files are tracked: %s\n' "$${bad[*]}" >&2; \
+		exit 1; \
+	fi
+
+pre-pr-backend: ## Run the local backend lane (lint, audit, PostgreSQL, root tests)
+	cd backend && uv run --frozen --no-build ruff check .
+	cd backend && uv run --frozen --no-build lint-imports
+	cd backend && uv run --frozen --no-build pip-audit
+	@command -v age >/dev/null 2>&1 || { \
+		echo "Error: age is required before backend root tests; install age, then rerun this lane. CI backup controls must not be skipped locally." >&2; \
+		exit 1; \
+	}
+	$(MAKE) test-backend-preflight
+	$(MAKE) test-root
+	@echo "Not reproduced locally: CI job 'migraciones-desde-cero' against its isolated empty PostgreSQL service."
+
+pre-pr-frontend: ## Run the local frontend lane (audit, checks, build, E2E)
+	@if [ ! -x frontend/node_modules/.bin/playwright ]; then \
+		echo "Error: frontend dependencies are missing. Run 'cd frontend && pnpm install' once before this lane." >&2; \
+		exit 1; \
+	fi
+	@cd frontend && node -e 'const fs = require("fs"); const { chromium } = require("@playwright/test"); process.exit(fs.existsSync(chromium.executablePath()) ? 0 : 1)' || { \
+		echo "Error: Playwright Chromium is missing. Run 'cd frontend && pnpm exec playwright install chromium' once before this lane." >&2; \
+		exit 1; \
+	}
+	cd frontend && pnpm audit --audit-level=high
+	cd frontend && pnpm type-check
+	cd frontend && pnpm lint
+	cd frontend && pnpm run test:coverage
+	cd frontend && pnpm build
+	cd frontend && pnpm exec playwright test
+
+pre-pr-integration: ## Run the local root/Compose contract lane (not production-image parity)
+	$(MAKE) test-root
+	@echo "Not reproduced locally: CI job 'docker-images' production-image build, boot, diagnostics, and GHCR publication."
+
+pre-pr-full: ## Run the broad local backend and frontend lanes
+	$(MAKE) pre-pr-backend
+	$(MAKE) pre-pr-frontend
+
 # El preflight solo aporta JWT_SECRET_KEY a Compose para que pueda interpolar
 # docker-compose.yml cuando falta `.env`. La clave de descarte no se hereda
 # al pytest ni se usa en producción; el contrato de la suite sigue viviendo
 # en backend/tests/conftest.py.
 test-backend-preflight: ## Start db-test without .env, then run backend tests
-	JWT_SECRET_KEY="$${JWT_SECRET_KEY:-clave-de-descarte-solo-para-compose}" docker compose --profile test up -d db-test
+	JWT_SECRET_KEY="$${JWT_SECRET_KEY:-clave-de-descarte-solo-para-compose}" docker compose --profile test up -d --force-recreate --wait --wait-timeout 60 db-test
 	$(MAKE) test-backend
 
 # Requiere `db-test` corriendo (`docker compose --profile test up -d

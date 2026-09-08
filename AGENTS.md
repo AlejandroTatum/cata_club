@@ -39,6 +39,20 @@ If validation or CI fails, stop safely and report it rather than delivering.
 
 ## Validation
 
+- Run the most focused test that exercises a change first.
+- Before pushing a branch or opening a PR, run the selected `make pre-pr
+  LANE=<backend|frontend|integration|full>` lane. Choose the smallest lane that
+  covers the change; use `full` for cross-cutting changes.
+- `gentle-ai-verify` runs the chosen lane and reports its local result only; it
+  never waits for GitHub and no Make target monitors remote CI. After a push,
+  the separate Pi `gentle-ai-monitor` background agent provides CI monitoring.
+- Do not blindly rerun a failed gate. Inspect the failure and classify it as
+  **deterministic** (caused by the candidate), **transient** (runner or external
+  infrastructure), or **inherited stacked** (present in the base or parent
+  branch) before deciding the next action.
+- Record the exact CI gates skipped locally, including the reason, in the
+  change evidence. Local lanes are predictive checks, not a claim of full CI
+  parity.
 - `make test` runs backend, frontend, and selected integration gates. It does
   **not** include every root-level check in `tests/`.
 - `make test-root` runs all root-level `tests/` checks, including Compose
