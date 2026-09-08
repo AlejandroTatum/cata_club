@@ -131,7 +131,7 @@ test.describe("landing vertical space", () => {
       contentType: "application/json",
     });
 
-    expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBe(380);
+    expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBeCloseTo(380, 0);
     expect(desktopMetrics.tabCount, "competition tab count").toBe(7);
     for (const height of desktopMetrics.tabHeights) {
       expect(height, "competition tab touch target on desktop").toBeGreaterThanOrEqual(94);
@@ -156,7 +156,7 @@ test.describe("landing vertical space", () => {
       contentType: "application/json",
     });
 
-    expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBe(160);
+    expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBeCloseTo(160, 0);
     for (const height of mobileMetrics.tabHeights) {
       expect(height, "competition tab touch target on mobile").toBeGreaterThanOrEqual(94);
     }

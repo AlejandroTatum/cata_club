@@ -284,31 +284,6 @@ def test_una_persona_sin_cuenta_no_queda_bloqueada(db_session):
     assert resultado.representante_id == tutor_sin_cuenta.id
 
 
-def test_una_cuenta_creada_por_un_administrador_nace_verificada(client, db_session):
-    """Las dos vías que crean cuentas exigen ya una sesión de ADMINISTRADOR
-    (`POST /personas/admin/cuentas` y `POST /auth/registro`), así que no son el
-    eslabón que este issue cierra: no hay forma de llegar a ellas sin que el
-    club ya te haya dado credenciales.
-
-    Nacen verificadas porque la alternativa no protege nada y sí rompe el
-    mostrador: el administrador que da de alta a un padre parado frente a él
-    quedaría sin poder vincularle a su hijo, esperando un correo. Que el club
-    identifique a alguien en persona es una comprobación más fuerte que una
-    ida y vuelta por correo, no una más débil."""
-    respuesta = client.post("/api/v1/personas/admin/cuentas", json={
-        "tipo_cuenta": "REPRESENTANTE",
-        "nombres": "Marcela", "apellidos": "Vega", "cedula": cedula_valida(991),
-        "fecha_nacimiento": "1988-07-01", "telefono": "0991230000",
-        "correo": "marcela.mostrador@example.com", "contrasenia": "password8",
-    })
-
-    assert respuesta.status_code == 201, respuesta.text
-    cuenta = db_session.query(Usuario).filter(
-        Usuario.correo == "marcela.mostrador@example.com"
-    ).one()
-    assert cuenta.correo_verificado is True
-
-
 def test_el_rechazo_dice_que_hacer_y_no_gasta_el_freno_de_intentos(db_session):
     """El freno progresivo existe para castigar a quien prueba cédulas en
     serie. Un correo sin verificar no es un intento fallido de adivinanza:

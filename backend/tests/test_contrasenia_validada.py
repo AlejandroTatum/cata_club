@@ -15,7 +15,6 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.dominio.cedula import cedula_valida
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO, RestablecerContraseniaDTO
 from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
@@ -62,7 +61,6 @@ def _construir(dto_nombre: str, contrasenia: str):
         "EnrollmentCredencialesDTO": lambda: EnrollmentCredencialesDTO(
             correo="juan@test.com", contrasenia=contrasenia,
         ),
-        "AdminCrearCuentaDTO": lambda: AdminCrearCuentaDTO(tipo_cuenta="ENTRENADOR", **comun),
         "RegistroUsuarioDTO": lambda: RegistroUsuarioDTO(
             cedula=_CEDULA, correo="juan@test.com", contrasenia=contrasenia,
         ),
@@ -76,10 +74,10 @@ def _construir(dto_nombre: str, contrasenia: str):
 
 @pytest.mark.parametrize("dto_nombre", [
     "EnrollmentRepresentanteDTO", "EnrollmentAlumnoDTO", "EnrollmentCredencialesDTO",
-    "AdminCrearCuentaDTO", "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
+    "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
     "RepresentadoCreateDTO",
 ])
-def test_cada_uno_de_los_siete_campos_reales_aplica_la_misma_regla(dto_nombre):
+def test_cada_uno_de_los_seis_campos_reales_aplica_la_misma_regla(dto_nombre):
     with pytest.raises(ValidationError):
         _construir(dto_nombre, _CONTRASENIA_COMUN)
     _construir(dto_nombre, "miclavefuerte1")  # no lanza
@@ -91,10 +89,10 @@ _CONTRASENIA_QUE_SUPERA_72_BYTES = "x" * 73
 
 @pytest.mark.parametrize("dto_nombre", [
     "EnrollmentRepresentanteDTO", "EnrollmentAlumnoDTO", "EnrollmentCredencialesDTO",
-    "AdminCrearCuentaDTO", "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
+    "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
     "RepresentadoCreateDTO",
 ])
-def test_cada_uno_de_los_siete_campos_reales_rechaza_mas_de_72_bytes(dto_nombre):
+def test_cada_uno_de_los_seis_campos_reales_rechaza_mas_de_72_bytes(dto_nombre):
     with pytest.raises(ValidationError) as error:
         _construir(dto_nombre, _CONTRASENIA_QUE_SUPERA_72_BYTES)
     assert "72 bytes" in str(error.value)

@@ -33,10 +33,31 @@ def _limpiar_contador_intentos():
     auth_servicio_modulo._INTENTOS_FALLIDOS_LOGIN.clear()
 
 
-def test_login_penalizado_no_bloquea_el_event_loop(db_session, client):
+def test_login_penalizado_no_bloquea_el_event_loop(db_session, client, monkeypatch):
     _limpiar_contador_intentos()
     try:
         _crear_usuario(db_session, correo="ana@cataclub.test", contrasenia="clave-correcta")
+
+        # Synchronize on entry to the actual sleeper, not on the thread merely
+        # being scheduled. The constructor patch is needed because AuthServicio
+        # captures time.sleep in its default argument at import time.
+        sleeper_started = threading.Event()
+        real_sleep = time.sleep
+
+        def _observable_sleep(retraso):
+            sleeper_started.set()
+            real_sleep(retraso)
+
+        init_original = auth_servicio_modulo.AuthServicio.__init__
+
+        def _init_with_observable_sleeper(self, db, dormir=real_sleep):
+            init_original(self, db, dormir=_observable_sleep)
+
+        monkeypatch.setattr(
+            auth_servicio_modulo.AuthServicio,
+            "__init__",
+            _init_with_observable_sleeper,
+        )
 
         # 2 fallos consecutivos: no penalizan (ver `_calcular_retraso_login`),
         # solo dejan el contador en 2 para que el 3ro sea el que dispara 1s.
@@ -47,15 +68,11 @@ def test_login_penalizado_no_bloquea_el_event_loop(db_session, client):
             )
             assert respuesta.status_code == 401
 
-        # El 3er fallo consecutivo penaliza con 1s de `time.sleep` REAL
-        # (`_calcular_retraso_login(3) == 1`). Se dispara en un hilo aparte
-        # para poder medir OTRO request (`GET /health`) desde el hilo
-        # principal mientras ese sleep todavía está en curso.
-        a_punto_de_loguear = threading.Event()
+        # El 3er fallo entra al sleep REAL en un hilo aparte, mientras el hilo
+        # principal mide OTRO request (`GET /health`).
         resultado_tercer_intento = {}
 
         def _disparar_tercer_intento_fallido():
-            a_punto_de_loguear.set()
             resultado_tercer_intento["respuesta"] = client.post(
                 "/api/v1/auth/login",
                 data={"username": "ana@cataclub.test", "password": "mal"},
@@ -63,14 +80,7 @@ def test_login_penalizado_no_bloquea_el_event_loop(db_session, client):
 
         hilo = threading.Thread(target=_disparar_tercer_intento_fallido)
         hilo.start()
-        a_punto_de_loguear.wait()
-        # Margen fijo, no arbitrario: le da tiempo al POST de cruzar el
-        # `TestClient` -> ASGI -> `AuthServicio.login` -> `_penalizar_intento_
-        # fallido` y entrar al `time.sleep(1)` real ANTES de que el hilo
-        # principal dispare `/health`. 0.1s alcanza sobrado frente al 1s de
-        # penalización y es chico frente al margen de aserción (200ms) de
-        # abajo, así que no infla el tiempo total del test de forma notoria.
-        time.sleep(0.1)
+        assert sleeper_started.wait(timeout=1.0), "el login no entró al sleeper"
 
         inicio = time.monotonic()
         respuesta_salud = client.get("/health")

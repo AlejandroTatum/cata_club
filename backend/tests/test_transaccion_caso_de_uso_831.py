@@ -25,12 +25,9 @@ import pytest
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import Categoria, DiaSemana, EstadoAsistencia, EstadoMembresia, EstadoPago, TipoPago
 from app.dominio.excepciones import OperacionInvalida
-from app.dominio.modelos import AlumnoHorario, Asistencia, HorarioEntrenamiento, Pago, Persona, Usuario
+from app.dominio.modelos import AlumnoHorario, Asistencia, HorarioEntrenamiento, Pago, Persona
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
-from app.infraestructura.repositorios.usuario_ficha_repositorio import FichaMedicaRepositorio
-from app.servicios_negocio.admin_cuenta_servicio import AdminCuentaServicio
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
-from app.servicios_negocio.dtos.admin_cuenta_schemas import AdminCrearCuentaDTO
 from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
@@ -38,42 +35,6 @@ from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_t
 
 def _falla(*args, **kwargs):
     raise RuntimeError("fallo simulado en la última escritura del caso de uso")
-
-
-# --- 1. AdminCuentaServicio.crear_cuenta: Persona + Usuario + Rol + Ficha --
-
-def _payload_admin_cuenta(**overrides) -> dict:
-    data = {
-        "tipo_cuenta": "JUGADOR",
-        "nombres": "Cata", "apellidos": "Atómica",
-        "cedula": cedula_valida(831),
-        "fecha_nacimiento": "1995-06-15",
-        "telefono": "0991230831",
-        "correo": "atomica831@test.com",
-        "contrasenia": "clave12345",
-        "ficha_medica": {
-            "tipo_sangre": "O_POSITIVO",
-            "enfermedades": [],
-            "contacto_emergencia": "Contacto Emergencia",
-            "telefono_emergencia": "0991230832",
-        },
-    }
-    data.update(overrides)
-    return data
-
-
-def test_crear_cuenta_no_deja_persona_ni_usuario_si_la_ficha_medica_falla(db_session, monkeypatch):
-    """La ficha médica es la ÚLTIMA escritura de `crear_cuenta` (Persona,
-    Usuario, Rol, Ficha). Si falla, nada de lo anterior debe sobrevivir."""
-    monkeypatch.setattr(FichaMedicaRepositorio, "crear", _falla)
-    datos = AdminCrearCuentaDTO(**_payload_admin_cuenta())
-
-    with pytest.raises(RuntimeError):
-        AdminCuentaServicio(db_session).crear_cuenta(datos)
-    db_session.rollback()
-
-    assert db_session.query(Persona).filter(Persona.cedula == datos.cedula).first() is None
-    assert db_session.query(Usuario).filter(Usuario.correo == datos.correo).first() is None
 
 
 # --- 2. AsistenciaServicio.eliminar_horario: alumno_horario + horario -----

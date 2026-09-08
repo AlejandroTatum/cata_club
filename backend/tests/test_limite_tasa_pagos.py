@@ -103,12 +103,8 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
     # para el razonamiento completo por grupo):
     #   - `listar_instituciones`: única superficie anónima del router (D6-a) --
     #     prioridad más alta de todo el cambio, valor fijado por diseño.
-    #   - `crear_cuenta_admin` / `crear_representado`: acuñan una identidad nueva
-    #     (Usuario + tokens), la misma categoría que ya protegen `registro` y
-    #     `autoinscribir` -- ver D1 ("acuñar identidades nuevas exige
-    #     POST /auth/registro, que está limitado"). `crear_cuenta_admin` iguala
-    #     el tier de `registro` (equivalente admin-driven); `crear_representado`
-    #     iguala el tier de autoservicio autenticado (`actualizar_perfil_propio`).
+    #   - `crear_representado` acuña una identidad nueva y recibe el tier de
+    #     autoservicio autenticado establecido por D1.
     #   - `listar_personas` / `listar_representados` / `buscar_personas`: (D6-d)
     #     devuelven listas de personas (PII real en las dos primeras). Tier
     #     admin/autoservicio de confianza, más laxo que las mutaciones.
@@ -122,8 +118,7 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
     #     `crear_membresia` en `membresias_pagos_router`.
     personas_router: {
         "listar_instituciones": "60/minute",
-        "crear_cuenta_admin": "20/minute",
-        "crear_representado": "10/minute",
+                "crear_representado": "10/minute",
         # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo tier de
         # autoservicio autenticado que `crear_representado` -- vincula (no
         # crea) una identidad ya existente a la cuenta del representante. El

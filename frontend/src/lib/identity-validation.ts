@@ -4,12 +4,11 @@
  *
  * ## Why this file exists
  *
- * Four rules that ought to be ONE rule each were instead written three times,
+ * Four rules that ought to be ONE rule each were instead written twice,
  * once per signup wizard, and drifted every time:
  *
  *   - `frontend/src/app/student/enroll/enroll-utils.ts`
  *   - `frontend/src/app/student/add-dependent/add-dependent-utils.ts`
- *   - `frontend/src/app/admin/crear-cuenta/crear-cuenta-utils.ts`
  *
  * Cédula validation was `/^\d{10}$/` in all three (length only — no province,
  * no check digit). Phone validation disagreed between "7-10 digits after
