@@ -30,12 +30,16 @@ Dos triggers, uno por tabla y por dirección del vínculo
 2. `trg_persona_representante_alcanzable`
    (`BEFORE UPDATE OF representante_id ON persona`): rechaza nulear el
    vínculo de un menor, y rechaza vincularlo a una cuenta ya desactivada.
-   Acotado a `UPDATE` (no `INSERT`): el alta de un representado nuevo
-   (`PersonaServicio.crear_representado` / autoinscripción) ya exige
-   `representante_id` para todo menor en el propio servicio, y varias
-   suites siembran Personas menores por ORM directo sin pasar por ese
-   servicio a propósito (para probar otra cosa); un trigger de INSERT
-   rompería esas fixtures sin relación con este issue.
+   Acotado a `UPDATE` (no `INSERT`) A NIVEL DE TRIGGER: el alta de un
+   representado nuevo (`PersonaServicio.crear_representado`) es un
+   `INSERT`, y varias suites siembran Personas menores por ORM directo sin
+   pasar por ningún servicio a propósito (para probar otra cosa); un
+   trigger de `INSERT` rompería esas fixtures sin relación con este issue.
+   Esto NO deja el alta sin cubrir: `crear_representado` SÍ valida el
+   destino con `_exigir_representante_destino_alcanzable` (el mismo chequeo
+   de servicio que usa `vincular_representado`) antes de crear nada -- el
+   respaldo que falta es solo el de la BASE para ese camino puntual, no el
+   invariante en sí.
 
 Por qué NO hace falta una tabla de legado (a diferencia de #762)
 -------------------------------------------------------------------

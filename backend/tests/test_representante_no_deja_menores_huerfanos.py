@@ -253,3 +253,44 @@ def test_vincular_un_representado_a_una_cuenta_sin_usuario_propio_sigue_funciona
     )
 
     assert respuesta.status_code == 200
+
+
+# --- crear_representado: la puerta MÁS usada tenía el mismo agujero --------
+# `POST /personas/{id}/representados` (self-service o admin) es el camino
+# más común para dar de alta a un menor -- más que `vincular_representado`,
+# que existe para reasignar a alguien YA cargado. Nada impedía crear un
+# representado nuevo colgado de una cuenta de representante ya desactivada:
+# mismo estado prohibido, alcanzado por la puerta de alta en vez de la de
+# reasignación.
+
+def _representado_payload(cedula: str) -> dict:
+    return {
+        "nombres": "Beto", "apellidos": "Vega", "cedula": cedula,
+        "fecha_nacimiento": MENOR_NACIMIENTO.isoformat(), "telefono": "0991230002",
+    }
+
+
+def test_crear_representado_para_una_cuenta_desactivada_se_rechaza(client, db_session):
+    representante_inactivo = _persona(db_session, "1710034065")
+    _usuario(db_session, representante_inactivo, activo=False)
+
+    respuesta = client.post(
+        f"/api/v1/personas/{representante_inactivo.id}/representados",
+        json=_representado_payload("1710034073"),
+    )
+
+    assert respuesta.status_code == 400
+    mensaje = respuesta.json()["message"].lower()
+    assert "desactivada" in mensaje
+
+
+def test_crear_representado_para_una_cuenta_activa_sigue_funcionando(client, db_session):
+    representante = _persona(db_session, "1710034065")
+    _usuario(db_session, representante)
+
+    respuesta = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=_representado_payload("1710034073"),
+    )
+
+    assert respuesta.status_code == 201

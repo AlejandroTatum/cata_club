@@ -159,7 +159,14 @@ class PersonaServicio:
         `_crear_persona_validada` (el núcleo SIN commit de
         `registrar_persona`), no `registrar_persona` en sí -- comitear acá
         antes de escribir la ficha o el usuario reproduciría exactamente el
-        bug que el issue #831 cierra."""
+        bug que el issue #831 cierra.
+
+        Issue #1139: esta es la puerta de alta MÁS usada para un menor nuevo
+        -- más que `vincular_representado`, que existe para reasignar a
+        alguien ya cargado -- así que el mismo invariante se exige acá,
+        antes de crear nada, igual que en `vincular_representado`."""
+        self._exigir_representante_destino_alcanzable(representante_id)
+
         persona_datos = PersonaCreateDTO(
             nombres=datos.nombres,
             apellidos=datos.apellidos,
