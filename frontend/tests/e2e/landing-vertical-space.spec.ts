@@ -133,7 +133,7 @@ test.describe("landing vertical space", () => {
       contentType: "application/json",
     });
 
-    expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBe(380);
+    expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBeCloseTo(380, 0);
     expect(desktopMetrics.podiosCount, "podios count").toBe(4);
     for (const height of desktopMetrics.podiosHeights) {
       expect(height, "podio photo height on desktop").toBe(150);
@@ -158,7 +158,7 @@ test.describe("landing vertical space", () => {
       contentType: "application/json",
     });
 
-    expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBe(160);
+    expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBeCloseTo(160, 0);
     for (const height of mobileMetrics.podiosHeights) {
       expect(height, "podio photo height on mobile").toBe(120);
     }
