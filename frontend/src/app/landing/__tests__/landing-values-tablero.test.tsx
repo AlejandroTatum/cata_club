@@ -16,11 +16,20 @@
  * the real Palmarés section.
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import "./landing-render-mocks";
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import LandingPage from "@/app/landing/LandingPage";
 import { resetLandingTestEnvironment, stubLandingGlobals } from "./landing-test-doubles";
+
+// jsdom cannot compute a `::before` pseudo-element's background-image or
+// opacity, so the crest motif's placement is locked against the authored
+// stylesheet directly — the same convention landing-logros-colors.test.ts
+// uses for stylesheet-only contracts.
+const landingCss = (): string =>
+  readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
 
 beforeEach((): void => {
   stubLandingGlobals();
@@ -83,5 +92,20 @@ describe("Valores tablero (rally replacement)", (): void => {
     expect(section.querySelector("svg")).toBeNull();
     expect(section.querySelectorAll("[data-value]")).toHaveLength(0);
     expect(section.querySelectorAll(".dim, .hit")).toHaveLength(0);
+  });
+
+  // The table-tennis / club-identity motif the client asked for, once the
+  // section read as flat without the retired rally. It lives behind each
+  // tile's numeral as a `::before` background-image — no image element, no
+  // inline vector markup, no extra DOM node — so it stays invisible to
+  // assistive tech, the "no svg in #valores" lock above holds unchanged,
+  // and the tiles' own aria-hidden/textContent locks (this file and
+  // LandingPage.test.tsx) do not need a matching DOM node to find.
+  it("carries the crest motif behind each tile's numeral, not a corner watermark", (): void => {
+    const css = landingCss();
+    expect(css).not.toContain(".landing-values-crest");
+    expect(css).toContain(
+      '.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.55; pointer-events: none; }',
+    );
   });
 });

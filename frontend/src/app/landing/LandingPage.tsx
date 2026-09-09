@@ -282,7 +282,9 @@ function MissionVision(): React.ReactElement {
 /** Decorative numeral tile — one per value, sharing one grid row with the
  * three others so every value's title starts at the same top edge by
  * construction. Replaces the scroll-scrubbed rally, rejected for breaking on
- * mobile and for the ball motif itself. */
+ * mobile and for the ball motif itself. The club-crest motif client asked
+ * for once the rally left now sits behind the numeral here, as a CSS
+ * background-image on `.landing-tablero-tile` — see landing.css for why. */
 function ValueTile({ index }: { index: string }): React.ReactElement {
   return <span className="landing-tablero-tile" aria-hidden="true">{index}</span>;
 }

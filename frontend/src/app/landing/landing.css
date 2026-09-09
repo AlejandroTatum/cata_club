@@ -278,7 +278,47 @@
    into explicit rows below, and a per-item margin is what lets it hold a
    different gap between the two value pairs than it holds inside one. */
 .landing-tablero { display: grid; width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 2px; align-items: start; margin-top: 40px; }
-.landing-tablero-tile { display: flex; align-items: flex-end; height: 176px; padding: 20px; background: var(--landing-brand-black); color: var(--landing-highlight); font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(72px, 7vw, 120px); line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; transition: transform 200ms ease; }
+/* `position: relative` + `isolation: isolate` give the tile its own
+   stacking context, so `::before`'s `z-index: -1` below is scoped to THIS
+   tile — it cannot paint behind a sibling tile or the section's own yellow
+   ground, and a sibling tile's `::before` cannot paint above this one's
+   numeral either. */
+.landing-tablero-tile { position: relative; isolation: isolate; display: flex; align-items: flex-end; height: 176px; padding: 20px; background: var(--landing-brand-black); color: var(--landing-highlight); font-family: var(--font-landing-barlow); font-weight: 800; font-size: clamp(72px, 7vw, 120px); line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; transition: transform 200ms ease; }
+/* Table-tennis / club-identity motif (client request — the tablero read as
+   flat once the rally left; PR #1127 removed the rally's ball, guide,
+   counter and dimming for breaking on mobile, NOT for using ball/paddle
+   imagery — the hero's own frame-ball and the CTA's crested paddle keep
+   that imagery elsewhere on this same page). PR #1161 first tried this as a
+   single watermark pinned to the section header's corner at `opacity: 0.1`
+   over the yellow ground; the client called the section "muy muerta" and
+   that treatment barely moved it (a ~9% shift on the surrounding yellow).
+   The crest now lives INSIDE each black numeral tile instead, one per tile:
+   on `--landing-brand-black` the same mark can carry far more presence than
+   it ever could on yellow, and a corner watermark plus a second placement in
+   the tiles would have doubled the motif in one section, which reads as
+   clutter rather than intent — so the corner rule is gone, not duplicated.
+   `content: ""` on a pseudo-element (not an `<img>`, not inline `<svg>`)
+   keeps it out of the accessible tree and out of `.landing-tablero-tile`'s
+   flex flow (`position: absolute` removes generated flex-container content
+   from flex layout), so it adds nothing to the 709px/1170px ceilings
+   `landing-vertical-space.spec.ts` enforces. `background-size: contain`
+   inside `inset: 0` scales the crest down with the tile itself at the
+   140px mobile height — no separate breakpoint override needed.
+   `opacity: 0.55` was chosen to actually read at normal viewing distance
+   rather than default to a watermark value, and it still leaves the
+   numeral legible: the crest's own brightest fully-opaque pixel (a dark
+   red, rgb(156, 48, 61)) composited at 0.55 over `--landing-brand-black`
+   is the worst-case backdrop under the numeral, and `--landing-highlight`
+   yellow (`#ffd600`) against that composite still measures ≈9.3:1 —
+   comfortably clear of the 3:1 WCAG AA minimum for text this large, and
+   above the 4.5:1 AA minimum for normal text besides. All four tiles carry
+   the identical mark at the identical scale and position: repeated
+   identically across a symmetric, evenly-spaced grid reads as a
+   deliberate pattern rather than a rendering bug, the way it would if only
+   some tiles carried it. Still not the retired rally: no scroll-scrubbed
+   opacity, no per-value state, nothing keyed to `[data-value]`/`.dim`/
+   `.hit`. */
+.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.55; pointer-events: none; }
 .landing-tablero-tile:hover { transform: translateY(-6px); }
 .landing-tablero-item { margin-top: 18px; }
 .landing-tablero-item h3 { margin: 0; font-family: var(--font-landing-barlow); font-weight: 800; font-size: 22px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--landing-text-strong); }
