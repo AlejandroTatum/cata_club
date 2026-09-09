@@ -256,6 +256,23 @@
    band — no fade there either. */
 .landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); gap: 0; }
 
+/* Table-tennis / club-identity motif (client request — the tablero read as
+   flat once the rally left; PR #1127 removed the rally's ball, guide,
+   counter and dimming for breaking on mobile, NOT for using ball/paddle
+   imagery — the hero's own frame-ball and the CTA's crested paddle keep
+   that imagery elsewhere on this same page). A single static crest
+   watermark, confined to the header's top-right corner: `position:
+   absolute` takes it out of flex flow, so it adds nothing to the
+   709px/1170px ceilings `landing-vertical-space.spec.ts` enforces, and the
+   section's own `overflow: hidden` plus the radial mask below keep it from
+   ever reaching the tablero. That keeps it clear of the flat-ground note
+   above — this is one large, low-opacity brand mark fading away from the
+   grid, not the repeating hairline texture that note rejects. `0.1` opacity
+   over `--landing-brand-yellow` composites the crest's dark navy to
+   roughly #e8c304 — a ~9% shift the surrounding yellow already absorbs
+   without touching the header text's own black-on-yellow contrast. */
+.landing-values .landing-values-crest { position: absolute; top: -34px; right: -16px; width: 200px; height: 200px; background-image: url("/brand/cata-club-crest-256.png"); background-size: contain; background-repeat: no-repeat; opacity: 0.1; mask-image: radial-gradient(circle at 65% 35%, var(--landing-brand-black) 0%, transparent 62%); pointer-events: none; }
+
 /* The scoreboard strip: tiles as one real grid row, value text as the next
    real grid row — a row's top edge is a single shared value across every one
    of its columns, so the four titles align without bottom-aligning anything
@@ -553,6 +570,10 @@
      pair gets the 32px gap above it, separating the two value pairs; the
      22px tile→text gap comes from `.landing-tablero-item`'s own margin,
      unchanged from desktop. */
+  /* Shrunk so it stays clear of the wrapped header title on a 390px
+     viewport, where the 15ch heading box leaves much less quiet space to
+     its right than on desktop. */
+  .landing-values .landing-values-crest { top: -14px; right: -10px; width: 108px; height: 108px; }
   .landing-tablero { margin-top: 36px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .landing-tablero > :nth-child(1) { grid-column: 1; grid-row: 1; }
   .landing-tablero > :nth-child(2) { grid-column: 2; grid-row: 1; }

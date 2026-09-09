@@ -84,4 +84,20 @@ describe("Valores tablero (rally replacement)", (): void => {
     expect(section.querySelectorAll("[data-value]")).toHaveLength(0);
     expect(section.querySelectorAll(".dim, .hit")).toHaveLength(0);
   });
+
+  // The table-tennis / club-identity motif the client asked for, once the
+  // section read as flat without the retired rally. A plain decorative
+  // span carrying its crest through CSS background-image — no image
+  // element, no inline vector markup — so it is invisible to assistive
+  // tech and does not disturb the "no svg in #valores" lock above.
+  it("carries the crest motif as a decorative watermark, not accessible content", (): void => {
+    const { container } = render(<LandingPage />);
+
+    const section = container.querySelector("#valores") as HTMLElement;
+    const crest = section.querySelector(".landing-values-crest");
+    expect(crest).not.toBeNull();
+    expect(crest).toHaveAttribute("aria-hidden", "true");
+    expect(crest?.tagName).toBe("SPAN");
+    expect(crest?.textContent).toBe("");
+  });
 });
