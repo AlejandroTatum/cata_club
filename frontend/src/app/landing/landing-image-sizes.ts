@@ -20,21 +20,29 @@
 export const MAP_INSET_SIZES = "(max-width: 768px) 220px, 230px";
 
 /**
- * `.landing-pillar-photo`, the Mission/Vision photograph below each
+ * `.landing-pillar-photo`, the Mission/Vision photograph beside each
  * pillar's body copy.
  *
- * Above the mobile breakpoint the grid is `.landing-pillars { 1fr 1fr }`
- * with a 72px gap, and `.landing-section` pads the row `8.33vw` on each
- * side. At 1440px — one of the reference viewports (1280/1440/1920) this
- * landing is already checked against, see the hero carousel's comment in
- * landing.css — that is ~120px of padding per side, so one pillar is
- * `(1440 - 2*120 - 72) / 2 = 564px` wide, and the photo fills it.
+ * Above the mobile breakpoint `.landing-pillars` is `1fr 1fr` with a 72px
+ * gap, and each `.landing-pillar` itself now mirrors that split — another
+ * `1fr 1fr`, copy left / photo right, with a tighter 32px inner gap — so
+ * the photo fills only half of what a whole pillar column used to give it.
+ * `.landing-section` pads the row `8.33vw` on each side. At 1440px — one
+ * of the reference viewports (1280/1440/1920) this landing is already
+ * checked against, see the hero carousel's comment in landing.css — that
+ * is ~120px of padding per side, so one pillar is
+ * `(1440 - 2*120 - 72) / 2 = 564px` wide, and the photo's own column is
+ * `(564 - 32) / 2 ≈ 266px`. This narrowed the slot from the 564px it used
+ * to render at when the photo closed the column below the copy instead of
+ * beside it — serving the old, wider `sizes` value here would over-request
+ * bytes for a box that shrank by more than half.
  *
- * Below the breakpoint the grid drops to one column, so the column itself
- * can reach ~720px, but landing.css caps the photo's own `max-width` at
- * 360px there — close to the ~330-375px the lead (`30ch`) and body
- * (`44ch`) text already max out at, so the photo never outgrows the copy
- * it illustrates. 360px is therefore the true rendered width, not the
- * wider column.
+ * Below the breakpoint the pillar collapses back to one column (copy above,
+ * photo below, `.landing-pillar { grid-template-columns: 1fr; }` in the
+ * 768px block), so the column itself can reach ~720px, but landing.css caps
+ * the photo's own `max-width` at 360px there — close to the ~330-375px the
+ * lead (`30ch`) and body (`44ch`) text already max out at, so the photo
+ * never outgrows the copy it illustrates. 360px is therefore the true
+ * rendered width, not the wider column.
  */
-export const MISSION_VISION_PHOTO_SIZES = "(max-width: 768px) 360px, 564px";
+export const MISSION_VISION_PHOTO_SIZES = "(max-width: 768px) 360px, 266px";

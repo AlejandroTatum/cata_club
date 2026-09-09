@@ -30,27 +30,39 @@
  * the #871-era compressed values were 788px/1067px and scrollHeight
  * 6146px/8197px.
  *
- * `document.scrollHeight` moved again when Mission/Vision (`#nosotros`) gained
- * one photo per pillar below its body copy: `.landing-values`, `.landing-wins`
- * and `.landing-motto` — the three sections this file actually shrinks — did
- * not change size at all, so their individual ceilings below are untouched.
- * Desktop's two pillars sit side by side, so only one photo's height
- * (~588px including its 24px top margin) is added to the page. Mobile stacks
- * both pillars into one column, so BOTH photos add their own height — at the
- * 390px viewport below, each photo is capped by the 342px column, not the
- * 360px `max-width` (`landing.css`), so the mobile increase is 2 × 366px.
+ * `document.scrollHeight` moved twice for Mission/Vision (`#nosotros`):
+ * `.landing-values`, `.landing-wins` and `.landing-motto` — the three
+ * sections this file actually shrinks — never changed size at either point,
+ * so their individual ceilings below are untouched by either move.
+ *
+ * It first ROSE when each pillar gained one photo BELOW its body copy:
+ * desktop's two pillars sit side by side with each other, so only one
+ * photo's height (~588px including its 24px top margin) was added to the
+ * page; mobile stacks both pillars into one column, so BOTH photos added
+ * their own height.
+ *
+ * It then FELL when the photo moved beside the copy instead of below it (a
+ * client-reported layout fix): on desktop each pillar became its own two
+ * column grid (copy | photo), so the photo's height only grows the pillar
+ * when it exceeds the copy column's own height — it no longer stacks a
+ * whole extra photo height onto the page, which is why desktop's
+ * `scrollHeight` below is now LOWER than even the pre-photo baseline this
+ * file used to carry (6505px). Below the mobile breakpoint the pillar still
+ * stacks copy above photo exactly as before (`.landing-pillar {
+ * grid-template-columns: 1fr; }` in the 768px block), so mobile's
+ * `scrollHeight` is unchanged from the previous measurement.
  *
  *   Section (desktop 1440x900)          height
  *   .landing-values (tablero)            701px
  *   .landing-wins (#1154)               1027px
  *   .landing-motto                       384px
- *   document.scrollHeight (mission/vision photos)  6973px
+ *   document.scrollHeight (photo beside copy)      6472px
  *
  *   Section (mobile 390x844)            height
  *   .landing-values (tablero)            941px
  *   .landing-wins (#1154)               1194px
  *   .landing-motto                       438px
- *   document.scrollHeight (mission/vision photos)  9057px
+ *   document.scrollHeight (unchanged — pillar still stacks)  9057px
  */
 import { test, expect } from "@playwright/test";
 
@@ -79,13 +91,21 @@ const VIEWPORTS = [
  *  keeps a wider buffer because it aggregates the whole page and absorbs
  *  environment font-metric variance.
  *
- *  `scrollHeight` rose again — 6505px to 7093px desktop, 8445px to 9177px
- *  mobile — for Mission/Vision's new per-pillar photos (see the file header):
- *  neither `valores`, `logros` nor `cta` moved, so only `scrollHeight` needed
- *  a new ceiling. Both keep the same 120px buffer over their measured
- *  6973px/9057px. */
+ *  `scrollHeight` rose from 6505px to 7093px desktop, 8445px to 9177px mobile,
+ *  for Mission/Vision's per-pillar photos when they sat BELOW the copy (see
+ *  the file header) — neither `valores`, `logros` nor `cta` moved, so only
+ *  `scrollHeight` needed a new ceiling.
+ *
+ *  It then DROPPED — desktop only — once the photo moved beside the copy
+ *  instead of below it: measured 6472px, below even the pre-photo 6505px
+ *  baseline (a narrower copy column wraps to more lines than the extra
+ *  height the photo used to add). The ceiling tightens to match, same 120px
+ *  buffer convention, rather than keeping the old 7093px headroom the new
+ *  layout no longer needs. Mobile's `scrollHeight` did not move at all — the
+ *  pillar still stacks copy above photo below the breakpoint — so its
+ *  ceiling stays exactly as it was (120px over the same measured 9057px). */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 709, logros: 1035, cta: 400, scrollHeight: 7093 },
+  desktop: { valores: 709, logros: 1035, cta: 400, scrollHeight: 6592 },
   mobile: { valores: 1170, logros: 1203, cta: 450, scrollHeight: 9177 },
 };
 
