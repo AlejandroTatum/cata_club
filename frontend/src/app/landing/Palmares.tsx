@@ -195,18 +195,35 @@ export default function Palmares(): React.ReactElement {
               onKeyDown={(event): void => handleTabKeyDown(event, index)}
             >
               <span className="landing-logro-tab-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-              {/* #1154: the thumbnail renders at `.landing-logro-tab`
-                  min-width (176px) minus its 2x6px padding and 2x1px border —
-                  the box-sizing: border-box content width the photo actually
-                  gets, the same number the CSS card and the carousel test
-                  lock in `sizes` below. The 96px it carried predated the
-                  54px side column it outlived. */}
+              {/* #1154 / #1159: below 1550px viewport width, the seven tabs
+                  sit at their 176px `.landing-logro-tab` floor (7 × 176px +
+                  6 × 10px gaps = 1292px, which is what 1550px of viewport
+                  yields after the section's 8.33vw gutter on both sides:
+                  1550 × 0.8334 ≈ 1292), so the photo still renders at
+                  176 − 2×6px padding − 2×1px border = 162px, the same number
+                  the CSS card and the carousel test lock in below.
+                  Past 1550px the tabs grow with `flex: 1 1 176px` to fill
+                  the tablist evenly, so 162px would underestimate the real
+                  width and, per `landing-image-sizes.ts`, letting `sizes`
+                  fall back to a `vw` unit would jump `next/image` off its
+                  small candidate ladder entirely. Instead this branch is
+                  pinned in plain pixels to the widest realistic desktop
+                  render: at a 1920px reference viewport (Full HD — the
+                  largest of next.config's default `deviceSizes` that is a
+                  real, common CSS width rather than a 2x/3x pixel-density
+                  multiple of it), content width is 1920 × 0.8334 ≈ 1600px,
+                  minus 6 × 10px gaps = 1540px, split 7 ways ≈ 220px per tab,
+                  minus the same 14px of padding/border ≈ 206px. Wider
+                  screens render the photo a little larger than declared —
+                  an accepted trade-off, not a defect — rather than the
+                  reverse. Change all three numbers (176, 1550, 206) together
+                  with the CSS. */}
               <Image
                 src={logroPhotoSrc(group.photo)}
                 alt=""
                 width={PODIO_DIMENSIONS[group.photo].width}
                 height={PODIO_DIMENSIONS[group.photo].height}
-                sizes="162px"
+                sizes="(max-width: 1550px) 162px, 206px"
                 loading="lazy"
                 aria-hidden="true"
               />
