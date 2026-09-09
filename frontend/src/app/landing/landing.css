@@ -330,9 +330,17 @@
 /* Thumbnail: image over text, full card width — the old 54px side column
    left 28px of dead space under the photo (issue 1154). The card grew with
    the photo; the strip keeps its horizontal scroll and the shared focus
-   ring below. min-width minus the 2x6px padding and the 2x1px border is also
-   the render width `Palmares.tsx` declares as `sizes` — change them together. */
-.landing-logro-tab { position: relative; display: grid; min-width: 176px; min-height: 150px; grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 6px; align-content: start; padding: 6px; border: 1px solid color-mix(in srgb, var(--landing-surface) 24%, transparent); border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 76%, transparent); cursor: pointer; text-align: left; transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease; }
+   ring below. `flex: 1 1 176px` (issue 1159) lets the seven tabs share out
+   whatever width is left over in `.landing-logro-tablist` evenly, instead of
+   one flex-grow:0 tab leaving it stranded past the last card. min-width
+   keeps 176px a hard floor: below the viewport where 7 × 176px + 6 × 10px
+   gaps (1292px) no longer fits the strip's content width, the tabs stop
+   shrinking and the strip falls back to its horizontal scroll instead. That
+   floor minus the 2x6px padding and the 2x1px border is also the render
+   width `Palmares.tsx` declares as `sizes` for narrow viewports — change
+   them together; the wide-viewport branch of that `sizes` string is derived
+   separately, from this same growth math, in the comment there. */
+.landing-logro-tab { position: relative; display: grid; flex: 1 1 176px; min-width: 176px; min-height: 150px; grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 6px; align-content: start; padding: 6px; border: 1px solid color-mix(in srgb, var(--landing-surface) 24%, transparent); border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 76%, transparent); cursor: pointer; text-align: left; transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease; }
 .landing-logro-tab:hover { border-color: color-mix(in srgb, var(--landing-highlight) 72%, transparent); color: var(--landing-surface); }
 .landing-logro-tab[aria-selected="true"] { border-color: var(--landing-highlight); background: color-mix(in srgb, var(--landing-highlight) 12%, transparent); color: var(--landing-surface); }
 .landing-logro-tab img { grid-column: 1; grid-row: 1; width: 100%; height: 100px; object-fit: cover; }

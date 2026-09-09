@@ -100,6 +100,20 @@ describe("landing vertical space (#871)", (): void => {
       expect(ruleAt(css, ".landing-logro", mobileBlock)).toContain("display: flex");
       expect(ruleAt(css, ".landing-logro", mobileBlock)).toContain("flex-direction: column");
     });
+
+    // Issue #1159: without an explicit grow factor, a flex item's default is
+    // `flex: 0 1 auto` — the seven tabs stopped at their content width and
+    // any leftover space in `.landing-logro-tablist` went unused past the
+    // last card. `flex: 1 1 176px` shares that leftover space evenly, while
+    // `min-width: 176px` keeps that same number a hard floor so the strip
+    // still falls back to horizontal scroll below it instead of squeezing
+    // the cards narrower.
+    it("lets the seven thumbnail tabs grow to fill the strip, with 176px as a hard floor (issue #1159)", (): void => {
+      const css = landingCss();
+      const tab = ruleAt(css, ".landing-logro-tab");
+      expect(tab).toContain("flex: 1 1 176px");
+      expect(pxIn(tab, "min-width")).toBe(176);
+    });
   });
 
   describe("CTA final", (): void => {
