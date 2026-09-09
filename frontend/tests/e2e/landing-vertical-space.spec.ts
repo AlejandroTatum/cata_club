@@ -1,9 +1,10 @@
 /**
  * Vertical space, measured (issue #871; Valores rewritten as a tablero).
  *
- * Valores, Logros and the CTA final each reserve less structural space than
- * the original template — tighter section gaps, tighter ask/warning padding,
- * a tighter Logros row rhythm and a shorter CTA padding. Valores itself later
+ * Valores and the CTA final reserve less structural space than the original
+ * template — tighter section gaps, tighter ask/warning padding and a shorter
+ * CTA padding (Logros held that tighter rhythm until #1154 restored the
+ * shared one; see the history below). Valores itself later
  * dropped the scroll-scrubbed rally (ball, guide, scoreboard counter,
  * dimming) for a static tablero of four numeral tiles: it does not scrub
  * anything into place, so it cannot break the way the rally did on mobile.
@@ -18,22 +19,28 @@
  * file runs (`pnpm exec playwright test`), so a future reader can see what
  * the sections cost without re-running the measurement.
  *
- * `.landing-wins` dropped sharply again once Logros was redesigned (issue
- * #657's follow-up) from the five-row placeholder trophy wall to a single
- * documented result told as a feature story plus a four-photo podios row —
- * see `landing-logros-d-historia.html`.
+ * `.landing-wins` dropped sharply once Logros was redesigned (issue #657's
+ * follow-up) from the five-row placeholder trophy wall to a single documented
+ * result told as a feature story plus a four-photo podios row — see
+ * `landing-logros-d-historia.html`. Issue #1154 then deliberately moved it
+ * back UP: the section returned to the shared vertical rhythm (76px/64px
+ * padding, 44px gap — #871's trim reverted) and its thumbnails grew into
+ * image-over-text cards worth actually reading. The higher `logros` and
+ * `scrollHeight` numbers below are the approved new rhythm, not a regression;
+ * the #871-era compressed values were 788px/1067px and scrollHeight
+ * 6146px/8197px.
  *
  *   Section (desktop 1440x900)          height
  *   .landing-values (tablero)            701px
- *   .landing-wins                        788px
+ *   .landing-wins (#1154)               1027px
  *   .landing-motto                       384px
- *   document.scrollHeight               6146px
+ *   document.scrollHeight (#1154)       6385px
  *
  *   Section (mobile 390x844)            height
  *   .landing-values (tablero)            941px
- *   .landing-wins                       1067px
+ *   .landing-wins (#1154)               1194px
  *   .landing-motto                       438px
- *   document.scrollHeight               8197px
+ *   document.scrollHeight (#1154)       8325px
  */
 import { test, expect } from "@playwright/test";
 
@@ -54,13 +61,16 @@ const VIEWPORTS = [
  *  `landing-vertical-space.test.ts` locks. Nothing else in #871's approved
  *  range moved.
  *
- *  `logros` and `scrollHeight` both dropped hard with the Logros redesign
- *  (feature story + podios row replacing the five-row placeholder wall);
- *  the ceilings below carry the same headroom convention over the
- *  `<MEASURED_*>` numbers recorded in the file header above. */
+ *  `logros` and `scrollHeight` dropped hard with the Logros redesign (feature
+ *  story + podios row replacing the five-row placeholder wall), then rose
+ *  again with #1154's approved rhythm — the sections above and below Logros
+ *  did not move. The ceilings below carry the same headroom convention (+8px)
+ *  over the measured numbers recorded in the file header; `scrollHeight`
+ *  keeps a wider buffer because it aggregates the whole page and absorbs
+ *  environment font-metric variance. */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 709, logros: 820, cta: 400, scrollHeight: 7300 },
-  mobile: { valores: 1170, logros: 1160, cta: 450, scrollHeight: 8600 },
+  desktop: { valores: 709, logros: 1035, cta: 400, scrollHeight: 6505 },
+  mobile: { valores: 1170, logros: 1203, cta: 450, scrollHeight: 8445 },
 };
 
 test.describe("landing vertical space", () => {

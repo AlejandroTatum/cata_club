@@ -95,6 +95,21 @@ describe("Logros data and carousel", (): void => {
     expect(within(carousel).getByRole("img")).toHaveAccessibleName(/imagen de referencia provisional/i);
   });
 
+  it("declares thumbnail sizes at the tab's real render width (issue #1154)", (): void => {
+    render(<Palmares />);
+
+    const thumbnails = Array.from(document.querySelectorAll<HTMLImageElement>(".landing-logro-tab img"));
+    expect(thumbnails).toHaveLength(ACHIEVEMENT_GROUPS.length);
+    // `.landing-logro-tab` min-width (176px) minus its 2x6px padding and its
+    // 2x1px border — the box-sizing: border-box content width — is the width
+    // the photo actually renders at: the number the srcset must be
+    // calibrated against, instead of a value inherited from the retired
+    // 54px side column. Change the CSS card and this number together.
+    for (const img of thumbnails) {
+      expect(img.getAttribute("sizes")).toBe("162px");
+    }
+  });
+
   it("updates the main story, fact sheet and selected tab when a competition is selected", (): void => {
     render(<Palmares />);
 

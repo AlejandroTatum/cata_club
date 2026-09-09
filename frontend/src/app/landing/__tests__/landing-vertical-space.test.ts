@@ -10,6 +10,11 @@ import { describe, expect, it } from "vitest";
 // heights are proved in `tests/e2e/landing-vertical-space.spec.ts`; what
 // lives here is the literal values that produce them, locked so a later
 // edit cannot drift outside the approved range without this failing.
+//
+// Issue #1154 deliberately reverts #871's trim for Logros (gap and padding
+// back to the shared rhythm, thumbnails image-over-text and larger), and
+// issue #1155 removes the Valores exit fade #1026 had asked for: those locks
+// below were rewritten with the new intention in the same PR, not deleted.
 const landingCss = (): string =>
   readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
 
@@ -43,18 +48,21 @@ describe("landing vertical space (#871)", (): void => {
   });
 
   describe("Logros", (): void => {
-    it("keeps the section's own structural gap at 28-32px", (): void => {
+    // Issue #1154 reverted #871's deliberate trim for Logros: the section
+    // re-joins the shared rhythm every other band keeps.
+    it("returns the section's own structural gap to the shared 44px (issue #1154)", (): void => {
       const css = landingCss();
-      const gap = pxIn(ruleAt(css, ".landing-wins"), "gap");
-      expect(gap).toBeGreaterThanOrEqual(28);
-      expect(gap).toBeLessThanOrEqual(32);
+      expect(pxIn(ruleAt(css, ".landing-wins"), "gap")).toBe(44);
     });
 
-    it("trims the section's own padding well below the shared 76px convention", (): void => {
+    it("recovers the shared vertical padding by inheriting .landing-section's rhythm, with no override left anywhere (issue #1154)", (): void => {
       const css = landingCss();
-      const rule = ruleAt(css, ".landing-wins");
-      expect(pxIn(rule, "padding-top")).toBeLessThanOrEqual(24);
-      expect(pxIn(rule, "padding-bottom")).toBeLessThanOrEqual(6);
+      // The desktop rule carries no padding of its own, so the 76px of
+      // `.landing-section` applies — above the 56px floor the issue sets.
+      expect(ruleAt(css, ".landing-wins")).not.toContain("padding");
+      // And the 768px block dropped its #871 trim too: mobile inherits the
+      // section's 64px rather than re-trimming to 22/14.
+      expect(css).not.toMatch(/\.landing-wins \{[^}]*padding/);
     });
 
     it("keeps the feature photo at a fixed 380px height on desktop, 160px on mobile", (): void => {
@@ -65,10 +73,28 @@ describe("landing vertical space (#871)", (): void => {
       expect(pxIn(ruleAt(css, ".landing-logro-photo", mobileBlock), "height")).toBe(160);
     });
 
-    it("keeps the carousel thumbnail row compact on desktop and mobile", (): void => {
+    // Issue #1154: each thumbnail is image-over-text — the photo owns the
+    // full card width and the index + label sit below it — so no band of
+    // the card is left without image or without text (the old 54px side
+    // column stranded 28px under the photo). The card grew with the photo;
+    // the strip keeps its horizontal scroll and its keyboard focus ring.
+    it("lays each thumbnail image-over-text, larger, with no residual band (issue #1154)", (): void => {
       const css = landingCss();
-      expect(pxIn(ruleAt(css, ".landing-logro-tab"), "min-height")).toBe(94);
-      expect(ruleAt(css, ".landing-logro-tablist")).toContain("padding: 3px 2px 8px");
+      const tab = ruleAt(css, ".landing-logro-tab");
+      expect(pxIn(tab, "min-width")).toBeGreaterThan(138);
+      expect(pxIn(tab, "min-height")).toBeGreaterThan(94);
+      // One column: nothing sits beside the image anymore.
+      expect(tab).toContain("grid-template-columns: 1fr");
+      expect(tab).not.toContain("54px");
+      const img = ruleAt(css, ".landing-logro-tab img");
+      expect(img).toContain("width: 100%");
+      expect(pxIn(img, "height")).toBeGreaterThan(54);
+
+      const tablist = ruleAt(css, ".landing-logro-tablist");
+      expect(tablist).toContain("overflow-x: auto");
+      expect(
+        ruleAt(css, ".landing-logro-control:focus-visible, .landing-logro-tab:focus-visible"),
+      ).toContain("outline: 3px solid var(--landing-highlight)");
 
       const mobileBlock = css.indexOf("@media (max-width: 768px)");
       expect(ruleAt(css, ".landing-logro", mobileBlock)).toContain("display: flex");
@@ -114,15 +140,13 @@ describe("landing vertical space (#871)", (): void => {
 // reading the authored stylesheet, same convention as the #871 block above.
 // ---------------------------------------------------------------------------
 describe("Valores tablero redesign", (): void => {
-  it("blends only its bottom edge into the trophy wall below — the top is a hard seam against #nosotros' v2 white ground", (): void => {
+  // Issue #1155 reverted #1026's exit fade on request: the yellow meets the
+  // trophy wall's black in a hard cut, like every other section boundary.
+  // Written as absence, so the gradient cannot quietly return.
+  it("cuts hard from the yellow into the trophy wall below — the exit fade is gone (issue #1155)", (): void => {
     const css = landingCss();
-    const blend = css.match(/\.landing-values::after \{[^}]*\}/);
-    expect(blend).not.toBeNull();
-    expect(blend![0]).not.toContain("linear-gradient(180deg, var(--landing-brand-black)");
-    expect(blend![0]).toContain("linear-gradient(0deg, var(--landing-brand-black)");
-    // The wash paints BEHIND the section's children, never over their text.
-    expect(blend![0]).toContain("z-index: 0");
-    expect(blend![0]).toContain("pointer-events: none");
+    expect(css).not.toContain(".landing-values::after");
+    expect(css).not.toContain("linear-gradient(0deg, var(--landing-brand-black)");
   });
 
   it("carries no rally, ball, guide, counter, or dimming rules", (): void => {

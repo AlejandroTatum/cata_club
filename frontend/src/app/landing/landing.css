@@ -236,11 +236,7 @@
 .landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 44ch; color: var(--landing-text); font-size: 17px; line-height: 1.7; }
 .landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
-/* #871: Valores and Logros each own a tighter structural gap than the rest of
-   the sections — the base `.landing-section` rule (44px) stays untouched for
-   Motto, Schedule and Location, which are out of this issue's scope.
-
-   Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
+/* Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
    scoreboard counter, dimming) was rejected for breaking on mobile and for
    the ball motif itself. The approved prototype
    (`landing-valores-b-tablero.html`) replaces it with a static tablero: four
@@ -251,18 +247,14 @@
    their own `margin-top` (40px / 48px, the prototype's own rhythm) instead
    of stacking a flex gap on top of it.
 
-   The section still sits above the trophy wall below, which is still black,
-   so its bottom edge BLENDS into it instead of cutting — a 72px fade, inside
-   the section's own 76px padding so no text ever sits on the gradient.
+   The bottom edge is a HARD cut from this yellow into the trophy wall's
+   black below: issue #1155 removed the 72px exit fade #1026 had asked for,
+   so the seam reads as the section boundary it is.
 
    Mission/Vision's v2 redesign turned #nosotros white (issue #611 rhythm
-   below), so the section's TOP edge is now a hard seam against another
-   white band — no fade needed there anymore. */
+   below), so the section's TOP edge is a hard seam against another white
+   band — no fade there either. */
 .landing-values { background: var(--landing-highlight); color: var(--landing-text-strong); gap: 0; }
-/* Only the exit fades: the yellow dissolving into the trophy wall's black
-   below. `z-index: 0` keeps the wash behind the section's children (z-index
-   1). */
-.landing-values::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(0deg, var(--landing-brand-black), transparent 72px); }
 
 /* The scoreboard strip: tiles as one real grid row, value text as the next
    real grid row — a row's top edge is a single shared value across every one
@@ -301,10 +293,11 @@
 /* Logros. Dark ground, one documented result told as a short story with a
    fact sheet (approved prototype `landing-logros-d-historia.html`), instead
    of the retired five-row placeholder trophy wall and its default-off demo
-   toggle. Padding trimmed well below the shared `.landing-section` 76px
-   convention — the fact sheet needs real vertical room, so every
-   non-mandated gap gives it back. */
-.landing-wins { background: var(--landing-brand-black); color: var(--landing-surface); gap: 30px; padding-top: 24px; padding-bottom: 6px; }
+   toggle. Issue #1154 restored the shared rhythm here — padding inherited
+   from `.landing-section` (76px desktop / 64px mobile, both above the 56px
+   floor the issue sets) and gap back at the shared 44px — reverting #871's
+   deliberate trim, which the fact sheet no longer needs. */
+.landing-wins { background: var(--landing-brand-black); color: var(--landing-surface); gap: 44px; }
 .landing-wins .landing-section-header h2 { color: var(--landing-surface); }
 .landing-wins .landing-eyebrow { color: var(--landing-highlight); }
 .landing-logro { display: grid; grid-template-columns: 5fr 7fr; grid-template-rows: auto auto; column-gap: 48px; row-gap: 20px; align-items: stretch; width: 100%; }
@@ -334,12 +327,17 @@
 .landing-logro-story > .landing-logro-source-note { width: 100%; max-width: 52ch; margin: 0; color: var(--landing-vitrina-text-muted); font-size: 12px; line-height: 1.5; }
 .landing-logro-thumbnails { width: 100%; min-width: 0; }
 .landing-logro-tablist { display: flex; gap: 10px; width: 100%; overflow-x: auto; padding: 3px 2px 8px; scrollbar-color: var(--landing-highlight) color-mix(in srgb, var(--landing-surface) 16%, transparent); }
-.landing-logro-tab { position: relative; display: grid; min-width: 138px; min-height: 94px; grid-template-columns: 54px 1fr; grid-template-rows: 1fr auto; gap: 4px 9px; align-items: center; padding: 6px; border: 1px solid color-mix(in srgb, var(--landing-surface) 24%, transparent); border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 76%, transparent); cursor: pointer; text-align: left; transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease; }
+/* Thumbnail: image over text, full card width — the old 54px side column
+   left 28px of dead space under the photo (issue 1154). The card grew with
+   the photo; the strip keeps its horizontal scroll and the shared focus
+   ring below. min-width minus the 2x6px padding and the 2x1px border is also
+   the render width `Palmares.tsx` declares as `sizes` — change them together. */
+.landing-logro-tab { position: relative; display: grid; min-width: 176px; min-height: 150px; grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 6px; align-content: start; padding: 6px; border: 1px solid color-mix(in srgb, var(--landing-surface) 24%, transparent); border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 76%, transparent); cursor: pointer; text-align: left; transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease; }
 .landing-logro-tab:hover { border-color: color-mix(in srgb, var(--landing-highlight) 72%, transparent); color: var(--landing-surface); }
 .landing-logro-tab[aria-selected="true"] { border-color: var(--landing-highlight); background: color-mix(in srgb, var(--landing-highlight) 12%, transparent); color: var(--landing-surface); }
-.landing-logro-tab img { width: 54px; height: 54px; grid-row: 1 / span 2; object-fit: cover; }
-.landing-logro-tab-index { align-self: start; color: var(--landing-highlight); font-weight: 800; font-size: 11px; letter-spacing: 2px; }
-.landing-logro-tab > span:last-child { align-self: end; font-size: 11px; font-weight: 700; line-height: 1.2; text-transform: uppercase; }
+.landing-logro-tab img { grid-column: 1; grid-row: 1; width: 100%; height: 100px; object-fit: cover; }
+.landing-logro-tab-index { grid-column: 1; grid-row: 2; color: var(--landing-highlight); font-weight: 800; font-size: 11px; letter-spacing: 2px; }
+.landing-logro-tab > span:last-child { grid-column: 1; grid-row: 3; font-size: 11px; font-weight: 700; line-height: 1.2; text-transform: uppercase; }
 
 .landing-motto { gap: 22px; padding: 60px 14vw; background: var(--landing-action); }
 .landing-motto .landing-halftone { mask-image: radial-gradient(circle at 4% 96%,var(--landing-brand-black),transparent 42%); }
@@ -594,7 +592,6 @@
   .landing-sponsor { height: 168px; }
   .landing-footer-top { flex-direction: column; gap: 36px; }
   .landing-footer nav { width: 100%; }
-  .landing-wins { padding-top: 22px; padding-bottom: 14px; }
   .landing-logro { display: flex; flex-direction: column; row-gap: 12px; }
   .landing-logro-photo { height: 160px; }
   .landing-logro-story { min-height: 0; gap: 12px; }
