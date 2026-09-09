@@ -195,12 +195,18 @@ export default function Palmares(): React.ReactElement {
               onKeyDown={(event): void => handleTabKeyDown(event, index)}
             >
               <span className="landing-logro-tab-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+              {/* #1154: the thumbnail renders at `.landing-logro-tab`
+                  min-width (176px) minus its 2x6px padding and 2x1px border —
+                  the box-sizing: border-box content width the photo actually
+                  gets, the same number the CSS card and the carousel test
+                  lock in `sizes` below. The 96px it carried predated the
+                  54px side column it outlived. */}
               <Image
                 src={logroPhotoSrc(group.photo)}
                 alt=""
                 width={PODIO_DIMENSIONS[group.photo].width}
                 height={PODIO_DIMENSIONS[group.photo].height}
-                sizes="96px"
+                sizes="162px"
                 loading="lazy"
                 aria-hidden="true"
               />

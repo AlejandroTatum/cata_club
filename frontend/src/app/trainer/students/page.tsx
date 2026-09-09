@@ -30,11 +30,15 @@
  *     explica dentro de `EmergencyCardDialog`, que es donde se descubre.
  *   · **No hay dato de a quién le toca cada alumno.** Ver arriba.
  *
- * ## Una sola acción por renglón
+ * ## Dos disparadores por renglón, la tabla compartida
  *
- * La ficha de emergencia y nada más. Editar un alumno, ver su asistencia o
- * cobrarle son cosas del administrador, y ofrecerlas acá pondría al entrenador
- * a tocar botones que le van a devolver un 403.
+ * La ficha de emergencia y el horario — nada más. Editar un alumno, ver su
+ * asistencia o cobrarle son cosas del administrador, y ofrecerlas acá pondría
+ * al entrenador a tocar botones que le van a devolver un 403. La nómina en sí
+ * se dibuja con `ResponsiveListTable`, el mismo shell de `/members`,
+ * `/discounts` y el historial de asistencias: tarjeta debajo de `sm`, tabla
+ * con encabezados de `sm` para arriba, y un índice que cuenta sobre el padrón
+ * filtrado COMPLETO, no sobre la página visible (issue #1156).
  */
 
 "use client";
@@ -52,7 +56,11 @@ import {
   FilterPanel,
   LoadingState,
   Pagination,
+  ResponsiveListTable,
   SearchInput,
+  TableCell,
+  TableHeaderCell,
+  TableRow,
 } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { fetchRosterDeTodosLosHorarios, type AlumnoHorario } from "@/services/api";
@@ -60,11 +68,80 @@ import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-util
 import EmergencyCardDialog, {
   type EmergencyCardStudent,
 } from "@/app/trainer/attendance/EmergencyCardDialog";
-import { agruparAlumnosDelPadron, filtrarPorNombre } from "./students-utils";
+import {
+  agruparAlumnosDelPadron,
+  filtrarPorNombre,
+  type AlumnoDelClub,
+} from "./students-utils";
 import ScheduleDialog from "./ScheduleDialog";
 
 /** Diez, como toda lista paginada del producto — ver `list-page-size.test.ts`. */
 const PAGE_SIZE = 10;
+
+/**
+ * Los dos disparadores del renglón, compartidos por las DOS renderings de
+ * `ResponsiveListTable` (tarjeta mobile, celda de tabla de escritorio).
+ *
+ * El botón entero es el `Button` del sistema. El de ficha médica ya lo era:
+ * la MISMA acción que la ficha de Administración (`/members`) — es la misma
+ * tarjeta, y aprenderla dos veces sería cobrarle al entrenador la misma
+ * lección dos veces — con `Stethoscope` y no `AlertTriangle` porque consulta
+ * una ficha, no anuncia un peligro (issue #857), vestido de secundario y no
+ * del rojo de peligro (#911), a densidad `md` (`h-ctl`, `ICON.base`) porque
+ * el renglón es una lista de pulgar, no una celda de tabla (#911). El de
+ * Horario era un `<button>` con clases copiadas a mano; el issue #1156 lo
+ * pasa al mismo `Button`, para que los dos disparadores de un renglón se
+ * lean y se comporten como lo que son: el mismo componente.
+ *
+ * `event.currentTarget.focus()` antes de abrir: un toque en el celular no
+ * enfoca nada, y la trampa de foco del diálogo guardaría `body` como origen —
+ * al cerrar, el entrenador volvería al principio de la página en vez del
+ * renglón que estaba mirando.
+ */
+function BotonFichaMedica({
+  alumno,
+  onAbrir,
+}: {
+  alumno: AlumnoDelClub;
+  onAbrir: () => void;
+}): React.ReactElement {
+  return (
+    <Button
+      variant="secondary"
+      className="flex-none"
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onAbrir();
+      }}
+      aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
+    >
+      <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
+      Ficha médica
+    </Button>
+  );
+}
+
+function BotonHorario({
+  alumno,
+  onAbrir,
+}: {
+  alumno: AlumnoDelClub;
+  onAbrir: () => void;
+}): React.ReactElement {
+  return (
+    <Button
+      variant="secondary"
+      className="flex-none"
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onAbrir();
+      }}
+      aria-label={`Horario de ${alumno.nombreCompleto}`}
+    >
+      Horario
+    </Button>
+  );
+}
 
 export default function TrainerStudentsPage(): React.ReactElement {
   const [padron, setPadron] = useState<AlumnoHorario[]>([]);
@@ -103,6 +180,18 @@ export default function TrainerStudentsPage(): React.ReactElement {
   const visibles = useMemo(
     () => paginateRecords(encontrados, pagina, PAGE_SIZE),
     [encontrados, pagina],
+  );
+
+  /**
+   * El número de renglón cuenta sobre el RESULTADO FILTRADO COMPLETO, no
+   * sobre la página visible: la fórmula es `(pagina - 1) * PAGE_SIZE + i +
+   * 1`. Contar desde `visibles` haría que la página 2 volviera a arrancar
+   * en 1, y el número dejaría de decir en qué posición del padrón está uno
+   * parado (issue #1156).
+   */
+  const visiblesConNumero = useMemo(
+    () => visibles.map((alumno, i) => ({ alumno, numero: (pagina - 1) * PAGE_SIZE + i + 1 })),
+    [visibles, pagina],
   );
 
   /**
@@ -189,86 +278,119 @@ export default function TrainerStudentsPage(): React.ReactElement {
               />
             ) : (
               <>
-                <ul>
-                  {visibles.map((alumno) => (
-                    <li
-                      key={alumno.personaId}
-                      data-testid={`student-row-${alumno.personaId}`}
-                      className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
-                    >
-                      {/*
-                       * `truncate` es `overflow:hidden` + `nowrap`, y `overflow`
-                       * no aplica a un elemento en línea no reemplazado (issue
-                       * #664): un `<span>` suelto adentro de este `min-w-0
-                       * flex-1` no se angosta ni trunca, se derrama debajo de
-                       * los botones. Por eso las tres clases viven en el MISMO
-                       * elemento, como ya hace `AttendanceRosterRow`.
-                       */}
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                        {alumno.nombreCompleto}
-                      </span>
-
-                      {/*
-                       * La única acción del renglón, y la MISMA que la ficha
-                       * médica de Administración (`/members`): es la misma
-                       * tarjeta, y aprenderla dos veces sería cobrarle al
-                       * entrenador la misma lección dos veces. `Stethoscope` y
-                       * no `AlertTriangle` porque el botón consulta una ficha,
-                       * no anuncia un peligro (issue #857).
-                       *
-                       * El botón entero es el de `MedicalRecordAccessButton`,
-                       * no una copia de sus clases: `Button` secundario y el
-                       * foco puesto en el disparador antes de abrir, porque un
-                       * toque en el celular no enfoca nada y la trampa de foco
-                       * de la ficha guardaría `body` como origen — al cerrar,
-                       * el entrenador volvería al principio de la página en vez
-                       * del renglón que estaba mirando. Lo que cambia respecto
-                       * de `/members` es la densidad: este renglón es una lista
-                       * de pulgar, no una celda de tabla, así que `md` (h-ctl,
-                       * `text-sm`) con `ICON.base` — los dos escalones que van
-                       * juntos — en lugar de `sm` con `ICON.sm` (issue #911).
-                       */}
-                      <Button
-                        variant="secondary"
-                        className="flex-none"
-                        onClick={(event) => {
-                          event.currentTarget.focus();
-                          setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto });
-                        }}
-                        aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
-                      >
-                        <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
-                        Ficha médica
-                      </Button>
-                          <button
-                            type="button"
-                            onClick={() => setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })}
-                            aria-label={`Horario de ${alumno.nombreCompleto}`}
-                            className="flex h-11 flex-none items-center justify-center rounded-ctl border border-line px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunken"
-                          >
-                            Horario
-                          </button>
-                          {/* extra closing control removed */}
-                    </li>
-                  ))}
-                </ul>
-
-                {/*
-                 * Paginación de cliente sobre la nómina ya juntada, porque el
-                 * endpoint devuelve el padrón entero de una y no se le va a
-                 * pedir que pagine. Se cuentan PERSONAS, no asignaciones: decir
-                 * "200 alumnos" cuando hay 66 sería contar tres veces al mismo
-                 * chico.
-                 */}
-                <Pagination
-                  page={pagina}
-                  totalPages={totalPaginas}
-                  onPageChange={setPagina}
-                  totalItems={encontrados.length}
-                  pageSize={PAGE_SIZE}
-                  itemNoun="alumno"
-                  variant="footer"
-                />
+                    {/*
+                     * La nómina es la MISMA tabla compartida que `/members`,
+                     * `/discounts` y el historial de asistencias: tarjetas
+                     * debajo de `sm`, tabla con `<thead>` de `sm` para arriba
+                     * (issue #1156). El `<ul>` hecho a mano se jubila.
+                     */}
+                    <ResponsiveListTable
+                      items={visiblesConNumero}
+                      getKey={({ alumno }) => alumno.personaId}
+                      mobileListTestId="students-mobile-list"
+                      desktopTableTestId="students-desktop-table"
+                      tableHead={
+                        <TableRow>
+                          <TableHeaderCell type="number">#</TableHeaderCell>
+                          <TableHeaderCell>Estudiante</TableHeaderCell>
+                          <TableHeaderCell type="action">Ficha médica</TableHeaderCell>
+                          <TableHeaderCell type="action">Horario</TableHeaderCell>
+                        </TableRow>
+                      }
+                      renderCard={({ alumno, numero }) => (
+                        <li
+                          data-testid={`student-card-${alumno.personaId}`}
+                          className="space-y-section px-4 py-4"
+                        >
+                          <div className="flex items-baseline gap-2">
+                            <span className="flex-none text-2xs tracking-flat text-ink-3">
+                              #{numero}
+                            </span>
+                            {/*
+                             * Las tres clases de #664 en el MISMO elemento que
+                             * el nombre: `truncate` es `overflow:hidden` +
+                             * `nowrap`, y `overflow` no aplica a un elemento
+                             * en línea no reemplazado — si el nombre no ES el
+                             * ítem flex que se angosta, se derrama debajo de
+                             * los botones.
+                             */}
+                            <span
+                              className="min-w-0 flex-1 truncate text-sm font-semibold text-ink"
+                              title={alumno.nombreCompleto}
+                            >
+                              {alumno.nombreCompleto}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <BotonFichaMedica
+                              alumno={alumno}
+                              onAbrir={() =>
+                                setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })
+                              }
+                            />
+                            <BotonHorario
+                              alumno={alumno}
+                              onAbrir={() =>
+                                setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })
+                              }
+                            />
+                          </div>
+                        </li>
+                      )}
+                      renderRow={({ alumno, numero }) => (
+                        <TableRow data-testid={`student-row-${alumno.personaId}`}>
+                          <TableCell type="number">{numero}</TableCell>
+                          <TableCell>
+                            {/*
+                             * El nombre trunca en el MISMO elemento que se
+                             * angosta (#664): `block` hace que `overflow`
+                             * aplique, `max-w` le da contra qué truncar, y
+                             * `title` devuelve el nombre completo al vuelo.
+                             */}
+                            <span
+                              className="block min-w-0 max-w-[240px] flex-1 truncate text-sm font-semibold text-ink"
+                              title={alumno.nombreCompleto}
+                            >
+                              {alumno.nombreCompleto}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <BotonFichaMedica
+                              alumno={alumno}
+                              onAbrir={() =>
+                                setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <BotonHorario
+                              alumno={alumno}
+                              onAbrir={() =>
+                                setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      footer={
+                        /*
+                         * Paginación de cliente sobre la nómina ya juntada,
+                         * porque el endpoint devuelve el padrón entero de una
+                         * y no se le va a pedir que pagine. Se cuentan
+                         * PERSONAS, no asignaciones: decir "200 alumnos" cuando
+                         * hay 66 sería contar tres veces al mismo chico.
+                         */
+                        <Pagination
+                          page={pagina}
+                          totalPages={totalPaginas}
+                          onPageChange={setPagina}
+                          totalItems={encontrados.length}
+                          pageSize={PAGE_SIZE}
+                          itemNoun="alumno"
+                          variant="footer"
+                        />
+                      }
+                    />
               </>
             )}
           </div>

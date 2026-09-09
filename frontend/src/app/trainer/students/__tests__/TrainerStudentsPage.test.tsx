@@ -203,9 +203,13 @@ describe("un alumno es una persona, no una asignación", () => {
     render(<TrainerStudentsPage />);
 
     await screen.findByTestId("student-row-7");
-    // Cinco filas entran, tres personas salen.
+    // Cinco filas entran, tres personas salen — y Melany aparece UNA vez por
+    // rendering (renglón de escritorio, tarjeta mobile), no una por horario.
     expect(renglones()).toHaveLength(3);
-    expect(screen.getAllByText("Melany Quimis")).toHaveLength(1);
+    const tabla = screen.getByTestId("students-desktop-table");
+    expect(within(tabla).getAllByText("Melany Quimis")).toHaveLength(1);
+    const moviles = screen.getByTestId("students-mobile-list");
+    expect(within(moviles).getAllByText("Melany Quimis")).toHaveLength(1);
   });
 
   it("le pone un solo botón de ficha a cada persona, no uno por horario", async () => {
@@ -332,7 +336,10 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
       render(<TrainerStudentsPage />);
       const melany = await screen.findByTestId("student-row-7");
       const trigger = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
-      trigger.focus();
+      // El renglón enfoca su propio disparador antes de abrir (mismo patrón
+      // de la ficha médica), así que la prueba no precarga el foco: lo que se
+      // prueba es ese comportamiento de la página.
+      expect(trigger).not.toHaveFocus();
       fireEvent.click(trigger);
       const dialog = screen.getByRole("dialog", { name: "Horario" });
       expect(within(dialog).getByText("Melany Quimis")).toBeInTheDocument();
@@ -376,7 +383,8 @@ describe("el buscador filtra la nómina que ya está en memoria", () => {
     });
 
     await waitFor(() => expect(renglones()).toHaveLength(1));
-    expect(screen.getByText("Diego Mendoza")).toBeInTheDocument();
+    const tabla = screen.getByTestId("students-desktop-table");
+    expect(within(tabla).getByText("Diego Mendoza")).toBeInTheDocument();
     expect(mockFetchRoster).toHaveBeenCalledTimes(1);
   });
 
@@ -389,6 +397,71 @@ describe("el buscador filtra la nómina que ya está en memoria", () => {
     });
 
     expect(await screen.findByText(/ningún alumno/i)).toBeInTheDocument();
+  });
+});
+
+describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
+  it("en escritorio es una tabla con los cuatro encabezados del issue", async () => {
+    render(<TrainerStudentsPage />);
+
+    const tabla = await screen.findByTestId("students-desktop-table");
+    const encabezados = within(tabla)
+      .getAllByRole("columnheader")
+      .map((celda) => celda.textContent);
+
+    expect(encabezados).toEqual(["#", "Estudiante", "Ficha médica", "Horario"]);
+  });
+
+  it("el índice cuenta sobre el padrón filtrado completo: la página 2 arranca en 11, no en 1", async () => {
+    // Doce personas, una asignación cada una: con PAGE_SIZE en 10 la página 2
+    // existe y muestra dos renglones — los números 11 y 12, no 1 y 2.
+    mockFetchRoster.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) =>
+        fila(100 + i, `Alumno ${String(i + 1).padStart(2, "0")} de Prueba`, 13, "LUNES"),
+      ),
+    );
+    render(<TrainerStudentsPage />);
+
+    await screen.findByTestId("student-row-100");
+    const tabla = screen.getByTestId("students-desktop-table");
+    const numeros = (): (string | null)[] =>
+      within(tabla)
+        .getAllByRole("row")
+        .slice(1)
+        .map((renglon) => (renglon as HTMLTableRowElement).cells[0]?.textContent ?? null);
+
+    expect(numeros()).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+
+    expect(numeros()).toEqual(["11", "12"]);
+    // La tarjeta de mobile cuenta la misma posición del padrón.
+    expect(
+      within(screen.getByTestId("students-mobile-list")).getByText("#11"),
+    ).toBeInTheDocument();
+  });
+
+  it("el botón Horario usa el Button compartido, como el de ficha médica (issue #1156)", async () => {
+    render(<TrainerStudentsPage />);
+
+    const melany = await screen.findByTestId("student-row-7");
+    const horario = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
+
+    for (const clase of buttonSkin("secondary").split(" ")) {
+      expect(horario).toHaveClass(clase);
+    }
+    expect(horario).toHaveClass("h-ctl");
+  });
+
+  it("debajo de sm cada alumno sigue siendo una tarjeta legible con sus dos acciones", async () => {
+    render(<TrainerStudentsPage />);
+
+    const moviles = await screen.findByTestId("students-mobile-list");
+    const tarjetas = within(moviles).getAllByTestId(/^student-card-/);
+    expect(tarjetas).toHaveLength(3);
+    for (const tarjeta of tarjetas) {
+      expect(within(tarjeta).getAllByRole("button")).toHaveLength(2);
+    }
   });
 });
 
