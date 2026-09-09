@@ -26,7 +26,7 @@ import Ticker from "./Ticker";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "./club-location";
 import { buildLandingStats, deriveContactHours, landingConfig, toWhatsAppLink } from "./landing-config";
-import { MAP_INSET_SIZES } from "./landing-image-sizes";
+import { MAP_INSET_SIZES, MISSION_VISION_PHOTO_SIZES } from "./landing-image-sizes";
 import { mapPublicSchedules, type LandingSchedule } from "./schedule-data";
 import { SITE_NAV_SECTIONS, landingSectionHref } from "@/lib/site-navigation";
 
@@ -248,6 +248,15 @@ function MissionVision(): React.ReactElement {
           <h3>Nuestra Misión</h3>
           <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
           <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
+          <Image
+            src="/landing/mission-focus.jpeg"
+            alt="Alumna de Cata Club ejecutando un golpe de derecha durante un torneo de tenis de mesa."
+            width={1080}
+            height={1090}
+            loading="lazy"
+            className="landing-pillar-photo"
+            sizes={MISSION_VISION_PHOTO_SIZES}
+          />
         </article>
         <article className="landing-pillar" data-reveal>
           <span className="landing-index" aria-hidden="true">02</span>
@@ -255,6 +264,15 @@ function MissionVision(): React.ReactElement {
           <h3>Nuestra Visión</h3>
           <p className="landing-lead">Ser un club líder y referente deportivo a nivel provincial y nacional.</p>
           <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
+          <Image
+            src="/landing/vision-coaching.jpeg"
+            alt="Joven jugador de Cata Club junto a su entrenadora en un torneo internacional."
+            width={1080}
+            height={1257}
+            loading="lazy"
+            className="landing-pillar-photo"
+            sizes={MISSION_VISION_PHOTO_SIZES}
+          />
         </article>
       </div>
     </section>

@@ -217,8 +217,11 @@
 
 /* Mission/Vision pillars — v2 redesign (issue #611 rhythm; approved
    prototype `landing-mision-vision-v2-texto.html`). Two typographic
-   columns, no photography: rank comes from an index, a scale jump and a
-   hairline top border — no tinted icon chip, no photo, no centred divider.
+   columns: rank comes from an index, a scale jump and a hairline top
+   border — no tinted icon chip, no centred divider. A single photograph
+   now closes each column below the body copy (`.landing-pillar-photo`
+   below); the icon chip and the centred divider the v2 redesign rejected
+   are unrelated to that photo and stay rejected.
    This block's own scale is applied through `.landing-pillars .landing-index`
    rather than the shared base rule below, which the Values tablero does not
    use — its numerals live in `.landing-tablero-tile` instead.
@@ -234,6 +237,17 @@
 .landing-pillar h3 { margin-top: 18px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; line-height: 1.1; text-transform: uppercase; }
 .landing-lead { margin: 18px 0 0; max-width: 30ch; color: var(--landing-text-strong); font-weight: 600; font-size: 22px; line-height: 1.35; }
 .landing-pillar p:not(.landing-lead) { margin: 14px 0 0; max-width: 44ch; color: var(--landing-text); font-size: 17px; line-height: 1.7; }
+/* The two source photos arrive at different native ratios (mission-focus.jpeg
+   is 1080x1090 ≈ 0.99, vision-coaching.jpeg is 1080x1257 ≈ 0.86), but the
+   pillars are one symmetric pair — `data-reveal-together` on the section
+   already treats them that way — so a SHARED ratio, not each photo's own, is
+   what keeps the two columns level. `1 / 1` crops mission-focus by well
+   under 1% (it is already almost square) and takes ~14% off
+   vision-coaching, and `object-position: top` puts all of that crop at the
+   bottom: it keeps both pillars' subjects — including mission-focus's ball,
+   already close to its own top edge — fully in frame, trimming empty
+   leg-room in vision-coaching instead of either subject's face. */
+.landing-pillar-photo { display: block; width: 100%; margin-top: 24px; aspect-ratio: 1 / 1; object-fit: cover; object-position: top; }
 .landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
 /* Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
@@ -588,6 +602,12 @@
   .landing-tablero-item p { font-size: 15px; margin-top: 10px; }
   .landing-tablero-cue { align-self: flex-start; }
   .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
+  /* Stacked into one column the pillar itself can reach ~720px wide, but a
+     1:1 square at that width would tower over the text it illustrates — the
+     lead and body copy above cap themselves to ~330-375px (30ch / 44ch).
+     Capping the photo near that same width keeps it proportionate to its
+     own column instead of becoming the tallest thing on the mobile page. */
+  .landing-pillar-photo { max-width: 360px; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are
      desktop-only reads, so both drop rather than crowd a 44px-tall pill. */
