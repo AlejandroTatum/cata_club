@@ -37,8 +37,8 @@
  * al entrenador a tocar botones que le van a devolver un 403. La nómina en sí
  * se dibuja con `ResponsiveListTable`, el mismo shell de `/members`,
  * `/discounts` y el historial de asistencias: tarjeta debajo de `sm`, tabla
- * con encabezados de `sm` para arriba, y un índice que cuenta sobre el padrón
- * filtrado COMPLETO, no sobre la página visible (issue #1156).
+ * con encabezados de `sm` para arriba (issue #1156). Sin columna de número de
+ * renglón: no hay nada en la nómina que numerar.
  */
 
 "use client";
@@ -183,18 +183,6 @@ export default function TrainerStudentsPage(): React.ReactElement {
   );
 
   /**
-   * El número de renglón cuenta sobre el RESULTADO FILTRADO COMPLETO, no
-   * sobre la página visible: la fórmula es `(pagina - 1) * PAGE_SIZE + i +
-   * 1`. Contar desde `visibles` haría que la página 2 volviera a arrancar
-   * en 1, y el número dejaría de decir en qué posición del padrón está uno
-   * parado (issue #1156).
-   */
-  const visiblesConNumero = useMemo(
-    () => visibles.map((alumno, i) => ({ alumno, numero: (pagina - 1) * PAGE_SIZE + i + 1 })),
-    [visibles, pagina],
-  );
-
-  /**
    * Cuál de los dos vacíos aplica, si aplica alguno — nunca ambos: un padrón
    * vacío ya explica por qué no hay resultados, así que la búsqueda ni se
    * evalúa. Statement independiente en vez de ternario anidado en el JSX
@@ -285,52 +273,36 @@ export default function TrainerStudentsPage(): React.ReactElement {
                      * (issue #1156). El `<ul>` hecho a mano se jubila.
                      */}
                     <ResponsiveListTable
-                      items={visiblesConNumero}
-                      getKey={({ alumno }) => alumno.personaId}
+                      items={visibles}
+                      getKey={(alumno) => alumno.personaId}
                       mobileListTestId="students-mobile-list"
                       desktopTableTestId="students-desktop-table"
                       tableHead={
                         <TableRow>
-                          {/*
-                           * The `#` is dropped (issue #1158): its header
-                           * text-aligns right while its body wraps the digit
-                           * in a centered `DataBox`, so the glyph and the
-                           * number never line up. Numbering the rows needs no
-                           * visible label — the `sr-only` span keeps the
-                           * column named for a screen reader.
-                           */}
-                          <TableHeaderCell type="number">
-                            <span className="sr-only">Número</span>
-                          </TableHeaderCell>
+                          {/* El número de renglón se retiró: ya no numera. */}
                           <TableHeaderCell>Estudiante</TableHeaderCell>
                           <TableHeaderCell type="action">Ficha médica</TableHeaderCell>
                           <TableHeaderCell type="action">Horario</TableHeaderCell>
                         </TableRow>
                       }
-                      renderCard={({ alumno, numero }) => (
+                      renderCard={(alumno) => (
                         <li
                           data-testid={`student-card-${alumno.personaId}`}
                           className="space-y-section px-4 py-4"
                         >
-                          <div className="flex items-baseline gap-2">
-                            <span className="flex-none text-2xs tracking-flat text-ink-3">
-                              #{numero}
-                            </span>
-                            {/*
-                             * Las tres clases de #664 en el MISMO elemento que
-                             * el nombre: `truncate` es `overflow:hidden` +
-                             * `nowrap`, y `overflow` no aplica a un elemento
-                             * en línea no reemplazado — si el nombre no ES el
-                             * ítem flex que se angosta, se derrama debajo de
-                             * los botones.
-                             */}
-                            <span
-                              className="min-w-0 flex-1 truncate text-sm font-semibold text-ink"
-                              title={alumno.nombreCompleto}
-                            >
-                              {alumno.nombreCompleto}
-                            </span>
-                          </div>
+                          {/*
+                           * `truncate` es `overflow:hidden` + `nowrap`, y
+                           * `overflow` no aplica a un elemento en línea no
+                           * reemplazado (#664): `block` lo vuelve un
+                           * candidato válido y lo acota al ancho de la
+                           * tarjeta.
+                           */}
+                          <span
+                            className="block min-w-0 truncate text-sm font-semibold text-ink"
+                            title={alumno.nombreCompleto}
+                          >
+                            {alumno.nombreCompleto}
+                          </span>
                           <div className="flex flex-wrap gap-2">
                             <BotonFichaMedica
                               alumno={alumno}
@@ -347,9 +319,8 @@ export default function TrainerStudentsPage(): React.ReactElement {
                           </div>
                         </li>
                       )}
-                      renderRow={({ alumno, numero }) => (
+                      renderRow={(alumno) => (
                         <TableRow data-testid={`student-row-${alumno.personaId}`}>
-                          <TableCell type="number">{numero}</TableCell>
                           <TableCell>
                             {/*
                              * El nombre trunca en el MISMO elemento que se

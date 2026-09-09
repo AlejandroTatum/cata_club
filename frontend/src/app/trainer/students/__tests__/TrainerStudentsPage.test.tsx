@@ -401,7 +401,7 @@ describe("el buscador filtra la nómina que ya está en memoria", () => {
 });
 
 describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
-  it("en escritorio es una tabla con los cuatro encabezados del issue", async () => {
+  it("en escritorio es una tabla con los tres encabezados del padrón", async () => {
     render(<TrainerStudentsPage />);
 
     const tabla = await screen.findByTestId("students-desktop-table");
@@ -409,38 +409,9 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
       .getAllByRole("columnheader")
       .map((celda) => celda.textContent);
 
-    // La columna de índice pierde el rótulo visible "#" (issue #1158): sigue
-    // numerando, pero su nombre accesible ahora viene de un `sr-only`.
-    expect(encabezados).toEqual(["Número", "Estudiante", "Ficha médica", "Horario"]);
-  });
-
-  it("el índice cuenta sobre el padrón filtrado completo: la página 2 arranca en 11, no en 1", async () => {
-    // Doce personas, una asignación cada una: con PAGE_SIZE en 10 la página 2
-    // existe y muestra dos renglones — los números 11 y 12, no 1 y 2.
-    mockFetchRoster.mockResolvedValue(
-      Array.from({ length: 12 }, (_, i) =>
-        fila(100 + i, `Alumno ${String(i + 1).padStart(2, "0")} de Prueba`, 13, "LUNES"),
-      ),
-    );
-    render(<TrainerStudentsPage />);
-
-    await screen.findByTestId("student-row-100");
-    const tabla = screen.getByTestId("students-desktop-table");
-    const numeros = (): (string | null)[] =>
-      within(tabla)
-        .getAllByRole("row")
-        .slice(1)
-        .map((renglon) => (renglon as HTMLTableRowElement).cells[0]?.textContent ?? null);
-
-    expect(numeros()).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
-
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
-
-    expect(numeros()).toEqual(["11", "12"]);
-    // La tarjeta de mobile cuenta la misma posición del padrón.
-    expect(
-      within(screen.getByTestId("students-mobile-list")).getByText("#11"),
-    ).toBeInTheDocument();
+    // La columna de índice se retira entera (el pedido del usuario): ya no
+    // hay nada que numerar, así que no queda encabezado que la represente.
+    expect(encabezados).toEqual(["Estudiante", "Ficha médica", "Horario"]);
   });
 
   it("el botón Horario usa el Button compartido, como el de ficha médica (issue #1156)", async () => {
@@ -487,14 +458,22 @@ describe("los encabezados se alinean con su contenido (issue #1158)", () => {
     });
   });
 
-  it("la columna de índice no muestra el rótulo # pero conserva un nombre accesible", async () => {
+  it("no numera los renglones: ni la tabla ni la tarjeta muestran una posición", async () => {
+    // El usuario pidió sacar la columna entera, no solo su rótulo visible:
+    // no queda encabezado "Número" ni un índice suelto en ninguna de las dos
+    // renderizaciones.
     render(<TrainerStudentsPage />);
 
     const tabla = await screen.findByTestId("students-desktop-table");
-    const indice = within(tabla).getByRole("columnheader", { name: "Número" });
+    expect(within(tabla).queryByRole("columnheader", { name: "Número" })).not.toBeInTheDocument();
 
-    expect(indice.textContent).toBe("Número");
-    expect(indice.querySelector(".sr-only")).not.toBeNull();
+    const melany = await screen.findByTestId("student-row-7");
+    expect(within(melany).queryByText(/^#\d+$/)).not.toBeInTheDocument();
+
+    const tarjetaMelany = within(screen.getByTestId("students-mobile-list")).getByTestId(
+      "student-card-7",
+    );
+    expect(within(tarjetaMelany).queryByText(/^#\d+$/)).not.toBeInTheDocument();
   });
 });
 
