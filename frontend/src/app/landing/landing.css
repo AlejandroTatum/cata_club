@@ -219,9 +219,13 @@
    prototype `landing-mision-vision-v2-texto.html`). Two typographic
    columns: rank comes from an index, a scale jump and a hairline top
    border — no tinted icon chip, no centred divider. A single photograph
-   now closes each column below the body copy (`.landing-pillar-photo`
-   below); the icon chip and the centred divider the v2 redesign rejected
-   are unrelated to that photo and stay rejected.
+   sits BESIDE the body copy (`.landing-pillar-photo` below, inside its own
+   `.landing-pillar-copy` / photo two-column grid) rather than below it —
+   the 44ch cap on `.landing-pillar p:not(.landing-lead)` already left the
+   right side of each column empty at any width wider than that, and a
+   client screenshot showed exactly that gap; the icon chip and the centred
+   divider the v2 redesign rejected are unrelated to that photo and stay
+   rejected.
    This block's own scale is applied through `.landing-pillars .landing-index`
    rather than the shared base rule below, which the Values tablero does not
    use — its numerals live in `.landing-tablero-tile` instead.
@@ -230,7 +234,19 @@
    previous side-by-side layout and has no place once the index and the label
    stack. */
 .landing-pillars { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
-.landing-pillar { border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
+/* Each pillar mirrors its parent's own 1fr/1fr split — copy on the left,
+   photo on the right — with a tighter 32px inner gap (vs. the 72px outer
+   gap between the two pillars themselves), since these two columns belong
+   to one visual unit rather than two. `.landing-pillar-copy` wraps the five
+   text children as a single grid item so the photo, the sixth child, lands
+   in the second column by plain two-item auto-placement — no per-child
+   `grid-column` bookkeeping. `align-items: start` keeps both columns' top
+   edges level with each other and with the pillar's own top border. Below
+   the mobile breakpoint this collapses back to one column (see the 768px
+   block), stacking the photo under the copy again: side-by-side inside an
+   already single-column `.landing-pillars` would leave neither half legible
+   on a phone. */
+.landing-pillar { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; border-top: 1px solid var(--landing-text-strong); padding-top: 28px; }
 .landing-index { color: var(--landing-text-muted); font-family: var(--font-landing-barlow); font-size: 15px; letter-spacing: 3px; }
 .landing-pillars .landing-index { display: block; margin: 0; font-weight: 800; font-size: 64px; line-height: 1; letter-spacing: normal; color: var(--landing-action); }
 .landing-index-label { display: block; margin-top: 4px; color: var(--landing-text-strong); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
@@ -246,8 +262,12 @@
    vision-coaching, and `object-position: top` puts all of that crop at the
    bottom: it keeps both pillars' subjects — including mission-focus's ball,
    already close to its own top edge — fully in frame, trimming empty
-   leg-room in vision-coaching instead of either subject's face. */
-.landing-pillar-photo { display: block; width: 100%; margin-top: 24px; aspect-ratio: 1 / 1; object-fit: cover; object-position: top; }
+   leg-room in vision-coaching instead of either subject's face. No
+   `margin-top` here on desktop — the photo sits in its own grid column,
+   level with the copy beside it; the 24px gap from the old stacked layout
+   only applies once the mobile breakpoint below collapses the pillar back
+   to one column. */
+.landing-pillar-photo { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; object-position: top; }
 .landing-contact h3 { font-family: var(--font-landing-barlow); font-size: 20px; text-transform: uppercase; }
 
 /* Valores tablero redesign: the scroll-scrubbed rally (ball, guide,
@@ -304,21 +324,36 @@
    `landing-vertical-space.spec.ts` enforces. `background-size: contain`
    inside `inset: 0` scales the crest down with the tile itself at the
    140px mobile height — no separate breakpoint override needed.
-   `opacity: 0.55` was chosen to actually read at normal viewing distance
-   rather than default to a watermark value, and it still leaves the
-   numeral legible: the crest's own brightest fully-opaque pixel (a dark
-   red, rgb(156, 48, 61)) composited at 0.55 over `--landing-brand-black`
-   is the worst-case backdrop under the numeral, and `--landing-highlight`
-   yellow (`#ffd600`) against that composite still measures ≈9.3:1 —
-   comfortably clear of the 3:1 WCAG AA minimum for text this large, and
-   above the 4.5:1 AA minimum for normal text besides. All four tiles carry
-   the identical mark at the identical scale and position: repeated
-   identically across a symmetric, evenly-spaced grid reads as a
+   The asset is `cata-club-crest-256-light.png`, the white-silhouette
+   derivative of the same 256×256 mark (identical 17,801 opaque pixels, all
+   `#ffffff`) — NOT `cata-club-crest-256.png`, the dark derivative used
+   elsewhere on this page (navbar, Motto paddle). That dark version's
+   opaque colour measures `rgb(17, 12, 34)`, effectively black: composited
+   over `--landing-brand-black` (`#111111`) it all but disappeared, leaving
+   only the red laurel visible — the defect the client reported. Swapping
+   to the white silhouette, without moving the tile background off
+   `--landing-brand-black` or recolouring the numeral, is what makes the
+   mark itself read again.
+   A white crest raises the worst-case backdrop under the numeral by a lot
+   more than the old dark mark ever did, so the opacity had to be
+   recomputed against it rather than carried over: composited at opacity N
+   over `#111111`, the crest's fully-opaque white reaches sRGB gray
+   `17 + 238×N` per channel. `--landing-highlight` yellow (`#ffd600`)
+   against that composite has WCAG contrast ≈5.0:1 at `opacity: 0.30`,
+   crossing below the 4.5:1 AA minimum for normal text (not just the 3:1
+   large-text minimum) only once opacity passes ≈0.33 — so 0.30 keeps
+   headroom on both sides of that line rather than sitting right on it.
+   (At full white, `opacity: 1`, the composite is bright enough to read as
+   nearly white itself, and contrast against the yellow numeral collapses
+   to ≈1.4:1 — this is a peak-then-valley curve, not a "higher opacity is
+   always safe" one, which is why the exact ceiling matters here.) All four
+   tiles carry the identical mark at the identical scale and position:
+   repeated identically across a symmetric, evenly-spaced grid reads as a
    deliberate pattern rather than a rendering bug, the way it would if only
    some tiles carried it. Still not the retired rally: no scroll-scrubbed
    opacity, no per-value state, nothing keyed to `[data-value]`/`.dim`/
    `.hit`. */
-.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.55; pointer-events: none; }
+.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256-light.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.3; pointer-events: none; }
 .landing-tablero-tile:hover { transform: translateY(-6px); }
 .landing-tablero-item { margin-top: 18px; }
 .landing-tablero-item h3 { margin: 0; font-family: var(--font-landing-barlow); font-weight: 800; font-size: 22px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--landing-text-strong); }
@@ -629,12 +664,23 @@
   .landing-tablero-item p { font-size: 15px; margin-top: 10px; }
   .landing-tablero-cue { align-self: flex-start; }
   .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
+  /* Undoes the desktop side-by-side split: below this breakpoint
+     `.landing-pillars` itself is already one column, so a photo beside the
+     copy would squeeze both into an unreadable sliver. Back to one column
+     per pillar — copy first, photo below — with the 24px gap the stacked
+     layout needs and the desktop rule above deliberately drops. */
+  /* `gap: 0` too — the base rule's 32px gap is a COLUMN gap meant for the
+     desktop copy/photo split, but grid `gap` covers both axes at once. Left
+     alone it would also apply as a ROW gap between the stacked copy and
+     photo here, stacking on top of the photo's own `margin-top: 24px`
+     below and doubling the intended spacing. */
+  .landing-pillar { grid-template-columns: 1fr; gap: 0; }
   /* Stacked into one column the pillar itself can reach ~720px wide, but a
      1:1 square at that width would tower over the text it illustrates — the
      lead and body copy above cap themselves to ~330-375px (30ch / 44ch).
      Capping the photo near that same width keeps it proportionate to its
      own column instead of becoming the tallest thing on the mobile page. */
-  .landing-pillar-photo { max-width: 360px; }
+  .landing-pillar-photo { max-width: 360px; margin-top: 24px; }
   /* The list becomes horizontal chips with scroll instead of a stacked
      vertical list — the accent bar and the tab's own hours line are
      desktop-only reads, so both drop rather than crowd a 44px-tall pill. */

@@ -243,11 +243,13 @@ function MissionVision(): React.ReactElement {
       <SectionHeader eyebrow="Quiénes somos" title="Misión y Visión" />
       <div className="landing-pillars">
         <article className="landing-pillar" data-reveal>
-          <span className="landing-index" aria-hidden="true">01</span>
-          <span className="landing-index-label" aria-hidden="true">Propósito</span>
-          <h3>Nuestra Misión</h3>
-          <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
-          <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
+          <div className="landing-pillar-copy">
+            <span className="landing-index" aria-hidden="true">01</span>
+            <span className="landing-index-label" aria-hidden="true">Propósito</span>
+            <h3>Nuestra Misión</h3>
+            <p className="landing-lead">Promover el tenis de mesa mediante formación deportiva de calidad.</p>
+            <p>Fomentamos el desarrollo integral de niños, jóvenes y adultos con valores, disciplina y excelencia competitiva.</p>
+          </div>
           <Image
             src="/landing/mission-focus.jpeg"
             alt="Alumna de Cata Club ejecutando un golpe de derecha durante un torneo de tenis de mesa."
@@ -259,11 +261,13 @@ function MissionVision(): React.ReactElement {
           />
         </article>
         <article className="landing-pillar" data-reveal>
-          <span className="landing-index" aria-hidden="true">02</span>
-          <span className="landing-index-label" aria-hidden="true">Horizonte</span>
-          <h3>Nuestra Visión</h3>
-          <p className="landing-lead">Ser un club líder y referente deportivo a nivel provincial y nacional.</p>
-          <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
+          <div className="landing-pillar-copy">
+            <span className="landing-index" aria-hidden="true">02</span>
+            <span className="landing-index-label" aria-hidden="true">Horizonte</span>
+            <h3>Nuestra Visión</h3>
+            <p className="landing-lead">Ser un club líder y referente deportivo a nivel provincial y nacional.</p>
+            <p>Preparamos deportistas altamente competitivos que integren de manera permanente las selecciones del país.</p>
+          </div>
           <Image
             src="/landing/vision-coaching.jpeg"
             alt="Joven jugador de Cata Club junto a su entrenadora en un torneo internacional."

@@ -31,6 +31,16 @@ import { resetLandingTestEnvironment, stubLandingGlobals } from "./landing-test-
 const landingCss = (): string =>
   readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
 
+/** The first `<selector> { ... }` rule at or after `fromIndex`, as raw text —
+ * same convention `landing-vertical-space.test.ts` uses for stylesheet-only
+ * contracts. */
+const ruleAt = (css: string, selector: string, fromIndex = 0): string => {
+  const start = css.indexOf(`${selector} {`, fromIndex);
+  if (start === -1) throw new Error(`rule not found: ${selector} (from ${fromIndex})`);
+  const end = css.indexOf("}", start);
+  return css.slice(start, end + 1);
+};
+
 beforeEach((): void => {
   stubLandingGlobals();
 });
@@ -105,7 +115,46 @@ describe("Valores tablero (rally replacement)", (): void => {
     const css = landingCss();
     expect(css).not.toContain(".landing-values-crest");
     expect(css).toContain(
-      '.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.55; pointer-events: none; }',
+      '.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256-light.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.3; pointer-events: none; }',
     );
+  });
+
+  // Issue: the dark crest (`cata-club-crest-256.png`, opaque colour
+  // rgb(17, 12, 34)) all but disappears over `--landing-brand-black`
+  // (`#111111`) — only the red laurel survived, which is what the client
+  // reported as no contrast at all. A regression back to that asset, or an
+  // opacity that stops keeping the numeral's contrast at or above 4.5:1
+  // against the new white-crest composite, must fail here rather than only
+  // being caught by eye.
+  it("uses the white-silhouette crest, never the dark one, and keeps the numeral at AA contrast (4.5:1) against it", (): void => {
+    const css = landingCss();
+    const rule = ruleAt(css, ".landing-tablero-tile::before");
+    expect(rule).toContain('url("/brand/cata-club-crest-256-light.png")');
+    expect(rule).not.toContain('url("/brand/cata-club-crest-256.png")');
+
+    const opacityMatch = rule.match(/opacity:\s*([\d.]+)/);
+    expect(opacityMatch).not.toBeNull();
+    const opacity = Number.parseFloat(opacityMatch![1]);
+
+    // Worst-case backdrop under the numeral: the crest's fully-opaque white
+    // (#ffffff) composited at `opacity` over the tile's `--landing-brand-black`
+    // (#111111 = rgb(17,17,17)).
+    const black = 17;
+    const composite = black + (255 - black) * opacity;
+
+    const linearize = (channel: number): number => {
+      const v = channel / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (r: number, g: number, b: number): number =>
+      0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+    const contrast = (l1: number, l2: number): number => {
+      const [lighter, darker] = l1 > l2 ? [l1, l2] : [l2, l1];
+      return (lighter + 0.05) / (darker + 0.05);
+    };
+
+    const numeralLuminance = luminance(0xff, 0xd6, 0x00); // --landing-highlight (#ffd600)
+    const backdropLuminance = luminance(composite, composite, composite);
+    expect(contrast(numeralLuminance, backdropLuminance)).toBeGreaterThanOrEqual(4.5);
   });
 });
