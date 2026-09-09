@@ -2,16 +2,20 @@
 
 /**
  * Structural lock — the Mission/Vision v2 redesign (typographic pillars,
- * no photography). Replaces the photo/divider symmetry lock this section
- * used to need: the approved prototype
- * (`landing-mision-vision-v2-texto.html`) drops the editorial photos, the
- * centre divider and the shared-row subgrid entirely, so none of that DOM
- * shape exists to protect anymore.
+ * one photo each). The approved prototype
+ * (`landing-mision-vision-v2-texto.html`) dropped the icon chip and the
+ * centre divider entirely, so no DOM shape for either exists to protect
+ * anymore; a single real photograph was later added back below each
+ * pillar's body copy, forced through the shared `.landing-pillar-photo`
+ * ratio (landing.css) so the two columns stay level as one pair.
  *
- * jsdom cannot lay out CSS Grid, so real geometry (the two-column layout,
- * the mobile stack) is out of scope here — this suite anchors only the DOM
- * shape: two `.landing-pillar` articles, each carrying its index, label,
- * heading, lead and body in order, and no image anywhere in the section.
+ * jsdom cannot lay out CSS Grid or compute a rendered aspect ratio, so real
+ * geometry (the two-column layout, the mobile stack, the actual crop) is
+ * out of scope here — this suite anchors the DOM shape: two `.landing-pillar`
+ * articles, each carrying its index, label, heading, lead, body and photo in
+ * order, both photos sharing the same class (and therefore the same CSS
+ * ratio — see `landing-vertical-space.test.ts` for the rule itself), and no
+ * icon chip or divider.
  *
  * `data-reveal-together` (issue #1009) still matters: `LandingMotion.tsx`
  * reads it to skip the default reveal stagger between the two `data-reveal`
@@ -61,16 +65,18 @@ describe("Mission/Vision pillars (v2 redesign)", (): void => {
     });
   });
 
-  it("carries index, label, heading, lead and body in that order, in each pillar", (): void => {
+  it("carries index, label, heading, lead, body and photo in that order, in each pillar", (): void => {
     const { container } = render(<LandingPage />);
 
     const [mission, vision] = Array.from(container.querySelectorAll("#nosotros .landing-pillar"));
     for (const pillar of [mission, vision]) {
       const children = Array.from(pillar.children);
-      expect(children.map((child): string => child.tagName.toLowerCase())).toEqual(["span", "span", "h3", "p", "p"]);
+      expect(children.map((child): string => child.tagName.toLowerCase()))
+        .toEqual(["span", "span", "h3", "p", "p", "img"]);
       expect(children[0]).toHaveClass("landing-index");
       expect(children[1]).toHaveClass("landing-index-label");
       expect(children[3]).toHaveClass("landing-lead");
+      expect(children[5]).toHaveClass("landing-pillar-photo");
     }
 
     expect(mission.querySelector(".landing-index")?.textContent).toBe("01");
@@ -79,11 +85,32 @@ describe("Mission/Vision pillars (v2 redesign)", (): void => {
     expect(vision.querySelector(".landing-index-label")?.textContent).toBe("Horizonte");
   });
 
-  it("carries no photography and no divider — the v2 redesign drops both", (): void => {
+  it("gives each pillar exactly one photo, both forced through the same ratio class, and no divider", (): void => {
     const { container } = render(<LandingPage />);
 
     const section = container.querySelector("#nosotros") as HTMLElement;
-    expect(section.querySelectorAll("img")).toHaveLength(0);
+    const photos = Array.from(section.querySelectorAll<HTMLImageElement>("img"));
+    expect(photos).toHaveLength(2);
+
+    // Both photos share ONE class, so they are governed by the same
+    // `aspect-ratio` / `object-fit` rule in landing.css by construction — a
+    // per-photo override could not quietly reintroduce the ratio mismatch
+    // between the two source files that this class exists to erase.
+    photos.forEach((photo): void => {
+      expect(photo).toHaveClass("landing-pillar-photo");
+      expect(photo.getAttribute("sizes")).toBeTruthy();
+      expect(photo.getAttribute("sizes") ?? "").not.toMatch(/vw/);
+    });
+
+    // Real, specific alt text in Spanish per photo — never empty, never a
+    // generic placeholder, and never the same string reused for both.
+    const alts = photos.map((photo): string => photo.getAttribute("alt") ?? "");
+    for (const alt of alts) {
+      expect(alt.length).toBeGreaterThan(15);
+      expect(alt.toLowerCase()).not.toBe("foto");
+    }
+    expect(alts[0]).not.toBe(alts[1]);
+
     expect(section.querySelectorAll(".landing-editorial-divider")).toHaveLength(0);
     expect(section.querySelectorAll(".landing-editorial-media")).toHaveLength(0);
     expect(section.querySelectorAll(".landing-rule")).toHaveLength(0);

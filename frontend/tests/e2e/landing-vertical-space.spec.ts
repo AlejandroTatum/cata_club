@@ -30,17 +30,27 @@
  * the #871-era compressed values were 788px/1067px and scrollHeight
  * 6146px/8197px.
  *
+ * `document.scrollHeight` moved again when Mission/Vision (`#nosotros`) gained
+ * one photo per pillar below its body copy: `.landing-values`, `.landing-wins`
+ * and `.landing-motto` — the three sections this file actually shrinks — did
+ * not change size at all, so their individual ceilings below are untouched.
+ * Desktop's two pillars sit side by side, so only one photo's height
+ * (~588px including its 24px top margin) is added to the page. Mobile stacks
+ * both pillars into one column, so BOTH photos add their own height — at the
+ * 390px viewport below, each photo is capped by the 342px column, not the
+ * 360px `max-width` (`landing.css`), so the mobile increase is 2 × 366px.
+ *
  *   Section (desktop 1440x900)          height
  *   .landing-values (tablero)            701px
  *   .landing-wins (#1154)               1027px
  *   .landing-motto                       384px
- *   document.scrollHeight (#1154)       6385px
+ *   document.scrollHeight (mission/vision photos)  6973px
  *
  *   Section (mobile 390x844)            height
  *   .landing-values (tablero)            941px
  *   .landing-wins (#1154)               1194px
  *   .landing-motto                       438px
- *   document.scrollHeight (#1154)       8325px
+ *   document.scrollHeight (mission/vision photos)  9057px
  */
 import { test, expect } from "@playwright/test";
 
@@ -67,10 +77,16 @@ const VIEWPORTS = [
  *  did not move. The ceilings below carry the same headroom convention (+8px)
  *  over the measured numbers recorded in the file header; `scrollHeight`
  *  keeps a wider buffer because it aggregates the whole page and absorbs
- *  environment font-metric variance. */
+ *  environment font-metric variance.
+ *
+ *  `scrollHeight` rose again — 6505px to 7093px desktop, 8445px to 9177px
+ *  mobile — for Mission/Vision's new per-pillar photos (see the file header):
+ *  neither `valores`, `logros` nor `cta` moved, so only `scrollHeight` needed
+ *  a new ceiling. Both keep the same 120px buffer over their measured
+ *  6973px/9057px. */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 709, logros: 1035, cta: 400, scrollHeight: 6505 },
-  mobile: { valores: 1170, logros: 1203, cta: 450, scrollHeight: 8445 },
+  desktop: { valores: 709, logros: 1035, cta: 400, scrollHeight: 7093 },
+  mobile: { valores: 1170, logros: 1203, cta: 450, scrollHeight: 9177 },
 };
 
 test.describe("landing vertical space", () => {
