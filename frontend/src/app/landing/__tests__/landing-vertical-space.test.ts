@@ -185,3 +185,37 @@ describe("Valores tablero redesign", (): void => {
     expect(grid).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mission/Vision pillar photos — same convention as above: jsdom cannot lay
+// out CSS Grid or compute a rendered box, so the geometry this locks is the
+// literal rule text, not a live measurement. `.landing-pillar-photo` is the
+// ONE class both `mission-focus.jpeg` and `vision-coaching.jpeg` render
+// with (`landing-mission-vision-pillars.test.tsx` proves that DOM sharing);
+// this lock proves the rule that class carries is what forces their two
+// different native ratios (0.99 and 0.86) into one shared box, so a later
+// edit cannot quietly split the rule in two and let the columns drift apart.
+// ---------------------------------------------------------------------------
+describe("Mission/Vision pillar photos", (): void => {
+  it("forces both photos to one shared square ratio, cropped from the bottom", (): void => {
+    const css = landingCss();
+    const rule = ruleAt(css, ".landing-pillar-photo");
+    expect(rule).toContain("aspect-ratio: 1 / 1");
+    expect(rule).toContain("object-fit: cover");
+    // Crops toward the top of the frame (i.e. trims the bottom) rather than
+    // centring: vision-coaching.jpeg's two faces sit close enough to its top
+    // edge that a centred crop would risk clipping them.
+    expect(rule).toContain("object-position: top");
+  });
+
+  it("caps the photo near the text column's own width once mobile stacks to one column", (): void => {
+    const css = landingCss();
+    const mobileBlock = css.indexOf("@media (max-width: 768px)");
+    const mobileRule = ruleAt(css, ".landing-pillar-photo", mobileBlock);
+    const maxWidth = pxIn(mobileRule, "max-width");
+    // Matches the ~330-375px the lead (30ch) and body (44ch) copy already
+    // cap themselves to, so the photo never outgrows the text beside it.
+    expect(maxWidth).toBeGreaterThanOrEqual(330);
+    expect(maxWidth).toBeLessThanOrEqual(375);
+  });
+});

@@ -311,7 +311,7 @@ describe("LandingPage", (): void => {
     expect(screen.getByText("Así se ve al llegar")).toBeInTheDocument();
   });
 
-  it("renders Mission and Vision as two typographic pillars, no photos (v2 redesign)", (): void => {
+  it("renders Mission and Vision as two typographic pillars, each with its own photo (v2 redesign)", (): void => {
     render(<LandingPage />);
 
     const missionItem = screen.getByRole("heading", { name: "Nuestra Misión" }).closest(".landing-pillar");
@@ -320,7 +320,11 @@ describe("LandingPage", (): void => {
     expect(visionItem).not.toBeNull();
 
     const section = document.querySelector("#nosotros") as HTMLElement;
-    expect(within(section).queryByRole("img")).not.toBeInTheDocument();
+    const photos = within(section).getAllByRole("img");
+    expect(photos).toHaveLength(2);
+    photos.forEach((photo): void => { expect(photo).toHaveClass("landing-pillar-photo"); });
+    expect(within(missionItem as HTMLElement).getByRole("img")).toHaveAttribute("src", "/landing/mission-focus.jpeg");
+    expect(within(visionItem as HTMLElement).getByRole("img")).toHaveAttribute("src", "/landing/vision-coaching.jpeg");
 
     expect(within(missionItem as HTMLElement).getByText(
       "Promover el tenis de mesa mediante formación deportiva de calidad.",
