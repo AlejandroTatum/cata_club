@@ -282,7 +282,9 @@ function MissionVision(): React.ReactElement {
 /** Decorative numeral tile — one per value, sharing one grid row with the
  * three others so every value's title starts at the same top edge by
  * construction. Replaces the scroll-scrubbed rally, rejected for breaking on
- * mobile and for the ball motif itself. */
+ * mobile and for the ball motif itself. The club-crest motif client asked
+ * for once the rally left now sits behind the numeral here, as a CSS
+ * background-image on `.landing-tablero-tile` — see landing.css for why. */
 function ValueTile({ index }: { index: string }): React.ReactElement {
   return <span className="landing-tablero-tile" aria-hidden="true">{index}</span>;
 }
@@ -299,16 +301,6 @@ function ValueCard({ title, children }: ValueCardProps): React.ReactElement {
 function Values(): React.ReactElement {
   return (
     <section className="landing-section landing-values" id="valores" data-motion-section data-testid="motion-section">
-      {/* Table-tennis / club-identity motif (client request — the section
-          read as flat once the rally left). The crest already depicts a
-          player mid-stroke, so it stands in for both "club logo" and
-          "table tennis reference" at once, without a second asset. It is a
-          plain background-image on a decorative span — no image element,
-          no inline vector markup — purely ornamental, so it needs no place
-          in the accessible tree. See `.landing-values-crest` in landing.css
-          for why it costs no height and does not reintroduce the retired
-          rally. */}
-      <span className="landing-values-crest" aria-hidden="true" />
       <SectionHeader eyebrow="Lo que nos mueve" title="Nuestros Valores" />
       <div className="landing-tablero">
         <ValueTile index="01" />
