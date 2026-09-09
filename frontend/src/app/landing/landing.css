@@ -324,21 +324,36 @@
    `landing-vertical-space.spec.ts` enforces. `background-size: contain`
    inside `inset: 0` scales the crest down with the tile itself at the
    140px mobile height — no separate breakpoint override needed.
-   `opacity: 0.55` was chosen to actually read at normal viewing distance
-   rather than default to a watermark value, and it still leaves the
-   numeral legible: the crest's own brightest fully-opaque pixel (a dark
-   red, rgb(156, 48, 61)) composited at 0.55 over `--landing-brand-black`
-   is the worst-case backdrop under the numeral, and `--landing-highlight`
-   yellow (`#ffd600`) against that composite still measures ≈9.3:1 —
-   comfortably clear of the 3:1 WCAG AA minimum for text this large, and
-   above the 4.5:1 AA minimum for normal text besides. All four tiles carry
-   the identical mark at the identical scale and position: repeated
-   identically across a symmetric, evenly-spaced grid reads as a
+   The asset is `cata-club-crest-256-light.png`, the white-silhouette
+   derivative of the same 256×256 mark (identical 17,801 opaque pixels, all
+   `#ffffff`) — NOT `cata-club-crest-256.png`, the dark derivative used
+   elsewhere on this page (navbar, Motto paddle). That dark version's
+   opaque colour measures `rgb(17, 12, 34)`, effectively black: composited
+   over `--landing-brand-black` (`#111111`) it all but disappeared, leaving
+   only the red laurel visible — the defect the client reported. Swapping
+   to the white silhouette, without moving the tile background off
+   `--landing-brand-black` or recolouring the numeral, is what makes the
+   mark itself read again.
+   A white crest raises the worst-case backdrop under the numeral by a lot
+   more than the old dark mark ever did, so the opacity had to be
+   recomputed against it rather than carried over: composited at opacity N
+   over `#111111`, the crest's fully-opaque white reaches sRGB gray
+   `17 + 238×N` per channel. `--landing-highlight` yellow (`#ffd600`)
+   against that composite has WCAG contrast ≈5.5:1 at `opacity: 0.30`,
+   crossing below the 4.5:1 AA minimum for normal text (not just the 3:1
+   large-text minimum) only once opacity passes ≈0.33 — so 0.30 keeps
+   headroom on both sides of that line rather than sitting right on it.
+   (At full white, `opacity: 1`, the composite is bright enough to read as
+   nearly white itself, and contrast against the yellow numeral collapses
+   to ≈1.4:1 — this is a peak-then-valley curve, not a "higher opacity is
+   always safe" one, which is why the exact ceiling matters here.) All four
+   tiles carry the identical mark at the identical scale and position:
+   repeated identically across a symmetric, evenly-spaced grid reads as a
    deliberate pattern rather than a rendering bug, the way it would if only
    some tiles carried it. Still not the retired rally: no scroll-scrubbed
    opacity, no per-value state, nothing keyed to `[data-value]`/`.dim`/
    `.hit`. */
-.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.55; pointer-events: none; }
+.landing-tablero-tile::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: url("/brand/cata-club-crest-256-light.png"); background-repeat: no-repeat; background-position: center; background-size: contain; opacity: 0.3; pointer-events: none; }
 .landing-tablero-tile:hover { transform: translateY(-6px); }
 .landing-tablero-item { margin-top: 18px; }
 .landing-tablero-item h3 { margin: 0; font-family: var(--font-landing-barlow); font-weight: 800; font-size: 22px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--landing-text-strong); }
