@@ -4,7 +4,7 @@
 
 Keep `Persona.representante_id` as the only mutable representation state. Add one focused relationship application service, extend the existing append-only `vinculacion_representante` evidence table, and reuse existing session-epoch and in-app notification mechanisms. No relationship request/status table, second current-state projection, or relationship-notification outbox is introduced.
 
-The implementation is intentionally ordered: independence safety first, then account/capability and membership truth, then relationship/contact/creation entry paths, and remediation last. The existing public enrollment remains only for adult self-enrollment; it must no longer be a child-entry path.
+The implementation is delivered as seven chained slices: audit/idempotency foundation, credential/capability primitives, administrator independence cutover, relationship integrity and reassignment, account-first and represented-minor enrollment, active-player truth with frontend experience, and legacy remediation last. Safe independence always precedes removal of represented credentials. The existing public enrollment remains only for adult self-enrollment; it must no longer be a child-entry path.
 
 ## Ownership and invariants
 
@@ -333,24 +333,21 @@ sequenceDiagram
 
 ## Feature-branch-chain and rollback boundaries
 
-Use the configured feature-branch chain with a draft/no-merge tracker. Each child targets its immediate predecessor and carries tests/docs for its work unit; implementation must split again once if an honest slice exceeds 400 additions plus deletions.
+Use the configured feature-branch chain with the draft/no-merge tracker #1164. Each PR targets its immediate predecessor and carries tests/docs for its work unit. The earlier 10-slice/400-line chain map is superseded by the seven-slice replan: each slice targets 600–900 additions plus deletions with a hard stop at 1,000; a slice that cannot land at or below 1,000 stops and is re-sliced, with no routine size exceptions.
 
 ```text
 main
-  └─ tracker: represented-person-account-flow
-       └─ 1 independence exit and credential core
-            └─ 2 representative capability and empty dashboard
-                 └─ 3 ACTIVA player predicate backend
-                      └─ 4 ACTIVA projections frontend
-                           └─ 5 minor contact API/derived read
-                                └─ 6 minor forms/BFF alignment
-                                     └─ 7 relationship DB/service safeguards
-                                          └─ 8 admin reassignment/effects/safe stop
-                                               └─ 9 session-derived enrollment/payment conservation
-                                                    └─ 10 remediation inventory/rehearsal tooling
+  └─ tracker #1164: represented-person-account-flow
+       └─ 1 audit/idempotency foundation (#1165, open)
+            └─ 2 existing-person credential + REPRESENTANTE capability primitives
+                 └─ 3 administrator independence vertical cutover
+                      └─ 4 relationship integrity and admin reassignment
+                           └─ 5 account-first representative + represented-minor enrollment
+                                └─ 6 ACTIVA player truth and frontend experience
+                                     └─ 7 legacy remediation and final E2E
 ```
 
-Rollback is per child against its immediate parent. Slices 1–9 are application/schema behavior reversions that preserve person, membership, payment, medical, attendance, consent, and audit records. Trigger/audit schema downgrade is allowed only before any dependent later slice relies on it and only with a tested backup. Slice 10 does not execute production removals; any future remediation rollback uses its tested backup/receipt restoration boundary, not deletion of conserved records.
+Rollback is per PR against its immediate parent. Slices 1–6 are application/schema behavior reversions that preserve person, membership, payment, medical, attendance, consent, and audit records. Trigger/audit schema downgrade is allowed only before any dependent later slice relies on it and only with a tested backup. Slice 7 does not execute production removals; any future remediation rollback uses its tested backup/receipt restoration boundary, not deletion of conserved records.
 
 ## Key decisions checklist
 
