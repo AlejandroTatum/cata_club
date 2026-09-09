@@ -339,7 +339,7 @@
    recomputed against it rather than carried over: composited at opacity N
    over `#111111`, the crest's fully-opaque white reaches sRGB gray
    `17 + 238×N` per channel. `--landing-highlight` yellow (`#ffd600`)
-   against that composite has WCAG contrast ≈5.5:1 at `opacity: 0.30`,
+   against that composite has WCAG contrast ≈5.0:1 at `opacity: 0.30`,
    crossing below the 4.5:1 AA minimum for normal text (not just the 3:1
    large-text minimum) only once opacity passes ≈0.33 — so 0.30 keeps
    headroom on both sides of that line rather than sitting right on it.
