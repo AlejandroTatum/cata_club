@@ -291,7 +291,17 @@ export default function TrainerStudentsPage(): React.ReactElement {
                       desktopTableTestId="students-desktop-table"
                       tableHead={
                         <TableRow>
-                          <TableHeaderCell type="number">#</TableHeaderCell>
+                          {/*
+                           * The `#` is dropped (issue #1158): its header
+                           * text-aligns right while its body wraps the digit
+                           * in a centered `DataBox`, so the glyph and the
+                           * number never line up. Numbering the rows needs no
+                           * visible label — the `sr-only` span keeps the
+                           * column named for a screen reader.
+                           */}
+                          <TableHeaderCell type="number">
+                            <span className="sr-only">Número</span>
+                          </TableHeaderCell>
                           <TableHeaderCell>Estudiante</TableHeaderCell>
                           <TableHeaderCell type="action">Ficha médica</TableHeaderCell>
                           <TableHeaderCell type="action">Horario</TableHeaderCell>
@@ -354,7 +364,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               {alumno.nombreCompleto}
                             </span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell type="action">
                             <BotonFichaMedica
                               alumno={alumno}
                               onAbrir={() =>
@@ -362,7 +372,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               }
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell type="action">
                             <BotonHorario
                               alumno={alumno}
                               onAbrir={() =>

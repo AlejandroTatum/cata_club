@@ -409,7 +409,9 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
       .getAllByRole("columnheader")
       .map((celda) => celda.textContent);
 
-    expect(encabezados).toEqual(["#", "Estudiante", "Ficha médica", "Horario"]);
+    // La columna de índice pierde el rótulo visible "#" (issue #1158): sigue
+    // numerando, pero su nombre accesible ahora viene de un `sr-only`.
+    expect(encabezados).toEqual(["Número", "Estudiante", "Ficha médica", "Horario"]);
   });
 
   it("el índice cuenta sobre el padrón filtrado completo: la página 2 arranca en 11, no en 1", async () => {
@@ -462,6 +464,37 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
     for (const tarjeta of tarjetas) {
       expect(within(tarjeta).getAllByRole("button")).toHaveLength(2);
     }
+  });
+});
+
+describe("los encabezados se alinean con su contenido (issue #1158)", () => {
+  it("cada columna alinea igual su encabezado y su primera celda", async () => {
+    render(<TrainerStudentsPage />);
+
+    const tabla = await screen.findByTestId("students-desktop-table");
+    const encabezados = within(tabla).getAllByRole("columnheader");
+    const primeraFila = within(tabla).getAllByRole("row")[1] as HTMLTableRowElement;
+
+    // Antes del fix, Ficha médica y Horario declaraban `type="action"` solo
+    // en el encabezado: el `<th>` caía a la derecha y su `<td>`, sin `type`,
+    // caía al default `left` — el mismo defecto que este bucle detecta para
+    // cualquier columna futura.
+    encabezados.forEach((encabezado, indice) => {
+      const alineacionEncabezado = encabezado.classList.contains("text-right") ? "right" : "left";
+      const celda = primeraFila.cells[indice];
+      const alineacionCelda = celda.classList.contains("text-right") ? "right" : "left";
+      expect(alineacionCelda).toBe(alineacionEncabezado);
+    });
+  });
+
+  it("la columna de índice no muestra el rótulo # pero conserva un nombre accesible", async () => {
+    render(<TrainerStudentsPage />);
+
+    const tabla = await screen.findByTestId("students-desktop-table");
+    const indice = within(tabla).getByRole("columnheader", { name: "Número" });
+
+    expect(indice.textContent).toBe("Número");
+    expect(indice.querySelector(".sr-only")).not.toBeNull();
   });
 });
 
