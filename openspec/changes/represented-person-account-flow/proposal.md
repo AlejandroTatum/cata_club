@@ -1,5 +1,13 @@
 # Represented-person account flow
 
+> **Scope note (replan 2026-09-10).** This change now delivers only the three
+> tramos decided in #1137: the administrator desk exit, closing every path that
+> gives a represented person credentials, and detecting legacy accounts. The
+> account-first representative capability (#1134), relationship reassignment,
+> safe-stop linking and notifications (#1133), active-player truth (#1132) and
+> minor-contact rules (#1138) described below are **out of this change** and
+> return to their issues. `tasks.md` is authoritative for what ships.
+
 ## Intent
 
 Deliver the represented-person flow with the canonical ownership and safety order from **#1137**: first provide an administrator-run independence exit for an existing person; next close every invalid credential/entry path and enforce the relationship, account, membership, and minor-contact invariants; only then remediate incompatible existing accounts. This order prevents credential removal from stranding people without a safe transition.

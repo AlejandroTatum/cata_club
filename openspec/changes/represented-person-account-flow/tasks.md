@@ -1,164 +1,151 @@
 # Implementation Tasks — Represented-person account flow
 
-> Replan: the original 14-child-PR/400-line plan is superseded by **7
-> implementation PRs** with a 600–900 changed-line target and a hard stop at
-> 1,000 per PR. The earlier size exception granted to the monolithic
-> independence slice (~1,795 changed lines) is superseded by this replan; that
-> local slice is not publishable whole and is salvaged into PRs 2–3. See
-> `handoff.md` for next-session startup and salvage instructions.
+> Replan (2026-09-10). This supersedes the 7-PR chain plan, which itself
+> superseded a 14-PR plan. Scope returns to what issue #1137 decided: three
+> tramos (the exit, the door, the people already inside), one PR per tramo,
+> preferring deletion. Work that belongs to #1132, #1133, #1134, and #1138
+> leaves this change. Size exceptions per tramo are already granted by the
+> issue text ("uno por tramo"); no slicing by line count.
 
-## Review Workload Forecast
+## Why the replan
 
-| Field | Value |
-|-------|-------|
-| Estimated changed lines | 600–900 target per implementation PR; hard stop 1,000 per PR |
-| Review budget | 600–900 target; 1,000 hard stop; no routine size exceptions |
-| Budget risk | Managed by this replan; an over-budget slice stops and is re-sliced |
-| Chained PRs recommended | Yes |
-| Suggested split | Tracker #1164 → PR 1 (#1165, open) → PR 2 → PR 3 → PR 4 → PR 5 → PR 6 → PR 7 |
-| Delivery strategy | auto-chain |
-| Chain strategy | feature-branch-chain |
-| Expected PR count | 1 draft/no-merge tracker (#1164) + 7 implementation PRs; PR 1 is open as #1165 and 6 remain |
-| Highest-risk slices | PR 3 independence cutover, PR 4 relationship integrity/reassignment, PR 5 atomic enrollment, PR 7 remediation |
-| Cumulative estimate | ≈3,600–5,400 changed lines for PRs 2–7 plus the shipped PR 1 |
+- Eight chained PRs (#1165 → #1176) added +5,422/−567 lines in 40 hours with
+  nothing merged, while `main` moved on. The issue asked for less code than
+  before.
+- Invariant (B) — a represented person never has a `usuario` row — is not
+  implemented at the chain tip: `_crear_usuario_alumno` still runs
+  (`backend/app/servicios_negocio/enrollment_servicio.py:286`) and both
+  wizards still ask for the minor's password.
+- #1171 retired self-service independence in the backend, but the student
+  portal still renders the "Independizarse del representante" button, the
+  `AgeUpConfirmation` modal and the BFF route: that button is broken at the
+  chain tip, and no administrator screen exists for the desk action.
+- PR2, PR3a, and PR4b were "inert by construction" (no production caller):
+  the 1,000-line stop had become the slicing criterion instead of the work
+  unit.
 
-Decision needed before apply: No
-Chained PRs recommended: Yes
-Chain strategy: feature-branch-chain
-Review budget: 600–900 target per implementation PR; hard stop at 1,000 changed lines
+## What is kept, parked, or discarded
 
-Estimates are one honest slicing pass. Do not compress code, tests, migrations,
-or documentation to fit a number. If a cohesive slice cannot land at or below
-1,000 changed lines, stop and re-slice it; a size exception is not routine and
-requires a new explicit human decision.
+| Unit | Decision | Reason |
+|---|---|---|
+| #1165 audit foundation | **Keep, merge** | `independizar_presencial` records into the ledger |
+| #1169 credential + capability cores | **Keep, merge** | Consumed by #1170/#1171 |
+| #1170 independence service | **Keep, merge** | Tramo 1 backend |
+| #1171 administrator cutover | **Keep, merge** | Tramo 1 backend |
+| #1172 fixture compatibility | **Keep, merge** | Required by #1173 |
+| #1173 relationship trigger migration | **Keep, merge** | Invariant (A) at the database |
+| #1175 shared link validator | **Park under #1133** | No caller without safe-stop; not in #1137 |
+| #1176 atomic reassignment | **Park under #1133** | Reassignment is not in #1137 |
+| WIP `pi-1137` (1,279 lines, uncommitted) | **Discard** | Already salvaged into #1170/#1171 |
+| WIP `pi-1137-pr4c2`, `pi-1137-pr4c2a` | **Park on a #1133 branch, remove worktrees** | Safe-stop linking is #1133 scope |
+| Tracker #1164 | **Becomes the docs PR for this replan** | No longer a chain base |
 
-## Governing inputs and ownership
+## Delivery strategy
 
-- Implement against `openspec/changes/represented-person-account-flow/proposal.md`, `design.md`, and every specification under `openspec/changes/represented-person-account-flow/specs/`.
-- Preserve the safety order: safe independence before removing represented credentials; invalid entry-path closure and invariants before integration; incompatible-account remediation last.
-- **#1137 owns** the complete flow, safety order, authenticated enrollment/payment conservation, remediation gates, and final integration.
-- **#1132 owns** active-player truth across membership, roster, scheduling, attendance, and frontend projections.
-- **#1133 owns** relationship lifecycle, unified validation, database safeguards, audit, reassignment, revocation, and notification effects.
-- **#1134 owns** account-first representative capability and empty dashboard; it does not own independence.
-- **#1135 owns no work**: do not add runtime behavior, migration, relationship state, or closure work for it.
-- **#1138 owns** minor prohibited fields and representative-derived emergency contact; it does not own legacy-account cleanup.
+Stacked PRs to `main`, one per phase, squash-merged in order. No tracker as a
+base branch. Each PR body says `Refs #1137`; only the Phase 4 PR says
+`Closes #1137`.
 
-## Chain map and rollback rule
+Decision needed before apply: Yes — one product decision blocks Phase 4 (see
+there). Phases 0–3 need none.
 
-```text
-main
-  └─ draft tracker #1164: #1137 represented-person-account-flow
-       └─ PR 1  audit/idempotency foundation — open as #1165
-            └─ PR 2  existing-person credential + REPRESENTANTE capability primitives
-                 └─ PR 3  administrator independence vertical cutover
-                      └─ PR 4  relationship integrity and admin reassignment
-                           └─ PR 5  account-first representative + represented-minor enrollment
-                                └─ PR 6  ACTIVA player truth and frontend experience
-                                     └─ PR 7  legacy remediation and final E2E
-```
+## Phase 0 — Put the house in order (no code)
 
-Every PR targets its immediate predecessor and carries a dependency diagram with the current PR marked `📍`. Rollback is only against that immediate parent. PRs 1–6 must preserve person, relationship, membership, payment, medical, attendance, consent, and audit records; PR 7 does not execute production deletion and rolls back by discarding its evidence/tooling change.
+- [ ] Edit the bodies of #1165, #1169, #1170, #1171, #1172, #1173, #1175, #1176: `Closes #1137` → `Refs #1137`.
+- [ ] Retarget #1165 from `fix/represented-person-account-flow` to `main`.
+- [ ] Mark #1175 and #1176 as draft, retitle with a `[#1133]` prefix, and note in their bodies that they wait for #1133.
+- [ ] Discard the uncommitted diff in worktree `pi-1137` (`fix/represented-person-independence`) and remove the worktree and branch.
+- [ ] Commit the uncommitted diffs of `pi-1137-pr4c2` and `pi-1137-pr4c2a` onto their own branches as `wip(personas): park #1133 safe-stop linking`, push them, and remove the worktrees. Do not open PRs.
+- [ ] Verify with `git worktree list` and `gh pr list --state open` that only the intended units remain.
 
-## PR 1 — Audit/idempotency foundation — open (#1165)
+## Phase 1 — Land what is already built
 
-**Owner:** #1137 with #1133. **Status:** delivered and open for review as [#1165](https://github.com/AlejandroTatum/cata_club/pull/1165) (`fix/represented-person-audit-foundation`), based on tracker #1164. **Dependency:** tracker only. **Estimate:** shipped; exact counts are recorded in the PR.
+Merge in this exact order: #1165, #1169, #1170, #1171, #1172, #1173.
 
-- [x] Append-only audit can represent create/reassign/independence/removal and replay keys without changing current authorization or closing an entry path; evidence recorded in #1165.
-- [ ] Merge and required CI on #1165 (pending; not claimable from this document).
+Per PR, the ritual is:
 
-## PR 2 — Existing-person credential and REPRESENTANTE capability primitives
+1. Retarget the **child** PR to `main` (before merging the parent; merging a parent with branch auto-delete closes an un-retargeted child).
+2. Squash-merge the parent: `gh pr merge <n> --squash --delete-branch`.
+3. Rebase the child onto the new `main`: `git rebase --onto main <parent-head-sha> <child-branch>` and `git push --force-with-lease`.
+4. Wait for the child's required CI to go green before the next iteration.
 
-**Owner:** #1134 capability semantics with #1137; preserves #762 compatibility. **Estimate:** 600–900 changed lines; hard stop 1,000. **Dependency:** PR 1 head. **Source:** salvage only the existing-person credential/capability hunks from the local WIP worktree (`pi-1137`, `fix/represented-person-independence`); that slice is monolithic and not publishable, and its remaining hunks feed PR 3.
-**Finish:** a non-committing existing-person credential core and the shared `REPRESENTANTE` capability rule (#762 single-role outcomes) exist with focused tests; no relationship mutation, no new endpoints, and no self-service behavior change yet.
-**TDD evidence:** RED failing focused tests for the credential core and capability outcomes; GREEN minimal implementation; TRIANGULATE lock/rollback and #762 role cases; REFACTOR to single core ownership.
-**Focused validation:** `cd backend && uv run pytest tests/test_auth.py tests/test_roles.py -q` against `db-test` PostgreSQL.
-**Runtime:** N/A (no endpoint or UI surface in this slice); record the justification in the PR.
-**Rollback:** revert the extracted core/helpers; no relationship, endpoint, or session behavior changes.
+Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/independizar`, admin-only, token-free response, `Idempotency-Key`) and the `i1141relinteg` trigger that rejects an adult link. Run `make pre-pr LANE=backend` on `main` after the sixth merge.
 
-- [ ] Existing-person credential core creates/updates one `Usuario` on a locked `persona_id` without emitting tokens or creating a `Persona`.
-- [ ] Shared capability rule implements #762 outcomes: grant when absent, reuse sole `REPRESENTANTE`, explicit sole-role replacement path, reject legacy multi-role accounts.
-- [ ] No relationship-column writes; no retired `AdminCuentaServicio` usage; changed lines within 600–900 (stop at 1,000).
+- [ ] #1165 merged
+- [ ] #1169 merged
+- [ ] #1170 merged
+- [ ] #1171 merged
+- [ ] #1172 merged
+- [ ] #1173 merged
+- [ ] `make pre-pr LANE=backend` green on `main`
 
-## PR 3 — Administrator independence vertical cutover
+## Phase 2 — Close tramo 1 in the frontend
 
-**Owner:** #1137 using #1133 safeguards. **Estimate:** 600–900 changed lines; hard stop 1,000 — this vertical slice may not exceed it; stop and re-slice instead. **Dependency:** PR 2. **Source:** remaining salvaged hunks from the local WIP.
-**Finish:** an authorized in-person administrator independence command (relationship service command, DTO/router, audit/session/notification effects) atomically establishes verified credentials plus sole `REPRESENTANTE` on the unchanged `persona_id`, removes the adult link, revokes affected epochs, and best-effort notifies after commit; debt does not block it, minors cannot be unlinked, and the old self-service independence implementation/tests/guards are retired.
-**TDD evidence:** RED failing service/router tests (admin-only access, same-person credentials, verified email, debt bypass, minor rejection, legacy multi-role rejection, idempotent retry, rollback, audit, epoch revocation, post-commit notification failure); GREEN; TRIANGULATE PostgreSQL locks and `persona_id` conservation; REFACTOR remove duplicate relationship/account writes.
-**Focused validation:** `cd backend && uv run pytest tests/test_independencia_representada.py tests/test_personas.py -q`.
-**Runtime:** `make qa-up`; perform admin independence for an adult with debt and verify login/portal plus preserved records; then attempt the same flow for a minor.
-**Rollback:** revert the endpoint/service/core before remediation; transaction rollback retains the original link and all history.
+One PR, `fix/represented-person-desk-exit-ui`. Net change expected negative or near zero.
 
-- [ ] Vertical cutover commits credentials, capability, link removal, audit, and session epochs in one transaction.
-- [ ] Self-service independence path, tests, and guards are removed, not left dual-writable.
-- [ ] Changed lines within 600–900 and ≤1,000 (hard stop).
+Remove the self-service path:
+- `frontend/src/app/student/page.tsx`: the "Independizarse del representante" button (≈1439), the `onIndependizar` prop plumbing (≈1010–1018, 1532), the `showAgeUpModal` state and handler (≈1493), and the `AgeUpConfirmation` mount (≈1537).
+- `frontend/src/components/AgeUpConfirmation.tsx` and its tests.
+- The `independizarPersona` client helper and `frontend/src/app/api/personas/[id]/independizar/route.ts` as a student-callable route.
 
-## PR 4 — Relationship integrity and admin reassignment
+Add the desk action:
+- On the administrator person detail page, an "Independizar" action for an adult with `representante_id`: fields `correo`, initial `contrasenia`, `evidencia_identidad`; sends `Idempotency-Key`; BFF route restricted to the administrator session; shows the backend message on error.
 
-**Owner:** #1133. **Estimate:** 600–900 changed lines; hard stop 1,000. **Dependency:** PR 3.
-**Finish:** `RelacionRepresentacionServicio` owns unified create/reassign validation; the additive migration enforces self/cycle/age/phone database safeguards; administrator reassignment atomically replaces the relationship with audit/revocation/notification; legacy self-service linking returns one non-disclosing safe stop; only current `Persona.representante_id` authorizes access.
-**TDD evidence:** RED failing tests for shared invariants, direct-SQL/concurrent graph scenarios, safe-stop non-disclosure, stale reassignment conflict, atomic audit, epoch revocation, and notification failure; GREEN; TRIANGULATE migration/trigger and concurrency cases; REFACTOR remove duplicate validators.
-**Focused validation:** `cd backend && uv run pytest tests/test_representacion_triggers.py tests/test_representados_alcanzables.py tests/test_relacion_representacion_servicio.py tests/test_reasignacion_representacion.py tests/test_notificaciones_relacion.py -q`.
-**Runtime:** `make qa-up`; submit ambiguous/existing/forged self-service requests (identical safe stops, no mutation); reassign a minor between two valid representatives and verify old-session denial plus current-contact change; then simulate notification failure.
-**Rollback:** revert service/router behavior; revert the additive trigger migration only before a later slice depends on it; never delete audit history.
+**TDD evidence:** RED Vitest for the student page without the button/modal and for the admin action (happy path, minor rejected, backend message passthrough); RED Playwright for the admin flow; GREEN; REFACTOR.
+**Focused validation:** `cd frontend && pnpm vitest run src/app/student src/app/admin src/app/api/personas && pnpm exec playwright test`.
+**Runtime:** `make qa-up`; as admin, independize a linked adult and log in with the new credentials; as a linked minor, confirm no independence control exists.
 
-- [ ] Shared validator owns self/cycle/age/phone/reachability invariants with database defense.
-- [ ] Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification.
-- [ ] Non-disclosing safe stop replaces self-service linking.
+- [ ] Student portal offers no independence path.
+- [ ] Administrator can run the desk exit from the UI.
+- [ ] `pnpm exec playwright test` green locally (the Frontend CI job runs it too).
 
-## PR 5 — Account-first representative and represented-minor enrollment
+## Phase 3 — The door (tramo 2)
 
-**Owner:** #1134 with #1137; #1138 write-field rules. **Estimate:** 600–900 changed lines; hard stop 1,000. **Dependency:** PR 4.
-**Finish:** rate-limited account-first adult registration (account/verification/empty capability state, no membership/link/token) and authenticated session-derived represented-minor enrollment exist; no child `Usuario`/`ALUMNO`; one atomic commit records Persona + relationship + medical + consents + `INACTIVA` membership + `PENDIENTE` payment; prohibited #1138 minor write fields are explicitly rejected.
-**TDD evidence:** RED failing API/service tests for adult-only DTOs, idempotency replay/conflict, verification boundary, consent/outbox atomicity, session authority, safe identity reuse/non-disclosure, prohibited-field rejection, and atomic rollback; GREEN; TRIANGULATE payment/consent/audit failure rollback and DTO matrix cells; REFACTOR remove the public child enrollment branch.
-**Focused validation:** `cd backend && uv run pytest tests/test_representante_cuenta.py tests/test_representado_enrollment.py tests/test_enrollment_idempotencia.py tests/test_minor_contact_contract.py -q`.
-**Runtime:** `make qa-up`; register an adult, verify email, confirm the empty capability state; enroll a represented minor from an authenticated representative, replay the same key, submit forged actor/credential fields, and inspect persisted rows.
-**Rollback:** revert the new contracts; failed transactions leave zero new domain rows; existing adult self-enrollment preserved.
+One PR, `fix/represented-person-no-credentials`. Mostly deletion.
 
-- [ ] Account-first adult account with exactly one persisted `REPRESENTANTE`, legal consents, and verification outbox; empty capability state without membership/link.
-- [ ] Session-derived child enrollment with idempotency, non-disclosing safe stop, and atomic conservation.
-- [ ] #1138 prohibited write fields rejected before any mutation.
+Backend:
+- `enrollment_servicio.py`: `_crear_usuario_alumno` is never called when the enrollment carries `representante_id`; delete the branch, do not guard it.
+- `dtos/enrollment_schemas.py`: the represented-minor enrollment DTO has no `correo`/`contrasenia` fields; a `model_validator` rejects `representante_id` on an adult `fecha_nacimiento` (invariant A at the DTO, matching the #1173 trigger).
+- `dtos/persona_schemas.py`: the same validator on every write DTO that accepts `representante_id`.
+- `backend/scripts/seed_dev_base.py`: seeded children get no `Usuario`; representatives keep theirs.
 
-## PR 6 — ACTIVA player truth and frontend experience
+Frontend:
+- `frontend/src/app/student/enroll/enroll-utils.ts` and `frontend/src/app/student/add-dependent/add-dependent-utils.ts`: remove the represented-minor `correo`/`contrasenia` fields, rules, and the wizard step that renders them; adjust the Playwright specs that fill them.
 
-**Owner:** #1132 with #1134 (empty dashboard) and #1138 (derived emergency contact). **Estimate:** 600–900 changed lines; hard stop 1,000. **Dependency:** PR 5.
-**Finish:** `Membresia.estado == ACTIVA` is the sole player predicate across roster, schedules, and attendance; a `REPRESENTANTE` may play without `ALUMNO`; member/dashboard/portal and BFF consume authoritative membership/player fields; the empty representative dashboard and derived emergency-contact display work end to end, with prohibited minor form fields removed.
-**TDD evidence:** RED failing backend predicate tests and frontend Vitest/Playwright projections (active/inactive/representative-only/forged-person); GREEN; TRIANGULATE payment rejection preserving portal access and role/link mismatches; REFACTOR one `isActivePlayer` mapping and centralized minor-form omissions.
-**Focused validation:** `cd backend && uv run pytest tests/test_jugador_activo.py tests/test_membresia_repositorio.py tests/test_asistencias.py tests/test_horario_repositorio.py -q && cd ../frontend && pnpm vitest run src/lib/server/__tests__ src/app/student/__tests__`.
-**Runtime:** `make qa-up && make qa-live` with active, inactive, representative-only, and forged-person scenarios across members/schedule/attendance/dashboard/forms.
-**Rollback:** revert frontend adapters/routes/types and backend predicate consumers while preserving memberships and historical attendance.
+**TDD evidence:** RED backend tests — enrollment with `representante_id` creates no `usuario` row (assert by count), adult with `representante_id` rejected by DTO on every write path, seed creates no child account; RED Vitest/Playwright for the wizards; GREEN; invert each new predicate and confirm the lock goes red.
+**Focused validation:** `cd backend && uv run pytest tests/test_enrollment*.py tests/test_personas.py -q && cd ../frontend && pnpm vitest run src/app/student && pnpm exec playwright test`.
+**Runtime:** `make qa-up`; enroll a minor publicly and from a logged-in representative; confirm neither asks for the minor's credentials and that the minor cannot log in.
 
-- [ ] Backend `ACTIVA` predicate across members/schedule/attendance; representative-as-player without `ALUMNO`.
-- [ ] Empty representative dashboard from server capability; BFF rejects browser-selected subjects.
-- [ ] Derived emergency-contact display; minor prohibited form inputs removed; legacy values never shown operationally.
+- [ ] No write path creates `usuario` for a person with `representante_id`.
+- [ ] Invariant (A) enforced at DTO level on every write path.
+- [ ] Both wizards neither show nor send represented-minor credentials.
 
-## PR 7 — Legacy account remediation and final E2E
+## Phase 4 — The people already inside (tramo 3)
 
-**Owner:** #1137. **Estimate:** 600–900 changed lines; hard stop 1,000. **Dependency:** PR 6.
-**Finish:** read-only inventory, signed evidence, QA/staging rehearsal, restoration/revocation/conservation checks, candidate fingerprint drift detection, idempotent receipts, and a stop-before-delete gate exist; full cross-flow E2E and cleanup pass; production remediation is not executed.
-**TDD evidence:** RED failing gate/conservation tests (missing/changed inventory, failed rehearsal/restoration/revocation/conservation, active-minor reachability, retry receipts, retired-email non-reservation); GREEN; TRIANGULATE rehearsal against QA data and hash conservation; REFACTOR keep remediation isolated from normal account flows.
-**Focused validation:** `cd backend && uv run pytest ../tests/test_remediacion_representada.py tests/test_remediacion_inventario.py -q`; the final PR also runs `make pre-pr LANE=full` and the affected Playwright cross-flow specs.
-**Runtime:** run the exact inventory/rehearsal against QA data, mutate one candidate between approval and execution, and verify the gate stops before credential/role writes; execute the full cross-flow E2E.
-**Rollback:** remove script/runbook/gate and tests; future account restoration uses the protected backup and batch receipts, never deletion of conserved records.
+**Blocking product decision (owner):** what happens to the existing accounts of represented minors and to the legal consents recorded against them? The migration must not choose. Options to put to the owner: (a) detect and report only, remediation later by hand; (b) detect, deactivate the `usuario` row, keep consents as history. Until answered, this phase does not start.
 
-- [ ] Remediation gate with conservation proof; no production execution in this change.
-- [ ] Full cross-flow E2E across all seven slices' behaviors.
-- [ ] #1135 remains explicitly work-free.
+One PR, `fix/represented-person-legacy-accounts`, following `e762rolunico_un_solo_rol_activo_por_cuenta.py`:
+- Alembic migration that finds `persona` rows with `representante_id IS NOT NULL` that have a `usuario` row, writes them to a detection table (`cuenta_representada_detectada`: `persona_id`, `usuario_id`, `representante_id`, `detectado_en`), logs the count in the deploy output, and never aborts.
+- Applies only what the owner decided in the blocking question above; nothing else.
 
-## Parent-owned SDD and delivery housekeeping
+**TDD evidence:** RED migration test against PostgreSQL with seeded legacy rows and exact before/after counts; RED for the from-scratch, single-head, drift, and root-guard migration checks; GREEN.
+**Focused validation:** `cd backend && uv run pytest tests/test_migraciones*.py -q` plus the migration validation targets in the Makefile.
+**Runtime:** `make qa-up` against a QA database seeded with linked minors that hold accounts; read the detection table.
 
-These tasks do not add feature behavior and must remain separate from child implementation PRs.
+- [ ] Detection table populated with exact counts; migration never aborts, never deletes.
+- [ ] Owner's decision applied, and only that.
+- [ ] PR body says `Closes #1137`.
 
-- [ ] Maintain the draft/no-merge tracker #1164; chain each child to its immediate predecessor with the dependency diagram marking the current PR `📍`; keep each child diff limited to its stated work unit.
-- [ ] Preserve `proposal.md`, `design.md`, and all `specs/**/spec.md`; update only SDD evidence/status artifacts when implementation results require it. This replan (7 PRs; 600–900 target; 1,000 hard stop) supersedes the earlier 14-PR/400-line plan and the monolithic-slice size exception.
-- [ ] Before each PR delivery, verify the exact focused command, runtime scenario, additions+deletions (600–900 target, 1,000 stop), rollback boundary, and skipped CI gates; run one applicable `make pre-pr LANE=backend|frontend|full` lane.
-- [ ] After the chain completes, compare implementation against every Given/When/Then scenario and authorization invariant, then record verification evidence before archive.
-- [ ] Keep #1135 explicitly superseded with no runtime, migration, relationship, or closure work; close #1132, #1133, #1134, #1138, and #1137 only against their stated completion conditions.
-- [ ] Archive the completed OpenSpec change only after all child PRs, migration checks, QA/live scenarios, conservation evidence, and post-merge lifecycle gates pass; do not claim production remediation execution.
+## Phase 5 — Close
 
-## Apply guardrails
+- [ ] Reduce this OpenSpec change to the delivered scope: `proposal.md` and `design.md` keep the tramo 1–3 decisions; sections owned by #1132, #1133, #1134, #1138 move to those issues as comments; `specs/player-eligibility`, `specs/representation-lifecycle`, `specs/representative-capability`, `specs/minor-contact` are removed from this change.
+- [ ] Merge #1164 as the docs PR of this replan.
+- [ ] Verify #1137 closed by the Phase 4 merge with `gh issue view 1137`.
+- [ ] Archive the change.
 
-- Strict TDD evidence is mandatory for every PR: RED failing test, GREEN minimal implementation, TRIANGULATE adversarial/integration evidence, and REFACTOR architecture/quality evidence.
-- Execution is automatic slice by slice: implement/TDD → focused validation → independent verification → native review when applicable → commit/push/open chained PR. Do not ask routine workflow questions between slices.
-- Stop conditions: genuine product ambiguity, destructive production action, a failed required gate, a severe review finding, conflict/drift with `main` or the chain parent, or a slice exceeding 1,000 changed lines.
-- Backend tests use real PostgreSQL through `db-test` (port 5436, single tenant); do not substitute SQLite or run concurrent backend suites.
-- The feature chain is not permission to force-push, merge red/pending CI, modify production configuration, or execute destructive remediation.
+## Guardrails
+
+- Strict TDD per phase: RED observed before touching code.
+- Backend tests against the real PostgreSQL `db-test` (port 5436); no concurrent backend suites.
+- Status of PRs and branches is read from `gh pr list` and `git worktree list`, never from this document.
+- No new "inert" PRs: every PR changes runtime behavior or is pure deletion.

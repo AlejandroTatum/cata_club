@@ -1,5 +1,14 @@
 # Technical design — represented-person account flow
 
+> **Scope note (replan 2026-09-10).** The seven-slice chain described in this
+> document is superseded. Delivered scope is the three tramos of #1137 as five
+> phases in `tasks.md`; slices 1–4a (audit foundation, credential/capability
+> cores, administrator independence, relationship trigger) are kept and merged
+> as built. Reassignment, shared link validator, safe-stop linking,
+> account-first enrollment, active-player truth and the remediation gate leave
+> this change (#1133, #1134, #1132). Sections below that describe them are
+> retained as design history only.
+
 ## Decision
 
 Keep `Persona.representante_id` as the only mutable representation state. Add one focused relationship application service, extend the existing append-only `vinculacion_representante` evidence table, and reuse existing session-epoch and in-app notification mechanisms. No relationship request/status table, second current-state projection, or relationship-notification outbox is introduced.
