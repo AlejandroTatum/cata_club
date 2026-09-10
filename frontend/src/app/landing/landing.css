@@ -622,15 +622,18 @@
      390px-wide phone, ~358px of content width), so `flex-wrap: wrap` used to
      drop the last link onto a second row and the sticky header ate ~200px of
      viewport. One row that scrolls instead — the same horizontal-chip
-     pattern `.landing-schedule-list` already uses at this breakpoint below.
-     The scrollbar is hidden and the right edge fades so the strip still
-     reads as nav, not as a stray scroller, signalling there is more to the
-     right without a visible track. */
+     pattern `.landing-schedule-list` already uses at this breakpoint below,
+     with no fade of its own either: at 412px the whole strip only overflows
+     by ~10px, so a permanent right-edge fade (tried first, then measured
+     against a scroll-to-end screenshot) dimmed the final "o" of "Contacto"
+     even with nothing left to scroll to — the exact "looks cut off" symptom
+     this fix exists to remove. The peeking partial chip alone is the
+     affordance; the scrollbar is still hidden so it does not compete with
+     that signal. */
   .landing-nav-links {
     order: 3; width: 100%; flex-wrap: nowrap; gap: 4px;
     overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 4px;
     -webkit-overflow-scrolling: touch; scrollbar-width: none;
-    mask-image: linear-gradient(90deg, black calc(100% - 24px), transparent);
   }
   .landing-nav-links::-webkit-scrollbar { display: none; }
   /* Keep the 44px pointer target promised by the base rule — this override
@@ -638,6 +641,17 @@
 
      @touch-target The regression that made this whole guard worth writing. */
   .landing-nav-links a { min-height: 44px; flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; padding: 8px 10px; font-size: 12px; }
+  /* `overflow-x: auto` computes `overflow-y` to `auto` too, so the strip's
+     own scroll box clips anything painted outside a chip's border box — the
+     base rule's `outline-offset: 4px` (7px beyond the link on every side,
+     3px width + 4px offset) got clipped top and bottom on every one of the
+     six keyboard-reachable links. `outline-offset: 0` is not enough either:
+     the outline is still drawn 3px OUTSIDE the border edge at offset 0, so
+     it still gets clipped. `-3px` (= the outline's own width) is what pulls
+     the ring fully inside the chip's border box on every side, confirmed
+     against both an inactive chip and the active red pill via a real
+     keyboard focus + screenshot on `mobile-chromium`. */
+  .landing-nav-links a:focus-visible { outline-offset: -3px; }
   .landing-logo img { height: clamp(58px, 15vw, 72px); }
   .landing-logo { font-size: 17px; }
   .landing-nav-cta { padding-inline: 18px; }

@@ -146,4 +146,74 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
 
     await expectTimePartsUnbroken(page);
   });
+
+  // Issue found on the nav strip once it became a real scroll container:
+  // `overflow-x: auto` computes `overflow-y` to `auto` too, so anything
+  // painted outside a chip's own border box — the focus ring — got clipped
+  // top and bottom by the strip's own scroll box. A permanent right-edge
+  // fade had the same "looks cut off" symptom on the last chip, measured by
+  // scrolling the strip to its own end and finding the final letter still
+  // dimmed with nothing left to scroll to.
+  test("never clips a focused nav link's ring, and never fades the strip's own edge", async ({ page }) => {
+    await mockSchedules(page);
+    await page.goto("/");
+
+    // No permanent edge fade: the strip's own box declares no mask, at any
+    // scroll position — so the last chip is never dimmed once it is the
+    // last thing left to scroll to.
+    const nav = page.locator(".landing-nav-links");
+    const maskImages = await nav.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { maskImage: style.maskImage, webkitMaskImage: style.getPropertyValue("-webkit-mask-image") };
+    });
+    expect(maskImages.maskImage, "mask-image").toBe("none");
+    expect(maskImages.webkitMaskImage || "none", "-webkit-mask-image").toBe("none");
+
+    // Reach the first nav link with a REAL keyboard, the same way a visitor
+    // tabbing through the page would — `:focus-visible` only engages this
+    // way, never through a plain programmatic `.focus()`.
+    await page.locator(".landing-logo").focus();
+    await page.keyboard.press("Tab");
+
+    const ring = await page.evaluate(() => {
+      const link = document.activeElement as HTMLElement | null;
+      const strip = document.querySelector(".landing-nav-links") as HTMLElement;
+      if (!link || !strip.contains(link)) return null;
+
+      const style = getComputedStyle(link);
+      const outlineWidth = parseFloat(style.outlineWidth) || 0;
+      const outlineOffset = parseFloat(style.outlineOffset) || 0;
+      // How far the ring's own outer edge extends past the link's border
+      // edge. Negative or zero means the ring stays inside the border box.
+      const ringExtent = outlineWidth + outlineOffset;
+
+      const linkRect = link.getBoundingClientRect();
+      const stripRect = strip.getBoundingClientRect();
+      return {
+        isFocusVisible: link.matches(":focus-visible"),
+        ringExtent,
+        ringTop: linkRect.top - ringExtent,
+        ringBottom: linkRect.bottom + ringExtent,
+        ringLeft: linkRect.left - ringExtent,
+        ringRight: linkRect.right + ringExtent,
+        stripTop: stripRect.top,
+        stripBottom: stripRect.bottom,
+        stripLeft: stripRect.left,
+        stripRight: stripRect.right,
+      };
+    });
+
+    expect(ring, "a nav link inside the strip is the active element").not.toBeNull();
+    expect(ring!.isFocusVisible, "the focused link reports :focus-visible").toBe(true);
+
+    // The whole ring — border edge plus whatever the outline extends past
+    // it — stays inside the strip's own scroll box on every side. This is
+    // the assertion that goes RED against the committed `outline-offset:
+    // 4px`: the ring's top/bottom sit 7px outside the link, clipped by the
+    // strip's own `overflow-y: auto`.
+    expect(ring!.ringTop, "ring top vs strip top").toBeGreaterThanOrEqual(ring!.stripTop - 0.5);
+    expect(ring!.ringBottom, "ring bottom vs strip bottom").toBeLessThanOrEqual(ring!.stripBottom + 0.5);
+    expect(ring!.ringLeft, "ring left vs strip left").toBeGreaterThanOrEqual(ring!.stripLeft - 0.5);
+    expect(ring!.ringRight, "ring right vs strip right").toBeLessThanOrEqual(ring!.stripRight + 0.5);
+  });
 });
