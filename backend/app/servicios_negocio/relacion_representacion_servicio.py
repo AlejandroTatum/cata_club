@@ -240,8 +240,8 @@ class RelacionRepresentacionServicio:
 
         if enlace_actual is not None and destino.id == enlace_actual:
             raise OperacionInvalida(
-                f"La persona {destino.id} ya es su representante actual: el "
-                "comando no tendría ningún cambio."
+                "La persona ya es su representante actual: el comando no "
+                "tendría ningún cambio."
             )
 
         if destino.id == objetivo.id:
