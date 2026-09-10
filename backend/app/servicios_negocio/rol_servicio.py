@@ -145,6 +145,55 @@ class RolServicio:
         self.db.refresh(usuario)
         return usuario
 
+    # --- Capacidad REPRESENTANTE (#1137, regla compartida #762) -------------
+    def establecer_capacidad_representante(self, usuario: Usuario) -> bool:
+        """Deja en `usuario` EXACTAMENTE un rol: REPRESENTANTE.
+
+        Es el núcleo de capacidad compartido de los caminos de cuenta: lo
+        invocan los comandos presenciales (y, más adelante, el alta de
+        cuenta de representante). La regla #762 se aplica de forma
+        determinista sobre las filas del usuario YA BLOQUEADAS:
+
+          1. multirol legado (debería ser imposible: el trigger
+             `trg_usuario_rol_unico_por_usuario` lo impide en la base) →
+             se RECHAZA para que lo remedie su dueño; jamás se adivina ni
+             se reescribe en silencio;
+          2. ya es REPRESENTANTE → se reusa, sin segunda inserción;
+          3. un único rol legal distinto → reemplazo EXPLÍCITO (quitar ese
+             rol y asignar REPRESENTANTE) -- solo existe en el comando
+             presencial autorizado por administración, nunca como
+             conversión genérica de roles;
+          4. sin roles → se inserta REPRESENTANTE (nunca ALUMNO: la
+             capacidad de representante no crea jugador).
+
+        No escribe columnas de relación y no comitea (solo `flush()`): la
+        transacción la cierra el comando. Devuelve `True` si la colección
+        cambió, `False` si se reusó."""
+        tipos_actuales = [rol.tipo_rol for rol in usuario.roles]
+        if len(tipos_actuales) > 1:
+            raise OperacionInvalida(
+                "Esta cuenta tiene más de un rol activo (estado legado) y la "
+                "capacidad de representante no se puede establecer "
+                "automáticamente: requiere que su dueño elija qué rol "
+                "conserva.",
+                detalle_tecnico=(
+                    f"usuario_id={usuario.id} tiene "
+                    f"{sorted(tipo.value for tipo in tipos_actuales)}"
+                ),
+            )
+        if TipoRol.REPRESENTANTE in tipos_actuales:
+            return False
+        if tipos_actuales:
+            # Reemplazo explícito del ÚNICO rol legal. Quitar y asignar son
+            # dos escrituras de la misma transacción: el trigger #762 ve la
+            # asociación vieja ya borrada cuando inserta la nueva.
+            usuario.roles.remove(usuario.roles[0])
+            self.db.flush()
+        rol = self.repo_rol.obtener_o_crear(TipoRol.REPRESENTANTE)
+        usuario.roles.append(rol)
+        self.db.flush()
+        return True
+
     def asignar_alumno_si_corresponde(self, persona_id: int) -> None:
         """
         Asignación perezosa (principio de diseño ya acordado: el rol ALUMNO

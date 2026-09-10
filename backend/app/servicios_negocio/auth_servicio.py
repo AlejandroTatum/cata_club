@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
-    RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
+    Persona, RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
 )
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
@@ -326,6 +326,65 @@ class AuthServicio:
             "usuario_id": nuevo_usuario.id,
             "correo": nuevo_usuario.correo,
         }
+
+    # --- Núcleo presencial (#1137): credenciales de una Persona existente ----
+    def establecer_credenciales_persona_existente(
+        self, persona: Persona, correo: str, contrasenia: str
+    ) -> Usuario:
+        """Crea o actualiza las credenciales de una Persona YA existente y
+        BLOQUEADA, sin comitear y sin emitir token.
+
+        Es el núcleo de credenciales compartido de los comandos presenciales:
+        el administrador tiene a la persona enfrente, verificó su identidad y
+        su correo ACTUAL en el mostrador -- por eso la cuenta nace (o queda)
+        con `correo_verificado=True` sin ningún clic en ningún buzón. La
+        verificación de identidad ES el trámite presencial, no un email.
+
+        - No crea `Persona`: opera sobre el `persona_id` recibido, que no
+          cambia jamás.
+        - La unicidad del correo se chequea NORMALIZADA (`lower(btrim)`,
+          el mismo predicado de `obtener_por_correo` y del índice único
+          `ix_usuario_correo_lower`): si la dirección pertenece a OTRA
+          persona, el comando completo se rechaza sin desvincular nada.
+        - Solo `flush()`: credenciales, capacidad, vínculo, auditoría y
+          epoch comitean JUNTOS o no comitean. Quien llama hace el único
+          `commit()`.
+
+        Devuelve el `Usuario` establecido."""
+        correo_normalizado = correo.strip().lower()
+        cuenta_con_ese_correo = self.repo.obtener_por_correo(correo_normalizado)
+        if cuenta_con_ese_correo is not None and cuenta_con_ese_correo.persona_id != persona.id:
+            raise EntidadDuplicada(
+                "Ese correo ya pertenece a la cuenta de otra persona. "
+                "Verificá con el titular otra dirección actual antes de "
+                "continuar.",
+                detalle_tecnico=(
+                    f"correo normalizado ya usado por persona_id="
+                    f"{cuenta_con_ese_correo.persona_id}; pedido para "
+                    f"persona_id={persona.id}"
+                ),
+            )
+
+        usuario = self.repo.obtener_por_persona_id(persona.id)
+        hash_contrasenia = GestorAutenticacion.obtener_hash_contrasenia(contrasenia)
+        if usuario is None:
+            usuario = Usuario(
+                correo=correo_normalizado,
+                contrasenia=hash_contrasenia,
+                persona_id=persona.id,
+                # La verificación la hizo el personal en persona: nace
+                # verificada a propósito (mismo criterio documentado de
+                # `registrar_usuario`, con evidencia presencial de por medio).
+                correo_verificado=True,
+            )
+            self.repo.crear(usuario)
+            return usuario
+
+        usuario.correo = correo_normalizado
+        usuario.contrasenia = hash_contrasenia
+        usuario.correo_verificado = True
+        self.db.flush()
+        return usuario
 
     # --- Perfil del usuario autenticado -------------------------------------
     def obtener_usuario_actual(self, correo: str) -> Usuario:

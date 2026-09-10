@@ -126,3 +126,63 @@ The following exact unchecked lines remain persisted in `tasks.md`; they are out
 - Independent verifier verdict: PASS; no PR 2+ scope drift.
 - Backend candidate count after correction: 474 additions + 5 deletions = 479 changed lines.
 - Maintainer accepted `size:exception` for this cohesive PR 1 slice; native complete-candidate accounting remains authoritative.
+
+---
+
+# Apply progress — PR 2 (existing-person credential + REPRESENTANTE capability primitives)
+
+## Structured status consumed
+
+- `changeName`: `represented-person-account-flow`; `artifactStore`: `openspec`; `applyState`: ready.
+- `actionContext.mode`: `repo-local`; allowed edit root: this worktree (`pi-1137-pr2`, branch `fix/represented-person-credentials` based on PR 1 head `4a60ca2`).
+- Delivery: `auto-chain`, `feature-branch-chain`; PR 2 targets immediate predecessor `fix/represented-person-audit-foundation` (#1165); parent owns commit/push/PR/attempt settlement (no sdd-attempt calls made).
+- Boundary honored: no relationship-column writes, no endpoint/router changes, no self-service independence behavior, no `AdminCuentaServicio` usage, no PR 3 hunks; salvage from `pi-1137` WIP was read-only (only the two auth/role hunks adapted).
+
+## Completed implementation tasks (persisted in `tasks.md`)
+
+- `[x]` Existing-person credential core creates/updates one `Usuario` on a locked `persona_id` without emitting tokens or creating a `Persona`.
+- `[x]` Shared capability rule implements #762 outcomes: grant when absent, reuse sole `REPRESENTANTE`, explicit sole-role replacement path, reject legacy multi-role accounts.
+- `[ ]` Third PR 2 checkbox (boundary/budget bundle) left unchecked per parent instruction; its guards are evidenced below and the diff is final for apply scope.
+
+## TDD Cycle Evidence (strict TDD)
+
+| Task | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| Credential core | `backend/tests/test_auth.py` | PostgreSQL service/ORM | — | 5 failed: `AttributeError: ...establecer_credenciales_persona_existente` | 5 passed | +3 adversarial (whitespace-normalized foreign-email conflict, no epoch bump, caller-owns-commit persistence) → 8 passed | ruff clean; reuses `obtener_por_correo`/`obtener_hash_contrasenia`; no `.commit()`, no tokens, no `AdminCuentaServicio` in code |
+| Capability rule | `backend/tests/test_roles.py` | PostgreSQL service + real #762 trigger | — | 8 failed: `AttributeError: ...establecer_capacidad_representante` | 8 passed | +4 adversarial (caller-owns-commit, no epoch bump, catalog row preserved on replacement, same association row on reuse) → 12 passed | ruff clean; single core ownership (no `exigir_rol_unico` duplication: reject vs. deterministic establishment are distinct contracts by design) |
+
+### Exact commands and results (runner: `uv run pytest` against real `db-test` PostgreSQL, port 5436)
+
+- RED: `TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test JWT_SECRET_KEY=... uv run pytest tests/test_auth.py tests/test_roles.py -q` → **13 failed, 1 warning in 2.08s** (exit 1; all `AttributeError` for the two missing methods).
+- GREEN: same command → **13 passed, 1 warning in 5.33s** (one iteration: the foreign-email test initially verified a password against a plain string instead of a real legacy hash; fixed the seed, not the production code).
+- TRIANGULATE: same command → **20 passed, 1 warning in 6.71s**.
+- REFACTOR: same command → **20 passed, 1 warning** (final); `uv run ruff check` on the four touched backend files → **All checks passed**.
+- Safety net: `uv run pytest tests/test_rol_unico_por_cuenta.py tests/test_auth_registro_refresh.py tests/test_autenticacion_endpoints.py tests/test_admin_cuenta_servicio.py tests/test_auth.py tests/test_roles.py -q` → **92 passed, 1 warning in 15.17s** (includes the #762 rejection regressions and the retired-module import compatibility suite).
+- Import/attribute probe (`AMBIENTE=test`): cores exist; method sources contain no `AdminCuentaServicio`, no token creation, no `.commit()`; `git diff | grep -ci admincuentaservicio` → 0.
+
+## Files changed
+
+- `backend/app/servicios_negocio/auth_servicio.py` — new non-committing `AuthServicio.establecer_credenciales_persona_existente(persona, correo, contrasenia) -> Usuario`: creates or updates exactly one `Usuario` on the received (caller-locked) `persona_id` with `correo_verificado=True`; normalized-email uniqueness against other persons' accounts (`EntidadDuplicada`, same `lower(btrim)` predicate as `ix_usuario_correo_lower`); flush-only; no token, no `Persona`, no role, no relationship write. `Persona` added to the existing model import.
+- `backend/app/servicios_negocio/rol_servicio.py` — new shared `RolServicio.establecer_capacidad_representante(usuario) -> bool`: #762 outcomes (reject legacy multi-role with `OperacionInvalida` before any flush; reuse sole `REPRESENTANTE` → False; explicit sole-role replacement with DELETE flushed before INSERT so the real `trg_usuario_rol_unico_por_usuario` admits the pair; grant when absent, never `ALUMNO`); flush-only; never touches `version_sesion` or relationship columns.
+- `backend/tests/test_auth.py` (new) — 8 tests: single-account creation on existing persona, rollback discipline (commit guard + rollback discards), legacy update in place, own-email reuse, foreign-email rejection without mutation, whitespace/case variant conflict parity, no epoch bump, caller-commits persistence.
+- `backend/tests/test_roles.py` (new) — 12 tests: grant/reuse/replacement (parametrized over ADMINISTRADOR/ENTRENADOR/ALUMNO)/multi-role rejection, no `ALUMNO` and no link write, rollback discipline, caller-commits, no epoch bump, catalog preservation, association identity on reuse.
+- `openspec/changes/represented-person-account-flow/tasks.md` — only the two PR 2 implementation checkboxes changed to `[x]`.
+- `openspec/changes/represented-person-account-flow/apply-progress.md` — this cumulative evidence (PR 1 content preserved).
+
+## Review workload, rollback, deviations
+
+- Authored count: 109 additions + 1 deletion (tracked) + 528 additions (two new test files) = **638 changed lines** — inside the 600–900 target, under the 1,000 hard stop. SDD bookkeeping files excluded from the implementation count.
+- Runtime harness: N/A — no endpoint or UI surface in this slice (justification recorded here for the PR body per `tasks.md`).
+- Rollback boundary: revert the two new methods plus the two new test files; no migration, no router, no relationship/session behavior, and no other slice's code is touched, so rollback removes nothing else.
+- Deviations from design/salvage: none material — hunks adapted verbatim from the WIP salvage except comments updated to describe the shared (not independence-specific) role; epoch bumping and audit/idempotency stay with the PR 3 command by design, and tests pin the cores to NOT do them.
+- Skipped locally: full `make pre-pr` lane not run (parent owns PR delivery per instruction); frontend lane not applicable (no frontend change); CI gates cannot be claimed locally.
+
+## Remaining tasks (exact unchecked lines owned by this change)
+
+```text
+- [ ] Merge and required CI on #1165 (pending; not claimable from this document).
+- [ ] No relationship-column writes; no retired `AdminCuentaServicio` usage; changed lines within 600–900 (stop at 1,000).
+- [ ] Vertical cutover commits credentials, capability, link removal, audit, and session epochs in one transaction.
+```
+
+(plus all PR 3–7 and parent-owned lines, unchanged — see `tasks.md`.)

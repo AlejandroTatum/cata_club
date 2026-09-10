@@ -75,9 +75,9 @@ Every PR targets its immediate predecessor and carries a dependency diagram with
 **Runtime:** N/A (no endpoint or UI surface in this slice); record the justification in the PR.
 **Rollback:** revert the extracted core/helpers; no relationship, endpoint, or session behavior changes.
 
-- [ ] Existing-person credential core creates/updates one `Usuario` on a locked `persona_id` without emitting tokens or creating a `Persona`.
-- [ ] Shared capability rule implements #762 outcomes: grant when absent, reuse sole `REPRESENTANTE`, explicit sole-role replacement path, reject legacy multi-role accounts.
-- [ ] No relationship-column writes; no retired `AdminCuentaServicio` usage; changed lines within 600–900 (stop at 1,000).
+- [x] Existing-person credential core creates/updates one `Usuario` on a locked `persona_id` without emitting tokens or creating a `Persona`.
+- [x] Shared capability rule implements #762 outcomes: grant when absent, reuse sole `REPRESENTANTE`, explicit sole-role replacement path, reject legacy multi-role accounts.
+- [x] No relationship-column writes; no retired `AdminCuentaServicio` usage; changed lines within 600–900 (stop at 1,000).
 
 ## PR 3 — Administrator independence vertical cutover
 
