@@ -83,10 +83,12 @@ def _representado_adulto(db_session, representante_id: int, *,
     que esta suite NO congela para el módulo nuevo)."""
     adulto = Persona(
         nombres="Carlos", apellidos="Ruiz", cedula=cedula_valida(cedula_seed),
-        fecha_nacimiento=date(2000, 6, 15), telefono="0991234567",
+        fecha_nacimiento=date(2020, 6, 15), telefono="0991234567",
         representante_id=representante_id,
     )
     db_session.add(adulto)
+    db_session.commit()
+    adulto.fecha_nacimiento = date(2000, 6, 15)  # envejece en el sitio
     db_session.commit()
     db_session.refresh(adulto)
     return adulto
