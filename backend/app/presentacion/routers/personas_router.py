@@ -11,13 +11,15 @@ from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaListItemDTO, PersonaUpdateDTO,
-    PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO, EstadoPersonaDTO,
+    PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO,
+    IndependenciaResponseDTO, EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
 from app.presentacion.routers.reporte_helpers import exigir_tope_reporte
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.persona_servicio import PersonaServicio
+from app.servicios_negocio.relacion_representacion_servicio import RelacionRepresentacionServicio
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.dtos.beneficio_schemas import (
     AsignacionDescuentoCreateDTO, AsignacionDescuentoResponseDTO,
@@ -383,8 +385,9 @@ async def listar_representados(
 # formulario de pago. Mismo criterio de ownership ya usado por
 # `GET /membresias/mias` y `GET /membresias/pagos/persona/{persona_id}`:
 # dueño, su representante, o ADMINISTRADOR -- vía `PoliticaAccesoPersona.
-# exigir_acceso` (ya usada en este mismo archivo por `actualizar_foto_persona`
-# e `independizar_persona`), no un chequeo nuevo.
+# exigir_acceso` (ya usada en este mismo archivo por `actualizar_foto_persona`),
+# no un chequeo nuevo. (`independizar_persona` ya no usa esta política: es
+# comando presencial de ADMINISTRADOR desde #1137.)
 @router.get(
     "/{persona_id}/beneficio",
     response_model=Optional[AsignacionDescuentoResponseDTO],
@@ -511,35 +514,40 @@ async def vincular_representado(
     return PersonaServicio(db).vincular_representado(persona_id, datos)
 
 
-# --- Independizar (Flujo 4): ex-menor se independiza del representante --
+# --- Independizar: salida de independencia PRESENCIAL (#1137) ---------------
 @router.post(
-    "/{persona_id}/independizar", response_model=PersonaResponseDTO,
-    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+    "/{persona_id}/independizar", response_model=IndependenciaResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
 )
 async def independizar_persona(
     persona_id: int,
+    request: Request,
     datos: IndependizarDTO,
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
     db: Session = Depends(obtener_sesion),
 ):
-    """Permite a una persona independizarse de su representante legal.
-    Solo puede ejecutarlo la propia persona o un ADMINISTRADOR."""
-    PoliticaAccesoPersona(db).exigir_acceso_directo(
-        persona_id_objetivo=persona_id,
-        persona_id_solicitante=token_payload.get("persona_id"),
-        roles_solicitante=token_payload.get("roles", []),
-        roles_privilegiados=SOLO_ADMINISTRADOR,
-    )
-    # `run_in_threadpool` (issue #826): `independizar` confirma la contraseña
-    # con `GestorAutenticacion.verificar_contrasenia` -> `pwd_context.verify`.
-    # Verificar cuesta EXACTAMENTE lo mismo que hashear (cientos de ms de CPU pura):
-    # bcrypt vuelve a derivar la clave con el costo y la sal que vienen dentro
-    # del hash guardado, no compara cadenas. Y a diferencia del resto de los
-    # sitios de #826, esta ruta no tiene `@limiter.limit`, así que cualquier
-    # autenticado podía congelar el único hilo del event loop (`Dockerfile:53`,
-    # sin `--workers`) esos cientos de ms por request, en un bucle sin freno.
+    """Salida de independencia de un adulto representado, ejecutada SOLO por
+    un ADMINISTRADOR con la persona enfrente (#1137).
+
+    El autoservicio anterior (la persona "se independizaba" sola confirmando
+    su contraseña, con la deuda bloqueando) se jubiló con este comando: la
+    especificación exige identidad verificada en persona, correo actual
+    verificado y deuda NO bloqueante -- tres cosas que solo garantiza el
+    trámite presencial. La acción queda en el balde de roles (ADMINISTRADOR)
+    y ya no en el de "cualquier autenticado".
+
+    Requiere `Idempotency-Key`: un reintento devuelve el resultado ya
+    establecido, nunca un segundo usuario ni un segundo evento. La respuesta
+    NO lleva tokens: el adulto entra después por el login normal."""
+    # `run_in_threadpool` (issue #826): el comando hashea la contraseña con
+    # bcrypt (`obtener_hash_contrasenia`), cientos de ms de CPU pura que no
+    # pueden pasar por el único hilo del event loop.
     return await run_in_threadpool(
-        PersonaServicio(db).independizar, persona_id, datos,
+        RelacionRepresentacionServicio(db).independizar_presencial,
+        admin_actor_id=token_payload.get("persona_id"),
+        persona_id=persona_id,
+        comando=datos,
+        idempotency_key=request.headers.get("idempotency-key"),
     )
 
 

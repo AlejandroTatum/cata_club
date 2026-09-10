@@ -103,9 +103,28 @@ class EstadoPersonaDTO(BaseModel):
 
 
 class IndependizarDTO(BaseModel):
-    """Payload para que un ex-menor (ya mayor de edad) o un administrador
-    independice a una persona de su representante legal."""
-    contrasenia: str = Field(..., min_length=8)
+    """Payload del comando PRESENCIAL de independencia (#1137).
+
+    Lo ejecuta un ADMINISTRADOR con la persona enfrente: acá no hay
+    autoservicio. `correo` es la dirección ACTUAL que el adulto demuestra en
+    el mostrador (nace verificada porque la verificó el personal),
+    `contrasenia` es la clave inicial que se establece y
+    `evidencia_identidad` deja constancia del trámite presencial."""
+    correo: CorreoValidado
+    contrasenia: ContraseniaValidada
+    evidencia_identidad: str = Field(..., min_length=1, max_length=500)
+
+
+class IndependenciaResponseDTO(BaseModel):
+    """Resultado commiteado del comando. Deliberadamente SIN tokens: quien
+    ejecutó el comando es el administrador; el adulto entra después por el
+    login normal con las credenciales que le fueron establecidas."""
+    persona_id: int = Field(..., examples=[42])
+    representante_anterior_id: Optional[int] = Field(default=None, examples=[7])
+    usuario_id: Optional[int] = Field(default=None, examples=[15])
+    cuenta_creada: bool = Field(..., examples=[True])
+    replay: bool = Field(default=False, examples=[False])
+    idempotency_key: str = Field(..., examples=["clave-de-intento"])
 
 
 class PersonaResponseDTO(ResponseBase, BaseModel):
