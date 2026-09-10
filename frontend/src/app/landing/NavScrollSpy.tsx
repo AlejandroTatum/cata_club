@@ -45,6 +45,19 @@ export default function NavScrollSpy(): React.ReactElement | null {
         } else {
           link.removeAttribute("aria-current");
         }
+
+        // Below 768px `.landing-nav-links` is its own horizontal-scroll
+        // strip — the active chip can sit off-screen to the right. Scroll
+        // it into view INSIDE the strip only: `element.scrollIntoView()`
+        // would scroll the page instead, since the navbar is `position:
+        // sticky`. `nav.scrollTo` is undefined in jsdom, hence the guard.
+        if (isActive && nav.scrollWidth > nav.clientWidth && typeof nav.scrollTo === "function") {
+          const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          nav.scrollTo({
+            left: link.offsetLeft - (nav.clientWidth - link.offsetWidth) / 2,
+            behavior: reducedMotion ? "auto" : "smooth",
+          });
+        }
       });
     };
 
