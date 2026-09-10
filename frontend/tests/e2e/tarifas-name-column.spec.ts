@@ -2,7 +2,7 @@
  * The tariff name column, measured — issues #660 and #677's root cause.
  *
  * `/tarifas` renders one `DataRow` per tariff below `sm`. Every group that
- * row trails with (price and modality chips, "Editar precio") is `flex-none`,
+ * row trails with (price and modality chips, "Editar") is `flex-none`,
  * so before this lock existed the name — the only flexible item — absorbed
  * the entire squeeze: at 390px it measured a 50px column. Both shipped
  * symptoms came from that one number. `truncate` turned a 53-character name
@@ -113,7 +113,7 @@ test("a long tariff name keeps a readable column at 390px", async ({ page }, tes
 
   // The name winning the row must not cost the row its actions, nor push the
   // page sideways.
-  const editar = page.getByRole("button", { name: /editar precio/i }).first();
+  const editar = page.getByRole("button", { name: /^editar$/i }).first();
   await expect(editar).toBeVisible();
   const box = await editar.boundingBox();
   expect(box).not.toBeNull();
@@ -121,7 +121,7 @@ test("a long tariff name keeps a readable column at 390px", async ({ page }, tes
     ([x, y]) => document.elementFromPoint(x, y)?.closest("button")?.textContent?.trim() ?? "",
     [box!.x + box!.width / 2, box!.y + box!.height / 2],
   );
-  expect(topmost).toBe("Editar precio");
+  expect(topmost).toBe("Editar");
 
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

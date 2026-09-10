@@ -37,7 +37,7 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchTiposMembresia, actualizarTipoMembresia, crearTipoMembresia } from "@/services/api";
-import type { TipoMembresiaCatalogo } from "@/services/api";
+import type { ActualizarTipoMembresiaInput, TipoMembresiaCatalogo } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
 
 const MODALIDAD_LABEL: Record<TipoMembresiaCatalogo["modalidad"], string> = {
@@ -77,6 +77,16 @@ function normalizePrecio(value: string): string {
 const PRECIO_INPUT_CLASS =
   "h-ctl w-28 rounded-ctl border border-line-2 bg-paper px-3 text-right text-sm text-ink tabular-nums outline-none focus:border-cata-red";
 
+/** Mirrors the backend's own bound (`membresia_pago_schemas.py`'s
+ *  `categoria: Optional[str] = Field(None, min_length=1, max_length=80)`) so
+ *  an admin sees the rejection before the round trip, not after it. */
+const CATEGORIA_MAX_LENGTH = 80;
+const CATEGORIA_ERROR_VACIA = "Ingrese un nombre para la tarifa.";
+const CATEGORIA_ERROR_LARGA = `El nombre no puede superar los ${CATEGORIA_MAX_LENGTH} caracteres.`;
+
+const CATEGORIA_INPUT_CLASS =
+  "h-ctl w-full min-w-[10rem] rounded-ctl border border-line-2 bg-paper px-3 text-sm text-ink outline-none focus:border-cata-red";
+
 /** The new-tariff form's field skin — same tokens `discounts/page.tsx` draws
  *  its own "Nuevo descuento" form with, spelled once. */
 const FIELD_LABEL = "flex flex-col gap-field text-2xs font-bold uppercase text-ink-3";
@@ -85,8 +95,13 @@ const FIELD_CONTROL =
 
 interface PendingConfirm {
   id: number;
-  categoria: string;
-  precioNuevo: string;
+  /** The name as it is BEFORE this save — needed for the dialog's "de X a Y"
+   *  wording and to build the partial patch's success toast. */
+  categoriaActual: string;
+  /** `null` when the name did not change — omitted from the PATCH payload. */
+  categoriaNueva: string | null;
+  /** `null` when the price did not change — omitted from the PATCH payload. */
+  precioNuevo: string | null;
 }
 
 const EMPTY_NEW_TARIFA = {
@@ -104,7 +119,9 @@ export default function TarifasPage(): React.ReactElement {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [precioInput, setPrecioInput] = useState("");
+  const [categoriaInput, setCategoriaInput] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const [categoriaError, setCategoriaError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
@@ -157,27 +174,57 @@ export default function TarifasPage(): React.ReactElement {
   function startEdit(tarifa: TipoMembresiaCatalogo): void {
     setEditingId(tarifa.id);
     setPrecioInput(tarifa.precio);
+    setCategoriaInput(tarifa.categoria);
     setInputError(null);
+    setCategoriaError(null);
     precioMasking.reset();
   }
 
   function cancelEdit(): void {
     setEditingId(null);
     setPrecioInput("");
+    setCategoriaInput("");
     setInputError(null);
+    setCategoriaError(null);
     precioMasking.reset();
   }
 
   /** "Guardar" click: validate locally, then open the confirmation — nothing
-   *  mutates until the admin confirms it there. */
+   *  mutates until the admin confirms it there. Only the fields that
+   *  actually changed reach `pendingConfirm`/the PATCH payload: the BFF
+   *  rejects an empty body, so an unchanged save closes edit mode instead of
+   *  opening a confirmation for nothing. */
   function requestConfirm(tarifa: TipoMembresiaCatalogo): void {
-    const value = normalizePrecio(precioInput);
-    if (!PRECIO_REGEX.test(value)) {
+    const categoriaTrimmed = categoriaInput.trim();
+    if (!categoriaTrimmed) {
+      setCategoriaError(CATEGORIA_ERROR_VACIA);
+      return;
+    }
+    if (categoriaTrimmed.length > CATEGORIA_MAX_LENGTH) {
+      setCategoriaError(CATEGORIA_ERROR_LARGA);
+      return;
+    }
+    const precioValue = normalizePrecio(precioInput);
+    if (!PRECIO_REGEX.test(precioValue)) {
       setInputError(PRECIO_ERROR);
       return;
     }
+    setCategoriaError(null);
     setInputError(null);
-    setPendingConfirm({ id: tarifa.id, categoria: tarifa.categoria, precioNuevo: value });
+
+    const categoriaChanged = categoriaTrimmed !== tarifa.categoria;
+    const precioChanged = precioValue !== tarifa.precio;
+    if (!categoriaChanged && !precioChanged) {
+      cancelEdit();
+      return;
+    }
+
+    setPendingConfirm({
+      id: tarifa.id,
+      categoriaActual: tarifa.categoria,
+      categoriaNueva: categoriaChanged ? categoriaTrimmed : null,
+      precioNuevo: precioChanged ? precioValue : null,
+    });
   }
 
   async function confirmSave(): Promise<void> {
@@ -185,13 +232,15 @@ export default function TarifasPage(): React.ReactElement {
     if (!pending) return;
     setSaving(true);
     try {
-      const actualizada = await actualizarTipoMembresia(pending.id, {
-        precio: pending.precioNuevo,
-      });
+      const payload: ActualizarTipoMembresiaInput = {};
+      if (pending.categoriaNueva !== null) payload.categoria = pending.categoriaNueva;
+      if (pending.precioNuevo !== null) payload.precio = pending.precioNuevo;
+      const actualizada = await actualizarTipoMembresia(pending.id, payload);
       setTarifas((prev) => prev.map((t) => (t.id === actualizada.id ? actualizada : t)));
-      showSuccess(`Precio de «${actualizada.categoria}» actualizado a $${actualizada.precio}.`);
+      showSuccess(buildSuccessMessage(pending, actualizada));
       setEditingId(null);
       setPrecioInput("");
+      setCategoriaInput("");
       setPendingConfirm(null);
     } catch (err) {
       const message = toUserMessage(err, "No se pudo actualizar la tarifa.");
@@ -207,6 +256,48 @@ export default function TarifasPage(): React.ReactElement {
    *  the admin can correct the value instead of starting over. */
   function cancelConfirm(): void {
     setPendingConfirm(null);
+  }
+
+  /** Reads from `actualizada.categoria`, not the local input, so a backend
+   *  normalization (e.g. trimming) is what the toast actually reports. */
+  function buildSuccessMessage(
+    pending: PendingConfirm,
+    actualizada: TipoMembresiaCatalogo,
+  ): string {
+    const categoriaChanged = pending.categoriaNueva !== null;
+    const precioChanged = pending.precioNuevo !== null;
+    if (categoriaChanged && precioChanged) {
+      return `Tarifa «${pending.categoriaActual}» actualizada: nombre a «${actualizada.categoria}» y precio a $${actualizada.precio}.`;
+    }
+    if (categoriaChanged) {
+      return `Nombre de «${pending.categoriaActual}» actualizado a «${actualizada.categoria}».`;
+    }
+    return `Precio de «${actualizada.categoria}» actualizado a $${actualizada.precio}.`;
+  }
+
+  /** The confirmation dialog's title/confirm label track exactly what is
+   *  about to change — a price-only edit still reads "Cambiar precio", the
+   *  wording the existing test suite (and admins) already know. */
+  function confirmDialogLabel(pending: PendingConfirm | null): string {
+    if (!pending) return "";
+    if (pending.categoriaNueva !== null && pending.precioNuevo !== null) return "Cambiar tarifa";
+    if (pending.categoriaNueva !== null) return "Cambiar nombre";
+    return "Cambiar precio";
+  }
+
+  function buildConfirmMessage(pending: PendingConfirm): string {
+    const parts: string[] = [];
+    if (pending.categoriaNueva !== null) {
+      parts.push(
+        `Va a cambiar el nombre de «${pending.categoriaActual}» a «${pending.categoriaNueva}».`,
+      );
+    }
+    if (pending.precioNuevo !== null) {
+      parts.push(
+        `Va a cambiar el precio a $${pending.precioNuevo}. El cambio aplica solo a los pagos futuros: las membresías y los pagos ya registrados no se modifican.`,
+      );
+    }
+    return parts.join(" ");
   }
 
   // --- Nueva tarifa (issue #507) --------------------------------------------
@@ -254,10 +345,38 @@ export default function TarifasPage(): React.ReactElement {
     }
   }
 
+  /** The bare name input for edit mode — swapped in for the plain
+   *  `tarifa.categoria` text both surfaces (`DataRow`'s `name` prop,
+   *  `TableNameCell`'s `name` prop) otherwise render. Read mode never calls
+   *  this: it keeps the name markup the `tarifas-name-column` e2e lock
+   *  measures untouched. It has to stay a single inline element — both
+   *  callers wrap `name` in a `<p>`/`<span>`, which cannot hold a block-level
+   *  wrapper, so its own error message surfaces from `renderMeta` instead. */
+  function renderNombreInput(tarifa: TipoMembresiaCatalogo): React.ReactElement {
+    return (
+      <input
+        type="text"
+        value={categoriaInput}
+        onChange={(e) => {
+          setCategoriaInput(e.target.value);
+          setCategoriaError(null);
+        }}
+        className={CATEGORIA_INPUT_CLASS}
+        aria-label={`Nombre de ${tarifa.categoria}`}
+        disabled={saving}
+      />
+    );
+  }
+
   function renderMeta(tarifa: TipoMembresiaCatalogo): React.ReactElement {
     if (editingId === tarifa.id) {
       return (
         <div className="flex flex-col gap-field">
+          {categoriaError && (
+            <p className="text-xs text-state-bad" role="alert">
+              {categoriaError}
+            </p>
+          )}
           <input
             type="text"
             inputMode="decimal"
@@ -298,7 +417,7 @@ export default function TarifasPage(): React.ReactElement {
       return (
         <Button size="sm" onClick={() => startEdit(tarifa)}>
           <Pencil size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Editar precio
+          Editar
         </Button>
       );
     }
@@ -449,15 +568,18 @@ export default function TarifasPage(): React.ReactElement {
                     {tarifas.map((tarifa) => (
                       <DataRow
                         key={tarifa.id}
-                        name={tarifa.categoria}
+                        name={
+                          editingId === tarifa.id ? renderNombreInput(tarifa) : tarifa.categoria
+                        }
                         // Opt-in only (#660): long tarifa/descuento names were
                         // truncating to "M…" on mobile. `nameWrap` is scoped
                         // to this page — the other five DataRow callers keep
-                        // truncating by default.
+                        // truncating by default. Read mode only: edit mode
+                        // renders an input instead of the wrapped text.
                         nameWrap
                         // Bundled into `meta` rather than `DataRow`'s own
                         // per-row `actions` prop: this row's actions are
-                        // "Editar precio"/"Guardar"/"Cancelar", distinct from
+                        // "Editar"/"Guardar"/"Cancelar", distinct from
                         // the header's own "Nueva tarifa" (#507). `meta`
                         // renders the same trailing flex row, so nothing
                         // about the card layout changes.
@@ -486,7 +608,13 @@ export default function TarifasPage(): React.ReactElement {
                       <TableBody>
                         {tarifas.map((tarifa) => (
                           <TableRow key={tarifa.id}>
-                            <TableNameCell name={tarifa.categoria} />
+                            <TableNameCell
+                              name={
+                                editingId === tarifa.id
+                                  ? renderNombreInput(tarifa)
+                                  : tarifa.categoria
+                              }
+                            />
                             <TableCell>
                               {editingId === tarifa.id ? (
                                 renderMeta(tarifa)
@@ -516,13 +644,9 @@ export default function TarifasPage(): React.ReactElement {
         <ConfirmDialog
           open={pendingConfirm !== null}
           variant="danger"
-          title="Cambiar precio"
-          message={
-            pendingConfirm
-              ? `Va a cambiar el precio de «${pendingConfirm.categoria}» a $${pendingConfirm.precioNuevo}. El cambio aplica solo a los pagos futuros: las membresías y los pagos ya registrados no se modifican.`
-              : ""
-          }
-          confirmLabel="Cambiar precio"
+          title={confirmDialogLabel(pendingConfirm)}
+          message={pendingConfirm ? buildConfirmMessage(pendingConfirm) : ""}
+          confirmLabel={confirmDialogLabel(pendingConfirm)}
           onConfirm={() => void confirmSave()}
           onCancel={cancelConfirm}
         />

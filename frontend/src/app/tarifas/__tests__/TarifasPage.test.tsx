@@ -159,7 +159,7 @@ describe("TarifasPage — editar precio", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
 
     const input = within(juniorRow).getByLabelText(/precio de junior/i);
     fireEvent.change(input, { target: { value: "50.00" } });
@@ -182,7 +182,7 @@ describe("TarifasPage — editar precio", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: "50.00" },
     });
@@ -199,7 +199,7 @@ describe("TarifasPage — editar precio", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: "50.00" },
     });
@@ -224,7 +224,7 @@ describe("TarifasPage — editar precio", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: valorInvalido },
     });
@@ -243,7 +243,7 @@ describe("TarifasPage — editar precio", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: "50.00" },
     });
@@ -259,7 +259,7 @@ describe("TarifasPage — editar precio", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: "999.00" },
     });
@@ -271,6 +271,138 @@ describe("TarifasPage — editar precio", () => {
   });
 });
 
+// The backend/BFF/api client already supported renaming a tariff — this
+// screen was the only gap. Edit mode now carries a name input alongside the
+// price one, and the PATCH only ever sends what actually changed.
+describe("TarifasPage — editar nombre", () => {
+  it("sends only categoria when just the name changed", async () => {
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...JUNIOR, categoria: "Junior Plus" });
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/nombre de junior/i), {
+      target: { value: "Junior Plus" },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cambiar nombre/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(1, { categoria: "Junior Plus" });
+    });
+    expect(await within(juniorRow).findByText("Junior Plus")).toBeInTheDocument();
+  });
+
+  it("sends only precio when just the price changed", async () => {
+    mockActualizarTipoMembresia.mockResolvedValueOnce({ ...JUNIOR, precio: "50.00" });
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
+      target: { value: "50.00" },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cambiar precio/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(1, { precio: "50.00" });
+    });
+  });
+
+  it("sends both categoria and precio when both changed", async () => {
+    mockActualizarTipoMembresia.mockResolvedValueOnce({
+      ...JUNIOR,
+      categoria: "Junior Plus",
+      precio: "50.00",
+    });
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/nombre de junior/i), {
+      target: { value: "Junior Plus" },
+    });
+    fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
+      target: { value: "50.00" },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cambiar tarifa/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarTipoMembresia).toHaveBeenCalledWith(1, {
+        categoria: "Junior Plus",
+        precio: "50.00",
+      });
+    });
+  });
+
+  it("closes edit mode without calling the API when nothing changed", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
+    expect(within(juniorRow).queryByLabelText(/nombre de junior/i)).not.toBeInTheDocument();
+  });
+
+  it("rejects an empty name without reaching the API", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/nombre de junior/i), {
+      target: { value: "   " },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
+    expect(await within(juniorRow).findByText(/ingrese un nombre/i)).toBeInTheDocument();
+  });
+
+  it("rejects a name longer than 80 characters without reaching the API", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/nombre de junior/i), {
+      target: { value: "x".repeat(81) },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockActualizarTipoMembresia).not.toHaveBeenCalled();
+    expect(
+      await within(juniorRow).findByText(/no puede superar los 80 caracteres/i),
+    ).toBeInTheDocument();
+  });
+
+  it("names both the old and the new name in the confirmation dialog", async () => {
+    renderPage();
+
+    const juniorRow = await findTarifaRow("Junior");
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
+    fireEvent.change(within(juniorRow).getByLabelText(/nombre de junior/i), {
+      target: { value: "Junior Plus" },
+    });
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^guardar$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/junior/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/junior plus/i)).toBeInTheDocument();
+  });
+});
+
 // Issue #506 — the price input let anything through and only ever accepted
 // "." as the decimal separator, rejecting the "45,50" an es-EC/es-AR admin
 // naturally types.
@@ -279,7 +411,7 @@ describe("TarifasPage — masking y separador decimal", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "4a5b" } });
@@ -291,7 +423,7 @@ describe("TarifasPage — masking y separador decimal", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "-5" } });
@@ -303,7 +435,7 @@ describe("TarifasPage — masking y separador decimal", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "45,,50" } });
@@ -316,7 +448,7 @@ describe("TarifasPage — masking y separador decimal", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: "45,50" },
     });
@@ -334,7 +466,7 @@ describe("TarifasPage — masking y separador decimal", () => {
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     fireEvent.change(within(juniorRow).getByLabelText(/precio de junior/i), {
       target: { value: "45,50" },
     });
@@ -357,7 +489,7 @@ describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () 
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i);
 
     expect(fireEvent.keyDown(input, { key: "a" })).toBe(false);
@@ -367,7 +499,7 @@ describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () 
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "45.5" } });
 
@@ -378,7 +510,7 @@ describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () 
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
     // Select JUNIOR's starting "45.00" first — the realistic "select, then
     // paste to replace" gesture. Pasting at an unselected caret would
@@ -395,7 +527,7 @@ describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () 
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "45.999" } });
@@ -407,7 +539,7 @@ describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () 
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "1234567" } }); // 7 digits, over the cap
@@ -419,7 +551,7 @@ describe("TarifasPage — masking en tiempo real y techo de negocio (#667)", () 
     renderPage();
 
     const juniorRow = await findTarifaRow("Junior");
-    fireEvent.click(within(juniorRow).getByRole("button", { name: /editar precio/i }));
+    fireEvent.click(within(juniorRow).getByRole("button", { name: /^editar$/i }));
     const input = within(juniorRow).getByLabelText(/precio de junior/i);
     fireEvent.change(input, { target: { value: "123456" } }); // already at the 6-digit cap
 
