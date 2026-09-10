@@ -101,33 +101,29 @@ Product decisions are confirmed, external research remains unselected, and `Pers
 
 ## Delivery plan and review budget
 
-Use the configured **feature-branch chain** with a draft/no-merge #1137 tracker. Every child PR targets its immediate predecessor, is a cohesive work unit with its tests/docs, and targets at most **400 additions plus deletions**. This is a dependency-safe forecast, not a forced final count: tasks may split a unit further where its honest implementation exceeds the budget. If one cohesive split cannot fit after one slicing pass, request explicit `size:exception` approval rather than compressing or omitting code/tests.
+Use the configured **feature-branch chain** with the draft/no-merge tracker #1164. The original 14-child-PR/400-line plan is superseded by a compact plan of **7 implementation PRs**. Every PR targets its immediate predecessor, is one cohesive work unit with its tests/docs, and targets **600–900 additions plus deletions** with a **hard stop at 1,000**; a cohesive slice that cannot land at or below 1,000 stops and is re-sliced instead of requesting a routine size exception. The earlier size exception granted to the monolithic independence slice (~1,795 changed lines) is superseded by this replan: that local slice is not publishable whole and is salvaged into PRs 2–3. Execution is automatic: each slice runs implement/TDD → focused validation → independent verification → native review when applicable → commit/push/open chained PR, without routine workflow questions.
 
 ```text
 main
-  └─ draft tracker: #1137 represented-person-account-flow
-       └─ PR 1: #1137 adult in-person independence exit on existing persona
-            └─ PR 2: #1134 adult representative account and capability backend
-                 └─ PR 3: #1134 empty representative dashboard
-                      └─ PR 4: #1132 backend active-membership player truth
-                           └─ PR 5: #1132 frontend member/dashboard/portal derivation
-                                └─ PR 6: #1138 minor-field and emergency-contact API contract
-                                     └─ PR 7: #1138 form/BFF contract alignment
-                                          └─ PR 8: #1133 relationship validation and database safeguards
-                                               └─ PR 9: #1133 admin reassignment, audit, revocation, notifications, and safe-stop UX
-                                                    └─ PR 10: #1137 authenticated represented-person creation and payment conservation
-                                                         └─ PR 11: #1137 incompatible-account inventory, rehearsal, revocation, and remediation
+  └─ draft tracker #1164: #1137 represented-person-account-flow
+       └─ PR 1 (open, #1165): audit/idempotency foundation
+            └─ PR 2: existing-person credential + REPRESENTANTE capability primitives
+                 └─ PR 3: administrator independence vertical cutover
+                      └─ PR 4: relationship integrity and admin reassignment
+                           └─ PR 5: account-first representative and represented-minor enrollment
+                                └─ PR 6: ACTIVA player truth and frontend experience
+                                     └─ PR 7: legacy account remediation and final E2E
 ```
 
 | Slice | Work-unit outcome | Dependency-safe boundary |
 |---|---|---|
-| PR 1 | An existing represented adult has a safe administrator independence exit that preserves the same person and history. | First safety prerequisite; uses the required #1133 transition safeguards. |
-| PRs 2–3 | An adult representative account has independent capability semantics and a safe empty dashboard. | Account-first capability before dependent-facing flows. |
-| PRs 4–5 | Player eligibility is consistently derived from active membership on backend and frontend. | Membership truth is isolated from representative capability. |
-| PRs 6–7 | Minor contact fields are rejected/removed and representative-derived operational contact is enforced. | API contract before clients depend on it. |
-| PRs 8–9 | Representation creation/change/removal is validated, atomically administered, fully audited, revoked, notified, and non-disclosing. | Shared relationship safety before integrated creation. |
-| PR 10 | Authenticated child creation is session-derived, atomic, credential-free, and payment-conserving. | Integrates closed entry paths with relationship and membership invariants. |
-| PR 11 | Existing incompatible accounts are safely remediated with evidence. | Last by design; no one is stranded by credential removal. |
+| PR 1 (#1165) | Append-only relationship-audit and idempotency foundation. | Shipped first; later slices depend on it. |
+| PR 2 | Existing-person credential core plus shared `REPRESENTANTE` capability primitives (#762-compatible) with focused tests, salvaged from local WIP. | Account/credential primitives exist before the independence cutover uses them. |
+| PR 3 | Administrator independence vertical cutover: relationship service command, DTO/router, audit/session/notification effects, and retirement of the self-service independence implementation/tests/guards. | Safe independence exists before any represented credential is removed; hard stop 1,000. |
+| PR 4 | Shared relationship validation, database self/cycle/age/phone safeguards, atomic administrator reassignment, non-disclosing safe stop, and audit/revocation/notification effects. | Relationship integrity precedes dependent creation flows. |
+| PR 5 | Account-first adult representative (account/verification/empty capability state) and session-derived represented-minor enrollment with no child `Usuario`/`ALUMNO`; atomic Persona + relationship + medical + consent + `INACTIVA` membership + `PENDIENTE` payment; #1138 write-field rules. | Closed entry paths before player-truth and frontend work. |
+| PR 6 | `ACTIVA` player predicate across members/schedule/attendance, representative-as-player, empty dashboard, and BFF/forms/derived emergency-contact experience. | Membership truth and portal experience land together on stable contracts. |
+| PR 7 | Legacy-account remediation inventory/rehearsal/revocation/conservation gate (no production execution) plus full cross-flow E2E and cleanup. | Last by design; no one is stranded by credential removal. |
 
 ## Risks and mitigations
 
@@ -139,7 +135,7 @@ main
 | A relationship mutation creates a self-link, cycle, or unreachable active minor. | Use unified validation, database anti-self/cycle and reachability safeguards, and atomic administrator operations. |
 | Membership status improperly controls account or representative access. | Keep `ACTIVA` limited to player truth and test representative capability separately. |
 | Remediation loses history or invalidates access incompletely. | Inventory, QA/staging rehearsal, session revocation, conservation proof, and a stop-on-failure gate precede removal. |
-| A cohesive slice exceeds review capacity. | Split once by work unit; otherwise obtain explicit `size:exception` approval. |
+| A cohesive slice exceeds the 1,000 changed-line hard stop. | Stop before delivery and re-slice by work unit; no routine size exceptions. |
 
 ## Rollback
 
@@ -158,7 +154,7 @@ main
 - [ ] An unrepresented adult still requires emergency-contact name and phone, while legacy emergency values for represented minors remain stored but operationally ignored.
 - [ ] Authenticated represented-person creation derives the representative server-side, creates no dependent credentials/`ALUMNO` role, and preserves relationship plus `INACTIVA` membership after rejected payment.
 - [ ] Incompatible existing accounts are remediated only after inventory, QA/staging rehearsal, revocation, and conservation proof.
-- [ ] Every chain slice remains within 400 changed lines or has explicit maintainer-approved `size:exception` evidence.
+- [ ] Each of the seven implementation PRs lands within its 600–900 changed-line target and none exceeds the 1,000-line hard stop.
 
 ## Issue closure mapping
 

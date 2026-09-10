@@ -46,17 +46,22 @@ secret tracking, empty-to-head migrations, production image boot, and gates not
 fully reproduced by local lanes. Backend tests use the single-tenant `db-test`
 service on port 5436 locally; do not run concurrent backend suites.
 
-Strict TDD is enabled from the first implementation change. Work is planned as a
-feature-branch chain with a 400 changed-line review budget; each child work unit
-must include its tests and remain independently reviewable where possible.
+Strict TDD is enabled from the first implementation change. Work is delivered as
+a feature-branch chain of 7 implementation PRs executed automatically, slice by
+slice, without routine workflow questions; each implementation PR targets
+600–900 changed lines with a hard stop at 1,000, carries its own tests, and
+remains independently reviewable.
 
 ## SDD conventions
 
 - Artifact store: `openspec` (`openspec/config.yaml`).
-- Execution mode: auto.
+- Execution mode: auto (slice-by-slice; stop only for genuine product ambiguity,
+  destructive production action, a failed required gate, a severe review finding,
+  conflict/drift, or a slice over 1,000 changed lines).
 - Delivery strategy: auto-chain.
 - Chain strategy: feature-branch-chain.
-- Review budget: 400 changed lines.
+- Review budget: 600–900 changed lines per implementation PR; hard stop at 1,000.
+  No routine size exceptions.
 - Required artifacts follow the OpenSpec flow: proposal, specs, design, tasks,
   apply evidence, verification, and archive notes as later phases require.
 
@@ -67,3 +72,13 @@ must include its tests and remain independently reviewable where possible.
 - No feature code was changed by this initialization.
 - Skill registry is available at `.atl/skill-registry.md` and is preserved in
   this worktree for delegation/indexing purposes.
+
+## Delivery state after the replan
+
+The original 14-child-PR/400-line delivery plan is superseded by a compact,
+automatic plan of 7 implementation PRs (600–900 target changed lines per PR,
+hard stop 1,000). The draft/no-merge tracker is PR #1164 and implementation
+PR 1 is open as #1165 (`fix/represented-person-audit-foundation`). The earlier
+monolithic independence slice on `fix/represented-person-independence` is local
+WIP only: it is not publishable whole, its size exception is superseded, and it
+must be salvaged into smaller slices (PR 2 first) without discarding it.

@@ -22,7 +22,11 @@ context: |
   Ruff/import-linter/pip-audit/pytest against PostgreSQL, root tests, empty-to-head
   Alembic migration, frontend audit/type-check/lint/Vitest/build/Playwright, and
   production Docker image boot verification.
-  Delivery: auto-chain with feature-branch-chain; review budget is 400 changed lines.
+  Delivery: auto-chain with feature-branch-chain; execution mode is auto
+  (slice-by-slice without routine workflow questions). The change is planned as
+  7 implementation PRs; each targets 600-900 changed lines with a hard stop at
+  1,000. No routine size exceptions; the earlier monolithic-slice exception is
+  superseded.
 
 strict_tdd: true
 
@@ -40,7 +44,8 @@ rules:
   tasks:
     - Group tasks by cohesive feature-branch-chain work unit.
     - Keep tests with the behavior they verify and use hierarchical numbering.
-    - Keep each work unit reviewable within the 400-line budget where feasible.
+    - Keep each work unit within the 600-900 changed-line target; 1,000 is a
+      hard stop that requires stopping and re-slicing, not a size exception.
   apply:
     - Follow existing clean-architecture and BFF patterns.
     - Apply strict TDD: RED, GREEN, TRIANGULATE, REFACTOR.
