@@ -127,9 +127,9 @@ export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): 
 
       <span className="landing-schedule-label">Horario</span>
       <p className={`landing-schedule-time${animate ? " landing-schedule-time--animate" : ""}`}>
-        <DigitRun text={start} animate={animate} />
+        <span className="landing-schedule-time-part"><DigitRun text={start} animate={animate} /></span>
         <span className="landing-schedule-dash">–</span>
-        <DigitRun text={end} animate={animate} />
+        <span className="landing-schedule-time-part"><DigitRun text={end} animate={animate} /></span>
       </p>
 
       <span className="landing-schedule-label">Días</span>

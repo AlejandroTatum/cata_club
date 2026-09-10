@@ -141,6 +141,18 @@ describe("ScheduleSelector", (): void => {
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-live", "polite");
   });
 
+  it("wraps every hour digit in its own unbreakable time-part, never bare in the time row", (): void => {
+    renderCard();
+    const panel = screen.getByRole("tabpanel");
+    const parts = panel.querySelectorAll(".landing-schedule-time-part");
+    expect(parts).toHaveLength(2);
+    const digits = panel.querySelectorAll(".landing-schedule-digit");
+    expect(digits.length).toBeGreaterThan(0);
+    digits.forEach((digit): void => {
+      expect(digit.closest(".landing-schedule-time-part")).not.toBeNull();
+    });
+  });
+
   it("keeps the day balls decorative and names the days in text on the group", (): void => {
     renderCard();
     const group = document.querySelector(".landing-schedule-days") as HTMLElement;

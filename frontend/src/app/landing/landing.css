@@ -508,6 +508,14 @@
 .landing-schedule-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0 0 8px; color: var(--landing-text-strong); font-family: var(--font-landing-barlow), sans-serif; font-size: clamp(38px, 5vw, 56px); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .landing-schedule-time small { color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.5px; text-transform: none; }
 .landing-schedule-dash { color: var(--landing-action); }
+/* Each `HH:MM` half is a run of one span per character (`DigitRun`, for the
+   stagger animation below), and `.landing-schedule-time` wraps as a flex
+   row — without this wrapper every digit is its own independently-wrappable
+   flex item, so a break can land INSIDE a number ("21:1" / "5"). Grouping
+   the run into one `inline-flex` makes the whole half one unbreakable flex
+   item instead; `.landing-schedule-time` can still wrap the range as a
+   whole onto two lines on an extremely narrow viewport. */
+.landing-schedule-time-part { display: inline-flex; white-space: nowrap; }
 .landing-schedule-digit { display: inline-block; }
 .landing-schedule-time--animate .landing-schedule-digit { animation: landing-schedule-digit-roll 520ms ease both; }
 @keyframes landing-schedule-digit-roll { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -610,12 +618,26 @@
 
 @media (max-width: 768px) {
   .landing-navbar { height: auto; min-height: 92px; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
-  .landing-nav-links { order: 3; width: 100%; flex-wrap: wrap; gap: 4px; }
+  /* Six links need ~426px at this padding/font-size (issue: measured on a
+     390px-wide phone, ~358px of content width), so `flex-wrap: wrap` used to
+     drop the last link onto a second row and the sticky header ate ~200px of
+     viewport. One row that scrolls instead — the same horizontal-chip
+     pattern `.landing-schedule-list` already uses at this breakpoint below.
+     The scrollbar is hidden and the right edge fades so the strip still
+     reads as nav, not as a stray scroller, signalling there is more to the
+     right without a visible track. */
+  .landing-nav-links {
+    order: 3; width: 100%; flex-wrap: nowrap; gap: 4px;
+    overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 4px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    mask-image: linear-gradient(90deg, black calc(100% - 24px), transparent);
+  }
+  .landing-nav-links::-webkit-scrollbar { display: none; }
   /* Keep the 44px pointer target promised by the base rule — this override
      used to shrink it to 40px on the narrowest, most touch-driven viewport.
 
      @touch-target The regression that made this whole guard worth writing. */
-  .landing-nav-links a { min-height: 44px; flex: 1 1 auto; padding: 8px 10px; font-size: 12px; }
+  .landing-nav-links a { min-height: 44px; flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; padding: 8px 10px; font-size: 12px; }
   .landing-logo img { height: clamp(58px, 15vw, 72px); }
   .landing-logo { font-size: 17px; }
   .landing-nav-cta { padding-inline: 18px; }
@@ -691,6 +713,13 @@
   .landing-schedule-tab[aria-selected="true"] { background: var(--landing-brand-black); color: var(--landing-surface); border-color: var(--landing-brand-black); }
   .landing-schedule-tab-hours { display: none; }
   .landing-schedule-card { padding: 26px 22px; }
+  /* Only just overflows at the base `clamp(38px, 5vw, 56px)`: the widest
+     reported range ("20:00 – 21:15") measures ~296px against the ~288px of
+     content width this padding leaves on a 390px phone. Smaller gap and a
+     lower clamp ceiling buy real margin — measured with the Playwright lock
+     below at both 412px (`mobile-chromium`'s Pixel 7) and a 360px extreme:
+     the range now fits with room to spare at both widths. */
+  .landing-schedule-time { gap: 8px; font-size: clamp(30px, 8.5vw, 38px); }
   .landing-schedule-day { width: 44px; height: 44px; }
   .landing-schedule-days { gap: 6px; }
   .landing-motto { padding: 52px 28px; }
