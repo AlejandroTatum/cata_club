@@ -241,3 +241,11 @@ The 19 unchecked implementation/lifecycle lines remain **CRITICAL archive blocke
 ```
 
 **Rollback:** discard only the 12 fixture edits and this SDD evidence against `d63e10d`; no runtime or schema rollback exists. **Next:** parent delivery/review for the approved PR4a0 boundary; archive remains blocked.
+## Independent verification — PR4a1
+**PASS — bounded database-defense slice only; native `ready`/`repo-local` scope is the migration, two new PostgreSQL tests, and 63-line apply evidence from `32358b7`; archive remains BLOCKED by the exact 19 unchecked lines above.**
+- DB: no competing pytest/Alembic process; sole `5436` listener was `pi-1137-pr4a-db-test-1` (`pi-1137-pr4a`/`db-test`).
+- Focused: `cd backend && export AMBIENTE=test TEST_DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5436/cataclub_test' DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5436/cataclub_test' JWT_SECRET_KEY='verify-pr4a1-4ed413b9e71fc4ea6d6b71b5e9e103aa' && uv run pytest tests/test_representacion_triggers.py tests/test_representados_alcanzables.py tests/test_migracion_representados_alcanzables.py -q -p no:randomly` => **35 passed, 1 warning**; an earlier concurrent verifier invocation failed during schema reset (`alembic_version` absent), then exclusive rerun passed.
+- Alembic: `uv run alembic heads` and `current` => sole `i1141relinteg (head)`; the 35 include actual `head → h1140rep_auditoria → head` downgrade/upgrade proof.
+- Adjacent/root/quality: inherited PR4a0 fixture suite => **167 passed, 4 warnings**; `make test-root` => **582 passed, 1 skipped**; changed-file Ruff and whitespace passed.
+- Strict TDD: PR4a table exists; both new integration files execute GREEN; direct SQL covers INSERT/UPDATE adult links, self/cycles, age/phone/reachability, mutex, and assertion audit found no CRITICAL issue (one redundant local-constant truthiness assertion is non-blocking).
+- Workload/scope: exact inventory is migration + two tests + apply-progress; **+992/−0 = 992**, over the 900 target but within the 1,000 hard stop (8-line report headroom consumed); no service/router/DTO/spec/design/task edit; candidate evidence hash is recorded at settle.
