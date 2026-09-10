@@ -249,3 +249,60 @@ The 19 unchecked implementation/lifecycle lines remain **CRITICAL archive blocke
 - Adjacent/root/quality: inherited PR4a0 fixture suite => **167 passed, 4 warnings**; `make test-root` => **582 passed, 1 skipped**; changed-file Ruff and whitespace passed.
 - Strict TDD: PR4a table exists; both new integration files execute GREEN; direct SQL covers INSERT/UPDATE adult links, self/cycles, age/phone/reachability, mutex, and assertion audit found no CRITICAL issue (one redundant local-constant truthiness assertion is non-blocking).
 - Workload/scope: exact inventory is migration + two tests + apply-progress; **+992/−0 = 992**, over the 900 target but within the 1,000 hard stop (8-line report headroom consumed); no service/router/DTO/spec/design/task edit; candidate evidence hash is recorded at settle.
+
+---
+
+## Independent verification — PR4b inert shared validator
+
+**Result: candidate PASS; overall change/archive BLOCKED.** Native status is `ready`, action context is `repo-local`, and the declared base is confirmed as `bb7999246cfad140908725aec279f42338b207af`. No implementation, test, task, apply-progress, commit, push, PR, or native token was changed by verification.
+
+- **Scope/budget:** exact candidate is `+499/-4 = 503` changed lines: domain `+44/-4`, service `+85/-0`, new focused test `+284`, apply evidence `+86`. This is below the 600 candidate cap and the 1,000 hard stop. Only the expected three implementation/test paths plus apply evidence changed from the base; this report is verification evidence.
+- **Invariant order:** `validar_enlace` executes no-change → self → represented-person age → destination active → destination adult → account reachability → canonical phone → cycle. The order test exercises the first three conflicts; individual PostgreSQL service cases cover inactive/minor/inactive-account/invalid-phone/cycle rejections.
+- **`i1141relinteg` parity:** the live database was at `i1141relinteg` with both relationship and phone triggers. The helper delegates to `es_telefono_valido`, whose ASCII/local-phone behavior matches `^(09[0-9]{8}|0[0-9]{8})$`; both valid branches (`0991234567`, `022345678`), invalid values, and a nested direct-SQL cycle rejection were exercised. The validator is the service error path; the committed trigger remains the bypass defense.
+- **Inertness/transactions:** no caller of `validar_enlace` exists outside its defining service and the new test. The pre-existing router import calls only `independizar_presencial`; no router, DTO, `persona_servicio`, or cutover hunk changed. AST inspection found no `add`, `delete`, `flush`, `commit`, `rollback`, or `actualizar` call in `validar_enlace`.
+
+| Validation | Exact command | Result |
+|---|---|---|
+| Focused real PostgreSQL | `cd backend && export AMBIENTE=test TEST_DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5436/cataclub_test' DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5436/cataclub_test' JWT_SECRET_KEY='verify-pr4b-independent' && uv run pytest tests/test_relacion_representacion_servicio.py -q -p no:randomly` | PASS — 17 passed, 1 warning in 2.49s |
+| Adjacent real PostgreSQL | `cd backend && export AMBIENTE=test TEST_DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5436/cataclub_test' DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5436/cataclub_test' JWT_SECRET_KEY='verify-pr4b-independent' && uv run pytest tests/test_relacion_representacion_servicio.py tests/test_representacion_triggers.py tests/test_representados_alcanzables.py tests/test_migracion_representados_alcanzables.py tests/test_representante_no_deja_menores_huerfanos.py tests/test_vinculacion_representante.py tests/test_migracion_representante_auditoria.py tests/test_independencia_representada.py tests/test_vincular_representado.py tests/test_personas.py -q -p no:randomly` | PASS — 179 passed, 18 warnings in 47.71s |
+| Changed-file quality | `cd backend && uv run ruff check app/dominio/representados_alcanzables.py app/servicios_negocio/relacion_representacion_servicio.py tests/test_relacion_representacion_servicio.py` | PASS — All checks passed |
+| Whitespace | `git diff --check bb7999246cfad140908725aec279f42338b207af` | PASS — clean |
+
+DB tenancy was exclusive: the one healthy `pi-1137-pr4a-db-test-1` listener on port 5436 had zero external `cataclub_test` connections before and after; no pytest/Alembic process remained. `make pre-pr` and QA runtime were intentionally not run (candidate is inert and the user prohibited the long lane). The only warnings were existing FastAPI/TestClient and test JWT-length deprecations.
+
+### Strict TDD and assertion quality
+
+`apply-progress.md` has the required PR4b RED/GREEN/TRIANGULATE/REFACTOR table. The reported new file exists and current GREEN is confirmed by the focused real-PostgreSQL run. It contains five durable assertions and two `pytest.raises` behavioral checks, no loops, no tautologies, type-only-only checks, smoke-only checks, or CSS assertions. The direct-SQL savepoint cycle test confirms the database defense remains GREEN.
+
+### Evidence hash for settle
+
+- `backend/app/dominio/representados_alcanzables.py`: `sha256:c66d08b280f5bd876e8e4c7ca8bcfb57bc8437f017987f036042858cc5a11a5f`
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py`: `sha256:b8f5fc254911c46437f4fb68bce9550f5fb215fe918a7b3f6d9374fa4274b354`
+- `backend/tests/test_relacion_representacion_servicio.py`: `sha256:daced554c988c691a26000e039b7989867eb0a764867ad59379d658b56f03604`
+- Canonical sorted `path + space + SHA-256 + LF` manifest: **`sha256:1aa6cdf6035e7810a723cf0f45279300b5631e73f7792c728cc1beb93b49fa57`**.
+
+### Critical completeness blockers
+
+The candidate is an approved partial PR4b boundary, not a completion of the OpenSpec change. These exact unchecked implementation/lifecycle lines remain archive blockers:
+
+```text
+- [ ] Merge and required CI on #1165 (pending; not claimable from this document).
+- [ ] Shared validator owns self/cycle/age/phone/reachability invariants with database defense.
+- [ ] Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification.
+- [ ] Non-disclosing safe stop replaces self-service linking.
+- [ ] Account-first adult account with exactly one persisted `REPRESENTANTE`, legal consents, and verification outbox; empty capability state without membership/link.
+- [ ] Session-derived child enrollment with idempotency, non-disclosing safe stop, and atomic conservation.
+- [ ] #1138 prohibited write fields rejected before any mutation.
+- [ ] Backend `ACTIVA` predicate across members/schedule/attendance; representative-as-player without `ALUMNO`.
+- [ ] Empty representative dashboard from server capability; BFF rejects browser-selected subjects.
+- [ ] Derived emergency-contact display; minor prohibited form inputs removed; legacy values never shown operationally.
+- [ ] Remediation gate with conservation proof; no production execution in this change.
+- [ ] Full cross-flow E2E across all seven slices' behaviors.
+- [ ] #1135 remains explicitly work-free.
+- [ ] Maintain the draft/no-merge tracker #1164; chain each child to its immediate predecessor with the dependency diagram marking the current PR `📍`; keep each child diff limited to its stated work unit.
+- [ ] Preserve `proposal.md`, `design.md`, and all `specs/**/spec.md`; update only SDD evidence/status artifacts when implementation results require it. This replan (7 PRs; 600–900 target; 1,000 hard stop) supersedes the earlier 14-PR/400-line plan and the monolithic-slice size exception.
+- [ ] Before each PR delivery, verify the exact focused command, runtime scenario, additions+deletions (600–900 target, 1,000 stop), rollback boundary, and skipped CI gates; run one applicable `make pre-pr LANE=backend|frontend|full` lane.
+- [ ] After the chain completes, compare implementation against every Given/When/Then scenario and authorization invariant, then record verification evidence before archive.
+- [ ] Keep #1135 explicitly superseded with no runtime, migration, relationship, or closure work; close #1132, #1133, #1134, #1138, and #1137 only against their stated completion conditions.
+- [ ] Archive the completed OpenSpec change only after all child PRs, migration checks, QA/live scenarios, conservation evidence, and post-merge lifecycle gates pass; do not claim production remediation execution.
+```

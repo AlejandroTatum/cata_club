@@ -35,6 +35,10 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRe
 from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
     VinculacionRepresentanteRepositorio,
 )
+from app.dominio.representados_alcanzables import (
+    exigir_representante_destino_alcanzable,
+    exigir_telefono_actual_del_destino,
+)
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.soporte_transversal.tiempo import hoy_club
@@ -215,6 +219,87 @@ class RelacionRepresentacionServicio:
             "idempotency_key": idempotency_key,
             "evento_id": evento.id,
         }
+
+    # --- PR 4: validador compartido de la relación (#1133) -------------------
+
+    def validar_enlace(
+        self, *, objetivo: Persona, destino: Persona, enlace_actual: int | None,
+        cuenta_destino: Usuario | None = None,
+    ) -> None:
+        """Los invariantes de TODO vínculo, en el orden del diseño:
+        sin-cambio → self → edad del objetivo → destino elegible, alcanzable
+        y con teléfono → ciclo. Es el ÚNICO dueño de estas reglas: crear,
+        reasignar y todo comando futuro pasan por acá. La base es la
+        garantía final contra bypasseos (trigger `i1141relinteg`); el fallo
+        de servicio es el camino legible y accionable.
+
+        Recibe las filas YA BLOQUEADAS: quien arma la transacción garantiza
+        el orden de locks; acá solo se lee estado bajo ese lock."""
+        if destino is None:
+            raise EntidadNoEncontrada("La persona destino del vínculo no existe")
+
+        if enlace_actual is not None and destino.id == enlace_actual:
+            raise OperacionInvalida(
+                f"La persona {destino.id} ya es su representante actual: el "
+                "comando no tendría ningún cambio."
+            )
+
+        if destino.id == objetivo.id:
+            raise OperacionInvalida(
+                "Una persona no puede ser su propio representante."
+            )
+
+        edad_objetivo = calcular_edad(objetivo.fecha_nacimiento, hoy_club())
+        if edad_objetivo >= EDAD_MAYORIA_EDAD:
+            raise OperacionInvalida(
+                f"Solo se vincula a menores de edad: la persona tiene "
+                f"{edad_objetivo} años. Un adulto no se vincula ni se "
+                "re-enlaza; le corresponde independencia (si ya estaba "
+                "vinculada) o ninguna relación."
+            )
+
+        if not destino.activo:
+            raise OperacionInvalida(
+                "La persona destino está dada de baja y no puede recibir "
+                "representados.",
+                detalle_tecnico=f"persona destino_id={destino.id} activo=False",
+            )
+
+        edad_destino = calcular_edad(destino.fecha_nacimiento, hoy_club())
+        if edad_destino < EDAD_MAYORIA_EDAD:
+            raise OperacionInvalida(
+                f"El representante debe ser mayor de edad "
+                f"({EDAD_MAYORIA_EDAD}+ años); el destino tiene "
+                f"{edad_destino}."
+            )
+
+        exigir_representante_destino_alcanzable(destino.id, cuenta_destino)
+        exigir_telefono_actual_del_destino(destino.id, destino.telefono)
+
+        if self._hay_ciclo(destino_id=destino.id, objetivo_id=objetivo.id):
+            raise OperacionInvalida(
+                "El vínculo formaría un ciclo de representación: la persona "
+                "destino ya desciende de la persona a vincular."
+            )
+
+    def _hay_ciclo(self, *, destino_id: int, objetivo_id: int,
+                   tope: int = 64) -> bool:
+        """Sube por `representante_id` desde el destino: si la cadena llega
+        al objetivo, el vínculo nuevo cierra un ciclo. El tope convierte una
+        cadena absurda (imposible bajo el trigger) en rechazo defensivo."""
+        actual = destino_id
+        for _ in range(tope):
+            fila = (
+                self.db.query(Persona.representante_id)
+                .filter(Persona.id == actual)
+                .one_or_none()
+            )
+            if fila is None or fila[0] is None:
+                return False
+            actual = fila[0]
+            if actual == objetivo_id:
+                return True
+        return True
 
     # --- Helpers de bloqueo ---------------------------------------------------
 

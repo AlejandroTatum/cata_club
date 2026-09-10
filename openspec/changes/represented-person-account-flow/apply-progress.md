@@ -416,3 +416,89 @@ Unchanged from PR3b. The three PR 4 implementation lines are still persisted as 
 
 ## Remaining tasks
 Unchanged from PR3b/PR4a0. Exactly the PR 4, PR 5–7, and parent-owned rows stay unchecked; the three PR 4 lines are reproduced verbatim in the checkbox-policy section above. PR4b is the next implementation slice.
+
+---
+
+# Apply progress — PR4b (inert shared relationship validator + focused service tests)
+
+## Structured status consumed
+
+- `changeName`: `represented-person-account-flow`; `artifactStore`: `openspec`; `applyState`: ready; `actionContext.mode`: `repo-local`; allowed edit root: this worktree (`pi-1137-pr4b`); `actionContext.warnings`: none.
+- Base revision `HEAD` = `bb7999246cfad140908725aec279f42338b207af` (tree `88efd8c545184998e36c05795375045fcb3cd8a5`) — matches the parent-declared base exactly; PR4a1 is already committed, so `i1141relinteg` is the alembic head and the relationship/phone candles are installed.
+- Authoritative inputs read before editing: `tasks.md`, all six delta specs (`representation-lifecycle/spec.md` line-by-line), `design.md` (§Relationship service contract, §PostgreSQL safeguards), `proposal.md`, `apply-progress.md` (merged, not overwritten), `openspec/config.yaml` (`strict_tdd: true`). The native attempt token was consumed as an opaque correlation id only and is **not** persisted.
+- Delivery: `auto-chain`, `feature-branch-chain`; parent owns commit/push/PR and attempt settlement. **No attempt call, no commit, no push, no PR, no router/DTO/`persona_servicio` cutover, no reassignment, no safe stop, and no `tasks.md` edit were performed.**
+
+## Scope, boundary, and outcome
+
+This slice delivers **only** the inert shared Python relationship validator on top of the committed database lock:
+
+- `RelacionRepresentacionServicio.validar_enlace(...)` — single owner of the ordered invariants sin-cambio → self → edad del objetivo → destino (activo + edad) → alcanzabilidad → teléfono canónico → ciclo, plus `_hay_ciclo(...)` (bounded `representante_id` walk).
+- `exigir_telefono_actual_del_destino(...)` in the domain module (canonical `^(09[0-9]{8}|0[0-9]{8})$` parity with `_RE_TELEFONO_FORMA` and the `i1141relinteg` phone trigger), plus the documented trigger constants and the graph advisory-lock key `MUTEX_GRAFO_REPRESENTACION = 7113911370001`.
+- `backend/tests/test_relacion_representacion_servicio.py` — 17 focused service cases.
+
+Inert by construction: no router, DTO, or `persona_servicio` imports it, and `RelacionRepresentacionServicio` still exposes only `independizar_presencial` (`crear_desde_sesion`/`reasignar_presencial` absent, probe-verified).
+
+## Authorized oracle adaptation (deviation from raw oracle bytes)
+
+The read-only oracle `/home/alejo/devwork/.projects/apps/cata_club-worktrees/pi-1137-pr4` supplied the bytes. Production bytes are **byte-identical** to the oracle for both files (`diff -q` verified, and the diff vs `HEAD` equals the oracle's diff exactly). The oracle test file cannot run verbatim against the committed candle, so three machine-verified adaptations were required — fixture/assertion fixes only, none weakening an invariant:
+
+1. **Adult-with-link fixtures vs the trigger.** `test_rechaza_un_objetivo_adulto` and `test_rechaza_el_ciclo_indirecto` seeded a raw `INSERT` of a linked adult, which `i1141relinteg` rejects (`CheckViolation: … es mayor de edad …`). New `_persona_adulta_vinculada` helper uses the committed PR4a0 age-in-place recipe (link as minor, then `UPDATE fecha_nacimiento`, which never touches `representante_id`).
+2. **`NULL` phone is impossible.** `persona.telefono` is `NOT NULL` in the base (and `persona.telefono` intentionally carries no CHECK), so the "no phone" case is seeded as `''` — the same "sin teléfono" value `_exigir_telefono_valido` tolerates — and the parametrization is `["", "123"]`.
+3. **Two assertions never matched their own messages.** `match="solo se vincula a menores"` cannot match the capitalized message, and the ordering case passed `enlace=baja.id` with `destino=baja`, so sin-cambio won before the age check. Fixed to `"se vincula a menores"` and `enlace=None` (the adult objective has no current link), preserving the documented order intent.
+
+Deferred out of the allowed edit surface: the oracle's `PersonaRepositorio.obtener_por_id_bloqueando` locking helper. It is needed only by the reassignment command, which is not in this slice; `validar_enlace` receives already-locked rows and takes no repository lock. Recorded as a deviation, not a silent omission.
+
+## TDD Cycle Evidence (strict TDD active; runner `uv run pytest` against real `db-test` PostgreSQL :5436)
+
+| Phase | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| Shared validator + canonical phone rule | `backend/tests/test_relacion_representacion_servicio.py` | PostgreSQL service/ORM (real trigger installed) | ✅ 162 passed pre-change | ✅ Written first with production untouched: `12 failed, 2 passed`, and all 12 failures were exactly `AttributeError: 'RelacionRepresentacionServicio' object has no attribute 'validar_enlace'` (grep count 12; zero remaining `IntegrityError`/`DBAPIError` after the fixture adaptation) | ✅ Production bytes added: `14 passed, 1 warning` | ✅ 2 added parity cases (both valid-phone branches `0991234567`/`022345678`; cross-layer cycle where the service rejects *and* the real trigger raises `CheckViolation` under a savepoint) → `17 passed`; adjacent 10-file relationship safety net `179 passed, 18 warnings` | ✅ ruff `All checks passed!`; trailing blank line at EOF removed; `git diff --check` clean; attribute probe confirms inertness and no `commit(` inside the validator |
+
+### Exact commands and results
+
+- Tenancy proof (before any test): `docker ps --filter publish=5436` → exactly one healthy `pi-1137-pr4a-db-test-1` (`127.0.0.1:5436->5432/tcp`); `select count(*) from pg_stat_activity where datname='cataclub_test' and pid<>pg_backend_pid()` → `0`; `pgrep -af 'pytest|alembic'` → none; `alembic_version` = `i1141relinteg` with `trg_relacion_representacion_valida` + `trg_telefono_representante_con_menores` installed. The existing container was reused as the single tenant on :5436 and left untouched (not stopped, recreated, or double-bound onto a second project).
+- Safety net (pre-change baseline with the two production files stashed back to `HEAD` and the new test excluded): the nine adjacent relationship suites → **162 passed, 18 warnings in 42.05s**. After the change, the same set plus the new suite → **179 passed** = 162 + 17, i.e. zero pre-existing regressions. The stash was popped immediately and the working tree re-verified.
+- RED: `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test JWT_SECRET_KEY=pr4b-strict-tdd-red uv run pytest tests/test_relacion_representacion_servicio.py -q -p no:randomly` → **12 failed, 2 passed, 1 warning**.
+- GREEN: same command with the production bytes in place → **14 passed, 1 warning in 2.16s**.
+- TRIANGULATE (focused, final bytes): same command → **17 passed, 1 warning in 2.35s**.
+- TRIANGULATE (bounded adjacent safety net, final bytes): `tests/test_relacion_representacion_servicio.py tests/test_representacion_triggers.py tests/test_representados_alcanzables.py tests/test_migracion_representados_alcanzables.py tests/test_representante_no_deja_menores_huerfanos.py tests/test_vinculacion_representante.py tests/test_migracion_representante_auditoria.py tests/test_independencia_representada.py tests/test_vincular_representado.py tests/test_personas.py -q -p no:randomly` → **179 passed, 18 warnings in 49.54s**.
+- REFACTOR: `uv run ruff check` on all three files → `All checks passed!`; `ast.parse` → `AST_OK`; `git diff --check` → clean; `git diff --no-index --check /dev/null` on the new test → only the exit-1 "differences exist" code after removing the EOF blank line.
+- Import/attribute probe (`AMBIENTE=test`): `validar_enlace`/`_hay_ciclo`/`independizar_presencial` present; `reasignar_presencial`/`crear_desde_sesion` still absent; `exigir_telefono_actual_del_destino` callable; `MUTEX_GRAFO_REPRESENTACION == 7113911370001`; trigger constants exported; `PersonaRepositorio.obtener_por_id_bloqueando` absent (out of surface); `_RE_TELEFONO_FORMA == '^(09[0-9]{8}|0[0-9]{8})$'` (parity); `commit(` absent from `validar_enlace`.
+
+## Files changed (only the allowed surfaces)
+
+- `backend/app/dominio/representados_alcanzables.py` (+44/−4) — module contract updated to the PR4 candles; `TRIGGER_RELACION_REPRESENTACION`, `TRIGGER_TELEFONO_REPRESENTANTE`, `MUTEX_GRAFO_REPRESENTACION`; new pure `exigir_telefono_actual_del_destino`. The removed `TRIGGER_PERSONA_REPRESENTANTE_ALCANZABLE` has zero remaining references repo-wide (grep: NONE).
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py` (+85/−0) — imported domain helpers; `validar_enlace` and `_hay_ciclo`. Byte-identical to the oracle.
+- `backend/tests/test_relacion_representacion_servicio.py` (284 new lines, 17 tests) — focused validator suite, including the authorization anchor (`PoliticaAccesoPersona` reads only the current `representante_id`) and the no-request-state contract.
+- `openspec/changes/represented-person-account-flow/apply-progress.md` — this cumulative section only.
+
+## Checkbox policy: no persisted task completion claimed
+
+`tasks.md` was **not modified**, per parent instruction. This slice supplies the validator half of PR 4 row 1, but its "with database defense" pairing, reassignment, and safe stop are not delivered; marking a PR 4 row complete now would be a false completion. The three rows remain verbatim:
+
+```text
+- [ ] Shared validator owns self/cycle/age/phone/reachability invariants with database defense.
+- [ ] Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification.
+- [ ] Non-disclosing safe stop replaces self-service linking.
+```
+
+## Workload, rollback, runtime, skipped gates
+
+- Authored implementation count: **44 additions + 4 deletions + 85 additions + 284 new = 417 changed lines** — inside the 600–900 target and far under the 1,000 hard stop. SDD bookkeeping (this section) is excluded, consistent with prior slices.
+- Boundary: `main → tracker #1164 → … → PR4a0 (32358b7) → PR4a1 (bb79992) → 📍 PR4b`; reassignment, the non-disclosing safe stop, and the route/DTO cutover remain the next slice.
+- Rollback boundary: revert the two production files to `HEAD` and delete the new test file. Nothing else is touched — no migration, model, router, DTO, `persona_servicio`, frontend, or other test change — so rollback removes no unrelated work.
+- Runtime: **N/A** — no endpoint or UI surface; the validator is inert and unimported by routers (recorded here for the PR body per `tasks.md`).
+- Not run (recorded, not claimed): no `make pre-pr` lane, no QA runtime, no commit/push/PR, and no remote CI gate — per instruction, apply ran only the focused suite plus the bounded adjacent safety net.
+- Cleanup: `pg_database` shows no `%arnes%`/`%roundtrip%` leftovers; `cataclub_test` has 0 external connections after the runs; no stray pytest/alembic process; the pre-existing `pi-1137-pr4a-db-test-1` container is untouched.
+
+## Evidence fingerprints (settle-ready)
+
+- Base revision (`HEAD`): `bb7999246cfad140908725aec279f42338b207af` (tree `88efd8c545184998e36c05795375045fcb3cd8a5`).
+- `backend/app/dominio/representados_alcanzables.py` → `sha256:c66d08b280f5bd876e8e4c7ca8bcfb57bc8437f017987f036042858cc5a11a5f`
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py` → `sha256:b8f5fc254911c46437f4fb68bce9550f5fb215fe918a7b3f6d9374fa4274b354`
+- `backend/tests/test_relacion_representacion_servicio.py` → `sha256:daced554c988c691a26000e039b7989867eb0a764867ad59379d658b56f03604`
+- Slice fingerprint (path + per-file sha256 manifest, canonical order): `sha256:1aa6cdf6035e7810a723cf0f45279300b5631e73f7792c728cc1beb93b49fa57`
+
+## Remaining tasks
+
+Unchanged from PR4a1. The PR 4 rows above, plus PR 5–7 and parent-owned rows, stay unchecked; PR4b continues with reassignment, the non-disclosing safe stop, and the route/DTO cutover, plus the deferred `PersonaRepositorio` locking helper.
