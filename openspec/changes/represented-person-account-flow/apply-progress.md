@@ -502,3 +502,94 @@ Deferred out of the allowed edit surface: the oracle's `PersonaRepositorio.obten
 ## Remaining tasks
 
 Unchanged from PR4a1. The PR 4 rows above, plus PR 5–7 and parent-owned rows, stay unchecked; PR4b continues with reassignment, the non-disclosing safe stop, and the route/DTO cutover, plus the deferred `PersonaRepositorio` locking helper.
+
+---
+
+# Apply progress — PR4c1 (administrator-only atomic reassignment)
+
+## Structured status consumed
+
+- `changeName`: `represented-person-account-flow`; `artifactStore`: `openspec`; `applyState`: ready; `actionContext.mode`: `repo-local`; allowed edit root: this worktree (`pi-1137-pr4c1`); `actionContext.warnings`: none.
+- Base revision `HEAD` = `dea7a12d3f4e042b2daf0e05fd4cb3f0547d7220` (tree `b6fabfb27a1cb652b4754c11bd514d53f2683b45`) — matches the parent-declared base exactly. PR4a1 (`i1141relinteg`) and PR4b (`validar_enlace`) are already committed, so the database candles and the shared validator are in place.
+- Authoritative inputs read before editing: `tasks.md`, `design.md` (§Relationship service contract, §Transaction/locking/retry policy), `representation-lifecycle/spec.md` line-by-line, `proposal.md`, `apply-progress.md` (merged, not overwritten), `openspec/config.yaml` (`strict_tdd: true`). The native attempt token was consumed as an opaque correlation id only and is **not** persisted.
+- Delivery: `auto-chain`, `feature-branch-chain`; parent owns commit/push/PR/attempt settlement. **No attempt call, no commit, no push, no PR, no task-checkbox edit, no safe-stop, and no legacy-self-service removal were performed.** The native token is not persisted in this artifact.
+
+## Scope, boundary, and outcome
+
+This slice delivers **only** the administrator-only atomic reassignment:
+
+- `RelacionRepresentacionServicio.reasignar_presencial(admin_actor_id, persona_id, comando, idempotency_key)` — invokes the PR4b `validar_enlace` on locked rows; deterministic locks (target, old and new ascending by `persona.id`, then the relevant `Usuario` rows ascending); stale observed-representative conflict (409); idempotent replay by key+fingerprint; append-only `REASIGNACION`/`ADMIN_PRESENCIAL` audit; session-epoch bump for the **former** representative only; reuses the existing post-commit best-effort `_notificar_ex_representante`.
+- `PersonaRepositorio.obtener_por_id_bloqueando` — the `SELECT ... FOR UPDATE` helper previously deferred out of PR4b.
+- `ReasignarRepresentacionDTO` / `ReasignacionResponseDTO` and the admin route `POST /personas/{persona_id}/reasignar-representante` (`GestorPermisos(["ADMINISTRADOR"])`).
+- Focused suites: `backend/tests/test_reasignacion_representacion.py`, `backend/tests/test_notificaciones_relacion.py`, plus the route guard in `test_guardia_autorizacion_rutas.py`/`test_personas.py`.
+
+Out of scope and untouched: the non-disclosing self-service safe stop and the retirement of `vincular-representado`/`PersonaServicio.vincular_representado` (PR4c2), `crear_desde_sesion`, migrations, models, frontend, and all PR 5–7 surfaces. `tasks.md` was **not** modified (see checkbox policy below).
+
+## TDD Cycle Evidence (strict TDD active; runner `uv run pytest` against real `db-test` PostgreSQL :5436)
+
+| Phase | Test file | Layer | Safety net | RED | GREEN | TRIANGULATE | REFACTOR |
+|---|---|---|---|---|---|---|---|
+| Reassignment command | `backend/tests/test_reasignacion_representacion.py` | PostgreSQL service/ORM + endpoint | ✅ 155 passed adjacent pre-change baseline | ✅ Written first with production untouched: `ImportError: cannot import name 'ReasignarRepresentacionDTO'` (collection error, exit 2) | ✅ Production added: `22 passed` (focused 2-file) | ✅ 200 passed across 13 relationship suites; DB-level defense proven by bypassing the validator; trigger parity via `test_representacion_triggers.py` | ✅ ruff `All checks passed!`; `git diff --check` clean |
+| Post-commit notification | `backend/tests/test_notificaciones_relacion.py` | PostgreSQL service + in-app channel | same baseline | ✅ Import error alongside the command suite | ✅ `4 passed` | ✅ Channel-failure non-propagation + structured log + no relationship outbox | ✅ ruff clean |
+| Route authorization | `backend/tests/test_guardia_autorizacion_rutas.py`, `backend/tests/test_personas.py` | route introspection | — | ✅ Both failed: guard listed the route that did not exist; `KeyError` on the new path | ✅ Both passed once the route was declared | ✅ Cross-checked by the global guard matrix | ✅ ruff clean |
+
+### Exact RED / GREEN / TRIANGULATE / REFACTOR commands and results
+
+- Tenancy: `docker ps --filter publish=5436` → the single healthy `pi-1137-pr4a-db-test-1` (`127.0.0.1:5436->5432/tcp`) reused as the one tenant; `select count(*) from pg_stat_activity where datname='cataclub_test' and pid<>pg_backend_pid()` → `0`; `pgrep -af 'pytest|alembic'` → none. The container was left untouched (not stopped, recreated, or double-bound).
+- RED (command + notification): `cd backend && AMBIENTE=test TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test JWT_SECRET_KEY=… uv run pytest tests/test_reasignacion_representacion.py tests/test_notificaciones_relacion.py tests/test_guardia_autorizacion_rutas.py tests/test_personas.py -q` → **2 collection errors** (`ImportError` for `ReasignarRepresentacionDTO`) plus **2 failed** guard/personas tests (`KeyError: '/personas/{persona_id}/reasignar-representante'`), exit 2/1.
+- GREEN (focused): `uv run pytest tests/test_reasignacion_representacion.py tests/test_notificaciones_relacion.py tests/test_guardia_autorizacion_rutas.py tests/test_personas.py -q -p no:randomly` → **75 passed** (first pass); **77 passed** after triangulation and **75–77** final depending on the set.
+- TRIANGULATE (focused PR4): `uv run pytest tests/test_representacion_triggers.py tests/test_representados_alcanzables.py tests/test_relacion_representacion_servicio.py tests/test_reasignacion_representacion.py tests/test_notificaciones_relacion.py -q` → **68 passed, 1 warning**.
+- TRIANGULATE (bounded adjacent safety net, 13 suites): `test_representacion_triggers.py test_representados_alcanzables.py test_relacion_representacion_servicio.py test_reasignacion_representacion.py test_notificaciones_relacion.py test_independencia_representada.py test_vincular_representado.py test_vinculacion_representante.py test_migracion_representante_auditoria.py test_personas.py test_guardia_autorizacion_rutas.py test_bloqueo_del_event_loop.py test_representante_no_deja_menores_huerfanos.py -q` → **200 passed, 18 warnings in 31.63s** (every pre-existing relationship/independence flow stays green; the legacy self-service linking is untouched).
+- TRIANGULATE (root guards): `make test-root` → **582 passed, 1 skipped in 25.14s** (includes the single-Alembic-head guard; no new revision).
+- REFACTOR: `uv run ruff check` on all eight touched files → `All checks passed!`; `git diff --check` → clean; import/attribute probe (`AMBIENTE=test`): `reasignar_presencial`/`validar_enlace`/`obtener_por_id_bloqueando` present, `crear_desde_sesion` deliberately absent, the new route is registered, and `_ejecutar_reasignacion` calls `validar_enlace`.
+
+## Files changed (only the allowed surfaces)
+
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py` (+185/−6) — `_VERSION_COMANDO_REASIGNACION`, `_huella_reasignacion`, `reasignar_presencial`, `_ejecutar_reasignacion`; module docstring updated; the shared post-commit log/docstring generalized from “independencia” to “la operación de representación”. No `crear_desde_sesion`; no safe stop.
+- `backend/app/infraestructura/repositorios/persona_repositorio.py` (+12) — `obtener_por_id_bloqueando`.
+- `backend/app/presentacion/routers/personas_router.py` (+28/−1) — new admin route `POST /personas/{persona_id}/reasignar-representante` + DTO imports.
+- `backend/app/servicios_negocio/dtos/persona_schemas.py` (+23) — `ReasignarRepresentacionDTO`, `ReasignacionResponseDTO`.
+- `backend/tests/test_reasignacion_representacion.py` (new, 422 lines, 22 tests) — happy path/audit, validator delegation (spy), one rejection-without-mutation, stale conflict, idempotent retry, key-reuse 409, epoch (old only), rollback, lock order (spy), `FOR UPDATE` on personas/accounts, DB defense with the service validator bypassed, 404, five endpoint cases, DTO matrix.
+- `backend/tests/test_notificaciones_relacion.py` (new, 158 lines, 4 tests) — post-commit notification reuse, channel-failure non-propagation, structured failure log, no relationship outbox.
+- `backend/tests/test_guardia_autorizacion_rutas.py` (+4) — new route added to the admin bucket.
+- `backend/tests/test_personas.py` (+20) — structural admin-role guard for the new route.
+- `openspec/changes/represented-person-account-flow/apply-progress.md` — this cumulative PR4c1 section only.
+
+Deviations: **none material.** The validator-restatement rejections (inactive destination, invalid phone, adult target, sin-cambio, and the command-level cycle duplicate) were dropped after the first pass because the PR4b validator suite already owns them, keeping only one command-level rejection plus the DB-defense test; this is workload trimming, not coverage loss. The `_notificar_ex_representante` log/docstring were generalized so a reassignment failure is not logged as an independence failure.
+
+## Checkbox policy: no persisted task completion claimed
+
+`tasks.md` was **not** modified, per the parent instruction and the allowed-surface list. This slice supplies the *whole* of PR 4 row 2 (“Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification”), but the parent owns settlement and explicitly forbade checkbox edits; the validator row 1 “with database defense” and row 3 (safe stop) still depend on PR4c2 for their full completion. The three rows therefore remain verbatim unchecked in the persisted artifact:
+
+```text
+- [ ] Shared validator owns self/cycle/age/phone/reachability invariants with database defense.
+- [ ] Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification.
+- [ ] Non-disclosing safe stop replaces self-service linking.
+```
+
+No persisted `- [x]` contradicts a completion claimed here; conversely, the reassignment completion above is **not** yet persisted as a checkbox and must be marked by the parent/settlement when PR4c2 lands or when the parent decides to accept the split rows.
+
+## Workload, rollback, runtime, skipped gates
+
+- Authored implementation/test count: **272 additions + 7 deletions (tracked) + 580 new test lines = 859 changed lines** — inside the 1,000 hard stop; 9 lines above the 700–850 soft target. SDD bookkeeping (this section) is excluded, consistent with prior slices.
+- Boundary: `main → tracker #1164 → … → PR4a1 (bb79992) → PR4b (dea7a12) → 📍 PR4c1`; PR4c2 (non-disclosing safe stop, retire legacy self-service) is the next slice.
+- Rollback boundary: revert the six tracked hunks and delete the two new test files. No migration, model, frontend, or unrelated test changed; the only shared-file collaboration is the generalized log/docstring, whose behavior for independence is unchanged.
+- Runtime: **N/A** for a live external system; the endpoint-level tests exercise the real route/guard. `make pre-pr` lanes were intentionally **not** run (parent owns delivery); remote CI is not claimable locally.
+- Cleanup: `pg_database` shows only `cataclub_test`/`postgres`; `cataclub_test` has 0 external connections after the runs; no stray pytest/alembic process; the pre-existing `pi-1137-pr4a-db-test-1` container is untouched.
+
+## Evidence fingerprints (settle-ready)
+
+- Base revision (`HEAD`): `dea7a12d3f4e042b2daf0e05fd4cb3f0547d7220` (tree `b6fabfb27a1cb652b4754c11bd514d53f2683b45`).
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py` → `sha256:699eebc88cc339a3fa55991144f3044fe1068db3e23baafc82d1d1d558d6136e`
+- `backend/app/infraestructura/repositorios/persona_repositorio.py` → `sha256:46d949b5e0fcd56e1da9cb33eded2c1f016a9f4cf7966ebc7afc8a548f5c1ec7`
+- `backend/app/presentacion/routers/personas_router.py` → `sha256:83d30ea209ffeef08d325ba0846338501cd60bf4c28038a9986d1479b19b022f`
+- `backend/app/servicios_negocio/dtos/persona_schemas.py` → `sha256:b0d17dd1eef21bf40faa02b087e86c3a9a8cec6fe82031fa4d93e7bb094295e2`
+- `backend/tests/test_reasignacion_representacion.py` → `sha256:594fa813743b115c9bc0606d216f1e70a746e6187292f3b70301ca9d70b0d879`
+- `backend/tests/test_notificaciones_relacion.py` → `sha256:c0ceb50e8c4f9ab9d4f788c32584582649f238df831e3986514e6e6475732cf0`
+- `backend/tests/test_guardia_autorizacion_rutas.py` → `sha256:f307eaa5baa8199be0d9d20fe7b9125a8a42c408ecbaf7bcc4d60dd2f7dc265d`
+- `backend/tests/test_personas.py` → `sha256:55cbf18f61f2e002c0062f1e91c292e88fdc114ef7ff4d3786da217e86a99af6`
+- Slice fingerprint (path + per-file sha256 manifest, canonical order): `sha256:aebe31197b788dc5ead13212adea6a78036993352c1dcb9fd009a5329342804e`
+
+## Remaining tasks
+
+Unchanged from PR4b. The three PR 4 rows above, plus PR 5–7 and parent-owned rows, stay unchecked; PR4c2 (non-disclosing safe stop + retire the legacy self-service linking) is the next implementation slice, and the parent must persist the row-2 checkbox when the split row is settled.

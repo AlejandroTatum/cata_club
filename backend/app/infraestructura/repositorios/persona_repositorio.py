@@ -32,6 +32,18 @@ class PersonaRepositorio:
     def obtener_por_id(self, persona_id: int) -> Optional[Persona]:
         return self.db.get(Persona, persona_id)
 
+    def obtener_por_id_bloqueando(self, persona_id: int) -> Optional[Persona]:
+        """`SELECT ... FOR UPDATE` de la fila: la lectura con lock es
+        responsabilidad del repositorio (design.md) y el commit sigue siendo del
+        caso de uso. La usa el comando de reasignación para su orden de locks
+        documentado (objetivo primero, luego ex/nuevo ascendente por `persona.id`)."""
+        return (
+            self.db.query(Persona)
+            .filter(Persona.id == persona_id)
+            .with_for_update()
+            .first()
+        )
+
     def obtener_por_cedula(self, cedula: str) -> Optional[Persona]:
         return self.db.query(Persona).filter(Persona.cedula == cedula).first()
 

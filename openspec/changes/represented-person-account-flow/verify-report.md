@@ -306,3 +306,17 @@ The candidate is an approved partial PR4b boundary, not a completion of the Open
 - [ ] Keep #1135 explicitly superseded with no runtime, migration, relationship, or closure work; close #1132, #1133, #1134, #1138, and #1137 only against their stated completion conditions.
 - [ ] Archive the completed OpenSpec change only after all child PRs, migration checks, QA/live scenarios, conservation evidence, and post-merge lifecycle gates pass; do not claim production remediation execution.
 ```
+
+---
+
+## Independent verification — PR4c1 atomic reassignment
+
+**Slice verdict: PASS. Change/archive status: BLOCKED.** Native status is `ready`; action context is `repo-local` and this worktree is the allowed root. No implementation, tests, tasks, or apply-progress artifact was modified during verification.
+
+- **OpenSpec coverage:** the admin-only route derives the actor from the token, requires `ADMINISTRADOR`, requires an idempotency key, delegates to PR4b `validar_enlace`, locks target/old/new people and relevant users in ascending ID order, rejects stale observed state, records `REASIGNACION`/`ADMIN_PRESENCIAL` audit evidence and a SHA-256 fingerprint, increments only the former representative epoch, and notifies only after the main commit. Notification failure rolls back its separate transaction and preserves the committed reassignment. No safe-stop or legacy self-service linking removal is claimed; those remain PR4c2 scope.
+- **Exact validation (exclusive PostgreSQL):** port 5436 had only healthy `pi-1137-pr4a-db-test-1`; no other pytest/Alembic process ran. Focused suite: `cd backend && AMBIENTE=test TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test JWT_SECRET_KEY=verify-pr4c1-independent uv run pytest tests/test_reasignacion_representacion.py tests/test_notificaciones_relacion.py tests/test_guardia_autorizacion_rutas.py tests/test_personas.py -q -p no:randomly` → **71 passed, 13 warnings**. The 13-suite relationship safety net → **200 passed, 18 warnings**. `make test-root` → **582 passed, 1 skipped**. Changed-file Ruff and `git diff --check` passed. No long `make pre-pr` lane was run, per the bounded-verification request.
+- **Strict TDD:** the PR4c1 `TDD Cycle Evidence` table exists; the two named new PostgreSQL integration/TestClient files exist and are GREEN in the focused execution. Assertion audit found no tautologies, ghost loops, type-only-only, smoke-only, or CSS-detail assertions. Test layer: 26 PostgreSQL service/ORM/TestClient integration tests across 2 new files; no browser E2E surface belongs to this backend slice.
+- **Review workload:** exact production/test diff is **272 additions + 7 deletions + 580 new-test additions = 859 changed lines**, below the requested `<950` bound. SDD evidence is excluded under the forecast convention. Rollback is the six tracked code/test hunks plus the two new test files; no migration/model/frontend change exists.
+- **Evidence hash:** canonical sorted `path + space + sha256 + LF` manifest of the eight implementation/test files is `sha256:539b7951ef02c8d1508a74812b63ce5fc67a8fd4ed1610e8b6019efc1317d4a3`.
+
+The exact 19 unchecked implementation/lifecycle lines immediately above remain CRITICAL archive blockers, including the three PR4 lines. This partial slice is not ready for archive.

@@ -6,9 +6,10 @@ columna. PR 3 entrega el primer comando del contrato del diseño:
 
   - `independizar_presencial`: salida de independencia de un adulto,
     ejecutada SOLO por un administrador con la persona enfrente.
+  - `reasignar_presencial`: reemplazo administrativo del vínculo de un menor,
+    ejecutado SOLO por un administrador con la persona enfrente (PR 4c1).
 
-Los otros dos (`crear_desde_sesion`, `reasignar_presencial`) llegan con sus
-propios slices; no se anticipan acá.
+`crear_desde_sesion` llega con su propio slice; no se anticipa acá.
 
 Transacción: UN solo `commit()` por comando, después de credenciales,
 capacidad #762, remoción del vínculo, auditoría completa y epochs de
@@ -50,6 +51,11 @@ _log = logging.getLogger(__name__)
 # es un conflicto 409, no un replay silencioso).
 _VERSION_COMANDO_INDEPENDENCIA = "independencia-presencial:v1"
 
+# Misma política para la reasignación: la identidad del comando es a quién,
+# desde qué vínculo observado y hacia qué destino. La evidencia de identidad NO
+# entra: es la constancia del trámite, no la identidad del comando.
+_VERSION_COMANDO_REASIGNACION = "reasignacion-presencial:v1"
+
 
 def _huella_independencia(persona_id: int, correo: str, admin_actor_id: int) -> str:
     """SHA-256 canónico del comando: persona destino, correo normalizado y
@@ -60,6 +66,22 @@ def _huella_independencia(persona_id: int, correo: str, admin_actor_id: int) -> 
         f"{_VERSION_COMANDO_INDEPENDENCIA}"
         f"|persona_id={persona_id}"
         f"|correo={correo.strip().lower()}"
+        f"|actor={admin_actor_id}"
+    )
+    return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
+
+
+def _huella_reasignacion(
+    persona_id: int, representante_actual_id: int | None,
+    nuevo_representante_id: int, admin_actor_id: int,
+) -> str:
+    """SHA-256 canónico del comando de reasignación: persona destino, el
+    vínculo OBSERVADO por el administrador, el destino nuevo y el actor."""
+    canonico = (
+        f"{_VERSION_COMANDO_REASIGNACION}"
+        f"|persona_id={persona_id}"
+        f"|representante_actual_id={representante_actual_id}"
+        f"|representante_nuevo_id={nuevo_representante_id}"
         f"|actor={admin_actor_id}"
     )
     return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
@@ -220,6 +242,163 @@ class RelacionRepresentacionServicio:
             "evento_id": evento.id,
         }
 
+    # --- PR 4: reasignación presencial (solo ADMINISTRADOR) -------------------
+
+    def reasignar_presencial(
+        self, *, admin_actor_id: int, persona_id: int, comando, idempotency_key: str | None,
+    ) -> dict:
+        """Reemplaza al representante actual de un menor en UNA transacción.
+
+        El administrador OBSERVÓ `comando.representante_actual_id` al abrir el
+        trámite: si el vínculo cambió mientras tanto, el comando conflictúa
+        (409) en vez de pisar el cambio ajeno. `validar_enlace` decide sobre las
+        filas YA BLOQUEADAS (objetivo primero, luego ex/nuevo y cuentas en
+        ascendente por `persona.id`), el ledger deja la evidencia completa
+        REASIGNACION/ADMIN_PRESENCIAL, el epoch sube SOLO para el ex
+        representante y el aviso al ex corre post-commit por el canal existente.
+        Un reintento con la misma clave+huella devuelve el resultado establecido."""
+        if not idempotency_key or not idempotency_key.strip():
+            raise OperacionInvalida(
+                "El comando requiere la cabecera Idempotency-Key: identifica el "
+                "intento y hace que un reintento devuelva el resultado ya "
+                "establecido en lugar de duplicar nada."
+            )
+        idempotency_key = idempotency_key.strip()
+
+        huella = _huella_reasignacion(
+            persona_id, comando.representante_actual_id,
+            comando.nuevo_representante_id, admin_actor_id,
+        )
+
+        # Replay PRIMERO, antes de validar: un comando que ya comiteó se responde
+        # desde su evidencia, aunque el mundo haya cambiado desde entonces (el
+        # vínculo ya apunta al destino nuevo: revalidarlo fallaría).
+        previo = self.repo_ledger.obtener_por_clave(idempotency_key)
+        if previo is not None:
+            if previo.request_fingerprint != huella:
+                raise ConflictoConcurrencia(
+                    "La clave de idempotencia ya fue usada por otro comando. "
+                    "Genere una clave nueva para este intento.",
+                    detalle_tecnico=(
+                        f"clave={idempotency_key} registrada con huella distinta "
+                        f"(evento_id={previo.id})"
+                    ),
+                )
+            return {
+                "persona_id": previo.persona_id,
+                "representante_anterior_id": previo.representante_anterior_id,
+                "representante_nuevo_id": previo.representante_nuevo_id,
+                "replay": True,
+                "idempotency_key": idempotency_key,
+            }
+
+        try:
+            resultado = self._ejecutar_reasignacion(
+                admin_actor_id=admin_actor_id, persona_id=persona_id,
+                comando=comando, idempotency_key=idempotency_key, huella=huella,
+            )
+        except Exception:
+            self.db.rollback()
+            raise
+
+        # Post-commit, transacción aparte, best-effort: si el canal falla, la
+        # reasignación YA comiteó y el comando la devuelve igual.
+        self._notificar_ex_representante(
+            representante_anterior_id=resultado["representante_anterior_id"],
+            evento_id=resultado["evento_id"],
+        )
+        return {clave: valor for clave, valor in resultado.items() if clave != "evento_id"}
+
+    def _ejecutar_reasignacion(
+        self, *, admin_actor_id: int, persona_id: int, comando, idempotency_key: str,
+        huella: str,
+    ) -> dict:
+        # 1. Locks deterministas en UN solo orden ascendente por `persona.id`:
+        #    objetivo, ex y nuevo. El estado observado viene en el comando, así
+        #    que el conjunto de locks se conoce SIN leer antes de bloquear (el
+        #    orden fijo evita el abrazo entre comandos concurrentes).
+        ids = sorted({
+            persona_id,
+            comando.representante_actual_id,
+            comando.nuevo_representante_id,
+        })
+        bloqueadas: dict[int, Persona | None] = {}
+        for pid in ids:
+            bloqueadas[pid] = self.repo_persona.obtener_por_id_bloqueando(pid)
+
+        persona = bloqueadas.get(persona_id)
+        if persona is None:
+            raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
+
+        # 2. Conflicto por estado OBSERVADO obsoleto: si otro comando ya cambió
+        #    el vínculo desde que el administrador lo leyó, este NO lo pisa.
+        if persona.representante_id != comando.representante_actual_id:
+            raise ConflictoConcurrencia(
+                "El vínculo de representación cambió desde que se abrió el "
+                "trámite: recargue la ficha y reintente.",
+                detalle_tecnico=(
+                    f"persona_id={persona_id} observado="
+                    f"{comando.representante_actual_id} "
+                    f"actual={persona.representante_id}"
+                ),
+            )
+        representante_anterior_id = persona.representante_id
+
+        destino = bloqueadas.get(comando.nuevo_representante_id)
+        if destino is None:
+            raise EntidadNoEncontrada(
+                f"Persona con id {comando.nuevo_representante_id} no encontrada"
+            )
+
+        # Las cuentas relevantes en ese mismo orden ascendente.
+        self._bloquear_usuarios([
+            pid for pid in (persona_id, representante_anterior_id,
+                            comando.nuevo_representante_id)
+            if pid is not None
+        ])
+        cuenta_destino = self.repo_usuario.obtener_por_persona_id(destino.id)
+
+        # 4. Los invariantes compartidos (PR 4b) deciden sobre filas bloqueadas.
+        self.validar_enlace(
+            objetivo=persona, destino=destino,
+            enlace_actual=representante_anterior_id, cuenta_destino=cuenta_destino,
+        )
+
+        # 5. Reemplazo atómico, epoch del EX representante (el destino recibe
+        #    acceso por el vínculo recién comiteado: no hay token previo que
+        #    revocar) y evidencia con la clave como recibo de replay.
+        self.repo_persona.actualizar(persona, {"representante_id": destino.id})
+
+        usuario_viejo = (
+            self.repo_usuario.obtener_por_persona_id(representante_anterior_id)
+            if representante_anterior_id is not None else None
+        )
+        if usuario_viejo is not None:
+            usuario_viejo.revocar_sesiones()
+
+        evento = self.repo_ledger.registrar(
+            persona_id=persona_id,
+            actor_persona_id=admin_actor_id,
+            representante_anterior_id=representante_anterior_id,
+            representante_nuevo_id=destino.id,
+            operacion="REASIGNACION",
+            origen="ADMIN_PRESENCIAL",
+            idempotency_key=idempotency_key,
+            request_fingerprint=huella,
+        )
+
+        # 6. El ÚNICO commit del comando.
+        self.db.commit()
+
+        return {
+            "persona_id": persona_id,
+            "representante_anterior_id": representante_anterior_id,
+            "representante_nuevo_id": destino.id,
+            "replay": False,
+            "idempotency_key": idempotency_key,
+            "evento_id": evento.id,
+        }
+
     # --- PR 4: validador compartido de la relación (#1133) -------------------
 
     def validar_enlace(
@@ -328,8 +507,8 @@ class RelacionRepresentacionServicio:
     ) -> None:
         """Avisa al ex representante DESPUÉS del commit, en una transacción
         propia (segundo `commit()` de la misma sesión). El fallo se registra
-        estructurado y NO propaga: la independencia ya está comiteada y un
-        aviso fallido no la revierte ni la invalida. Sin outbox: la fila de
+        estructurado y NO propaga: la operación de representación ya está
+        comiteada y un aviso fallido no la revierte ni la invalida. Sin outbox: la fila de
         `Notificacion` es el canal existente y no se agrega ningún ciclo de
         vida de notificación de relación."""
         if representante_anterior_id is None:
@@ -349,7 +528,7 @@ class RelacionRepresentacionServicio:
         except Exception:
             self.db.rollback()
             _log.exception(
-                "No se pudo notificar la independencia operacion_id=%s "
-                "destinatario_persona_id=%s",
+                "No se pudo notificar la operación de representación "
+                "operacion_id=%s destinatario_persona_id=%s",
                 evento_id, representante_anterior_id,
             )

@@ -12,7 +12,8 @@ from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_r
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaListItemDTO, PersonaUpdateDTO,
     PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO,
-    IndependenciaResponseDTO, EstadoPersonaDTO,
+    IndependenciaResponseDTO, ReasignarRepresentacionDTO, ReasignacionResponseDTO,
+    EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
@@ -544,6 +545,32 @@ async def independizar_persona(
     # pueden pasar por el único hilo del event loop.
     return await run_in_threadpool(
         RelacionRepresentacionServicio(db).independizar_presencial,
+        admin_actor_id=token_payload.get("persona_id"),
+        persona_id=persona_id,
+        comando=datos,
+        idempotency_key=request.headers.get("idempotency-key"),
+    )
+
+
+# --- Reasignar representante: reemplazo PRESENCIAL (#1133 / #1137) --------------
+# Tercer comando del contrato del diseño: reemplaza al representante actual de un
+# menor. Solo un ADMINISTRADOR con la persona enfrente. `representante_actual_id`
+# es el estado OBSERVADO por el administrador: si el vínculo cambió mientras el
+# trámite estaba abierto, responde 409 en vez de pisar el cambio ajeno.
+# Requiere `Idempotency-Key` (reintento = resultado ya establecido). La respuesta
+# NO lleva tokens.
+@router.post(
+    "/{persona_id}/reasignar-representante", response_model=ReasignacionResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def reasignar_representante(
+    persona_id: int,
+    request: Request,
+    datos: ReasignarRepresentacionDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    return RelacionRepresentacionServicio(db).reasignar_presencial(
         admin_actor_id=token_payload.get("persona_id"),
         persona_id=persona_id,
         comando=datos,
