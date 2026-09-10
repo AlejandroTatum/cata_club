@@ -20,6 +20,10 @@ import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
  * satisfy both is to compress, which is what was actually done (mozjpeg q92,
  * unchanged dimensions, 47.6-48.3 dB PSNR at render scale).
  *
+ * `EXPECTED_DIMENSIONS`' key order tracks `HERO_PHOTOS`' own order, not the
+ * order the files were first measured in — the carousel now opens on
+ * `hero-community.jpg` (the group photo) so that key moved first below.
+ *
  * The ceiling is deliberately close to what the current files weigh. A new
  * hero photo dropped in straight from a phone will trip it, and that is the
  * intent: the compression step is not optional for this slot.
@@ -29,8 +33,8 @@ const MAX_HERO_BYTES = 600 * 1024;
 
 /** Pinned from the sources as shipped. Recompression must not resize them. */
 const EXPECTED_DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "/landing/hero-competition.jpg": { width: 1536, height: 2048 },
   "/landing/hero-community.jpg": { width: 2048, height: 1536 },
+  "/landing/hero-competition.jpg": { width: 1536, height: 2048 },
   "/landing/hero-training.jpg": { width: 2048, height: 1536 },
 };
 
@@ -62,10 +66,10 @@ describe("landing hero photo sources", (): void => {
     expect(HERO_PHOTOS.map((photo): string => photo.src)).toEqual(Object.keys(EXPECTED_DIMENSIONS));
   });
 
-  it("opens on the two-students photo, then community, then training", (): void => {
+  it("opens on the community photo, then the two students, then training", (): void => {
     expect(HERO_PHOTOS.map((photo): string => photo.src)).toEqual([
-      "/landing/hero-competition.jpg",
       "/landing/hero-community.jpg",
+      "/landing/hero-competition.jpg",
       "/landing/hero-training.jpg",
     ]);
   });

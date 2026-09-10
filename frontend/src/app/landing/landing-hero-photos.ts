@@ -13,14 +13,14 @@ export interface HeroPhoto {
  */
 export const HERO_PHOTOS: HeroPhoto[] = [
   {
-    src: "/landing/hero-competition.jpg",
-    alt: "Dos estudiantes de Cata Club posando",
-    objectPosition: "50% 42%",
-  },
-  {
     src: "/landing/hero-community.jpg",
     alt: "Deportistas, entrenadores y familias de Cata Club reunidos",
     objectPosition: "50% 50%",
+  },
+  {
+    src: "/landing/hero-competition.jpg",
+    alt: "Dos estudiantes de Cata Club posando",
+    objectPosition: "50% 42%",
   },
   {
     src: "/landing/hero-training.jpg",
