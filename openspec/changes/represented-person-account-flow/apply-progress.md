@@ -284,3 +284,72 @@ Revert exactly this native diff against `87518b2`: the router hunk, DTO hunk, `P
 - Skipped locally (recorded, not claimed): full `make pre-pr` lane and QA runtime are parent/verifier-owned per instruction; remote CI gates are not claimable locally.
 - Deviations from the oracle: none — every touched file is byte-identical; the only local composition work is the PR3a/PR3b split itself.
 - Next in chain: PR 4 (relationship integrity + admin reassignment). This apply stops before PR4; `#1165` merge/CI and tracker housekeeping remain parent-owned.
+
+---
+
+# Apply progress — PR4a0 (legacy adult-link fixture compatibility; test-only preparatory slice)
+
+## Structured status consumed
+
+- `changeName`: `represented-person-account-flow`; `artifactStore`: `openspec`; `applyState`: ready.
+- `actionContext.mode`: `repo-local`; allowed edit root: this worktree (`pi-1137-pr4a0`, branch head `d63e10d`, the clean PR3b predecessor).
+- Delivery: `auto-chain`, `feature-branch-chain`; **PR4a0** is the parent-authorized test-only preparative slice of PR 4. Parent owns attempt settlement, commit, push, and PR creation; no attempt commands, no commit, no push, and no production action were performed.
+- Boundary honored: **no production code, no migration, no router/service/DTO change, no `openspec/**/spec.md`, `proposal.md`, or `design.md` edit, and no task checkbox change.** `tasks.md` was deliberately left untouched; the three PR 4 implementation checkboxes stay `- [ ]` because PR4a0 completes neither the database slice (PR4a) nor the validator/reassignment/safe-stop slice (PR4b).
+
+## Files changed (test fixtures only)
+
+Seven files carry the tracked fixture corrections already present in the read-only oracle `pi-1137-pr4a` (`+49/-15` there), copied byte-identical except one docstring adaptation noted below:
+
+- `backend/tests/test_baja_logica_persona.py` — `_crear_persona(..., fecha_nacimiento=...)`; the two dependent-link fixtures seed a 2015 minor.
+- `backend/tests/test_beneficio_autoservicio.py` — linked child seeded as a 2015 minor.
+- `backend/tests/test_inventario_anomalias_membresias.py` — linked member seeded as a 2015 minor.
+- `backend/tests/test_notificaciones_paginacion.py` — `_crear_persona(..., fecha_nacimiento=...)`; both dependent feeds seed a 2015 minor.
+- `backend/tests/test_migracion_representados_alcanzables.py` — new `_sembrar_persona_legada_mayor_vinculada` helper (minor link, then `UPDATE fecha_nacimiento`), used by the two legacy-adult scenarios. **Adaptation:** the docstring names "el candado de relación de PR 4" instead of the oracle's literal `i1141relinteg` revision id, because that migration is not part of this predecessor; the executable code is byte-identical.
+- `backend/tests/test_independencia_representada.py` — `_representado_adulto` seeds a 2020 minor link and ages in place to `2000-06-15`.
+- `backend/tests/test_representante_no_deja_menores_huerfanos.py` — the "Carla" majority-of-age control seeds `MENOR_NACIMIENTO` and ages in place to `1995-01-01`.
+
+Five files carry the **remaining failures listed in the oracle's `verify-report.md`**, corrected with the same recipe (no oracle version existed):
+
+- `backend/tests/test_alertas_mora.py` — `_crear_persona` gains `fecha_nacimiento`; linked rows are seeded as a 2015 minor then aged in place.
+- `backend/tests/test_alertas_vencimiento.py` — same in `_crear_persona` (covers the `[3]`/`[6]` N+1 cases and the retry case).
+- `backend/tests/test_membresia_repositorio.py` — same in `_crear_persona` (family count/DISTINCT case).
+- `backend/tests/test_notificaciones_marcar_todas.py` — same in `_crear_persona` (own + active-children case).
+- `backend/tests/test_roles.py` — same in `_persona` (never-creates-`ALUMNO`/never-touches-link case).
+
+No assertion, status-code, JSON-body, or test-name line was modified. `git diff -U0 -- backend/tests | grep -E '^[+-]' | grep -icE 'assert|status_code|json\(\)'` → **0**.
+
+## Strict-TDD evidence (RED → GREEN, plus neutrality and state-identity proofs)
+
+The PR 4 database lock does not exist on this predecessor (`alembic head` = `h1140rep_auditoria`), so RED could not come from the repository alone. Temporary, out-of-repo oracle comparison was used: a throwaway pytest plugin (`/tmp/pr4a0_trigger_plugin.py`, **not** added to the repository) imports the read-only oracle migration `i1141relinteg` and installs its real relationship trigger after the session schema is migrated, recreating the verifier's lane conditions.
+
+| Phase | Command (cd `backend`; `AMBIENTE=test TEST_DATABASE_URL/DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test JWT_SECRET_KEY=verify-read-only`) | Result |
+|---|---|---|
+| RED (before corrections) | `PYTHONPATH=/tmp uv run pytest tests/test_alertas_mora.py tests/test_alertas_vencimiento.py tests/test_membresia_repositorio.py tests/test_notificaciones_marcar_todas.py tests/test_roles.py -q -p pr4a0_trigger_plugin -p no:randomly` | **7 failed, 58 passed** — exactly the oracle's blocker list, including the seventh failure the report only implied: `test_representante_recibe_una_sola_notificacion_en_reintento`. Every failure was `CheckViolation: persona_id=N es mayor de edad y no puede vincularse o re-enlazarse a un representante`. |
+| GREEN (after corrections, lock installed) | same plugin, all 12 touched files | **167 passed, 7 warnings in 32.85s** |
+| Neutrality (no lock, native branch head) | same 12 files without the plugin | **167 passed, 7 warnings in 32.46s** — identical count, proving the recipe depends on nothing new and the suite is not weakened. |
+| State identity (structural probe) | `uv run python /tmp/pr4a0_state_probe.py` (throwaway, everything ROLLBACK-ed) | **PASS** — inside one transaction: legacy recipe `INSERT` adult + `representante_id` is rejected (`persona_id=6 es mayor de edad…`); corrected recipe (minor `INSERT` + `UPDATE fecha_nacimiento`) persists `(1990-01-01, representante_id=<same>, activo=True, telefono='0991112222')`, i.e. the exact state the legacy recipe intended; `persona` row count returned to 0 and the `persona` triggers were restored to the `h1140` head state (`trg_persona_representante_alcanzable`). |
+| Lint / whitespace | `uv run ruff check` on all 12 files; `git diff --check` | **All checks passed!**; no whitespace findings |
+
+Because the corrections only change *how* a row is seeded and leave the persisted row identical, the existing assertions are themselves the regression test: the adult-control and independence tests that pass with the lock installed prove the fixtures still end as linked adults (e.g. `test_desactivar_cuenta_con_representado_mayor_de_edad_no_se_rechaza`, `_representado_adulto`-driven independence cases).
+
+## Interrupted canonical lane (recorded, not claimed)
+
+`COMPOSE_PROJECT_NAME=pi-1137-pr4a AMBIENTE=test … make pre-pr LANE=backend` was started and **interrupted by the executor timeout during the backend pytest suite** (last log line at 83 % of `test_seed_dev_bulk.py`, backend suite, `0 FAILED / 0 ERROR`). Gates completed before interruption: `ruff check .` → `All checks passed!`; `lint-imports` → `Contracts: 3 kept, 0 broken.`; `pip-audit` → `No known vulnerabilities found`; `db-test` recreated and healthy. The lane result is **not** claimed as PASS; `test-root` never ran and remote CI gates are not claimable locally. No pytest/alembic process survived the interruption (`pgrep -af 'pytest|alembic'` empty).
+
+## Review workload, rollback, deviations
+
+- Authored count (test files only): **+107 / −28 = 135 changed lines** across 12 files — far inside the 600–900 target and the 1,000 hard stop. This apply-progress section is SDD bookkeeping and is excluded from that count. Zero production lines.
+- Rollback boundary: `git checkout -- backend/tests/` on this worktree (the 12 renamed fixtures) plus reverting this section; nothing else exists to revert — no migration, no service/router/DTO, no endpoint or runtime behavior change. Any rollback of the later PR4a migration is separate.
+- Runtime: **N/A** — no endpoint or UI surface; the slice only changes test seed order. Recorded here for the PR body per `tasks.md`.
+- Deviations from the oracle: one docstring wording adaptation (revision id replaced by "el candado de relación de PR 4"); no executable divergence in the seven copied files.
+- Not done here (PR4a/PR4b scope, still unchecked in `tasks.md`): the additive trigger migration, the shared validator, atomic reassignment, non-disclosing safe stop, and all PR 4 checkboxes.
+
+## Remaining tasks
+
+Unchanged from PR3b. The three PR 4 implementation lines are still persisted as unchecked and were **not** edited by this slice:
+
+```text
+- [ ] Shared validator owns self/cycle/age/phone/reachability invariants with database defense.
+- [ ] Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification.
+- [ ] Non-disclosing safe stop replaces self-service linking.
+```

@@ -170,3 +170,74 @@ Confirmed `make qa-up` is **invalid on this feature branch** without executing i
 ### Severe findings
 
 None for the authorized PR3b boundary. Archive remains blocked solely by the explicitly out-of-scope unchecked PR4–7 + parent/lifecycle tasks and the pending `#1165` merge/CI gate. Full canonical CI is unproven locally and must be satisfied post-publication.
+
+---
+
+## Independent verification — PR4a0 test-only fixture compatibility
+
+### Result contract
+
+**PASS — PR4a0 only.** The candidate is limited to twelve test files plus SDD bookkeeping; it is not a completion claim for PR4 or the OpenSpec change. No production, migration, router, service, DTO, spec, design, proposal, task-checkbox, commit, push, or PR edit occurred during verification.
+
+- Native status/action context: `represented-person-account-flow`, verify `ready`, `repo-local`; this worktree is the allowed root.
+- Native `HEAD` is `d63e10d81a85992a49c3ce8b2d28722f906e2699` (PR3b predecessor `87518b2...`); changed inventory is exactly 12 `backend/tests/` files and `apply-progress.md`.
+- Test-only authored diff is **+107/−28 = 135 lines**, below the 1,000 hard stop. `git diff --check` is clean.
+
+### Scope and structural evidence
+
+- `git diff --name-status` found exactly the twelve named modified test files and one SDD file; no other path is changed before this report.
+- Python AST comparison confirms test/class definitions and every `assert` AST are unchanged in all 12 files. Zero-context diff finds no changed `assert`, `status_code`, or `json()` expectation.
+- The only executable fixture change is seed order: a linked legacy person is inserted as a 2015 minor, then its birth date is updated to the original adult date. Where an adult-linked legacy state is required, final persisted values remain adult birth date, same `representante_id`, `activo=True`, and the original phone.
+- CodeGraph review of the PR4 oracle trigger confirms its `BEFORE INSERT OR UPDATE OF representante_id` age guard short-circuits an age-only update; therefore the recipe represents an adult who aged in place rather than weakening any assertion or status expectation.
+
+### Exact validation
+
+| Gate | Command | Result |
+|---|---|---|
+| Native predecessor suite | `cd backend && AMBIENTE=test TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test JWT_SECRET_KEY=verify-read-only uv run pytest tests/test_alertas_mora.py tests/test_alertas_vencimiento.py tests/test_baja_logica_persona.py tests/test_beneficio_autoservicio.py tests/test_independencia_representada.py tests/test_inventario_anomalias_membresias.py tests/test_membresia_repositorio.py tests/test_migracion_representados_alcanzables.py tests/test_notificaciones_marcar_todas.py tests/test_notificaciones_paginacion.py tests/test_representante_no_deja_menores_huerfanos.py tests/test_roles.py -q -p no:randomly` | PASS — 167 passed, 7 warnings, 32.47s |
+| Trigger-installed corrected suite | Same command with `PYTHONPATH=/tmp -p pr4a0_trigger_plugin -p no:randomly` | PASS — 167 passed, 7 warnings, 32.98s; cleanup restored only `trg_persona_representante_alcanzable` |
+| Trigger simulation | Rollback-bounded PostgreSQL probe importing the read-only PR4 oracle migration | PASS — old adult-link `INSERT` rejected with `CheckViolation`; corrected minor-link then age update persisted `(1990-01-01, same representative, True, 0991112222)`; triggers and row count restored |
+| Changed-file lint | `cd backend && uv run ruff check tests/test_alertas_mora.py tests/test_alertas_vencimiento.py tests/test_baja_logica_persona.py tests/test_beneficio_autoservicio.py tests/test_independencia_representada.py tests/test_inventario_anomalias_membresias.py tests/test_membresia_repositorio.py tests/test_migracion_representados_alcanzables.py tests/test_notificaciones_marcar_todas.py tests/test_notificaciones_paginacion.py tests/test_representante_no_deja_menores_huerfanos.py tests/test_roles.py` | PASS — All checks passed |
+
+A pre-existing `/tmp/pr4a0_state_probe.py` also proved the old rejection and corrected state, but exited 1 during redundant trigger restoration (`DuplicateObject`); its transaction rollback left the head trigger intact. The independent rollback-bounded probe above passed and is the authoritative simulation result. `make pre-pr LANE=backend` was not run: its earlier attempt was interrupted, and no interrupted lane is claimed.
+
+### Strict TDD, specs, and workload
+
+| Check | Result | Evidence |
+|---|---|---|
+| TDD evidence | PASS | `apply-progress.md` has PR4a0 RED/GREEN/TRIANGULATE/REFACTOR evidence. |
+| GREEN cross-check | PASS | All 12 reported PostgreSQL/TestClient fixture files exist and pass both native and trigger-installed runs (167 cases). |
+| Assertion quality | PASS | No test/assertion/status expectation changed; therefore no new tautology, ghost loop, type-only, smoke-only, or implementation-detail assertion was introduced. |
+| Layer coverage | PASS | 12 PostgreSQL integration/TestClient files; no frontend/E2E surface belongs to this fixture-only slice. |
+| Spec/design coherence | PASS, bounded | Supports `representation-lifecycle`'s adult-aged-in-place scenario only; PR4 validation/reassignment/safe-stop requirements remain unimplemented and unclaimed. |
+| Review boundary | PASS | Test fixtures + SDD only; 135 lines, below 1,000; rollback is reverting the 12 test files and this evidence only. |
+
+Coverage was not run because this diff introduces no production branch or assertion; full backend lane and remote CI remain unproven.
+
+### Task completion and archive blockers
+
+The 19 unchecked implementation/lifecycle lines remain **CRITICAL archive blockers**; this approved preparatory slice leaves them untouched:
+
+```text
+- [ ] Merge and required CI on #1165 (pending; not claimable from this document).
+- [ ] Shared validator owns self/cycle/age/phone/reachability invariants with database defense.
+- [ ] Atomic reassignment with documented lock order, stale conflict, audit, epoch revocation, and post-commit notification.
+- [ ] Non-disclosing safe stop replaces self-service linking.
+- [ ] Account-first adult account with exactly one persisted `REPRESENTANTE`, legal consents, and verification outbox; empty capability state without membership/link.
+- [ ] Session-derived child enrollment with idempotency, non-disclosing safe stop, and atomic conservation.
+- [ ] #1138 prohibited write fields rejected before any mutation.
+- [ ] Backend `ACTIVA` predicate across members/schedule/attendance; representative-as-player without `ALUMNO`.
+- [ ] Empty representative dashboard from server capability; BFF rejects browser-selected subjects.
+- [ ] Derived emergency-contact display; minor prohibited form inputs removed; legacy values never shown operationally.
+- [ ] Remediation gate with conservation proof; no production execution in this change.
+- [ ] Full cross-flow E2E across all seven slices' behaviors.
+- [ ] #1135 remains explicitly work-free.
+- [ ] Maintain the draft/no-merge tracker #1164; chain each child to its immediate predecessor with the dependency diagram marking the current PR `📍`; keep each child diff limited to its stated work unit.
+- [ ] Preserve `proposal.md`, `design.md`, and all `specs/**/spec.md`; update only SDD evidence/status artifacts when implementation results require it. This replan (7 PRs; 600–900 target; 1,000 hard stop) supersedes the earlier 14-PR/400-line plan and the monolithic-slice size exception.
+- [ ] Before each PR delivery, verify the exact focused command, runtime scenario, additions+deletions (600–900 target, 1,000 stop), rollback boundary, and skipped CI gates; run one applicable `make pre-pr LANE=backend|frontend|full` lane.
+- [ ] After the chain completes, compare implementation against every Given/When/Then scenario and authorization invariant, then record verification evidence before archive.
+- [ ] Keep #1135 explicitly superseded with no runtime, migration, relationship, or closure work; close #1132, #1133, #1134, #1138, and #1137 only against their stated completion conditions.
+- [ ] Archive the completed OpenSpec change only after all child PRs, migration checks, QA/live scenarios, conservation evidence, and post-merge lifecycle gates pass; do not claim production remediation execution.
+```
+
+**Rollback:** discard only the 12 fixture edits and this SDD evidence against `d63e10d`; no runtime or schema rollback exists. **Next:** parent delivery/review for the approved PR4a0 boundary; archive remains blocked.

@@ -114,10 +114,12 @@ def test_desactivar_cuenta_con_representado_mayor_de_edad_no_se_rechaza(client, 
     (puede independizarse él mismo)."""
     representante = _persona(db_session, "1710034065")
     _usuario(db_session, representante)
-    _persona(
-        db_session, "1710034073", fecha_nacimiento=date(1995, 1, 1),
+    carla = _persona(
+        db_session, "1710034073", fecha_nacimiento=MENOR_NACIMIENTO,
         nombres="Carla", representante_id=representante.id,
     )
+    carla.fecha_nacimiento = date(1995, 1, 1)  # envejece en el sitio
+    db_session.commit()
 
     respuesta = _desactivar_cuenta(client, representante.id)
 

@@ -64,17 +64,26 @@ def _crear_persona(
     representante_id: int | None = None,
     nombres: str = "Ana",
     apellidos: str = "Test",
+    fecha_nacimiento: date = date(1990, 1, 1),
 ) -> Persona:
+    # Un representado LEGADO se siembra como llega de verdad a la base: el
+    # vínculo se creó siendo MENOR y envejeció en el sitio. El candado de
+    # relación rechaza el alta cruda (`INSERT`) de un adulto vinculado; el
+    # `UPDATE` de fecha no toca `representante_id`, la columna del trigger.
+    vinculado = representante_id is not None
     persona = Persona(
         nombres=nombres,
         apellidos=apellidos,
         cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1),
+        fecha_nacimiento=date(2015, 1, 1) if vinculado else fecha_nacimiento,
         telefono="0991112222",
         representante_id=representante_id,
     )
     db.add(persona)
     db.flush()
+    if vinculado:
+        persona.fecha_nacimiento = fecha_nacimiento  # envejece en el sitio
+        db.flush()
     return persona
 
 

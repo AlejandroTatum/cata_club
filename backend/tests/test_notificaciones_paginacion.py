@@ -28,10 +28,11 @@ from main import app
 FECHA = datetime(2029, 1, 1, tzinfo=timezone.utc)
 
 
-def _crear_persona(db_session, cedula: str = "1710034065") -> Persona:
+def _crear_persona(db_session, cedula: str = "1710034065",
+                   fecha_nacimiento: date = date(1990, 1, 1)) -> Persona:
     persona = Persona(
         nombres="Ana", apellidos="Vega", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+        fecha_nacimiento=fecha_nacimiento, telefono="0990000000",
     )
     db_session.add(persona)
     db_session.commit()
@@ -140,7 +141,8 @@ class TestFeedNotificacionesPaginado:
 class TestFeedNotificacionesRepresentante:
     def test_representante_pagina_su_feed_y_el_de_sus_hijos(self, db_session):
         representante = _crear_persona(db_session, cedula="1710034065")
-        hijo = _crear_persona(db_session, cedula="1710034073")
+        hijo = _crear_persona(db_session, cedula="1710034073",
+                                fecha_nacimiento=date(2015, 1, 1))
         hijo.representante_id = representante.id
         db_session.commit()
         _crear_notificaciones(db_session, representante.id, ["propia"])
@@ -159,7 +161,8 @@ class TestFeedNotificacionesRepresentante:
 
     def test_representante_paginacion_con_desempate(self, db_session):
         representante = _crear_persona(db_session, cedula="1710034065")
-        hijo = _crear_persona(db_session, cedula="1710034073")
+        hijo = _crear_persona(db_session, cedula="1710034073",
+                                fecha_nacimiento=date(2015, 1, 1))
         hijo.representante_id = representante.id
         db_session.commit()
         # Cuatro notificaciones con la misma fecha: el desempate por id es lo

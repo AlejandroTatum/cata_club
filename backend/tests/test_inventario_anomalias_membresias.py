@@ -9,6 +9,7 @@ devuelven estructuras planas, así los tests las llaman directo sin
 subproceso ni I/O (ver `test_reset_dev_db.py`). Detalle de A1/A2/A4 en el
 docstring de `scripts/inventario_anomalias_membresias.py`.
 """
+from datetime import date
 from decimal import Decimal
 
 from app.dominio.cedula import cedula_valida
@@ -72,7 +73,9 @@ def test_importes_cero_gratuidad_con_tarifa_real(db_session):
     nunca en `incoherente`, porque la persona SÍ tiene representante (la
     precondición de negocio de la regla)."""
     representante = crear_persona_orm(db_session, cedula_valida(104))
-    alumno = crear_persona_orm(db_session, cedula_valida(114))
+    alumno = crear_persona_orm(
+            db_session, cedula_valida(114), fecha_nacimiento=date(2015, 1, 1),
+        )
     alumno.representante_id = representante.id
     tipo = crear_tipo_membresia_orm(db_session, precio=Decimal("35.00"))
     membresia = crear_membresia_orm(
