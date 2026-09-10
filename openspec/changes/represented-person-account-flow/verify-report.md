@@ -77,3 +77,46 @@ The following unchecked implementation/lifecycle scope remains and is a **CRITIC
 ## Severe findings
 
 No PR 2 severe implementation or validation finding remains. Archive remains blocked solely by the explicitly listed out-of-scope unchecked work and required PR 1 merge/CI lifecycle gate.
+
+---
+
+## Independent verification — PR3a inert independence-service core
+
+### Result Contract
+
+**PR3a verdict: PASS (inert core slice only).** The overall OpenSpec change remains **BLOCKED for archive**: all PR 3 implementation checkboxes intentionally remain unchecked pending PR3b and later chain/lifecycle work.
+
+- Status/action context: `represented-person-account-flow`, native verify `ready`; `repo-local` worktree is the allowed root.
+- Boundary: exactly the new relationship service, its new service-level test file, and PR3a apply-progress evidence changed from base `8c77c5f6eb8e958ba4cfb76cbb1bd9c075f7063b`.
+- Inertness: no runtime importer exists outside the candidate test; no router, DTO, `PersonaServicio`, guard, or legacy-route file changed. The administrator router/DTO guard remains explicitly PR3b scope.
+- Tests use local `_ComandoIndependencia` dataclass and contain no router/DTO/TestClient/client-fixture import.
+
+### Exact validation
+
+| Gate | Exact command | Result |
+|---|---|---|
+| Focused PostgreSQL | `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_independencia_representada.py -q` | PASS — `25 passed, 1 warning in 7.99s` |
+| Legacy + guards | `cd backend && TEST_DATABASE_URL=… uv run pytest tests/test_independizar.py tests/test_bloqueo_del_event_loop.py tests/test_guardia_autorizacion_rutas.py -q` | PASS — `27 passed, 1 warning in 9.48s` |
+| Combined | `cd backend && TEST_DATABASE_URL=… uv run pytest tests/test_independencia_representada.py tests/test_independizar.py tests/test_bloqueo_del_event_loop.py tests/test_guardia_autorizacion_rutas.py -q` | PASS — `52 passed, 1 warning in 16.74s` |
+| Focused quality | `cd backend && uv run ruff check app/servicios_negocio/relacion_representacion_servicio.py tests/test_independencia_representada.py` | PASS — `All checks passed!` |
+| Imports/whitespace/diff | AST import-boundary probe; `git diff --check 8c77c5f6…`; two `git diff --no-index --check /dev/null <new-file>` probes | PASS — clean; service imports without presentation/`PersonaServicio`/`AdminCuentaServicio` and tests without presentation/TestClient |
+| Canonical lane | `JWT_SECRET_KEY=… TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test make pre-pr LANE=backend` | PASS — Ruff; import-linter `3 kept, 0 broken`; pip-audit clean; backend `2507 passed, 3 skipped, 85 warnings in 961.55s`; root `582 passed, 1 skipped in 23.86s` |
+
+Skipped locally: CI `migraciones-desde-cero` isolated-empty-PostgreSQL job, as the canonical lane reports. No endpoint/runtime scenario applies because this service is unreferenced.
+
+### Strict TDD and assertion quality
+
+`apply-progress.md` contains PR3a RED/GREEN/TRIANGULATE/REFACTOR evidence. The RED module-absence evidence, final 25-test file, and current GREEN execution were cross-checked. All 25 tests are PostgreSQL service/ORM integration tests; the direct-SQL minor trigger, locks, rollback, replay, audit, epochs, and post-commit notification cases provide triangulation. No tautology, ghost loop, type-only-only, smoke-only, CSS-detail, or client-fixture assertion was found.
+
+### Inventory, workload, and rollback
+
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py` — NEW, 270 additions, SHA-256 `63c693dc40f4463fbe14c874675324b58955867349264356115e050492eb04c7`.
+- `backend/tests/test_independencia_representada.py` — NEW, 627 additions, SHA-256 `4c23f7610ce41e82950d4b2ac63aaca54bc60b0af68e105888d32c2eecd286b2`.
+- `openspec/changes/represented-person-account-flow/apply-progress.md` — modified, 37 additions; this report section is verification evidence only.
+- Native candidate accounting after this section: **983 additions, 0 deletions**, within the PR 3 hard stop of 1,000 (service + tests + SDD evidence).
+- PR 3 task state is unchanged: `Vertical cutover…`, `Self-service independence…`, and `Changed lines within 600–900 and ≤1,000…` remain unchecked. This is a CRITICAL archive blocker for the overall change, not a failure of this approved partial slice.
+- Rollback: delete only the two NEW PR3a files against PR 2; no router, DTO, legacy route, migration, or production behavior is engaged.
+
+### Severe findings
+
+None for the authorized inert PR3a boundary. Do not archive or mark PR 3 tasks complete until PR3b completes the routed/guarded cutover and the remaining chain gates pass.

@@ -1,0 +1,270 @@
+"""Orquestación de los comandos de representación (#1137).
+
+Este servicio es el ÚNICO dueño de las escrituras de `representante_id` en
+el flujo de cuenta: `PersonaServicio` delega acá y los routers no tocan la
+columna. PR 3 entrega el primer comando del contrato del diseño:
+
+  - `independizar_presencial`: salida de independencia de un adulto,
+    ejecutada SOLO por un administrador con la persona enfrente.
+
+Los otros dos (`crear_desde_sesion`, `reasignar_presencial`) llegan con sus
+propios slices; no se anticipan acá.
+
+Transacción: UN solo `commit()` por comando, después de credenciales,
+capacidad #762, remoción del vínculo, auditoría completa y epochs de
+sesión. Cualquier falla antes del commit revierte TODO -- el vínculo
+original queda usable y no queda evidencia a medias. La notificación al ex
+representante corre DESPUÉS del commit, en una transacción propia y con
+esfuerzo best-effort: su fallo no revierte ni invalida el éxito ya
+comiteado, y jamás se persiste fuera del canal existente (sin outbox de
+relación, sin estado de solicitud, sin segunda proyección del vínculo).
+"""
+import hashlib
+import logging
+
+from sqlalchemy.orm import Session
+
+from app.dominio.enums import TipoNotificacion
+from app.dominio.excepciones import (
+    ConflictoConcurrencia, EntidadNoEncontrada, OperacionInvalida,
+)
+from app.dominio.modelos import Notificacion, Persona, Usuario
+from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
+from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
+from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
+    VinculacionRepresentanteRepositorio,
+)
+from app.servicios_negocio.auth_servicio import AuthServicio
+from app.servicios_negocio.rol_servicio import RolServicio
+from app.soporte_transversal.tiempo import hoy_club
+
+_log = logging.getLogger(__name__)
+
+# Versión del comando dentro de la huella: cambiar la semántica del comando
+# invalida las huellas viejas a propósito (una clave vieja con comando nuevo
+# es un conflicto 409, no un replay silencioso).
+_VERSION_COMANDO_INDEPENDENCIA = "independencia-presencial:v1"
+
+
+def _huella_independencia(persona_id: int, correo: str, admin_actor_id: int) -> str:
+    """SHA-256 canónico del comando: persona destino, correo normalizado y
+    actor. La contraseña NO entra a propósito: es una credencial que el
+    administrador teclea de nuevo en cada reintento y su variación no cambia
+    la IDENTIDAD del comando -- la identidad es a quién y con qué correo."""
+    canonico = (
+        f"{_VERSION_COMANDO_INDEPENDENCIA}"
+        f"|persona_id={persona_id}"
+        f"|correo={correo.strip().lower()}"
+        f"|actor={admin_actor_id}"
+    )
+    return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
+
+
+class RelacionRepresentacionServicio:
+    def __init__(self, db: Session):
+        self.db = db
+        self.repo_persona = PersonaRepositorio(db)
+        self.repo_usuario = UsuarioRepositorio(db)
+        self.repo_ledger = VinculacionRepresentanteRepositorio(db)
+
+    # --- PR 3: independencia presencial (solo ADMINISTRADOR) -----------------
+
+    def independizar_presencial(
+        self, *, admin_actor_id: int, persona_id: int, comando, idempotency_key: str | None,
+    ) -> dict:
+        """Convierte a un adulto representado en persona independiente.
+
+        Establece credenciales verificadas y la única capacidad
+        REPRESENTANTE sobre el `persona_id` SIN CAMBIAR, corta el vínculo
+        con su representante, deja la evidencia completa en el ledger y
+        revoca los epochs afectados -- todo en UNA transacción. La deuda no
+        se lee (la independencia no la negocia); un menor se rechaza; el
+        reintento con la misma clave devuelve el resultado establecido."""
+        if not idempotency_key or not idempotency_key.strip():
+            raise OperacionInvalida(
+                "El comando requiere la cabecera Idempotency-Key: identifica el "
+                "intento y hace que un reintento devuelva el resultado ya "
+                "establecido en lugar de duplicar nada."
+            )
+        idempotency_key = idempotency_key.strip()
+
+        huella = _huella_independencia(persona_id, comando.correo, admin_actor_id)
+
+        # Replay PRIMERO, antes de validar: un comando que ya comiteó se
+        # responde desde su evidencia, aunque el mundo haya cambiado desde
+        # entonces (el vínculo ya está cortado: revalidarlo fallaría).
+        previo = self.repo_ledger.obtener_por_clave(idempotency_key)
+        if previo is not None:
+            if previo.request_fingerprint != huella:
+                raise ConflictoConcurrencia(
+                    "La clave de idempotencia ya fue usada por otro comando. "
+                    "Genere una clave nueva para este intento.",
+                    detalle_tecnico=(
+                        f"clave={idempotency_key} registrada con huella distinta "
+                        f"(evento_id={previo.id})"
+                    ),
+                )
+            return {
+                "persona_id": previo.persona_id,
+                "representante_anterior_id": previo.representante_anterior_id,
+                "usuario_id": None,
+                "cuenta_creada": False,
+                "replay": True,
+                "idempotency_key": idempotency_key,
+            }
+
+        try:
+            resultado = self._ejecutar_independencia(
+                admin_actor_id=admin_actor_id, persona_id=persona_id,
+                comando=comando, idempotency_key=idempotency_key, huella=huella,
+            )
+        except Exception:
+            self.db.rollback()
+            raise
+
+        # Post-commit, transacción aparte, best-effort: si el canal falla,
+        # la independencia YA comiteó y el comando la devuelve igual.
+        self._notificar_ex_representante(
+            representante_anterior_id=resultado["representante_anterior_id"],
+            evento_id=resultado["evento_id"],
+        )
+        return {clave: valor for clave, valor in resultado.items() if clave != "evento_id"}
+
+    def _ejecutar_independencia(
+        self, *, admin_actor_id: int, persona_id: int, comando, idempotency_key: str,
+        huella: str,
+    ) -> dict:
+        # 1. Bloquear la fila del target: la decisión es sobre ESTA persona.
+        persona = self._bloquear_persona(persona_id)
+        if persona is None:
+            raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
+
+        # 2. Validaciones de remoción: vínculo vivo y adulto HOY (la edad la
+        #    calcula el día del club; el trigger g1139 de la base es el
+        #    respaldo contra cualquier bypass).
+        if not persona.representante_id:
+            raise OperacionInvalida(
+                "Esta persona no tiene un representante legal asociado."
+            )
+        edad = calcular_edad(persona.fecha_nacimiento, hoy_club())
+        if edad < EDAD_MAYORIA_EDAD:
+            raise OperacionInvalida(
+                f"La persona debe ser mayor de edad ({EDAD_MAYORIA_EDAD}+ años) "
+                f"para independizarse (calculado: {edad}). Un menor no se "
+                "desvincula: corresponde una reasignación administrativa."
+            )
+        representante_anterior_id = persona.representante_id
+
+        # 3. Bloquear al ex representante y las dos cuentas en orden estable.
+        # Lock del ex representante: la fila queda bloqueada aunque este
+        # método no lea nada más de ella (el epoch se escribe vía repo).
+        self._bloquear_persona(representante_anterior_id)
+        self._bloquear_usuarios([persona_id, representante_anterior_id])
+
+        # 4. Credenciales verificadas sobre el MISMO persona_id (puede fallar
+        #    por correo ajeno: ese fallo revierte todo ANTES de tocar nada).
+        #    Instanciación directa (`Clase(...).metodo`): además de ser la
+        #    forma que el candado del event loop sabe resolver hasta bcrypt,
+        #    deja explícito qué núcleo hace qué.
+        cuenta_preexistente = (
+            self.repo_usuario.obtener_por_persona_id(persona.id) is not None
+        )
+        usuario = AuthServicio(self.db).establecer_credenciales_persona_existente(
+            persona, comando.correo, comando.contrasenia,
+        )
+
+        # 5. Capacidad #762: insertar, reusar o reemplazar explícitamente.
+        RolServicio(self.db).establecer_capacidad_representante(usuario)
+
+        # 6. Cortar el vínculo.
+        self.repo_persona.actualizar(persona, {"representante_id": None})
+
+        # 7. Epochs: el ex representante pierde acceso a la ficha al instante;
+        #    la cuenta legada del adulto también se revoca (cambiaron
+        #    credenciales y rol). Una cuenta recién creada no tiene token
+        #    previo que revocar.
+        usuario_viejo = self.repo_usuario.obtener_por_persona_id(representante_anterior_id)
+        if usuario_viejo is not None:
+            usuario_viejo.revocar_sesiones()
+        if cuenta_preexistente:
+            usuario.revocar_sesiones()
+
+        # 8. Evidencia completa, con la clave como recibo de replay.
+        evento = self.repo_ledger.registrar(
+            persona_id=persona_id,
+            actor_persona_id=admin_actor_id,
+            representante_anterior_id=representante_anterior_id,
+            representante_nuevo_id=None,
+            operacion="INDEPENDENCIA",
+            origen="ADMIN_PRESENCIAL",
+            idempotency_key=idempotency_key,
+            request_fingerprint=huella,
+        )
+
+        # 9. El ÚNICO commit del comando. Nada de tokens: quien ejecuta es el
+        #    administrador; el adulto entra después por el login normal.
+        self.db.commit()
+
+        return {
+            "persona_id": persona_id,
+            "representante_anterior_id": representante_anterior_id,
+            "usuario_id": usuario.id,
+            "cuenta_creada": not cuenta_preexistente,
+            "replay": False,
+            "idempotency_key": idempotency_key,
+            "evento_id": evento.id,
+        }
+
+    # --- Helpers de bloqueo ---------------------------------------------------
+
+    def _bloquear_persona(self, persona_id: int) -> Persona | None:
+        return (
+            self.db.query(Persona)
+            .filter(Persona.id == persona_id)
+            .with_for_update()
+            .first()
+        )
+
+    def _bloquear_usuarios(self, persona_ids: list[int]) -> None:
+        """`SELECT ... FOR UPDATE` de las cuentas por `persona_id`, en orden
+        ascendente: el orden fijo evita el abrazo de dos comandos que
+        bloquean las mismas filas en orden contrario."""
+        if not persona_ids:
+            return
+        self.db.query(Usuario).filter(
+            Usuario.persona_id.in_(sorted(set(persona_ids)))
+        ).with_for_update().all()
+
+    # --- Post-commit: canal existente, best-effort ----------------------------
+
+    def _notificar_ex_representante(
+        self, *, representante_anterior_id: int | None, evento_id: int,
+    ) -> None:
+        """Avisa al ex representante DESPUÉS del commit, en una transacción
+        propia (segundo `commit()` de la misma sesión). El fallo se registra
+        estructurado y NO propaga: la independencia ya está comiteada y un
+        aviso fallido no la revierte ni la invalida. Sin outbox: la fila de
+        `Notificacion` es el canal existente y no se agrega ningún ciclo de
+        vida de notificación de relación."""
+        if representante_anterior_id is None:
+            return
+        try:
+            self.db.add(Notificacion(
+                persona_id=representante_anterior_id,
+                tipo=TipoNotificacion.VINCULACION_REPRESENTANTE,
+                mensaje=(
+                    "La administración del club finalizó el vínculo de "
+                    "representación de una persona que figuraba bajo tu cuenta. "
+                    "Tu sesión quedó cerrada por seguridad."
+                ),
+                entidad_relacionada_id=evento_id,
+            ))
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            _log.exception(
+                "No se pudo notificar la independencia operacion_id=%s "
+                "destinatario_persona_id=%s",
+                evento_id, representante_anterior_id,
+            )

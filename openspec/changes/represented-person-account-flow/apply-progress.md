@@ -186,3 +186,40 @@ The following exact unchecked lines remain persisted in `tasks.md`; they are out
 ```
 
 (plus all PR 3–7 and parent-owned lines, unchanged — see `tasks.md`.)
+
+---
+
+# Apply progress — PR3a (inert independence command service + its focused tests; attempt 2 completes the interrupted writer)
+
+## Structured status consumed
+
+- `changeName`: `represented-person-account-flow`; `artifactStore`: `openspec`; `applyState`: ready.
+- `actionContext.mode`: `repo-local`; allowed edit roots: this worktree (`pi-1137-pr3a`, branch `fix/represented-person-independence-core`, base PR 2 head `8c77c5f`).
+- Delivery: `auto-chain`, `feature-branch-chain`; parent owns attempt settlement; no attempt commands called; no commit/push/PR performed.
+- Slice: the parent-authorized PR3a split preserved in the oracle (`pi-1137-pr3`): service verbatim + service-level tests only; PR3b owns router/DTO cutover, self-service retirement, endpoint/runtime/DTO tests, and the two granted 1-line guard hunks.
+
+## Files changed (both NEW/untracked on base `8c77c5f`)
+
+- `backend/app/servicios_negocio/relacion_representacion_servicio.py` — 270 lines, byte-identical to the oracle candidate (`diff` verified). Inert: no router imports it; `independizar_presencial` only (no `crear_desde_sesion`/`reasignar_presencial` anticipated).
+- `backend/tests/test_independencia_representada.py` — 627 lines, 25 tests. Authorized adaptation of oracle lines 1–619: local `@dataclass _ComandoIndependencia(correo, contrasenia, evidencia_identidad)` replaces the `IndependizarDTO` import (the service duck-types `.correo`/`.contrasenia`); no router/DTO/client usage (one docstring mention only). Excludes oracle lines 620–748 (PR3b sections).
+- `openspec/changes/represented-person-account-flow/apply-progress.md` — this section only. `tasks.md` NOT modified (split checkbox policy: PR 3 checkboxes wait for PR3b).
+
+## TDD cycle evidence (strict TDD; runner `uv run pytest` against real `db-test` PostgreSQL :5436)
+
+| Phase | Command (cd backend; TEST_DATABASE_URL + JWT_SECRET_KEY set) | Result |
+|---|---|---|
+| RED | service file moved to `/tmp` outside import resolution; focused suite run | `ModuleNotFoundError: No module named 'app.servicios_negocio.relacion_representacion_servicio'`; 1 collection error, exit 2; file restored immediately, SHA-256 identical before/after |
+| GREEN | `uv run pytest tests/test_independencia_representada.py -q` | `25 passed, 1 warning in 8.41s` (final bytes) |
+| TRIANGULATE | `uv run pytest tests/test_independizar.py tests/test_bloqueo_del_event_loop.py tests/test_guardia_autorizacion_rutas.py -q` | `27 passed, 1 warning in 9.52s` — legacy self-service suite + both guard files green UNTOUCHED (verified zero diffs vs base) |
+| Combined | focused + safety net in one run | `52 passed, 1 warning in 16.70s` |
+| REFACTOR | `uv run ruff check` (both files); import probe (`AMBIENTE=test`); `git diff --no-index --check /dev/null <file>` ×2 | `All checks passed!`; clean import; 0 `AdminCuentaServicio`; 0 router/DTO imports; zero whitespace findings |
+
+REFACTOR correction: the prior writer left a trailing blank line at EOF in the test file (`git diff --check`: `new blank line at EOF`; the oracle candidate is clean). Corrected to a single trailing newline (628→627 lines; 1-byte, behavior-neutral); GREEN/TRIANGULATE/REFACTOR numbers were re-captured on the final bytes.
+
+## Workload, rollback, remaining
+
+- Count: 897 implementation additions (270 + 627), 0 deletions — inside the 600–900 target; ≤1,000 hard stop respected including this bookkeeping section (exact final total below).
+- Rollback boundary: delete the two new files; nothing else exists to revert; no migration; no route/behavior change anywhere (the service has zero importers).
+- Runtime: N/A — no endpoint or UI surface in this slice (record this justification in the PR body).
+- Skipped by parent instruction: full `make pre-pr` lane (the independent verifier owns it); CI gates are not claimable locally.
+- Evidence SHA-256 (final): service `63c693dc40f4463fbe14c874675324b58955867349264356115e050492eb04c7`; tests `4c23f7610ce41e82950d4b2ac63aaca54bc60b0af68e105888d32c2eecd286b2`.
