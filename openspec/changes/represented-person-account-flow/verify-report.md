@@ -120,3 +120,53 @@ Skipped locally: CI `migraciones-desde-cero` isolated-empty-PostgreSQL job, as t
 ### Severe findings
 
 None for the authorized inert PR3a boundary. Do not archive or mark PR 3 tasks complete until PR3b completes the routed/guarded cutover and the remaining chain gates pass.
+
+---
+
+## Independent verification — PR3b vertical cutover (complete-PR3, second/final attempt)
+
+### Result Contract
+
+**PR3b / complete-PR3 verdict: PASS (focused required checks).** The overall OpenSpec change remains **BLOCKED for archive**: PR 4–7 and parent/lifecycle tasks remain unchecked, and `#1165` merge/CI is pending. This is the second/final attempt; the prior attempt **timed out** because canonical `make pre-pr LANE=backend` exceeds the ~10-minute agent budget (previous run ~961s). Per parent instruction, pre-pr was **not** rerun; full canonical CI gates remain pending and are claimable only after PR publication.
+
+- Change/status: `represented-person-account-flow`; native verify `ready`; `repo-local` worktree is the authoritative allowed root.
+- Boundary: exact native diff vs base `87518b2be111b664a6ac68c357d33b8d6ec1af04`; oracle `pi-1137-pr3` read-only; every touched file byte-identical to oracle (evidence SHAs in apply-progress).
+
+### Exact validation
+
+| Gate | Exact command | Result |
+|---|---|---|
+| 33-test independence matrix | `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_independencia_representada.py -q` | PASS — `33 passed, 1 warning in 9.47s` |
+| Combined + two guards | `… uv run pytest tests/test_independencia_representada.py tests/test_guardia_autorizacion_rutas.py tests/test_bloqueo_del_event_loop.py -q` | PASS — `43 passed, 1 warning in 10.05s` |
+| PR2/audit/link safety net | `… uv run pytest tests/test_auth.py tests/test_roles.py tests/test_rol_unico_por_cuenta.py tests/test_auth_registro_refresh.py tests/test_autenticacion_endpoints.py tests/test_admin_cuenta_servicio.py tests/test_vinculacion_representante.py tests/test_migracion_representante_auditoria.py tests/test_vincular_representado.py -q` | PASS — `127 passed, 3 warnings in 21.99s` |
+| Touched-file Ruff | `cd backend && uv run ruff check app/presentacion/routers/personas_router.py app/servicios_negocio/dtos/persona_schemas.py app/servicios_negocio/persona_servicio.py tests/test_independencia_representada.py tests/test_guardia_autorizacion_rutas.py tests/test_bloqueo_del_event_loop.py` | PASS — `All checks passed!` |
+| Whitespace | `git diff --check 87518b2` | PASS — clean, exit 0 |
+| Canonical lane | `make pre-pr LANE=backend` | **SKIPPED** — prior attempt timed out at ~961s (>10-min budget); full CI pending after PR publication |
+
+### Runtime proof (actual FastAPI TestClient)
+
+`tests/test_independencia_representada.py` exercises the real runtime: `test_runtime_el_adulto_puede_loguearse_con_las_credenciales_establecidas` (admin independence → represented login/session, L623), `test_endpoint_admin_completa_sin_token_en_la_respuesta` (admin success, L673), `test_endpoint_exige_rol_administrador` (unauthorized 403 via `client_sin_permisos`, L658), `test_endpoint_menor_rechazado_y_vinculo_intacto` (minor rejection, L708), plus 404/400 idempotency negatives. Route introspection: `POST /personas/{persona_id}/independizar` → `response_model=IndependenciaResponseDTO`, deps = `GestorPermisos` roles `['ADMINISTRADOR']` only. `PersonaServicio.independizar` retired (`hasattr` → False); legacy `tests/test_independizar.py` deleted (415 lines).
+
+### Budget, import/diff, and scope
+
+- Native changed lines: **190 additions + 516 deletions = 706** (inside 600–900; ≤1,000 hard stop). SDD bookkeeping excluded.
+- `AdminCuentaServicio` references in production/test diff: **0** (the single `grep -ci` hit is the apply-progress.md documentation row, not code).
+- No PR4 scope: `RelacionRepresentacionServicio` exposes only `independizar_presencial` (+ private helpers); no shared validator, reassignment, or enrollment method added.
+- PR3 tasks exactly `[x]` (3/3 checked); PR4–7 and parent-owned lines remain unchecked — correct out-of-scope archive blockers, not PR3b defects.
+
+### Strict TDD compliance
+
+| Check | Result | Details |
+|---|---|---|
+| TDD Cycle Evidence table | PASS | Present in apply-progress PR3b section (RED 4-fail → GREEN 33-pass → TRIANGULATE 129+127 → REFACTOR). |
+| Test files + GREEN | PASS | 33-test file exists and currently passes (`33 passed, 9.47s`). |
+| Assertion quality | PASS | 82 assertions, real value assertions on service/ORM/endpoint responses; `is True` checks assert real boolean fields. No tautologies, ghost loops, type-only-only, smoke-only, or CSS-detail assertions. |
+| Layers | PASS | 33 PostgreSQL service/ORM + TestClient endpoint/runtime tests; frontend N/A for this backend-only slice. |
+
+### QA guard confirmation (no rebuild)
+
+Confirmed `make qa-up` is **invalid on this feature branch** without executing it: the target runs `git fetch origin main`, builds with `BUILD_SHA=$(git rev-parse HEAD)`, then `scripts/qa_verify_build_sha.py` compares the served SHA against `origin/main`. Feature HEAD `87518b2` is not on `origin/main`, so the guard fails. QA was **not** rebuilt; existing `cataclub-qa-*` containers (14h) were left untouched.
+
+### Severe findings
+
+None for the authorized PR3b boundary. Archive remains blocked solely by the explicitly out-of-scope unchecked PR4–7 + parent/lifecycle tasks and the pending `#1165` merge/CI gate. Full canonical CI is unproven locally and must be satisfied post-publication.

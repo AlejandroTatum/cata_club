@@ -487,7 +487,7 @@ class TestElCandadoMira:
             ("app.servicios_negocio.membresia_pago_servicio", "PagoServicio.adjuntar_voucher"),
             # Llega por `pwd_context.verify`, no por `hash`: es el salto que la
             # primera versión de `PRIMITIVAS_BLOQUEANTES` no podía dar.
-            ("app.servicios_negocio.persona_servicio", "PersonaServicio.independizar"),
+            ("app.servicios_negocio.relacion_representacion_servicio", "RelacionRepresentacionServicio.independizar_presencial"),
             ("app.servicios_negocio.auth_servicio", "AuthServicio.login"),
         } <= MAPA.bloqueantes
 

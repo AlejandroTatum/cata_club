@@ -19,7 +19,6 @@ hacer. El comando nuevo:
   - el reintento con la misma clave devuelve el resultado establecido;
   - la notificación al ex representante es post-commit y best-effort.
 """
-import dataclasses
 from datetime import date, datetime, timezone
 
 import pytest
@@ -34,6 +33,7 @@ from app.dominio.modelos import (
     VinculacionRepresentante,
 )
 from app.dominio.enums import TipoSangre
+from app.servicios_negocio.dtos.persona_schemas import IndependizarDTO
 from app.servicios_negocio.relacion_representacion_servicio import (
     RelacionRepresentacionServicio,
 )
@@ -117,25 +117,16 @@ def _usuario_legado(db_session, persona: Persona, *, correo: str,
     return usuario
 
 
-@dataclasses.dataclass
-class _ComandoIndependencia:
-    """Comando mínimo a nivel de servicio: la forma router/DTO llega en PR 3b."""
-
-    correo: str
-    contrasenia: str
-    evidencia_identidad: str
-
-
 def _comando(correo: str = "carlos.nuevo@test.com",
-             contrasenia: str = "clave-segura-123") -> _ComandoIndependencia:
-    return _ComandoIndependencia(
+             contrasenia: str = "clave-segura-123") -> IndependizarDTO:
+    return IndependizarDTO(
         correo=correo, contrasenia=contrasenia,
         evidencia_identidad="cédula verificada en mostrador",
     )
 
 
 def _independizar(db_session, admin: Persona, persona: Persona, *,
-                  comando: _ComandoIndependencia | None = None,
+                  comando: IndependizarDTO | None = None,
                   clave: str = CLAVE_COMANDO) -> dict:
     return RelacionRepresentacionServicio(db_session).independizar_presencial(
         admin_actor_id=admin.id, persona_id=persona.id,
@@ -625,3 +616,133 @@ def test_el_adulto_independizado_sigue_editable_y_con_cuenta_usable(db_session):
     assert adulto.telefono == "0990000099"
     usuario = db_session.query(Usuario).filter_by(persona_id=adulto.id).one()
     assert usuario.correo_verificado is True
+
+
+# --- Runtime: login real del adulto con la cuenta establecida ---------------
+
+def test_runtime_el_adulto_puede_loguearse_con_las_credenciales_establecidas(db_session):
+    """Cierre del escenario de runtime de PR 2: después de la salida, el
+    adulto entra al portal con las credenciales que el administrador le
+    estableció en el mostrador -- login REAL (bcrypt + sesión + tokens) sobre
+    la cuenta que creó el comando. Sin la independencia previa no habría
+    cuenta: este es el"portal accessible" que el flujo promete."""
+    admin = _admin(db_session)
+    rep, _ = _representante(db_session)
+    adulto = _representado_adulto(db_session, rep.id)
+
+    _independizar(db_session, admin, adulto)
+
+    from app.servicios_negocio.auth_servicio import AuthServicio
+
+    sesion = AuthServicio(db_session).login(
+        "carlos.nuevo@test.com", "clave-segura-123",
+    )
+    assert sesion["token_type"] == "bearer"
+    assert sesion["access_token"]
+    assert "refresh_token" in sesion
+
+
+# --- Clave de idempotencia obligatoria ---------------------------------------
+
+def test_sin_clave_de_idempotencia_rechazado(db_session):
+    admin = _admin(db_session)
+    rep, _ = _representante(db_session)
+    adulto = _representado_adulto(db_session, rep.id)
+
+    with pytest.raises(OperacionInvalida, match="Idempotency-Key"):
+        _independizar(db_session, admin, adulto, clave="")
+
+
+# --- Endpoint: solo administrador presencial --------------------------------
+
+def test_endpoint_exige_rol_administrador(client_sin_permisos, db_session):
+    """El propio adulto (o cualquier no-admin) ya NO puede independizarse:
+    403. La puerta de autoservicio se jubiló con este comando."""
+    rep, _ = _representante(db_session)
+    adulto = _representado_adulto(db_session, rep.id)
+
+    resp = client_sin_permisos.post(
+        f"/api/v1/personas/{adulto.id}/independizar",
+        json={"correo": "carlos.nuevo@test.com", "contrasenia": "clave-segura-123",
+              "evidencia_identidad": "x"},
+        headers={"Idempotency-Key": CLAVE_COMANDO},
+    )
+    assert resp.status_code == 403
+
+
+def test_endpoint_admin_completa_sin_token_en_la_respuesta(client, db_session):
+    """El administrador (persona_id=1 del token de pruebas) ejecuta el
+    comando: 200, vínculo cortado, y la respuesta JAMÁS lleva tokens."""
+    rep, _ = _representante(db_session)
+    adulto = _representado_adulto(db_session, rep.id)
+
+    resp = client.post(
+        f"/api/v1/personas/{adulto.id}/independizar",
+        json={"correo": "carlos.nuevo@test.com", "contrasenia": "clave-segura-123",
+              "evidencia_identidad": "cédula verificada en mostrador"},
+        headers={"Idempotency-Key": CLAVE_COMANDO},
+    )
+    assert resp.status_code == 200
+    cuerpo = resp.json()
+    assert cuerpo["persona_id"] == adulto.id
+    assert cuerpo["representante_anterior_id"] == rep.id
+    assert cuerpo["cuenta_creada"] is True
+    assert "access_token" not in cuerpo
+    assert "refresh_token" not in cuerpo
+    db_session.refresh(adulto)
+    assert adulto.representante_id is None
+
+
+def test_endpoint_sin_clave_de_idempotencia_rechazado(client, db_session):
+    rep, _ = _representante(db_session)
+    adulto = _representado_adulto(db_session, rep.id)
+
+    resp = client.post(
+        f"/api/v1/personas/{adulto.id}/independizar",
+        json={"correo": "carlos.nuevo@test.com", "contrasenia": "clave-segura-123",
+              "evidencia_identidad": "x"},
+    )
+    assert resp.status_code == 400
+
+
+def test_endpoint_menor_rechazado_y_vinculo_intacto(client, db_session):
+    rep, _ = _representante(db_session)
+    menor = _representado_menor(db_session, rep.id)
+
+    resp = client.post(
+        f"/api/v1/personas/{menor.id}/independizar",
+        json={"correo": "lucia@test.com", "contrasenia": "clave-segura-123",
+              "evidencia_identidad": "x"},
+        headers={"Idempotency-Key": CLAVE_COMANDO},
+    )
+    assert resp.status_code == 400
+    db_session.refresh(menor)
+    assert menor.representante_id == rep.id
+
+
+def test_endpoint_persona_inexistente_404(client, db_session):
+    resp = client.post(
+        "/api/v1/personas/999999/independizar",
+        json={"correo": "x@test.com", "contrasenia": "clave-segura-123",
+              "evidencia_identidad": "x"},
+        headers={"Idempotency-Key": CLAVE_COMANDO},
+    )
+    assert resp.status_code == 404
+
+
+# --- DTO del comando ---------------------------------------------------------
+
+def test_dto_exige_correo_contrasenia_y_evidencia():
+    comando = IndependizarDTO(
+        correo="Carlos@Test.com ", contrasenia="clave-segura-123",
+        evidencia_identidad="cédula verificada",
+    )
+    assert comando.correo == "carlos@test.com"  # normalizado
+
+    with pytest.raises(Exception):
+        IndependizarDTO(contrasenia="clave-segura-123")  # forma vieja: solo contraseña
+    with pytest.raises(Exception):
+        IndependizarDTO(correo="x@test.com", contrasenia="clave-segura-123")  # sin evidencia
+    with pytest.raises(Exception):
+        IndependizarDTO(correo="x@test.com", contrasenia="corta",
+                        evidencia_identidad="x")  # contraseña inválida

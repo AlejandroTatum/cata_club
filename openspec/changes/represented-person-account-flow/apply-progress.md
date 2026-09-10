@@ -223,3 +223,64 @@ REFACTOR correction: the prior writer left a trailing blank line at EOF in the t
 - Runtime: N/A — no endpoint or UI surface in this slice (record this justification in the PR body).
 - Skipped by parent instruction: full `make pre-pr` lane (the independent verifier owns it); CI gates are not claimable locally.
 - Evidence SHA-256 (final): service `63c693dc40f4463fbe14c874675324b58955867349264356115e050492eb04c7`; tests `4c23f7610ce41e82950d4b2ac63aaca54bc60b0af68e105888d32c2eecd286b2`.
+
+---
+
+# Apply progress — PR3b (vertical cutover: router/DTO wiring, self-service retirement, guard updates)
+
+## Structured status consumed
+
+- `changeName`: `represented-person-account-flow`; `artifactStore`: `openspec`; `applyState`: ready.
+- `actionContext.mode`: `repo-local`; allowed edit root: this worktree (`pi-1137-pr3b`), base = green PR3a commit `87518b2` (verified as HEAD).
+- Delivery: `auto-chain`, `feature-branch-chain`; PR3b is the second half of the authorized PR3 re-slice (PR3a service core + PR3b cutover). Parent owns attempt settlement; **no attempt commands, no commit, no push, no PR created**. Oracle `/home/alejo/devwork/apps/cata_club-worktrees/pi-1137-pr3` used read-only; every production/test file touched is byte-identical to the oracle candidate.
+- Slice boundary honored: no PR4 validator/reassignment work; `RelacionRepresentacionServicio` remains `independizar_presencial`-only; no production execution; specs/proposal/design untouched.
+
+## Authorized re-slice recorded
+
+PR 3 was re-sliced (authorized by parent) into **PR3a** (inert `RelacionRepresentacionServicio.independizar_presencial` core + 25 service-level tests, landed as `87518b2`) and **PR3b** (this slice: router/DTO cutover, `PersonaServicio.independizar` retirement, legacy self-service test deletion, two 1-line guard updates, 8 appended runtime/idempotency/endpoint/DTO tests). Each half is inside the 600–900 target on its own; the full native PR3b diff vs `87518b2` is **190 additions + 516 deletions = 706 changed lines** (inside 600–900; ≤1,000 hard stop respected), dominated by the 415-line legacy self-service suite deletion.
+
+## Files changed (native diff vs `87518b2`)
+
+- `backend/app/presentacion/routers/personas_router.py` (+31/−23): route `POST /personas/{persona_id}/independizar` now `GestorPermisos(["ADMINISTRADOR"])` (was any-authenticated + `exigir_acceso_directo`), `response_model=IndependenciaResponseDTO` (never tokens), `Request` injected, `run_in_threadpool` calls `RelacionRepresentacionServicio(db).independizar_presencial(admin_actor_id, persona_id, comando, idempotency_key=request.headers.get("idempotency-key"))`; comments updated.
+- `backend/app/servicios_negocio/dtos/persona_schemas.py` (+22/−3): `IndependizarDTO` becomes the presential command (normalized `CorreoValidado`, `ContraseniaValidada`, required `evidencia_identidad` 1–500); new `IndependenciaResponseDTO` (persona_id, representante_anterior_id, usuario_id, cuenta_creada, replay, idempotency_key; deliberately no tokens).
+- `backend/app/servicios_negocio/persona_servicio.py` (+1/−60): retired `PersonaServicio.independizar` (self-service: password confirm + debt block + bare link cut) plus `MembresiaRepositorio`/`IndependizarDTO` imports; zero dual-write paths remain.
+- `backend/tests/test_independencia_representada.py` (627→748 lines, +134/−13): restored `IndependizarDTO` import, removed the local `_ComandoIndependencia` dataclass, appended oracle lines 619–748: real login runtime test, required idempotency-key service test, 5 endpoint tests (403 non-admin, 200 admin full-body sans tokens, 400 missing key, 400 minor with link intact, 404 unknown persona), DTO validation matrix. Byte-identical to the oracle candidate (SHA `06256c6f…286b2`).
+- `backend/tests/test_guardia_autorizacion_rutas.py` (+1/−1): the route guard map moves `/personas/{persona_id}/independizar` from the any-authenticated bucket `(b)` to `frozenset({"ADMINISTRADOR"})`.
+- `backend/tests/test_bloqueo_del_event_loop.py` (+1/−1): event-loop CPU guard retargets from retired `PersonaServicio.independizar` to `RelacionRepresentacionServicio.independizar_presencial` (bcrypt hashing must stay off the loop).
+- `backend/tests/test_independizar.py` (−415, deleted): the legacy self-service independence suite; no dual-write surface left.
+- `openspec/changes/represented-person-account-flow/tasks.md`: exactly the three PR3 summary checkboxes marked `[x]`.
+- `openspec/changes/represented-person-account-flow/apply-progress.md`: this section only.
+
+## TDD cycle evidence (strict TDD; runner `uv run pytest` against real `db-test` PostgreSQL :5436)
+
+| Phase | Command (cd backend; TEST_DATABASE_URL + JWT_SECRET_KEY set) | Result |
+|---|---|---|
+| RED | Test file extended to the oracle 748-line candidate first (byte-identical, SHA `06256c6f…`), production untouched; focused subset run: `-k "runtime or idempotencia or endpoint or dto"` | **4 failed, 4 passed** in 1.85s: `test_runtime_el_adulto_puede_loguearse…`, `test_endpoint_admin_completa…`, `test_endpoint_sin_clave…` (route accepted any auth + returned no command DTO), `test_dto_exige…` (`'IndependizarDTO' object has no attribute 'correo'`) — exit 1 |
+| GREEN | Copied oracle bytes: router, DTOs, persona_servicio retirement; deleted `tests/test_independizar.py`; applied the two 1-line guard hunks; full suite `uv run pytest tests/test_independencia_representada.py -q` | **33 passed, 1 warning in 9.83s** (25 service-level + 8 runtime/idempotency/endpoint/DTO) |
+| TRIANGULATE | `tests/test_independencia_representada.py tests/test_guardia_autorizacion_rutas.py tests/test_bloqueo_del_event_loop.py tests/test_contrasenia_validada.py tests/test_migracion_representados_alcanzables.py tests/test_representante_no_deja_menores_huerfanos.py tests/test_personas.py -q` | **129 passed, 11 warnings in 31.25s** |
+| TRIANGULATE (safety net) | PR2 cores + audit/role/link suites: `test_auth.py test_roles.py test_rol_unico_por_cuenta.py test_auth_registro_refresh.py test_autenticacion_endpoints.py test_admin_cuenta_servicio.py test_vinculacion_representante.py test_migracion_representante_auditoria.py test_vincular_representado.py -q` | **127 passed, 3 warnings in 22.92s** |
+| REFACTOR | `uv run ruff check` on all 6 touched files; import/attribute probe (`AMBIENTE=test`); `git diff --check`; `git diff \| grep -ci admincuentaservicio` | `All checks passed!`; route introspection: `POST /personas/{persona_id}/independizar` deps = `GestorPermisos` only, `response_model=IndependenciaResponseDTO`; `PersonaServicio.independizar` retired (`hasattr` → False); legacy test file gone; zero whitespace findings; 0 `AdminCuentaServicio` references in the diff |
+
+## Runtime status
+
+`make qa-up` + admin-presential independence runtime scenario (adult with debt: login/portal + preserved records; then minor attempt): **PENDING** — per parent instruction, the independent verifier owns full `pre-pr` and QA runtime if apply risks timeout; no runtime claims made by this apply.
+
+## Rollback boundary
+
+Revert exactly this native diff against `87518b2`: the router hunk, DTO hunk, `PersonaServicio.independizar` retirement, the 748-line test file, the two guard hunks, and the deleted `tests/test_independizar.py`. Nothing else (service core, auth/role cores, migrations, other slices) is touched, so rollback removes no unrelated work. The old self-service behavior returns by restoring `test_independizar.py` + the router/service hunks from the parent commit.
+
+## Evidence SHA-256 (final bytes)
+
+- `backend/app/presentacion/routers/personas_router.py` → `37d6348a644d91c3d6576e84157bb7d45a9fd629d6aa62d4992913990aa86fb3`
+- `backend/app/servicios_negocio/dtos/persona_schemas.py` → `0b1c68030049fcc2ab22b2c22878c65c13a320e2da22518eb7ac35ca3598ab7c`
+- `backend/app/servicios_negocio/persona_servicio.py` → `dd3caf9c6f006b57cbea775f74ee65a8820f8a626914332f45d57064e4cba2d7`
+- `backend/tests/test_independencia_representada.py` → `06256c6ffef601a1e27a2c5c14aaacbaa9f647b8041798087869b6f8717ee237` (byte-identical to oracle)
+- `backend/tests/test_guardia_autorizacion_rutas.py` → `8952d087b232ef8d937233d3d7fdd5ca9fcad36ab7dd51de3d88459e71d65db8`
+- `backend/tests/test_bloqueo_del_event_loop.py` → `d00110d72bcc54d5a20841c080f31cb1b6ae876675852b728012c3067d98537a`
+
+## Workload, skipped gates, deviations
+
+- Native changed lines: **706** (190+ / 516−) — inside the 600–900 target; ≤1,000 hard stop respected including this bookkeeping section.
+- Skipped locally (recorded, not claimed): full `make pre-pr` lane and QA runtime are parent/verifier-owned per instruction; remote CI gates are not claimable locally.
+- Deviations from the oracle: none — every touched file is byte-identical; the only local composition work is the PR3a/PR3b split itself.
+- Next in chain: PR 4 (relationship integrity + admin reassignment). This apply stops before PR4; `#1165` merge/CI and tracker housekeeping remain parent-owned.

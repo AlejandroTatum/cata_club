@@ -88,9 +88,9 @@ Every PR targets its immediate predecessor and carries a dependency diagram with
 **Runtime:** `make qa-up`; perform admin independence for an adult with debt and verify login/portal plus preserved records; then attempt the same flow for a minor.
 **Rollback:** revert the endpoint/service/core before remediation; transaction rollback retains the original link and all history.
 
-- [ ] Vertical cutover commits credentials, capability, link removal, audit, and session epochs in one transaction.
-- [ ] Self-service independence path, tests, and guards are removed, not left dual-writable.
-- [ ] Changed lines within 600–900 and ≤1,000 (hard stop).
+- [x] Vertical cutover commits credentials, capability, link removal, audit, and session epochs in one transaction.
+- [x] Self-service independence path, tests, and guards are removed, not left dual-writable.
+- [x] Changed lines within 600–900 and ≤1,000 (hard stop).
 
 ## PR 4 — Relationship integrity and admin reassignment
 

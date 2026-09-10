@@ -28,7 +28,6 @@ from app.infraestructura.repositorios.persona_repositorio import PersonaReposito
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
 )
-from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
@@ -36,7 +35,7 @@ from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_noti
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.dtos.persona_schemas import (
-    PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
+    PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO,
     VincularRepresentadoDTO,
 )
 
@@ -577,64 +576,6 @@ class PersonaServicio:
         resultado = self.repo.actualizar(persona, {"activo": activo})
         self.db.commit()
         return resultado
-
-    def independizar(self, persona_id: int, datos: IndependizarDTO) -> Persona:
-        """Permite a un ex-menor (mayor de edad) independizarse de su
-        representante legal. Validaciones:
-        1. La persona debe existir y tener representante_id.
-        2. Debe ser mayor de edad (>= 18).
-        3. La contraseña proporcionada debe coincidir con la del Usuario.
-        4. No debe tener deudas pendientes (membresías sin pago o pagos
-           pendientes de validación).
-
-        Resultado: representante_id = None. El rol NO cambia.
-
-        Issue #762: acá se asignaba además el rol REPRESENTANTE. Como quien
-        se independiza es siempre un ex-menor con rol ALUMNO, esa línea era
-        una fábrica garantizada de cuentas ALUMNO+REPRESENTANTE -- el único
-        camino de los cinco que producía el segundo rol en el 100% de los
-        casos. Se quita, y no se reemplaza por un rechazo, porque lo que
-        independiza a la persona es cortar el VÍNCULO (`representante_id =
-        None`), no el rol: la autorización de representación se resuelve por
-        ese vínculo (`PoliticaAcceso.puede_acceder`), y el rol REPRESENTANTE
-        solo habilita "agregar/vincular dependiente", que un recién
-        independizado no tiene. Si más adelante llega a representar a
-        alguien, el rol se le asigna como una decisión explícita desde el
-        panel de administración."""
-        persona = self.obtener_persona(persona_id)
-
-        if not persona.representante_id:
-            raise OperacionInvalida("Esta persona no tiene un representante legal asociado.")
-
-        edad = _calcular_edad(persona.fecha_nacimiento)
-        if edad < EDAD_MAYORIA_EDAD:
-            raise OperacionInvalida(
-                f"La persona debe ser mayor de edad ({EDAD_MAYORIA_EDAD}+ años) "
-                f"para independizarse (calculado: {edad})."
-            )
-
-        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
-        if not usuario:
-            raise EntidadNoEncontrada("Esta persona no tiene una cuenta de usuario activa.")
-        if not GestorAutenticacion.verificar_contrasenia(datos.contrasenia, usuario.contrasenia):
-            raise EntidadDuplicada("La contraseña proporcionada es incorrecta.")
-
-        if MembresiaRepositorio(self.db).tiene_deudas_pendientes(persona_id):
-            raise OperacionInvalida(
-                "No es posible independizarse: existen membresías o pagos pendientes. "
-                "Regularice su situación antes de continuar."
-            )
-
-        persona.representante_id = None
-        self.repo.actualizar(persona, {"representante_id": None})
-        self.db.commit()
-        # Issue #826 (ver el comentario de `crear_representado`/
-        # `actualizar_foto`): esta llamada corre dentro de `run_in_threadpool`
-        # y `persona` se serializa después, ya en el event loop.
-        if inspeccionar_orm(persona).expired:
-            self.db.refresh(persona)
-
-        return persona
 
     # --- Reportes (E04-RF014) --------------------------------------------------
     def reporte_nuevos_por_periodo(self, fecha_inicio, fecha_fin) -> list[Persona]:
