@@ -10,11 +10,14 @@ Qué fija este archivo, y por qué cada cosa:
      anterior sin dejar rastro de quién lo decidió.
   2. Un duplicado del MISMO rol sigue siendo el rechazo de duplicado que ya
      existía (no se degrada a la regla nueva, que dice otra cosa).
-  3. Los caminos de alta que siguen vigentes -- inscripción pública y
-     membresía -- cierran contra la misma regla. Antes cada uno tenía su propio
-     `_asignar_rol` que solo miraba duplicados del mismo rol, así que dos
-     flujos independientes podían acumular roles distintos sin que ninguno
-     de los dos viera al otro.
+  3. El camino de alta que sigue vigente -- inscripción pública -- cierra
+     contra la misma regla. Antes cada uno tenía su propio `_asignar_rol`
+     que solo miraba duplicados del mismo rol, así que dos flujos
+     independientes podían acumular roles distintos sin que ninguno de los
+     dos viera al otro. El camino de membresía dejó de asignar rol alguno
+     (issue #1132): "ser jugador" se deriva de la membresía ACTIVA, no de
+     un rol, así que `crear_membresia` ya no participa de esta invariante
+     -- las pruebas de esa sección confirman que no toca ningún rol.
 
 La invariante de base de datos (trigger) y la migración se prueban aparte,
 en `test_migracion_rol_unico.py`: acá la sesión vive dentro de la
@@ -26,9 +29,9 @@ from decimal import Decimal
 import pytest
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import EstadoMembresia, TipoModalidad, TipoRol
+from app.dominio.enums import TipoModalidad, TipoRol
 from app.dominio.excepciones import OperacionInvalida
-from app.dominio.modelos import Membresia, Persona, Rol, TipoMembresia, Usuario
+from app.dominio.modelos import Persona, Rol, TipoMembresia, Usuario
 from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
     EnrollmentCreateDTO,
@@ -255,8 +258,10 @@ def _crear_tipo_membresia(db_session) -> TipoMembresia:
     return tipo
 
 
-def test_la_membresia_asigna_alumno_a_una_cuenta_sin_rol(db_session):
-    """Ancla del camino feliz: la asignación perezosa sigue funcionando."""
+def test_la_membresia_ya_no_asigna_ningun_rol_a_una_cuenta_sin_rol(db_session):
+    """Ancla del camino feliz, actualizada por el issue #1132: "ser jugador"
+    se deriva de la membresía ACTIVA, no de un rol -- matricularse ya no
+    otorga ALUMNO, ni a una cuenta sin rol ni a ninguna otra."""
     usuario = _crear_cuenta_con_rol(db_session, None, semilla=730)
     tipo = _crear_tipo_membresia(db_session)
 
@@ -265,44 +270,23 @@ def test_la_membresia_asigna_alumno_a_una_cuenta_sin_rol(db_session):
     ))
 
     db_session.refresh(usuario)
-    assert _tipos(usuario) == {TipoRol.ALUMNO}
+    assert _tipos(usuario) == set()
 
 
 @pytest.mark.parametrize("rol_existente", [
     TipoRol.ADMINISTRADOR, TipoRol.ENTRENADOR, TipoRol.REPRESENTANTE,
 ])
-def test_la_membresia_no_agrega_alumno_sobre_otro_rol(db_session, rol_existente):
-    """El camino más silencioso de todos: `asignar_alumno_si_corresponde` es
-    "mejor esfuerzo" y agregaba ALUMNO sin mirar qué rol había."""
+def test_la_membresia_no_toca_ningun_rol_existente(db_session, rol_existente):
+    """Issue #1132: `crear_membresia` ya no lee ni muta roles -- un
+    representante que paga una membresía para sí mismo conserva EXACTAMENTE
+    su rol técnico (issue #762), sin que el trigger `e762rolunico` tenga
+    nada que rechazar."""
     usuario = _crear_cuenta_con_rol(db_session, rol_existente, semilla=731)
     tipo = _crear_tipo_membresia(db_session)
 
-    with pytest.raises(OperacionInvalida) as error:
-        MembresiaServicio(db_session).crear_membresia(MembresiaCreateDTO(
-            persona_id=usuario.persona_id, tipo_membresia_id=tipo.id,
-        ))
+    MembresiaServicio(db_session).crear_membresia(MembresiaCreateDTO(
+        persona_id=usuario.persona_id, tipo_membresia_id=tipo.id,
+    ))
 
-    assert "un solo rol" in str(error.value).lower()
-    db_session.rollback()
     db_session.refresh(usuario)
     assert _tipos(usuario) == {rol_existente}
-
-
-def test_la_membresia_rechazada_por_rol_no_deja_una_membresia_colgada(db_session):
-    """El rechazo llega ANTES de escribir la membresía: si llegara después,
-    la persona quedaría matriculada y el request devolvería un error."""
-    usuario = _crear_cuenta_con_rol(db_session, TipoRol.ENTRENADOR, semilla=732)
-    tipo = _crear_tipo_membresia(db_session)
-
-    with pytest.raises(OperacionInvalida):
-        MembresiaServicio(db_session).crear_membresia(MembresiaCreateDTO(
-            persona_id=usuario.persona_id, tipo_membresia_id=tipo.id,
-        ))
-
-    db_session.rollback()
-    assert db_session.query(Membresia).filter(
-        Membresia.persona_id == usuario.persona_id
-    ).count() == 0
-    assert db_session.query(Membresia).filter(
-        Membresia.estado == EstadoMembresia.INACTIVA
-    ).count() == 0

@@ -194,43 +194,6 @@ class RolServicio:
         self.db.flush()
         return True
 
-    def asignar_alumno_si_corresponde(self, persona_id: int) -> None:
-        """
-        Asignación perezosa (principio de diseño ya acordado: el rol ALUMNO
-        se otorga al matricularse, no al crear la cuenta). Se llama desde
-        MembresiaServicio.crear_membresia. Es un "mejor esfuerzo": si la
-        persona todavía no tiene Usuario (no se ha auto-registrado), no hace
-        nada -- no es un error, simplemente no hay nada que asignar todavía.
-
-        Solo `flush()` (issue #831): es un paso de la transacción atómica de
-        `crear_membresia`, que hace el único `commit()` al final -- antes
-        comiteaba acá, ANTES de que `crear_membresia` terminara de escribir.
-        """
-        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
-        if not usuario:
-            return None
-        # Issue #762: "mejor esfuerzo" nunca quiso decir "y si ya tiene otro
-        # rol, se lo sumo igual". Este era el camino más silencioso de los
-        # cuatro -- matricular a un entrenador le agregaba ALUMNO sin que
-        # nadie lo pidiera ni lo viera.
-        if not exigir_rol_unico(usuario, TipoRol.ALUMNO):
-            return None
-        rol_alumno = self.repo_rol.obtener_o_crear(TipoRol.ALUMNO)
-        usuario.roles.append(rol_alumno)
-        self.db.flush()
-
-    def exigir_que_pueda_ser_alumno(self, persona_id: int) -> None:
-        """La mitad de `asignar_alumno_si_corresponde` que NO muta, para que
-        `MembresiaServicio.crear_membresia` pueda rechazar ANTES de escribir.
-
-        Sin esto el rechazo llegaría al final del método, con la membresía ya
-        comiteada: la persona quedaría matriculada y el request devolvería un
-        error, que es el peor de los dos mundos."""
-        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
-        if usuario is None:
-            return
-        exigir_rol_unico(usuario, TipoRol.ALUMNO)
-
     # --- E01-RF013: activar/desactivar cuenta sin borrar datos -------------
     def cambiar_estado_cuenta(self, persona_id: int, activo: bool) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)

@@ -9,7 +9,10 @@ orientación en este proyecto, no una regla."""
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+import pytest
+
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago
+from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import Membresia, Pago, Persona, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, HorarioCreateDTO,
@@ -109,7 +112,11 @@ def test_asignar_alumno_con_membresia_activa_no_marca_el_aviso(db_session, monke
     assert respuesta.dias_vencida is None
 
 
-def test_asignar_alumno_sin_ninguna_membresia_no_marca_el_aviso(db_session, monkeypatch):
+def test_asignar_alumno_sin_ninguna_membresia_ahora_se_bloquea(db_session, monkeypatch):
+    """Issue #1132: nunca haber pagado nada ya no es "sin aviso, se asigna
+    igual" -- es el caso que la nueva regla bloquea. Antes de #1132 esta
+    prueba comprobaba que la asignación pasaba sin marcar
+    `membresia_vencida`; ahora la asignación misma se rechaza."""
     monkeypatch.setattr(asistencia_servicio_mod, "hoy_club", lambda: date(2026, 8, 15))
     servicio = AsistenciaServicio(db_session)
     persona = _crear_persona(db_session)
@@ -117,19 +124,19 @@ def test_asignar_alumno_sin_ninguna_membresia_no_marca_el_aviso(db_session, monk
         categoria=Categoria.FORMATIVO, dia_semana=DiaSemana.LUNES,
     ))
 
-    respuesta = servicio.asignar_alumno_a_horario(
-        AlumnoHorarioCreateDTO(persona_id=persona.id, horario_id=horario.id)
-    )
-
-    assert respuesta.membresia_vencida is False
-    assert respuesta.dias_vencida is None
+    with pytest.raises(OperacionInvalida):
+        servicio.asignar_alumno_a_horario(
+            AlumnoHorarioCreateDTO(persona_id=persona.id, horario_id=horario.id)
+        )
 
 
-def test_asignar_alumno_con_membresia_inactiva_no_marca_el_aviso(db_session, monkeypatch):
-    """Alcance deliberado: INACTIVA (nunca se activó / sin pago aprobado
-    todavía) es un estado distinto de VENCIDA (se activó y expiró). La
-    decisión de negocio #4 habla de "cuota vencida", no de "nunca pagó" --
-    no se trata como vencida acá."""
+def test_asignar_alumno_con_membresia_inactiva_ahora_se_bloquea(db_session, monkeypatch):
+    """Alcance que el issue #1132 cierra: INACTIVA (nunca se activó / sin
+    pago aprobado todavía) es un estado distinto de VENCIDA (se activó y
+    expiró). La decisión de negocio #4 habla de "cuota vencida", no de
+    "nunca pagó" -- eso seguía sin bloquearse hasta este issue, que es
+    exactamente el gap que cierra ("mientras el pago esté pendiente o
+    rechazado, permanece fuera de horario y asistencia")."""
     monkeypatch.setattr(asistencia_servicio_mod, "hoy_club", lambda: date(2026, 8, 15))
     servicio = AsistenciaServicio(db_session)
     persona = _crear_persona(db_session)
@@ -138,11 +145,10 @@ def test_asignar_alumno_con_membresia_inactiva_no_marca_el_aviso(db_session, mon
         categoria=Categoria.FORMATIVO, dia_semana=DiaSemana.LUNES,
     ))
 
-    respuesta = servicio.asignar_alumno_a_horario(
-        AlumnoHorarioCreateDTO(persona_id=persona.id, horario_id=horario.id)
-    )
-
-    assert respuesta.membresia_vencida is False
+    with pytest.raises(OperacionInvalida):
+        servicio.asignar_alumno_a_horario(
+            AlumnoHorarioCreateDTO(persona_id=persona.id, horario_id=horario.id)
+        )
 
 
 def test_asignar_alumno_mira_la_membresia_mas_reciente(db_session, monkeypatch):

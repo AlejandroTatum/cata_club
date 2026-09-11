@@ -32,7 +32,6 @@ from app.infraestructura.repositorios.notificacion_repositorio import Notificaci
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
-from app.servicios_negocio.rol_servicio import RolServicio
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
@@ -253,12 +252,11 @@ class MembresiaServicio:
             for m in existentes
         ):
             raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA)
-        # Issue #762: matricular otorga ALUMNO, y una cuenta tiene un solo
-        # rol activo. Se valida ACÁ, antes de escribir la membresía, y no
-        # abajo junto a la asignación perezosa: al final del método la
-        # membresía ya estaría comiteada, así que el rechazo dejaría a la
-        # persona matriculada y con un error en pantalla.
-        RolServicio(self.db).exigir_que_pueda_ser_alumno(datos.persona_id)
+        # Issue #1132: matricularse ya NO otorga (ni exige) ningún rol. "Ser
+        # jugador" se deriva exclusivamente de la membresía ACTIVA (ver
+        # `app.dominio.jugador.es_jugador`), nunca del rol -- un
+        # representante que paga una membresía para sí mismo conserva su
+        # único rol técnico REPRESENTANTE (issue #762 sigue intacto).
         # Estado y fecha_activacion NO vienen del payload (B-12): una membresía
         # nace INACTIVA y se ACTIVA al aprobarse su primer pago. La
         # fecha_activacion intermedia es necesaria porque la columna es NOT
@@ -278,12 +276,6 @@ class MembresiaServicio:
             tipo_membresia_id=datos.tipo_membresia_id,
         )
         membresia = self.repo.crear(membresia)
-        # Asignación perezosa del rol ALUMNO (principio de diseño ya
-        # acordado: se asigna al matricularse, no al crear la cuenta).
-        # Best-effort: si la persona aún no tiene Usuario, no hace nada.
-        # `asignar_alumno_si_corresponde` ya no comitea por su cuenta (issue
-        # #831): forma parte de esta misma transacción.
-        RolServicio(self.db).asignar_alumno_si_corresponde(datos.persona_id)
         self.db.commit()
         if inspeccionar_orm(membresia).expired:
             self.db.refresh(membresia)

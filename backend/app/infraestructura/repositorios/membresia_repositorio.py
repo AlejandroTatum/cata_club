@@ -109,6 +109,55 @@ class MembresiaRepositorio:
         )
         return self.db.execute(stmt).scalar_one()
 
+    def tiene_membresia_activa(self, persona_id: int) -> bool:
+        """El predicado único de "es jugador" (issue #1132): existe una
+        `Membresia` ACTIVA para esta persona. Ni el rol ni `Usuario` deciden
+        nada acá -- un representante que paga una membresía para sí mismo
+        pasa esto sin que nadie le otorgue ALUMNO.
+
+        No es lo mismo que `obtener_operativa_por_persona` (ACTIVA O
+        SUSPENDIDA): una membresía suspendida no cuenta como "es jugador"
+        para ESTA pregunta, aunque siga siendo operativa para otros
+        propósitos (deuda, beneficios)."""
+        stmt = (
+            select(Membresia.id)
+            .where(
+                Membresia.persona_id == persona_id,
+                Membresia.estado == EstadoMembresia.ACTIVA,
+            )
+            .limit(1)
+        )
+        return self.db.execute(stmt).first() is not None
+
+    def tiene_membresia_activada_alguna_vez(self, persona_id: int) -> bool:
+        """True si la persona tiene alguna `Membresia` que llegó a
+        aprobarse -- cualquier estado salvo INACTIVA.
+
+        INACTIVA es el ÚNICO estado con el que `MembresiaServicio.
+        crear_membresia` escribe una fila nueva, y de él nunca se vuelve:
+        `PagoServicio.validar_pago` la mueve a ACTIVA al aprobar el primer
+        pago, y desde ahí solo transiciona hacia SUSPENDIDA/VENCIDA/ACTIVA
+        entre sí (ver `EstadoMembresia`). Por eso "no está en INACTIVA"
+        alcanza para decir "ya tuvo, alguna vez, un pago aprobado".
+
+        Distinto de `tiene_membresia_activa` a propósito (issue #1132): una
+        membresía VENCIDA no es "es jugador" para el listado de Miembros,
+        pero sí habilita seguir entrenando -- decisión de negocio #4
+        ("la cuota vencida no impide entrenar", ver
+        `tests/test_asignacion_membresia_vencida.py`). Esta consulta es la
+        que usa `AsistenciaServicio.asignar_alumno_a_horario` para no
+        reabrir esa decisión: lo único nuevo que bloquea es la membresía
+        que TODAVÍA no se aprobó ni una vez (pago pendiente o rechazado)."""
+        stmt = (
+            select(Membresia.id)
+            .where(
+                Membresia.persona_id == persona_id,
+                Membresia.estado != EstadoMembresia.INACTIVA,
+            )
+            .limit(1)
+        )
+        return self.db.execute(stmt).first() is not None
+
     def crear(self, membresia: Membresia) -> Membresia:
         self.db.add(membresia)
         self.db.flush()

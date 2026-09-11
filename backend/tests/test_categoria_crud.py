@@ -9,13 +9,14 @@ archivo cubre las cuatro decisiones documentadas en el fix:
 3. Cambiar la franja re-deriva las horas de los horarios que quedan.
 4. Agregar un día a una categoría con alumnos backfillea su inscripción.
 """
-from datetime import time
+from datetime import date, time
+from decimal import Decimal
 
 import pytest
 
-from app.dominio.enums import DiaSemana, EstadoAsistencia
+from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, TipoModalidad
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
-from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia
+from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia, Membresia, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO,
 )
@@ -30,6 +31,21 @@ def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
             "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
         },
     ).json()
+
+
+def _habilitar_como_jugador(db_session, persona_id: int) -> None:
+    """Issue #1132: horario/asistencia exigen una membresía ya aprobada
+    alguna vez. Este archivo prueba mecánica de categorías/horarios, no
+    membresía, así que la habilita directo por ORM en vez de recorrer el
+    ciclo de pago completo."""
+    tipo = TipoMembresia(categoria="Formativo", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+    db_session.add(tipo)
+    db_session.flush()
+    db_session.add(Membresia(
+        estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("25.00"),
+        fecha_activacion=date(2026, 1, 1), persona_id=persona_id, tipo_membresia_id=tipo.id,
+    ))
+    db_session.flush()
 
 
 # --- Alta atómica ------------------------------------------------------
@@ -173,6 +189,7 @@ def test_actualizar_categoria_agregar_dia_backfillea_alumnos_inscriptos(db_sessi
         dias=[DiaSemana.LUNES],
     ))
     alumno = _crear_persona_api(client)
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario_lunes = servicio.listar_horarios(categoria.codigo)[0]
     servicio.asignar_alumno_a_horario(
         AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
@@ -212,6 +229,7 @@ def test_actualizar_categoria_quitar_dia_con_asistencias_bloquea_la_edicion_ente
         dias=[DiaSemana.LUNES, DiaSemana.MIERCOLES],
     ))
     alumno = _crear_persona_api(client)
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario_lunes = next(h for h in servicio.listar_horarios(categoria.codigo) if h.dia_semana == DiaSemana.LUNES)
     servicio.asignar_alumno_a_horario(
         AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
@@ -256,6 +274,7 @@ def test_eliminar_categoria_con_asistencias_bloquea_y_no_borra_nada(db_session, 
         dias=[DiaSemana.LUNES],
     ))
     alumno = _crear_persona_api(client)
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario = servicio.listar_horarios(categoria.codigo)[0]
     servicio.asignar_alumno_a_horario(
         AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario.id)
