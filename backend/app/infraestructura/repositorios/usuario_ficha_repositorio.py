@@ -90,6 +90,26 @@ class UsuarioRepositorio:
     def obtener_por_persona_id(self, persona_id: int) -> Optional[Usuario]:
         return self.db.query(Usuario).filter(Usuario.persona_id == persona_id).first()
 
+    def roles_por_persona_ids(self, persona_ids: list[int]) -> dict[int, list[str]]:
+        """Roles en bloque (issue #1132), mismo espíritu bulk que
+        `FichaMedicaRepositorio.listar_persona_ids_con_ficha`: un único
+        `JOIN` + `IN`, nunca una consulta por persona -- el listado de
+        Miembros pinta hasta 200 cuentas por página. Una persona sin
+        `Usuario` (o sin ningún rol asignado) simplemente no aparece como
+        clave del dict; el llamador la lee como lista vacía."""
+        if not persona_ids:
+            return {}
+        filas = (
+            self.db.query(Usuario.persona_id, Rol.tipo_rol)
+            .join(Usuario.roles)
+            .filter(Usuario.persona_id.in_(persona_ids))
+            .all()
+        )
+        resultado: dict[int, list[str]] = {}
+        for persona_id, tipo_rol in filas:
+            resultado.setdefault(persona_id, []).append(tipo_rol.value)
+        return resultado
+
     def contar_administradores_activos(self, excluir_usuario_id: Optional[int] = None) -> int:
         """Cuenta las cuentas ACTIVAS con rol ADMINISTRADOR, opcionalmente
         ignorando una de ellas.

@@ -12,6 +12,7 @@ import {
   formatMembershipPeriod,
   getPayerTypeLabel,
   countActiveStudents,
+  accountDisplayRoles,
   filterAccounts,
   getAccountStatusBadge,
   getAccountStateBadge,
@@ -85,6 +86,74 @@ describe("buildMemberStats", () => {
     };
     const stats = buildMemberStats([pureRepresentative]);
     expect(stats.totalStudents).toBe(0);
+  });
+
+  // Issue #1132 (contrato final): "mientras el pago esté pendiente o
+  // rechazado, permanece fuera del listado deportivo" — backend INACTIVA,
+  // which `MEMBERSHIP_STATUS_BY_ESTADO` folds into the SAME "vencida" the
+  // screen already reads for a real VENCIDA. Only `estadoBackend` (the raw
+  // enum) tells them apart; without it this row would be indistinguishable
+  // from the "vencida" case the suspended-member test above keeps counted.
+  it("does not count a membership whose first payment is pending or rejected (backend INACTIVA)", () => {
+    const account: MemberAccount = {
+      id: "rep-self-enrolled",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0001",
+      estudiantes: [
+        {
+          id: "rep-self-enrolled",
+          nombres: "Marta",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: {
+            id: 900,
+            tipo: "Adultos",
+            estado: "vencida",
+            estadoBackend: "INACTIVA",
+            fechaInicio: "",
+            fechaFin: "",
+            monto: 35,
+          },
+          ultimoPago: null,
+        },
+      ],
+    };
+    const stats = buildMemberStats([account]);
+    expect(stats.totalStudents).toBe(0);
+  });
+
+  it("keeps ACTIVA, VENCIDA and SUSPENDIDA counted — only INACTIVA is excluded", () => {
+    const buildAccount = (estadoBackend: "ACTIVA" | "VENCIDA" | "SUSPENDIDA"): MemberAccount => ({
+      id: `acct-${estadoBackend}`,
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0001",
+      estudiantes: [
+        {
+          id: `acct-${estadoBackend}`,
+          nombres: "Marta",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: {
+            id: 901,
+            tipo: "Adultos",
+            estado: estadoBackend === "ACTIVA" ? "activa" : estadoBackend === "SUSPENDIDA" ? "suspendida" : "vencida",
+            estadoBackend,
+            fechaInicio: "",
+            fechaFin: "",
+            monto: 35,
+          },
+          ultimoPago: null,
+        },
+      ],
+    });
+    const stats = buildMemberStats([
+      buildAccount("ACTIVA"), buildAccount("VENCIDA"), buildAccount("SUSPENDIDA"),
+    ]);
+    expect(stats.totalStudents).toBe(3);
   });
 
   it("counts active memberships correctly", () => {
@@ -355,6 +424,77 @@ describe("countActiveStudents", () => {
       estudiantes: [],
     };
     expect(countActiveStudents(emptyAccount)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// accountDisplayRoles
+// ---------------------------------------------------------------------------
+
+// Issue #1132: the role labels IdentityCell actually renders — real
+// `backendRoles` plus the membership-derived "jugador" (ALUMNO key) signal.
+describe("accountDisplayRoles", () => {
+  function buildAccount(overrides: Partial<MemberAccount>): MemberAccount {
+    return {
+      id: "acct",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0001",
+      estudiantes: [],
+      ...overrides,
+    };
+  }
+
+  it("shows only REPRESENTANTE for a pure representative with no active membership", () => {
+    const account = buildAccount({
+      backendRoles: ["REPRESENTANTE"],
+      estudiantes: [{
+        id: "acct", nombres: "Marta", apellidos: "Reyes", activo: true,
+        membresia: null, ultimoPago: null,
+      }],
+    });
+    expect(accountDisplayRoles(account)).toEqual(["REPRESENTANTE"]);
+  });
+
+  it("adds ALUMNO (\"jugador\") for a representative with an own ACTIVA membership", () => {
+    const account = buildAccount({
+      backendRoles: ["REPRESENTANTE"],
+      estudiantes: [{
+        id: "acct", nombres: "Marta", apellidos: "Reyes", activo: true,
+        membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+        ultimoPago: null,
+      }],
+    });
+    expect(accountDisplayRoles(account)).toEqual(["REPRESENTANTE", "ALUMNO"]);
+  });
+
+  it("does not duplicate ALUMNO for an adult self-student who already holds the real role", () => {
+    const account = buildAccount({
+      backendRoles: ["ALUMNO"],
+      estudiantes: [{
+        id: "acct", nombres: "Marta", apellidos: "Reyes", activo: true,
+        membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+        ultimoPago: null,
+      }],
+    });
+    expect(accountDisplayRoles(account)).toEqual(["ALUMNO"]);
+  });
+
+  it("does not add ALUMNO for a VENCIDA or SUSPENDIDA membership — only ACTIVA counts", () => {
+    const account = buildAccount({
+      backendRoles: ["REPRESENTANTE"],
+      estudiantes: [{
+        id: "acct", nombres: "Marta", apellidos: "Reyes", activo: true,
+        membresia: { id: 1, tipo: "Adultos", estado: "vencida", fechaInicio: "", fechaFin: "", monto: 35 },
+        ultimoPago: null,
+      }],
+    });
+    expect(accountDisplayRoles(account)).toEqual(["REPRESENTANTE"]);
+  });
+
+  it("returns an empty list when the bulk lookup has nothing for this persona", () => {
+    expect(accountDisplayRoles(buildAccount({}))).toEqual([]);
   });
 });
 

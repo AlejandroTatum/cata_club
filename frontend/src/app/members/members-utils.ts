@@ -8,7 +8,9 @@
 import type {
   TipoMembresia,
   EstadoMembresia,
+  BackendTipoRol,
 } from "@/types/domain";
+import type { BackendEstadoMembresia } from "@/lib/membership-status";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,6 +71,19 @@ export interface MemberStudentSummary {
     /** Backend `Membresia.id` — surfaced here so the admin can register
      *  a new payment (renewal) against the right membership. */
     id: number;
+    /**
+     * Issue #1132: the RAW backend `estado`, before `MEMBERSHIP_STATUS_BY_
+     * ESTADO` folds INACTIVA into the same `"vencida"` bucket as VENCIDA
+     * (`estado` above). `isOperationalStudent` needs this distinction —
+     * "mientras el pago esté pendiente o rechazado, permanece fuera del
+     * listado deportivo" only applies to INACTIVA — while every OTHER
+     * consumer of `estado` keeps reading the folded, display-facing value.
+     * Optional so existing fixtures/tests that don't care about this
+     * distinction can omit it; a missing value reads as "not INACTIVA"
+     * (operational), the same population `isOperationalStudent` already
+     * counted before this field existed.
+     */
+    estadoBackend?: BackendEstadoMembresia;
     /**
      * `Membresia.es_gratuidad_familiar` — the authoritative gratuity
      * signal; `monto === 0` alone is NOT gratuity (see `BackendMembresia`'s
@@ -151,6 +166,18 @@ export interface MemberAccount {
    * value as `"none"` rather than fabricating "active".
    */
   accountState?: AccountState;
+  /**
+   * Issue #1132 (gap #1 in `members-adapter.ts`'s module doc): this
+   * person's REAL backend roles, from `GET /personas/roles/bulk` — never a
+   * guess. Optional/omitted (not fabricated as an empty array) when the
+   * bulk lookup didn't resolve this persona (no `Usuario`, or a failed
+   * fetch), same convention as every other best-effort field here.
+   * `accountDisplayRoles` below is what `IdentityCell` actually renders —
+   * it folds in the membership-derived "jugador" signal this field alone
+   * cannot carry (a representative with an own active membership keeps
+   * ONLY `REPRESENTANTE` here, per the #1132 contract).
+   */
+  backendRoles?: BackendTipoRol[];
 }
 
 /**
@@ -285,9 +312,17 @@ function parseDateStringLocal(dateStr: string): Date | null {
  * question — a lapsed (vencida) or suspended member is still counted here:
  * they HAVE a membership on file, just not a current one, and the roster
  * (and its debt tracking, issue #326) still needs to show them.
+ *
+ * A membership whose FIRST payment is still pending or was rejected
+ * (backend INACTIVA) stays OUT, per the owner's final contract: "mientras
+ * el pago esté pendiente o rechazado, permanece fuera del listado
+ * deportivo." `estado` (the display-facing field) cannot tell INACTIVA
+ * apart from a real VENCIDA — both fold into `"vencida"` — so this reads
+ * `membresia.estadoBackend`, the one field that still carries the raw
+ * backend enum. ACTIVA, VENCIDA and SUSPENDIDA all stay counted.
  */
 function isOperationalStudent(student: MemberAccount["estudiantes"][number]): boolean {
-  return student.membresia !== null;
+  return student.membresia !== null && student.membresia.estadoBackend !== "INACTIVA";
 }
 
 /**
@@ -468,6 +503,29 @@ export function countActiveStudents(account: MemberAccount): number {
   return account.estudiantes.filter(
     (a) => a.membresia?.estado === "activa",
   ).length;
+}
+
+/**
+ * Issue #1132: the role labels `IdentityCell` actually renders for this
+ * row — `account.backendRoles` (the real roles, issue #1132's bulk
+ * lookup), plus `"ALUMNO"` when the person is a player right now (an OWN
+ * `ACTIVA` membership) and that role isn't already among them.
+ *
+ * "Jugador" cannot come from `backendRoles` alone: the #1132 contract keeps
+ * a self-enrolled representative on EXACTLY `REPRESENTANTE`, never adding
+ * `ALUMNO` — "ser jugador" is a fact about the membership, not the role
+ * (same rule `isOperationalStudent` enforces above, narrowed here to
+ * `"activa"` specifically, per the owner's "la condición de jugador se
+ * deriva EXCLUSIVAMENTE de una membresía ACTIVA"). Reusing the `ALUMNO`
+ * key (rather than inventing a new one) is deliberate: `IdentityCell`'s own
+ * map already spells that key "Jugador", the exact word this needs, and an
+ * adult self-student who really does hold the `ALUMNO` role already reaches
+ * this word through `backendRoles` with no synthesis at all.
+ */
+export function accountDisplayRoles(account: MemberAccount): BackendTipoRol[] {
+  const roles = account.backendRoles ?? [];
+  if (countActiveStudents(account) === 0 || roles.includes("ALUMNO")) return roles;
+  return [...roles, "ALUMNO"];
 }
 
 /**

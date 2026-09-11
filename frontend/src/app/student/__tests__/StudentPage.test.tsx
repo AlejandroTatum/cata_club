@@ -70,6 +70,24 @@ let mockAuthSession = {
 
 const { mockRefreshSession } = vi.hoisted(() => ({ mockRefreshSession: vi.fn() }));
 
+/**
+ * Issue #1132 (independent-verification fix): `JoinAsPlayerAction` calls
+ * `useToast`, and this file's `render(<StudentPage />)` calls never wrap a
+ * real `ToastProvider` (production mounts one at the root layout — see
+ * `app/layout.tsx` — this test tree does not). Same pass-through mock
+ * `MembersPage.test.tsx` uses for the same reason.
+ */
+vi.mock("@/contexts/ToastContext", () => ({
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useToast: () => ({
+    showToast: vi.fn(),
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+    showInfo: vi.fn(),
+    showWarning: vi.fn(),
+  }),
+}));
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     session: mockAuthSession,
@@ -334,7 +352,10 @@ describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
     // The dual account keeps its representante CTA...
     expect(await screen.findByText("Agregar hijo o dependiente")).toBeInTheDocument();
     // ...but is never offered the role it already has (#269 symptom 1).
-    expect(screen.queryByRole("link", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+    // `JoinAsPlayerAction`'s trigger is a `<button>` (from `TipoSelectorForm`),
+    // never a `<Link>` — querying by "link" here always passes regardless of
+    // whether the CTA is wrongly shown (independent-verification fix).
+    expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
   });
 
   it("keeps the account's own student profile selected instead of rewriting to the first dependent (#269 symptom 2)", async () => {
@@ -398,7 +419,8 @@ describe("StudentPage — a representative with an own active membership (#1132)
     render(<StudentPage />);
 
     await screen.findByTestId("student-carnet");
-    expect(screen.queryByRole("link", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+    // Same button-vs-link correction as the dual-role scenario above.
+    expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
   });
 
   it("keeps its own profile selected, enabling its own schedule and payments", async () => {
@@ -2651,5 +2673,54 @@ describe("StudentPage — la fila de pulso", () => {
     const pulso = within(await screen.findByTestId("student-pulse"));
 
     expect(pulso.getByText("Pagos en revisión")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #1132 (independent-verification fix): a PURE representative — no
+ * ALUMNO role, no own active membership, zero representados — is the exact
+ * persona `derivePortalMode` sends to `PendingEnrollmentView`, not
+ * `ActivePortalView`. That view's own "Inscribirme como jugador" CTA used to
+ * be a plain `<Link href="/student/enroll?type=self">` — the PUBLIC wizard,
+ * which creates a brand-new Persona/Usuario instead of a membership for this
+ * existing one. `JoinAsPlayerAction` (already wired into `ActivePortalView`
+ * for the dual-role/own-membership cases below) belongs here too.
+ */
+describe("StudentPage — a pure representative with no dependents and no membership (#1132 pending state)", () => {
+  beforeEach(() => {
+    mockAuthSession = {
+      user: { id: "9", name: "Representante Test", email: "rep@cataclub.com", role: "representante", representanteId: null },
+      roles: ["REPRESENTANTE"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+    // `PORTAL`: self.membership is null and representados is [] — exactly
+    // the zero-signal account `derivePortalMode` reads as "pending".
+    mockFetchStudentPortal.mockReset().mockResolvedValue(PORTAL);
+  });
+
+  it("sees the in-portal join action (a button), never a link to the public wizard", async () => {
+    render(<StudentPage />);
+
+    // Reaches the pending screen at all — the ancla this scenario needs
+    // before the CTA assertion below means anything.
+    await screen.findByText(/todavía no tiene una matrícula activa/i);
+
+    expect(
+      screen.getByRole("button", { name: /unirme como jugador/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /inscribirme como jugador/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /unirme como jugador/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still offers the honest dependent-enrollment link untouched", async () => {
+    render(<StudentPage />);
+
+    await screen.findByText(/todavía no tiene una matrícula activa/i);
+    const link = screen.getByRole("link", { name: /inscribir a un hijo o dependiente/i });
+    expect(link).toHaveAttribute("href", "/student/enroll?type=child");
   });
 });

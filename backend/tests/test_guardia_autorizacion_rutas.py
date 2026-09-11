@@ -277,6 +277,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/personas/roles/bulk"): frozenset({"ADMINISTRADOR"}),  # issue #1132
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
@@ -297,6 +298,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/geografia/paises"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/geografia/provincias"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1132 (independent-verification fix): los dos roles del portal,
+    # nunca ADMINISTRADOR (que ya tiene la ruta de arriba, sin el límite de
+    # "solo mi persona") ni ENTRENADOR (fuera de este contrato).
+    ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,

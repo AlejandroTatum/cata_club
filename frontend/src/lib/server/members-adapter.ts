@@ -21,16 +21,12 @@
  *
  * Known backend gaps found while building this:
  *
- *  1. `PersonaResponseDTO` carries no `roles` field, and there is no bulk
- *     "roles by persona" endpoint (only `POST`/`DELETE
- *     /personas/{id}/roles`, which mutate — nothing to `GET`). A
- *     staff-only Persona (ADMINISTRADOR/ENTRENADOR/REPRESENTANTE with no
- *     student profile) is therefore indistinguishable, via this API, from
- *     a self-managed "estudiante" account that simply has no membership
- *     yet — both surface here as a root account with one empty-membership
- *     student. Left as-is rather than guessing a heuristic (e.g. "has an
- *     AntecedentesClub record") that isn't backed by any documented
- *     contract.
+ *  1. CLOSED by issue #1132: `GET /personas/roles/bulk` now answers "roles
+ *     by persona" in one `IN` query — see `rolesByPersonaId` below and
+ *     `backend/app/presentacion/routers/personas_router.py`. `role` (the
+ *     narrow `PayerType` `getPayerTypeLabel` reads) and `backendRoles` (the
+ *     full role list `IdentityCell` renders) both come from this map now,
+ *     never a hardcoded `"representante"`.
  *  2. `PersonaResponseDTO` has no `email` — email lives on `Usuario`
  *     (login credentials), not every Persona has one (a managed child may
  *     have no login), and there's no bulk lookup. `MemberAccount.email`/
@@ -46,7 +42,7 @@
  * `personaIdsConFicha` below and `backend/app/presentacion/routers/ficha_medica_router.py`.
  */
 
-import type { EstadoMembresia } from "@/types/domain";
+import type { BackendTipoRol, EstadoMembresia } from "@/types/domain";
 import type { AccountState, MemberAccount, MemberStudentSummary, PaymentStatus } from "@/app/members/members-utils";
 import { MEMBERSHIP_STATUS_BY_ESTADO, type BackendEstadoPago, type BackendMembresia, type BackendTipoMembresia } from "@/lib/server/payments-adapter";
 import { readsAsVencida } from "@/lib/membership-status";
@@ -219,6 +215,11 @@ function buildMemberStudentSummary(
           estado: ((membresia.estado as string) === "SUSPENDIDA"
             ? "suspendida"
             : MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado]) as EstadoMembresia,
+          // Issue #1132: the RAW backend estado, kept alongside the folded
+          // `estado` above so `isOperationalStudent` can tell INACTIVA
+          // (never-approved-or-rejected first payment) apart from a real
+          // VENCIDA — see that function's doc comment in members-utils.ts.
+          estadoBackend: membresia.estado,
           // No pago, no paid period: empty strings, which
           // `formatMembershipPeriod` already renders as nothing rather than as
           // an invented range.
@@ -276,6 +277,11 @@ function buildMemberStudentSummary(
  *   results keyed by `membresiaId`. Optional (defaults to an empty map) —
  *   only read for a VENCIDA membership, and only ever adds the two owed-debt
  *   fields, so omitting it changes nothing for existing callers/fixtures.
+ * @param rolesByPersonaId — issue #1132: `GET /personas/roles/bulk` results
+ *   keyed by `personaId`. Optional (defaults to an empty map) — a persona
+ *   absent from the map (no `Usuario`, or the bulk lookup failed) falls back
+ *   to the pre-#1132 default of `"representante"` / no `backendRoles`,
+ *   exactly like every other best-effort field on this adapter.
  */
 export function buildMemberAccounts(
   personas: BackendPersonaFull[],
@@ -285,6 +291,7 @@ export function buildMemberAccounts(
   tipoById: Map<number, BackendTipoMembresia>,
   personaIdsConFicha: Set<number> = new Set(),
   deudaByMembresiaId: Map<number, DeudaBulkItem> = new Map(),
+  rolesByPersonaId: Map<number, BackendTipoRol[]> = new Map(),
 ): MemberAccount[] {
   const personaById = new Map<number, BackendPersonaFull>(
     personas.map((persona) => [persona.id, persona]),
@@ -294,15 +301,16 @@ export function buildMemberAccounts(
     const representante =
       persona.representanteId != null ? personaById.get(persona.representanteId) : undefined;
 
-    // All root personas are adults (minors always have representanteId set),
-    // and self-enrollment now assigns the REPRESENTANTE role to every adult
-    // self-enrollee. Without a bulk roles endpoint (gap #1 in the module
-    // docstring), we label every row as "representante" — the admin edit
-    // modal already shows/toggles the actual backend roles. This is a
-    // pre-existing, separately-tracked gap; not fixed here.
+    // Issue #1132 closed gap #1 (module docstring): `backendRoles` is the
+    // real role list for this persona, and `role` (the narrow `PayerType`
+    // `getPayerTypeLabel` reads) is derived from it — ALUMNO reads
+    // "estudiante", anything else (REPRESENTANTE, or no `Usuario` at all)
+    // keeps the pre-#1132 default "representante".
+    const backendRoles = rolesByPersonaId.get(persona.id) ?? [];
     return {
       id: String(persona.id),
-      role: "representante" as const,
+      role: backendRoles.includes("ALUMNO") ? ("estudiante" as const) : ("representante" as const),
+      backendRoles: backendRoles.length > 0 ? backendRoles : undefined,
       nombres: persona.nombres,
       apellidos: persona.apellidos,
       telefono: persona.telefono,
