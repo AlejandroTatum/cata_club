@@ -76,7 +76,7 @@ Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/in
 - [x] #1171 merged
 - [x] #1172 merged
 - [x] #1173 merged
-- [ ] CI run on `main` green after the #1173 merge (`34dfb58`)
+- [x] CI run on `main` green after the #1173 merge (`34dfb58`)
 
 ## Phase 2 — Close tramo 1 in the frontend
 
@@ -94,9 +94,9 @@ Add the desk action:
 **Focused validation:** `cd frontend && pnpm vitest run src/app/student src/app/admin src/app/api/personas && pnpm exec playwright test`.
 **Runtime:** `make qa-up`; as admin, independize a linked adult and log in with the new credentials; as a linked minor, confirm no independence control exists.
 
-- [ ] Student portal offers no independence path.
-- [ ] Administrator can run the desk exit from the UI.
-- [ ] `pnpm exec playwright test` green locally (the Frontend CI job runs it too).
+- [x] Student portal offers no independence path.
+- [x] Administrator can run the desk exit from the UI.
+- [x] `pnpm exec playwright test` green locally (the Frontend CI job runs it too).
 
 ## Phase 3 — The door (tramo 2)
 
