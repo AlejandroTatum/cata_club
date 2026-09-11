@@ -749,3 +749,61 @@ def test_eventos_de_dominio_no_duplican_al_correr_dos_veces():
     assert conteos_segunda_corrida == conteos_primera_corrida, (
         f"corrida repetida duplicó filas: {conteos_primera_corrida} -> {conteos_segunda_corrida}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Regresión contra Postgres real (`make qa-up`, issue de QA con
+# `ck_vinculacion_representante_distintos`).
+# ---------------------------------------------------------------------------
+def test_bulk_seed_corre_completo_contra_postgres_migrado_a_head(arnes_migracion):
+    """El motor SQLite en memoria de los tests de arriba NUNCA hubiera
+    detectado este bug: los CHECK de `vinculacion_representante`
+    (`h1140rep_auditoria`) nacen `ddl_if(dialect="postgresql")`, así que
+    SQLite ni los crea. `pares_representante_hijo[0]` y `[1]` comparten
+    representante (el primer representante de `HIJOS_POR_REPRESENTANTE`
+    tiene varios hijos) y violaban `ck_vinculacion_representante_distintos`
+    en cuanto `make qa-up` corría el seed contra Postgres real después de
+    migrar a `head`.
+
+    Corre el seed COMPLETO (base + bulk) contra una base Postgres efímera
+    migrada con Alembic real, con un `main()` que hace un COMMIT real -- a
+    diferencia de `db_session` (que solo libera un SAVEPOINT y nunca
+    dispara un `CONSTRAINT TRIGGER ... DEFERRED`), este camino sí ejercita
+    los candados diferidos del invariante B (`j1142ctarep`, `k1143rolrep`):
+    ningún hijo gestionado puede tener `Usuario` propio."""
+    arnes_migracion.preparar("head")
+
+    modulo_base = _load_base_seed_module()
+    modulo_bulk = _load_seed_module()
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=arnes_migracion.motor)
+    modulo_base.SessionLocal = SessionLocal
+    modulo_bulk.SessionLocal = SessionLocal
+
+    modulo_base.main()
+    modulo_bulk.main()
+
+    filas = arnes_migracion.consultar(
+        "SELECT representante_anterior_id, representante_nuevo_id "
+        "FROM vinculacion_representante ORDER BY id"
+    )
+    assert len(filas) == 2, f"cantidad inesperada de vinculaciones: {filas}"
+    assert any(anterior is not None for anterior, _ in filas), (
+        "falta la rama 'con representante anterior'"
+    )
+    assert any(anterior is None for anterior, _ in filas), (
+        "falta la rama 'sin representante anterior'"
+    )
+    for anterior, nuevo in filas:
+        assert anterior != nuevo, (
+            f"fila con representante_anterior_id == representante_nuevo_id ({anterior})"
+        )
+
+    # Segunda corrida: mismo criterio de idempotencia que las pruebas SQLite
+    # de arriba, ahora verificado contra Postgres real (con COMMIT real).
+    modulo_bulk.main()
+    filas_segunda_corrida = arnes_migracion.consultar(
+        "SELECT id FROM vinculacion_representante"
+    )
+    assert len(filas_segunda_corrida) == len(filas), (
+        "la segunda corrida duplicó vinculaciones de representante"
+    )
