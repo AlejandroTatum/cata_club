@@ -143,8 +143,14 @@ function LoginPageContent(): React.ReactElement {
   /**
    * Issue #353/#1057: `?motivo=` names WHY an involuntary redirect landed
    * here — `ProtectedRoute` sets `sesion-expirada` on a failed
-   * refresh-and-retry, `/login/activacion` sets `correo-verificado` when the
-   * person's own session ends the instant their verification lands. An
+   * refresh-and-retry. `correo-verificado` used to be set by
+   * `/login/activacion`'s own inline code/link form, for the case where the
+   * person's session ended the instant their verification landed;
+   * PR #1191 removed that form (the email now carries a link, verified on
+   * `/verificar-correo`, not on this page), so nothing produces
+   * `correo-verificado` any more. It stays a recognized reason — read here,
+   * kept in `RedirectReason` — for a bookmarked or already-open link built
+   * against the old flow; nothing else depends on it staying reachable. An
    * ordinary unauthenticated visit or an explicit logout carries no such
    * param. Read once; there is nothing to keep in sync with, the query
    * string does not change under this form.
