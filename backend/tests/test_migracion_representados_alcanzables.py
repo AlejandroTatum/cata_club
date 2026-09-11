@@ -76,6 +76,24 @@ def _sembrar_usuario(arnes, usuario_id: int, persona_id: int, activo: bool = Tru
     )
 
 
+def _sembrar_persona_legada_mayor_vinculada(arnes, persona_id: int, cedula: str,
+                                           representante_id: int) -> None:
+    """Fila LEGADA de adulto ya vinculado, sembrada como llega de verdad a la
+    base: el vínculo se creó siendo menor y envejeció en el sitio.
+
+    El candado de relación de PR 4 ya rechaza el alta cruda (`INSERT`) de un
+    adulto vinculado, así que un `_sembrar_persona(..., "1995-01-01",
+    representante_id=...)` directo dejaría de representar la fila legada. El
+    `UPDATE` de fecha no toca `representante_id`, que es la columna del trigger."""
+    _sembrar_persona(arnes, persona_id, cedula, "2015-05-14",
+                     representante_id=representante_id)
+    arnes.ejecutar(
+        "UPDATE persona SET fecha_nacimiento = DATE '1995-01-01'"
+        " WHERE id = :pid",
+        pid=persona_id,
+    )
+
+
 # --- La migración sobre una base LIMPIA -------------------------------------
 
 def test_los_triggers_no_existian_antes(arnes_migracion):
@@ -132,7 +150,7 @@ def test_postgres_permite_desactivar_con_representado_mayor_de_edad(arnes_migrac
     base = base_con_invariante(arnes_migracion)
     _sembrar_persona(base, 1, "1710034065", "1990-01-01")
     _sembrar_usuario(base, 1, 1)
-    _sembrar_persona(base, 2, "1710034073", "1995-01-01", representante_id=1)
+    _sembrar_persona_legada_mayor_vinculada(base, 2, "1710034073", 1)
 
     base.ejecutar("UPDATE usuario SET activo = false WHERE id = 1")
 
@@ -171,7 +189,7 @@ def test_postgres_permite_nulear_el_representante_de_un_mayor_de_edad(arnes_migr
     """El camino de `independizar()`."""
     base = base_con_invariante(arnes_migracion)
     _sembrar_persona(base, 1, "1710034065", "1990-01-01")
-    _sembrar_persona(base, 2, "1710034073", "1995-01-01", representante_id=1)
+    _sembrar_persona_legada_mayor_vinculada(base, 2, "1710034073", 1)
 
     base.ejecutar("UPDATE persona SET representante_id = NULL WHERE id = 2")
 
