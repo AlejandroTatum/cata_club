@@ -69,7 +69,7 @@ Per PR, the ritual is:
 3. Rebase the child onto the new `main`: `git rebase --onto main <parent-head-sha> <child-branch>` and `git push --force-with-lease`.
 4. Wait for the child's required CI to go green before the next iteration.
 
-Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/independizar`, admin-only, token-free response, `Idempotency-Key`) and the `i1141relinteg` trigger that rejects an adult link. Run `make pre-pr LANE=backend` on `main` after the sixth merge.
+Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/independizar`, admin-only, token-free response, `Idempotency-Key`) and the `i1141relinteg` trigger that rejects an adult link. The `make pre-pr` lane cited by the previous handoff does not exist in this repository; the acceptance is the CI run on `main` after the sixth merge.
 
 - [x] #1165 merged
 - [x] #1169 merged
@@ -77,7 +77,7 @@ Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/in
 - [x] #1171 merged
 - [x] #1172 merged
 - [x] #1173 merged
-- [ ] `make pre-pr LANE=backend` green on `main`
+- [ ] CI run on `main` green after the #1173 merge (`34dfb58`)
 
 ## Phase 2 — Close tramo 1 in the frontend
 
