@@ -9,7 +9,6 @@ import {
   fetchStudentPortal,
   fetchPagosDePersona,
   fetchHorariosPorAlumno,
-  independizarPersona,
   subirFotoPersona,
 } from "@/services/api";
 import type {
@@ -35,7 +34,6 @@ import {
 // strip's, already owned by `/groups` — see `toStripDia`'s own comment for why
 // the two tables are joined by the WORD they both print and not by position.
 import { toStripDias } from "@/app/groups/groups-page-utils";
-import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 import ManagedStudentPicker, {
   useManagedProfiles,
   withSelectedStudent,
@@ -56,7 +54,7 @@ import {
   daysUntil,
   type UpcomingTraining,
 } from "./student-utils";
-import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { CalendarDays, ShieldCheck, User, UserPlus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
@@ -1007,7 +1005,6 @@ function ActivePortalView({
   data,
   hasAlumnoRole,
   accountPersonaId,
-  onIndependizar,
   onPhotoUploaded,
   onOwnPhotoUploaded,
 }: {
@@ -1015,7 +1012,6 @@ function ActivePortalView({
   hasAlumnoRole: boolean;
   /** The persona behind the SESSION — not the profile currently selected. */
   accountPersonaId: string;
-  onIndependizar: () => void;
   onPhotoUploaded: () => void;
   /** Extra refresh for the SESSION avatar, fired only when the OWN profile uploaded. */
   onOwnPhotoUploaded?: () => void;
@@ -1140,8 +1136,12 @@ function ActivePortalView({
    * or an ADMINISTRADOR), so they get the real CTA.
    */
   const paymentsAreReadOnly = selectedIsMinor && viewingOwnProfile;
-  const hasAccountActions =
-    representative || !hasAlumnoRole || data.self?.representanteId != null;
+  // #1137: a represented adult used to have one action here — "Independizarse
+  // del representante" — which is gone (independence is now a PRESENCIAL
+  // command an ADMINISTRADOR runs from "Miembros", never self-service). That
+  // account has nothing left to trigger from its own portal, so it no longer
+  // counts toward `hasAccountActions`.
+  const hasAccountActions = representative || !hasAlumnoRole;
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
@@ -1406,7 +1406,7 @@ function ActivePortalView({
       )}
 
       {/* A minor manages nothing on their own account: no dependents, no
-          payments, no independentization. Everything below is gated on that.
+          payments. Everything below is gated on that.
 
           A self-managed student with no dependents sees no "agregar
           dependiente" either: that CTA used to point at the PUBLIC enrolment
@@ -1416,9 +1416,12 @@ function ActivePortalView({
 
           `hasAccountActions` exists because the row is now genuinely optional:
           the payments CTA lives in `CuotaCard` in the rail above (on the fact
-          it acts on), so a self-managed adult with no dependents and no
-          representative has nothing left to put here, and an empty flex row
-          still costs a 20px gap under the panel. */}
+          it acts on), so a self-managed adult with no dependents has nothing
+          left to put here, and an empty flex row still costs a 20px gap
+          under the panel. A represented adult ALSO has nothing here anymore
+          (#1137): "Independizarse del representante" is gone — independence
+          is a PRESENCIAL command an ADMINISTRADOR runs from "Miembros", not
+          self-service. */}
       {!selfIsMinor && hasAccountActions && (
         <div className="flex flex-wrap gap-3 pt-1">
           {representative && (
@@ -1434,12 +1437,6 @@ function ActivePortalView({
               Unirme como jugador
               <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             </Link>
-          )}
-          {data.self?.representanteId != null && (
-            <button type="button" onClick={onIndependizar} className={buttonClasses("secondary")}>
-              <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Independizarse del representante
-            </button>
           )}
         </div>
       )}
@@ -1458,8 +1455,6 @@ function StudentPortalContent(): React.ReactElement {
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [reloadToken, setReloadToken] = useState(0);
-  const [showAgeUpModal, setShowAgeUpModal] = useState(false);
-  const [ageUpLoading, setAgeUpLoading] = useState(false);
 
   useEffect(() => {
     if (!personaId) return;
@@ -1485,19 +1480,6 @@ function StudentPortalContent(): React.ReactElement {
     state.status === "ready" && state.data.self
       ? firstNameOf(state.data.self.nombres)
       : firstNameOf(session?.user.name ?? "");
-
-  async function handleAgeUpConfirm(contrasenia: string): Promise<void> {
-    if (!personaId) return;
-    setAgeUpLoading(true);
-    try {
-      await independizarPersona(Number(personaId), contrasenia);
-      await refreshSession();
-      setReloadToken((n) => n + 1);
-      setShowAgeUpModal(false);
-    } finally {
-      setAgeUpLoading(false);
-    }
-  }
 
   // The greeting rides on the header row rather than in a heading of its own
   // (see `ActivePortalView`). While the portal is still loading there is no
@@ -1529,16 +1511,10 @@ function StudentPortalContent(): React.ReactElement {
             data={state.data}
             hasAlumnoRole={hasAlumnoRole}
             accountPersonaId={personaId}
-            onIndependizar={() => setShowAgeUpModal(true)}
             onPhotoUploaded={() => setReloadToken((n) => n + 1)}
             onOwnPhotoUploaded={() => void refreshSession()}
           />
         ))}
-      <AgeUpConfirmation
-        open={showAgeUpModal}
-        onConfirm={handleAgeUpConfirm}
-        onCancel={() => setShowAgeUpModal(false)}
-      />
     </AppShell>
   );
 }
