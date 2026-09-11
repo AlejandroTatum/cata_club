@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy import (
-    String, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
+    String, CHAR, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
     CheckConstraint, Index, UniqueConstraint, text, func, event,
     Enum as SAEnum, inspect as inspeccionar_orm,
 )
@@ -41,6 +41,11 @@ _log = logging.getLogger("cataclub.dominio.modelos")
 def _ahora_utc() -> datetime:
     """Reemplaza datetime.utcnow() (deprecado desde Python 3.12)."""
     return datetime.now(timezone.utc)
+
+
+def _actor_legacy_desde_representante(context) -> Optional[int]:
+    """Compatibilidad del escritor histórico hasta su migración posterior."""
+    return context.get_current_parameters().get("representante_nuevo_id")
 
 
 class Base(DeclarativeBase):
@@ -2100,8 +2105,45 @@ class VinculacionRepresentante(Base):
     __tablename__ = "vinculacion_representante"
     __table_args__ = (
         Index("ix_vinculacion_representante_persona_id", "persona_id"),
+        Index(
+            "ix_vinculacion_representante_persona_fecha_id",
+            "persona_id", text("fecha DESC"), text("id DESC"),
+        ),
         Index("ix_vinculacion_representante_representante_anterior_id", "representante_anterior_id"),
         Index("ix_vinculacion_representante_representante_nuevo_id", "representante_nuevo_id"),
+        Index("ix_vinculacion_representante_actor_persona_id", "actor_persona_id"),
+        Index(
+            "uq_vinculacion_representante_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "representante_anterior_id IS NULL OR representante_nuevo_id IS NULL "
+            "OR representante_anterior_id <> representante_nuevo_id",
+            name="ck_vinculacion_representante_distintos",
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "((operacion = 'CREACION' AND representante_anterior_id IS NULL "
+            "AND representante_nuevo_id IS NOT NULL) OR "
+            "(operacion = 'REASIGNACION' AND representante_nuevo_id IS NOT NULL) OR "
+            "(operacion = 'INDEPENDENCIA' AND representante_anterior_id IS NOT NULL "
+            "AND representante_nuevo_id IS NULL))",
+            name="ck_vinculacion_representante_operacion_valores",
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "(idempotency_key IS NULL) = (request_fingerprint IS NULL)",
+            name="ck_vinculacion_representante_fingerprint_pareado",
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "origen IN ('SESION_AUTENTICADA', 'ADMIN_PRESENCIAL', "
+            "'AUTOSERVICIO_LEGADO', 'REMEDIACION_LEGACY')",
+            name="ck_vinculacion_representante_origen",
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "request_fingerprint IS NULL OR request_fingerprint ~ '^[0-9a-f]{64}$'",
+            name="ck_vinculacion_representante_fingerprint_sha256",
+        ).ddl_if(dialect="postgresql"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -2112,8 +2154,7 @@ class VinculacionRepresentante(Base):
     persona: Mapped["Persona"] = relationship(foreign_keys=[persona_id])
 
     # `None` cuando el representado no tenía representante legal antes de
-    # esta vinculación (ej. se había independizado, o quedó huérfano de
-    # representante por algún otro camino).
+    # esta vinculación, o cuando la operación fue independencia.
     representante_anterior_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
@@ -2121,8 +2162,21 @@ class VinculacionRepresentante(Base):
         foreign_keys=[representante_anterior_id]
     )
 
-    representante_nuevo_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
-    representante_nuevo: Mapped["Persona"] = relationship(foreign_keys=[representante_nuevo_id])
+    representante_nuevo_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    representante_nuevo: Mapped[Optional["Persona"]] = relationship(
+        foreign_keys=[representante_nuevo_id]
+    )
+
+    actor_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id"), default=_actor_legacy_desde_representante
+    )
+    actor_persona: Mapped["Persona"] = relationship(foreign_keys=[actor_persona_id])
+    operacion: Mapped[str] = mapped_column(String(24), default="REASIGNACION")
+    origen: Mapped[str] = mapped_column(String(32), default="AUTOSERVICIO_LEGADO")
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    request_fingerprint: Mapped[Optional[str]] = mapped_column(CHAR(64), nullable=True)
 
 
 # ---------------------------------------------------------------------------
