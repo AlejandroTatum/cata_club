@@ -28,7 +28,7 @@ import {
   PHONE_LOCAL_HINT,
   PHONE_ENROLL_LOCAL_HINT,
 } from "@/lib/identity-validation";
-import { Button, buttonClasses } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { NUMERIC_FIELD_LIMIT_MESSAGE, type NumericFieldMode } from "@/lib/numeric-input";
@@ -794,18 +794,6 @@ interface WizardNavigationProps {
    * the problem is a dead end. Omit it and the alert behaves as before.
    */
   duplicateIdentityAudience?: DuplicateIdentityAudience;
-  /**
-   * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): when the caller can
-   * actually link the already-registered person (today, only
-   * `/student/add-dependent`, `audience="representative"`), passing this
-   * renders a same-click "Vincular a mi cuenta" action next to the
-   * duplicate-identity alert — no extra page, no extra step. The cédula the
-   * visitor already typed is the one the caller sends; this component never
-   * sees it.
-   */
-  onLinkExisting?: () => void;
-  /** Disables the link-existing button and swaps its label while the request is in flight. */
-  linkingExisting?: boolean;
   isFirst: boolean;
   isLast: boolean;
   submitting: boolean;
@@ -887,20 +875,6 @@ export function WizardNavigation(props: WizardNavigationProps): ReactElement {
               ))}
             </ul>
             {duplicateHelpAudience && <DuplicateIdentityHelp audience={duplicateHelpAudience} />}
-            {/* INS-2 only reaches a REPRESENTANTE's own account — this check
-                is a defense-in-depth belt, not just trusting the caller: even
-                if `onLinkExisting` were mistakenly wired into the public
-                self-service wizard, this button must not appear there. */}
-            {duplicateHelpAudience === "representative" && props.onLinkExisting && (
-              <button
-                type="button"
-                onClick={props.onLinkExisting}
-                disabled={props.linkingExisting || props.submitting}
-                className={buttonClasses("secondary", "sm", "disabled:cursor-not-allowed")}
-              >
-                {props.linkingExisting ? "Vinculando…" : "Vincular a mi cuenta"}
-              </button>
-            )}
           </div>
         </div>
       )}

@@ -2,22 +2,20 @@
 Issue #790: la vinculación de un representado exige que la cuenta que la
 ejerce haya probado el control de su dirección de correo.
 
-Contexto de las dos mitades, cada una razonable por separado:
-
-  * `POST /enrollment/` es público, sin autenticar, y entrega credenciales de
-    inmediato (`enrollment_servicio.py`). Hasta este cambio, el backend no
-    tenía NINGUNA noción de correo verificado.
-  * `POST /personas/{id}/vincular-representado` deja adjuntar por cédula a un
-    menor ya registrado sin que nadie apruebe. Esa regla es una decisión de
-    producto escrita y sostenida (`personas_router.py`, INS-2), y este
-    archivo NO la toca: sigue sin requerir aprobación de nadie.
-
-Lo que se cierra es la COMPOSICIÓN: quien todavía no probó que la dirección
-con la que se inscribió es suya no puede usar la vinculación para alcanzar
-los datos de una persona que no creó. Nada más se restringe -- en
-particular, un representante recién inscripto conserva acceso completo a
-los datos del hijo que él mismo dio de alta, porque la inscripción presencial
-en el club no puede quedar a la espera de un correo.
+Estado tras la decisión del dueño de 2026-09-11 (#1133, punto 3): la
+vinculación de AUTOSERVICIO que este archivo protegía se retiró -- `POST
+/personas/{id}/vincular-representado` responde una parada segura no
+divulgativa para un actor REPRESENTANTE y ya no llega a este candado (ver
+`test_vincular_representado.py`, sección "Parada segura"). El candado del
+#790 SOBREVIVE como código vivo del camino de MOSTRADOR
+(`PersonaServicio.vincular_representado`, ahora ejercido por un
+ADMINISTRADOR): sigue siendo cierto que una cuenta destino sin correo
+verificado no puede recibir un representado, y este archivo lo cubre a nivel
+de servicio, más la consecuencia que importa a nivel de ruta -- una cuenta sin
+verificar conserva acceso completo a los datos del hijo que ella misma dio de
+alta, porque la inscripción presencial no puede quedar a la espera de un
+correo -- y el mecanismo de verificación en sí (marca la cuenta, es
+idempotente, y sus tokens no se confunden con un access token ni al revés).
 
 La regla se expresa sobre la CUENTA del representante, no sobre el rol: una
 Persona sin cuenta (un tutor cargado por el club, sin login) no tiene ninguna
@@ -31,7 +29,9 @@ import pytest
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import TipoRol, TipoSangre
 from app.dominio.excepciones import PermisosInsuficientes
-from app.dominio.mensajes import MENSAJE_CORREO_SIN_VERIFICAR
+from app.dominio.mensajes import (
+    MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_VINCULACION_SOLO_PRESENCIAL,
+)
 from app.dominio.modelos import FichaMedica, Persona, Rol, Usuario
 from app.servicios_negocio.dtos.persona_schemas import VincularRepresentadoDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -126,8 +126,11 @@ def _verificar_correo(client_sin_token, correo: str):
 def test_una_cuenta_sin_verificar_no_alcanza_los_datos_de_otra_persona(
     client_sin_token, db_session
 ):
-    """Caso negativo del issue #790: si este test se vuelve verde sin el
-    candado, el eslabón se reabrió.
+    """Caso negativo del issue #790, adaptado a #1133: la vinculación de
+    autoservicio se retiró, así que la cuenta recién inscripta ya no llega ni
+    a este candado -- recibe la parada segura (400). La consecuencia que
+    importa se mantiene: sin relación, los datos de otra persona siguen
+    fuera de alcance.
 
     Recorre el camino completo con tokens REALES emitidos por el alta
     pública -- no un override de dependencia -- porque lo que se mide es
@@ -140,7 +143,8 @@ def test_una_cuenta_sin_verificar_no_alcanza_los_datos_de_otra_persona(
         json={"cedula": ajena.cedula}, headers=_cabecera(tokens),
     )
 
-    assert vinculacion.status_code == 403
+    assert vinculacion.status_code == 400
+    assert vinculacion.json()["detail"] == MENSAJE_VINCULACION_SOLO_PRESENCIAL
     db_session.expire_all()
     assert db_session.get(Persona, ajena.id).representante_id != tokens["persona_id"]
 
@@ -172,9 +176,12 @@ def test_la_cuenta_sin_verificar_conserva_acceso_a_su_propio_representado(
     assert respuesta.json()["id"] == hijo.id
 
 
-def test_verificar_el_correo_habilita_la_vinculacion(client_sin_token, db_session):
-    """La otra mitad del candado: una vez probado el control de la dirección,
-    la vinculación vuelve a ser exactamente la que decidió el dueño."""
+def test_verificar_el_correo_no_reabre_la_vinculacion_de_autoservicio(client_sin_token, db_session):
+    """#1133 retiró la vinculación de autoservicio: probar el control del
+    correo ya no habilita ninguna mutación por esta ruta para un
+    REPRESENTANTE. La verificación sigue marcando la cuenta (ver el test de
+    idempotencia más abajo), pero la ruta legada responde la misma parada
+    segura y no toca el grafo."""
     ajena = _menor_de_otra_familia(db_session)
     tokens = _autoinscribir(client_sin_token)
 
@@ -185,9 +192,10 @@ def test_verificar_el_correo_habilita_la_vinculacion(client_sin_token, db_sessio
         json={"cedula": ajena.cedula}, headers=_cabecera(tokens),
     )
 
-    assert vinculacion.status_code == 200
+    assert vinculacion.status_code == 400
+    assert vinculacion.json()["detail"] == MENSAJE_VINCULACION_SOLO_PRESENCIAL
     db_session.expire_all()
-    assert db_session.get(Persona, ajena.id).representante_id == tokens["persona_id"]
+    assert db_session.get(Persona, ajena.id).representante_id != tokens["persona_id"]
 
 
 def test_la_verificacion_marca_la_cuenta_y_es_idempotente(client_sin_token, db_session):
@@ -302,7 +310,7 @@ def test_el_rechazo_dice_que_hacer_y_no_gasta_el_freno_de_intentos(db_session):
     assert persona_servicio_modulo._INTENTOS_FALLIDOS_VINCULACION == {}
 
 
-def test_el_403_viaja_marcado_como_seguro_de_mostrar(client_sin_token, db_session):
+def test_el_403_de_correo_sin_verificar_viaja_marcado_como_seguro_de_mostrar(db_session):
     """Escribir un mensaje accionable no sirve si el frontend lo tira.
 
     El traductor del frontend (`lib/error-message.ts`) responde con su texto
@@ -312,22 +320,23 @@ def test_el_403_viaja_marcado_como_seguro_de_mostrar(client_sin_token, db_sessio
     ya abre la de los 5xx (issue #355): `seguro_mostrar`, que este raise site
     tiene que declarar explícitamente.
 
-    Se mide sobre la RESPUESTA HTTP y no sobre la excepción: `mensaje_seguro`
-    lo agrega el manejador global de `main.py`, así que un `seguro_mostrar`
-    que no llegue al cuerpo deja el mensaje igual de invisible que antes.
-    """
+    #1133 retiró el camino HTTP de autoservicio que ejercía este candado (ver
+    el test de arriba): la excepción sigue viva en
+    `PersonaServicio.vincular_representado`, el camino de MOSTRADOR, así que
+    se mide directamente sobre ella -- el atributo `seguro_mostrar` es lo que
+    el manejador global de `main.py` lee para agregar `mensaje_seguro` al
+    cuerpo, y ese cableado no cambió."""
     ajena = _menor_de_otra_familia(db_session)
-    tokens = _autoinscribir(client_sin_token)
+    cuenta = crear_usuario_auth(db_session, correo="sin.verificar.403@cataclub.test",
+                                cedula=cedula_valida(990))
 
-    respuesta = client_sin_token.post(
-        f"/api/v1/personas/{tokens['persona_id']}/vincular-representado",
-        json={"cedula": ajena.cedula}, headers=_cabecera(tokens),
-    )
+    with pytest.raises(PermisosInsuficientes) as excepcion:
+        PersonaServicio(db_session).vincular_representado(
+            cuenta.persona_id, VincularRepresentadoDTO(cedula=ajena.cedula)
+        )
 
-    assert respuesta.status_code == 403
-    cuerpo = respuesta.json()
-    assert cuerpo["detail"] == MENSAJE_CORREO_SIN_VERIFICAR
-    assert cuerpo["mensaje_seguro"] is True
+    assert excepcion.value.mensaje == MENSAJE_CORREO_SIN_VERIFICAR
+    assert excepcion.value.seguro_mostrar is True
 
 
 def test_el_403_de_la_regla_de_elegibilidad_sigue_sin_marcar(client_sin_token, db_session):

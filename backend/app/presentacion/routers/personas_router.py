@@ -12,7 +12,8 @@ from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_r
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaListItemDTO, PersonaUpdateDTO,
     PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO,
-    IndependenciaResponseDTO, EstadoPersonaDTO,
+    IndependenciaResponseDTO, ReasignarRepresentacionDTO, ReasignacionResponseDTO,
+    EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
 )
 from app.servicios_negocio.dtos.base import PaginatedResponse
@@ -484,18 +485,19 @@ async def crear_representado(
     )
 
 
-# --- Vincular un representado ya existente (INS-2) --------------------------
-# docs/product/decisiones-de-negocio-2026-08-11.md §1: "un representante puede
-# vincular a su cuenta un chico ya registrado, escribiendo su cédula, sin que
-# nadie apruebe". Mismo patrón de ownership que `crear_representado` (línea
-# ~342): la identidad del representante sale EXCLUSIVAMENTE del token, nunca
-# del cuerpo, y se compara contra el `persona_id` de la URL.
+# --- Vincular un representado ya existente: mostrador (INS-2, #1133) --------
+# docs/product/decisiones-de-negocio-2026-08-11.md §1 creó esta vía para el
+# autoservicio del representante. La decisión del dueño de 2026-09-11 (#1133,
+# punto 3) la retiró de esa sesión: vincular por cédula queda como acción de
+# MOSTRADOR. La ruta sigue viva para los dos roles (mismo patrón de ownership
+# que `crear_representado`: la identidad sale EXCLUSIVAMENTE del token), pero
+# el ACTOR decide el comportamiento -- un ADMINISTRADOR ejecuta la vinculación
+# real; un REPRESENTANTE recibe la parada segura no divulgativa de
+# `PersonaServicio.parar_vinculacion_representado` (nunca revela si la cédula
+# existe o ya está vinculada a otra cuenta).
 # Rate-limited (mismo tier de autoservicio autenticado que `crear_representado`
-# -- 10/minute): el freno REAL de intentos en serie es el retraso progresivo
-# por representante que vive en `PersonaServicio` (guardarraíl 4 de la
-# decisión), que sí se ejerce en `AMBIENTE=test`; este decorador es la capa
-# adicional que ya cubre a todo el router (D6-c/D1), consistente con el resto
-# del inventario de `test_limite_tasa_pagos.py`.
+# -- 10/minute): capa adicional que ya cubre a todo el router (D6-c/D1),
+# consistente con el resto del inventario de `test_limite_tasa_pagos.py`.
 @router.post(
     "/{persona_id}/vincular-representado", response_model=PersonaResponseDTO,
 )
@@ -513,7 +515,11 @@ async def vincular_representado(
         roles_solicitante=token_payload.get("roles", []),
         roles_privilegiados=SOLO_ADMINISTRADOR,
     )
-    return PersonaServicio(db).vincular_representado(persona_id, datos)
+    if "ADMINISTRADOR" in token_payload.get("roles", []):
+        return PersonaServicio(db).vincular_representado(
+            persona_id, datos, actor_persona_id=token_payload.get("persona_id"),
+        )
+    return PersonaServicio(db).parar_vinculacion_representado(persona_id)
 
 
 # --- Independizar: salida de independencia PRESENCIAL (#1137) ---------------
@@ -546,6 +552,32 @@ async def independizar_persona(
     # pueden pasar por el único hilo del event loop.
     return await run_in_threadpool(
         RelacionRepresentacionServicio(db).independizar_presencial,
+        admin_actor_id=token_payload.get("persona_id"),
+        persona_id=persona_id,
+        comando=datos,
+        idempotency_key=request.headers.get("idempotency-key"),
+    )
+
+
+# --- Reasignar representante: reemplazo PRESENCIAL (#1133 / #1137) --------
+# Reemplaza el vínculo de un menor de un representante a otro. Solo un
+# ADMINISTRADOR con la persona enfrente. `representante_actual_id` es el
+# estado OBSERVADO por el administrador: si el vínculo cambió mientras el
+# trámite estaba abierto, responde 409 en vez de pisar el cambio ajeno.
+# Requiere `Idempotency-Key` (reintento = resultado ya establecido). La
+# respuesta NO lleva tokens.
+@router.post(
+    "/{persona_id}/reasignar-representante", response_model=ReasignacionResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def reasignar_representante(
+    persona_id: int,
+    request: Request,
+    datos: ReasignarRepresentacionDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    return RelacionRepresentacionServicio(db).reasignar_presencial(
         admin_actor_id=token_payload.get("persona_id"),
         persona_id=persona_id,
         comando=datos,

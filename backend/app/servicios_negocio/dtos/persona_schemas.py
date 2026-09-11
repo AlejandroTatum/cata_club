@@ -145,6 +145,29 @@ class IndependenciaResponseDTO(BaseModel):
     idempotency_key: str = Field(..., examples=["clave-de-intento"])
 
 
+class ReasignarRepresentacionDTO(BaseModel):
+    """Payload del comando PRESENCIAL de reasignación de representación
+    (#1133, #1137).
+
+    Lo ejecuta un ADMINISTRADOR con la persona enfrente. `representante_actual_id`
+    es el estado que el administrador OBSERVÓ al abrir el trámite: si el vínculo
+    cambió mientras tanto, el comando conflictúa (409) en vez de pisar el cambio
+    ajeno. `evidencia_identidad` deja constancia del trámite presencial."""
+    nuevo_representante_id: int = Field(..., gt=0, examples=[9])
+    representante_actual_id: int = Field(..., gt=0, examples=[7])
+    evidencia_identidad: str = Field(..., min_length=1, max_length=500)
+
+
+class ReasignacionResponseDTO(BaseModel):
+    """Resultado commiteado del comando: la relación reemplazada y el recibo de
+    reintento. Deliberadamente SIN tokens."""
+    persona_id: int = Field(..., examples=[42])
+    representante_anterior_id: Optional[int] = Field(default=None, examples=[7])
+    representante_nuevo_id: int = Field(..., examples=[9])
+    replay: bool = Field(default=False, examples=[False])
+    idempotency_key: str = Field(..., examples=["clave-de-intento"])
+
+
 class PersonaResponseDTO(ResponseBase, BaseModel):
     id: int = Field(..., examples=[1])
     nombres: NombrePresentado = Field(..., examples=["Juan Carlos"])

@@ -85,12 +85,16 @@ describe("buildMemberAccounts", () => {
     expect(carlos?.estudiantes[0].membresia).toBeNull();
     // A root with no representative of their own has no `representadoPor`.
     expect(carlos?.representadoPor).toBeUndefined();
+    expect(carlos?.representadoPorId).toBeUndefined();
 
     const sofia = accounts.find((a) => a.id === "3");
     expect(sofia?.estudiantes).toHaveLength(1);
     expect(sofia?.estudiantes[0].id).toBe("3");
     // Sofia's row names her representative by full name.
     expect(sofia?.representadoPor).toBe("Carlos Martinez");
+    // #1133: the numeric id behind that name — what `reasignar-representante`
+    // needs as `representante_actual_id`.
+    expect(sofia?.representadoPorId).toBe(2);
     // Her own membership/payment status comes through on her own row, not
     // aggregated into or hidden behind Carlos'.
     expect(sofia?.estudiantes[0].membresia?.estado).toBe("activa");

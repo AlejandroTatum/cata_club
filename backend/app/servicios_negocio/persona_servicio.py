@@ -6,7 +6,7 @@ from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
+from app.dominio.modelos import Persona, FichaMedica, Enfermedades, Notificacion
 from app.dominio.enums import TipoNotificacion
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.excepciones import (
@@ -14,7 +14,7 @@ from app.dominio.excepciones import (
 )
 from app.dominio.mensajes import (
     MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_IDENTIDAD_DUPLICADA,
-    MENSAJE_VINCULACION_NO_DISPONIBLE,
+    MENSAJE_VINCULACION_NO_DISPONIBLE, MENSAJE_VINCULACION_SOLO_PRESENCIAL,
 )
 from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.representados_alcanzables import (
@@ -272,54 +272,70 @@ class PersonaServicio:
 
         return representado
 
-    # --- INS-2: vincular un representado ya existente ------------------------
-    # docs/product/decisiones-de-negocio-2026-08-11.md §1: "Un chico tiene un solo
-    # representante, y el representante lo vincula solo". Antes no existía
-    # ninguna vía (ni endpoint ni pantalla) para pasar una Persona ya
-    # registrada de un representante a otro, pese a que el mensaje de cédula
-    # duplicada se lo prometía al usuario (INS-2).
+    # --- INS-2 retirada: parada segura de la vinculación de autoservicio -----
+    # Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la
+    # vinculación por cédula desde la sesión del propio REPRESENTANTE se
+    # retira. La ruta `POST /{persona_id}/vincular-representado` sigue viva
+    # -- el router la despacha acá para ese actor -- pero deja de leer y de
+    # escribir: responde SIEMPRE el mismo error, para cualquier cédula (exista,
+    # no exista, o ya esté vinculada a otra cuenta), así que no hay ningún
+    # oráculo de existencia ni de relación que filtrar. Vincular una persona ya
+    # existente sigue siendo posible, pero solo como acción de mostrador --
+    # ver `vincular_representado` más abajo, el camino que el router reserva
+    # para un ADMINISTRADOR.
+    def parar_vinculacion_representado(self, representante_id: int) -> None:
+        """Nunca devuelve: siempre levanta el corte seguro no divulgativo.
+
+        No lee la cédula recibida ni la cuenta de `representante_id`: la
+        única forma de no filtrar por timing ni por el motivo del rechazo es
+        directamente no resolver nada. No escribe nada tampoco -- ni
+        `representante_id`, ni auditoría, ni notificaciones."""
+        raise OperacionInvalida(
+            MENSAJE_VINCULACION_SOLO_PRESENCIAL,
+            detalle_tecnico=(
+                f"vinculación de autoservicio retirada (#1133): intento de "
+                f"representante_id={representante_id} derivado a administración"
+            ),
+        )
+
+    # --- Vincular un representado ya existente: acción de mostrador ---------
+    # docs/product/decisiones-de-negocio-2026-08-11.md §1 creó esta vía; la
+    # decisión del dueño de 2026-09-11 (#1133, punto 3) la retiró del
+    # autoservicio y la dejó como acción de mostrador: solo la ejecuta un
+    # ADMINISTRADOR (el router la despacha acá únicamente para ese rol; ver
+    # `parar_vinculacion_representado` arriba para el actor REPRESENTANTE).
     def vincular_representado(
-        self, representante_id: int, datos: VincularRepresentadoDTO
+        self, representante_id: int, datos: VincularRepresentadoDTO,
+        actor_persona_id: int | None = None,
     ) -> Persona:
         """Vincula a `representante_id` una Persona YA EXISTENTE (típicamente
         cargada por otro representante), identificada por cédula. Sin
-        aprobación de nadie -- decisión de negocio explícita, ver docstring
-        del módulo de tests `test_vinculacion_representado.py`. Cuatro
-        guardarraíles, ninguno agrega un clic al padre que vincula:
+        aprobación de nadie más que la del administrador que lo ejecuta en el
+        mostrador. Guardarraíles que sobreviven al retiro del autoservicio:
 
         1. Auditoría: la vinculación exitosa deja una fila en
-           `VinculacionRepresentante` (quién, a quién, cuándo).
+           `VinculacionRepresentante` (quién, a quién, cuándo), escrita por
+           el repositorio del ledger -- no un `INSERT` suelto.
         2. Si el representado ya tenía representante, se le notifica
            DESPUÉS del hecho por el feed de notificaciones existente.
-           "Deshacerlo" es repetir esta misma llamada con la misma cédula
-           -- que el representante anterior ya conocía, porque fue quien
-           dio de alta a ese representado.
         3. ANTI-ENUMERACIÓN: toda falla de elegibilidad -- cédula
            inexistente, representado mayor de edad, ya vinculado a este
            mismo representante, o la cédula del propio representante --
            levanta el MISMO error (`MENSAJE_VINCULACION_NO_DISPONIBLE`).
-           Ni el mensaje ni el código HTTP distinguen "no existe" de "existe
-           pero no es elegible": esta llamada NUNCA revela el nombre de la
-           persona antes de vincularla.
         4. Tope de intentos: freno progresivo por representante (mismo
            patrón que `AuthServicio._calcular_retraso_login`, nunca bloqueo
-           duro).
+           duro) -- se conserva aunque el actor típico ya no sea quien prueba
+           cédulas en serie desde su propia sesión.
         5. Issue #790: la cuenta que ejerce esta capacidad tiene que haber
-           probado el control de su dirección de correo. Es lo ÚNICO que
-           agrega ese issue, y no toca ninguno de los cuatro guardarraíles
-           de arriba: la vinculación sigue sin requerir la aprobación de
-           nadie.
+           probado el control de su dirección de correo.
 
-        Por qué el candado va acá y no en el rol ni en la política de acceso:
-        `REPRESENTANTE` desbloquea también cosas inofensivas, y
-        `PoliticaAccesoPersona` concede a partir de `representante_id`, que es
-        el vínculo que un representante recién inscripto YA tiene sobre el
-        hijo que él mismo dio de alta. Cerrar ahí dejaría a una familia real
-        sin acceso a la ficha de su propio chico mientras espera un correo.
-        Esta llamada es la única que ATA una cuenta a una persona que no creó,
-        que es exactamente el paso que convierte "controlo una dirección de
-        correo" en "puedo leer y escribir la ficha médica de un menor".
-        """
+        `actor_persona_id` es quien ejecuta el comando (issue #1133, ledger
+        completo). Por defecto es `representante_id`: los llamadores directos
+        existentes (tests unitarios) simulan al representante vinculando para
+        sí mismo; el router de producción pasa el `persona_id` del
+        administrador autenticado."""
+        if actor_persona_id is None:
+            actor_persona_id = representante_id
         self._exigir_correo_verificado_del_representante(representante_id)
         self._exigir_representante_destino_alcanzable(representante_id)
         # Issue #1138: solo valida el teléfono si el representante EXISTE.
@@ -343,11 +359,19 @@ class PersonaServicio:
         representante_anterior_id = representado.representante_id
         self.repo.actualizar(representado, {"representante_id": representante_id})
 
-        self.db.add(VinculacionRepresentante(
+        # Issue #1133: el ledger completo -- la vinculación de mostrador
+        # también pasa por el repositorio, nunca por un `self.db.add(...)`
+        # suelto (esa era la única escritura del ledger que lo bypaseaba).
+        self.repo_ledger.registrar(
             persona_id=representado.id,
+            actor_persona_id=actor_persona_id,
             representante_anterior_id=representante_anterior_id,
             representante_nuevo_id=representante_id,
-        ))
+            operacion="REASIGNACION",
+            origen="ADMIN_PRESENCIAL",
+            idempotency_key=None,
+            request_fingerprint=None,
+        )
         self.db.commit()
 
         if representante_anterior_id is not None:

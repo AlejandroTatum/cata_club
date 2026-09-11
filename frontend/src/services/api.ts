@@ -32,6 +32,7 @@ import type {
   PersonaResponse,
   PersonaBusqueda,
   IndependenciaResponse,
+  ReasignacionResponse,
   Notificacion,
   PaginatedResponse,
   PerfilPropio,
@@ -2366,6 +2367,41 @@ export async function independizarPersona(
   idempotencyKey: string,
 ): Promise<IndependenciaResponse> {
   return request<IndependenciaResponse>(apiEndpoint(`/personas/${personaId}/independizar`), {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Reasignar representante — comando presencial del mostrador (#1133)
+// ---------------------------------------------------------------------------
+
+export interface ReasignarRepresentantePayload {
+  nuevoRepresentanteId: number;
+  representanteActualId: number;
+  evidenciaIdentidad: string;
+}
+
+/**
+ * Reasigna al representante de un menor: comando PRESENCIAL que solo un
+ * ADMINISTRADOR ejecuta desde el mostrador — ver `POST
+ * /personas/{persona_id}/reasignar-representante`.
+ *
+ * `representanteActualId` es el vínculo que el administrador OBSERVÓ en
+ * pantalla al abrir el trámite: si cambió mientras tanto, el backend
+ * responde 409 en vez de pisar el cambio ajeno.
+ *
+ * `idempotencyKey` identifica ESTE intento, mismo contrato que
+ * `independizarPersona`: el llamador acuña una clave nueva por cada envío
+ * (`crypto.randomUUID()`).
+ */
+export async function reasignarRepresentante(
+  personaId: number,
+  payload: ReasignarRepresentantePayload,
+  idempotencyKey: string,
+): Promise<ReasignacionResponse> {
+  return request<ReasignacionResponse>(apiEndpoint(`/personas/${personaId}/reasignar-representante`), {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(payload),

@@ -155,6 +155,7 @@ const mockCambiarPlanMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "AC
 const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockVincularRepresentado = vi.fn();
 const mockIndependizarPersona = vi.fn();
+const mockReasignarRepresentante = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -195,6 +196,8 @@ vi.mock("@/services/api", () => {
     vincularRepresentado: (personaId: number, cedula: string) => mockVincularRepresentado(personaId, cedula),
     independizarPersona: (personaId: number, payload: unknown, idempotencyKey: string) =>
       mockIndependizarPersona(personaId, payload, idempotencyKey),
+    reasignarRepresentante: (personaId: number, payload: unknown, idempotencyKey: string) =>
+      mockReasignarRepresentante(personaId, payload, idempotencyKey),
     ApiClientError: MockApiClientError,
   };
 });
@@ -3109,6 +3112,151 @@ describe("MembersPage — Representante legal (issue #460)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /vincular a marcela ruiz/i }));
 
     expect(await within(dialog).findByText(/no fue posible completar la vinculación/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * #1133/#1137, decisión del dueño (2026-09-11, punto 2): a minor who ALREADY
+ * has a representative is reassigned through the atomic `reasignar-
+ * representante` command, not through `vincular-representado` (that one
+ * stays for the first-link case with nothing to conflict against — see the
+ * "Representante legal (issue #460)" suite above, whose fixtures omit
+ * `representadoPorId` on purpose to keep exercising that path).
+ */
+describe("MembersPage — Reasignar representante (issue #1133)", () => {
+  const MENOR_CON_REPRESENTANTE: MemberAccount = {
+    id: "24",
+    role: "representante",
+    nombres: "Menor",
+    apellidos: "ConRepresentante",
+    telefono: "0999999999",
+    representadoPor: "Pedro Ruiz",
+    representadoPorId: 30,
+    estudiantes: [
+      {
+        id: "24",
+        nombres: "Menor",
+        apellidos: "ConRepresentante",
+        cedula: "1710034065",
+        fechaNacimiento: "2015-01-01",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  const REPRESENTANTE_ENCONTRADO = { id: 40, nombres: "Marcela", apellidos: "Nueva" };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockSearchStudents.mockReset().mockResolvedValue([]);
+    mockReasignarRepresentante.mockReset();
+  });
+
+  async function openMenorConRepresentanteModal(): Promise<HTMLElement> {
+    mockFetchMembers.mockResolvedValue({ accounts: [MENOR_CON_REPRESENTANTE] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText("Menor ConRepresentante");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    return screen.getByRole("dialog");
+  }
+
+  it("offers Reasignar representante instead of Vincular for a minor who already has one", async () => {
+    const dialog = await openMenorConRepresentanteModal();
+
+    expect(within(dialog).getByRole("button", { name: /reasignar representante/i })).toBeInTheDocument();
+    expect(within(dialog).queryByPlaceholderText(/buscar representante por nombre/i)).not.toBeInTheDocument();
+  });
+
+  it("sends the current link, the new representative and a fresh Idempotency-Key", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockReasignarRepresentante.mockResolvedValue({
+      personaId: 24,
+      representanteAnteriorId: 30,
+      representanteNuevoId: 40,
+      replay: false,
+      idempotencyKey: "clave-1",
+    });
+    const dialog = await openMenorConRepresentanteModal();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reasignar representante/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar nuevo representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Nueva"));
+    fireEvent.change(within(dialog).getByLabelText(/evidencia del trámite/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar reasignación/i }));
+
+    await waitFor(() => expect(mockReasignarRepresentante).toHaveBeenCalledTimes(1));
+    const [personaId, payload, idempotencyKey] = mockReasignarRepresentante.mock.calls[0] as [
+      number,
+      Record<string, unknown>,
+      string,
+    ];
+    expect(personaId).toBe(24);
+    expect(payload).toEqual({
+      nuevoRepresentanteId: 40,
+      representanteActualId: 30,
+      evidenciaIdentidad: "Cédula verificada en el mostrador",
+    });
+    expect(idempotencyKey.length).toBeGreaterThan(0);
+    await waitFor(() => expect(mockFetchMembers).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows the backend's stale-conflict message verbatim on a 409", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockReasignarRepresentante.mockRejectedValue(
+      new (await import("@/services/api")).ApiClientError(
+        "El vínculo de representación cambió desde que se abrió el trámite: recargue la ficha y reintente.",
+        409,
+        true,
+      ),
+    );
+    const dialog = await openMenorConRepresentanteModal();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reasignar representante/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar nuevo representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Nueva"));
+    fireEvent.change(within(dialog).getByLabelText(/evidencia del trámite/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar reasignación/i }));
+
+    expect(await within(dialog).findByText(/recargue la ficha y reintente/i)).toBeInTheDocument();
+  });
+
+  it("shows the backend's domain-rule message verbatim on a 422", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockReasignarRepresentante.mockRejectedValue(
+      new (await import("@/services/api")).ApiClientError(
+        "Esta cuenta no tiene el rol de Representante y no puede recibir representados.",
+        422,
+        true,
+      ),
+    );
+    const dialog = await openMenorConRepresentanteModal();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reasignar representante/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar nuevo representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Nueva"));
+    fireEvent.change(within(dialog).getByLabelText(/evidencia del trámite/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar reasignación/i }));
+
+    expect(await within(dialog).findByText(/no puede recibir representados/i)).toBeInTheDocument();
   });
 });
 

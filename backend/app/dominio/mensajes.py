@@ -59,6 +59,20 @@ MENSAJE_VINCULACION_NO_DISPONIBLE = (
     "intente nuevamente."
 )
 
+# Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la vinculación
+# de AUTOSERVICIO (un REPRESENTANTE atando por cédula a una Persona ya
+# existente desde su propia sesión) se retira -- vincular queda como acción de
+# mostrador. La ruta pública sigue viva, pero para ese actor deja de mutar y
+# responde esta parada segura, sin importar si la cédula existe, ya está
+# vinculada a otra cuenta o no existe en absoluto: los tres casos devuelven el
+# MISMO texto y el MISMO código HTTP, igual criterio anti-enumeración que
+# `MENSAJE_VINCULACION_NO_DISPONIBLE` de arriba, solo que acá no hay ninguna
+# cédula que resolver -- la parada corre ANTES de leer nada.
+MENSAJE_VINCULACION_SOLO_PRESENCIAL = (
+    "La vinculación de un representado se realiza únicamente en persona. "
+    "Acérquese a administración del club."
+)
+
 # Issue #790: respuesta cuando la cuenta que intenta vincular a un representado
 # todavía no probó que la dirección de correo con la que se inscribió es suya.
 #
@@ -99,6 +113,29 @@ MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS = (
 MENSAJE_REPRESENTANTE_SIN_ROL = (
     "Esta cuenta no tiene el rol de Representante y no puede recibir "
     "representados."
+)
+
+# Issue #1133/#1137, comando de reasignación presencial: rechazar un no-op
+# ANTES de tocar cualquier fila. `reasignar_presencial` reemplaza el vínculo
+# de un menor -- pedir que el "nuevo" representante sea el MISMO que el
+# actual no es una reasignación, es un trámite sin ningún cambio, y dejarlo
+# pasar hasta `_ejecutar_reasignacion` bloqueaba filas y revocaba la sesión
+# del representante que sigue representando a la misma persona.
+MENSAJE_REASIGNACION_SIN_CAMBIO = (
+    "El nuevo representante es el mismo que el actual: no hay ningún cambio "
+    "que reasignar."
+)
+
+# Issue #1133/#1137: la auto-referencia (un menor no puede ser su propio
+# representante) ya la rechaza el trigger de base
+# `trg_relacion_representacion_valida` (`i1141relinteg`), pero llegar hasta
+# ahí significa bloquear las tres filas primero y responder con el
+# `IntegrityError` genérico traducido a un 409 -- un código que no describe
+# el motivo real. El comando de reasignación la rechaza acá, antes de
+# cualquier lock, con el mismo criterio ya legible que el resto de sus
+# validaciones de dominio.
+MENSAJE_REPRESENTANTE_AUTORREFERENCIA = (
+    "Una persona no puede ser su propio representante legal."
 )
 
 # Issue #790, misma disciplina anti-enumeración que la recuperación de

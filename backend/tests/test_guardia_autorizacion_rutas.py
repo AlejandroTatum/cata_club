@@ -331,9 +331,15 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/independizar"): frozenset({"ADMINISTRADOR"}),
+    # #1133/#1137: la reasignación de representación es un acto PRESENCIAL de
+    # administración -- reemplaza el vínculo de un menor, así que exige el
+    # mismo rol que su hermana `independizar`.
+    ("POST", "/personas/{persona_id}/reasignar-representante"): frozenset({"ADMINISTRADOR"}),
     # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
-    # que su hermano `representados` -- un representante vincula su propio
-    # representado ya existente, un administrador puede hacerlo por cualquiera.
+    # que su hermano `representados` -- ambos actores siguen pasando la
+    # guardia de la ruta; #1133 punto 3 retiró la MUTACIÓN del lado
+    # REPRESENTANTE (ver `test_vincular_representado.py`), no el rol de la
+    # ruta -- un administrador sigue pudiendo vincular por cualquiera.
     ("POST", "/personas/{persona_id}/vincular-representado"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }

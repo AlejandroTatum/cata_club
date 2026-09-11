@@ -95,6 +95,7 @@ import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
+import ReassignRepresentativeSection from "./ReassignRepresentativeSection";
 import IndependizarSection from "./IndependizarSection";
 import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
@@ -659,18 +660,37 @@ function MemberEditDialog({
               {/* Issue #460: the only in-app way to assign a representante to
                   a minor used to be knowing the endpoint existed and calling
                   it directly — this panel had roles, estado, and per-student
-                  membership/ficha médica, and no field for it. */}
+                  membership/ficha médica, and no field for it.
+
+                  #1133 split the two cases: a minor with NO representative
+                  yet has nothing to conflict with, so it keeps the original
+                  `vincular-representado` desk flow (`LinkRepresentativeSection`).
+                  A minor who ALREADY has one goes through the atomic
+                  `reasignar-representante` command instead
+                  (`ReassignRepresentativeSection`), which knows the CURRENT
+                  link and lets the backend reject a stale one (409) instead
+                  of silently overwriting it. */}
               {isMinorStudent && (
                 <ModalSection
                   title="Representante legal"
                   saveMode="manual"
                   icon={<Building2 size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
                 >
-                  <LinkRepresentativeSection
-                    studentCedula={primaryStudent?.cedula}
-                    currentRepresentativeName={account.representadoPor}
-                    onLinked={membresiaCallbacks.onMembresiaChanged}
-                  />
+                  {account.representadoPor && account.representadoPorId ? (
+                    <ReassignRepresentativeSection
+                      personaId={personaId}
+                      personaNombreCompleto={accountFullName}
+                      representanteActualId={account.representadoPorId}
+                      representanteActualNombre={account.representadoPor}
+                      onReasignado={membresiaCallbacks.onMembresiaChanged}
+                    />
+                  ) : (
+                    <LinkRepresentativeSection
+                      studentCedula={primaryStudent?.cedula}
+                      currentRepresentativeName={account.representadoPor}
+                      onLinked={membresiaCallbacks.onMembresiaChanged}
+                    />
+                  )}
                 </ModalSection>
               )}
 

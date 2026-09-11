@@ -2104,15 +2104,18 @@ class Sponsor(Base):
 class VinculacionRepresentante(Base):
     """Ledger append-only de la relación de representación (issue #1133).
 
-    Cubre los CUATRO eventos que mutan `Persona.representante_id`, cada uno
-    con su `operacion`/`origen` propio: alta pública sin representante previo
+    Cubre los eventos que mutan `Persona.representante_id`, cada uno con su
+    `operacion`/`origen` propio: alta pública sin representante previo
     (`EnrollmentServicio.enroll`, `CREACION`/`ALTA_PUBLICA`), alta desde el
     panel o el dashboard del representante (`PersonaServicio.
-    crear_representado`, `CREACION`/`SESION_AUTENTICADA`), vinculación por
-    cédula de una persona ya existente (`PersonaServicio.
-    vincular_representado`, `REASIGNACION`/`AUTOSERVICIO_LEGADO` -- el
-    nombre "legado" es deliberado: este camino de autoservicio está en vías
-    de retiro, ver el issue) e independencia presencial
+    crear_representado`, `CREACION`/`SESION_AUTENTICADA`), vinculación de
+    mostrador de una persona ya existente (`PersonaServicio.
+    vincular_representado`, `REASIGNACION`/`ADMIN_PRESENCIAL` -- la
+    autoservicio por cédula que este camino tenía se retiró, ver #1133 punto
+    3: la ruta pública sigue viva pero responde una parada segura no
+    divulgativa), reasignación presencial (`RelacionRepresentacionServicio.
+    reasignar_presencial`, `REASIGNACION`/`ADMIN_PRESENCIAL` con
+    `idempotency_key`) e independencia presencial
     (`RelacionRepresentacionServicio.independizar_presencial`,
     `INDEPENDENCIA`/`ADMIN_PRESENCIAL`). Append-only: la base rechaza
     `UPDATE`/`DELETE`/`TRUNCATE` (migración `h1140rep_auditoria`)."""
