@@ -154,17 +154,21 @@ function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
   if (!isRecord(value)) return false;
   const alumno = value.alumno;
   const fichaMedica = value.fichaMedica;
-  if (!isStudent(alumno) || !isMedicalRecord(fichaMedica)) return false;
+  const hasRepresentative = isRepresentative(value.representante);
+  if (!isStudent(alumno) || !isMedicalRecord(fichaMedica, hasRepresentative)) return false;
   if (value.aceptaConsentimientos !== true) return false;
   // Issue #860: mirrors the wizard's `emergencyPhoneDiffersRule` at the
   // boundary, same as `isValidEcuadorianPhone` above does for `phoneRule` —
   // a body that skips the wizard cannot enroll a student whose emergency
-  // contact repeats their own phone.
+  // contact repeats their own phone. Issue #1138: a represented child has no
+  // `telefonoEmergencia` to compare against — this cross-check only applies
+  // to the self (adult) path.
   // `isMedicalRecord` returns a plain `boolean`, not a type predicate (its
   // return type would need to widen to `EnrollmentMedicalRecord`, which this
   // module does not import), so `fichaMedica` stays `unknown` here — cast
   // after the check above already proved the field is a string.
   if (
+    !hasRepresentative &&
     emergencyPhoneDiffersRule(
       (fichaMedica as JsonRecord).telefonoEmergencia as string,
       alumno.telefono as string,
@@ -173,7 +177,6 @@ function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
     return false;
   }
   const hasStudentCredentials = isCredentials(value.credencialesAlumno);
-  const hasRepresentative = isRepresentative(value.representante);
   return (hasStudentCredentials && value.representante === undefined) ||
     (hasRepresentative && value.credencialesAlumno === undefined);
 }
@@ -192,20 +195,34 @@ function isStudent(value: unknown): value is JsonRecord {
     isOptionalNumber(value.institucionId);
 }
 
-function isMedicalRecord(value: unknown): boolean {
-  return isRecord(value) &&
-    isBloodType(value.tipoSangre) &&
-    isNonEmptyString(value.contactoEmergencia) &&
-    // #643: non-empty was never enough for a phone number. The wizard already
-    // validates it with `phoneRule`; this is the same rule at the boundary,
-    // from the same module, so a body that skips the wizard cannot enroll a
-    // student whose emergency contact is `123`.
-    isNonEmptyString(value.telefonoEmergencia) &&
-    isValidEcuadorianPhone(value.telefonoEmergencia) &&
-    // Required by EnrollmentMedicalRecord, but "" is a legitimate value: an
-    // empty condicionesSalud/alergias means "none", so the key must be present
-    // and a string without being forced to carry text.
-    isRequiredString(value.condicionesSalud) &&
+/**
+ * Issue #1138: `isChild` (the body carries a `representante`) picks which
+ * shape applies. A "child" `fichaMedica` must NOT carry
+ * `contactoEmergencia`/`telefonoEmergencia` at all — the backend's
+ * `EnrollmentFichaMedicaMenorDTO` forbids those keys outright (422) — so
+ * this BFF gate mirrors that rejection instead of silently dropping them.
+ */
+function isMedicalRecord(value: unknown, isChild: boolean): boolean {
+  if (!isRecord(value) || !isBloodType(value.tipoSangre)) return false;
+  if (isChild) {
+    if (value.contactoEmergencia !== undefined || value.telefonoEmergencia !== undefined) return false;
+  } else {
+    if (
+      !isNonEmptyString(value.contactoEmergencia) ||
+      // #643: non-empty was never enough for a phone number. The wizard
+      // already validates it with `phoneRule`; this is the same rule at the
+      // boundary, from the same module, so a body that skips the wizard
+      // cannot enroll a student whose emergency contact is `123`.
+      !isNonEmptyString(value.telefonoEmergencia) ||
+      !isValidEcuadorianPhone(value.telefonoEmergencia)
+    ) {
+      return false;
+    }
+  }
+  // Required by EnrollmentMedicalRecord, but "" is a legitimate value: an
+  // empty condicionesSalud/alergias means "none", so the key must be present
+  // and a string without being forced to carry text.
+  return isRequiredString(value.condicionesSalud) &&
     isRequiredString(value.alergias) &&
     isOptionalString(value.observaciones);
 }

@@ -503,9 +503,13 @@ def test_el_upsert_por_patch_crea_una_ficha_completa(client, db_session):
 # Los caminos de enrollment
 # ---------------------------------------------------------------------------
 #
-# `EnrollmentFichaMedicaDTO` lo consumen los servicios de enrollment y
-# representados, así que la regla entra una vez y vale en ambos. Se prueban
-# los dos igual para evitar que un camino se despegue del otro.
+# `EnrollmentFichaMedicaDTO` lo consume el servicio de enrollment (adulto
+# autogestionado). Issue #1138: el camino de representados
+# (`/personas/{id}/representados`) usa desde entonces
+# `EnrollmentFichaMedicaMenorDTO` -- sin contacto de emergencia propio, se
+# deriva del representante -- así que las reglas COMPARTIDAS (tipo de sangre
+# obligatorio y no `DESCONOCIDO`) siguen probándose en ambos caminos, pero ya
+# no comparten literalmente el mismo DTO.
 
 def _dto_ficha_enrollment(**overrides) -> dict:
     cuerpo = {
@@ -593,8 +597,9 @@ def test_enrollment_acepta_una_ficha_completa():
 
 
 def test_el_alta_de_un_representado_rechaza_desconocido(client, db_session):
-    """`RepresentadoCreateDTO.ficha_medica` reusa el mismo DTO: el camino de
-    `/student/add-dependent`."""
+    """El camino de `/student/add-dependent`: `tipo_sangre` sigue sin poder
+    ser `DESCONOCIDO`, aunque desde #1138 use
+    `EnrollmentFichaMedicaMenorDTO` (sin contacto de emergencia propio)."""
     representante = _persona(db_session, 30)
 
     resp = client.post(
@@ -602,22 +607,7 @@ def test_el_alta_de_un_representado_rechaza_desconocido(client, db_session):
         json={
             "nombres": "Hijo", "apellidos": "Torres", "cedula": cedula_valida(731),
             "fecha_nacimiento": "2015-03-02", "telefono": "0991234567",
-            "ficha_medica": _dto_ficha_enrollment(tipo_sangre="DESCONOCIDO"),
-        },
-    )
-
-    assert resp.status_code == 422
-
-
-def test_el_alta_de_un_representado_rechaza_un_telefono_invalido(client, db_session):
-    representante = _persona(db_session, 31)
-
-    resp = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json={
-            "nombres": "Hijo", "apellidos": "Torres", "cedula": cedula_valida(732),
-            "fecha_nacimiento": "2015-03-02", "telefono": "0991234567",
-            "ficha_medica": _dto_ficha_enrollment(telefono_emergencia="123"),
+            "ficha_medica": {"tipo_sangre": "DESCONOCIDO", "enfermedades": []},
         },
     )
 
@@ -625,6 +615,8 @@ def test_el_alta_de_un_representado_rechaza_un_telefono_invalido(client, db_sess
 
 
 def test_el_alta_de_un_representado_acepta_una_ficha_completa(client, db_session):
+    """Issue #1138: "completa" en este camino ya no incluye contacto de
+    emergencia propio -- se deriva del representante."""
     representante = _persona(db_session, 32)
 
     resp = client.post(
@@ -632,7 +624,7 @@ def test_el_alta_de_un_representado_acepta_una_ficha_completa(client, db_session
         json={
             "nombres": "Hijo", "apellidos": "Torres", "cedula": cedula_valida(733),
             "fecha_nacimiento": "2015-03-02", "telefono": "0991234567",
-            "ficha_medica": _dto_ficha_enrollment(),
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
         },
     )
 

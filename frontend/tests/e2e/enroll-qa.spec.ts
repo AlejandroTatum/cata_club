@@ -764,6 +764,36 @@ test.describe("H · Salud y emergencia", () => {
   });
 });
 
+// Issue #1138: un menor representado no tiene contacto de emergencia
+// propio -- se deriva del representante ya cargado en el paso anterior.
+test.describe("H · Salud y emergencia (camino representado)", () => {
+  test.beforeEach(async ({ page }) => {
+    await enterFromLogin(page);
+    await goToPersonal(page, "Representante");
+    await fillValidStudent(page);
+    await nextButton(page).click();
+    await fillValidRepresentative(page);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
+  });
+
+  test("H06 · el paso de salud no pide contacto de emergencia propio", async ({ page }) => {
+    await expect(field(page, F.contactoEmergencia)).toHaveCount(0);
+    await expect(field(page, F.telefonoEmergencia)).toHaveCount(0);
+    await shot(page, "H06", "salud-representado-sin-contacto-propio");
+  });
+
+  test("H07 · solo el tipo de sangre habilita Siguiente en el camino representado", async ({ page }) => {
+    await expect(nextButton(page)).toBeDisabled();
+    await field(page, F.tipoSangre).selectOption(VALID_HEALTH.tipoSangre);
+    await expect(nextButton(page)).toBeEnabled();
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
+    await expect(page.getByText(/se deriva del representante/i)).toBeVisible();
+    await shot(page, "H07", "salud-representado-minima-valida");
+  });
+});
+
 // ===========================================================================
 // S — Paso "Resumen y Confirmación" y el envío
 // ===========================================================================

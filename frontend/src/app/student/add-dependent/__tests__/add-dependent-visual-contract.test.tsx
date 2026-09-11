@@ -96,13 +96,10 @@ describe("the field ids are declared, not slugged from the label", () => {
     render(<AddDependentPage />);
     goToHealthStep();
 
-    for (const field of [
-      "tipoSangre",
-      "enfermedades",
-      "alergias",
-      "contactoEmergencia",
-      "telefonoEmergencia",
-    ] as const) {
+    // Issue #1138: no contactoEmergencia/telefonoEmergencia controls — a
+    // dependent created here is always a represented minor, and that
+    // contact is derived from the representante, not collected here.
+    for (const field of ["tipoSangre", "enfermedades", "alergias"] as const) {
       expect(document.getElementById(addDependentFieldId(field))).not.toBeNull();
     }
   });
@@ -125,7 +122,9 @@ describe("the field ids are declared, not slugged from the label", () => {
   it("declares an id for every field the payload carries", () => {
     const declared = Object.keys(ADD_DEPENDENT_FIELD_TOKEN) as AddDependentField[];
     expect(declared).toContain("institucionId");
-    expect(declared.length).toBeGreaterThanOrEqual(11);
+    // Issue #1138: 11 fields dropped to 9 with the removal of
+    // contactoEmergencia/telefonoEmergencia.
+    expect(declared.length).toBeGreaterThanOrEqual(9);
   });
 });
 

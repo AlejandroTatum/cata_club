@@ -20,6 +20,7 @@ from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.representados_alcanzables import (
     exigir_representante_destino_alcanzable, exigir_sin_representados_menores_activos,
 )
+from app.dominio.telefono import es_telefono_valido
 from app.soporte_transversal.tiempo import hoy_club
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
@@ -136,6 +137,7 @@ class PersonaServicio:
                     f"({EDAD_MAYORIA_EDAD} años o más); el representante indicado "
                     f"tiene {edad_representante} años."
                 )
+            self._exigir_telefono_valido_de_representante(representante)
 
         nueva_persona = Persona(**datos.model_dump())
         return self.repo.crear(nueva_persona)
@@ -182,12 +184,15 @@ class PersonaServicio:
             representado = self._crear_persona_validada(persona_datos)
 
             if datos.ficha_medica:
+                # Issue #1138: `EnrollmentFichaMedicaMenorDTO` no tiene
+                # `contacto_emergencia`/`telefono_emergencia` -- ese contacto
+                # se deriva del representante al leer (ver
+                # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
+                # persiste acá.
                 ficha = FichaMedica(
                     tipo_sangre=datos.ficha_medica.tipo_sangre,
                     persona_id=representado.id,
                     alergias=datos.ficha_medica.alergias,
-                    contacto_emergencia=datos.ficha_medica.contacto_emergencia,
-                    telefono_emergencia=datos.ficha_medica.telefono_emergencia,
                 )
                 for nombre in datos.ficha_medica.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
@@ -278,6 +283,15 @@ class PersonaServicio:
         """
         self._exigir_correo_verificado_del_representante(representante_id)
         self._exigir_representante_destino_alcanzable(representante_id)
+        # Issue #1138: solo valida el teléfono si el representante EXISTE.
+        # Un `representante_id` inexistente (issue #460, TRIANGULATE: un
+        # ADMINISTRADOR puede llamar este endpoint con cualquier id) sigue
+        # cayendo, sin chequeo nuevo de por medio, en el `IntegrityError` de
+        # la FK que `main.py` ya traduce a un 409 legible -- agregar acá un
+        # 404 anticipado rompería ESE contrato deliberado.
+        representante = self.repo.obtener_por_id(representante_id)
+        if representante is not None:
+            self._exigir_telefono_valido_de_representante(representante)
 
         try:
             representado = self._resolver_representado_elegible(representante_id, datos.cedula)
@@ -347,6 +361,22 @@ class PersonaServicio:
         dejándolo en el mismo estado prohibido sin pasar por ninguna baja."""
         cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
         exigir_representante_destino_alcanzable(representante_id, cuenta)
+
+    def _exigir_telefono_valido_de_representante(self, representante: Persona) -> None:
+        """Issue #1138: el contacto de emergencia de un representado se
+        deriva del teléfono ACTUAL del representante (ver
+        `FichaMedicaServicio.obtener_ficha_emergencia`), así que un vínculo
+        NUEVO no puede apuntar a alguien sin un teléfono al que efectivamente
+        se pueda llamar. `Persona.telefono` no tiene CHECK en la base (ver
+        `dominio/modelos.py`) porque tolera filas legadas con `""` -- ese
+        vacío es memoria histórica, no un candidato válido para un vínculo
+        que se crea o reasigna HOY."""
+        if not representante.telefono or not es_telefono_valido(representante.telefono):
+            raise OperacionInvalida(
+                "El representante legal debe tener un teléfono válido "
+                "registrado: de él se deriva el contacto de emergencia del "
+                "representado."
+            )
 
     def _resolver_representado_elegible(self, representante_id: int, cedula: str) -> Persona:
         """Devuelve la Persona elegible para ser vinculada, o levanta

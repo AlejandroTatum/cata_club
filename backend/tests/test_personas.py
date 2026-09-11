@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from app.dominio.cedula import cedula_valida
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Usuario, FichaMedica
@@ -225,12 +227,13 @@ def test_crear_representado_happy_path(client, db_session):
     representante = _crear_persona_representante(db_session)
     _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
 
+    # Issue #1138: sin contacto de emergencia propio -- este endpoint
+    # siempre crea un representado, y ese contacto se deriva del
+    # representante al leer.
     ficha_medica = {
         "tipo_sangre": "O_POSITIVO",
         "enfermedades": ["Asma"],
         "alergias": "Polen",
-        "contacto_emergencia": "Marcela Vega",
-        "telefono_emergencia": "0991230000",
     }
     resp = client.post(
         f"/api/v1/personas/{representante.id}/representados",
@@ -248,6 +251,29 @@ def test_crear_representado_happy_path(client, db_session):
     assert [e.nombre_enfermedad for e in hijo.ficha_medica.enfermedades] == ["Asma"]
     # No debe crearse Usuario ni rol alguno para el dependiente self-service.
     assert db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).first() is None
+
+
+@pytest.mark.parametrize(
+    "campo_retirado",
+    ["contacto_emergencia", "telefono_emergencia"],
+)
+def test_crear_representado_rechaza_contacto_de_emergencia_propio(
+    client, db_session, campo_retirado,
+):
+    """Issue #1138: el contacto de emergencia de un representado se deriva
+    SIEMPRE del representante -- mandarlo en el alta es un 422 explícito, no
+    un valor que la API descarta en silencio."""
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    ficha_medica = {"tipo_sangre": "O_POSITIVO", campo_retirado: "0991230000"}
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=_payload_representado(ficha_medica=ficha_medica),
+    )
+
+    assert resp.status_code == 422
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).first() is None
 
 
 def test_crear_representado_persona_id_no_coincide_con_token_da_403_sin_filtrar_existencia(client, db_session):

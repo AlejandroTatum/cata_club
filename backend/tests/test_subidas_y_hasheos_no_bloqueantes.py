@@ -49,7 +49,7 @@ from sqlalchemy import inspect as inspeccionar_orm
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Persona
-from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaMenorDTO
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaListItemDTO, PersonaResponseDTO, RepresentadoCreateDTO,
 )
@@ -234,9 +234,10 @@ def test_crear_representado_devuelve_una_persona_que_no_vuelve_a_la_base(
     datos = RepresentadoCreateDTO(
         nombres="Lucas", apellidos="Vega", cedula=cedula_valida(2),
         fecha_nacimiento=date(2015, 5, 14), telefono="0991230001",
-        ficha_medica=EnrollmentFichaMedicaDTO(
+        # Issue #1138: sin contacto de emergencia propio (se deriva del
+        # representante).
+        ficha_medica=EnrollmentFichaMedicaMenorDTO(
             tipo_sangre="O_POSITIVO", enfermedades=["Asma"],
-            contacto_emergencia="Marcela Vega", telefono_emergencia="0991230000",
         ),
     )
 

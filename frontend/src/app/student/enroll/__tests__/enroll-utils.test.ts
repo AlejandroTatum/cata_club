@@ -11,12 +11,17 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  buildEnrollmentRequest,
   canonicalStudentPhone,
   describeStepBlocker,
+  ENROLLMENT_TYPES,
   enrollStudentPhoneRule,
+  fieldsForStep,
   initialFormData,
   validateEnrollFields,
+  validateEnrollStep,
   type EnrollFieldErrors,
+  type EnrollFormData,
 } from "../enroll-utils";
 
 describe("describeStepBlocker", (): void => {
@@ -145,5 +150,65 @@ describe("enrollStudentPhoneRule — step 2 takes only the 9 digits after +593",
       contraseniaConfirmacion: "password8",
     });
     expect(valid.telefono).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1138 — a represented child has no emergency contact of their own:
+// it is derived from the representante, never a field this wizard collects.
+// ---------------------------------------------------------------------------
+describe("health step — emergency contact only exists on the self (adult) path", (): void => {
+  it("does not render contactoEmergencia/telefonoEmergencia for a child enrollment", (): void => {
+    expect(fieldsForStep("health", ENROLLMENT_TYPES.CHILD)).toEqual(["tipoSangre"]);
+  });
+
+  it("still requires both for a self (adult) enrollment", (): void => {
+    expect(fieldsForStep("health", ENROLLMENT_TYPES.SELF)).toEqual([
+      "tipoSangre",
+      "contactoEmergencia",
+      "telefonoEmergencia",
+    ]);
+  });
+
+  it("a child enrollment's health step is valid with only tipoSangre filled", (): void => {
+    const data: EnrollFormData = {
+      ...initialFormData,
+      enrollmentType: ENROLLMENT_TYPES.CHILD,
+      tipoSangre: "O_POSITIVO",
+    };
+    expect(validateEnrollStep("health", data)).toEqual([]);
+  });
+
+  it("buildEnrollmentRequest omits contactoEmergencia/telefonoEmergencia for a child enrollment", (): void => {
+    const data: EnrollFormData = {
+      ...initialFormData,
+      enrollmentType: ENROLLMENT_TYPES.CHILD,
+      nombres: "Lucas", apellidos: "Martinez", cedula: "1798765432",
+      fechaNacimiento: "2015-06-15", telefono: "991234567",
+      nombreRepresentante: "Sofia", apellidosRepresentante: "Martinez",
+      cedulaRepresentante: "1798765433", fechaNacimientoRepresentante: "1990-05-20",
+      telefonoRepresentante: "0991234567", correoRepresentante: "sofia@example.com",
+      contraseniaRepresentante: "password8",
+      tipoSangre: "O_POSITIVO",
+    };
+    const request = buildEnrollmentRequest(data, true);
+    expect(request.fichaMedica).not.toHaveProperty("contactoEmergencia");
+    expect(request.fichaMedica).not.toHaveProperty("telefonoEmergencia");
+  });
+
+  it("buildEnrollmentRequest still includes both for a self (adult) enrollment", (): void => {
+    const data: EnrollFormData = {
+      ...initialFormData,
+      enrollmentType: ENROLLMENT_TYPES.SELF,
+      nombres: "Ana", apellidos: "Torres", cedula: "1798765432",
+      fechaNacimiento: "1990-05-20", telefono: "991234567",
+      correo: "ana@example.com", contrasenia: "password8",
+      tipoSangre: "O_POSITIVO",
+      contactoEmergencia: "María Torres",
+      telefonoEmergencia: "0987654321",
+    };
+    const request = buildEnrollmentRequest(data, true);
+    expect(request.fichaMedica.contactoEmergencia).toBe("María Torres");
+    expect(request.fichaMedica.telefonoEmergencia).toBe("0987654321");
   });
 });

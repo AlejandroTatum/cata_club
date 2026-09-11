@@ -1012,18 +1012,32 @@ function EnrollWizard(): React.ReactElement {
           rows: 2,
         })}
 
-        <EmergencyContactFields
-          idPrefix="enroll"
-          disabled={submitting}
-          contacto={formData.contactoEmergencia}
-          telefono={formData.telefonoEmergencia}
-          onContactoChange={(v) => updateField("contactoEmergencia", v)}
-          onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
-          contactoError={shownError("contactoEmergencia")}
-          telefonoError={shownError("telefonoEmergencia")}
-          onContactoBlur={() => markTouched("contactoEmergencia")}
-          onTelefonoBlur={() => markTouched("telefonoEmergencia")}
-        />
+        {/*
+         * Issue #1138: un menor representado no tiene contacto de
+         * emergencia propio -- se deriva del representante (nombre y
+         * teléfono actuales), así que este paso solo pide los dos campos
+         * en la inscripción de un adulto (jugador). El camino "child" ya
+         * cargó los datos del representante en el paso anterior.
+         */}
+        {formData.enrollmentType === ENROLLMENT_TYPES.SELF ? (
+          <EmergencyContactFields
+            idPrefix="enroll"
+            disabled={submitting}
+            contacto={formData.contactoEmergencia}
+            telefono={formData.telefonoEmergencia}
+            onContactoChange={(v) => updateField("contactoEmergencia", v)}
+            onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
+            contactoError={shownError("contactoEmergencia")}
+            telefonoError={shownError("telefonoEmergencia")}
+            onContactoBlur={() => markTouched("contactoEmergencia")}
+            onTelefonoBlur={() => markTouched("telefonoEmergencia")}
+          />
+        ) : (
+          <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
+            En caso de emergencia, el club lo contactará a usted con el
+            nombre y teléfono de representante que ya indicó.
+          </div>
+        )}
 
         {renderTextarea("observaciones", {
           label: "Observaciones adicionales",
@@ -1165,11 +1179,17 @@ function EnrollWizard(): React.ReactElement {
             formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",
             "health",
           )}
-          {summaryRow(
-            "Contacto de emergencia",
-            `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
-            "health",
-          )}
+          {isChild
+            ? summaryRow(
+                "Contacto de emergencia",
+                "Se deriva del representante indicado arriba",
+                "representative",
+              )
+            : summaryRow(
+                "Contacto de emergencia",
+                `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
+                "health",
+              )}
           {summaryRow("Condiciones de salud", formData.condicionesSalud || "Ninguna reportada", "health")}
           {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
           {formData.observaciones

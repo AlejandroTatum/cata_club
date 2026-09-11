@@ -16,7 +16,6 @@ import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
-  emergencyPhoneDiffersRule,
   personNameRule,
   studentBirthDateRule,
 } from "@/lib/identity-validation";
@@ -61,7 +60,15 @@ export const ADD_DEPENDENT_SHORT_LABELS: Record<AddDependentStep, string> = {
   summary: "Confirmar",
 };
 
-/** Shape of the add-dependent wizard form data. */
+/**
+ * Shape of the add-dependent wizard form data.
+ *
+ * Issue #1138: no `contactoEmergencia`/`telefonoEmergencia` fields. A
+ * dependent created here is always a minor (this wizard always assigns
+ * `representanteId`), and a represented minor's emergency contact is
+ * derived from the representante at read time — never a free-text field
+ * this form collects and the visitor has to keep in sync by hand.
+ */
 export interface AddDependentFormData {
   nombres: string;
   apellidos: string;
@@ -73,8 +80,6 @@ export interface AddDependentFormData {
   /** Raw comma-separated input — parsed into a string[] by `buildRepresentadoPayload`. */
   enfermedades: string;
   alergias: string;
-  contactoEmergencia: string;
-  telefonoEmergencia: string;
 }
 
 /** Default empty form data. */
@@ -88,8 +93,6 @@ export const initialAddDependentFormData: AddDependentFormData = {
   tipoSangre: "",
   enfermedades: "",
   alergias: "",
-  contactoEmergencia: "",
-  telefonoEmergencia: "",
 };
 
 /**
@@ -184,8 +187,6 @@ export const ADD_DEPENDENT_FIELD_TOKEN: Record<AddDependentField, string> = {
   tipoSangre: "tipo-sangre",
   enfermedades: "enfermedades",
   alergias: "alergias",
-  contactoEmergencia: "contacto-emergencia",
-  telefonoEmergencia: "telefono-emergencia",
 };
 
 /** The id prefix every field on this wizard shares. */
@@ -216,12 +217,6 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
   telefono: (d) => phoneRule(d.telefono, "El teléfono"),
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
-  contactoEmergencia: (d) =>
-    personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
-  // Issue #860: chained after `phoneRule`, same order the public wizard uses.
-  telefonoEmergencia: (d) =>
-    phoneRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
-    emergencyPhoneDiffersRule(d.telefonoEmergencia, d.telefono),
 };
 
 const CHILD_FIELDS: AddDependentField[] = [
@@ -232,7 +227,9 @@ const CHILD_FIELDS: AddDependentField[] = [
   "telefono",
 ];
 
-const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+// Issue #1138: sin contacto de emergencia propio -- se deriva del
+// representante.
+const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre"];
 
 /** The fields a given step actually renders. */
 export function fieldsForAddDependentStep(step: AddDependentStep): AddDependentField[] {
@@ -274,8 +271,6 @@ const FIELD_LABELS: Partial<Record<AddDependentField, string>> = {
   cedula: "Cédula de identidad",
   telefono: "Teléfono",
   tipoSangre: "Tipo de sangre",
-  contactoEmergencia: "Nombre del contacto de emergencia",
-  telefonoEmergencia: "Teléfono de emergencia",
 };
 
 /** Why "Siguiente" is disabled, in one sentence naming the fields. `null` when nothing is missing. */
@@ -350,6 +345,11 @@ function parseEnfermedades(raw: string): string[] {
  *
  * Issue #1137, invariante (B): no credentials are ever built into this
  * payload — a represented dependent never has a `Usuario` of their own.
+ *
+ * Issue #1138: `fichaMedica` never carries `contactoEmergencia`/
+ * `telefonoEmergencia` — this endpoint always creates a represented minor,
+ * and the backend rejects those two fields explicitly (422) rather than
+ * ignoring them.
  */
 export function buildRepresentadoPayload(data: AddDependentFormData): RepresentadoCreatePayload {
   const payload: RepresentadoCreatePayload = {
@@ -362,8 +362,6 @@ export function buildRepresentadoPayload(data: AddDependentFormData): Representa
       tipoSangre: data.tipoSangre as TipoSangre,
       enfermedades: parseEnfermedades(data.enfermedades),
       ...(data.alergias.trim() ? { alergias: data.alergias.trim() } : {}),
-      ...(data.contactoEmergencia.trim() ? { contactoEmergencia: data.contactoEmergencia.trim() } : {}),
-      ...(data.telefonoEmergencia.trim() ? { telefonoEmergencia: data.telefonoEmergencia.trim() } : {}),
     },
   };
   if (data.institucionId) {

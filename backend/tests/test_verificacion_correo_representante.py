@@ -96,11 +96,9 @@ def _cuerpo_de_inscripcion(semilla: int = 950) -> dict:
             "cedula": cedula_valida(semilla + 1),
             "fecha_nacimiento": "2015-06-15", "telefono": "0991234568",
         },
-        "ficha_medica": {
-            "tipo_sangre": TipoSangre.O_POSITIVO.value, "enfermedades": [],
-            "contacto_emergencia": "Sofia Martinez",
-            "telefono_emergencia": "0991112233",
-        },
+        # Issue #1138: camino representado -- sin contacto de emergencia
+        # propio (se deriva del representante).
+        "ficha_medica": {"tipo_sangre": TipoSangre.O_POSITIVO.value, "enfermedades": []},
         "acepta_consentimientos": True,
     }
 

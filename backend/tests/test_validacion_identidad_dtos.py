@@ -185,32 +185,29 @@ class TestRepresentadoCreateDTO:
         with pytest.raises(ValidationError):
             RepresentadoCreateDTO(**self._base(telefono=TELEFONO_INVALIDO))
 
-    # --- Issue #860: el teléfono de emergencia no puede repetir el personal -
-
-    def _con_ficha(self, telefono_emergencia: str) -> dict:
-        return self._base(
-            ficha_medica=dict(
-                tipo_sangre="O_POSITIVO", contacto_emergencia="Tía Rosa",
-                telefono_emergencia=telefono_emergencia,
-            ),
-        )
-
     def test_sin_ficha_medica_no_hay_nada_que_comparar(self):
-        # `ficha_medica` es opcional en este DTO: sin ella, la regla del
-        # #860 no tiene con qué compararse.
+        # `ficha_medica` es opcional en este DTO.
         RepresentadoCreateDTO(**self._base())
 
-    def test_acepta_telefono_emergencia_distinto_del_personal(self):
-        RepresentadoCreateDTO(**self._con_ficha(TELEFONO_EMERGENCIA_VALIDO))
+    # --- Issue #1138: el contacto de emergencia se deriva del representante,
+    # y este camino ya no admite un contacto propio ---------------------------
 
-    # `FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO` incluye la forma local
-    # (idéntica a `TELEFONO_VALIDO`) además de las dos internacionales, así
-    # que un solo parametrize cubre "igual" y "equivalente" a la vez.
-    @pytest.mark.parametrize("telefono_emergencia", FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO)
-    def test_rechaza_telefono_emergencia_igual_o_equivalente_al_personal(self, telefono_emergencia):
-        _assert_rechaza_por_telefono_emergencia_igual(
-            lambda: RepresentadoCreateDTO(**self._con_ficha(telefono_emergencia))
-        )
+    def test_acepta_ficha_medica_sin_contacto_de_emergencia(self):
+        RepresentadoCreateDTO(**self._base(
+            ficha_medica=dict(tipo_sangre="O_POSITIVO", alergias="Ninguna"),
+        ))
+
+    def test_rechaza_contacto_emergencia_en_la_ficha(self):
+        with pytest.raises(ValidationError, match="contacto_emergencia"):
+            RepresentadoCreateDTO(**self._base(
+                ficha_medica=dict(tipo_sangre="O_POSITIVO", contacto_emergencia="Tía Rosa"),
+            ))
+
+    def test_rechaza_telefono_emergencia_en_la_ficha(self):
+        with pytest.raises(ValidationError, match="telefono_emergencia"):
+            RepresentadoCreateDTO(**self._base(
+                ficha_medica=dict(tipo_sangre="O_POSITIVO", telefono_emergencia=TELEFONO_EMERGENCIA_VALIDO),
+            ))
 
 
 class TestVincularRepresentadoDTO:

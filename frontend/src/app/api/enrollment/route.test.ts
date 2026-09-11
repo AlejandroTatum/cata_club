@@ -360,6 +360,55 @@ describe("POST /api/enrollment — fichaMedica field contract", () => {
 });
 
 /**
+ * Issue #1138: a represented child (`representante` present) has no
+ * emergency contact of their own — it is derived from the representante.
+ */
+describe("POST /api/enrollment — represented child's fichaMedica contract (#1138)", () => {
+  const representanteBody = {
+    alumno: { nombres: "Lucas", apellidos: "Martinez", cedula: "1798765432", fechaNacimiento: "2015-06-15", telefono: "0991234568" },
+    representante: {
+      nombres: "Sofia", apellidos: "Martinez", cedula: "1798765433", fechaNacimiento: "1990-05-20",
+      telefono: "0991234567", correo: "sofia@example.com", contrasenia: "password8",
+    },
+    fichaMedica: { tipoSangre: BLOOD_TYPES.O_POSITIVO, condicionesSalud: "", alergias: "" },
+    aceptaConsentimientos: true,
+  };
+
+  it("accepts a fichaMedica with no emergency-contact fields at all", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(representanteBody));
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a body that still carries contactoEmergencia, with 400, without calling the backend", async () => {
+    const body = {
+      ...representanteBody,
+      fichaMedica: { ...representanteBody.fichaMedica, contactoEmergencia: "Sofia Martinez" },
+    };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body that still carries telefonoEmergencia, with 400, without calling the backend", async () => {
+    const body = {
+      ...representanteBody,
+      fichaMedica: { ...representanteBody.fichaMedica, telefonoEmergencia: "0991112233" },
+    };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * Same drift class as fichaMedica: fields the type declares but the validator
  * never inspected, so a malformed value was forwarded to the backend.
  */

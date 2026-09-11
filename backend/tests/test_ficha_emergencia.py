@@ -127,8 +127,11 @@ class TestCandado3RespaldoDelRepresentanteSinFichaMedica:
         cuerpo = resp.json()
         assert cuerpo["tipoSangre"] is None
         assert cuerpo["alergias"] is None
-        assert cuerpo["contactoEmergencia"] is None
-        assert cuerpo["telefonoEmergencia"] is None
+        # Issue #1138: sin ficha médica, el contacto de emergencia YA NO
+        # queda en `null` -- se deriva del representante, igual que el
+        # respaldo de abajo (mismos dos valores, misma persona).
+        assert cuerpo["contactoEmergencia"] == "Marta Solís"
+        assert cuerpo["telefonoEmergencia"] == "0987654321"
         assert cuerpo["representanteNombreCompleto"] == "Marta Solís"
         assert cuerpo["representanteTelefono"] == "0987654321"
 

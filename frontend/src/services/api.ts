@@ -2268,13 +2268,13 @@ export async function actualizarPersona(
 // ---------------------------------------------------------------------------
 
 /** Ficha médica payload for a new dependent — mirrors the backend's
- *  `EnrollmentFichaMedicaDTO` (reused as-is by `RepresentadoCreateDTO`). */
+ *  `EnrollmentFichaMedicaMenorDTO` (issue #1138). No emergency-contact
+ *  fields: a dependent created here is always a represented minor, and the
+ *  backend derives that contact from the representante at read time. */
 export interface RepresentadoFichaMedicaPayload {
   tipoSangre: TipoSangre;
   enfermedades?: string[];
   alergias?: string;
-  contactoEmergencia?: string;
-  telefonoEmergencia?: string;
 }
 
 /** Payload for the self-service "add a dependent" endpoint. Deliberately

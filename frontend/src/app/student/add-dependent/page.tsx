@@ -28,7 +28,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculatePersonAge } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
-import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation, example } from "@/components/wizard-fields";
+import { WizardTextarea, WizardInput, PersonIdentityFields, WizardNavigation, example } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
@@ -448,18 +448,16 @@ function AddDependentContent(): React.ReactElement {
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
-        <EmergencyContactFields
-          idPrefix="add-dependent"
-          disabled={submitting}
-          contacto={formData.contactoEmergencia}
-          telefono={formData.telefonoEmergencia}
-          onContactoChange={(v) => updateField("contactoEmergencia", v)}
-          onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
-          contactoError={shownError("contactoEmergencia")}
-          telefonoError={shownError("telefonoEmergencia")}
-          onContactoBlur={() => markTouched("contactoEmergencia")}
-          onTelefonoBlur={() => markTouched("telefonoEmergencia")}
-        />
+        {/*
+         * Issue #1138: sin campos de contacto de emergencia propios -- este
+         * wizard siempre crea un menor representado, y su contacto de
+         * emergencia se deriva del representante (nombre y teléfono
+         * actuales), no de un texto libre que haya que mantener acá.
+         */}
+        <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
+          En caso de emergencia, el club lo contactará a usted con el nombre y
+          teléfono de su cuenta.
+        </div>
 
         {/* `rounded-ctl`, and the ramp's own ink instead of `amber-700/80` —
             which is Tailwind's default palette, and measures 3.25:1 on this
@@ -547,11 +545,6 @@ function AddDependentContent(): React.ReactElement {
           {summaryRow(
             "Tipo de sangre",
             formData.tipoSangre ? formData.tipoSangre.replace("_", " ") : "—",
-            "health",
-          )}
-          {summaryRow(
-            "Contacto de emergencia",
-            `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
             "health",
           )}
           {summaryRow("Enfermedades", formData.enfermedades || "Ninguna reportada", "health")}

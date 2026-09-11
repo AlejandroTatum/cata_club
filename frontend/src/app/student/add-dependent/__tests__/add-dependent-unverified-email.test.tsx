@@ -96,9 +96,9 @@ async function walkToReviewedSummary(): Promise<void> {
   // Credentials are optional and all-or-nothing: left blank, the step is complete.
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
+  // Issue #1138: no emergency-contact fields on this wizard — tipoSangre
+  // alone completes the health step.
   setField("tipoSangre", "O_POSITIVO");
-  setField("contactoEmergencia", "Laura Zambrano");
-  setField("telefonoEmergencia", "0992223344");
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 
   fireEvent.click(screen.getByRole("checkbox"));

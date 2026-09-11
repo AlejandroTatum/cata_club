@@ -6,9 +6,9 @@ el wizard del frontend sin intervención del administrador. El endpoint orquesta
 la creación de Persona, Usuario, FichaMedica y AntecedentesClub en un solo
 request transaccional, y retorna tokens JWT para auto-login inmediato.
 """
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from datetime import date
-from typing import Optional, List
+from typing import Any, Optional, List, Union
 
 from app.dominio.enums import NivelTecnicoAlumno, TipoManoDominante
 from app.servicios_negocio.dtos.validadores import (
@@ -90,6 +90,38 @@ class EnrollmentFichaMedicaDTO(BaseModel):
     telefono_emergencia: TelefonoValidado = Field(..., max_length=32)
 
 
+class EnrollmentFichaMedicaMenorDTO(BaseModel):
+    """Ficha médica de un menor representado (issue #1138).
+
+    Mismos campos "médicos" que `EnrollmentFichaMedicaDTO` -- tipo de sangre,
+    enfermedades, alergias -- pero SIN `contacto_emergencia` ni
+    `telefono_emergencia`: el contacto operativo de un representado es
+    SIEMPRE su representante, derivado al leer (ver
+    `FichaMedicaServicio.obtener_ficha_emergencia`), nunca un texto libre
+    independiente que alguien tenga que mantener sincronizado a mano.
+
+    `extra="forbid"` es la decisión de producto hecha cumplir: si un cliente
+    manda igual `contacto_emergencia`/`telefono_emergencia` en el camino
+    representado, Pydantic los rechaza como campos desconocidos en vez de
+    tragárselos en silencio."""
+    model_config = ConfigDict(extra="forbid")
+
+    tipo_sangre: TipoSangreValidado
+    enfermedades: List[str] = Field(default_factory=list)
+    alergias: Optional[str] = Field(default=None, max_length=255)
+
+
+# Issue #1138: mensaje único para el rechazo explícito de los dos campos
+# retirados del camino representado, reusado por `EnrollmentCreateDTO`
+# (alta pública con `representante`) y `RepresentadoCreateDTO` (alta de
+# dependiente vía `POST /personas/{id}/representados`).
+MENSAJE_CONTACTO_EMERGENCIA_NO_ADMITIDO_PARA_REPRESENTADO = (
+    "El contacto de emergencia de un menor representado se deriva del "
+    "representante: no debe enviarse contacto_emergencia ni "
+    "telefono_emergencia."
+)
+
+
 # Issue #730. Un solo texto para los dos caminos que crean alumnos
 # (`EnrollmentCreateDTO` acá y `AdminCrearCuentaDTO` en
 # admin_cuenta_schemas.py, que ya importa de este módulo). Nombra los dos
@@ -133,15 +165,42 @@ class EnrollmentCreateDTO(BaseModel):
     cual al cliente. Ese texto en inglés lo leería un representante en el
     navegador. El validador de modelo es el mismo recurso que ya usa
     `_representante_o_credenciales` acá al lado, y por el mismo motivo.
+
+    Issue #1138: `ficha_medica` acepta DOS formas -- `EnrollmentFichaMedicaDTO`
+    (con contacto de emergencia propio, camino adulto) o
+    `EnrollmentFichaMedicaMenorDTO` (sin esos dos campos, camino
+    representado). Pydantic (unión "smart") elige la que valide: un cuerpo
+    representado que igual manda los campos retirados resuelve como la forma
+    de adulto, y por eso `_ficha_medica_no_admite_contacto_para_representado`
+    lo rechaza explícitamente por tipo resuelto, no por Union solo.
     """
     representante: Optional[EnrollmentRepresentanteDTO] = None
     alumno: EnrollmentAlumnoDTO
     credenciales_alumno: Optional[EnrollmentCredencialesDTO] = None
-    ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
+    ficha_medica: Optional[Union[EnrollmentFichaMedicaDTO, EnrollmentFichaMedicaMenorDTO]] = None
     antecedentes: Optional[EnrollmentAntecedentesDTO] = None
     # Solo se acepta una acción afirmativa; el servidor determina documentos,
     # versiones, texto y timestamp, nunca el cliente.
     acepta_consentimientos: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ficha_medica_no_admite_contacto_para_representado(cls, data: Any) -> Any:
+        """Issue #1138: rechazo TEMPRANO y explícito, antes de que
+        `EnrollmentFichaMedicaMenorDTO` (`extra="forbid"`) lo intente y
+        devuelva el inglés genérico de Pydantic ("Extra inputs are not
+        permitted") -- un mensaje que `isUserFacingText` del frontend nunca
+        deja pasar."""
+        if not isinstance(data, dict):
+            return data
+        if data.get("representante") is None:
+            return data
+        ficha = data.get("ficha_medica")
+        if not isinstance(ficha, dict):
+            return data
+        if {"contacto_emergencia", "telefono_emergencia"} & ficha.keys():
+            raise ValueError(MENSAJE_CONTACTO_EMERGENCIA_NO_ADMITIDO_PARA_REPRESENTADO)
+        return data
 
     @model_validator(mode="after")
     def _representante_o_credenciales(self) -> "EnrollmentCreateDTO":
@@ -176,11 +235,24 @@ class EnrollmentCreateDTO(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _ficha_medica_completa_para_autoinscripcion_adulta(self) -> "EnrollmentCreateDTO":
+        """Issue #1138. Sin `representante` (camino adulto), la ficha sigue
+        exigiendo tipo de sangre y contacto de emergencia COMPLETOS -- si
+        `ficha_medica` resolvió como `EnrollmentFichaMedicaMenorDTO` es
+        porque a un adulto le faltaron esos dos campos (el Union prueba
+        primero la forma completa; solo cae acá cuando esa falla), mismo
+        mensaje que `_ficha_medica_obligatoria`."""
+        if self.representante is None and isinstance(self.ficha_medica, EnrollmentFichaMedicaMenorDTO):
+            raise ValueError(MENSAJE_FICHA_MEDICA_OBLIGATORIA)
+        return self
+
+    @model_validator(mode="after")
     def _telefono_emergencia_distinto_del_alumno(self) -> "EnrollmentCreateDTO":
-        """Issue #860. `Optional` en el tipo por el mismo motivo que
-        `_ficha_medica_obligatoria` de arriba -- ese validador ya la exige
-        en los hechos, esto solo evita un `AttributeError` sobre `None`."""
-        if self.ficha_medica is not None:
+        """Issue #860. Solo aplica a la forma con contacto propio
+        (`EnrollmentFichaMedicaDTO`, camino adulto): un menor representado ya
+        no manda `telefono_emergencia` propio (issue #1138) -- su contacto
+        de emergencia ES el representante."""
+        if isinstance(self.ficha_medica, EnrollmentFichaMedicaDTO):
             validar_telefono_emergencia_distinto(self.alumno.telefono, self.ficha_medica.telefono_emergencia)
         return self
 

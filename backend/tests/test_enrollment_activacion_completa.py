@@ -65,7 +65,9 @@ def _cuerpo_menor_con_representante(secuencia: int) -> dict:
             "cedula": cedula_valida(secuencia + 1),
             "fecha_nacimiento": "2015-06-15", "telefono": "0991234568",
         },
-        "ficha_medica": _ficha(),
+        # Issue #1138: camino representado -- sin contacto de emergencia
+        # propio (se deriva del representante).
+        "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
         "acepta_consentimientos": True,
     }
 

@@ -17,6 +17,7 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentCreateDTO,
     EnrollmentCredencialesDTO,
     EnrollmentFichaMedicaDTO,
+    EnrollmentFichaMedicaMenorDTO,
     EnrollmentRepresentanteDTO,
 )
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
@@ -48,6 +49,12 @@ def _ficha_dto() -> EnrollmentFichaMedicaDTO:
     )
 
 
+def _ficha_dto_menor() -> EnrollmentFichaMedicaMenorDTO:
+    # Issue #1138: el camino representado (`representante` presente) ya no
+    # admite contacto de emergencia propio -- se deriva del representante.
+    return EnrollmentFichaMedicaMenorDTO(tipo_sangre=TipoSangre.O_POSITIVO, enfermedades=[])
+
+
 def _enrollment_dto(**kwargs) -> EnrollmentCreateDTO:
     """Alta con ficha médica por defecto (issue #730).
 
@@ -64,8 +71,15 @@ def _enrollment_dto(**kwargs) -> EnrollmentCreateDTO:
 
     Que la ficha ahora sea obligatoria se prueba en
     `test_ficha_medica_obligatoria.py`, que es donde se puede ver fallar.
+
+    Issue #1138: el default depende del camino. Con `representante` en
+    `kwargs`, una `EnrollmentFichaMedicaDTO` (con contacto propio) sería
+    rechazada -- ese camino usa `EnrollmentFichaMedicaMenorDTO`.
     """
-    kwargs.setdefault("ficha_medica", _ficha_dto())
+    kwargs.setdefault(
+        "ficha_medica",
+        _ficha_dto_menor() if kwargs.get("representante") is not None else _ficha_dto(),
+    )
     kwargs.setdefault("acepta_consentimientos", True)
     return EnrollmentCreateDTO(**kwargs)
 
@@ -201,10 +215,9 @@ def test_api_alumno_representado_no_puede_iniciar_sesion(client, db_session):
                 "fecha_nacimiento": "2015-06-15", "telefono": "0991234568",
                 "correo": "lucas-login@example.com", "contrasenia": "password8",
             },
-            "ficha_medica": {
-                "tipo_sangre": "O_POSITIVO", "contacto_emergencia": "Sofia",
-                "telefono_emergencia": "0991112233",
-            },
+            # Issue #1138: camino representado -- sin contacto de emergencia
+            # propio, se deriva del representante.
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
             "acepta_consentimientos": True,
         },
     )
@@ -613,12 +626,12 @@ def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
             nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
         ),
-        ficha_medica=EnrollmentFichaMedicaDTO(
+        # Issue #1138: camino representado -- `EnrollmentFichaMedicaMenorDTO`,
+        # sin contacto de emergencia propio (se deriva del representante).
+        ficha_medica=EnrollmentFichaMedicaMenorDTO(
             tipo_sangre=TipoSangre.O_POSITIVO,
             enfermedades=["Asma"],
             alergias="Ninguna",
-            contacto_emergencia="Mamá",
-            telefono_emergencia="0991112222",
         ),
         antecedentes=EnrollmentAntecedentesDTO(
             nivel_tecnico_alumno=NivelTecnicoAlumno.NIVEL_1,
