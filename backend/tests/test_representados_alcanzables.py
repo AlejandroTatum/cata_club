@@ -156,8 +156,13 @@ def test_el_round_trip_downgrade_upgrade_restaura_el_candado(arnes_migracion):
     se ejercita de punta a punta sobre una base limpia del arnés: el downgrade
     restituye el trigger legado de `g1139` (con su CONTRATO, no solo su nombre)
     y el upgrade reinstala el candado de relación, que vuelve a rechazar el
-    mismo alta cruda de adulto que sin él se admitía."""
-    arnes_migracion.preparar("head")
+    mismo alta cruda de adulto que sin él se admitía.
+
+    Prepara hasta `REVISION_CANDADO` explícitamente, no `"head"`: una
+    migración posterior (issue #1137, Fase 4 en adelante) mueve el head hacia
+    adelante sin tocar este candado, y esta prueba es sobre ESA revisión
+    puntual, no sobre lo último que exista en el árbol."""
+    arnes_migracion.preparar(REVISION_CANDADO)
     assert arnes_migracion.revision_actual() == REVISION_CANDADO
     assert _candado_de_relacion(arnes_migracion) == [
         (TRIGGER_RELACION_REPRESENTACION,)
@@ -188,7 +193,7 @@ def test_el_round_trip_downgrade_upgrade_restaura_el_candado(arnes_migracion):
             "UPDATE persona SET representante_id = NULL WHERE id = 3"
         )
 
-    arnes_migracion.migrar("head")
+    arnes_migracion.migrar(REVISION_CANDADO)
     assert arnes_migracion.revision_actual() == REVISION_CANDADO
     assert _candado_de_relacion(arnes_migracion) == [
         (TRIGGER_RELACION_REPRESENTACION,)
