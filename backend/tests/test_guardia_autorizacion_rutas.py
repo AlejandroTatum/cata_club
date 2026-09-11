@@ -191,7 +191,6 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`
     ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
-    ("POST", "/membresias/propia"),                               # (b) - persona_id sale del token, nunca del body (issue #1132)
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
     ("POST", "/personas/{persona_id}/foto"),                      # (b) - dueño/representante/admin validado en el router
 }
@@ -299,6 +298,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/geografia/paises"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/geografia/provincias"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1132 (independent-verification fix): los dos roles del portal,
+    # nunca ADMINISTRADOR (que ya tiene la ruta de arriba, sin el límite de
+    # "solo mi persona") ni ENTRENADOR (fuera de este contrato).
+    ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,

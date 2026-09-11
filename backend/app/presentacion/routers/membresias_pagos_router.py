@@ -124,14 +124,22 @@ async def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obten
 # autorización -- este endpoint dedicado matricula EXCLUSIVAMENTE a quien
 # llama. `persona_id` nunca sale del body (ver `MembresiaPropiaCreateDTO`),
 # siempre del token; no existe ningún payload que apunte a otra Persona.
+#
+# Restringido a los dos roles del portal (independent-verification fix):
+# REPRESENTANTE (el caso que motiva el issue) y ALUMNO (un autoinscripto
+# adulto que todavía no tiene membresía). ADMINISTRADOR ya tiene su propia
+# ruta arriba (`POST /membresias/`, sin este límite de "solo mi persona"),
+# y ENTRENADOR queda fuera de este contrato -- nunca es quien paga.
+ROLES_PORTAL = ["REPRESENTANTE", "ALUMNO"]
+
+
 @router.post(
     "/propia", response_model=MembresiaResponseDTO, status_code=201,
-    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
 async def crear_membresia_propia(
     datos: MembresiaPropiaCreateDTO,
     db: Session = Depends(obtener_sesion),
-    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    token_payload: dict = Depends(GestorPermisos(ROLES_PORTAL)),
 ):
     return MembresiaServicio(db).crear_membresia_propia(
         persona_id=token_payload.get("persona_id"),

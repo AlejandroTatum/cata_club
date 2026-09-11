@@ -967,7 +967,20 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
 // `derivePortalMode` doc comment for why this is not /unauthorized).
 // ---------------------------------------------------------------------------
 
-function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.ReactElement {
+function PendingEnrollmentView({
+  data,
+  accountPersonaId,
+}: {
+  data: StudentPortalSummary;
+  /** The SESSION's own persona id (independent-verification fix, issue
+   *  #1132): a pure representative with zero representados and no own
+   *  membership lands here, and their "Inscribirme como jugador" CTA used
+   *  to be a plain `<Link href="/student/enroll?type=self">` — the PUBLIC
+   *  wizard, which creates a brand-new Persona/Usuario instead of a
+   *  membership for this existing one. `JoinAsPlayerAction` (the same
+   *  component `ActivePortalView` already uses) fixes this here too. */
+  accountPersonaId: string;
+}): React.ReactElement {
   return (
     <>
       <section className="card p-6">
@@ -983,11 +996,7 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
       <MembershipPlansGrid data={data} />
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/student/enroll?type=self" className={buttonClasses("primary")}>
-          <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Inscribirme como jugador
-          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        </Link>
+        <JoinAsPlayerAction accountPersonaId={accountPersonaId} />
         <Link href="/student/enroll?type=child" className={buttonClasses("secondary")}>
           <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Inscribir a un hijo o dependiente
@@ -1529,7 +1538,7 @@ function StudentPortalContent(): React.ReactElement {
       )}
       {state.status === "ready" &&
         (portalMode === "pending" ? (
-          <PendingEnrollmentView data={state.data} />
+          <PendingEnrollmentView data={state.data} accountPersonaId={personaId} />
         ) : (
           <ActivePortalView
             data={state.data}

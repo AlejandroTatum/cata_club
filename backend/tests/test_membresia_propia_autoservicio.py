@@ -141,3 +141,19 @@ def test_endpoint_propia_sin_token_responde_401(client_sin_token):
         "/api/v1/membresias/propia", json={"tipo_membresia_id": 1},
     )
     assert respuesta.status_code == 401
+
+
+def test_endpoint_propia_rechaza_a_un_entrenador(client, db_session):
+    """Independent-verification fix: `POST /membresias/propia` está
+    restringido a los dos roles del portal (REPRESENTANTE, ALUMNO) -- un
+    ENTRENADOR nunca es quien paga una membresía, ni la propia ni la de un
+    tercero, y queda fuera de este contrato."""
+    entrenador = crear_persona_orm(db_session, cedula_valida(745), nombres="Coach", apellidos="Reyes")
+    tipo = crear_tipo_membresia_orm(db_session)
+    db_session.commit()
+
+    _autenticar_como(entrenador.id, ["ENTRENADOR"])
+    respuesta = client.post(
+        "/api/v1/membresias/propia", json={"tipo_membresia_id": tipo.id},
+    )
+    assert respuesta.status_code == 403
