@@ -15,9 +15,10 @@ Mismo patrón NO BLOQUEANTE que INS-6 / `membresia_vencida`: el aviso viaja
 en la respuesta del alta, al lado de las asignaciones que SÍ se crearon.
 """
 from datetime import date, time
+from decimal import Decimal
 
-from app.dominio.enums import DiaSemana
-from app.dominio.modelos import Persona
+from app.dominio.enums import DiaSemana, EstadoMembresia, TipoModalidad
+from app.dominio.modelos import Membresia, Persona, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AlumnoHorarioCreateDTO, CategoriaCreateDTO,
 )
@@ -25,11 +26,22 @@ from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 
 
 def _crear_alumno(sesion, cedula: str = "1710034065") -> Persona:
+    """Issue #1132: horario exige una membresía ya aprobada alguna vez --
+    este archivo prueba el aviso de solape, no membresía, así que la
+    persona nace ya habilitada como jugadora."""
     persona = Persona(
         nombres="Ariana", apellidos="Ruiz", cedula=cedula,
         fecha_nacimiento=date(2012, 3, 1), telefono="0991234567",
     )
     sesion.add(persona)
+    sesion.flush()
+    tipo = TipoMembresia(categoria="Formativo", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+    sesion.add(tipo)
+    sesion.flush()
+    sesion.add(Membresia(
+        estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("25.00"),
+        fecha_activacion=date(2026, 1, 1), persona_id=persona.id, tipo_membresia_id=tipo.id,
+    ))
     sesion.flush()
     return persona
 

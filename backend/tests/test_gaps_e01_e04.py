@@ -105,9 +105,13 @@ def test_login_real_funciona_tras_asignar_rol(client):
     assert payload["roles"] == ["ADMINISTRADOR"]
 
 
-def test_alumno_se_asigna_automaticamente_al_matricularse(client):
-    """Asignación perezosa: al crear la primera Membresia de una persona con
-    credenciales ya registradas, se le otorga ALUMNO automáticamente."""
+def test_matricularse_ya_no_asigna_ningun_rol_automaticamente(client):
+    """Issue #1132: "ser jugador" se deriva exclusivamente de la membresía
+    ACTIVA, nunca de un rol -- crear la primera Membresia de una persona con
+    credenciales ya registradas ya NO le otorga ALUMNO. Antes de este issue
+    esta prueba fijaba justo lo contrario (la asignación perezosa de
+    ALUMNO); ese principio de diseño quedó reemplazado por el predicado
+    único de `app.dominio.jugador.es_jugador`."""
     persona = _crear_persona(client, cedula_valida(304))
     _registrar_credenciales(client, persona["cedula"], "u3@x.com")
 
@@ -128,7 +132,7 @@ def test_alumno_se_asigna_automaticamente_al_matricularse(client):
     import jwt
     from app.soporte_transversal.configuracion import settings
     payload = jwt.decode(resp.json()["access_token"], settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo])
-    assert "ALUMNO" in payload["roles"]
+    assert payload["roles"] == []
 
 
 # --- Bloqueo de auto-exclusión de administradores ---------------------------

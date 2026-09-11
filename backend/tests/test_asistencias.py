@@ -22,13 +22,43 @@ def _dia_semana_de(fecha: str) -> str:
 
 
 def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
-    return client.post(
+    persona = client.post(
         "/api/v1/personas/",
         json={
             "nombres": nombres, "apellidos": "Torres", "cedula": cedula,
             "fecha_nacimiento": "2010-05-14", "telefono": "0991234567",
         },
     ).json()
+    # Issue #1132: horario/asistencia exigen una membresía ya aprobada
+    # alguna vez. Este archivo prueba mecánica de asistencia, no membresía,
+    # así que cada persona nace ya habilitada como jugadora -- vía el mismo
+    # `client` admin, para no tener que enhebrar `db_session` por los
+    # helpers compartidos de este archivo (`_preparar_asistencia_para_
+    # corregir`, `_crear_autor_y_alumno`).
+    _habilitar_como_jugador(client, persona["id"])
+    return persona
+
+
+def _habilitar_como_jugador(client, persona_id: int) -> None:
+    tipo = client.post(
+        "/api/v1/membresias/tipos",
+        json={"categoria": "Formativo", "precio": "25.00", "modalidad": "MENSUAL"},
+    ).json()
+    membresia = client.post(
+        "/api/v1/membresias/",
+        json={"persona_id": persona_id, "tipo_membresia_id": tipo["id"]},
+    ).json()
+    pago = client.post(
+        "/api/v1/membresias/pagos",
+        json={
+            "meses": 1, "tipo_pago": "EFECTIVO",
+            "persona_id": persona_id, "membresia_id": membresia["id"],
+        },
+    ).json()
+    client.patch(
+        f"/api/v1/membresias/pagos/{pago['id']}/validar",
+        json={"estado_pago": "APROBADO"},
+    )
 
 
 # --- Issue #13: sin relación entrenador–horario -----------------------------
