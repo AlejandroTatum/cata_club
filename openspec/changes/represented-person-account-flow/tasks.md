@@ -51,12 +51,12 @@ there). Phases 0–3 need none.
 
 ## Phase 0 — Put the house in order (no code)
 
-- [ ] Edit the bodies of #1165, #1169, #1170, #1171, #1172, #1173, #1175, #1176: `Closes #1137` → `Refs #1137`.
-- [ ] Retarget #1165 from `fix/represented-person-account-flow` to `main`.
-- [ ] Mark #1175 and #1176 as draft, retitle with a `[#1133]` prefix, and note in their bodies that they wait for #1133.
-- [ ] Discard the uncommitted diff in worktree `pi-1137` (`fix/represented-person-independence`) and remove the worktree and branch.
-- [ ] Commit the uncommitted diffs of `pi-1137-pr4c2` and `pi-1137-pr4c2a` onto their own branches as `wip(personas): park #1133 safe-stop linking`, push them, and remove the worktrees. Do not open PRs.
-- [ ] Verify with `git worktree list` and `gh pr list --state open` that only the intended units remain.
+- [x] Edit the bodies of #1165, #1169, #1170, #1171, #1172, #1173, #1175, #1176: `Closes #1137` → `Refs #1137`.
+- [x] Retarget #1165 from `fix/represented-person-account-flow` to `main`.
+- [x] Mark #1175 and #1176 as draft, retitle with a `[#1133]` prefix, and note in their bodies that they wait for #1133.
+- [x] Discard the uncommitted diff in worktree `pi-1137` (`fix/represented-person-independence`) and remove the worktree and branch.
+- [x] Commit the uncommitted diffs of `pi-1137-pr4c2` and `pi-1137-pr4c2a` onto their own branches as `chore(...)` parking commits (also `pi-1137-pr5-red` → `test/represented-person-pr5-contracts` for #1134), push them, and remove the worktrees. Do not open PRs.
+- [x] Verify with `git worktree list` and `gh pr list --state open` that only the intended units remain.
 
 ## Phase 1 — Land what is already built
 
