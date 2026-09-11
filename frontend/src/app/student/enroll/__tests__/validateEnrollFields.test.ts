@@ -296,6 +296,11 @@ describe("isStepComplete", () => {
    *  has nothing to validate beyond the student's own identity fields —
    *  there is no optional account to half-fill anymore. */
   it("completes a child enrollment's personal step without any credential field", () => {
-    expect(isStepComplete("personal", validForm({ enrollmentType: "child" }))).toBe(true);
+    expect(
+      isStepComplete(
+        "personal",
+        validForm({ enrollmentType: "child", fechaNacimiento: "2015-06-15" }),
+      ),
+    ).toBe(true);
   });
 });

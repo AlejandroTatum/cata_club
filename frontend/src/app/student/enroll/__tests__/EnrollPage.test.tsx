@@ -66,8 +66,6 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("@/services/api", () => ({
   enrollStudent: vi.fn(),
-  // The wizard loads the school catalogue on mount for the child flow.
-  fetchInstituciones: vi.fn().mockResolvedValue([]),
   // Public tariff catalog shown on step 1 (issue #331) — mocked so the
   // wizard's fetch-on-mount effect resolves instead of hanging in jsdom.
   fetchTarifas: vi.fn().mockResolvedValue([{ categoria: "Categoria Test", precio: "1.00" }]),
