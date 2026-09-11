@@ -20,9 +20,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormE
 import Link from "next/link";
 import {
   enrollStudent,
-  fetchInstituciones,
   fetchTarifas,
-  type Institucion,
   type TarifaPublica,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -116,26 +114,6 @@ const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: s
       "Gestiono la inscripción de un hijo o dependiente. El estudiante es distinto de mi cuenta.",
   },
 ];
-
-/**
- * What each `tipoEscuela` is CALLED, as opposed to how it is stored.
- *
- * The institution list printed the raw enum in the option text —
- * "Unidad Educativa Anexa · (FISCOMISIONAL)" — which is the backend's spelling
- * shouted at a family filling in a form. The filter right above it already
- * spelled the same four values properly; this is that list, reused instead of
- * re-derived.
- */
-const SCHOOL_TYPES: { value: string; label: string }[] = [
-  { value: "PARTICULAR", label: "Particular" },
-  { value: "FISCAL", label: "Fiscal" },
-  { value: "FISCOMISIONAL", label: "Fiscomisional" },
-  { value: "MUNICIPAL", label: "Municipal" },
-];
-
-function schoolTypeLabel(value: string): string {
-  return SCHOOL_TYPES.find((type) => type.value === value)?.label ?? value;
-}
 
 // ---------------------------------------------------------------------------
 // Confirmation copy when the auto-login could not be confirmed (issue #717)
@@ -234,22 +212,11 @@ function EnrollWizard(): React.ReactElement {
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
-  const [instituciones, setInstituciones] = useState<Institucion[]>([]);
-  /**
-   * The school catalogue is optional data, but its ABSENCE was not being
-   * distinguished from its failure: `fetchInstituciones().catch(() => {})` left
-   * the list empty, and the two selects — which only render when the list has
-   * entries — vanished without a word. A visitor who came to pick their child's
-   * school saw a step that simply never offered it.
-   */
-  const [institucionesFailed, setInstitucionesFailed] = useState(false);
-  const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
   /**
    * Issue #331: the public tariff catalog shown on step 1, BEFORE the
-   * visitor's first field. Unlike `instituciones`, a failure here gets its
-   * own visible `ErrorState` with retry rather than a silently empty list —
-   * a price is what this block exists to show, so its absence must be loud,
-   * not swallowed the way `institucionesFailed` swallows the school catalog.
+   * visitor's first field. A failure here gets its own visible `ErrorState`
+   * with retry — a price is what this block exists to show, so its absence
+   * must be loud, not silently empty.
    */
   const [tarifas, setTarifas] = useState<TarifaPublica[]>([]);
   const [tarifasLoading, setTarifasLoading] = useState(true);
@@ -355,12 +322,6 @@ function EnrollWizard(): React.ReactElement {
     if (!draftHydrated) return;
     saveEnrollDraft(formData);
   }, [formData, draftHydrated]);
-
-  useEffect(() => {
-    fetchInstituciones()
-      .then(setInstituciones)
-      .catch(() => setInstitucionesFailed(true));
-  }, []);
 
   const loadTarifas = useCallback(async (): Promise<void> => {
     setTarifasLoading(true);
@@ -731,69 +692,6 @@ function EnrollWizard(): React.ReactElement {
           }
         />
 
-        {/* The school block — child enrolment only.
-            It used to render on exactly one condition (`instituciones.length >
-            0`) and therefore had exactly one failure mode: silence. A catalogue
-            that could not be fetched and a club with no schools on file looked
-            identical, and both looked like a step that simply does not ask. */}
-        {!isSelf && institucionesFailed && (
-          <div className="mt-page rounded-ctl bg-sunken p-page text-sm text-ink-3-strong">
-            No pudimos cargar la lista de escuelas. Puede continuar sin
-            seleccionarla: la institución es opcional y el club la registra
-            después.
-          </div>
-        )}
-        {!isSelf && instituciones.length > 0 && (
-          <div className="mt-page">
-            <label htmlFor="enroll-tipo-escuela" className="mb-field block text-sm font-semibold text-ink">
-              Tipo de escuela
-              <span className="ml-1 font-normal text-ink-3">(opcional)</span>
-            </label>
-            <select
-              id="enroll-tipo-escuela"
-              value={tipoEscuelaFilter}
-              onChange={(e) => {
-                setTipoEscuelaFilter(e.target.value);
-                updateField("institucionId", "");
-              }}
-              disabled={submitting}
-              className="input-field"
-            >
-              <option value="">Todos los tipos</option>
-              {SCHOOL_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-
-            {/* The paragraph that used to sit here — "Seleccione la institución
-                educativa del estudiante (opcional)" — said the label's own
-                words back plus the marker the label now carries. D11c: no help
-                repeats the thing it explains. */}
-            <label htmlFor="enroll-institucion" className="mb-field mt-section block text-sm font-semibold text-ink">
-              Escuela o institución
-              <span className="ml-1 font-normal text-ink-3">(opcional)</span>
-            </label>
-            <select
-              id="enroll-institucion"
-              value={formData.institucionId}
-              onChange={(e) => updateField("institucionId", e.target.value)}
-              disabled={submitting}
-              className="input-field"
-            >
-              <option value="">Sin institución asignada</option>
-              {instituciones
-                .filter((inst) => !tipoEscuelaFilter || inst.tipoEscuela === tipoEscuelaFilter)
-                .map((inst) => (
-                  <option key={inst.id} value={String(inst.id)}>
-                    {inst.nombre} · {schoolTypeLabel(inst.tipoEscuela)}
-                  </option>
-                ))}
-            </select>
-          </div>
-        )}
-
         {/* Student credentials — self enrollment only (issue #1137,
             invariante B: un menor representado nunca tiene Usuario propio,
             así que este bloque no tiene sentido para un "child"). */}
@@ -1148,14 +1046,6 @@ function EnrollWizard(): React.ReactElement {
           )}
           {summaryRow("Cédula", formData.cedula || "—", "personal", { duplicateCandidate: true })}
           {summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
-          {isChild
-            ? summaryRow(
-                "Institución",
-                instituciones.find((inst) => String(inst.id) === formData.institucionId)?.nombre
-                  ?? "Sin institución asignada",
-                "personal",
-              )
-            : null}
           {isChild
             ? summaryRow(
                 "Representante",
@@ -1594,11 +1484,9 @@ function EnrollWizard(): React.ReactElement {
               backend contract of #394) — shown ONLY on step 1, before the
               visitor's first field, so anyone knows the price before they
               start. Public and harmless data: unlike the demo panel above,
-              this is NOT gated on auth or environment, and unlike
-              `institucionesFailed` (a silently-empty auxiliary list), a
-              failure here gets its own loud `ErrorState` with retry — the
-              whole point of this block is showing a price, so its absence
-              must say so. */}
+              this is NOT gated on auth or environment, and a failure here
+              gets its own loud `ErrorState` with retry — the whole point of
+              this block is showing a price, so its absence must say so. */}
           {step === "type" && (
             <div className="card p-page">
               <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">

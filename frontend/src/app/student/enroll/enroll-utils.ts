@@ -52,8 +52,6 @@ export interface EnrollFormData {
   contrasenia: string;
   /** UI-only: never read by the draft serializer or the payload builder (#876). */
   contraseniaConfirmacion: string;
-  /** School/institution (child enrollment only) — optional. */
-  institucionId: string;
   nombreRepresentante: string;
   apellidosRepresentante: string;
   cedulaRepresentante: string;
@@ -132,7 +130,6 @@ export const initialFormData: EnrollFormData = {
   correo: "",
   contrasenia: "",
   contraseniaConfirmacion: "",
-  institucionId: "",
   nombreRepresentante: "",
   apellidosRepresentante: "",
   cedulaRepresentante: "",
@@ -262,7 +259,6 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
     // #1028 (round 3): the visitor typed the 9 digits after the +593; the
     // contract the backend expects is the local 09XXXXXXXX form.
     telefono: canonicalStudentPhone(data.telefono),
-    ...(data.institucionId ? { institucionId: Number(data.institucionId) } : {}),
   };
   const fichaMedica = {
     tipoSangre: data.tipoSangre as BloodType, condicionesSalud: data.condicionesSalud.trim(),
@@ -321,10 +317,9 @@ export type EnrollField = keyof EnrollFormData;
  * free to change; the id only changes when the FIELD does, which is a change
  * the tests should notice.
  *
- * Two of the entries name no input on purpose and exist so this table stays a
- * total function of `EnrollField`: `enrollmentType` is the pair of choice
- * cards on the first step, and `institucionId` is a `<select>` the page
- * renders itself. A new form field cannot be added without answering "what is
+ * One entry names no input on purpose and exists so this table stays a total
+ * function of `EnrollField`: `enrollmentType` is the pair of choice cards on
+ * the first step. A new form field cannot be added without answering "what is
  * its id" here first.
  */
 export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
@@ -337,7 +332,6 @@ export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
   correo: "correo",
   contrasenia: "contrasenia",
   contraseniaConfirmacion: "confirmar-contrasena",
-  institucionId: "institucion",
   nombreRepresentante: "nombres-representante",
   apellidosRepresentante: "apellidos-representante",
   cedulaRepresentante: "cedula-representante",
@@ -440,6 +434,12 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
       isMinorAge(calculatePersonAge(d.fechaNacimiento))
     ) {
       return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
+    }
+    if (
+      d.enrollmentType === ENROLLMENT_TYPES.CHILD &&
+      !isMinorAge(calculatePersonAge(d.fechaNacimiento))
+    ) {
+      return "Un mayor de edad no puede inscribirse con representante. Seleccione 'Me inscribo yo' para gestionar su propia cuenta.";
     }
     return null;
   },
@@ -713,10 +713,22 @@ function parseStoredEnrollDraft(raw: string | null): {
   }
   if (!isStoredEnrollDraft(parsed)) return { draft: null, hadStoredPasswords: false };
   const record = parsed as Record<string, unknown>;
+  // Built key-by-key from `initialFormData` rather than `{ ...parsed }`: a
+  // draft saved by an older build can still carry a field this version no
+  // longer has (e.g. `institucionId`, removed by #1190) — spreading the raw
+  // stored object would let it ride straight into `formData` again.
+  const draft = { ...initialFormData } as EnrollFormData;
+  for (const key of Object.keys(initialFormData) as EnrollField[]) {
+    if (key === "enrollmentType") continue;
+    if (typeof record[key] === "string") {
+      (draft as Record<EnrollField, string>)[key] = record[key] as string;
+    }
+  }
+  draft.enrollmentType = record.enrollmentType as EnrollmentType;
   return {
     // Passwords are ALWAYS blanked, never read back from storage.
     draft: {
-      ...parsed,
+      ...draft,
       contrasenia: "",
       contraseniaConfirmacion: "",
       contraseniaRepresentante: "",

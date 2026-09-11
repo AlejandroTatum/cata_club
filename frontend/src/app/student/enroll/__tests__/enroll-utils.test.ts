@@ -14,6 +14,7 @@ import {
   buildEnrollmentRequest,
   canonicalStudentPhone,
   describeStepBlocker,
+  ENROLL_FIELD_TOKEN,
   ENROLLMENT_TYPES,
   enrollStudentPhoneRule,
   fieldsForStep,
@@ -210,5 +211,31 @@ describe("health step — emergency contact only exists on the self (adult) path
     const request = buildEnrollmentRequest(data, true);
     expect(request.fichaMedica.contactoEmergencia).toBe("María Torres");
     expect(request.fichaMedica.telefonoEmergencia).toBe("0987654321");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The school/institution block was removed from the wizard: it was
+// unnecessary information the product owner never asked the visitor for.
+// ---------------------------------------------------------------------------
+describe("the school/institution field no longer exists on this wizard", (): void => {
+  it("ENROLL_FIELD_TOKEN has no institucionId key", (): void => {
+    expect(ENROLL_FIELD_TOKEN).not.toHaveProperty("institucionId");
+  });
+
+  it("buildEnrollmentRequest's payload for a child enrollment has no institucionId", (): void => {
+    const data: EnrollFormData = {
+      ...initialFormData,
+      enrollmentType: ENROLLMENT_TYPES.CHILD,
+      nombres: "Lucas", apellidos: "Martinez", cedula: "1798765432",
+      fechaNacimiento: "2015-06-15", telefono: "991234567",
+      nombreRepresentante: "Sofia", apellidosRepresentante: "Martinez",
+      cedulaRepresentante: "1798765433", fechaNacimientoRepresentante: "1990-05-20",
+      telefonoRepresentante: "0991234567", correoRepresentante: "sofia@example.com",
+      contraseniaRepresentante: "password8",
+      tipoSangre: "O_POSITIVO",
+    };
+    const request = buildEnrollmentRequest(data, true);
+    expect(request.alumno).not.toHaveProperty("institucionId");
   });
 });

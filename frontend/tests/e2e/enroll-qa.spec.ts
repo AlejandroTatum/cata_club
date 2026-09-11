@@ -184,6 +184,18 @@ const VALID_STUDENT = {
   telefono: "991234567",
 };
 
+/**
+ * The same fixture, but a minor — for the "Representante" (child/dependent)
+ * flow. An adult student under that flow is rejected on the personal step
+ * itself (issue #1189): using `VALID_STUDENT`'s adult birth date here would
+ * make every "child" fixture describe the exact bug this rule exists to
+ * catch.
+ */
+const VALID_CHILD_STUDENT = {
+  ...VALID_STUDENT,
+  fechaNacimiento: isoYearsAgo(9),
+};
+
 const VALID_CREDENTIALS = {
   correo: "juan.perez@example.com",
   contrasenia: "clave-segura-8",
@@ -283,6 +295,15 @@ async function fillValidStudent(page: Page): Promise<void> {
   await fillBirthDate(page, F.fechaNacimiento, VALID_STUDENT.fechaNacimiento);
   await field(page, F.cedula).fill(VALID_STUDENT.cedula);
   await field(page, F.telefono).fill(VALID_STUDENT.telefono);
+}
+
+/** Same as `fillValidStudent`, but with `VALID_CHILD_STUDENT`'s minor birth date. */
+async function fillValidChildStudent(page: Page): Promise<void> {
+  await field(page, F.nombres).fill(VALID_CHILD_STUDENT.nombres);
+  await field(page, F.apellidos).fill(VALID_CHILD_STUDENT.apellidos);
+  await fillBirthDate(page, F.fechaNacimiento, VALID_CHILD_STUDENT.fechaNacimiento);
+  await field(page, F.cedula).fill(VALID_CHILD_STUDENT.cedula);
+  await field(page, F.telefono).fill(VALID_CHILD_STUDENT.telefono);
 }
 
 async function fillValidRepresentative(page: Page): Promise<void> {
@@ -591,7 +612,7 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
   });
 
   test("C01 · sin credenciales el paso es válido: el dependiente nunca tiene cuenta propia (#1137)", async ({ page }) => {
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await expect(nextButton(page)).toBeEnabled();
     // Issue #1137, invariante (B): un representado nunca tiene `Usuario` —
     // este paso no renderiza ningún campo de credenciales para él.
@@ -617,7 +638,7 @@ test.describe("R · Datos del representante", () => {
   test.beforeEach(async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /datos del representante/i })).toBeVisible();
   });
@@ -770,7 +791,7 @@ test.describe("H · Salud y emergencia (camino representado)", () => {
   test.beforeEach(async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await nextButton(page).click();
     await fillValidRepresentative(page);
     await nextButton(page).click();
