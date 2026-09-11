@@ -147,42 +147,22 @@ def test_autoinscripcion_jugador_persiste_rol_mas_alla_del_flush(db_session):
     assert roles == {TipoRol.ALUMNO}
 
 
-# --- Flujo 3: inscripción de menor con credenciales propias ----------------
+# --- Flujo 3 (retirado, issue #1137): un representado nunca tiene Usuario --
+# `EnrollmentAlumnoDTO` ya no acepta `correo`/`contrasenia` -- lo que antes
+# era "Opción B: menores con cuenta propia" está eliminado, no apagado.
 
-def test_inscripcion_menor_con_credenciales_crea_usuario_menor(db_session):
-    """Cuando el representante provee credencialesMenor, se crea también
-    un Usuario + ALUMNO para el menor con esas credenciales."""
-    datos = _enrollment_dto(
-        representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
-            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
-            correo="sofia@example.com", contrasenia="password8",
-        ),
-        alumno=EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
-            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="lucas@example.com", contrasenia="password8",
-        ),
-    )
-    EnrollmentServicio(db_session).enroll(datos)
-
-    # Representante tiene su cuenta
-    usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
-    roles_rep = {r.tipo_rol for r in usuario_rep.roles}
-    assert roles_rep == {TipoRol.REPRESENTANTE}
-
-    # Menor tiene su propia cuenta
-    usuario_menor = db_session.query(Usuario).filter(Usuario.correo == "lucas@example.com").one()
-    roles_menor = {r.tipo_rol for r in usuario_menor.roles}
-    assert roles_menor == {TipoRol.ALUMNO}
-
-    # El menor apunta al mismo representante
-    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).one()
-    assert alumno.representante_id is not None
+def test_enrollment_alumno_dto_ya_no_acepta_credenciales_propias():
+    """Candado de esquema (issue #1137, invariante B): un representado nunca
+    tiene `Usuario`, así que el DTO del alumno de un menor ni siquiera
+    declara los campos que antes le fabricaban una cuenta."""
+    assert "correo" not in EnrollmentAlumnoDTO.model_fields
+    assert "contrasenia" not in EnrollmentAlumnoDTO.model_fields
 
 
-def test_inscripcion_menor_sin_credenciales_no_crea_usuario_menor(db_session):
-    """Sin credencialesMenor, solo se crea cuenta del representante."""
+def test_inscripcion_con_representante_nunca_crea_usuario_para_el_alumno(db_session):
+    """Issue #1137, invariante (B): un alumno con representante nunca tiene
+    `Usuario` propio -- ni una fila en la tabla, sin importar cuántas otras
+    cosas se le hayan creado (Persona, ficha médica, antecedentes)."""
     datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
@@ -193,44 +173,67 @@ def test_inscripcion_menor_sin_credenciales_no_crea_usuario_menor(db_session):
     )
     EnrollmentServicio(db_session).enroll(datos)
 
-    # Solo el representante tiene cuenta
-    assert db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").count() == 1
-    assert db_session.query(Usuario).filter(Usuario.correo != "sofia@example.com").count() == 0
+    # Solo el representante tiene cuenta.
+    usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
+    assert {r.tipo_rol for r in usuario_rep.roles} == {TipoRol.REPRESENTANTE}
+
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).one()
+    assert alumno.representante_id == usuario_rep.persona_id
+    assert db_session.query(Usuario).filter(Usuario.persona_id == alumno.id).count() == 0
 
 
-def test_inscripcion_menor_correo_duplicado_rechazada(db_session):
-    """Si el correo del menor ya está en uso, se rechaza."""
-    # Crear un usuario con ese correo primero
-    persona = Persona(
-        nombres="Existente", apellidos="Test", cedula=cedula_valida(253),
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+def test_api_alumno_representado_no_puede_iniciar_sesion(client, db_session):
+    """Aunque el cuerpo del request incluya `correo`/`contrasenia` para el
+    menor (campos que `EnrollmentAlumnoDTO` ya ignora), ninguna cuenta se
+    crea para él -- el login con esos datos debe fallar."""
+    cedula_rep = cedula_valida(590)
+    cedula_alumno = cedula_valida(591)
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "representante": {
+                "nombres": "Sofia", "apellidos": "Martinez", "cedula": cedula_rep,
+                "fecha_nacimiento": "1990-05-20", "telefono": "0991234567",
+                "correo": "sofia-login@example.com", "contrasenia": "password8",
+            },
+            "alumno": {
+                "nombres": "Lucas", "apellidos": "Martinez", "cedula": cedula_alumno,
+                "fecha_nacimiento": "2015-06-15", "telefono": "0991234568",
+                "correo": "lucas-login@example.com", "contrasenia": "password8",
+            },
+            "ficha_medica": {
+                "tipo_sangre": "O_POSITIVO", "contacto_emergencia": "Sofia",
+                "telefono_emergencia": "0991112233",
+            },
+            "acepta_consentimientos": True,
+        },
     )
-    db_session.add(persona)
-    db_session.flush()
-    usuario = Usuario(
-        correo="ocupado@example.com", contrasenia="hash",
-        persona_id=persona.id,
-    )
-    db_session.add(usuario)
-    db_session.commit()
+    assert respuesta.status_code == 201, respuesta.text
 
-    datos = _enrollment_dto(
-        representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
-            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
-            correo="sofia@example.com", contrasenia="password8",
-        ),
-        alumno=EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
-            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="ocupado@example.com", contrasenia="password8",
-        ),
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_alumno).one()
+    assert db_session.query(Usuario).filter(Usuario.persona_id == alumno.id).count() == 0
+
+    login = client.post(
+        "/api/v1/auth/login",
+        data={"username": "lucas-login@example.com", "password": "password8"},
     )
-    from app.dominio.excepciones import EntidadDuplicada
-    # Texto genérico e idéntico para cédula y correo, a propósito:
-    # ver app/dominio/mensajes.py y tests/test_mensajes_identidad_duplicada.py.
-    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
-        EnrollmentServicio(db_session).enroll(datos)
+    assert login.status_code == 401
+
+
+def test_enrollment_representante_con_alumno_mayor_de_edad_rechazado():
+    """Issue #1137, invariante (A): el DTO rechaza un alumno mayor de edad
+    cuando viene con representante, ANTES de tocar la base -- antes de este
+    validador, ese cuerpo solo moría contra el trigger `i1141relinteg`."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="mayor de edad"):
+        _enrollment_dto(
+            representante=EnrollmentRepresentanteDTO(
+                nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+                fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+                correo="sofia@example.com", contrasenia="password8",
+            ),
+            alumno=_alumno_dto(cedula=cedula_valida(251), fecha_nacimiento=date(2000, 1, 1)),
+        )
 
 
 def test_autoinscripcion_adulto_correo_case_variant_rechazada(db_session):
@@ -423,28 +426,6 @@ def test_representante_correo_duplicado_rechazado(db_session):
         EnrollmentServicio(db_session).enroll(datos)
 
 
-def test_credenciales_menor_correo_invalido_rechazado_schema(db_session):
-    """Pydantic rechaza correoMenor con formato inválido en EnrollmentAlumnoDTO."""
-    from pydantic import ValidationError
-    with pytest.raises(ValidationError):
-        EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
-            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="no-es-correo", contrasenia="password8",
-        )
-
-
-def test_credenciales_menor_contrasenia_corta_rechazada_schema(db_session):
-    """Pydantic rechaza contraseniaMenor con < 8 caracteres."""
-    from pydantic import ValidationError
-    with pytest.raises(ValidationError):
-        EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
-            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="lucas@test.com", contrasenia="123",
-        )
-
-
 # --- Notificación a administradores (hueco de cobertura) -------------------
 # Ninguna prueba anterior de este archivo llega a crear una Notificacion:
 # `_notificar_nueva_inscripcion` sale temprano cuando no existe el rol
@@ -568,42 +549,6 @@ def test_inscripcion_sin_credenciales_rechazada_en_dto():
 # en el servicio y prueba que, tras la excepción, NINGUNA escritura de ese
 # intento sobrevive.
 
-def test_inscripcion_menor_correo_duplicado_no_deja_representante_huerfano(db_session):
-    """Falla tardía #1 (la reportada en el issue): el correo del menor con
-    cuenta propia se validaba dentro de `_crear_usuario_alumno`, el ÚLTIMO
-    paso del flujo -- para entonces la Persona+Usuario+roles del
-    representante y la Persona del alumno ya estaban commiteadas."""
-    persona = Persona(
-        nombres="Existente", apellidos="Test", cedula=cedula_valida(253),
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
-    )
-    db_session.add(persona)
-    db_session.flush()
-    usuario = Usuario(correo="ocupado@example.com", contrasenia="hash", persona_id=persona.id)
-    db_session.add(usuario)
-    db_session.commit()
-
-    datos = _enrollment_dto(
-        representante=EnrollmentRepresentanteDTO(
-            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
-            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
-            correo="sofia-huerfano@example.com", contrasenia="password8",
-        ),
-        alumno=EnrollmentAlumnoDTO(
-            nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
-            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="ocupado@example.com", contrasenia="password8",
-        ),
-    )
-    from app.dominio.excepciones import EntidadDuplicada
-    with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
-        EnrollmentServicio(db_session).enroll(datos)
-
-    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(250)).count() == 0
-    assert db_session.query(Usuario).filter(Usuario.correo == "sofia-huerfano@example.com").count() == 0
-    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(251)).count() == 0
-
-
 def test_autoinscripcion_adulto_correo_duplicado_no_deja_alumno_huerfano(db_session):
     """Falla tardía #2 (hallada al explorar el servicio, no reportada en el
     issue): autoinscripción de adulto (sin representante). El correo de
@@ -654,10 +599,10 @@ def test_alumno_cedula_duplicada_no_deja_representante_huerfano(db_session):
 
 
 def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
-    """Camino feliz, candado obligatorio: representante + menor + roles +
-    ficha médica + antecedentes quedan TODOS escritos. Sin este test, un fix
-    de atomicidad que rompiera el camino feliz (p. ej. olvidar el `commit()`
-    final) pasaría desapercibido."""
+    """Camino feliz, candado obligatorio: representante + menor (sin cuenta
+    propia, issue #1137) + ficha médica + antecedentes quedan TODOS
+    escritos. Sin este test, un fix de atomicidad que rompiera el camino
+    feliz (p. ej. olvidar el `commit()` final) pasaría desapercibido."""
     datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
@@ -667,7 +612,6 @@ def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
         alumno=EnrollmentAlumnoDTO(
             nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(251),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="lucas-completa@example.com", contrasenia="password8",
         ),
         ficha_medica=EnrollmentFichaMedicaDTO(
             tipo_sangre=TipoSangre.O_POSITIVO,
@@ -696,8 +640,8 @@ def test_inscripcion_completa_persiste_todo_en_una_transaccion(db_session):
     usuario_rep = db_session.query(Usuario).filter(Usuario.correo == "sofia-completa@example.com").one()
     assert {r.tipo_rol for r in usuario_rep.roles} == {TipoRol.REPRESENTANTE}
 
-    usuario_alumno = db_session.query(Usuario).filter(Usuario.correo == "lucas-completa@example.com").one()
-    assert {r.tipo_rol for r in usuario_alumno.roles} == {TipoRol.ALUMNO}
+    # Issue #1137, invariante (B): el alumno representado no tiene Usuario.
+    assert db_session.query(Usuario).filter(Usuario.persona_id == alumno.id).count() == 0
 
     ficha = db_session.query(FichaMedica).filter(FichaMedica.persona_id == alumno.id).one()
     assert ficha.tipo_sangre == TipoSangre.O_POSITIVO

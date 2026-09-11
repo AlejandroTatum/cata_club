@@ -51,6 +51,11 @@ FORMATOS_EQUIVALENTES_A_TELEFONO_VALIDO = ["0991234567", "+593991234567", "59399
 CEDULA_DIGITOS_NO_ASCII = "١٧١٠٠٣٤٠٦٥"
 TELEFONO_DIGITOS_NO_ASCII = "٠٩٩١٢٣٤٥٦٧"
 FECHA_NACIMIENTO_ADULTO = date(1990, 5, 14)
+# `RepresentadoCreateDTO` exige menor de edad sin excepción (issue #1137,
+# invariante A: este endpoint siempre asigna `representante_id`) -- su clase
+# de tests no puede reusar `FECHA_NACIMIENTO_ADULTO` como el resto del
+# archivo.
+FECHA_NACIMIENTO_MENOR = date(2015, 5, 14)
 
 
 def _assert_rechaza_por_telefono_emergencia_igual(construir):
@@ -157,10 +162,17 @@ class TestRepresentadoCreateDTO:
     def _base(self, **overrides):
         datos = dict(
             nombres="Luis", apellidos="Gómez", cedula=CEDULA_VALIDA,
-            fecha_nacimiento=FECHA_NACIMIENTO_ADULTO, telefono=TELEFONO_VALIDO,
+            fecha_nacimiento=FECHA_NACIMIENTO_MENOR, telefono=TELEFONO_VALIDO,
         )
         datos.update(overrides)
         return datos
+
+    def test_rechaza_mayor_de_edad(self):
+        """Issue #1137, invariante (A): este endpoint siempre asigna
+        `representante_id`, así que un representado mayor de edad se
+        rechaza sin excepción."""
+        with pytest.raises(ValidationError, match="mayor de edad"):
+            RepresentadoCreateDTO(**self._base(fecha_nacimiento=FECHA_NACIMIENTO_ADULTO))
 
     def test_acepta_datos_validos(self):
         RepresentadoCreateDTO(**self._base())

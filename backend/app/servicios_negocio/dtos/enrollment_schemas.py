@@ -20,6 +20,7 @@ from app.servicios_negocio.dtos.validadores import (
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
+    validar_representante_solo_para_menor,
     validar_telefono_emergencia_distinto,
 )
 
@@ -38,9 +39,9 @@ class EnrollmentRepresentanteDTO(BaseModel):
 class EnrollmentAlumnoDTO(BaseModel):
     """Datos del alumno a inscribir.
 
-    Para inscripción "child" (representante inscribe hijo menor):
-      Opcionalmente incluir `correo` + `contrasenia` para crear también
-      un Usuario con rol ALUMNO (Opción B: menores con cuenta propia).
+    Para inscripción "child" (representante inscribe hijo menor): el menor
+    nunca tiene credenciales propias (issue #1137, invariante B: una persona
+    con `representante_id` nunca tiene `Usuario`).
     Para inscripción "self" (adulto): las credenciales van en
       `credenciales_alumno`."""
     nombres: NombreValidado = Field(..., max_length=100)
@@ -48,8 +49,6 @@ class EnrollmentAlumnoDTO(BaseModel):
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
-    correo: Optional[CorreoValidado] = None
-    contrasenia: Optional[ContraseniaValidada] = None
     institucion_id: Optional[int] = None
 
 
@@ -152,6 +151,18 @@ class EnrollmentCreateDTO(BaseModel):
                 "datos del representante legal: debe completarse al menos "
                 "uno de los dos."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _representante_no_apunta_a_un_mayor(self) -> "EnrollmentCreateDTO":
+        """Issue #1137, invariante (A): un representante no puede inscribir a
+        un alumno mayor de edad. Antes de este validador, ese cuerpo pasaba
+        toda la validación y moría recién contra el trigger de base
+        `i1141relinteg` -- un `IntegrityError` genérico en vez de un 422 que
+        diga qué está mal."""
+        validar_representante_solo_para_menor(
+            self.alumno.fecha_nacimiento, self.representante is not None,
+        )
         return self
 
     @model_validator(mode="after")

@@ -204,10 +204,12 @@ def test_crear_representado_devuelve_una_persona_que_no_vuelve_a_la_base(
     """Lo que el servicio devuelve no puede quedar EXPIRADO.
 
     `crear_representado` no termina en el `commit()+refresh()` de
-    `registrar_persona`: después de eso commitean `FichaMedicaRepositorio.
-    crear`, `repo_usuario.crear` y `_asignar_rol`, y como `expire_on_commit`
-    está en su default `True` (`app/infraestructura/db.py:14`), cada uno de
-    esos commits vuelve a expirar el objeto ya devuelto.
+    `registrar_persona`: después de eso commitea `FichaMedicaRepositorio.
+    crear` (issue #1137 retiró el commit de `repo_usuario.crear`/
+    `_asignar_rol` -- un representado ya no tiene `Usuario`), y como
+    `expire_on_commit` está en su default `True`
+    (`app/infraestructura/db.py:14`), ese commit vuelve a expirar el objeto
+    ya devuelto.
 
     Un ORM expirado se despierta solo, con un SELECT, la primera vez que
     alguien lee un atributo. Y ese alguien es la serialización de FastAPI
@@ -227,8 +229,8 @@ def test_crear_representado_devuelve_una_persona_que_no_vuelve_a_la_base(
     db_session.commit()
     db_session.refresh(representante)
 
-    # CON ficha médica Y credenciales: es el camino que dispara los tres
-    # commits posteriores al `refresh` de `registrar_persona`.
+    # CON ficha médica: es el camino que dispara el commit posterior al
+    # `refresh` de `registrar_persona`.
     datos = RepresentadoCreateDTO(
         nombres="Lucas", apellidos="Vega", cedula=cedula_valida(2),
         fecha_nacimiento=date(2015, 5, 14), telefono="0991230001",
@@ -236,16 +238,15 @@ def test_crear_representado_devuelve_una_persona_que_no_vuelve_a_la_base(
             tipo_sangre="O_POSITIVO", enfermedades=["Asma"],
             contacto_emergencia="Marcela Vega", telefono_emergencia="0991230000",
         ),
-        correo="menor-no-bloqueante@example.com", contrasenia="clave12345",
     )
 
     representado = PersonaServicio(db_session).crear_representado(representante.id, datos)
 
     assert not inspeccionar_orm(representado).expired, (
-        "`crear_representado` devolvió una Persona expirada: los commits de la "
-        "ficha, el usuario y el rol la invalidan después del `refresh` de "
-        "`registrar_persona`. Refrescarla dentro del servicio deja ese SELECT "
-        "en el threadpool en vez de dejárselo al event loop"
+        "`crear_representado` devolvió una Persona expirada: el commit de la "
+        "ficha la invalida después del `refresh` de `registrar_persona`. "
+        "Refrescarla dentro del servicio deja ese SELECT en el threadpool en "
+        "vez de dejárselo al event loop"
     )
 
     with contar_selects() as sentencias:

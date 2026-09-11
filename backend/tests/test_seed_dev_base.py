@@ -264,9 +264,51 @@ def test_main_persiste_todos_los_representados_del_primer_representante():
             assert verificacion.execute(
                 select(Membresia).where(Membresia.persona_id == persona.id)
             ).scalar_one() is not None
+
+
+def test_los_hijos_representados_no_tienen_usuario_propio():
+    """Issue #1137, invariante (B): un representado nunca tiene `Usuario`.
+    Antes del cierre de este issue, `alumno123` era la contraseña que el
+    seed le fabricaba a cada hijo -- esa cuenta ya no debe existir."""
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    hijos_esperados = [
+        hijo for rep in modulo.REPRESENTANTES for hijo in rep["hijos"]
+    ]
+    with SessionLocal() as verificacion:
+        for hijo in hijos_esperados:
+            persona = verificacion.execute(
+                select(Persona).where(Persona.cedula == hijo["cedula"])
+            ).scalar_one()
             assert verificacion.execute(
-                select(Usuario).where(Usuario.correo == hijo["correo"])
-            ).scalar_one() is not None
+                select(Usuario).where(Usuario.persona_id == persona.id)
+            ).first() is None
+
+
+def test_los_hijos_representados_reciben_horarios_asignados():
+    """Sin `Usuario`/rol ALUMNO propio, la consulta de `alumno_persona_ids`
+    tiene que seguir encontrando a los hijos por `representante_id` -- si no,
+    un representado se queda sin horarios asignados desde el seed."""
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    hijos_esperados = [
+        hijo for rep in modulo.REPRESENTANTES for hijo in rep["hijos"]
+    ]
+    with SessionLocal() as verificacion:
+        for hijo in hijos_esperados:
+            persona = verificacion.execute(
+                select(Persona).where(Persona.cedula == hijo["cedula"])
+            ).scalar_one()
+            asignaciones = list(verificacion.execute(
+                select(AlumnoHorario).where(AlumnoHorario.persona_id == persona.id)
+            ).scalars().all())
+            assert asignaciones, f"{hijo['cedula']} quedó sin horarios tras la primera corrida"
 
 
 def test_main_es_idempotente_para_personas_membresias_y_pagos():
@@ -337,8 +379,12 @@ def test_main_agrega_las_personas_nuevas_a_una_bd_ya_sembrada_con_los_datos_viej
         )
         legado.add(hijo_persona)
         legado.flush()
+        # Cuenta LEGADA (issue #1137, invariante B: un representado ya no
+        # tiene `Usuario` propio -- esta fila simula una escrita ANTES del
+        # cierre del issue, así que no puede salir de `hijo_original`, que
+        # ya no declara `correo`).
         legado.add(Usuario(
-            correo=hijo_original["correo"], contrasenia="hash-heredado",
+            correo="hijo-legado@cataclub.test", contrasenia="hash-heredado",
             persona_id=hijo_persona.id, roles=[],
         ))
         legado.commit()

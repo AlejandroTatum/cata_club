@@ -17,6 +17,7 @@ from app.servicios_negocio.dtos.validadores import (
     NombreValidado,
     TelefonoValidado,
     TipoSangreValidado,
+    validar_representante_solo_para_menor,
     validar_telefono_emergencia_distinto,
 )
 
@@ -44,23 +45,31 @@ class PersonaCreateDTO(BaseModel):
     direccion_id: Optional[int] = None
     institucion_id: Optional[int] = None
 
+    @model_validator(mode="after")
+    def _representante_solo_para_menor(self) -> "PersonaCreateDTO":
+        """Issue #1137, invariante (A): ver el docstring de
+        `validar_representante_solo_para_menor` en `validadores.py`."""
+        validar_representante_solo_para_menor(
+            self.fecha_nacimiento, self.representante_id is not None,
+        )
+        return self
+
 
 # --- Representado (portal autoservicio) -------------------------------------
 class RepresentadoCreateDTO(BaseModel):
     """Payload para que un representante o administrador agregue un
     dependiente (POST /personas/{persona_id}/representados).
 
-    Si se proporcionan `correo` y `contrasenia`, se crea también un
-    Usuario con rol ALUMNO para el menor (Opción B: menores con cuenta).
-    Si se omiten, solo se crea la Persona (comportamiento anterior)."""
+    Issue #1137, invariante (B): un representado nunca tiene `Usuario`
+    propio -- este endpoint SOLO crea la `Persona` (y su ficha médica, si se
+    proporcionó). `crear_representado` siempre le asigna el `representante_id`
+    del path, así que el alumno tiene que ser menor de edad sin excepción."""
     nombres: NombreValidado = Field(..., max_length=100)
     apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
     ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
-    correo: Optional[CorreoValidado] = None
-    contrasenia: Optional[ContraseniaValidada] = None
     institucion_id: Optional[int] = None
 
     @model_validator(mode="after")
@@ -69,6 +78,14 @@ class RepresentadoCreateDTO(BaseModel):
         (`telefono` arriba), no el del representante que hace el alta."""
         if self.ficha_medica is not None:
             validar_telefono_emergencia_distinto(self.telefono, self.ficha_medica.telefono_emergencia)
+        return self
+
+    @model_validator(mode="after")
+    def _siempre_menor(self) -> "RepresentadoCreateDTO":
+        """Issue #1137, invariante (A): este endpoint asigna `representante_id`
+        incondicionalmente (ver `PersonaServicio.crear_representado`), así
+        que la validación no es condicional como en `PersonaCreateDTO`."""
+        validar_representante_solo_para_menor(self.fecha_nacimiento, True)
         return self
 
 

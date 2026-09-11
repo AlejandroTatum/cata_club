@@ -483,7 +483,6 @@ class TestElCandadoMira:
             ("app.servicios_negocio.persona_servicio", "PersonaServicio.actualizar_foto"),
             ("app.servicios_negocio.auth_servicio", "AuthServicio.actualizar_foto_perfil"),
             ("app.servicios_negocio.enrollment_servicio", "EnrollmentServicio.enroll"),
-            ("app.servicios_negocio.enrollment_servicio", "EnrollmentServicio._crear_usuario_alumno"),
             ("app.servicios_negocio.membresia_pago_servicio", "PagoServicio.adjuntar_voucher"),
             # Llega por `pwd_context.verify`, no por `hash`: es el salto que la
             # primera versión de `PRIMITIVAS_BLOQUEANTES` no podía dar.
@@ -540,11 +539,13 @@ class TestElCandadoMira:
         # que se le pasa a `run_in_threadpool`, esta lista quedaría vacía y la
         # regla de arriba pasaría por la razón equivocada.
         #
-        # Medido sobre este commit: 12 referencias envueltas. La cota bajó de
-        # 13 al eliminar el endpoint de creación directa de cuentas; las 12
-        # rutas bloqueantes que siguen existiendo deben conservar su envoltura.
-        # DESENVOLVER una, o perder una primitiva de la lista, pone roja la prueba.
-        assert len(ENVUELTAS) >= 12
+        # Medido sobre este commit: 11 referencias envueltas. La cota bajó de
+        # 12 al eliminar `EnrollmentServicio._crear_usuario_alumno` (issue
+        # #1137: un alumno representado ya no tiene Usuario propio, así que
+        # ese sitio bloqueante dejó de existir); las 11 rutas bloqueantes que
+        # siguen existiendo deben conservar su envoltura. DESENVOLVER una, o
+        # perder una primitiva de la lista, pone roja la prueba.
+        assert len(ENVUELTAS) >= 11
         nombres = {(modulo.split(".")[-1], handler) for modulo, handler, _ in ENVUELTAS}
         assert ("membresias_pagos_router", "subir_voucher") in nombres
         assert ("chatbot_router", "consultar") in nombres
