@@ -145,8 +145,8 @@ function LoginPageContent(): React.ReactElement {
    * here — `ProtectedRoute` sets `sesion-expirada` on a failed
    * refresh-and-retry. `correo-verificado` used to be set by
    * `/login/activacion`'s own inline code/link form, for the case where the
-   * person's session ended the instant their verification landed; issue
-   * #1102 removed that form (the email now carries a link, verified on
+   * person's session ended the instant their verification landed;
+   * PR #1191 removed that form (the email now carries a link, verified on
    * `/verificar-correo`, not on this page), so nothing produces
    * `correo-verificado` any more. It stays a recognized reason — read here,
    * kept in `RedirectReason` — for a bookmarked or already-open link built
