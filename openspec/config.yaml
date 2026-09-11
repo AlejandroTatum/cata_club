@@ -1,0 +1,81 @@
+schema: spec-driven
+
+context: |
+  Project: Cata Club Admin, a table-tennis club administration system for UNL.
+  Approved change: represented-person-account-flow (issue #1137), complemented by
+  issues #1132, #1133, #1134, #1135, and #1138.
+  Stack: Python 3.13, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, PostgreSQL 16,
+  Celery/Redis, uv; Next.js 14 App Router, React 18, TypeScript strict, Tailwind,
+  Vitest, Playwright, pnpm 10; Docker Compose and GitHub Actions.
+  Backend architecture: clean layered architecture with domain, infrastructure,
+  business services, security, presentation routers/schemas, and cross-cutting support.
+  Frontend architecture: Next.js BFF; browser calls same-origin Route Handlers,
+  which call FastAPI. HttpOnly cookies carry session tokens; backend is the
+  authorization authority.
+  Domain context: people may be students, representatives, or self-managed users;
+  account and represented-person flows must preserve authorization, identity,
+  relationship, and data-integrity invariants.
+  Repository rules: work only in a dedicated branch/worktree; never commit directly
+  to main; preserve unrelated work; product and deployment decisions belong to the
+  linked cata_club-docs repository.
+  CI reference: .github/workflows/ci.yml. CI runs secret tracking guard, backend
+  Ruff/import-linter/pip-audit/pytest against PostgreSQL, root tests, empty-to-head
+  Alembic migration, frontend audit/type-check/lint/Vitest/build/Playwright, and
+  production Docker image boot verification.
+  Delivery: auto-chain with feature-branch-chain; execution mode is auto
+  (slice-by-slice without routine workflow questions). The change is planned as
+  7 implementation PRs; each targets 600-900 changed lines with a hard stop at
+  1,000. No routine size exceptions; the earlier monolithic-slice exception is
+  superseded.
+
+strict_tdd: true
+
+rules:
+  proposal:
+    - State scope for #1137 and the complementary issues #1132-#1135 and #1138.
+    - Include explicit non-goals and rollback plan for risky changes.
+  specs:
+    - Use Given/When/Then scenarios.
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY).
+    - Specify backend, frontend/BFF, authorization, migration, and integration boundaries.
+  design:
+    - Document layer ownership and rationale for identity/relationship invariants.
+    - Include sequence diagrams for multi-step account or notification flows.
+  tasks:
+    - Group tasks by cohesive feature-branch-chain work unit.
+    - Keep tests with the behavior they verify and use hierarchical numbering.
+    - Keep each work unit within the 600-900 changed-line target; 1,000 is a
+      hard stop that requires stopping and re-slicing, not a size exception.
+  apply:
+    - Follow existing clean-architecture and BFF patterns.
+    - Apply strict TDD: RED, GREEN, TRIANGULATE, REFACTOR.
+    - Never modify production configuration or linked documentation decisions.
+  verify:
+    - Compare implementation against every spec scenario and authorization invariant.
+    - Record focused tests, one applicable pre-pr lane, and skipped CI gates.
+  archive:
+    - Preserve chain dependency and rollback notes.
+    - Warn before destructive schema or identity changes.
+
+testing:
+  strict_tdd: true
+  runner:
+    command: "make pre-pr LANE=full"
+    framework: "pytest (PostgreSQL 16) + Vitest + Playwright"
+  layers:
+    unit:
+      available: true
+      tool: "backend: uv run pytest; frontend: pnpm test"
+    integration:
+      available: true
+      tool: "pytest with real PostgreSQL, Docker Compose contract tests, BFF/backend integration"
+    e2e:
+      available: true
+      tool: "pnpm exec playwright test; live backend flows via make qa-live"
+  quality:
+    backend_lint: "make lint-backend"
+    frontend_lint: "make lint-frontend"
+    typecheck: "make typecheck"
+    migrations: "cd backend && uv run alembic upgrade head"
+    compose: "make test-compose"
+    root_tests: "make test-root"
