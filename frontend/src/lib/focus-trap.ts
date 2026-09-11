@@ -10,10 +10,10 @@
  * (Reintentar plus Cerrar), one once the ficha is on screen. So this hook reads
  * its focusables out of the DOM at each keypress instead of holding refs.
  *
- * `ConfirmDialog` and `AgeUpConfirmation` keep their two-ref copies on purpose:
- * they are proven, tested, and they gate the payments and groups actions, so
- * rewriting them is its own change. This hook exists so the next dialog does
- * not hand-roll a fourth copy.
+ * `ConfirmDialog` keeps its two-ref copy on purpose: it is proven, tested, and
+ * it gates the payments and groups actions, so rewriting it is its own
+ * change. This hook exists so the next dialog does not hand-roll a second
+ * copy.
  *
  * ## Why Tab is always preventDefault-ed
  *

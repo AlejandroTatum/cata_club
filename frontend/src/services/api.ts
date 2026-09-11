@@ -31,6 +31,7 @@ import type {
   PersonaReporte,
   PersonaResponse,
   PersonaBusqueda,
+  IndependenciaResponse,
   Notificacion,
   PaginatedResponse,
   PerfilPropio,
@@ -2328,14 +2329,33 @@ export async function vincularRepresentado(personaId: number, cedula: string): P
 }
 
 // ---------------------------------------------------------------------------
-// Aging Up / Independizar (Flow 4)
+// Independizar (Flow 4) — comando presencial del mostrador (#1137)
 // ---------------------------------------------------------------------------
 
-/** Independizar a persona de su representante legal (POST /personas/{id}/independizar). */
-export async function independizarPersona(personaId: number, contrasenia: string): Promise<PersonaResponse> {
-  return request<PersonaResponse>(apiEndpoint(`/personas/${personaId}/independizar`), {
+export interface IndependizarPayload {
+  correo: string;
+  contrasenia: string;
+  evidenciaIdentidad: string;
+}
+
+/**
+ * Independizar a un adulto representado: ya no es autoservicio (#1137) sino
+ * un comando PRESENCIAL que solo un ADMINISTRADOR ejecuta desde el
+ * mostrador — ver `POST /personas/{persona_id}/independizar`.
+ *
+ * `idempotencyKey` identifica ESTE intento: un reintento con la MISMA clave
+ * reproduce el resultado ya establecido en vez de duplicar el comando. El
+ * llamador acuña una clave nueva por cada envío (`crypto.randomUUID()`).
+ */
+export async function independizarPersona(
+  personaId: number,
+  payload: IndependizarPayload,
+  idempotencyKey: string,
+): Promise<IndependenciaResponse> {
+  return request<IndependenciaResponse>(apiEndpoint(`/personas/${personaId}/independizar`), {
     method: "POST",
-    body: JSON.stringify({ contrasenia }),
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(payload),
   });
 }
 

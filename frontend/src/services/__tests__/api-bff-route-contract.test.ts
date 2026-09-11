@@ -170,7 +170,15 @@ describe("API client URLs resolve to a real BFF route handler", () => {
           telefono: "0999999999",
         }),
     ],
-    ["independizarPersona", () => independizarPersona(2, "secreto")],
+    [
+      "independizarPersona",
+      () =>
+        independizarPersona(
+          2,
+          { correo: "adulto@cataclub.com", contrasenia: "unaClaveSegura1", evidenciaIdentidad: "Cédula verificada" },
+          "clave-independencia-prueba",
+        ),
+    ],
     ["fetchFichaMedica", () => fetchFichaMedica(2)],
     ["actualizarFichaMedica", () => actualizarFichaMedica(2, { tipoSangre: "DESCONOCIDO" })],
     ["fetchFichaEmergencia", () => fetchFichaEmergencia(2)],

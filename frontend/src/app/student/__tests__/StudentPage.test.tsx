@@ -84,7 +84,6 @@ vi.mock("@/contexts/AuthContext", () => ({
 const mockFetchStudentPortal = vi.fn();
 const mockFetchPagosDePersona = vi.fn();
 const mockFetchHorariosPorAlumno = vi.fn();
-const mockIndependizarPersona = vi.fn();
 const mockSubirFotoPersona = vi.fn();
 
 vi.mock("@/services/api", () => ({
@@ -95,7 +94,6 @@ vi.mock("@/services/api", () => ({
   // The student's REAL schedule assignments — the only source the "Próximos
   // entrenamientos" panel is allowed to state a future session from.
   fetchHorariosPorAlumno: (...args: unknown[]) => mockFetchHorariosPorAlumno(...args),
-  independizarPersona: (...args: unknown[]) => mockIndependizarPersona(...args),
   subirFotoPersona: (...args: unknown[]) => mockSubirFotoPersona(...args),
 }));
 
@@ -177,7 +175,6 @@ beforeEach(() => {
   mockFetchStudentPortal.mockReset().mockResolvedValue(PORTAL);
   mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
   mockFetchHorariosPorAlumno.mockReset().mockResolvedValue([]);
-  mockIndependizarPersona.mockReset().mockResolvedValue(undefined);
   mockSubirFotoPersona.mockReset().mockResolvedValue(undefined);
   mockRefreshSession.mockReset();
   mockRefreshSession.mockResolvedValue(undefined);
@@ -281,6 +278,24 @@ describe("StudentPage — contextual dependent CTA", () => {
 
     const link = await screen.findByText("Agregar hijo o dependiente");
     expect(link.closest("a")).toHaveAttribute("href", "/student/add-dependent");
+  });
+
+  // #1137: independence stopped being self-service — it is now a PRESENCIAL
+  // command only an ADMINISTRADOR can run, from "Miembros". A represented
+  // adult (still carrying `representanteId`) used to see an "Independizarse
+  // del representante" button here; that button, its confirmation modal, and
+  // the client call it made are all gone, regardless of what the account
+  // looks like.
+  it("offers no self-service independence action to a represented adult", async () => {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, representanteId: 5 } });
+
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByText(/independizarse/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 

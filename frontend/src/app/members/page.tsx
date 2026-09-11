@@ -58,6 +58,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Pencil,
+  UserMinus,
   X,
   Wallet,
 } from "lucide-react";
@@ -93,6 +94,7 @@ import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
+import IndependizarSection from "./IndependizarSection";
 import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
 import PaymentsDialog from "./PaymentsDialog";
@@ -666,6 +668,27 @@ function MemberEditDialog({
                     studentCedula={primaryStudent?.cedula}
                     currentRepresentativeName={account.representadoPor}
                     onLinked={membresiaCallbacks.onMembresiaChanged}
+                  />
+                </ModalSection>
+              )}
+
+              {/* Issue #1137: independence stopped being self-service — it is
+                  now a PRESENCIAL command an ADMINISTRADOR runs from here,
+                  never from `/student`. Only offered to a represented ADULT:
+                  a represented minor is exactly the case the backend rejects
+                  (`independizar_presencial`'s own doc comment), so this
+                  never shows beside "Representante legal" above for the
+                  same student. */}
+              {account.representadoPor && !isMinorStudent && (
+                <ModalSection
+                  title="Independencia"
+                  saveMode="manual"
+                  icon={<UserMinus size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+                >
+                  <IndependizarSection
+                    personaId={personaId}
+                    personaNombreCompleto={accountFullName}
+                    onIndependizado={membresiaCallbacks.onMembresiaChanged}
                   />
                 </ModalSection>
               )}
