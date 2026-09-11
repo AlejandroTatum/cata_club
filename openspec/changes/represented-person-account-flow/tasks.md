@@ -46,8 +46,7 @@ Stacked PRs to `main`, one per phase, squash-merged in order. No tracker as a
 base branch. Each PR body says `Refs #1137`; only the Phase 4 PR says
 `Closes #1137`.
 
-Decision needed before apply: Yes — one product decision blocks Phase 4 (see
-there). Phases 0–3 need none.
+Decision needed before apply: No — the Phase 4 product question was answered on 2026-09-11 (no legacy accounts in production).
 
 ## Phase 0 — Put the house in order (no code)
 
@@ -120,20 +119,22 @@ Frontend:
 - [ ] Invariant (A) enforced at DTO level on every write path.
 - [ ] Both wizards neither show nor send represented-minor credentials.
 
-## Phase 4 — The people already inside (tramo 3)
+## Phase 4 — Lock invariant (B) in the database (tramo 3)
 
-**Blocking product decision (owner):** what happens to the existing accounts of represented minors and to the legal consents recorded against them? The migration must not choose. Options to put to the owner: (a) detect and report only, remediation later by hand; (b) detect, deactivate the `usuario` row, keep consents as history. Until answered, this phase does not start.
+**Product fact (owner, 2026-09-11):** production has no represented person with an account. There is nothing to migrate, so the legacy-remediation slice is replaced by a database lock, mirroring what #1173 did for invariant (A).
 
-One PR, `fix/represented-person-legacy-accounts`, following `e762rolunico_un_solo_rol_activo_por_cuenta.py`:
-- Alembic migration that finds `persona` rows with `representante_id IS NOT NULL` that have a `usuario` row, writes them to a detection table (`cuenta_representada_detectada`: `persona_id`, `usuario_id`, `representante_id`, `detectado_en`), logs the count in the deploy output, and never aborts.
-- Applies only what the owner decided in the blocking question above; nothing else.
+One PR, `fix/represented-person-account-db-lock`, one additive Alembic migration:
+- **Guard:** at upgrade time, count `persona` rows with `representante_id IS NOT NULL` that have a `usuario` row. If the count is not zero, abort the migration with a message listing the count and the first ids. It never deletes, deactivates or chooses; it stops. (Production is expected to pass with zero; a QA/staging database seeded with old data stops the deploy instead of silently carrying the violation.)
+- **Trigger on `usuario`:** `BEFORE INSERT OR UPDATE OF persona_id` rejects a row whose persona has `representante_id IS NOT NULL`.
+- **Trigger on `persona`:** `BEFORE UPDATE OF representante_id` rejects setting a non-null `representante_id` on a persona that has a `usuario` row. (Insert is covered by construction: a new persona has no account yet.)
+- `downgrade` removes both triggers and their functions.
 
-**TDD evidence:** RED migration test against PostgreSQL with seeded legacy rows and exact before/after counts; RED for the from-scratch, single-head, drift, and root-guard migration checks; GREEN.
-**Focused validation:** `cd backend && uv run pytest tests/test_migraciones*.py -q` plus the migration validation targets in the Makefile.
-**Runtime:** `make qa-up` against a QA database seeded with linked minors that hold accounts; read the detection table.
+**TDD evidence:** RED direct-SQL tests against PostgreSQL — inserting a `usuario` for a represented persona is rejected; re-pointing an account to a represented persona is rejected; linking a persona that already has an account is rejected; a normal adult account and a normal minor link still work; the guard aborts on a seeded legacy pair and passes on a clean database; `downgrade → upgrade` round-trip. GREEN; invert each predicate once and confirm red.
+**Focused validation:** `cd backend && uv run pytest tests/test_representacion_triggers.py tests/test_cuenta_representada_triggers.py -q` plus the existing migration checks (single head, from-empty, drift, root guards) found under `backend/tests/` and `.github/workflows`.
+**Runtime:** `make qa-up` on a fresh seed; confirm the migration applies, then attempt to create an account for a seeded child through `POST /auth/registro` and see the DTO/service rejection (the trigger is the last line, not the first).
 
-- [ ] Detection table populated with exact counts; migration never aborts, never deletes.
-- [ ] Owner's decision applied, and only that.
+- [ ] Guard aborts on legacy rows, passes on a clean database, never mutates.
+- [ ] Both triggers installed and proven at the SQL boundary; round-trip clean.
 - [ ] PR body says `Closes #1137`.
 
 ## Phase 5 — Close
