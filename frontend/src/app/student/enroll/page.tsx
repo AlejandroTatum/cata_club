@@ -57,7 +57,6 @@ import {
   Stepper,
   buttonClasses,
 } from "@/components/ui";
-import ContextualHelp from "@/components/ContextualHelp";
 import { BLOOD_TYPES, BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import {
   UserPlus,
@@ -385,21 +384,7 @@ function EnrollWizard(): React.ReactElement {
     key: K,
     value: EnrollFormData[K],
   ): void {
-    setFormData((prev) => {
-      const next = { ...prev, [key]: value };
-      // A withdrawn optional child account takes its confirmation with it:
-      // once correo AND contrasenia are empty again, a leftover confirmation
-      // value could no longer describe anything the visitor can see (#876).
-      if (
-        next.enrollmentType === ENROLLMENT_TYPES.CHILD &&
-        (key === "correo" || key === "contrasenia") &&
-        !next.correo &&
-        !next.contrasenia
-      ) {
-        next.contraseniaConfirmacion = "";
-      }
-      return next;
-    });
+    setFormData((prev) => ({ ...prev, [key]: value }));
     setFormErrors([]);
     // The visitor is now actively working the form again — same moment the
     // attendance wizard's own "Recuperamos las marcas…" banner drops on the
@@ -705,7 +690,6 @@ function EnrollWizard(): React.ReactElement {
 
   function renderPersonalStep(): React.ReactElement {
     const isSelf = formData.enrollmentType === ENROLLMENT_TYPES.SELF;
-    const childCredentialsRequired = !isSelf && Boolean(formData.correo || formData.contrasenia);
     return (
       <div className="space-y-1">
         <p className="mb-page text-sm text-ink-2">
@@ -810,63 +794,51 @@ function EnrollWizard(): React.ReactElement {
           </div>
         )}
 
-        {/* Student credentials */}
-        <div className="my-page h-px bg-line" />
-        <div>
-          {/* The icon lost its red. A decorative glyph beside a section heading
-              is not the primary action and not a destructive one, which are the
-              only two jobs the red has. */}
-          <div className="mb-section flex items-center gap-2">
-            <Mail size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
-            <h3 className="text-2xs font-bold uppercase text-ink-3">
-              {isSelf ? "Credenciales de acceso" : "Cuenta del estudiante"}
-            </h3>
-          </div>
-          {/* "(Opcional)" used to live in this heading AND in both placeholders
-              below. It is stated once now, by the two labels themselves. What
-              is left here is the part that explains HOW it works, which D11c
-              puts behind "Ver ayuda". */}
-          {!isSelf && (
-            <div className="mb-section">
-              <ContextualHelp title="Cuenta del estudiante">
-                El menor puede tener su propio acceso, o no tenerlo. Si ingresa
-                un correo y una contraseña, creamos también su cuenta; si deja
-                los dos campos vacíos, la inscripción se completa igual y usted
-                gestiona todo desde la suya.
-              </ContextualHelp>
+        {/* Student credentials — self enrollment only (issue #1137,
+            invariante B: un menor representado nunca tiene Usuario propio,
+            así que este bloque no tiene sentido para un "child"). */}
+        {isSelf && (
+          <>
+            <div className="my-page h-px bg-line" />
+            <div>
+              {/* The icon lost its red. A decorative glyph beside a section
+                  heading is not the primary action and not a destructive
+                  one, which are the only two jobs the red has. */}
+              <div className="mb-section flex items-center gap-2">
+                <Mail size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+                <h3 className="text-2xs font-bold uppercase text-ink-3">
+                  Credenciales de acceso
+                </h3>
+              </div>
+              {renderField("correo", {
+                label: "Correo electrónico",
+                value: formData.correo,
+                onChange: (v) => updateField("correo", v),
+                type: "email",
+                required: true,
+                placeholder: example("correo@ejemplo.com"),
+                autoComplete: "email",
+              })}
+              {renderField("contrasenia", {
+                label: "Contraseña",
+                value: formData.contrasenia,
+                onChange: (v) => updateField("contrasenia", v),
+                type: "password",
+                required: true,
+                hint: "Al menos 8 caracteres.",
+                autoComplete: "new-password",
+              })}
+              {renderField("contraseniaConfirmacion", {
+                label: "Confirmar contraseña",
+                value: formData.contraseniaConfirmacion,
+                onChange: (v) => updateField("contraseniaConfirmacion", v),
+                type: "password",
+                required: true,
+                autoComplete: "new-password",
+              })}
             </div>
-          )}
-          {renderField("correo", {
-            label: "Correo electrónico",
-            value: formData.correo,
-            onChange: (v) => updateField("correo", v),
-            type: "email",
-            required: isSelf || childCredentialsRequired,
-            placeholder: example("correo@ejemplo.com"),
-            autoComplete: "email",
-          })}
-          {renderField("contrasenia", {
-            label: "Contraseña",
-            value: formData.contrasenia,
-            onChange: (v) => updateField("contrasenia", v),
-            type: "password",
-            required: isSelf || childCredentialsRequired,
-            hint: "Al menos 8 caracteres.",
-            autoComplete: "new-password",
-          })}
-          {/* Only while credentials are actually being created — always for
-              a self enrollment, only once the child's optional account has
-              started, exactly like "Contraseña" above (#876). */}
-          {(isSelf || childCredentialsRequired) &&
-            renderField("contraseniaConfirmacion", {
-              label: "Confirmar contraseña",
-              value: formData.contraseniaConfirmacion,
-              onChange: (v) => updateField("contraseniaConfirmacion", v),
-              type: "password",
-              required: isSelf || childCredentialsRequired,
-              autoComplete: "new-password",
-            })}
-        </div>
+          </>
+        )}
       </div>
     );
   }
@@ -1188,9 +1160,6 @@ function EnrollWizard(): React.ReactElement {
             // their cédula while the real collision was on this row (#999).
             { duplicateCandidate: true },
           )}
-          {isChild && formData.correo.trim()
-            ? summaryRow("Cuenta del estudiante", formData.correo, "personal")
-            : null}
           {summaryRow(
             "Tipo de sangre",
             formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",

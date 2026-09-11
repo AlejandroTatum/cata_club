@@ -32,16 +32,20 @@ describe("buildEnrollmentRequest", () => {
     expect(request.representante).toEqual(expect.objectContaining({ cedula: "0998765432", correo: "marta@example.com" }));
   });
 
-  it("includes credencialesMenor when student credentials are provided for child enrollment", () => {
+  /** Issue #1137, invariante (B): a represented minor never has a Usuario —
+   *  the request built for a child enrollment carries no credentials for
+   *  the student, even when the (retired) fields would have been filled. */
+  it("never builds credentials for the student in a child enrollment", () => {
     const request = buildEnrollmentRequest(form({
       enrollmentType: "child", fechaNacimiento: "2015-06-15",
-      correo: "lucas@example.com", contrasenia: "password8",
       nombreRepresentante: "Marta", apellidosRepresentante: "Pérez",
       cedulaRepresentante: "0998765432", fechaNacimientoRepresentante: "1985-04-10",
       telefonoRepresentante: "0991234567", correoRepresentante: "marta@example.com",
       contraseniaRepresentante: "password8",
     }));
-    expect(request.credencialesMenor).toEqual({ correo: "lucas@example.com", contrasenia: "password8" });
+    expect(request.alumno).not.toHaveProperty("correo");
+    expect(request.alumno).not.toHaveProperty("contrasenia");
+    expect(request).not.toHaveProperty("credencialesMenor");
   });
 
   /** Issue #876: the confirmation is strictly a UI field — it never reaches the request built for the backend. */
@@ -49,27 +53,13 @@ describe("buildEnrollmentRequest", () => {
     const request = buildEnrollmentRequest(form({
       contraseniaConfirmacion: "password8",
       enrollmentType: "child", fechaNacimiento: "2015-06-15",
-      correo: "lucas@example.com", contrasenia: "password8",
       nombreRepresentante: "Marta", apellidosRepresentante: "Pérez",
       cedulaRepresentante: "0998765432", fechaNacimientoRepresentante: "1985-04-10",
       telefonoRepresentante: "0991234567", correoRepresentante: "marta@example.com",
       contraseniaRepresentante: "password8", contraseniaRepresentanteConfirmacion: "password8",
     }));
     expect(JSON.stringify(request)).not.toContain("Confirmacion");
-    expect(request.credencialesMenor).toEqual({ correo: "lucas@example.com", contrasenia: "password8" });
     expect(request.representante).not.toHaveProperty("contraseniaRepresentanteConfirmacion");
-  });
-
-  it("omits credencialesMenor when student credentials are empty for child enrollment", () => {
-    const request = buildEnrollmentRequest(form({
-      enrollmentType: "child", fechaNacimiento: "2015-06-15",
-      correo: "", contrasenia: "",
-      nombreRepresentante: "Marta", apellidosRepresentante: "Pérez",
-      cedulaRepresentante: "0998765432", fechaNacimientoRepresentante: "1985-04-10",
-      telefonoRepresentante: "0991234567", correoRepresentante: "marta@example.com",
-      contraseniaRepresentante: "password8",
-    }));
-    expect(request.credencialesMenor).toBeUndefined();
   });
 });
 

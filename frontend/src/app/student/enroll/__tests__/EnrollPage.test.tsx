@@ -177,13 +177,22 @@ describe("EnrollPage — autocomplete on the representative step", () => {
     render(<EnrollPage />);
     fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    // Issue #1137, invariante (B): a child enrollment's personal step no
+    // longer has an optional credentials section that happens to reuse
+    // these same labels — fill it for real to reach the representative step.
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     // The representative step's own fields carry PLAIN labels ("Nombres",
     // not "Nombres del representante") — the card title says whose data
     // this is, so only one "Nombres" field exists on screen at a time.
     expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("autoComplete", "given-name");
     expect(screen.getByLabelText(/^Apellidos/)).toHaveAttribute("autoComplete", "family-name");
-    const fechaParts = birthDatePartIds(enrollFieldId("fechaNacimiento"));
+    const fechaParts = birthDatePartIds(enrollFieldId("fechaNacimientoRepresentante"));
     expect(document.getElementById(fechaParts.day)).toHaveAttribute("autoComplete", "bday-day");
     expect(document.getElementById(fechaParts.month)).toHaveAttribute("autoComplete", "bday-month");
     expect(document.getElementById(fechaParts.year)).toHaveAttribute("autoComplete", "bday-year");
@@ -403,37 +412,20 @@ describe("EnrollPage — error prevention on the student step", () => {
 });
 
 /**
- * Issue #876: the dependent's account is optional, and its confirmation
- * follows the same "both-or-neither" gate the password and correo already
- * use — it only exists while an account is actually being created.
+ * Issue #1137, invariante (B): a represented minor never has a Usuario, so
+ * the "optional account" this describe block used to cover (#876) no
+ * longer exists — the child flow's personal step renders no credential
+ * field at all.
  */
-describe("EnrollPage — confirmación de la cuenta opcional del menor (#876)", () => {
-  it("hides and clears the confirmation once the optional account is withdrawn", () => {
+describe("EnrollPage — un enrolamiento de menor nunca pide sus credenciales (#1137)", () => {
+  it("never renders the student's own credential fields for a child enrollment", () => {
     render(<EnrollPage />);
     fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    const correo = screen.getByLabelText(/^Correo electrónico/);
-    fireEvent.change(correo, { target: { value: "lucas@example.com" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
-    const confirm = screen.getByLabelText(/^Confirmar contraseña/);
-    fireEvent.change(confirm, { target: { value: "otraClave9" } });
-    fireEvent.blur(confirm);
-    expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
-
-    // Withdraw the optional account: clearing both correo and contrasenia
-    // takes the confirmation with them.
-    fireEvent.change(correo, { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "" } });
-
+    expect(screen.queryByLabelText(/^Correo electrónico/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Contraseña/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^Confirmar contraseña/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Las contraseñas no coinciden.")).not.toBeInTheDocument();
-
-    // Re-entering credentials starts from a clean, unmatched confirmation —
-    // never resurrecting the withdrawn value.
-    fireEvent.change(correo, { target: { value: "lucas@example.com" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
-    expect(screen.getByLabelText(/^Confirmar contraseña/)).toHaveValue("");
   });
 });
 

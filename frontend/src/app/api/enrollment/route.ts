@@ -155,7 +155,6 @@ function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
   const alumno = value.alumno;
   const fichaMedica = value.fichaMedica;
   if (!isStudent(alumno) || !isMedicalRecord(fichaMedica)) return false;
-  if (value.credencialesMenor !== undefined && !isCredentials(value.credencialesMenor)) return false;
   if (value.aceptaConsentimientos !== true) return false;
   // Issue #860: mirrors the wizard's `emergencyPhoneDiffersRule` at the
   // boundary, same as `isValidEcuadorianPhone` above does for `phoneRule` —

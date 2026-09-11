@@ -36,8 +36,6 @@ import {
   Heart,
   CheckCircle,
   AlertTriangle,
-  Mail,
-  Lock,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -372,61 +370,6 @@ function AddDependentContent(): React.ReactElement {
     );
   }
 
-  function renderCredentialsStep(): React.ReactElement {
-    const credentialsRequired = Boolean(formData.correo || formData.contrasenia);
-    return (
-      <div className="space-y-section">
-        <p className="mb-4 text-sm leading-relaxed text-ink-2">
-          Si desea que el dependiente tenga su propia cuenta de acceso, ingrese
-          las credenciales. Deje estos campos vacíos si no requiere cuenta para el menor.
-        </p>
-
-        <WizardInput
-          idPrefix="add-dependent"
-          label="Correo electrónico"
-          value={formData.correo}
-          onChange={(v) => updateField("correo", v)}
-          type="email"
-          required={credentialsRequired}
-          placeholder="correo@ejemplo.com"
-          disabled={submitting}
-          icon={<Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          error={shownError("correo")}
-          onBlur={() => markTouched("correo")}
-        />
-
-        <WizardInput
-          idPrefix="add-dependent"
-          label="Contraseña"
-          value={formData.contrasenia}
-          onChange={(v) => updateField("contrasenia", v)}
-          type="password"
-          required={credentialsRequired}
-          placeholder="Mínimo 8 caracteres"
-          disabled={submitting}
-          icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          error={shownError("contrasenia")}
-          onBlur={() => markTouched("contrasenia")}
-        />
-
-        <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
-          <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Cuenta de acceso del menor
-          </p>
-          {/* `ink-2`, not `blue-700/80`: that was Tailwind's default palette
-              at 3.84:1 on this surface, and blue carries no meaning in a
-              system whose accents are red, coal and the ball. */}
-          <p className="mt-1">
-            Si crea estas credenciales, el menor podrá iniciar sesión de forma
-            independiente. Si las deja vacías, solo el representante tendrá acceso
-            a la cuenta.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   function renderHealthStep(): React.ReactElement {
     return (
       <div className="space-y-field">
@@ -542,12 +485,10 @@ function AddDependentContent(): React.ReactElement {
    *
    * `duplicateCandidate: true` flags a row as one of the fields a
    * duplicate-identity 400 could not tell apart (issue #233): here, the
-   * dependent's cédula and its optional correo. When the backend answers
-   * with that error, EVERY candidate row gets the SAME "Revisar" marker —
-   * never just one — so the visitor's eye lands on the right "Corregir"
-   * button without the app ever singling out which field was actually the
-   * duplicate. The marker lives outside `WizardNavigation`'s alert box on
-   * purpose: that alert must never name a field either.
+   * dependent's cédula — the only identity field this wizard collects since
+   * issue #1137 retired the dependent's own correo. The marker lives
+   * outside `WizardNavigation`'s alert box on purpose: that alert must
+   * never name a field either.
    */
   function summaryRow(
     label: string,
@@ -602,12 +543,6 @@ function AddDependentContent(): React.ReactElement {
             instituciones.find((inst) => String(inst.id) === formData.institucionId)?.nombre
               ?? "Sin institución asignada",
             "child",
-          )}
-          {summaryRow(
-            "Cuenta de acceso",
-            formData.correo.trim() || "Sin cuenta propia",
-            "credentials",
-            { duplicateCandidate: true },
           )}
           {summaryRow(
             "Tipo de sangre",
@@ -700,7 +635,6 @@ function AddDependentContent(): React.ReactElement {
         <form onSubmit={handleConfirm}>
           {/* Step content */}
           {step === "child" && renderChildStep()}
-          {step === "credentials" && renderCredentialsStep()}
           {step === "health" && renderHealthStep()}
           {step === "summary" && renderSummary()}
 

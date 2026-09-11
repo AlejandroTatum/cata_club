@@ -590,10 +590,14 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
     await goToPersonal(page, "Representante");
   });
 
-  test("C01 · sin credenciales del estudiante el paso es válido: son opcionales", async ({ page }) => {
+  test("C01 · sin credenciales el paso es válido: el dependiente nunca tiene cuenta propia (#1137)", async ({ page }) => {
     await fillValidStudent(page);
     await expect(nextButton(page)).toBeEnabled();
-    await shot(page, "C01", "credenciales-opcionales-vacias");
+    // Issue #1137, invariante (B): un representado nunca tiene `Usuario` —
+    // este paso no renderiza ningún campo de credenciales para él.
+    await expect(page.locator(`#${F.correo}`)).toHaveCount(0);
+    await expect(page.locator(`#${F.contrasenia}`)).toHaveCount(0);
+    await shot(page, "C01", "sin-cuenta-propia");
   });
 
   test("C02 · el estudiante dependiente puede ser menor de edad", async ({ page }) => {
@@ -602,58 +606,6 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
     await expectFieldValid(page, F.fechaNacimiento);
     await expect(nextButton(page)).toBeEnabled();
     await shot(page, "C02", "menor-dependiente-valido");
-  });
-
-  test("C03 · credenciales a medias: solo el correo bloquea Siguiente en el campo (#226)", async ({ page }) => {
-    await fillValidStudent(page);
-    await field(page, F.correo).fill("hijo@example.com");
-    // La regla ahora es de CAMPO, como el resto del asistente: "Siguiente" se
-    // deshabilita apenas el correo queda solo, sin esperar a que se clickee.
-    await expect(nextButton(page)).toBeDisabled();
-    await expect(page.getByText(/^Para continuar, revise:/)).toContainText("Contraseña");
-
-    await field(page, F.contrasenia).focus();
-    await field(page, F.contrasenia).blur();
-    await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
-    );
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
-    await shot(page, "C03", "credenciales-a-medias-solo-correo");
-  });
-
-  test("C04 · credenciales a medias: solo la contraseña bloquea Siguiente en el campo", async ({ page }) => {
-    await fillValidStudent(page);
-    await field(page, F.contrasenia).fill("clave-segura-8");
-    await expect(nextButton(page)).toBeDisabled();
-
-    await field(page, F.correo).focus();
-    await field(page, F.correo).blur();
-    await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo del estudiante es obligatorio si se desea crear una cuenta.",
-    );
-    await shot(page, "C04", "credenciales-a-medias-solo-clave");
-  });
-
-  test("C05 · correo del estudiante inválido cuando sí se piden credenciales", async ({ page }) => {
-    await fillValidStudent(page);
-    await fillAndBlur(page, F.correo, "hijo@example");
-    await field(page, F.contrasenia).fill("clave-segura-8");
-    await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo del estudiante no es válido.",
-    );
-    await expect(nextButton(page)).toBeDisabled();
-    await shot(page, "C05", "correo-estudiante-invalido");
-  });
-
-  test("C06 · contraseña del estudiante de menos de 8 caracteres", async ({ page }) => {
-    await fillValidStudent(page);
-    await field(page, F.correo).fill("hijo@example.com");
-    await fillAndBlur(page, F.contrasenia, "1234567");
-    await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña del estudiante debe tener al menos 8 caracteres.",
-    );
-    await expect(nextButton(page)).toBeDisabled();
-    await shot(page, "C06", "clave-estudiante-corta");
   });
 });
 
@@ -1268,29 +1220,6 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await expect(fieldError(page, F.cedula)).toHaveText(
       "La cédula de identidad no es válida.",
     );
-  });
-
-  test("G06 · credenciales a medias ahora bloquea en el campo, ya no hace falta clickear", async ({ page }) => {
-    await enterFromLogin(page);
-    await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
-    await field(page, F.correo).fill("hijo@example.com");
-
-    // La regla de "ambos o ninguno" corre ahora desde `validateEnrollFields`,
-    // igual que el resto del modelo de prevención de errores (#226): ya no es
-    // la única regla de paso del asistente. "Siguiente" se deshabilita apenas
-    // el correo queda solo.
-    await expect(nextButton(page)).toBeDisabled();
-    await expect(page.getByText(/^Para continuar, revise:/)).toContainText("Contraseña");
-    await shot(page, "G06a", "siguiente-deshabilitado-consistente");
-
-    await field(page, F.contrasenia).focus();
-    await field(page, F.contrasenia).blur();
-    await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
-    );
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
-    await shot(page, "G06b", "mensaje-en-el-campo");
   });
 
   test("G08 · un dependiente de 3 años ya no pasa: el piso de 5 años ahora se aplica", async ({ page }) => {

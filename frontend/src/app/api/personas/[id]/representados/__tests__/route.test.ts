@@ -171,22 +171,13 @@ describe("POST /api/personas/[id]/representados", () => {
     expect(response.status).toBe(422);
   });
 
-  it("forwards correo, contrasenia and institucionId to the backend (FIC-2)", async () => {
-    // FIC-2: the wizard's credentials step builds these into
-    // RepresentadoCreatePayload, the backend's RepresentadoCreateDTO accepts
-    // them, and the API says 201 — but this route used to drop all three
-    // before forwarding, so the minor's Usuario row was never created.
+  it("forwards institucionId to the backend", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(personaResponse, 201));
-    const payloadWithCredentials = {
-      ...validPayload,
-      correo: "hijo@cataclub.com",
-      contrasenia: "alumno1234",
-      institucionId: 3,
-    };
+    const payloadWithInstitucion = { ...validPayload, institucionId: 3 };
 
     const access = makeJwt(3600);
     await POST(
-      postRequest("5", payloadWithCredentials, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      postRequest("5", payloadWithInstitucion, `${ACCESS_TOKEN_COOKIE}=${access}`),
       { params: Promise.resolve({ id: "5" }) },
     );
 
@@ -207,15 +198,13 @@ describe("POST /api/personas/[id]/representados", () => {
             contacto_emergencia: "María Pérez",
             telefono_emergencia: "0997654321",
           },
-          correo: "hijo@cataclub.com",
-          contrasenia: "alumno1234",
           institucion_id: 3,
         }),
       }),
     );
   });
 
-  it("omits correo/contrasenia/institucionId from the backend body when not provided", async () => {
+  it("omits institucionId from the backend body when not provided", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(personaResponse, 201));
 
     const access = makeJwt(3600);
@@ -226,9 +215,34 @@ describe("POST /api/personas/[id]/representados", () => {
 
     const [, options] = vi.mocked(global.fetch).mock.calls[0];
     const sentBody = JSON.parse((options as RequestInit).body as string) as Record<string, unknown>;
+    expect(sentBody).not.toHaveProperty("institucion_id");
+  });
+
+  /**
+   * Issue #1137, invariante (B): a represented dependent never has a
+   * `Usuario` of their own. `correo`/`contrasenia` used to be forwarded here
+   * (FIC-2) so the backend's (now-retired) "Opción B" could create one —
+   * a stray value with either name in the body must never reach the
+   * backend anymore.
+   */
+  it("never forwards a stray correo/contrasenia in the body", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(personaResponse, 201));
+    const payloadWithCredentials = {
+      ...validPayload,
+      correo: "hijo@cataclub.com",
+      contrasenia: "alumno1234",
+    };
+
+    const access = makeJwt(3600);
+    await POST(
+      postRequest("5", payloadWithCredentials, `${ACCESS_TOKEN_COOKIE}=${access}`),
+      { params: Promise.resolve({ id: "5" }) },
+    );
+
+    const [, options] = vi.mocked(global.fetch).mock.calls[0];
+    const sentBody = JSON.parse((options as RequestInit).body as string) as Record<string, unknown>;
     expect(sentBody).not.toHaveProperty("correo");
     expect(sentBody).not.toHaveProperty("contrasenia");
-    expect(sentBody).not.toHaveProperty("institucion_id");
   });
 
   it("returns 400 when the request body is not valid JSON", async () => {

@@ -180,26 +180,15 @@ describe("the red is the action and nothing else", () => {
     }
   });
 
-  it("marks the dependent's optional account with a word, not with the absence of a mark", () => {
+  /** Issue #1137, invariante (B): a represented minor never has a Usuario —
+   *  the child flow's "personal" step renders no credential input at all. */
+  it("never renders a credential input on the child flow's personal step", () => {
     render(<EnrollPage />);
     chooseRepresentative();
     next();
 
-    // The child flow's student credentials are the two optional inputs.
-    expect(screen.getAllByText("(opcional)").length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("requires both child credentials as soon as either one is entered", () => {
-    render(<EnrollPage />);
-    chooseRepresentative();
-    next();
-    const correo = screen.getByLabelText(/^Correo electrónico/);
-    const contrasenia = screen.getByLabelText(/^Contraseña/);
-    expect(correo).not.toBeRequired();
-    expect(contrasenia).not.toBeRequired();
-    fireEvent.change(correo, { target: { value: "menor@ejemplo.com" } });
-    expect(correo).toBeRequired();
-    expect(contrasenia).toBeRequired();
+    expect(screen.queryByLabelText(/^Correo electrónico/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Contraseña/)).not.toBeInTheDocument();
   });
 
   it("keeps the action colour off a field in error", () => {
