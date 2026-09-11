@@ -210,6 +210,26 @@ def test_no_existe_ruta_de_listado_de_entrenadores():
     assert "/personas/entrenadores" not in rutas
 
 
+# --- #1133/#1137: la reasignación de representación es ADMINISTRADOR-only ---
+# Guardia estructural local (además del guardia global de autorización): la
+# ruta del comando presencial existe y declara el rol correcto. Mismo
+# mecanismo que `test_no_existe_ruta_de_listado_de_entrenadores`: congelar
+# una propiedad estructural revisable en diff.
+def test_ruta_de_reasignacion_exige_administrador():
+    from app.presentacion.routers import personas_router
+    from app.servicios_negocio.gestor_permisos import GestorPermisos
+
+    rutas = {ruta.path: ruta for ruta in personas_router.router.routes}
+    ruta = rutas["/personas/{persona_id}/reasignar-representante"]
+    assert "POST" in ruta.methods
+    roles = {
+        frozenset(dep.call.roles_requeridos)
+        for dep in ruta.dependant.dependencies
+        if isinstance(dep.call, GestorPermisos)
+    }
+    assert roles == {frozenset({"ADMINISTRADOR"})}
+
+
 # --- POST /personas/{persona_id}/representados (portal autoservicio) --------
 # El representante ya está autenticado (misma `client` fixture de conftest.py,
 # solo se reemplaza el override del token — mismo patrón que

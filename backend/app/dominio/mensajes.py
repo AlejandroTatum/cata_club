@@ -59,6 +59,20 @@ MENSAJE_VINCULACION_NO_DISPONIBLE = (
     "intente nuevamente."
 )
 
+# Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la vinculación
+# de AUTOSERVICIO (un REPRESENTANTE atando por cédula a una Persona ya
+# existente desde su propia sesión) se retira -- vincular queda como acción de
+# mostrador. La ruta pública sigue viva, pero para ese actor deja de mutar y
+# responde esta parada segura, sin importar si la cédula existe, ya está
+# vinculada a otra cuenta o no existe en absoluto: los tres casos devuelven el
+# MISMO texto y el MISMO código HTTP, igual criterio anti-enumeración que
+# `MENSAJE_VINCULACION_NO_DISPONIBLE` de arriba, solo que acá no hay ninguna
+# cédula que resolver -- la parada corre ANTES de leer nada.
+MENSAJE_VINCULACION_SOLO_PRESENCIAL = (
+    "La vinculación de un representado se realiza únicamente en persona. "
+    "Acérquese a administración del club."
+)
+
 # Issue #790: respuesta cuando la cuenta que intenta vincular a un representado
 # todavía no probó que la dirección de correo con la que se inscribió es suya.
 #

@@ -19,8 +19,14 @@ decisión:
   4. Tope de intentos: freno progresivo por representante (mismo patrón que
      `AuthServicio._calcular_retraso_login`, TRA-4).
 
-Sin aprobación de nadie: la decisión de negocio la evaluó y la sostuvo
-explícitamente pese al riesgo -- no se re-discute acá.
+Decisión del dueño de 2026-09-11 (#1133, punto 3): la vinculación por cédula
+desde la SESIÓN DEL REPRESENTANTE se retira -- vincular queda como acción de
+mostrador. `PersonaServicio.vincular_representado` (y los cuatro guardarraíles
+de arriba) sobreviven intactos como el camino que un ADMINISTRADOR ejerce
+desde el mostrador; lo que cambia es el ROUTER, que para un actor
+REPRESENTANTE ya no llama a ese método -- responde la parada segura no
+divulgativa de `PersonaServicio.parar_vinculacion_representado` (sección
+"Parada segura" más abajo), sin leer ni escribir nada.
 """
 from datetime import date
 
@@ -28,7 +34,9 @@ import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.excepciones import OperacionInvalida
-from app.dominio.mensajes import MENSAJE_VINCULACION_NO_DISPONIBLE
+from app.dominio.mensajes import (
+    MENSAJE_VINCULACION_NO_DISPONIBLE, MENSAJE_VINCULACION_SOLO_PRESENCIAL,
+)
 from app.dominio.modelos import Notificacion, Persona, VinculacionRepresentante
 from app.dominio.enums import TipoNotificacion
 from app.servicios_negocio.dtos.persona_schemas import VincularRepresentadoDTO
@@ -414,13 +422,17 @@ def test_cedula_existente_no_elegible_sigue_la_misma_curva_de_retraso_que_una_in
 # Router — ownership, permisos, forma de la respuesta
 # ---------------------------------------------------------------------------
 
-def test_vincular_representado_router_happy_path(client, db_session):
+def test_vincular_representado_router_happy_path_via_administrador(client, db_session):
+    """Camino feliz de mostrador (renombrado: el rol REPRESENTANTE ya no
+    tiene un camino feliz por esta ruta, ver la sección "Parada segura" más
+    abajo)."""
+    admin = _guardado(db_session, _adulto(cedula_valida(700), nombres="Ada"))
     representante_anterior = _guardado(db_session, _adulto("1710034065", nombres="Pedro"))
     representante_nuevo = _adulto("1710034073", nombres="Marcela")
     menor = _menor(cedula_valida(632), representante_id=representante_anterior.id)
     db_session.add_all([representante_nuevo, menor])
     db_session.commit()
-    _restaurar_override_token(persona_id=representante_nuevo.id, roles=["REPRESENTANTE"])
+    _restaurar_override_token(persona_id=admin.id, roles=["ADMINISTRADOR"])
 
     resp = client.post(
         f"/api/v1/personas/{representante_nuevo.id}/vincular-representado",
@@ -430,6 +442,8 @@ def test_vincular_representado_router_happy_path(client, db_session):
     data = resp.json()
     assert data["id"] == menor.id
     assert data["representanteId"] == representante_nuevo.id
+    auditoria = db_session.query(VinculacionRepresentante).filter_by(persona_id=menor.id).one()
+    assert auditoria.actor_persona_id == admin.id
 
     notificaciones = db_session.query(Notificacion).filter(
         Notificacion.persona_id == representante_anterior.id
@@ -441,7 +455,7 @@ def test_vincular_representado_router_no_elegible_da_400_generico(client, db_ses
     representante = _adulto("1710034073", nombres="Marcela")
     db_session.add(representante)
     db_session.commit()
-    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+    _restaurar_override_token(persona_id=999, roles=["ADMINISTRADOR"])
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/vincular-representado",
@@ -449,6 +463,68 @@ def test_vincular_representado_router_no_elegible_da_400_generico(client, db_ses
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == MENSAJE_VINCULACION_NO_DISPONIBLE
+
+
+# ---------------------------------------------------------------------------
+# Parada segura (#1133, punto 3): el REPRESENTANTE ya no vincula por cédula
+# ---------------------------------------------------------------------------
+# La decisión del dueño retira la vinculación de AUTOSERVICIO: la ruta sigue
+# viva para el rol REPRESENTANTE, pero deja de leer y de escribir. Responde
+# SIEMPRE el mismo corte, sin importar si la cédula existe, ya está vinculada
+# a otra cuenta, o directamente no existe -- los tres casos tienen que dar la
+# MISMA respuesta exacta (mismo código, mismo cuerpo), no solo cada uno por
+# separado, porque una diferencia entre ellos ya sería el oráculo que la
+# parada existe para cerrar.
+
+def test_vincular_representado_representante_recibe_la_parada_segura(client, db_session):
+    representante = _guardado(db_session, _adulto("1710034073", nombres="Marcela"))
+    menor = _menor(cedula_valida(632), representante_id=None)
+    db_session.add(menor)
+    db_session.commit()
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/vincular-representado",
+        json={"cedula": menor.cedula},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == MENSAJE_VINCULACION_SOLO_PRESENCIAL
+    db_session.refresh(menor)
+    assert menor.representante_id is None
+    assert db_session.query(VinculacionRepresentante).count() == 0
+    assert db_session.query(Notificacion).count() == 0
+
+
+def test_vincular_representado_parada_segura_es_identica_para_los_tres_casos(client, db_session):
+    """Cédula existente y libre, cédula ya vinculada a otra cuenta, y cédula
+    inexistente: las TRES respuestas -- código y cuerpo -- son la misma."""
+    representante = _guardado(db_session, _adulto("1710034073", nombres="Marcela"))
+    otro_representante = _guardado(db_session, _adulto("1710034065", nombres="Pedro"))
+    libre = _guardado(db_session, _menor(cedula_valida(632), representante_id=None))
+    ya_vinculada = _guardado(db_session, _menor(
+        cedula_valida(633), representante_id=otro_representante.id, nombres="Ana",
+    ))
+    db_session.commit()
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    respuestas = [
+        client.post(
+            f"/api/v1/personas/{representante.id}/vincular-representado",
+            json={"cedula": cedula},
+        )
+        for cedula in (libre.cedula, ya_vinculada.cedula, cedula_valida(634))
+    ]
+
+    codigos = {r.status_code for r in respuestas}
+    cuerpos = {r.json()["detail"] for r in respuestas}
+    assert codigos == {400}
+    assert cuerpos == {MENSAJE_VINCULACION_SOLO_PRESENCIAL}
+    db_session.refresh(libre)
+    db_session.refresh(ya_vinculada)
+    assert libre.representante_id is None
+    assert ya_vinculada.representante_id == otro_representante.id
+    assert db_session.query(VinculacionRepresentante).count() == 0
 
 
 def test_vincular_representado_persona_id_no_coincide_con_token_da_403(client, db_session):
@@ -481,11 +557,12 @@ def test_vincular_representado_sin_rol_representante_da_403(client, db_session):
 
 
 def test_vincular_representado_administrador_puede_vincular_por_cualquiera(client, db_session):
+    admin = _guardado(db_session, _adulto(cedula_valida(701), nombres="Ada"))
     representante = _adulto("1710034073", nombres="Marcela")
     menor = _menor(cedula_valida(632), representante_id=None)
     db_session.add_all([representante, menor])
     db_session.commit()
-    _restaurar_override_token(persona_id=999, roles=["ADMINISTRADOR"])
+    _restaurar_override_token(persona_id=admin.id, roles=["ADMINISTRADOR"])
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/vincular-representado",
