@@ -9,7 +9,7 @@ from app.dominio.enums import (
 from app.dominio.modelos import (
     AntecedentesClub, ConsentimientoLegal, EnrollmentNotificacionOutbox,
     FichaMedica, Notificacion,
-    Persona, Usuario,
+    Persona, Usuario, VinculacionRepresentante,
 )
 from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentAlumnoDTO,
@@ -143,6 +143,55 @@ def test_inscripcion_representante_persiste_su_rol_mas_alla_del_flush(db_session
     usuario = db_session.query(Usuario).filter(Usuario.correo == "sofia@example.com").one()
     roles = {r.tipo_rol for r in usuario.roles}
     assert roles == {TipoRol.REPRESENTANTE}
+
+
+def test_inscripcion_representante_deja_exactamente_una_fila_en_el_ledger(db_session):
+    """Issue #1133 (ledger completo): la autoinscripción pública es el
+    cuarto camino que muta `representante_id` -- antes no dejaba ninguna
+    fila. `alumno` nace con `representante_id` YA seteado, ANTES de que la
+    cuenta y el rol del representante existan (ver el comentario en
+    `enrollment_servicio.py`); el candado de base (`k1143rolrep`, diferido)
+    tolera ese orden dentro de la misma transacción."""
+    datos = _enrollment_dto(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(252),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia-ledger@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(cedula=cedula_valida(253)),
+    )
+    EnrollmentServicio(db_session).enroll(datos)
+    db_session.rollback()
+
+    representante = db_session.query(Persona).filter(
+        Persona.cedula == cedula_valida(252)
+    ).one()
+    alumno = db_session.query(Persona).filter(
+        Persona.cedula == cedula_valida(253)
+    ).one()
+
+    fila = db_session.query(VinculacionRepresentante).filter(
+        VinculacionRepresentante.persona_id == alumno.id
+    ).one()
+    assert fila.representante_anterior_id is None
+    assert fila.representante_nuevo_id == representante.id
+    assert fila.actor_persona_id == representante.id
+    assert fila.operacion == "CREACION"
+    assert fila.origen == "ALTA_PUBLICA"
+
+
+def test_autoinscripcion_de_adulto_sin_representante_no_deja_fila_en_el_ledger(db_session):
+    """Sin representante involucrado, no hay ningún vínculo que auditar."""
+    datos = _enrollment_dto(
+        alumno=_alumno_dto(cedula=cedula_valida(254), fecha_nacimiento=date(2000, 1, 1)),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="adulto-ledger@example.com", contrasenia="password8",
+        ),
+    )
+    EnrollmentServicio(db_session).enroll(datos)
+    db_session.rollback()
+
+    assert db_session.query(VinculacionRepresentante).count() == 0
 
 
 def test_autoinscripcion_jugador_persiste_rol_mas_alla_del_flush(db_session):

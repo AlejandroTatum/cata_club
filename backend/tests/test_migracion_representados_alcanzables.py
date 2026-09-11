@@ -62,7 +62,10 @@ def _sembrar_persona(arnes, persona_id: int, cedula: str, fecha_nacimiento: str,
     )
 
 
-def _sembrar_usuario(arnes, usuario_id: int, persona_id: int, activo: bool = True) -> None:
+def _sembrar_usuario(
+    arnes, usuario_id: int, persona_id: int, activo: bool = True,
+    con_rol_representante: bool = True,
+) -> None:
     arnes.ejecutar(
         """
         INSERT INTO usuario (id, correo, contrasenia, fecha_creacion,
@@ -74,6 +77,22 @@ def _sembrar_usuario(arnes, usuario_id: int, persona_id: int, activo: bool = Tru
         uid=usuario_id, correo=f"cuenta{usuario_id}@cataclub.test",
         activo=activo, pid=persona_id,
     )
+    if con_rol_representante:
+        # Issue #1133 (k1143rolrep): a "head" ya exige que una cuenta
+        # destino, si existe, tenga el rol REPRESENTANTE. Este archivo
+        # prueba un invariante DISTINTO (cuenta activa/inactiva, g1139) y no
+        # debe chocar con uno posterior -- por eso este helper otorga el rol
+        # por default, igual que una cuenta real de representante.
+        arnes.ejecutar(
+            "INSERT INTO rol (id, tipo_rol, descripcion) VALUES"
+            " (1, 'REPRESENTANTE', 'Representante')"
+            " ON CONFLICT (id) DO NOTHING"
+        )
+        arnes.ejecutar(
+            "INSERT INTO usuario_rol (usuario_id, rol_id) VALUES (:uid, 1)"
+            " ON CONFLICT DO NOTHING",
+            uid=usuario_id,
+        )
 
 
 def _sembrar_persona_legada_mayor_vinculada(arnes, persona_id: int, cedula: str,

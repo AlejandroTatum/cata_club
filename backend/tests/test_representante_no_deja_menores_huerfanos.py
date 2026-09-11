@@ -26,7 +26,7 @@ Postgres -- ver `tests/test_migracion_representados_alcanzables.py`.
 from datetime import date
 
 from app.dominio.enums import TipoRol
-from app.dominio.modelos import Persona, Rol, Usuario
+from app.dominio.modelos import Persona, Rol, Usuario, VinculacionRepresentante
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -288,7 +288,8 @@ def test_crear_representado_para_una_cuenta_desactivada_se_rechaza(client, db_se
 
 def test_crear_representado_para_una_cuenta_activa_sigue_funcionando(client, db_session):
     representante = _persona(db_session, "1710034065")
-    _usuario(db_session, representante)
+    # Issue #1133: activa YA no alcanza -- también necesita el rol.
+    _usuario(db_session, representante, tipo_rol=TipoRol.REPRESENTANTE)
 
     respuesta = client.post(
         f"/api/v1/personas/{representante.id}/representados",
@@ -296,3 +297,93 @@ def test_crear_representado_para_una_cuenta_activa_sigue_funcionando(client, db_
     )
 
     assert respuesta.status_code == 201
+
+
+def test_crear_representado_sin_cuenta_propia_sigue_funcionando(client, db_session):
+    """Fuera del alcance de este candado (ver `k1143rolrep`): un tutor
+    cargado a mano, sin cuenta, sigue funcionando igual que antes."""
+    tutor_sin_cuenta = _persona(db_session, "1710034065")
+
+    respuesta = client.post(
+        f"/api/v1/personas/{tutor_sin_cuenta.id}/representados",
+        json=_representado_payload("1710034073"),
+    )
+
+    assert respuesta.status_code == 201
+
+
+# --- Issue #1133: la cuenta destino necesita el rol REPRESENTANTE ----------
+# `exigir_representante_con_rol_valido` (`app/dominio/
+# representados_alcanzables.py`), consumida por los mismos dos caminos de
+# arriba (`crear_representado`, `vincular_representado`) más
+# `_crear_persona_validada` (`registrar_persona`, ver `test_personas.py`).
+
+def test_crear_representado_para_una_cuenta_sin_el_rol_se_rechaza(client, db_session):
+    entrenador = _persona(db_session, "1710034065")
+    _usuario(db_session, entrenador, tipo_rol=TipoRol.ENTRENADOR)
+
+    respuesta = client.post(
+        f"/api/v1/personas/{entrenador.id}/representados",
+        json=_representado_payload("1710034073"),
+    )
+
+    assert respuesta.status_code == 400
+    mensaje = respuesta.json()["message"].lower()
+    assert "rol de representante" in mensaje
+
+
+def test_vincular_un_representado_a_una_cuenta_sin_el_rol_se_rechaza(client, db_session):
+    entrenador = _persona(db_session, "1710034065")
+    _usuario(db_session, entrenador, tipo_rol=TipoRol.ENTRENADOR)
+    _persona(
+        db_session, "1710034073", fecha_nacimiento=MENOR_NACIMIENTO, nombres="Beto",
+    )
+
+    respuesta = client.post(
+        f"/api/v1/personas/{entrenador.id}/vincular-representado",
+        json={"cedula": "1710034073"},
+    )
+
+    assert respuesta.status_code == 400
+    mensaje = respuesta.json()["message"].lower()
+    assert "rol de representante" in mensaje
+
+
+def test_vincular_un_representado_a_una_cuenta_con_el_rol_sigue_funcionando(client, db_session):
+    representante = _persona(db_session, "1710034065")
+    _usuario(db_session, representante, tipo_rol=TipoRol.REPRESENTANTE)
+    _persona(
+        db_session, "1710034073", fecha_nacimiento=MENOR_NACIMIENTO, nombres="Beto",
+    )
+
+    respuesta = client.post(
+        f"/api/v1/personas/{representante.id}/vincular-representado",
+        json={"cedula": "1710034073"},
+    )
+
+    assert respuesta.status_code == 200
+
+
+# --- Issue #1133: ledger completo -- crear_representado deja fila ---------
+
+def test_crear_representado_deja_exactamente_una_fila_en_el_ledger(client, db_session):
+    representante = _persona(db_session, "1710034065")
+    _usuario(db_session, representante, tipo_rol=TipoRol.REPRESENTANTE)
+
+    respuesta = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=_representado_payload("1710034073"),
+    )
+    assert respuesta.status_code == 201
+    representado_id = respuesta.json()["id"]
+
+    fila = db_session.query(VinculacionRepresentante).filter(
+        VinculacionRepresentante.persona_id == representado_id
+    ).one()
+    assert fila.representante_anterior_id is None
+    assert fila.representante_nuevo_id == representante.id
+    assert fila.operacion == "CREACION"
+    assert fila.origen == "SESION_AUTENTICADA"
+    # El `client` fixture autentica como persona_id=1 (ADMINISTRADOR); el
+    # actor del ledger es quien EJECUTA el comando, no el destino.
+    assert fila.actor_persona_id == 1

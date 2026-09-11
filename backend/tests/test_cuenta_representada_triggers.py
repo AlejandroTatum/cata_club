@@ -206,9 +206,12 @@ def test_el_guard_pasa_sobre_una_base_limpia(arnes_migracion):
 
 def test_el_round_trip_downgrade_upgrade_restaura_el_candado(arnes_migracion):
     """Mismo criterio que `test_representados_alcanzables.py` para
-    `i1141relinteg`: `head -> REVISION_ANTERIOR -> head`, verificando que el
-    candado reinstalado vuelve a rechazar el mismo alta cruda."""
-    arnes_migracion.preparar("head")
+    `i1141relinteg`: `REVISION_CANDADO -> REVISION_ANTERIOR -> REVISION_CANDADO`,
+    verificando que el candado reinstalado vuelve a rechazar el mismo alta
+    cruda. Se ancla en `REVISION_CANDADO`, no en `"head"`: una migración
+    posterior (`k1143rolrep`, issue #1133) agrega candados propios que no
+    son parte de lo que ESTE test verifica."""
+    arnes_migracion.preparar(REVISION_CANDADO)
     assert arnes_migracion.revision_actual() == REVISION_CANDADO
     assert arnes_migracion.consultar(SQL_TRIGGERS) == [
         ("trg_persona_bloquea_vinculo_con_cuenta",),
