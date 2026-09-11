@@ -281,6 +281,18 @@ class MembresiaServicio:
             self.db.refresh(membresia)
         return membresia
 
+    def crear_membresia_propia(self, persona_id: int, tipo_membresia_id: int) -> Membresia:
+        """Autoservicio (issue #1132): un representante puede matricular una
+        membresía para su MISMA Persona y pagarla -- la única diferencia con
+        `crear_membresia` es de dónde sale `persona_id`: siempre el de la
+        propia sesión (lo deriva el router del token), nunca un valor que el
+        cliente elija. Reusa `crear_membresia` entera -- misma regla de
+        duplicado ACTIVA/SUSPENDIDA, mismo nacimiento INACTIVA, y ningún rol
+        se asigna ni se exige."""
+        return self.crear_membresia(
+            MembresiaCreateDTO(persona_id=persona_id, tipo_membresia_id=tipo_membresia_id)
+        )
+
     def cambiar_plan(
         self, membresia_id: int, datos: CambioPlanMembresiaDTO, actor_persona_id: int,
     ) -> Membresia:

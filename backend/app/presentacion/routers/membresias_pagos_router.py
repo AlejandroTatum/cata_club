@@ -9,7 +9,7 @@ from app.soporte_transversal.tiempo import hoy_club
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.dominio.enums import EstadoPago
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
-    MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaResponseDTO,
+    MembresiaCreateDTO, MembresiaEstadisticasResponseDTO, MembresiaPropiaCreateDTO, MembresiaResponseDTO,
     PagoCreateDTO, PagoResponseDTO, PagoValidarDTO, PagoListItemDTO,
     ComprobantePagoCreateDTO, ComprobantePagoResponseDTO,
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO, TarifaPublicaDTO,
@@ -117,6 +117,26 @@ async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtene
              dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
 async def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obtener_sesion)):
     return MembresiaServicio(db).crear_membresia(datos)
+
+
+# Issue #1132: "Inscribirme como jugador" para un representante puro no
+# puede pasar por la ruta admin-only de arriba, y tampoco se le AMPLÍA la
+# autorización -- este endpoint dedicado matricula EXCLUSIVAMENTE a quien
+# llama. `persona_id` nunca sale del body (ver `MembresiaPropiaCreateDTO`),
+# siempre del token; no existe ningún payload que apunte a otra Persona.
+@router.post(
+    "/propia", response_model=MembresiaResponseDTO, status_code=201,
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+async def crear_membresia_propia(
+    datos: MembresiaPropiaCreateDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    return MembresiaServicio(db).crear_membresia_propia(
+        persona_id=token_payload.get("persona_id"),
+        tipo_membresia_id=datos.tipo_membresia_id,
+    )
 
 
 @router.get(

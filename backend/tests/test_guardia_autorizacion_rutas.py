@@ -191,6 +191,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("POST", "/auth/sesiones/invalidar"),                        # (b) - propio via `sub`
     ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
+    ("POST", "/membresias/propia"),                               # (b) - persona_id sale del token, nunca del body (issue #1132)
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
     ("POST", "/personas/{persona_id}/foto"),                      # (b) - dueño/representante/admin validado en el router
 }
@@ -277,6 +278,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/personas/roles/bulk"): frozenset({"ADMINISTRADOR"}),  # issue #1132
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),

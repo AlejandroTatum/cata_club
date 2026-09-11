@@ -88,6 +88,18 @@ class MembresiaCreateDTO(BaseModel):
     tipo_membresia_id: int
 
 
+class MembresiaPropiaCreateDTO(BaseModel):
+    """Autoservicio (issue #1132): `POST /membresias/propia` matricula a
+    quien llama, nunca a otra Persona. A diferencia de `MembresiaCreateDTO`,
+    este DTO no tiene NINGÚN campo `persona_id` -- no por omisión, sino
+    porque el router la deriva siempre del token de sesión (ver
+    `crear_membresia_propia`). Un cliente no tiene ningún campo por el que
+    apuntar a una Persona ajena; un `persona_id` que llegue igual en el body
+    se ignora en silencio, mismo comportamiento de Pydantic para campos de
+    más que ya documenta `MembresiaCreateDTO`."""
+    tipo_membresia_id: int
+
+
 class MembresiaResponseDTO(ResponseBase, BaseModel):
     id: int
     estado: EstadoMembresia

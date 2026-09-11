@@ -695,6 +695,44 @@ class EstadoCuentaDTO(BaseModel):
     activo: bool
 
 
+class RolesBulkItemDTO(ResponseBase, BaseModel):
+    persona_id: int
+    roles: List[str]
+
+
+# Issue #1132: `members-adapter.ts` hardcodeaba `role: "representante"` para
+# TODA fila porque no existía ningún `GET` en bloque -- solo `POST`/`DELETE
+# /{persona_id}/roles`, que mutan. Mismo patrón bulk que `GET
+# /membresias/deuda/bulk` y `GET /fichas-medicas/existe`: un único `IN`
+# (`UsuarioRepositorio.roles_por_persona_ids`), nunca una consulta por fila
+# -- el listado de Miembros pinta hasta 200 cuentas por página. Registrada
+# ANTES de `/{persona_id}/roles` por el mismo criterio que esas dos rutas
+# (aunque acá no hay riesgo real de sombra: dos segmentos literales contra
+# un comodín de UNO no colisionan, ver `test_ninguna_ruta_literal_queda_
+# despues_del_comodin`).
+_MAX_ROLES_BULK_IDS = 200
+
+
+@router.get(
+    "/roles/bulk", response_model=List[RolesBulkItemDTO],
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def obtener_roles_bulk(
+    persona_ids: List[int] = Query(default=[]),
+    db: Session = Depends(obtener_sesion),
+):
+    if len(persona_ids) > _MAX_ROLES_BULK_IDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Esta consulta admite hasta {_MAX_ROLES_BULK_IDS} personas a la vez.",
+        )
+    roles_por_persona = RolServicio(db).obtener_roles_bulk(persona_ids)
+    return [
+        RolesBulkItemDTO(persona_id=persona_id, roles=roles)
+        for persona_id, roles in roles_por_persona.items()
+    ]
+
+
 @router.get(
     "/{persona_id}/roles", response_model=RolesResponseDTO,
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],

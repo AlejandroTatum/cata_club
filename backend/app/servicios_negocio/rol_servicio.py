@@ -52,6 +52,17 @@ class RolServicio:
         roles" / "activo" por defecto)."""
         return self._obtener_usuario_de_persona(persona_id)
 
+    def obtener_roles_bulk(self, persona_ids: list[int]) -> dict[int, list[str]]:
+        """Lectura pura en bloque (issue #1132): ids duplicados se
+        deduplican preservando el primer orden de aparición, mismo criterio
+        que `MembresiaServicio.obtener_deuda_bulk`. Ver
+        `UsuarioRepositorio.roles_por_persona_ids` para el porqué de un
+        único `IN` en vez de una consulta por persona."""
+        ids_unicos = list(dict.fromkeys(persona_ids))
+        if not ids_unicos:
+            return {}
+        return self.repo_usuario.roles_por_persona_ids(ids_unicos)
+
     def asignar_rol(self, persona_id: int, tipo_rol: TipoRol) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if any(r.tipo_rol == tipo_rol for r in usuario.roles):
