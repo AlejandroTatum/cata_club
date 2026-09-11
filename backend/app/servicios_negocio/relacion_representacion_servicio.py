@@ -29,6 +29,9 @@ from app.dominio.enums import TipoNotificacion
 from app.dominio.excepciones import (
     ConflictoConcurrencia, EntidadNoEncontrada, OperacionInvalida,
 )
+from app.dominio.mensajes import (
+    MENSAJE_REASIGNACION_SIN_CAMBIO, MENSAJE_REPRESENTANTE_AUTORREFERENCIA,
+)
 from app.dominio.modelos import Notificacion, Persona, Usuario
 from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.representados_alcanzables import (
@@ -251,13 +254,18 @@ class RelacionRepresentacionServicio:
 
         El administrador OBSERVÓ `comando.representante_actual_id` al abrir el
         trámite: si el vínculo cambió mientras tanto, el comando conflictúa
-        (409) en vez de pisar el cambio ajeno. Las filas relevantes se
-        bloquean primero (objetivo, ex y nuevo ascendente por `persona.id`,
+        (409) en vez de pisar el cambio ajeno. Antes de bloquear nada se
+        rechazan dos comandos que no describen un cambio real: el no-op
+        (`nuevo_representante_id == representante_actual_id`) y la
+        auto-referencia (`nuevo_representante_id == persona_id`) -- ambos con
+        un 422 legible, sin locks ni escritura. Las filas relevantes se
+        bloquean después (objetivo, ex y nuevo ascendente por `persona.id`,
         luego las cuentas) y las validaciones de dominio corren sobre esas
         filas YA BLOQUEADAS -- destino mayor de edad, con teléfono válido,
         cuenta alcanzable (activa) y, si tiene cuenta, con el rol
-        REPRESENTANTE (issue #1133, decisión del dueño). La auto-referencia y
-        los ciclos no se revalidan acá: quedan a cargo del trigger
+        REPRESENTANTE (issue #1133, decisión del dueño). Los CICLOS más
+        largos (que dependen del grafo completo, no solo de estas dos
+        filas) no se revalidan acá: quedan a cargo del trigger
         `trg_relacion_representacion_valida` (`i1141relinteg`), la misma
         defensa que ya protege el resto de las escrituras de
         `representante_id`. El ledger deja la evidencia completa
@@ -322,6 +330,41 @@ class RelacionRepresentacionServicio:
         self, *, admin_actor_id: int, persona_id: int, comando, idempotency_key: str,
         huella: str,
     ) -> dict:
+        # 0. Guardarraíles puros sobre el COMANDO: son comparaciones de ids
+        #    que no necesitan ninguna fila bloqueada, así que corren ANTES de
+        #    pedir ningún lock y antes de escribir nada.
+        #
+        #    - No-op: el "nuevo" representante es el mismo que el actual. No
+        #      es una reasignación -- dejarlo pasar bloqueaba filas y
+        #      revocaba la sesión de un representante que sigue
+        #      representando a la misma persona (hallazgo de verificación
+        #      independiente).
+        #    - Auto-referencia: un menor no puede ser su propio
+        #      representante. El trigger de base `trg_relacion_
+        #      representacion_valida` (`i1141relinteg`) también la rechaza,
+        #      pero solo después de bloquear las tres filas y con un
+        #      `IntegrityError` genérico traducido a 409 -- acá el rechazo es
+        #      legible y no necesita ningún lock. Los CICLOS más largos (que
+        #      SÍ dependen del grafo completo) se quedan a cargo de ese
+        #      mismo trigger, que ya los recorre con un CTE recursivo.
+        if comando.nuevo_representante_id == comando.representante_actual_id:
+            raise OperacionInvalida(
+                MENSAJE_REASIGNACION_SIN_CAMBIO,
+                detalle_tecnico=(
+                    f"persona_id={persona_id} representante_actual_id="
+                    f"{comando.representante_actual_id} "
+                    f"nuevo_representante_id={comando.nuevo_representante_id}"
+                ),
+            )
+        if comando.nuevo_representante_id == persona_id:
+            raise OperacionInvalida(
+                MENSAJE_REPRESENTANTE_AUTORREFERENCIA,
+                detalle_tecnico=(
+                    f"persona_id={persona_id} nuevo_representante_id="
+                    f"{comando.nuevo_representante_id}"
+                ),
+            )
+
         # 1. Locks deterministas en UN solo orden ascendente por `persona.id`:
         #    objetivo, ex y nuevo. El estado observado viene en el comando,
         #    así que el conjunto de locks se conoce SIN leer antes de

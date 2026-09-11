@@ -115,6 +115,29 @@ MENSAJE_REPRESENTANTE_SIN_ROL = (
     "representados."
 )
 
+# Issue #1133/#1137, comando de reasignación presencial: rechazar un no-op
+# ANTES de tocar cualquier fila. `reasignar_presencial` reemplaza el vínculo
+# de un menor -- pedir que el "nuevo" representante sea el MISMO que el
+# actual no es una reasignación, es un trámite sin ningún cambio, y dejarlo
+# pasar hasta `_ejecutar_reasignacion` bloqueaba filas y revocaba la sesión
+# del representante que sigue representando a la misma persona.
+MENSAJE_REASIGNACION_SIN_CAMBIO = (
+    "El nuevo representante es el mismo que el actual: no hay ningún cambio "
+    "que reasignar."
+)
+
+# Issue #1133/#1137: la auto-referencia (un menor no puede ser su propio
+# representante) ya la rechaza el trigger de base
+# `trg_relacion_representacion_valida` (`i1141relinteg`), pero llegar hasta
+# ahí significa bloquear las tres filas primero y responder con el
+# `IntegrityError` genérico traducido a un 409 -- un código que no describe
+# el motivo real. El comando de reasignación la rechaza acá, antes de
+# cualquier lock, con el mismo criterio ya legible que el resto de sus
+# validaciones de dominio.
+MENSAJE_REPRESENTANTE_AUTORREFERENCIA = (
+    "Una persona no puede ser su propio representante legal."
+)
+
 # Issue #790, misma disciplina anti-enumeración que la recuperación de
 # contraseña: el reenvío del enlace de verificación responde EXACTAMENTE esto
 # exista o no la cuenta, y esté o no ya verificada. Si difiriera en algún

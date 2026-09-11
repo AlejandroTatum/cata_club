@@ -191,6 +191,99 @@ def test_destino_sin_cuenta_propia_es_aceptado(db_session):
     assert menor.representante_id == tutor_sin_cuenta.id
 
 
+# --- Guardarraíles del propio comando: no-op y auto-referencia --------------
+# Hallazgo de verificación independiente (2026-09-11): ninguno de los dos
+# necesita ninguna fila bloqueada -- son comparaciones de ids del propio
+# comando -- así que se rechazan ANTES de pedir cualquier lock o escribir
+# nada.
+
+
+def test_rechaza_reasignacion_sin_cambio_sin_mutar(db_session):
+    """`nuevo_representante_id == representante_actual_id` no es una
+    reasignación: dejarlo pasar bloqueaba filas y revocaba la sesión de un
+    representante que sigue representando a la misma persona."""
+    admin, viejo, usuario_viejo, _, _, menor = _escenario(db_session)
+
+    with pytest.raises(OperacionInvalida, match="mismo que el actual"):
+        _reasignar(db_session, admin, menor, nuevo=viejo, actual=viejo.id)
+
+    db_session.refresh(menor)
+    assert menor.representante_id == viejo.id
+    assert db_session.query(VinculacionRepresentante).count() == 0
+    db_session.refresh(usuario_viejo)
+    assert usuario_viejo.version_sesion == 1
+
+
+def test_rechaza_autoreferencia_sin_mutar(db_session):
+    """`nuevo_representante_id == persona_id`: una persona no puede ser su
+    propio representante. El trigger de base también lo rechaza, pero acá
+    llega como un 422 legible ANTES de bloquear nada -- no el
+    `IntegrityError` genérico traducido a 409."""
+    admin, viejo, _, _, _, menor = _escenario(db_session)
+
+    with pytest.raises(OperacionInvalida, match="propio representante"):
+        _reasignar(db_session, admin, menor, nuevo=menor, actual=viejo.id)
+
+    db_session.refresh(menor)
+    assert menor.representante_id == viejo.id
+    assert db_session.query(VinculacionRepresentante).count() == 0
+
+
+def test_rechaza_un_ciclo_de_representacion(db_session):
+    """Ciclo de dos: A representa a B (B.representante_id = A), y se pide
+    reasignar al representante DE A hacia B -- cerraría A -> B -> A.
+
+    Ninguna de las dos puntas puede ser adulta y menor a la vez por el
+    camino normal, así que se construye con el mismo patrón "envejecido en
+    el sitio" que `test_representacion_triggers.py`
+    (`test_sql_directo_rechaza_reenlazar_a_un_adulto`): B nace MENOR
+    vinculado a A (alta válida) y después se lo envejece por SQL crudo,
+    tocando solo `fecha_nacimiento` -- la columna que el trigger no vigila
+    -- para que pase la validación de dominio del servicio (destino mayor de
+    edad) sin haber pasado nunca por un alta de adulto.
+
+    El servicio no duplica el CTE recursivo del trigger para detectar
+    ciclos de más de un salto: se deja que
+    `trg_relacion_representacion_valida` (`i1141relinteg`) lo rechace y el
+    `IntegrityError` suba sin traducir (mismo criterio que
+    `test_la_base_rechaza_lo_que_el_servicio_no_valida`)."""
+    admin = _admin(db_session)
+    # C: representante actual de A (cualquier adulto con cuenta y rol válido).
+    representante_actual, _ = _representante(db_session, 460)
+    # A: menor representado por `representante_actual`, y a la vez el
+    # representante de B (representante_id de B apunta a A.id).
+    a = _menor_vinculado(db_session, 461, representante_actual.id)
+    # B: nace MENOR vinculado a A (alta válida -- A ya tiene representante_id
+    # fijado a `representante_actual` en este punto, así que el alta de B no
+    # cierra ningún ciclo todavía).
+    b = _menor_vinculado(db_session, 462, a.id)
+    # Envejecer a B por SQL crudo: la columna que cambia (`fecha_nacimiento`)
+    # no es la que vigila el trigger (`UPDATE OF representante_id`), así que
+    # b.representante_id sigue siendo a.id -- exactamente el estado "adulto
+    # con vínculo legado" que un alta real nunca podría producir.
+    from sqlalchemy import text
+
+    db_session.execute(text(
+        "UPDATE persona SET fecha_nacimiento = CAST('1990-01-01' AS date)"
+        " WHERE id = :pid"
+    ), {"pid": b.id})
+    db_session.commit()
+    db_session.add(Usuario(
+        correo="ciclo-b@test.com", contrasenia="hash", persona_id=b.id,
+        correo_verificado=True,
+        roles=[Rol(tipo_rol=TipoRol.REPRESENTANTE, descripcion="Representante")],
+    ))
+    db_session.commit()
+    db_session.refresh(b)
+
+    with pytest.raises(IntegrityError, match="ciclo"):
+        _reasignar(db_session, admin, a, nuevo=b, actual=representante_actual.id)
+
+    db_session.refresh(a)
+    assert a.representante_id == representante_actual.id
+    assert db_session.query(VinculacionRepresentante).count() == 0
+
+
 # --- Conflicto por estado obsoleto y reintento idempotente -------------------
 
 
@@ -345,9 +438,12 @@ def test_la_base_rechaza_lo_que_el_servicio_no_valida(db_session, monkeypatch):
 
 def test_persona_inexistente_da_entidad_no_encontrada(db_session):
     admin = _admin(db_session)
+    # `nuevo` distinto de `actual` y de la persona objetivo -- ninguno de los
+    # dos guardarraíles del comando (no-op, auto-referencia) debe interceptar
+    # este caso antes de que el lock descubra que la persona no existe.
     with pytest.raises(EntidadNoEncontrada):
         _reasignar(db_session, admin, Persona(id=999999),
-                   nuevo=Persona(id=999999), actual=1)
+                   nuevo=Persona(id=999998), actual=1)
 
 
 # --- Endpoint: solo administrador -------------------------------------------
@@ -420,10 +516,13 @@ def test_endpoint_observado_obsoleto_da_409(client, db_session):
 
 
 def test_endpoint_persona_inexistente_da_404(client, db_session):
+    # `nuevo_representante_id` distinto de `representante_actual_id`: el
+    # guardarraíl de no-op corre ANTES de cualquier lock y no debe
+    # interceptar este caso, que quiere probar la persona inexistente.
     resp = client.post(
         "/api/v1/personas/999999/reasignar-representante",
         json={
-            "nuevo_representante_id": 1,
+            "nuevo_representante_id": 2,
             "representante_actual_id": 1,
             "evidencia_identidad": "x",
         },
