@@ -151,6 +151,29 @@ def test_asignar_alumno_con_membresia_inactiva_ahora_se_bloquea(db_session, monk
         )
 
 
+def test_asignar_alumno_con_membresia_suspendida_se_bloquea(db_session, monkeypatch):
+    """SUSPENDIDA no es VENCIDA: la decisión de negocio #4 ("la cuota
+    vencida no impide entrenar") habla puntualmente de una cuota que
+    expiró sin que nadie actuara, nunca de una pausa que alguien pidió a
+    propósito. `AlumnoHorarioRepositorio` ya excluye a un suspendido del
+    roster de cada horario (`_condiciones_persona_operativa`,
+    `asistencia_repositorio.py`); el alta tiene que ser consistente con esa
+    misma exclusión -- de lo contrario se lo podría asignar de nuevo por
+    esta puerta mientras el roster lo sigue mostrando afuera."""
+    monkeypatch.setattr(asistencia_servicio_mod, "hoy_club", lambda: date(2026, 8, 15))
+    servicio = AsistenciaServicio(db_session)
+    persona = _crear_persona(db_session)
+    _crear_membresia(db_session, persona, EstadoMembresia.SUSPENDIDA)
+    horario = servicio.crear_horario(HorarioCreateDTO(
+        categoria=Categoria.FORMATIVO, dia_semana=DiaSemana.LUNES,
+    ))
+
+    with pytest.raises(OperacionInvalida):
+        servicio.asignar_alumno_a_horario(
+            AlumnoHorarioCreateDTO(persona_id=persona.id, horario_id=horario.id)
+        )
+
+
 def test_asignar_alumno_mira_la_membresia_mas_reciente(db_session, monkeypatch):
     """Triangulación: si la persona tiene una VENCIDA vieja y una ACTIVA más
     reciente (renovó), el aviso no debe dispararse -- la vigente es la que

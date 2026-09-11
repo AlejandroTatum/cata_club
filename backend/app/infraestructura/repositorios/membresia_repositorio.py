@@ -129,30 +129,36 @@ class MembresiaRepositorio:
         )
         return self.db.execute(stmt).first() is not None
 
-    def tiene_membresia_activada_alguna_vez(self, persona_id: int) -> bool:
-        """True si la persona tiene alguna `Membresia` que llegó a
-        aprobarse -- cualquier estado salvo INACTIVA.
+    def puede_entrenar(self, persona_id: int) -> bool:
+        """True si la persona tiene una `Membresia` en un estado que
+        habilita entrenar: ACTIVA o VENCIDA.
 
-        INACTIVA es el ÚNICO estado con el que `MembresiaServicio.
-        crear_membresia` escribe una fila nueva, y de él nunca se vuelve:
-        `PagoServicio.validar_pago` la mueve a ACTIVA al aprobar el primer
-        pago, y desde ahí solo transiciona hacia SUSPENDIDA/VENCIDA/ACTIVA
-        entre sí (ver `EstadoMembresia`). Por eso "no está en INACTIVA"
-        alcanza para decir "ya tuvo, alguna vez, un pago aprobado".
+        Allow-list explícita a propósito (issue #1132, hallazgo de
+        verificación independiente) -- NO "distinto de INACTIVA". De los
+        cuatro `EstadoMembresia`, una negación admitía SUSPENDIDA en
+        silencio, y SUSPENDIDA no es VENCIDA: la decisión de negocio #4
+        ("la cuota vencida no impide entrenar", 2026-08-11) habla puntual
+        de una cuota que expiró sola, nunca de una pausa que alguien pidió
+        a propósito. `AlumnoHorarioRepositorio._condiciones_persona_
+        operativa` (`asistencia_repositorio.py`) ya excluye a un
+        suspendido del roster de cada horario; esta consulta tiene que
+        bloquear el alta con el mismo criterio, o se lo podría asignar de
+        nuevo por esta puerta mientras el roster lo sigue mostrando
+        afuera.
 
-        Distinto de `tiene_membresia_activa` a propósito (issue #1132): una
-        membresía VENCIDA no es "es jugador" para el listado de Miembros,
-        pero sí habilita seguir entrenando -- decisión de negocio #4
-        ("la cuota vencida no impide entrenar", ver
+        Distinto de `tiene_membresia_activa` a propósito: una membresía
+        VENCIDA no es "es jugador" para el listado de Miembros, pero sí
+        habilita seguir entrenando (decisión de negocio #4, ver
         `tests/test_asignacion_membresia_vencida.py`). Esta consulta es la
         que usa `AsistenciaServicio.asignar_alumno_a_horario` para no
         reabrir esa decisión: lo único nuevo que bloquea es la membresía
-        que TODAVÍA no se aprobó ni una vez (pago pendiente o rechazado)."""
+        que TODAVÍA no se aprobó ni una vez (pago pendiente o rechazado) o
+        que está en pausa (SUSPENDIDA)."""
         stmt = (
             select(Membresia.id)
             .where(
                 Membresia.persona_id == persona_id,
-                Membresia.estado != EstadoMembresia.INACTIVA,
+                Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.VENCIDA)),
             )
             .limit(1)
         )

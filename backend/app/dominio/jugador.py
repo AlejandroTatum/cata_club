@@ -31,5 +31,5 @@ def es_jugador(membresias) -> bool:
     La pregunta distinta de "¿puede seguir entrenando aunque se le venza la
     cuota?" no la resuelve esta función: la resuelve la decisión de negocio
     #4 (ya vigente antes de este issue), en
-    `MembresiaRepositorio.tiene_membresia_activada_alguna_vez`."""
+    `MembresiaRepositorio.puede_entrenar`."""
     return any(membresia.estado == EstadoMembresia.ACTIVA for membresia in membresias)
