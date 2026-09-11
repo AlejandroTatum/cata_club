@@ -160,6 +160,10 @@ describe("ActivationPage — the email screen", () => {
     expect(screen.queryByLabelText(/código o enlace de verificación/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inscripción presencial completada")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Abrir verificación de correo" })).not.toBeInTheDocument();
+    // "Consultar estado nuevamente" is the enrolment screen's own primary
+    // action — the email screen has its own single primary, "Ya verifiqué
+    // mi correo", and must not show both at once.
+    expect(screen.queryByRole("button", { name: "Consultar estado nuevamente" })).not.toBeInTheDocument();
   });
 
   it("omits the pending-enrolment sentence when only the email is pending", async () => {
@@ -244,6 +248,18 @@ describe("ActivationPage — the enrolment screen", () => {
 
     await screen.findByText("Correo verificado");
     expect(screen.queryByText("Su correo quedó verificado.")).not.toBeInTheDocument();
+  });
+
+  // The old checklist carried `aria-live="polite"` (#1045) so a
+  // screen-reader user heard the state change in place. The email → enrolment
+  // swap (#1102) is a silent screen replacement without it: the confirmation
+  // has to live inside its own polite live region for that announcement to
+  // survive the split.
+  it("wraps the confirmation in a polite live region so the screen change is announced", async () => {
+    renderPending(enrolmentPendingSession());
+
+    const confirmacion = await screen.findByText("Correo verificado");
+    expect(confirmacion.closest('[aria-live="polite"]')).toBeInTheDocument();
   });
 });
 

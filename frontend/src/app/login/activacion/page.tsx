@@ -168,17 +168,26 @@ function ActivationPageContent(): React.ReactElement {
   return (
     <AuthShell title="Complete su inscripción en el club" hideBack>
       <div className="flex flex-col gap-4">
-        <p className="flex items-center gap-2 text-sm font-semibold text-state-ok">
-          <Check size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Correo verificado
-        </p>
-        <p className="text-sm leading-relaxed text-ink-2">
-          La inscripción presencial se completa en el club, a cargo del personal. El acceso a los módulos se habilita
-          en cuanto quede registrada.
-        </p>
-        {emailJustVerified && (
-          <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>
-        )}
+        {/*
+         * `aria-live="polite"`: this screen replaces the email screen in
+         * place, with no navigation — the old checklist (#1045) carried the
+         * same attribute so a screen-reader user heard the state change; this
+         * wrapper is what carries it across the split into two screens
+         * (#1102), for the one moment that content actually changes.
+         */}
+        <div className="flex flex-col gap-4" aria-live="polite">
+          <p className="flex items-center gap-2 text-sm font-semibold text-state-ok">
+            <Check size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            Correo verificado
+          </p>
+          <p className="text-sm leading-relaxed text-ink-2">
+            La inscripción presencial se completa en el club, a cargo del personal. El acceso a los módulos se
+            habilita en cuanto quede registrada.
+          </p>
+          {emailJustVerified && (
+            <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>
+          )}
+        </div>
 
         <Button type="button" variant="primary" onClick={checkStatus} disabled={resending} className="w-full">
           Consultar estado nuevamente
