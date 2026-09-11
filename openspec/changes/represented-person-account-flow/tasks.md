@@ -133,15 +133,15 @@ One PR, `fix/represented-person-account-db-lock`, one additive Alembic migration
 **Focused validation:** `cd backend && uv run pytest tests/test_representacion_triggers.py tests/test_cuenta_representada_triggers.py -q` plus the existing migration checks (single head, from-empty, drift, root guards) found under `backend/tests/` and `.github/workflows`.
 **Runtime:** `make qa-up` on a fresh seed; confirm the migration applies, then attempt to create an account for a seeded child through `POST /auth/registro` and see the DTO/service rejection (the trigger is the last line, not the first).
 
-- [ ] Guard aborts on legacy rows, passes on a clean database, never mutates.
-- [ ] Both triggers installed and proven at the SQL boundary; round-trip clean.
-- [ ] PR body says `Closes #1137`.
+- [x] Guard aborts on legacy rows, passes on a clean database, never mutates.
+- [x] Both triggers installed and proven at the SQL boundary; round-trip clean.
+- [x] PR body says `Closes #1137`.
 
 ## Phase 5 — Close
 
-- [ ] Reduce this OpenSpec change to the delivered scope: `proposal.md` and `design.md` keep the tramo 1–3 decisions; sections owned by #1132, #1133, #1134, #1138 move to those issues as comments; `specs/player-eligibility`, `specs/representation-lifecycle`, `specs/representative-capability`, `specs/minor-contact` are removed from this change.
+- [x] Reduce this OpenSpec change to the delivered scope: `proposal.md` and `design.md` keep the tramo 1–3 decisions; sections owned by #1132, #1133, #1134, #1138 move to those issues as comments; `specs/player-eligibility`, `specs/representation-lifecycle`, `specs/representative-capability`, `specs/minor-contact` are removed from this change.
 - [ ] Merge #1164 as the docs PR of this replan.
-- [ ] Verify #1137 closed by the Phase 4 merge with `gh issue view 1137`.
+- [x] Verify #1137 closed by the Phase 4 merge with `gh issue view 1137`.
 - [ ] Archive the change.
 
 ## Guardrails
