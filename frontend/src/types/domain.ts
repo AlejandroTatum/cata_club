@@ -380,6 +380,23 @@ export interface IndependenciaResponse {
   idempotencyKey: string;
 }
 
+/**
+ * Result of the presencial, ADMINISTRADOR-only reassignment command (#1133):
+ * `POST /personas/{id}/reasignar-representante`. Deliberately carries no
+ * tokens, same reasoning as `IndependenciaResponse` above.
+ *
+ * `ReasignacionResponseDTO` (backend) is a plain `BaseModel`, not
+ * `ResponseBase`, so the backend answers snake_case — the BFF route
+ * translates it into this camelCase shape.
+ */
+export interface ReasignacionResponse {
+  personaId: number;
+  representanteAnteriorId: number | null;
+  representanteNuevoId: number;
+  replay: boolean;
+  idempotencyKey: string;
+}
+
 /** Lightweight persona shape for autocomplete / search results. */
 export interface PersonaBusqueda {
   id: number;

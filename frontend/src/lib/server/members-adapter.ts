@@ -315,6 +315,7 @@ export function buildMemberAccounts(
       apellidos: persona.apellidos,
       telefono: persona.telefono,
       representadoPor: representante ? `${representante.nombres} ${representante.apellidos}` : undefined,
+      representadoPorId: persona.representanteId ?? undefined,
       // Issue #362's exact gap: no legal representative at all AND no ficha
       // médica. A represented persona (has `representanteId`) is NEVER in the
       // gap here, even with no ficha médica of their own — this deliberately

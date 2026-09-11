@@ -149,6 +149,15 @@ export interface MemberAccount {
    */
   representadoPor?: string;
   /**
+   * #1133: the numeric `persona.id` behind `representadoPor` — the string
+   * above is for display, this is what `reasignar-representante` needs as
+   * `representante_actual_id` (the stale-state guard the atomic command
+   * checks before replacing the link). `undefined` in lockstep with
+   * `representadoPor`: both come from the same `persona.representanteId`
+   * lookup in `members-adapter.ts`.
+   */
+  representadoPorId?: number;
+  /**
    * Issue #362: this person has no legal representative at all
    * (`representanteId === null`) AND no ficha médica on file. Optional (not
    * required) for the same reason `representadoPor` is — fixtures and tests
