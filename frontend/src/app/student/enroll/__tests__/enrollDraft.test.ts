@@ -150,4 +150,14 @@ describe("parseEnrollDraft", () => {
     expect(parseEnrollDraft(null)).toBeNull();
     expect(parseEnrollDraft("")).toBeNull();
   });
+
+  it("drops a stale key that is no longer part of EnrollFormData (e.g. a pre-#1190 institucionId), keeping every known field", () => {
+    // A draft written by a build that still had the school/institution field
+    // (#1190 removed it from the wizard) — sessionStorage still holds it for
+    // any visitor who had one saved before the deploy.
+    const stored = { ...SOME_DRAFT, institucionId: "3" };
+    const draft = parseEnrollDraft(JSON.stringify(stored));
+    expect(draft).not.toHaveProperty("institucionId");
+    expect(draft).toEqual(SOME_DRAFT);
+  });
 });

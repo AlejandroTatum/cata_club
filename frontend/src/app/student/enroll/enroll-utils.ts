@@ -713,10 +713,22 @@ function parseStoredEnrollDraft(raw: string | null): {
   }
   if (!isStoredEnrollDraft(parsed)) return { draft: null, hadStoredPasswords: false };
   const record = parsed as Record<string, unknown>;
+  // Built key-by-key from `initialFormData` rather than `{ ...parsed }`: a
+  // draft saved by an older build can still carry a field this version no
+  // longer has (e.g. `institucionId`, removed by #1190) — spreading the raw
+  // stored object would let it ride straight into `formData` again.
+  const draft = { ...initialFormData } as EnrollFormData;
+  for (const key of Object.keys(initialFormData) as EnrollField[]) {
+    if (key === "enrollmentType") continue;
+    if (typeof record[key] === "string") {
+      (draft as Record<EnrollField, string>)[key] = record[key] as string;
+    }
+  }
+  draft.enrollmentType = record.enrollmentType as EnrollmentType;
   return {
     // Passwords are ALWAYS blanked, never read back from storage.
     draft: {
-      ...parsed,
+      ...draft,
       contrasenia: "",
       contraseniaConfirmacion: "",
       contraseniaRepresentante: "",
