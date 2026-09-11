@@ -1003,13 +1003,21 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
 
 function ActivePortalView({
   data,
-  hasAlumnoRole,
+  isPlayer,
   accountPersonaId,
   onPhotoUploaded,
   onOwnPhotoUploaded,
 }: {
   data: StudentPortalSummary;
-  hasAlumnoRole: boolean;
+  /**
+   * Issue #1132: whether the SESSION account itself counts as a player —
+   * its own `ALUMNO` role (still granted at direct self-enrollment, before
+   * any membership exists) OR its own active membership (a representante
+   * who paid for themselves; `crear_membresia` no longer grants `ALUMNO`).
+   * Neither signal alone is reliable on its own, so this is already the
+   * union of both — see `StudentPortalContent`.
+   */
+  isPlayer: boolean;
   /** The persona behind the SESSION — not the profile currently selected. */
   accountPersonaId: string;
   onPhotoUploaded: () => void;
@@ -1018,7 +1026,7 @@ function ActivePortalView({
 }): React.ReactElement {
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole,
+    isPlayer,
     accountPersonaId,
   );
 
@@ -1141,7 +1149,7 @@ function ActivePortalView({
   // command an ADMINISTRADOR runs from "Miembros", never self-service). That
   // account has nothing left to trigger from its own portal, so it no longer
   // counts toward `hasAccountActions`.
-  const hasAccountActions = representative || !hasAlumnoRole;
+  const hasAccountActions = representative || !isPlayer;
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
@@ -1431,7 +1439,19 @@ function ActivePortalView({
               <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             </Link>
           )}
-          {!hasAlumnoRole && (
+          {/* Issue #1132: gated on `isPlayer` (role OR own active membership),
+              never on the role alone — a representante who already paid a
+              membership for themselves must not be offered this CTA again.
+              The destination is unchanged and is a known, separately-scoped
+              gap: `/student/enroll?type=self` is the PUBLIC wizard, which
+              creates a brand-new Persona/Usuario (see its own doc comment) —
+              for an already-authenticated representante it would open a
+              second account rather than pay a membership for their existing
+              one. Fixing that destination needs a self-service way to create
+              a Membresia for the caller's own persona_id, which does not
+              exist today (`POST /membresias/` is ADMIN-only, see
+              `membresias_pagos_router.py`). */}
+          {!isPlayer && (
             <Link href="/student/enroll?type=self" className={buttonClasses("secondary")}>
               <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               Unirme como jugador
@@ -1454,6 +1474,18 @@ function StudentPortalContent(): React.ReactElement {
   const hasAlumnoRole = session?.roles.includes("ALUMNO") ?? false;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const hasOwnActiveMembership = state.status === "ready" && state.data.self?.membership?.estado === "ACTIVA";
+  /**
+   * Issue #1132: "es jugador" (the domain's single predicate — an ACTIVA
+   * Membresia, `app/dominio/jugador.py::es_jugador`) is the union of both
+   * signals this session can carry, never the role alone. `ALUMNO` is still
+   * granted at direct self-enrollment (`POST /enrollment/`, before any
+   * membership exists), but `crear_membresia` no longer grants it when a
+   * representante pays a membership for their OWN persona — so that account
+   * would otherwise read as "not a player" forever despite having exactly
+   * the membership this feature is about.
+   */
+  const isPlayer = hasAlumnoRole || hasOwnActiveMembership;
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -1486,7 +1518,7 @@ function StudentPortalContent(): React.ReactElement {
   // name to greet, so the slot stays empty instead of flashing a placeholder.
   const portalMode =
     state.status === "ready"
-      ? derivePortalMode(hasAlumnoRole, state.data.representados.length)
+      ? derivePortalMode(isPlayer, state.data.representados.length)
       : null;
   const subtitle =
     portalMode === "active" && greetingName
@@ -1509,7 +1541,7 @@ function StudentPortalContent(): React.ReactElement {
         ) : (
           <ActivePortalView
             data={state.data}
-            hasAlumnoRole={hasAlumnoRole}
+            isPlayer={isPlayer}
             accountPersonaId={personaId}
             onPhotoUploaded={() => setReloadToken((n) => n + 1)}
             onOwnPhotoUploaded={() => void refreshSession()}
