@@ -5,7 +5,7 @@ from typing import Optional, List
 from app.dominio.enums import TipoEscuela, NivelTecnicoAlumno, TipoSangre, TipoManoDominante
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.servicios_negocio.dtos.base import ResponseBase
-from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaDTO
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentFichaMedicaMenorDTO
 from app.servicios_negocio.dtos.validadores import (
     ApellidoValidado,
     CedulaValidada,
@@ -18,7 +18,6 @@ from app.servicios_negocio.dtos.validadores import (
     TelefonoValidado,
     TipoSangreValidado,
     validar_representante_solo_para_menor,
-    validar_telefono_emergencia_distinto,
 )
 
 
@@ -63,22 +62,24 @@ class RepresentadoCreateDTO(BaseModel):
     Issue #1137, invariante (B): un representado nunca tiene `Usuario`
     propio -- este endpoint SOLO crea la `Persona` (y su ficha médica, si se
     proporcionó). `crear_representado` siempre le asigna el `representante_id`
-    del path, así que el alumno tiene que ser menor de edad sin excepción."""
+    del path, así que el alumno tiene que ser menor de edad sin excepción.
+
+    Issue #1138: `ficha_medica` es `EnrollmentFichaMedicaMenorDTO`, sin
+    `contacto_emergencia` ni `telefono_emergencia` -- este endpoint SIEMPRE
+    crea un representado, así que su contacto de emergencia se deriva del
+    representante al leer (`FichaMedicaServicio.obtener_ficha_emergencia`) y
+    nunca se pide acá. Mandar esos dos campos es rechazado por Pydantic
+    (`extra="forbid"` en esa DTO), no ignorado en silencio. La comparación
+    cruzada de teléfonos del #860 (`_telefono_emergencia_distinto_del_personal`,
+    retirada por este issue) ya no aplica: no queda ningún teléfono de
+    emergencia propio con el que comparar."""
     nombres: NombreValidado = Field(..., max_length=100)
     apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
-    ficha_medica: Optional[EnrollmentFichaMedicaDTO] = None
+    ficha_medica: Optional[EnrollmentFichaMedicaMenorDTO] = None
     institucion_id: Optional[int] = None
-
-    @model_validator(mode="after")
-    def _telefono_emergencia_distinto_del_personal(self) -> "RepresentadoCreateDTO":
-        """Issue #860: el teléfono personal es el del propio dependiente
-        (`telefono` arriba), no el del representante que hace el alta."""
-        if self.ficha_medica is not None:
-            validar_telefono_emergencia_distinto(self.telefono, self.ficha_medica.telefono_emergencia)
-        return self
 
     @model_validator(mode="after")
     def _siempre_menor(self) -> "RepresentadoCreateDTO":
@@ -241,6 +242,15 @@ class FichaMedicaCreateDTO(BaseModel):
     exija; este no lo exigía. `EnrollmentFichaMedicaDTO` sí lo exigía desde
     antes, y allá se conserva — la diferencia entre los dos DTOs es la
     decisión, no un descuido.
+
+    Issue #1138 NO toca esta regla: este DTO respalda el endpoint general
+    `POST /fichas-medicas/` (ADMINISTRADOR-only), que edita la ficha de
+    CUALQUIER persona -- adulta o representada -- fuera de los caminos de
+    alta (autoinscripción y "agregar dependiente"). Ese endpoint no deriva
+    nada del representante; sigue pidiendo `telefono_emergencia` como
+    siempre. Lo que #1138 retira es la exigencia en los DOS caminos de
+    ALTA de un menor representado (`EnrollmentCreateDTO` con `representante`
+    y `RepresentadoCreateDTO`), no en este.
     """
     tipo_sangre: TipoSangreValidado
     persona_id: int
@@ -268,6 +278,12 @@ class FichaMedicaUpdateDTO(BaseModel):
     Que el RESULTADO de aplicar el parche sea una ficha válida no se decide
     acá: este DTO solo ve el payload, no la fila. Eso lo hace
     `FichaMedicaServicio.actualizar_por_persona`.
+
+    Issue #1138 NO toca esta regla, por el mismo motivo que
+    `FichaMedicaCreateDTO`: este PATCH es el endpoint general (administrador
+    o representante del titular, ver `test_ficha_medica_representante.py`),
+    no un camino de alta de menor representado. `telefono_emergencia` sigue
+    sin poder borrarse acá, para CUALQUIER persona.
     """
     tipo_sangre: Optional[TipoSangreValidado] = None
     enfermedades: Optional[List[str]] = None

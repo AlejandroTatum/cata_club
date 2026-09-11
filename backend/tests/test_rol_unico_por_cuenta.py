@@ -34,6 +34,7 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentCreateDTO,
     EnrollmentCredencialesDTO,
     EnrollmentFichaMedicaDTO,
+    EnrollmentFichaMedicaMenorDTO,
     EnrollmentRepresentanteDTO,
 )
 from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaCreateDTO
@@ -176,7 +177,13 @@ def test_endpoint_admin_de_roles_rechaza_el_segundo_rol(client, db_session):
 # --- 3b. Inscripción pública ------------------------------------------------
 # --- 3c. Inscripción pública ------------------------------------------------
 
-def _ficha_dto() -> EnrollmentFichaMedicaDTO:
+def _ficha_dto() -> EnrollmentFichaMedicaMenorDTO:
+    # Issue #1138: camino representado -- sin contacto de emergencia propio.
+    return EnrollmentFichaMedicaMenorDTO(tipo_sangre="O_POSITIVO", enfermedades=[])
+
+
+def _ficha_dto_adulto() -> EnrollmentFichaMedicaDTO:
+    # Camino adulto: sigue exigiendo contacto de emergencia propio.
     return EnrollmentFichaMedicaDTO(
         tipo_sangre="O_POSITIVO", enfermedades=[],
         contacto_emergencia="María Torres", telefono_emergencia="0991112233",
@@ -222,7 +229,7 @@ def test_autoinscripcion_de_adulto_deja_un_solo_rol(db_session):
         credenciales_alumno=EnrollmentCredencialesDTO(
             correo="adulto762@example.com", contrasenia="password8",
         ),
-        ficha_medica=_ficha_dto(),
+        ficha_medica=_ficha_dto_adulto(),
         acepta_consentimientos=True,
     )
 

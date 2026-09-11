@@ -191,6 +191,12 @@ class FichaMedicaServicio:
         vacía ni tirar un 404, porque el respaldo del representante (que
         siempre existe para un menor) sigue siendo información útil.
 
+        Issue #1138: para un representado, `contacto_emergencia`/
+        `telefono_emergencia` YA NO salen de `ficha` -- se derivan del
+        representante ACTUAL en este mismo método, así que la tarjeta nunca
+        queda vacía para un menor sin ficha médica cargada, y un cambio de
+        teléfono del representante se refleja acá sin tocar ningún registro.
+
         La consulta se registra DESPUÉS de confirmar que la persona existe,
         mismo orden que `AuthServicio._registrar_sesion`: un 404 no debe dejar
         una fila de auditoría de una consulta que en los hechos no ocurrió.
@@ -206,12 +212,26 @@ class FichaMedicaServicio:
             alumno_persona_id=persona_id, consultante_persona_id=consultante_persona_id,
         )
 
+        # Issue #1138: el contacto operativo de un representado es SIEMPRE su
+        # representante, derivado acá al leer -- nunca un texto libre
+        # independiente. Si `ficha.contacto_emergencia`/`telefono_emergencia`
+        # tienen un valor legado (staging, previo a este issue), se ignora a
+        # propósito: queda almacenado sin uso operativo hasta que #1062
+        # resuelva su retención. Un adulto (sin representante) sigue leyendo
+        # esos dos campos de su propia ficha, sin cambios.
+        if representante is not None:
+            contacto_emergencia = nombre_completo(representante.nombres, representante.apellidos)
+            telefono_emergencia = representante.telefono
+        else:
+            contacto_emergencia = ficha.contacto_emergencia if ficha else None
+            telefono_emergencia = ficha.telefono_emergencia if ficha else None
+
         return FichaEmergenciaResponseDTO(
             alumno_nombre_completo=nombre_completo(persona.nombres, persona.apellidos),
             tipo_sangre=ficha.tipo_sangre if ficha else None,
             alergias=ficha.alergias if ficha else None,
-            contacto_emergencia=ficha.contacto_emergencia if ficha else None,
-            telefono_emergencia=ficha.telefono_emergencia if ficha else None,
+            contacto_emergencia=contacto_emergencia,
+            telefono_emergencia=telefono_emergencia,
             representante_nombre_completo=(
                 nombre_completo(representante.nombres, representante.apellidos) if representante else None
             ),

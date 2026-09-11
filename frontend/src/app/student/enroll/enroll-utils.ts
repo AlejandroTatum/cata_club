@@ -66,6 +66,12 @@ export interface EnrollFormData {
   tipoSangre: BloodType | "";
   condicionesSalud: string;
   alergias: string;
+  /**
+   * Issue #1138: only collected/sent for a "self" (adult) enrollment. A
+   * "child" enrollment never renders or sends these two — the represented
+   * minor's emergency contact is derived from the representante, never a
+   * free-text field this form collects.
+   */
   contactoEmergencia: string;
   telefonoEmergencia: string;
   observaciones: string;
@@ -174,7 +180,7 @@ export function validateEnrollStep(
       errors.push(...validateRepresentative(data));
       break;
     case "health":
-      errors.push(...collect(HEALTH_FIELDS, data));
+      errors.push(...collect(healthFieldsFor(data.enrollmentType), data));
       break;
     case "summary":
       break;
@@ -260,8 +266,16 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
   };
   const fichaMedica = {
     tipoSangre: data.tipoSangre as BloodType, condicionesSalud: data.condicionesSalud.trim(),
-    alergias: data.alergias.trim(), contactoEmergencia: data.contactoEmergencia.trim(),
-    telefonoEmergencia: data.telefonoEmergencia.trim(),
+    alergias: data.alergias.trim(),
+    // Issue #1138: a "child" enrollment never sends these two — the
+    // represented minor's emergency contact is derived from the
+    // representante, and the backend rejects them explicitly if sent.
+    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
+      ? {
+          contactoEmergencia: data.contactoEmergencia.trim(),
+          telefonoEmergencia: data.telefonoEmergencia.trim(),
+        }
+      : {}),
     ...(data.observaciones.trim() ? { observaciones: data.observaciones.trim() } : {}),
   };
   if (data.enrollmentType === ENROLLMENT_TYPES.SELF) {
@@ -493,7 +507,15 @@ const REPRESENTATIVE_FIELDS: EnrollField[] = [
   "contraseniaRepresentanteConfirmacion",
 ];
 
-const HEALTH_FIELDS: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+// Issue #1138: a represented child never has a contact of their own — the
+// health step only asks for the two emergency-contact fields on the "self"
+// (adult) path.
+const HEALTH_FIELDS_SELF: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+const HEALTH_FIELDS_CHILD: EnrollField[] = ["tipoSangre"];
+
+function healthFieldsFor(type: EnrollmentType): EnrollField[] {
+  return type === ENROLLMENT_TYPES.CHILD ? HEALTH_FIELDS_CHILD : HEALTH_FIELDS_SELF;
+}
 
 /**
  * The fields a given step actually renders — so a disabled "Siguiente" can
@@ -513,7 +535,7 @@ export function fieldsForStep(step: WizardStep, type: EnrollmentType): EnrollFie
       // Skipped entirely for a self enrollment — there is no representante.
       return isChild ? REPRESENTATIVE_FIELDS : [];
     case "health":
-      return HEALTH_FIELDS;
+      return healthFieldsFor(type);
     case "summary":
       return [];
   }

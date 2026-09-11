@@ -43,12 +43,13 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     telefono: body.telefono,
   };
   if (body.fichaMedica) {
+    // Issue #1138: sin contacto de emergencia propio -- ese contacto se
+    // deriva del representante, y el backend rechaza explícitamente
+    // (422) `contacto_emergencia`/`telefono_emergencia` en este camino.
     backendBody.ficha_medica = {
       tipo_sangre: body.fichaMedica.tipoSangre,
       enfermedades: body.fichaMedica.enfermedades ?? [],
       alergias: body.fichaMedica.alergias,
-      contacto_emergencia: body.fichaMedica.contactoEmergencia,
-      telefono_emergencia: body.fichaMedica.telefonoEmergencia,
     };
   }
   if (body.institucionId !== undefined) backendBody.institucion_id = body.institucionId;

@@ -76,3 +76,44 @@ describe("buildEnrollmentCreateDTO — emergency fields (#643)", () => {
     expect(buildEnrollmentCreateDTO(request()).ficha_medica.enfermedades).toEqual([]);
   });
 });
+
+/**
+ * Issue #1138: a represented child (`EnrollFormData`/`buildEnrollmentRequest`
+ * never populate these two for that path) must NOT reach the backend at all
+ * — `EnrollmentFichaMedicaMenorDTO` forbids the keys outright (422).
+ */
+describe("buildEnrollmentCreateDTO — represented child omits the emergency fields (#1138)", () => {
+  function childRequest(): EnrollmentRequest {
+    return {
+      alumno: {
+        nombres: "Lucas",
+        apellidos: "Martinez",
+        cedula: "1798765432",
+        fechaNacimiento: "2015-06-15",
+        telefono: "0991234568",
+      },
+      representante: {
+        nombres: "Sofia",
+        apellidos: "Martinez",
+        cedula: "1798765433",
+        fechaNacimiento: "1990-05-20",
+        telefono: "0991234567",
+        correo: "sofia@example.com",
+        contrasenia: "password8",
+      },
+      aceptaConsentimientos: true,
+      fichaMedica: {
+        tipoSangre: BLOOD_TYPES.O_POSITIVO,
+        condicionesSalud: "",
+        alergias: "",
+        // Deliberately absent — the child path never sets them.
+      },
+    };
+  }
+
+  it("omits contacto_emergencia and telefono_emergencia", () => {
+    const dto = buildEnrollmentCreateDTO(childRequest());
+    expect("contacto_emergencia" in dto.ficha_medica).toBe(false);
+    expect("telefono_emergencia" in dto.ficha_medica).toBe(false);
+  });
+});

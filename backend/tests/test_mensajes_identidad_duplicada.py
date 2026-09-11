@@ -95,10 +95,15 @@ _FICHA = dict(
     tipo_sangre="O_POSITIVO", enfermedades=[],
     contacto_emergencia="María Torres", telefono_emergencia="0991112233",
 )
+# Issue #1138: camino representado, sin contacto de emergencia propio.
+_FICHA_MENOR = dict(tipo_sangre="O_POSITIVO", enfermedades=[])
 
 
 def _inscripcion(**kwargs) -> EnrollmentCreateDTO:
-    kwargs.setdefault("ficha_medica", dict(_FICHA))
+    kwargs.setdefault(
+        "ficha_medica",
+        dict(_FICHA_MENOR) if kwargs.get("representante") is not None else dict(_FICHA),
+    )
     kwargs.setdefault("acepta_consentimientos", True)
     return EnrollmentCreateDTO(**kwargs)
 

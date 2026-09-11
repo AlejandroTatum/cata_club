@@ -37,7 +37,7 @@ from app.infraestructura.tareas.verificacion_correo_tareas import (
     procesar_verificacion_correo_outbox,
 )
 from app.servicios_negocio.dtos.enrollment_schemas import (
-    EnrollmentAlumnoDTO, EnrollmentCreateDTO, EnrollmentFichaMedicaDTO,
+    EnrollmentAlumnoDTO, EnrollmentCreateDTO, EnrollmentFichaMedicaMenorDTO,
     EnrollmentRepresentanteDTO,
 )
 from app.dominio.enums import TipoSangre
@@ -92,9 +92,10 @@ def _inscribir(db_session, correo="sofia@example.com", semilla=800) -> Usuario:
             nombres="Mateo", apellidos="Martinez", cedula=cedula_valida(semilla + 1),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234568",
         ),
-        ficha_medica=EnrollmentFichaMedicaDTO(
+        # Issue #1138: camino representado -- sin contacto de emergencia
+        # propio (se deriva del representante).
+        ficha_medica=EnrollmentFichaMedicaMenorDTO(
             tipo_sangre=TipoSangre.O_POSITIVO, enfermedades=[],
-            contacto_emergencia="Sofia Martinez", telefono_emergencia="0991112233",
         ),
         acepta_consentimientos=True,
     )

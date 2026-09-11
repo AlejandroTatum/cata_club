@@ -233,12 +233,19 @@ class EnrollmentServicio:
             self.repo_persona.crear(alumno)
 
             if datos.ficha_medica:
+                # Issue #1138: en el camino representado, `datos.ficha_medica`
+                # resuelve como `EnrollmentFichaMedicaMenorDTO`, que no tiene
+                # `contacto_emergencia`/`telefono_emergencia` -- el contacto
+                # de ese menor se deriva del representante al LEER (ver
+                # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
+                # persiste acá. `getattr` cubre ambas formas del Union sin
+                # un `isinstance` explícito.
                 ficha = FichaMedica(
                     tipo_sangre=datos.ficha_medica.tipo_sangre,
                     persona_id=alumno.id,
                     alergias=datos.ficha_medica.alergias,
-                    contacto_emergencia=datos.ficha_medica.contacto_emergencia,
-                    telefono_emergencia=datos.ficha_medica.telefono_emergencia,
+                    contacto_emergencia=getattr(datos.ficha_medica, "contacto_emergencia", None),
+                    telefono_emergencia=getattr(datos.ficha_medica, "telefono_emergencia", None),
                 )
                 for nombre in datos.ficha_medica.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))

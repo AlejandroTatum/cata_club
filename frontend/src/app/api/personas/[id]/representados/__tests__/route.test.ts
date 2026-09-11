@@ -35,6 +35,9 @@ function postRequest(id: string, body: unknown, cookie = ""): NextRequest {
   });
 }
 
+// Issue #1138: no contactoEmergencia/telefonoEmergencia — a dependent
+// created through this endpoint is always a represented minor, and the
+// backend derives that contact from the representante at read time.
 const validPayload = {
   nombres: "Juan",
   apellidos: "Pérez",
@@ -45,8 +48,6 @@ const validPayload = {
     tipoSangre: "O_POSITIVO",
     enfermedades: ["Asma"],
     alergias: "Ninguna",
-    contactoEmergencia: "María Pérez",
-    telefonoEmergencia: "0997654321",
   },
 };
 
@@ -112,8 +113,6 @@ describe("POST /api/personas/[id]/representados", () => {
             tipo_sangre: "O_POSITIVO",
             enfermedades: ["Asma"],
             alergias: "Ninguna",
-            contacto_emergencia: "María Pérez",
-            telefono_emergencia: "0997654321",
           },
         }),
       }),
@@ -195,8 +194,6 @@ describe("POST /api/personas/[id]/representados", () => {
             tipo_sangre: "O_POSITIVO",
             enfermedades: ["Asma"],
             alergias: "Ninguna",
-            contacto_emergencia: "María Pérez",
-            telefono_emergencia: "0997654321",
           },
           institucion_id: 3,
         }),
