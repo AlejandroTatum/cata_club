@@ -76,7 +76,7 @@ Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/in
 - [x] #1171 merged
 - [x] #1172 merged
 - [x] #1173 merged
-- [ ] CI run on `main` green after the #1173 merge (`34dfb58`)
+- [x] CI run on `main` green after the #1173 merge (`34dfb58`)
 
 ## Phase 2 — Close tramo 1 in the frontend
 
