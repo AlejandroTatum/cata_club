@@ -1,7 +1,7 @@
 /**
  * El quinto spec E2E contra un backend REAL: activación de cuenta por
  * verificación de correo (issue #790), de punta a punta — alta pública real,
- * correo real leído de Mailpit, token seguido, y una sesión nueva que
+ * correo real leído de Mailpit, el enlace seguido, y una sesión nueva que
  * recuerda la verificación.
  *
  * ## Qué prueba, y por qué el asistente completo
@@ -11,26 +11,31 @@
  * `enroll-qa.spec.ts` ya prueba que el asistente en sí navega y valida bien
  * con la red mockeada — lo que ningún spec mockeado puede probar es que
  * `POST /enrollment/` deja una fila real en el outbox de verificación, que el
- * correo real sale, y que el token real que trae confirma la cuenta real.
+ * correo real sale, y que el enlace real que trae confirma la cuenta real.
  * Cinco pasos, uno por cada tramo que un mock no puede atravesar:
  *
  *   1. autoinscripción de un Jugador (adulto, sin representante) vía el
  *      asistente;
  *   2. el correo de verificación, despachado y leído de Mailpit;
- *   3. el token seguido desde `/login/activacion`, EN el lugar;
- *   4. el estado de activación persistido tras cerrar sesión y volver a
+ *   3. el enlace abierto en OTRA pestaña — el correo lleva un enlace, no un
+ *      código, así que verificarlo no es una acción de `/login/activacion`
+ *      sino de `/verificar-correo` en cualquier dispositivo (#1102);
+ *   4. `/login/activacion` reconociendo la verificación al pedirle que
+ *      vuelva a consultar su estado, y pasando de la pantalla de correo a la
+ *      de inscripción presencial sin recargar;
+ *   5. el estado de activación persistido tras cerrar sesión y volver a
  *      entrar con la cuenta nueva.
  *
  * ## Qué regresión real cubre
  *
- * `feat(auth): verificar el correo sin salir de la pantalla de activacion
- * (#1050)`: antes de ese cambio, `/login/activacion` solo ofrecía navegar
- * HACIA AFUERA para verificar (a `/verificar-correo` o al cliente de correo).
- * La aserción que importa acá no es que la cuenta termine verificada — un
- * mock ya podía fingir eso — es que la URL nunca se mueve de
- * `/login/activacion` mientras el estado de la pantalla cambia en el lugar:
- * si alguien revierte #1050, este spec deja de ver el formulario
- * desaparecer sin navegación y falla ahí, no en un timeout genérico.
+ * `feat(activation): split the gate into email and enrolment screens
+ * (#1102)`: antes de ese cambio, `/login/activacion` mostraba una sola
+ * pantalla con las dos condiciones, un formulario de código/enlace y varias
+ * salidas superpuestas. La aserción que importa acá no es que la cuenta
+ * termine verificada — un mock ya podía fingir eso — es que
+ * `/login/activacion` pasa de la pantalla de correo a la de inscripción
+ * presencial EN EL LUGAR, sin navegar, apenas alguien pide "Ya verifiqué mi
+ * correo" después de abrir el enlace real en otra pestaña.
  *
  * ## Por qué el despacho manual del outbox
  *
@@ -72,8 +77,9 @@ const ASUNTO_VERIFICACION = "Cata Club | Verificación de correo";
 /** Correo nuevo por corrida: `persona.cedula` y el índice de correo son `unique` (ver `newPlayer`). */
 const player = newPlayer(`qa-activacion-${Date.now()}@cataclub.com`);
 
-test("un jugador se autoinscribe, verifica su correo sin salir de /login/activacion, y la sesión nueva lo recuerda", async ({
+test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/activacion pasa de una pantalla a la otra sin recargar", async ({
   page,
+  context,
   request,
 }) => {
   // El flujo completo — alta, despacho real del outbox, sondeo de Mailpit,
@@ -91,9 +97,9 @@ test("un jugador se autoinscribe, verifica su correo sin salir de /login/activac
     // `/login/activacion` porque el correo todavía no está verificado.
     await page.goto("/login");
     await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
-    await expect(page.getByRole("heading", { name: /active su cuenta/i })).toBeVisible();
-    const verificarButton = page.getByRole("button", { name: "Verificar correo" });
-    await expect(verificarButton).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Verifique su correo" })).toBeVisible();
+    const yaVerifiqueButton = page.getByRole("button", { name: "Ya verifiqué mi correo" });
+    await expect(yaVerifiqueButton).toBeVisible();
 
     // ── 2. El correo real, despachado y leído de Mailpit ──
     await dispatchPendingOutboxTask(
@@ -102,18 +108,29 @@ test("un jugador se autoinscribe, verifica su correo sin salir de /login/activac
     const mensaje = await waitForMessageTo(request, player.correo, ASUNTO_VERIFICACION);
     const token = extractTokenFromLink(mensaje, "/verificar-correo");
 
-    // ── 3. El token seguido EN el lugar — regresión #1050 ──
-    await page.getByLabel(/código o enlace de verificación/i).fill(token);
-    await verificarButton.click();
+    // ── 3. El enlace, abierto en OTRA pestaña — el correo lleva un enlace,
+    // no un código (#1102), así que verificarlo no es una acción de
+    // /login/activacion sino de /verificar-correo, posiblemente en otro
+    // dispositivo. La pestaña original queda intacta en /login/activacion.
+    const verificationPage = await context.newPage();
+    await verificationPage.goto(`/verificar-correo?token=${token}`);
+    await expect(verificationPage.getByText(/correo.*verificad/i)).toBeVisible({ timeout: 15_000 });
+    await verificationPage.close();
 
-    // La URL nunca se mueve: la pantalla se actualiza sola, sin navegar.
+    // ── 4. De vuelta en la pestaña original: pedirle que vuelva a
+    // consultar su estado mueve la pantalla de correo a la de inscripción
+    // presencial, EN EL LUGAR — regresión #1102 ──
+    await yaVerifiqueButton.click();
+
     await expect(page).toHaveURL(/\/login\/activacion$/);
-    await expect(verificarButton).toHaveCount(0, { timeout: 15_000 });
-    await expect(
-      page.getByText("Complete la inscripción presencial en el club para habilitar el acceso a los módulos."),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Complete su inscripción en el club" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText("Correo verificado")).toBeVisible();
+    await expect(page.getByText("Su correo quedó verificado.")).toBeVisible();
+    await expect(yaVerifiqueButton).toHaveCount(0);
 
-    // ── 4. Cerrar sesión y volver a entrar: el estado persistió, no era del cliente ──
+    // ── 5. Cerrar sesión y volver a entrar: el estado persistió, no era del cliente ──
     await page.getByRole("button", { name: "Cerrar sesión" }).click();
     await expect(page).toHaveURL(/\/login$/, { timeout: 20_000 });
 
@@ -124,9 +141,12 @@ test("un jugador se autoinscribe, verifica su correo sin salir de /login/activac
     await expect(page.getByText("Hola, QA")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("Antes de entrar, le faltan un par de pasos.")).toBeVisible();
     await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
-    // El formulario de verificación no reaparece: el correo verificado
-    // sobrevivió al logout/login, no era un estado que vivía en el navegador.
-    await expect(page.getByRole("button", { name: "Verificar correo" })).toHaveCount(0);
+    // La pantalla de correo no reaparece: el correo verificado sobrevivió al
+    // logout/login, no era un estado que vivía en el navegador. Al ser un
+    // load nuevo — no una transición desde "Ya verifiqué mi correo" — el
+    // aviso puntual de la sesión anterior tampoco reaparece.
+    await expect(page.getByRole("heading", { name: "Complete su inscripción en el club" })).toBeVisible();
+    await expect(page.getByText("Su correo quedó verificado.")).toHaveCount(0);
   } finally {
     await purgeMessagesTo(request, player.correo);
   }

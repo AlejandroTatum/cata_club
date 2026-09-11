@@ -7,13 +7,16 @@
  * entrenador without a membership has the facts False but the decision
  * True, and must not stay trapped here.
  *
- * Issue #1045: the screen used to only offer navigation OUT (a resend
- * button, a link to /verificar-correo) for a condition it already knows how
- * to read and display. These tests cover completing that verification
- * in place — pasting the code or link, confirming without leaving the
- * page, the state updating with no re-login, the two conditions no longer
- * looking like interchangeable checkboxes, and a dead code/link saying what
- * to do next instead of just failing quietly.
+ * Issue #1102: this page used to show a checklist, a summary box, an inline
+ * verification form, a resend button and two "check again" affordances all
+ * at once. The verification email carries a LINK, not a code, so there is
+ * no paste-and-confirm step to keep in place: this route now renders one of
+ * two sequential screens instead — an email screen ("Verifique su correo")
+ * while `correoVerificado` is false, and an enrolment screen ("Complete su
+ * inscripción en el club") once the email is verified and only the
+ * in-person enrolment remains. Both share the same `checkStatus` refresh;
+ * the label on the primary button is the only thing that differs by which
+ * fact is still pending when it is pressed.
  *
  * @vitest-environment jsdom
  */
@@ -32,19 +35,18 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
-const mockVerificarCorreo = vi.fn();
 const mockReenviarVerificacionCorreo = vi.fn();
 vi.mock("@/services/api", () => ({
-  verificarCorreo: (...args: unknown[]) => mockVerificarCorreo(...args),
   reenviarVerificacionCorreo: (...args: unknown[]) => mockReenviarVerificacionCorreo(...args),
 }));
 
 // Same stub as LoginPage.test.tsx: only the content under test matters here,
-// not the shell's own layout. Wrapped in a spy (#1045) so the tests below can
-// assert on the props ActivationPage hands the shell — `hideBack` in
-// particular — without rendering the real composition.
+// not the shell's own layout. Wrapped in a spy so the tests below can assert
+// on the props ActivationPage hands the shell — `title`, `subtitle` and
+// `hideBack` in particular — without rendering the real composition.
 const mockAuthShell = vi.fn(
-  ({ children }: { children: React.ReactNode }): React.ReactElement => <>{children}</>,
+  ({ children }: { children: React.ReactNode; title?: string; subtitle?: string; hideBack?: boolean }): React.ReactElement =>
+    <>{children}</>,
 );
 vi.mock("@/components/auth/AuthShell", async () => {
   const actual = await vi.importActual<typeof import("@/components/auth/AuthShell")>(
@@ -62,11 +64,15 @@ import type { ActivationSession } from "@/lib/activation-reasons";
 
 const mockUseAuth = vi.mocked(useAuth);
 
+/** Reads the `subtitle` prop most recently handed to `AuthShell`. */
+function lastSubtitle(): string | undefined {
+  return mockAuthShell.mock.calls.at(-1)?.[0]?.subtitle;
+}
+
 beforeEach(() => {
   mockReplace.mockReset();
   mockUseAuth.mockReset();
   mockAuthShell.mockClear();
-  mockVerificarCorreo.mockReset();
   mockReenviarVerificacionCorreo.mockReset();
   mockReenviarVerificacionCorreo.mockResolvedValue({ mensaje: "Enviado." });
 });
@@ -83,7 +89,7 @@ describe("ActivationPage", () => {
     });
   });
 
-  it("stays on the page and renders the checklist when the decision is incomplete", async () => {
+  it("stays on the page and renders the enrolment screen when the decision is incomplete", async () => {
     const session = {
       ...createMockSession({ roles: ["ALUMNO"] }),
       correoVerificado: true,
@@ -94,38 +100,13 @@ describe("ActivationPage", () => {
 
     render(<ActivationPage />);
 
-    expect(await screen.findByRole("list", { name: "Estado de activación" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
-  });
-
-  // Issue reported against staging: a stale token can leave `activacionCompleta`
-  // false while both raw facts already read true — the explanatory box below
-  // the checklist has nothing left to say in that combination, and used to
-  // render anyway as an empty bordered bar with no text inside it.
-  it("does not render the empty explanatory box when both facts are already true", async () => {
-    const session = {
-      ...createMockSession({ roles: ["ALUMNO"] }),
-      correoVerificado: true,
-      altaPresencialCompletada: true,
-      activacionCompleta: false,
-    };
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante", "Test User", { session }));
-
-    const { container } = render(<ActivationPage />);
-
-    await screen.findByRole("list", { name: "Estado de activación" });
-    expect(container.querySelector("div.rounded-ctl")).not.toBeInTheDocument();
   });
 });
 
 // ---------------------------------------------------------------------------
-// Issue #1045 — verifying the email without leaving /login/activacion.
-//
-// Shared helpers below: every scenario needs an authenticated-but-pending
-// session on screen, most need to type a code and press the one button that
-// submits it, and the two "state updates in place" scenarios need a
-// `refreshSession` that actually swaps the mocked session — three shapes of
-// setup that would otherwise repeat, token-for-token, across every test.
+// Issue #1102 — the two sequential screens.
 // ---------------------------------------------------------------------------
 
 function pendingSession(overrides?: Partial<ActivationSession>): ActivationSession {
@@ -144,24 +125,17 @@ function pendingSession(overrides?: Partial<ActivationSession>): ActivationSessi
 
 type AuthOverrides = Parameters<typeof createAuthenticatedAuth>[2];
 
-/** Authenticates as the pending session and renders the page. */
+/** Authenticates as the given session and renders the page. */
 function renderPending(session: ActivationSession = pendingSession(), authOverrides?: AuthOverrides): RenderResult {
   mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante", "Test User", { session, ...authOverrides }));
   return render(<ActivationPage />);
 }
 
-/** Types the pasted value into the one field and presses the one button that submits it. */
-async function submitToken(value: string): Promise<void> {
-  fireEvent.change(await screen.findByLabelText(/código o enlace de verificación/i), {
-    target: { value },
-  });
-  fireEvent.click(screen.getByRole("button", { name: /^verificar correo$/i }));
-}
-
 /**
  * A `refreshSession` double that, once awaited, re-points the mocked
  * `useAuth()` at `nextSession` — standing in for the BFF round-trip that
- * really updates `AuthContext`'s state after a successful verification.
+ * really updates `AuthContext`'s state after "Ya verifiqué mi correo" /
+ * "Consultar estado nuevamente" is pressed.
  */
 function mockRefreshTo(nextSession: ActivationSession): ReturnType<typeof vi.fn> {
   const mockRefreshSession = vi.fn().mockImplementation(async () => {
@@ -176,56 +150,62 @@ function mockRefreshTo(nextSession: ActivationSession): ReturnType<typeof vi.fn>
   return mockRefreshSession;
 }
 
-describe("ActivationPage — verifying the email in place (#1045)", () => {
-  // AC1 — completing the verification without leaving the page.
-  it("offers a field to paste the code or link, and a button to confirm it right here", async () => {
+describe("ActivationPage — the email screen", () => {
+  it("shows the check-again action and the pending-enrolment sentence when both facts are pending", async () => {
+    renderPending(pendingSession());
+
+    expect(await screen.findByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
+    expect(lastSubtitle()).toContain("Después queda un paso: la inscripción presencial en el club.");
+    // No trace of the checklist/summary/inline-form screen this replaces.
+    expect(screen.queryByLabelText(/código o enlace de verificación/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Inscripción presencial completada")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Abrir verificación de correo" })).not.toBeInTheDocument();
+  });
+
+  it("omits the pending-enrolment sentence when only the email is pending", async () => {
+    renderPending(pendingSession({ altaPresencialCompletada: true }));
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(lastSubtitle()).not.toContain("Después queda un paso");
+  });
+
+  it("names the account's own address so the person knows which inbox to check", async () => {
+    renderPending(pendingSession());
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(lastSubtitle()).toContain("Le enviamos un enlace a estudiante@cataclub.com.");
+  });
+
+  it("keeps the resend action available as a secondary control", async () => {
     renderPending();
 
-    expect(await screen.findByLabelText(/código o enlace de verificación/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^verificar correo$/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /reenviar correo de verificación/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
   });
 
-  it("reads the token out of a pasted full link and confirms with it", async () => {
-    mockVerificarCorreo.mockResolvedValue(undefined);
-    const session = pendingSession();
-    renderPending(session, { refreshSession: vi.fn().mockResolvedValue({ kind: "authenticated", session }) });
-
-    await submitToken("https://cataclub.com/verificar-correo?token=abc123");
-
-    await waitFor(() => expect(mockVerificarCorreo).toHaveBeenCalledWith("abc123"));
-  });
-
-  // AC2 — the state updates in place, with no return to /login.
-  it("updates the checklist after verifying, without asking to sign in again", async () => {
+  it("moves to the enrolment screen once checking status reports the email verified, with only the enrolment pending", async () => {
     const pending = pendingSession();
     const verified = { ...pending, correoVerificado: true };
-    mockVerificarCorreo.mockResolvedValue(undefined);
     const mockRefreshSession = mockRefreshTo(verified);
     const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
 
-    await submitToken("token-valido");
+    fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
 
     await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
     rerender(<ActivationPage />);
 
-    // The pending explanation for BOTH conditions must be gone; only the
-    // alta presencial one remains, and no re-login was ever requested.
-    expect(
-      screen.queryByText("Le faltan verificar su correo y completar la inscripción presencial en el club."),
-    ).not.toBeInTheDocument();
-    expect(await screen.findByText(/Complete la inscripción presencial en el club/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
+    expect(screen.getByText("Su correo quedó verificado.")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalledWith("/login");
   });
 
-  // AC3 — both conditions complete after verifying continues straight to the panel.
-  it("continues on to the panel when verifying leaves both conditions complete", async () => {
+  it("redirects straight through when checking status reports both conditions complete", async () => {
     const pending = pendingSession({ altaPresencialCompletada: true });
     const complete = { ...pending, correoVerificado: true, activacionCompleta: true };
-    mockVerificarCorreo.mockResolvedValue(undefined);
     const mockRefreshSession = mockRefreshTo(complete);
     const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
 
-    await submitToken("token-valido");
+    fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
 
     await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
     rerender(<ActivationPage />);
@@ -233,78 +213,59 @@ describe("ActivationPage — verifying the email in place (#1045)", () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
   });
 
-  // Review finding on #1050, unified with `/login`'s own mechanism in #1057:
-  // the verification can succeed in the backend at the exact moment the
-  // person's OWN session ends (expired, or a logout in another tab) —
-  // `refreshSession()` then answers "unauthenticated", the guard effect
-  // sends this screen to /login on its own, and a message set on THIS page's
-  // local state would be thrown away with it before anyone reads it. The
-  // news has to survive that redirect — carried in the URL, the same way
-  // `?motivo=sesion-expirada` already does for #353, instead of a toast.
-  it("still says the verification worked when the session ends at that exact moment", async () => {
-    mockVerificarCorreo.mockResolvedValue(undefined);
-    // Mirrors what `AuthContext`'s real `revalidate()` does on this outcome —
-    // it clears the session itself, which is what actually flips
-    // `isAuthenticated` and lets the guard effect fire the redirect below.
-    const mockRefreshSession = vi.fn().mockImplementation(async () => {
-      mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
-      return { kind: "unauthenticated" };
-    });
-    const { rerender } = renderPending(pendingSession(), { refreshSession: mockRefreshSession });
+  it("reports the outage without moving screens when checking status fails", async () => {
+    const mockRefreshSession = vi.fn().mockResolvedValue({ kind: "outage" });
+    renderPending(pendingSession(), { refreshSession: mockRefreshSession });
 
-    await submitToken("token-valido");
+    fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
 
-    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
-    rerender(<ActivationPage />);
-
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login?motivo=correo-verificado"));
-  });
-
-  // AC4 — the condition that is not resolved here reads differently from the one that is.
-  it("marks the club-only condition as distinct from the one this screen can resolve", async () => {
-    renderPending(pendingSession({ correoVerificado: true }));
-
-    expect(await screen.findByText(/se completa en el club/i)).toBeInTheDocument();
-    // The verified condition carries no such note — it is the one this
-    // screen resolves, not the one deferred to an in-person step.
-    const correoItem = screen.getByText("Correo electrónico verificado").closest("li");
-    expect(correoItem).not.toHaveTextContent(/se completa en el club/i);
-  });
-
-  // AC5 — resending stays available and is not displaced by the new form.
-  it("keeps the resend button available alongside the new inline form", async () => {
-    renderPending();
-
-    expect(await screen.findByRole("button", { name: /reenviar correo de verificación/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^verificar correo$/i })).toBeInTheDocument();
-  });
-
-  // AC6 — a dead code/link says what to do next, without leaving the page.
-  it("tells the person what to do next when the code or link is invalid or expired", async () => {
-    mockVerificarCorreo.mockRejectedValue(new Error("token inválido"));
-    renderPending();
-
-    await submitToken("token-vencido");
-
-    const error = await screen.findByRole("alert");
-    expect(error).toHaveTextContent(/no es válido|venció/i);
-    expect(error).toHaveTextContent(/reenviar correo de verificación/i);
-    // Still on the same screen — never redirected, checklist still standing.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo consultar el estado/i);
+    expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
-    expect(screen.getByRole("list", { name: "Estado de activación" })).toBeInTheDocument();
+  });
+});
+
+describe("ActivationPage — the enrolment screen", () => {
+  function enrolmentPendingSession(overrides?: Partial<ActivationSession>): ActivationSession {
+    return pendingSession({ correoVerificado: true, altaPresencialCompletada: false, ...overrides });
+  }
+
+  it("shows the confirmation, the one status action, and no verification controls", async () => {
+    renderPending(enrolmentPendingSession());
+
+    expect(await screen.findByText("Correo verificado")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ya verifiqué mi correo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reenviar correo de verificación/i })).not.toBeInTheDocument();
+  });
+
+  it("does not show the just-verified confirmation on a plain load", async () => {
+    renderPending(enrolmentPendingSession());
+
+    await screen.findByText("Correo verificado");
+    expect(screen.queryByText("Su correo quedó verificado.")).not.toBeInTheDocument();
   });
 });
 
 // ---------------------------------------------------------------------------
-// Issue #1045 — the corner exit no longer offers the landing to an
-// authenticated person stuck at this gate.
+// Shared behaviour across both screens.
 // ---------------------------------------------------------------------------
+
+describe("ActivationPage — logging out", () => {
+  it("redirects an unauthenticated visitor straight to /login", async () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth(false));
+
+    render(<ActivationPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+  });
+});
 
 describe("ActivationPage — the corner exit", () => {
   it("tells AuthShell to hide the corner exit, since 'Cerrar sesión' is the deliberate one", async () => {
     renderPending();
 
-    await screen.findByRole("list", { name: "Estado de activación" });
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
     expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ hideBack: true }));
   });
 });
