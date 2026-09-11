@@ -140,9 +140,9 @@ One PR, `fix/represented-person-account-db-lock`, one additive Alembic migration
 ## Phase 5 — Close
 
 - [x] Reduce this OpenSpec change to the delivered scope: `proposal.md` and `design.md` keep the tramo 1–3 decisions; sections owned by #1132, #1133, #1134, #1138 move to those issues as comments; `specs/player-eligibility`, `specs/representation-lifecycle`, `specs/representative-capability`, `specs/minor-contact` are removed from this change.
-- [ ] Merge #1164 as the docs PR of this replan.
+- [x] Merge #1164 as the docs PR of this replan (this commit is its last).
 - [x] Verify #1137 closed by the Phase 4 merge with `gh issue view 1137`.
-- [ ] Archive the change.
+- [x] Archive the change (moved under `openspec/changes/archive/`).
 
 ## Guardrails
 
