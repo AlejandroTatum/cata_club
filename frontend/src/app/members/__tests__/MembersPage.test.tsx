@@ -2038,10 +2038,30 @@ describe("MembersPage — the stats row doesn't repeat the student count", () =>
         },
       ],
     });
-    // 2 accounts with an active membership + 1 without → 3 students total,
-    // 2 with an active membership: two distinct, unambiguous figures.
+    // 2 accounts with an active membership + 1 with a lapsed one (a real
+    // membership on file, issue #1132 — a pure representative with none at
+    // all would not count as a student here) → 3 students total, 2 with an
+    // active membership: two distinct, unambiguous figures.
     mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [active("1"), active("2"), { ...ACCOUNT, id: "3" }],
+      accounts: [
+        active("1"),
+        active("2"),
+        {
+          ...ACCOUNT,
+          id: "3",
+          estudiantes: [{
+            ...ACCOUNT.estudiantes[0],
+            membresia: {
+              tipo: "Mensual",
+              estado: "vencida",
+              fechaInicio: "2026-06-01",
+              fechaFin: "2026-06-30",
+              monto: 50,
+              id: 3,
+            },
+          }],
+        },
+      ],
     });
 
     render(
@@ -2404,16 +2424,18 @@ describe("MembersPage — four tiles, four shapes (D7)", () => {
         {
           ...ACCOUNT.estudiantes[0],
           id: `${id}-e`,
-          membresia: activa
-            ? {
-                tipo: "Mensual",
-                estado: "activa",
-                fechaInicio: "2026-07-01",
-                fechaFin: "2026-07-31",
-                monto: 50,
-                id: Number(id),
-              }
-            : null,
+          // Issue #1132: a `null` membresia is a pure representative — not a
+          // student at all — so the "not active" leg of this fixture needs a
+          // REAL (lapsed) membership on file to still count toward the
+          // "Estudiantes" denominator this ratio divides by.
+          membresia: {
+            tipo: "Mensual",
+            estado: activa ? "activa" : "vencida",
+            fechaInicio: "2026-07-01",
+            fechaFin: "2026-07-31",
+            monto: 50,
+            id: Number(id),
+          },
         },
       ],
     };

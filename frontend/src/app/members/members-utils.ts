@@ -275,12 +275,36 @@ function parseDateStringLocal(dateStr: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Issue #1132: "es jugador" is a fact about the MEMBERSHIP, never about
+ * `Persona.activo` — a pure representative's own row carries a
+ * `MemberStudentSummary` with `membresia: null` (`members-adapter.ts` never
+ * resolved one because none exists), and that absence, not `activo`, is what
+ * says this person has never been a player. `activo` stays a real, separate
+ * fact (an administratively archived Persona) that no longer decides this
+ * question — a lapsed (vencida) or suspended member is still counted here:
+ * they HAVE a membership on file, just not a current one, and the roster
+ * (and its debt tracking, issue #326) still needs to show them.
+ */
 function isOperationalStudent(student: MemberAccount["estudiantes"][number]): boolean {
+  return student.membresia !== null;
+}
+
+/**
+ * Whether this row's own Persona is an archived (`activo: false`) account —
+ * independent of whether it is, or has ever been, a player. Issue #362's
+ * "sin datos de emergencia" gap is about THIS Persona having no one to call
+ * (no representative and no ficha médica), which applies just as much to a
+ * pure representative as to a player, so it deliberately does NOT filter on
+ * `isOperationalStudent` (membership) — a representative with no membership
+ * on file is exactly the account this stat exists to catch.
+ */
+function isActiveAccountHolder(student: MemberAccount["estudiantes"][number]): boolean {
   return student.activo;
 }
 
 function hasOperationalStudent(account: MemberAccount): boolean {
-  return account.estudiantes.length === 0 || account.estudiantes.some(isOperationalStudent);
+  return account.estudiantes.length === 0 || account.estudiantes.some(isActiveAccountHolder);
 }
 
 function isPendingOperationalPayment(student: MemberAccount["estudiantes"][number]): boolean {
@@ -423,8 +447,7 @@ export function accountMatchesFlag(
      * land on a worklist of people to go chase.
      */
     case "sin-emergencia":
-      return (account.estudiantes.length === 0 || account.estudiantes.some((s) => s.activo))
-        && account.sinDatosEmergencia === true;
+      return hasOperationalStudent(account) && account.sinDatosEmergencia === true;
   }
 }
 

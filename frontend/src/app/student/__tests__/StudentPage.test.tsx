@@ -350,6 +350,69 @@ describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
   });
 });
 
+/**
+ * Issue #1132: "es jugador" comes from an ACTIVA Membresia, never from the
+ * ALUMNO role alone — `crear_membresia` no longer grants ALUMNO when a
+ * representante pays a membership for their own persona (issue #762 stays
+ * intact: they keep only REPRESENTANTE). Before this fix, `derivePortalMode`
+ * and `useManagedProfiles` both read `hasAlumnoRole`, so this exact account
+ * would be stuck on the "pending" screen forever and, even if it reached the
+ * active portal some other way, would never see its own schedule/payments.
+ */
+describe("StudentPage — a representative with an own active membership (#1132)", () => {
+  const ACTIVE_MEMBERSHIP_PORTAL: StudentPortalSummary = {
+    self: {
+      ...PORTAL.self!,
+      membership: {
+        id: 11,
+        estado: "ACTIVA",
+        personaId: 9,
+        montoAplicado: "35.00",
+        categoria: "Mensual",
+        modalidad: "MENSUAL",
+        fechaActivacion: "2026-07-01",
+        fechaFin: "2026-07-31",
+      },
+    },
+    representados: [],
+    membershipPlans: [],
+  };
+
+  beforeEach(() => {
+    mockAuthSession = {
+      user: { id: "9", name: "Representante Test", email: "rep@cataclub.com", role: "representante", representanteId: null },
+      roles: ["REPRESENTANTE"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+    mockFetchStudentPortal.mockReset().mockResolvedValue(ACTIVE_MEMBERSHIP_PORTAL);
+  });
+
+  it("shows the active portal instead of the pending-enrollment screen", async () => {
+    render(<StudentPage />);
+
+    expect(await screen.findByTestId("student-carnet")).toBeInTheDocument();
+    expect(screen.queryByText(/todavía no completaste/i)).not.toBeInTheDocument();
+  });
+
+  it("does not offer the join-as-player CTA — the account is already a player", async () => {
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByRole("link", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps its own profile selected, enabling its own schedule and payments", async () => {
+    render(<StudentPage />);
+
+    // Without the fix, `useManagedProfiles` only included `data.self` when
+    // `hasAlumnoRole` was true — this account never holds that role.
+    expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
+      "aria-label",
+      "Carnet de socio de Alumno Test",
+    );
+  });
+});
+
 describe("StudentPage — the club membership card (carnet)", () => {
   it("shows the student's name and plan, and no payment state at all", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
