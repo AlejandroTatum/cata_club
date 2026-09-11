@@ -452,9 +452,10 @@ async def retirar_beneficio(
 # excepción de dominio ya mapeada a 403, sin revelar si el `persona_id` de la
 # URL existe o pertenece a otro representante.
 # Rate-limited (D6-c): `RepresentadoCreateDTO` puede acuñar una identidad
-# nueva (Persona + Usuario, si vienen `correo`/`contrasenia`) igual que
-# `autoinscribir` -- la misma categoría que D1 cierra con el límite de
-# `POST /auth/registro`. Tier de autoservicio autenticado (10/min), igual que
+# nueva (solo Persona -- issue #1137, invariante B: un representado nunca
+# tiene `Usuario` propio) igual que `autoinscribir` -- la misma categoría que
+# D1 cierra con el límite de `POST /auth/registro`. Tier de autoservicio
+# autenticado (10/min), igual que
 # `actualizar_perfil_propio`/`actualizar_foto_perfil`.
 @router.post(
     "/{persona_id}/representados", response_model=PersonaResponseDTO,
