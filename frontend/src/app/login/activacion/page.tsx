@@ -14,7 +14,7 @@ import { Button, buttonClasses } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 
 /**
- * The subtitle for the email-verification screen (#1102).
+ * The subtitle for the email-verification screen (#1191).
  *
  * Names the account's own address so the person can confirm they are looking
  * for the right inbox — the verification email carries a LINK, not a code,
@@ -44,7 +44,7 @@ function ActivationPageContent(): React.ReactElement {
   const [resendError, setResendError] = useState<string | null>(null);
   /**
    * Set once `checkStatus` learns the email went from pending to verified
-   * (#1102) — the verification itself happens on the email's own link, not
+   * (#1191) — the verification itself happens on the email's own link, not
    * on a request this page makes, so nothing else here can name that
    * transition. Read only on the enrolment screen below, which is the one
    * this can land on right after: the checklist story a code/link paste used
@@ -129,7 +129,7 @@ function ActivationPageContent(): React.ReactElement {
     );
   }
 
-  // Screen A (#1102): the email is still pending, regardless of the
+  // Screen A (#1191): the email is still pending, regardless of the
   // enrolment fact — the link in the verification email is the one thing
   // that resolves it, and this page only offers to re-check for it or send
   // another one.
@@ -162,7 +162,7 @@ function ActivationPageContent(): React.ReactElement {
     );
   }
 
-  // Screen B (#1102): the email is verified, the in-person enrolment is not.
+  // Screen B (#1191): the email is verified, the in-person enrolment is not.
   // It is completed at the club by staff — there is nothing to submit here,
   // only the status to re-check once it lands.
   return (
@@ -173,7 +173,7 @@ function ActivationPageContent(): React.ReactElement {
          * place, with no navigation — the old checklist (#1045) carried the
          * same attribute so a screen-reader user heard the state change; this
          * wrapper is what carries it across the split into two screens
-         * (#1102), for the one moment that content actually changes.
+         * (#1191), for the one moment that content actually changes.
          */}
         <div className="flex flex-col gap-4" aria-live="polite">
           <p className="flex items-center gap-2 text-sm font-semibold text-state-ok">

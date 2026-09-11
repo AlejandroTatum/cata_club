@@ -19,7 +19,7 @@
  *   2. el correo de verificación, despachado y leído de Mailpit;
  *   3. el enlace abierto en OTRA pestaña — el correo lleva un enlace, no un
  *      código, así que verificarlo no es una acción de `/login/activacion`
- *      sino de `/verificar-correo` en cualquier dispositivo (#1102);
+ *      sino de `/verificar-correo` en cualquier dispositivo (#1191);
  *   4. `/login/activacion` reconociendo la verificación al pedirle que
  *      vuelva a consultar su estado, y pasando de la pantalla de correo a la
  *      de inscripción presencial sin recargar;
@@ -29,7 +29,7 @@
  * ## Qué regresión real cubre
  *
  * `feat(activation): split the gate into email and enrolment screens
- * (#1102)`: antes de ese cambio, `/login/activacion` mostraba una sola
+ * (#1191)`: antes de ese cambio, `/login/activacion` mostraba una sola
  * pantalla con las dos condiciones, un formulario de código/enlace y varias
  * salidas superpuestas. La aserción que importa acá no es que la cuenta
  * termine verificada — un mock ya podía fingir eso — es que
@@ -109,7 +109,7 @@ test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/
     const token = extractTokenFromLink(mensaje, "/verificar-correo");
 
     // ── 3. El enlace, abierto en OTRA pestaña — el correo lleva un enlace,
-    // no un código (#1102), así que verificarlo no es una acción de
+    // no un código (#1191), así que verificarlo no es una acción de
     // /login/activacion sino de /verificar-correo, posiblemente en otro
     // dispositivo. La pestaña original queda intacta en /login/activacion.
     const verificationPage = await context.newPage();
@@ -119,7 +119,7 @@ test("un jugador se autoinscribe, verifica su correo en otra pestaña, y /login/
 
     // ── 4. De vuelta en la pestaña original: pedirle que vuelva a
     // consultar su estado mueve la pantalla de correo a la de inscripción
-    // presencial, EN EL LUGAR — regresión #1102 ──
+    // presencial, EN EL LUGAR — regresión #1191 ──
     await yaVerifiqueButton.click();
 
     await expect(page).toHaveURL(/\/login\/activacion$/);

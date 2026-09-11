@@ -7,7 +7,7 @@
  * entrenador without a membership has the facts False but the decision
  * True, and must not stay trapped here.
  *
- * Issue #1102: this page used to show a checklist, a summary box, an inline
+ * Issue #1191: this page used to show a checklist, a summary box, an inline
  * verification form, a resend button and two "check again" affordances all
  * at once. The verification email carries a LINK, not a code, so there is
  * no paste-and-confirm step to keep in place: this route now renders one of
@@ -106,7 +106,7 @@ describe("ActivationPage", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Issue #1102 — the two sequential screens.
+// Issue #1191 — the two sequential screens.
 // ---------------------------------------------------------------------------
 
 function pendingSession(overrides?: Partial<ActivationSession>): ActivationSession {
@@ -252,7 +252,7 @@ describe("ActivationPage — the enrolment screen", () => {
 
   // The old checklist carried `aria-live="polite"` (#1045) so a
   // screen-reader user heard the state change in place. The email → enrolment
-  // swap (#1102) is a silent screen replacement without it: the confirmation
+  // swap (#1191) is a silent screen replacement without it: the confirmation
   // has to live inside its own polite live region for that announcement to
   // survive the split.
   it("wraps the confirmation in a polite live region so the screen change is announced", async () => {
