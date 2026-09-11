@@ -2152,7 +2152,7 @@ class VinculacionRepresentante(Base):
         ).ddl_if(dialect="postgresql"),
         CheckConstraint(
             "origen IN ('SESION_AUTENTICADA', 'ADMIN_PRESENCIAL', "
-            "'AUTOSERVICIO_LEGADO', 'REMEDIACION_LEGACY')",
+            "'AUTOSERVICIO_LEGADO', 'REMEDIACION_LEGACY', 'ALTA_PUBLICA')",
             name="ck_vinculacion_representante_origen",
         ).ddl_if(dialect="postgresql"),
         CheckConstraint(

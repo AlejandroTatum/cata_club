@@ -424,3 +424,20 @@ def test_el_check_de_origen_admite_alta_publica(db_session):
     db_session.add(evento)
     db_session.flush()
     assert evento.id is not None
+
+
+def test_el_literal_orm_del_check_de_origen_incluye_alta_publica():
+    """El test de arriba corre contra la base REAL migrada (`k1143rolrep`),
+    no contra `Base.metadata.create_all` -- no hubiera detectado que el
+    literal declarado en el modelo (`app/dominio/modelos.py`) se quedó
+    desactualizado. `crear_tablas()` (`app/infraestructura/db.py`, solo
+    dev) sí usa `create_all`: si el literal del ORM no incluye
+    `ALTA_PUBLICA`, esa base de desarrollo instalaría el CHECK viejo y
+    rechazaría la fila que `EnrollmentServicio` escribe."""
+    from app.dominio.modelos import VinculacionRepresentante
+
+    check = next(
+        c for c in VinculacionRepresentante.__table__.constraints
+        if c.name == "ck_vinculacion_representante_origen"
+    )
+    assert "ALTA_PUBLICA" in str(check.sqltext)
