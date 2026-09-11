@@ -164,6 +164,71 @@ describe("validateEnrollStep — personal step", () => {
     expect(errors).toEqual([]);
   });
 
+  // ---- Domain rule: adults cannot be enrolled as a represented child ----
+
+  it("blocks a child enrollment when birth date indicates an adult", () => {
+    // Build the local calendar date directly to avoid UTC timezone shifts.
+    const now = new Date();
+    const iso = `${now.getFullYear() - 25}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "child",
+        fechaNacimiento: iso, // 25 years old
+      }),
+    );
+    expect(errors).toContain(
+      "Un mayor de edad no puede inscribirse con representante. " +
+      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+    );
+  });
+
+  it("blocks a child enrollment for exactly 18-year-olds too", () => {
+    const now = new Date();
+    const iso = `${now.getFullYear() - 18}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "child",
+        fechaNacimiento: iso,
+      }),
+    );
+    expect(errors).toContain(
+      "Un mayor de edad no puede inscribirse con representante. " +
+      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+    );
+  });
+
+  it("allows a child enrollment when birth date indicates a minor", () => {
+    const now = new Date();
+    const iso = `${now.getFullYear() - 12}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "child",
+        fechaNacimiento: iso, // 12 years old
+      }),
+    );
+    expect(errors).not.toContain(
+      "Un mayor de edad no puede inscribirse con representante. " +
+      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+    );
+  });
+
+  it("does not apply the adult-child rule to a self enrollment", () => {
+    const errors = validateEnrollStep(
+      "personal",
+      validForm({
+        enrollmentType: "self",
+        fechaNacimiento: "1990-05-20", // 36 years old
+      }),
+    );
+    expect(errors).not.toContain(
+      "Un mayor de edad no puede inscribirse con representante. " +
+      "Seleccione 'Me inscribo yo' para gestionar su propia cuenta.",
+    );
+  });
+
   // ---- Student credentials for self-enrollment (required) ----
 
   it("requires valid email for self-enrollment", () => {
