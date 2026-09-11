@@ -115,9 +115,9 @@ Frontend:
 **Focused validation:** `cd backend && uv run pytest tests/test_enrollment*.py tests/test_personas.py -q && cd ../frontend && pnpm vitest run src/app/student && pnpm exec playwright test`.
 **Runtime:** `make qa-up`; enroll a minor publicly and from a logged-in representative; confirm neither asks for the minor's credentials and that the minor cannot log in.
 
-- [ ] No write path creates `usuario` for a person with `representante_id`.
-- [ ] Invariant (A) enforced at DTO level on every write path.
-- [ ] Both wizards neither show nor send represented-minor credentials.
+- [x] No write path creates `usuario` for a person with `representante_id`.
+- [x] Invariant \(A\) enforced at DTO level on every write path.
+- [x] Both wizards neither show nor send represented-minor credentials.
 
 ## Phase 4 — Lock invariant (B) in the database (tramo 3)
 
