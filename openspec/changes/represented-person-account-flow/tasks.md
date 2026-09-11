@@ -71,12 +71,12 @@ Per PR, the ritual is:
 
 Acceptance: `main` contains the administrator desk exit (`POST /personas/{id}/independizar`, admin-only, token-free response, `Idempotency-Key`) and the `i1141relinteg` trigger that rejects an adult link. Run `make pre-pr LANE=backend` on `main` after the sixth merge.
 
-- [ ] #1165 merged
-- [ ] #1169 merged
-- [ ] #1170 merged
-- [ ] #1171 merged
-- [ ] #1172 merged
-- [ ] #1173 merged
+- [x] #1165 merged
+- [x] #1169 merged
+- [x] #1170 merged
+- [x] #1171 merged
+- [x] #1172 merged
+- [x] #1173 merged
 - [ ] `make pre-pr LANE=backend` green on `main`
 
 ## Phase 2 — Close tramo 1 in the frontend
