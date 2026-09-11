@@ -191,42 +191,28 @@ describe("validateEnrollStep — personal step", () => {
     expect(hasNivelError).toBe(false);
   });
 
-  // ---- Student credentials for child enrollment (optional) ----
+  // ---- Student credentials for a child enrollment: retired (#1137) --------
+  // Issue #1137, invariante (B): a represented minor never has a Usuario, so
+  // the personal step of a child enrollment never validates credentials for
+  // the student at all — not even the malformed values the old "optional
+  // account" rule used to catch.
 
-  it("accepts empty student credentials for child enrollment", () => {
+  it("ignores a malformed student email on a child enrollment's personal step", () => {
     const errors = validateEnrollStep(
       "personal",
-      validForm({
-        enrollmentType: "child",
-        correo: "",
-        contrasenia: "",
-      }),
+      validForm({ enrollmentType: "child", correo: "invalid" }),
     );
-    expect(errors).toEqual([]);
+    expect(errors).not.toContain("El correo del estudiante no es válido.");
+    expect(errors).not.toContain("El correo electrónico no es válido.");
   });
 
-  it("requires valid email if student credentials provided for child", () => {
+  it("ignores a short student password on a child enrollment's personal step", () => {
     const errors = validateEnrollStep(
       "personal",
-      validForm({
-        enrollmentType: "child",
-        correo: "invalid",
-        contrasenia: "",
-      }),
+      validForm({ enrollmentType: "child", contrasenia: "short" }),
     );
-    expect(errors).toContain("El correo del estudiante no es válido.");
-  });
-
-  it("requires password of at least 8 chars if student credentials provided for child", () => {
-    const errors = validateEnrollStep(
-      "personal",
-      validForm({
-        enrollmentType: "child",
-        correo: "lucas@example.com",
-        contrasenia: "short",
-      }),
-    );
-    expect(errors).toContain("La contraseña del estudiante debe tener al menos 8 caracteres.");
+    expect(errors).not.toContain("La contraseña del estudiante debe tener al menos 8 caracteres.");
+    expect(errors).not.toContain("La contraseña debe tener al menos 8 caracteres.");
   });
 
   it("ignores malformed cedulaRepresentante for self enrollment", () => {

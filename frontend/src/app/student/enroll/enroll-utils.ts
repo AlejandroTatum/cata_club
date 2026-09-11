@@ -167,11 +167,6 @@ export function validateEnrollStep(
       break;
     case "personal":
       errors.push(...collect(fieldsForStep("personal", data.enrollmentType), data));
-      // A child enrollment may create an optional account for the student:
-      // blank is fine, half-filled is not.
-      if (data.enrollmentType !== ENROLLMENT_TYPES.SELF) {
-        errors.push(...validateOptionalStudentCredentials(data));
-      }
       break;
     case "representative":
       // NOT `fieldsForStep`: this runs as an aggregate check too, so it must
@@ -190,9 +185,7 @@ export function validateEnrollStep(
 export function validateEnrollment(data: EnrollFormData): string[] {
   return [
     ...validateStudent(data),
-    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
-      ? validateStudentCredentials(data)
-      : validateOptionalStudentCredentials(data)),
+    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF ? validateStudentCredentials(data) : []),
     ...(data.enrollmentType === ENROLLMENT_TYPES.CHILD
       ? validateRepresentative(data)
       : []),
@@ -283,9 +276,6 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
       contrasenia: data.contraseniaRepresentante,
     },
   };
-  if (data.correo.trim() && data.contrasenia) {
-    result.credencialesMenor = { correo: data.correo.trim(), contrasenia: data.contrasenia };
-  }
   return result;
 }
 
@@ -369,9 +359,7 @@ export function digitsOf(value: string): string {
 /**
  * Confirmation must repeat the password exactly (issue #876). The helper is
  * unconditional; whether a confirmation is required at all is decided by the
- * caller — `FIELD_RULES` for self/representante credentials, and the
- * both-or-neither gate inside `optionalStudentCredentialErrors` for the
- * child's optional account.
+ * caller — `FIELD_RULES` for self/representante credentials.
  */
 function passwordConfirmRule(confirm: string, password: string): string | null {
   if (confirm.length === 0) return "La confirmación de contraseña es obligatoria.";
@@ -518,7 +506,8 @@ export function fieldsForStep(step: WizardStep, type: EnrollmentType): EnrollFie
       return [];
     case "personal":
       // A self enrollment signs in as the student, so its credentials are
-      // required here. A child's are optional and validated separately.
+      // required here. A represented child never has credentials (issue
+      // #1137, invariante B: un representado nunca tiene Usuario propio).
       return isChild ? STUDENT_FIELDS : [...STUDENT_FIELDS, ...CREDENTIAL_FIELDS];
     case "representative":
       // Skipped entirely for a self enrollment — there is no representante.
@@ -540,13 +529,6 @@ export function validateEnrollFields(step: WizardStep, data: EnrollFormData): En
   for (const field of fieldsForStep(step, data.enrollmentType)) {
     const message = FIELD_RULES[field]?.(data) ?? null;
     if (message !== null) errors[field] = message;
-  }
-  // A child enrollment's student account is optional, but half-filled blocks
-  // the step the same way `validateAddDependentFields` gates its own
-  // "credentials" step — the message has to land on the field that is
-  // actually wrong, and "Siguiente" has to see it too (#226).
-  if (step === "personal" && data.enrollmentType !== ENROLLMENT_TYPES.SELF) {
-    Object.assign(errors, optionalStudentCredentialErrors(data));
   }
   return errors;
 }
@@ -601,34 +583,6 @@ function validateStudent(data: EnrollFormData): string[] {
 
 function validateStudentCredentials(data: EnrollFormData): string[] {
   return collect(CREDENTIAL_FIELDS, data);
-}
-
-/**
- * The "both-or-neither" rule for a child enrollment's optional student
- * account, keyed to the field that owns each message — mirrors
- * `validateAddDependentFields`'s "credentials" step in `add-dependent-utils.ts`.
- */
-function optionalStudentCredentialErrors(data: EnrollFormData): EnrollFieldErrors {
-  const errors: EnrollFieldErrors = {};
-  const hasCorreo = data.correo.trim().length > 0;
-  const hasContrasenia = data.contrasenia.length > 0;
-  if (hasCorreo || hasContrasenia) {
-    if (!hasCorreo) errors.correo = "El correo del estudiante es obligatorio si se desea crear una cuenta.";
-    else if (!isEmail(data.correo)) errors.correo = "El correo del estudiante no es válido.";
-    if (!hasContrasenia) {
-      errors.contrasenia = "La contraseña del estudiante es obligatoria si se desea crear una cuenta.";
-    } else {
-      const passwordError = passwordRule(data.contrasenia, "La contraseña del estudiante");
-      if (passwordError) errors.contrasenia = passwordError;
-    }
-    const confirmError = passwordConfirmRule(data.contraseniaConfirmacion, data.contrasenia);
-    if (confirmError) errors.contraseniaConfirmacion = confirmError;
-  }
-  return errors;
-}
-
-function validateOptionalStudentCredentials(data: EnrollFormData): string[] {
-  return Object.values(optionalStudentCredentialErrors(data));
 }
 
 function validateRepresentative(data: EnrollFormData): string[] {

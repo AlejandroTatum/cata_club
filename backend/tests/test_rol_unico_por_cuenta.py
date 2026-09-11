@@ -183,9 +183,11 @@ def _ficha_dto() -> EnrollmentFichaMedicaDTO:
     )
 
 
-def test_inscripcion_de_menor_deja_un_solo_rol_en_cada_cuenta(db_session):
+def test_inscripcion_de_menor_deja_un_solo_rol_en_la_cuenta_del_representante(db_session):
     """El flujo de inscripción con representante creaba la cuenta del
-    representante con REPRESENTANTE + ALUMNO en dos llamadas seguidas."""
+    representante con REPRESENTANTE + ALUMNO en dos llamadas seguidas (issue
+    #762). El menor mismo ya no tiene cuenta propia (issue #1137,
+    invariante B)."""
     datos = EnrollmentCreateDTO(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(720),
@@ -195,7 +197,6 @@ def test_inscripcion_de_menor_deja_un_solo_rol_en_cada_cuenta(db_session):
         alumno=EnrollmentAlumnoDTO(
             nombres="Lucas", apellidos="Martinez", cedula=cedula_valida(721),
             fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo="lucas762@example.com", contrasenia="password8",
         ),
         ficha_medica=_ficha_dto(),
         acepta_consentimientos=True,
@@ -207,11 +208,9 @@ def test_inscripcion_de_menor_deja_un_solo_rol_en_cada_cuenta(db_session):
     representante = db_session.query(Usuario).filter(
         Usuario.correo == "sofia762@example.com"
     ).one()
-    menor = db_session.query(Usuario).filter(
-        Usuario.correo == "lucas762@example.com"
-    ).one()
+    menor = db_session.query(Persona).filter(Persona.cedula == cedula_valida(721)).one()
     assert _tipos(representante) == {TipoRol.REPRESENTANTE}
-    assert _tipos(menor) == {TipoRol.ALUMNO}
+    assert db_session.query(Usuario).filter(Usuario.persona_id == menor.id).count() == 0
 
 
 def test_autoinscripcion_de_adulto_deja_un_solo_rol(db_session):

@@ -2281,8 +2281,8 @@ export interface RepresentadoFichaMedicaPayload {
  *  narrow — no admin-only fields (e.g. `representanteId`) are accepted here;
  *  the backend always derives `representante_id` from the caller's own
  *  token, never from the request body.
- *  If `correo` + `contrasenia` are provided, a Usuario with rol ALUMNO is
- *  also created for the minor (Option B: minors with own account). */
+ *  Issue #1137, invariante (B): a represented dependent never has a
+ *  `Usuario` of their own — this payload carries no credentials. */
 export interface RepresentadoCreatePayload {
   nombres: string;
   apellidos: string;
@@ -2290,15 +2290,12 @@ export interface RepresentadoCreatePayload {
   fechaNacimiento: string;
   telefono: string;
   fichaMedica?: RepresentadoFichaMedicaPayload;
-  correo?: string;
-  contrasenia?: string;
   institucionId?: number;
 }
 
 /**
  * Representante-only self-service: add a second/third dependent (child)
- * from the authenticated portal. If `correo`/`contrasenia` are provided,
- * also creates a `Usuario` + ALUMNO for the minor (Option B).
+ * from the authenticated portal.
  * See `POST /personas/{persona_id}/representados`.
  */
 export async function crearRepresentado(

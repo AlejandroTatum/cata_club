@@ -228,17 +228,13 @@ export interface NewDependent {
   cedula: string;
   telefono: string;
   fechaNacimiento: string;
-  /**
-   * Presente solo cuando el dependiente TAMBIÉN recibe su propia cuenta
-   * (Opción B, `EnrollmentAlumnoDTO.correo`/`contrasenia` en el backend). Es
-   * el único campo que distingue "hijo gestionado" de "hijo con cuenta
-   * propia" -- ver el DTO: mismo alumno, mismo representante, un `Usuario`
-   * de más si esto viene presente.
-   */
-  credenciales?: { correo: string; contrasenia: string };
 }
 
-/** Un dependiente menor de edad nuevo; el llamador decide si lleva `credenciales`. */
+/**
+ * Un dependiente menor de edad nuevo. Issue #1137, invariante (B): un
+ * representado nunca tiene `Usuario` propio, así que este dependiente no
+ * lleva -- ni podría llevar -- credenciales.
+ */
 export function newDependent(overrides: Partial<NewDependent> = {}): NewDependent {
   return {
     nombres: "QA Dependiente",
@@ -252,8 +248,7 @@ export function newDependent(overrides: Partial<NewDependent> = {}): NewDependen
 
 /**
  * Completa el asistente público (`/student/enroll`) como Representante --
- * dependiente + representante, con o sin cuenta propia del dependiente según
- * `dependent.credenciales` -- y confirma la inscripción. Termina con las
+ * dependiente + representante -- y confirma la inscripción. Termina con las
  * cookies de sesión reales del REPRESENTANTE ya puestas (mismo auto-login que
  * `enrollNewPlayerViaWizard`) y la pantalla "Inscripción completada" visible.
  */
@@ -277,11 +272,6 @@ export async function enrollDependentViaWizard(
   await fillBirthDate(page, FIELD_ID.fechaNacimiento, dependent.fechaNacimiento);
   await page.locator(`#${FIELD_ID.cedula}`).fill(dependent.cedula);
   await page.locator(`#${FIELD_ID.telefono}`).fill(dependent.telefono.replace(/^0/, ""));
-  if (dependent.credenciales) {
-    await page.locator(`#${FIELD_ID.correo}`).fill(dependent.credenciales.correo);
-    await page.locator(`#${FIELD_ID.contrasenia}`).fill(dependent.credenciales.contrasenia);
-    await page.locator(`#${FIELD_ID.contraseniaConfirmacion}`).fill(dependent.credenciales.contrasenia);
-  }
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   // Paso "Datos del representante".

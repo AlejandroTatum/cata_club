@@ -73,6 +73,21 @@ MENSAJE_CORREO_SIN_VERIFICAR = (
     "Revise su bandeja de entrada o solicite un nuevo enlace de verificación."
 )
 
+# Issue #1137, invariante (B): una Persona con `representante_id` nunca
+# puede tener `Usuario` propio. La mitad de este invariante que corre en la
+# capa de DTO (`validar_representante_solo_para_menor`,
+# `dtos/validadores.py`) usa su propio texto porque ahí la regla es sobre la
+# EDAD del representado; acá (`AuthServicio.registrar_usuario`, detrás de
+# `POST /auth/registro`) el candidato ya existe como Persona y lo que falla
+# es que está representado. Sin la disciplina anti-enumeración de los
+# mensajes de arriba: este endpoint es ADMINISTRADOR-only, y quien lo llama
+# ya conoce a la persona por su cédula -- nombrar el motivo no revela nada
+# que ese administrador no supiera.
+MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS = (
+    "Esta persona tiene un representante legal asignado y no puede tener "
+    "credenciales propias."
+)
+
 # Issue #790, misma disciplina anti-enumeración que la recuperación de
 # contraseña: el reenvío del enlace de verificación responde EXACTAMENTE esto
 # exista o no la cuenta, y esté o no ya verificada. Si difiriera en algún

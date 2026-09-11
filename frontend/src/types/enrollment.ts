@@ -95,9 +95,6 @@ export interface EnrollmentRequest {
   alumno: EnrollmentStudent;
   fichaMedica: EnrollmentMedicalRecord;
   credencialesAlumno?: EnrollmentCredentials;
-  /** Optional credentials for the minor (child enrollment). When provided,
-   *  a Usuario with rol ALUMNO is also created for the student. */
-  credencialesMenor?: EnrollmentCredentials;
   representante?: EnrollmentRepresentative;
   /** Explicit affirmative action for the grouped legal consent. */
   aceptaConsentimientos?: boolean;

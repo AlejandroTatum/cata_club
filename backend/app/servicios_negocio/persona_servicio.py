@@ -6,8 +6,8 @@ from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
-from app.dominio.enums import TipoRol, TipoNotificacion
+from app.dominio.modelos import Persona, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
+from app.dominio.enums import TipoNotificacion
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida, PermisosInsuficientes,
@@ -20,16 +20,13 @@ from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.representados_alcanzables import (
     exigir_representante_destino_alcanzable, exigir_sin_representados_menores_activos,
 )
-from app.dominio.rol_unico import exigir_rol_unico
 from app.soporte_transversal.tiempo import hoy_club
 from app.soporte_transversal.firma_archivos import es_firma_valida
-from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
-from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
@@ -95,7 +92,6 @@ class PersonaServicio:
         self.db = db
         self.repo = PersonaRepositorio(db)
         self.repo_usuario = UsuarioRepositorio(db)
-        self.repo_rol = RolRepositorio(db)
         # Inyectable para tests (ningún test hace un sleep real de varios
         # segundos, mismo criterio que `AuthServicio`). Los routers de
         # producción no pasan `dormir`, así que usan el `time.sleep` real.
@@ -150,14 +146,15 @@ class PersonaServicio:
         Flujo:
         1. Crear Persona (vía `registrar_persona`, reusando reglas de edad/duplicado).
         2. Crear FichaMedica si se proporcionó.
-        3. Si se proporcionaron `correo` + `contrasenia`: crear Usuario con
-           rol ALUMNO para el menor (Opción B: menores con cuenta propia).
+
+        Issue #1137, invariante (B): este método NUNCA crea un `Usuario` para
+        el representado -- solo crea la `Persona` (y su ficha médica). El
+        "Opción B: menores con cuenta propia" que existía acá se eliminó.
 
         Todo o nada (issue #831): un solo `commit()` al final, después de la
-        Persona, la ficha médica y el Usuario+rol del menor. Usa
-        `_crear_persona_validada` (el núcleo SIN commit de
-        `registrar_persona`), no `registrar_persona` en sí -- comitear acá
-        antes de escribir la ficha o el usuario reproduciría exactamente el
+        Persona y la ficha médica. Usa `_crear_persona_validada` (el núcleo
+        SIN commit de `registrar_persona`), no `registrar_persona` en sí --
+        comitear acá antes de escribir la ficha reproduciría exactamente el
         bug que el issue #831 cierra.
 
         Issue #1139: esta es la puerta de alta MÁS usada para un menor nuevo
@@ -176,13 +173,11 @@ class PersonaServicio:
             institucion_id=datos.institucion_id,
         )
         # El `try` abarca desde la Persona hasta el `commit()`, igual que el
-        # de `AdminCuentaServicio.crear_cuenta` (issue #1016, ADR-3/ADR-6).
-        # No alcanza con envolver el INSERT del Usuario: el pre-check de
-        # cédula de `_crear_persona_validada` es tan racy como el de correo,
-        # y ese método ya flushea la Persona -- dos altas casi simultáneas
-        # con la misma cédula caían en el 409 genérico de `main.py`, que es
-        # justo lo que este catch existe para evitar. Las dos rutas que
-        # acuñan credenciales tienen que tratar igual la misma carrera.
+        # de `AdminCuentaServicio.crear_cuenta` (issue #1016, ADR-3/ADR-6):
+        # el pre-check de cédula de `_crear_persona_validada` es racy, y ese
+        # método ya flushea la Persona -- dos altas casi simultáneas con la
+        # misma cédula caían en el 409 genérico de `main.py`, que es justo lo
+        # que este catch existe para evitar.
         try:
             representado = self._crear_persona_validada(persona_datos)
 
@@ -198,26 +193,11 @@ class PersonaServicio:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
                 FichaMedicaRepositorio(self.db).crear(ficha)
 
-            # Opción B: si el admin/representante provee credenciales,
-            # crear también el Usuario + rol ALUMNO para el menor.
-            if datos.correo and datos.contrasenia:
-                if self.repo_usuario.obtener_por_correo(datos.correo):
-                    raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
-                hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
-                usuario = Usuario(
-                    correo=datos.correo,
-                    contrasenia=hash_pw,
-                    persona_id=representado.id,
-                )
-                self.repo_usuario.crear(usuario)
-                self._asignar_rol(usuario, TipoRol.ALUMNO)
-
             self.db.commit()
         except IntegrityError as error:
             # Carrera (issue #1016, ADR-3): dos altas casi simultáneas con la
-            # misma cédula, o con el mismo correo (o una variante de
-            # mayúsculas), pasan las dos los pre-checks de arriba. Mismo
-            # mensaje genérico que esos pre-checks ya usan.
+            # misma cédula pasan las dos el pre-check de arriba. Mismo
+            # mensaje genérico que ese pre-check ya usa.
             self.db.rollback()
             # `None` es una restricción que NO es de identidad: se re-lanza
             # para que la trate el handler de `main.py`. `INDETERMINADA` (el
@@ -434,18 +414,6 @@ class PersonaServicio:
                 "vinculación de persona_id=%s. La vinculación YA está commiteada.",
                 representante_anterior_id, representado.id,
             )
-
-    def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
-        """Asigna un rol al usuario si aún no lo tiene (idempotente).
-
-        Regla de un solo rol activo compartida (issue #762). Solo `flush()`
-        (issue #831): forma parte de la transacción atómica de
-        `crear_representado`, que hace el único `commit()` al final."""
-        if not exigir_rol_unico(usuario, tipo_rol):
-            return
-        rol = self.repo_rol.obtener_o_crear(tipo_rol)
-        usuario.roles.append(rol)
-        self.db.flush()
 
     def listar_personas(self, skip: int = 0, limit: int = 50) -> tuple[list[Persona], int]:
         items = self.repo.listar(skip, limit)

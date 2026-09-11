@@ -24,9 +24,6 @@ export interface BackendEnrollmentAlumno {
   cedula: string;
   fecha_nacimiento: string;
   telefono: string;
-  /** Optional: when provided (child enrollment), a Usuario + ALUMNO is also created. */
-  correo?: string;
-  contrasenia?: string;
   institucion_id?: number;
 }
 
@@ -105,9 +102,6 @@ export function buildEnrollmentCreateDTO(data: EnrollmentRequest): BackendEnroll
       fecha_nacimiento: data.alumno.fechaNacimiento,
       telefono: data.alumno.telefono,
       ...(data.alumno.institucionId ? { institucion_id: data.alumno.institucionId } : {}),
-      ...(data.credencialesMenor
-        ? { correo: data.credencialesMenor.correo, contrasenia: data.credencialesMenor.contrasenia }
-        : {}),
     },
     ...(data.credencialesAlumno
       ? { credenciales_alumno: { correo: data.credencialesAlumno.correo, contrasenia: data.credencialesAlumno.contrasenia } }

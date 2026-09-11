@@ -74,15 +74,12 @@ function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
 }
 
-/** Walk to the credentials step (step 2) from the identity step. */
-function goToCredentialsStep(): void {
-  fillChildStep();
-  fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
-}
-
-/** Walk to a later step by filling the identity block the first one asks for. */
+/** Walk to the health step (step 2) by filling the identity block the first
+ *  one asks for. Issue #1137, invariante (B): this wizard has no
+ *  "credentials" step anymore — the identity step advances straight to
+ *  health. */
 function goToHealthStep(): void {
-  goToCredentialsStep();
+  fillChildStep();
   fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 }
 
@@ -128,7 +125,7 @@ describe("the field ids are declared, not slugged from the label", () => {
   it("declares an id for every field the payload carries", () => {
     const declared = Object.keys(ADD_DEPENDENT_FIELD_TOKEN) as AddDependentField[];
     expect(declared).toContain("institucionId");
-    expect(declared.length).toBeGreaterThanOrEqual(13);
+    expect(declared.length).toBeGreaterThanOrEqual(11);
   });
 });
 
@@ -148,37 +145,14 @@ describe("one mark for one idea", () => {
     expect(diseasesLabel.textContent).toContain("(opcional)");
   });
 
-  /**
-   * `correo` and `contrasenia` hardcoded "(opcional)" into their own label
-   * text on top of the one `WizardInput` already appends for every
-   * non-required field, so the step read "(opcional)(opcional)" — the same
-   * mark said twice this describe block is about, just on a different step.
-   */
-  it("marks the credentials step's optional fields exactly once", () => {
+  /** Issue #1137, invariante (B): a represented dependent never has a
+   *  Usuario — this wizard never renders a credential input at all. */
+  it("never renders a credential input anywhere in the wizard", () => {
     render(<AddDependentPage />);
-    goToCredentialsStep();
+    goToHealthStep();
 
-    const correoInput = screen.getByLabelText(/^Correo electrónico/);
-    const contraseniaInput = screen.getByLabelText(/^Contraseña/);
-    const correoLabel = document.querySelector(`label[for="${correoInput.id}"]`) as HTMLElement;
-    const contraseniaLabel = document.querySelector(
-      `label[for="${contraseniaInput.id}"]`,
-    ) as HTMLElement;
-
-    expect(correoLabel.textContent?.match(/\(opcional\)/g)).toHaveLength(1);
-    expect(contraseniaLabel.textContent?.match(/\(opcional\)/g)).toHaveLength(1);
-  });
-
-  it("requires both child credentials as soon as either one is entered", () => {
-    render(<AddDependentPage />);
-    goToCredentialsStep();
-    const correo = screen.getByLabelText(/^Correo electrónico/);
-    const contrasenia = screen.getByLabelText(/^Contraseña/);
-    expect(correo).not.toBeRequired();
-    expect(contrasenia).not.toBeRequired();
-    fireEvent.change(correo, { target: { value: "menor@ejemplo.com" } });
-    expect(correo).toBeRequired();
-    expect(contrasenia).toBeRequired();
+    expect(screen.queryByLabelText(/^Correo electrónico/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Contraseña/)).not.toBeInTheDocument();
   });
 
   it("keeps the action colour off the one control this screen renders itself", () => {

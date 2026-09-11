@@ -17,7 +17,8 @@ from app.dominio.excepciones import (
     ServicioNoDisponible,
 )
 from app.dominio.mensajes import (
-    MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VERIFICACION_ENVIADA,
+    MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS,
+    MENSAJE_VERIFICACION_ENVIADA,
 )
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
@@ -263,8 +264,10 @@ class AuthServicio:
     # --- Registro de usuario para una Persona ya existente -------------------
     def registrar_usuario(self, datos: RegistroUsuarioDTO) -> dict:
         """
-        Crea el `Usuario` (credenciales) para una `Persona` que YA existe (dada
-        de alta antes por un ADMINISTRADOR vía POST /personas). NO crea Persona.
+        Solo ADMINISTRADOR (`POST /auth/registro` exige
+        `GestorPermisos(["ADMINISTRADOR"])`, ver `auth_router.py`): crea el
+        `Usuario` (credenciales) para una `Persona` que YA existe (dada de
+        alta antes por un ADMINISTRADOR vía POST /personas). NO crea Persona.
         Sin roles asignados (coherente con la asignación perezosa de roles ya
         implementada, los roles se asignan por separado).
 
@@ -281,9 +284,20 @@ class AuthServicio:
                 "Contacte al administrador del club."
             )
 
-        # Endpoint público: los dos casos comparten el mismo texto a propósito,
-        # para no revelar si lo que ya estaba tomado era la cédula o el correo
-        # (ver app/dominio/mensajes.py).
+        # Issue #1137, invariante (B): una Persona con `representante_id`
+        # nunca puede tener `Usuario` propio. Este endpoint no tenía este
+        # candado -- solo comprobaba "existe" y "no tiene ya una cuenta" --
+        # así que un ADMINISTRADOR podía acuñar credenciales para un menor
+        # representado pasando su cédula.
+        if persona.representante_id is not None:
+            raise OperacionInvalida(MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS)
+
+        # Endpoint ADMINISTRADOR-only (ver docstring arriba): los dos casos
+        # de abajo comparten el mismo texto a propósito -- no por el motivo
+        # anti-enumeración de `MENSAJE_IDENTIDAD_DUPLICADA` en un endpoint
+        # público (este no lo es), sino porque el mensaje ya es el texto
+        # estándar del producto para "cédula o correo ya en uso" y no hay
+        # razón para inventar uno distinto acá.
         if persona.usuario is not None:
             raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 

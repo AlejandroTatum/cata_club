@@ -1,7 +1,6 @@
 from datetime import date
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import TipoRol
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.modelos import Persona, Usuario, FichaMedica
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -48,6 +47,23 @@ def test_representante_reflexivo(client):
     assert resp.status_code == 200
     ids = [p["id"] for p in resp.json()]
     assert hijo["id"] in ids
+
+
+def test_registrar_persona_con_representante_mayor_de_edad_rechazada_por_dto(client):
+    """Issue #1137, invariante (A): un `representante_id` nunca puede
+    apuntar a un mayor de edad -- el trigger de base `i1141relinteg` ya lo
+    exige; el DTO lo adelanta a un 422 en castellano."""
+    representante = client.post("/api/v1/personas/", json=_payload_persona("1710034065")).json()
+
+    resp = client.post(
+        "/api/v1/personas/",
+        json={
+            **_payload_persona("1710034073"),
+            "fecha_nacimiento": "1990-01-01",
+            "representante_id": representante["id"],
+        },
+    )
+    assert resp.status_code == 422
 
 
 # --- GET /personas/{persona_id}/representados: ownership (issue #122 IDOR) --
@@ -295,30 +311,15 @@ def test_crear_representado_ficha_medica_invalida_rechazada(client, db_session):
     assert db_session.query(FichaMedica).count() == 0
 
 
-# --- Flujo 2: representado con credenciales (menores con cuenta propia) ----
+# --- Flujo 2 (retirado, issue #1137): un representado nunca tiene Usuario --
+# `RepresentadoCreateDTO` ya no declara `correo`/`contrasenia` -- lo que antes
+# era "Opción B: menores con cuenta propia" está eliminado, no apagado.
 
-def test_crear_representado_con_credenciales_crea_usuario_y_rol(client, db_session):
-    representante = _crear_persona_representante(db_session)
-    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
-
-    payload = _payload_representado()
-    payload["correo"] = "menor@test.com"
-    payload["contrasenia"] = "clave12345"
-
-    resp = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json=payload,
-    )
-    assert resp.status_code == 201, resp.text
-    data = resp.json()
-    assert data["cedula"] == cedula_valida(520)
-
-    hijo = db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).one()
-    usuario = db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).one()
-    assert usuario.correo == "menor@test.com"
-    assert usuario.contrasenia != "clave12345"  # hasheada
-    roles = {r.tipo_rol for r in usuario.roles}
-    assert roles == {TipoRol.ALUMNO}
+def test_representado_create_dto_ya_no_acepta_credenciales_propias():
+    """Candado de esquema (issue #1137, invariante B)."""
+    from app.servicios_negocio.dtos.persona_schemas import RepresentadoCreateDTO
+    assert "correo" not in RepresentadoCreateDTO.model_fields
+    assert "contrasenia" not in RepresentadoCreateDTO.model_fields
 
 
 def test_crear_representado_sin_credenciales_no_crea_usuario(client, db_session):
@@ -334,101 +335,22 @@ def test_crear_representado_sin_credenciales_no_crea_usuario(client, db_session)
     assert db_session.query(Usuario).filter(Usuario.persona_id == hijo.id).first() is None
 
 
-def test_crear_representado_correo_duplicado_rechazada(client, db_session):
-    representante = _crear_persona_representante(db_session, cedula="1710034065")
-    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
-
-    payload = _payload_representado()
-    payload["correo"] = "duplicado@test.com"
-    payload["contrasenia"] = "clave12345"
-
-    resp1 = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json=payload,
-    )
-    assert resp1.status_code == 201
-
-    payload2 = _payload_representado(cedula=cedula_valida(521))
-    payload2["correo"] = "duplicado@test.com"
-    payload2["contrasenia"] = "clave12345"
-
-    resp2 = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json=payload2,
-    )
-    assert resp2.status_code == 400
-    assert resp2.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
-
-
-def test_crear_representado_correo_case_variant_rechazada(client, db_session):
-    """Regression lock, no prueba de comportamiento nuevo de este cambio:
-    el pre-check case-insensitive de
-    `persona_servicio.py::crear_representado` (`obtener_por_correo`) no
-    cambia entre `origin/main` y este stack -- confirmado con `git diff
-    origin/main..HEAD` sobre el archivo, ese bloque queda fuera del hunk
-    modificado (el diff toca solo el `try/except IntegrityError` que
-    envuelve la creación, no el `if` del pre-check). Se agrega porque el
-    escenario "Dependant credential mint rejects a case-variant of an
-    existing email" de `email-identity.md` solo estaba cubierto por la
-    variante de CARRERA (`test_correo_race_condicion.py`, que anula este
-    mismo pre-check con monkeypatch), nunca por una request SECUENCIAL
-    normal como esta.
-
-    Verificado que muerde invirtiendo el predicado: comentando
-    temporalmente el `if self.repo_usuario.obtener_por_correo(datos.
-    correo):` de `crear_representado`, este test falla (201 en vez de
-    400); restaurado, vuelve a pasar."""
-    representante = _crear_persona_representante(db_session, cedula="1710034065")
-    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
-
-    payload = _payload_representado()
-    payload["correo"] = "case-variante@test.com"
-    payload["contrasenia"] = "clave12345"
-    resp1 = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json=payload,
-    )
-    assert resp1.status_code == 201, resp1.text
-
-    payload2 = _payload_representado(cedula=cedula_valida(522))
-    payload2["correo"] = "CASE-VARIANTE@TEST.COM"
-    payload2["contrasenia"] = "clave12345"
-    resp2 = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json=payload2,
-    )
-    assert resp2.status_code == 400
-    assert resp2.json()["detail"] == MENSAJE_IDENTIDAD_DUPLICADA
-
-
-def test_crear_representado_con_credenciales_correo_invalido_rechazado(client, db_session):
+def test_crear_representado_mayor_de_edad_rechazado_por_dto(client, db_session):
+    """Issue #1137, invariante (A): este endpoint siempre asigna
+    `representante_id`, así que un representado mayor de edad se rechaza en
+    el DTO -- antes de tocar la base."""
     representante = _crear_persona_representante(db_session)
     _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
 
     payload = _payload_representado()
-    payload["correo"] = "no-es-correo"
-    payload["contrasenia"] = "clave12345"
+    payload["fecha_nacimiento"] = "1990-01-01"
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/representados",
         json=payload,
     )
     assert resp.status_code == 422
-
-
-def test_crear_representado_con_credenciales_contrasenia_corta_rechazada(client, db_session):
-    representante = _crear_persona_representante(db_session)
-    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
-
-    payload = _payload_representado()
-    payload["correo"] = "menor@test.com"
-    payload["contrasenia"] = "123"
-
-    resp = client.post(
-        f"/api/v1/personas/{representante.id}/representados",
-        json=payload,
-    )
-    assert resp.status_code == 422
+    assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).first() is None
 
 
 def test_crear_representado_admin_puede_usar_endpoint(client, db_session):

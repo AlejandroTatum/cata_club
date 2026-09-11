@@ -132,46 +132,11 @@ def test_auth_registro_race_case_variant_de_correo_da_entidad_duplicada(db_sessi
     assert _contar_usuarios_por_correo(db_session, "registro@example.com") == 1
 
 
-# --- 3. POST /personas/{id}/representados, correo ----------------------------
-
-def test_crear_representado_race_case_variant_de_correo_da_entidad_duplicada(
-    db_session, monkeypatch
-):
-    """ADR-3: `persona_servicio.py::crear_representado` es el quinto camino
-    que acuña credenciales (`RepresentadoCreateDTO`); tampoco atrapaba
-    `IntegrityError`."""
-    _bypass_correo(monkeypatch)
-    servicio = PersonaServicio(db_session)
-
-    representante = Persona(
-        nombres="Rep", apellidos="Legal", cedula=cedula_valida(708),
-        fecha_nacimiento=date(1985, 1, 1), telefono="0990000012",
-    )
-    db_session.add(representante)
-    db_session.commit()
-
-    def _datos(correo: str, cedula: str) -> RepresentadoCreateDTO:
-        return RepresentadoCreateDTO(
-            nombres="Hija", apellidos="Legal", cedula=cedula,
-            fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-            correo=correo, contrasenia="password8",
-        )
-
-    ganadora = servicio.crear_representado(
-        representante.id, _datos("Depende@Example.com", cedula_valida(709))
-    )
-    assert ganadora.id is not None
-
-    with pytest.raises(EntidadDuplicada) as error:
-        servicio.crear_representado(
-            representante.id, _datos("depende@example.com", cedula_valida(710))
-        )
-    assert error.value.mensaje == MENSAJE_IDENTIDAD_DUPLICADA
-
-    assert _contar_usuarios_por_correo(db_session, "depende@example.com") == 1
-
-
 # --- 4. POST /personas/{id}/representados, cedula ----------------------------
+# La sección 3 (carrera de correo en `crear_representado`) se retiró con el
+# issue #1137: ese camino ya no acuña ningún `Usuario` -- `RepresentadoCreateDTO`
+# ni siquiera declara `correo`/`contrasenia` -- así que la carrera que este
+# archivo cubría no puede volver a ocurrir.
 
 def test_crear_representado_race_de_cedula_da_entidad_duplicada(db_session, monkeypatch):
     """ADR-6: `crear_representado` valida la cédula en

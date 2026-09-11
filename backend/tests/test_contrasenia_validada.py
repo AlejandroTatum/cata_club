@@ -1,9 +1,14 @@
 """
 `ContraseniaValidada` (issue #1017, ADR-5): cablea `validar_contrasenia` en
-los 7 campos reales que acuñan o restablecen una credencial. "No alcanza con
+los 5 campos reales que acuñan o restablecen una credencial. "No alcanza con
 probarla en uno" -- mismo criterio que `test_validacion_identidad_dtos.py`
 ya usa para cédula/teléfono: instanciar el DTO prueba lo mismo que un
 round-trip HTTP.
+
+Issue #1137, invariante (B): `EnrollmentAlumnoDTO.contrasenia` y
+`RepresentadoCreateDTO.contrasenia` -- la cuenta propia del menor
+representado -- se eliminaron: un representado nunca tiene `Usuario`. Bajaron
+de 7 campos reales a 5.
 
 NO cubre `IndependizarDTO.contrasenia` (`persona_schemas.py:107`): verifica
 la contraseña YA EXISTENTE del llamante, no acuña una nueva -- `test_
@@ -17,11 +22,9 @@ from pydantic import BaseModel, ValidationError
 from app.dominio.cedula import cedula_valida
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO, RestablecerContraseniaDTO
 from app.servicios_negocio.dtos.enrollment_schemas import (
-    EnrollmentAlumnoDTO,
     EnrollmentCredencialesDTO,
     EnrollmentRepresentanteDTO,
 )
-from app.servicios_negocio.dtos.persona_schemas import RepresentadoCreateDTO
 from app.servicios_negocio.dtos.validadores import ContraseniaValidada
 from tests.fabricas_auth import crear_usuario_auth
 
@@ -47,7 +50,7 @@ def test_contrasenia_validada_rechaza_comun_aunque_cumpla_el_piso():
 
 
 def _construir(dto_nombre: str, contrasenia: str):
-    """Un payload mínimo válido por cada uno de los 7 campos reales,
+    """Un payload mínimo válido por cada uno de los 5 campos reales,
     sobreescribiendo solo la contraseña bajo prueba (mismo criterio que
     `test_nombres_limite_escritura.py::_instanciar`)."""
     comun = dict(
@@ -57,7 +60,6 @@ def _construir(dto_nombre: str, contrasenia: str):
     )
     fabricas = {
         "EnrollmentRepresentanteDTO": lambda: EnrollmentRepresentanteDTO(**comun),
-        "EnrollmentAlumnoDTO": lambda: EnrollmentAlumnoDTO(**comun),
         "EnrollmentCredencialesDTO": lambda: EnrollmentCredencialesDTO(
             correo="juan@test.com", contrasenia=contrasenia,
         ),
@@ -67,17 +69,15 @@ def _construir(dto_nombre: str, contrasenia: str):
         "RestablecerContraseniaDTO": lambda: RestablecerContraseniaDTO(
             token="abc123", nueva_contrasenia=contrasenia,
         ),
-        "RepresentadoCreateDTO": lambda: RepresentadoCreateDTO(**comun),
     }
     return fabricas[dto_nombre]()
 
 
 @pytest.mark.parametrize("dto_nombre", [
-    "EnrollmentRepresentanteDTO", "EnrollmentAlumnoDTO", "EnrollmentCredencialesDTO",
+    "EnrollmentRepresentanteDTO", "EnrollmentCredencialesDTO",
     "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
-    "RepresentadoCreateDTO",
 ])
-def test_cada_uno_de_los_seis_campos_reales_aplica_la_misma_regla(dto_nombre):
+def test_cada_uno_de_los_cuatro_campos_reales_aplica_la_misma_regla(dto_nombre):
     with pytest.raises(ValidationError):
         _construir(dto_nombre, _CONTRASENIA_COMUN)
     _construir(dto_nombre, "miclavefuerte1")  # no lanza
@@ -88,11 +88,10 @@ _CONTRASENIA_QUE_SUPERA_72_BYTES = "x" * 73
 
 
 @pytest.mark.parametrize("dto_nombre", [
-    "EnrollmentRepresentanteDTO", "EnrollmentAlumnoDTO", "EnrollmentCredencialesDTO",
+    "EnrollmentRepresentanteDTO", "EnrollmentCredencialesDTO",
     "RegistroUsuarioDTO", "RestablecerContraseniaDTO",
-    "RepresentadoCreateDTO",
 ])
-def test_cada_uno_de_los_seis_campos_reales_rechaza_mas_de_72_bytes(dto_nombre):
+def test_cada_uno_de_los_cuatro_campos_reales_rechaza_mas_de_72_bytes(dto_nombre):
     with pytest.raises(ValidationError) as error:
         _construir(dto_nombre, _CONTRASENIA_QUE_SUPERA_72_BYTES)
     assert "72 bytes" in str(error.value)

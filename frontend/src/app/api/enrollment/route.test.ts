@@ -382,22 +382,24 @@ describe("POST /api/enrollment — optional field contract", () => {
     expect(response.status).toBe(201);
   });
 
-  it("rejects a malformed credencialesMenor with 400", async () => {
-    const body = { ...validBody, credencialesMenor: { correo: "not-an-email", contrasenia: "short" } };
-
-    const response = await POST(enrollRequest(body));
-
-    expect(response.status).toBe(400);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it("accepts a well-formed credencialesMenor", async () => {
+  /**
+   * Issue #1137, invariante (B): a represented minor never has a Usuario,
+   * so `credencialesMenor` is no longer part of the contract — an extra
+   * field with that name in the body is simply ignored, never rejected and
+   * never forwarded.
+   */
+  it("ignores a stray credencialesMenor field in the body", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
     const body = { ...validBody, credencialesMenor: { correo: "hijo@example.com", contrasenia: "password8" } };
 
     const response = await POST(enrollRequest(body));
 
     expect(response.status).toBe(201);
+    const [, options] = vi.mocked(global.fetch).mock.calls[0] ?? [];
+    const forwardedBody = JSON.parse((options as RequestInit).body as string);
+    expect(forwardedBody).not.toHaveProperty("credenciales_menor");
+    expect(forwardedBody.alumno).not.toHaveProperty("correo");
+    expect(forwardedBody.alumno).not.toHaveProperty("contrasenia");
   });
 });
 
