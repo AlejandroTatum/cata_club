@@ -25,7 +25,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
+import { fetchStudentPortal, crearRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculatePersonAge } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { WizardTextarea, WizardInput, PersonIdentityFields, WizardNavigation, example } from "@/components/wizard-fields";
@@ -54,7 +54,6 @@ import {
   validateAddDependentForm,
   buildRepresentadoPayload,
   getAddDependentErrorMessage,
-  getLinkExistingErrorMessage,
   type AddDependentField,
   type AddDependentFormData,
   type AddDependentStep,
@@ -71,7 +70,6 @@ function AddDependentContent(): React.ReactElement {
 
   const [formData, setFormData] = useState<AddDependentFormData>(initialAddDependentFormData);
   const [submitting, setSubmitting] = useState(false);
-  const [linkingExisting, setLinkingExisting] = useState(false);
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<AddDependentField>>(new Set());
@@ -212,36 +210,6 @@ function AddDependentContent(): React.ReactElement {
     } catch (error: unknown) {
       setSubmitting(false);
       const message = getAddDependentErrorMessage(error);
-      setFormErrors([message]);
-    }
-  }
-
-  /**
-   * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): the "Vincular a mi
-   * cuenta" action next to the duplicate-identity alert. Reuses the cédula
-   * the visitor already typed in the "child" step — no extra field, no extra
-   * page, no extra click beyond the one that reveals this button. The
-   * backend answers every ineligible cédula with the SAME generic message
-   * (anti-enumeration), so this handler shows whatever it gets back
-   * verbatim instead of trying to interpret it.
-   */
-  async function handleLinkExisting(): Promise<void> {
-    if (submitting || linkingExisting) return;
-    if (representanteId === null) {
-      setFormErrors([
-        representanteLoadError ??
-          "No se pudo identificar su cuenta de representante. Intente nuevamente.",
-      ]);
-      return;
-    }
-    setLinkingExisting(true);
-    try {
-      await vincularRepresentado(representanteId, formData.cedula.trim());
-      showSuccess("Persona vinculada a su cuenta correctamente.");
-      router.push("/student");
-    } catch (error: unknown) {
-      setLinkingExisting(false);
-      const message = getLinkExistingErrorMessage(error);
       setFormErrors([message]);
     }
   }
@@ -634,11 +602,9 @@ function AddDependentContent(): React.ReactElement {
           <WizardNavigation
             formErrors={formErrors}
             duplicateIdentityAudience="representative"
-            onLinkExisting={handleLinkExisting}
-            linkingExisting={linkingExisting}
             isFirst={isFirst}
             isLast={isLast}
-            submitting={submitting || linkingExisting}
+            submitting={submitting}
             onBack={handleBack}
             onNext={handleNext}
             nextDisabled={!stepComplete}
@@ -646,7 +612,7 @@ function AddDependentContent(): React.ReactElement {
             submitButton={
               <button
                 type="submit"
-                disabled={submitting || linkingExisting || !summaryReviewed || loadingRepresentante}
+                disabled={submitting || !summaryReviewed || loadingRepresentante}
                 className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
               >
                 {submitting ? (
