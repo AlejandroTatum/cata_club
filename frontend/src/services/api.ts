@@ -2055,6 +2055,22 @@ export async function crearMembresia(data: {
   });
 }
 
+/**
+ * Issue #1132: self-service — enroll the CALLER (never another persona) as a
+ * player. `POST /api/membresias/propia`. There is no `personaId` field here
+ * to send, by design: the backend derives it from the caller's own session,
+ * so this request says only WHICH PLAN. The membership is born INACTIVA;
+ * `registrarPago` (the existing `/student/payments` renewal flow) registers
+ * its first payment.
+ */
+export async function crearMembresiaPropia(tipoMembresiaId: number): Promise<MembresiaPorPersona> {
+  return request<MembresiaPorPersona>(apiEndpoint("/membresias/propia"), {
+    method: "POST",
+    body: JSON.stringify({ tipoMembresiaId }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Descuentos — catálogo del club (issue #12, admin-only)
 // ---------------------------------------------------------------------------

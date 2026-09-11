@@ -39,6 +39,7 @@ import ManagedStudentPicker, {
   withSelectedStudent,
 } from "./ManagedStudentPicker";
 import CuotaCard from "./CuotaCard";
+import JoinAsPlayerAction from "./JoinAsPlayerAction";
 import {
   derivePortalMode,
   isRepresentative,
@@ -1442,22 +1443,13 @@ function ActivePortalView({
           {/* Issue #1132: gated on `isPlayer` (role OR own active membership),
               never on the role alone — a representante who already paid a
               membership for themselves must not be offered this CTA again.
-              The destination is unchanged and is a known, separately-scoped
-              gap: `/student/enroll?type=self` is the PUBLIC wizard, which
-              creates a brand-new Persona/Usuario (see its own doc comment) —
-              for an already-authenticated representante it would open a
-              second account rather than pay a membership for their existing
-              one. Fixing that destination needs a self-service way to create
-              a Membresia for the caller's own persona_id, which does not
-              exist today (`POST /membresias/` is ADMIN-only, see
-              `membresias_pagos_router.py`). */}
-          {!isPlayer && (
-            <Link href="/student/enroll?type=self" className={buttonClasses("secondary")}>
-              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Unirme como jugador
-              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            </Link>
-          )}
+              This used to point at `/student/enroll?type=self`, the PUBLIC
+              wizard — for an already-authenticated representante it opened a
+              SECOND account instead of a membership for their existing one.
+              `JoinAsPlayerAction` picks a plan and creates that membership
+              for `accountPersonaId` (never the selected profile, which can
+              be a dependent) — see its own doc comment. */}
+          {!isPlayer && <JoinAsPlayerAction accountPersonaId={accountPersonaId} />}
         </div>
       )}
     </>

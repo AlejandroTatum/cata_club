@@ -82,6 +82,7 @@ import {
   PAYMENT_STATUS_LABELS,
   PAYMENT_STATUS_TONE,
   getPayerTypeLabel,
+  accountDisplayRoles,
   type MemberAccount,
   type MemberStudentSummary,
   type MemberFilterFlag,
@@ -438,12 +439,13 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       {/* D9's shared identity cell, not a second drawing of the same layout.
           Issue #388 removed the row's disclosure along with the group it used
           to expand: `estudiantes` is now always this exact person, so there is
-          no relationship left to name or count here. `account.role` is still
-          not a role — see `lib/server/members-adapter.ts`'s module doc for why
-          — so this cell draws the name and nothing else; the account's real
-          roles are read one account at a time, in the edit dialog. */}
+          no relationship left to name or count here. Issue #1132 closed the
+          "no real roles" gap `lib/server/members-adapter.ts`'s module doc
+          used to document — `accountDisplayRoles` folds the bulk-fetched
+          roles with the membership-derived "jugador" signal (see its own doc
+          comment in `members-utils.ts`). */}
       <TableCell>
-        <IdentityCell name={fullName} />
+        <IdentityCell name={fullName} roles={accountDisplayRoles(account)} />
       </TableCell>
       <TableCell>{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">

@@ -127,6 +127,9 @@ describe("buildMemberAccounts", () => {
       id: 100,
       tipo: "Mensual Adultos",
       estado: "activa",
+      // Issue #1132: the raw backend enum survives alongside the folded
+      // `estado` above — see `isOperationalStudent`'s doc comment.
+      estadoBackend: "ACTIVA",
       fechaInicio: "2026-07-01",
       fechaFin: "2026-07-31",
       monto: 25,
@@ -169,6 +172,7 @@ describe("buildMemberAccounts", () => {
       id: 3,
       tipo: "Mensual Adultos",
       estado: "activa",
+      estadoBackend: "ACTIVA",
       fechaInicio: "",
       fechaFin: "",
       monto: 25,
@@ -198,6 +202,37 @@ describe("buildMemberAccounts", () => {
     expect(accounts).toHaveLength(2);
     expect(accounts[0].email).toBeUndefined();
     expect(accounts[1].email).toBeUndefined();
+  });
+
+  // Issue #1132 (gap #1 in this module's doc): `role` and `backendRoles` come
+  // from `GET /personas/roles/bulk`, never a hardcoded "representante".
+  describe("real roles", () => {
+    it("defaults to representante with no backendRoles when the bulk lookup has nothing for this persona", () => {
+      const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
+      const account = accounts.find((a) => a.id === "1");
+      expect(account?.role).toBe("representante");
+      expect(account?.backendRoles).toBeUndefined();
+    });
+
+    it("reads role and backendRoles off the bulk roles map — REPRESENTANTE stays representante", () => {
+      const accounts = buildMemberAccounts(
+        [admin], new Map(), new Map(), new Map(), new Map(),
+        new Set(), new Map(), new Map([[1, ["REPRESENTANTE"]]]),
+      );
+      const account = accounts.find((a) => a.id === "1");
+      expect(account?.role).toBe("representante");
+      expect(account?.backendRoles).toEqual(["REPRESENTANTE"]);
+    });
+
+    it("reads estudiante for a persona whose real role is ALUMNO", () => {
+      const accounts = buildMemberAccounts(
+        [admin], new Map(), new Map(), new Map(), new Map(),
+        new Set(), new Map(), new Map([[1, ["ALUMNO"]]]),
+      );
+      const account = accounts.find((a) => a.id === "1");
+      expect(account?.role).toBe("estudiante");
+      expect(account?.backendRoles).toEqual(["ALUMNO"]);
+    });
   });
 
   // Issue #362: "sin datos de emergencia" — no representative at all AND no
@@ -326,6 +361,10 @@ describe("buildMemberAccounts", () => {
       // (never paid, no coverage yet) — not the absence that means "unknown".
       expect(student?.membresia?.mesesAdeudados).toBe(0);
       expect(student?.membresia?.montoAdeudado).toBe(0);
+      // …but `estadoBackend` still tells INACTIVA apart from a real VENCIDA —
+      // `isOperationalStudent` (members-utils.ts) reads exactly this field to
+      // keep a never-approved-or-rejected membership out of the roster.
+      expect(student?.membresia?.estadoBackend).toBe("INACTIVA");
     });
 
     it("does NOT attach debt fields for an ACTIVA membership even if present in the bulk map", () => {
