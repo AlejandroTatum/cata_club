@@ -43,10 +43,16 @@ sobre la fila de `persona` ANTES de leer su `representante_id`; el `UPDATE
 persona SET representante_id` del otro trigger ya tiene esa misma fila
 bloqueada por ser el objetivo de su propio `UPDATE` desde que esa sentencia
 corrió (el lock de fila de un `UPDATE` no espera a que el trigger se
-dispare). Es el mismo mecanismo de mutex de fila que
-`g1139repmenor`/`i1141relinteg` usan sobre la fila de `usuario` del
+dispare). Es el mismo mecanismo de mutex de fila (un `SELECT ... FOR UPDATE`
+puntual) que `g1139repmenor` usa sobre la fila de `usuario` del
 representante -- acá espejado sobre la fila de `persona` del representado,
 porque es esa la fila que ambos triggers necesitan leer con el estado final.
+`i1141relinteg` no es la misma comparación: ese candado además recorre un
+CTE recursivo para detectar ciclos en TODO el grafo de representación, y por
+eso necesita el mutex más fuerte de `pg_advisory_xact_lock` (serializa
+cualquier escritura de vínculo, no solo la fila en juego). Acá alcanza con
+el lock de UNA fila: el invariante B es puntual entre una persona y su
+cuenta, no una propiedad del grafo completo.
 
 Guardia previa a instalar
 --------------------------
