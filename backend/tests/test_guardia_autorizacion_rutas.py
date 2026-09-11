@@ -192,7 +192,6 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
-    ("POST", "/personas/{persona_id}/independizar"),             # (b)
     ("POST", "/personas/{persona_id}/foto"),                      # (b) - dueño/representante/admin validado en el router
 }
 
@@ -326,6 +325,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/personas/{persona_id}/independizar"): frozenset({"ADMINISTRADOR"}),
     # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
     # que su hermano `representados` -- un representante vincula su propio
     # representado ya existente, un administrador puede hacerlo por cualquiera.
