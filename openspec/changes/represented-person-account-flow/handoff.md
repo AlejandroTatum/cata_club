@@ -9,7 +9,7 @@ main
   ├─ Phase 1: #1165 → #1169 → #1170 → #1171 → #1172 → #1173   (merge in order, retarget child before each merge)
   ├─ Phase 2: fix/represented-person-desk-exit-ui              (new, after Phase 1)
   ├─ Phase 3: fix/represented-person-no-credentials            (new, after Phase 2)
-  ├─ Phase 4: fix/represented-person-legacy-accounts           (new, after owner decision)
+  ├─ Phase 4: fix/represented-person-account-db-lock           (database lock for invariant B; no legacy data to migrate)
   └─ docs:    #1164 fix/represented-person-account-flow        (this replan)
 
 Parked under #1133: #1175, #1176, wip branches from pi-1137-pr4c2 / pi-1137-pr4c2a
@@ -28,7 +28,7 @@ The first unchecked box in `tasks.md` whose phase predecessors are all checked i
 
 ## Stop conditions
 
-- Phase 4 needs the owner's decision on legacy accounts and consents; do not start it without an answer recorded in #1137.
+- Phase 4 no longer waits on a decision: the owner confirmed on 2026-09-11 that production has no represented person with an account.
 - A merge in Phase 1 whose child was not retargeted first: stop, the child is closed and cannot be reopened; open a new PR from the same branch.
 - Any new PR that would be "inert" (no runtime change, no deletion): stop and fold it into the phase PR.
 
