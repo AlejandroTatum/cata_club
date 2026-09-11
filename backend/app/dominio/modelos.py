@@ -2102,6 +2102,21 @@ class Sponsor(Base):
 
 
 class VinculacionRepresentante(Base):
+    """Ledger append-only de la relación de representación (issue #1133).
+
+    Cubre los CUATRO eventos que mutan `Persona.representante_id`, cada uno
+    con su `operacion`/`origen` propio: alta pública sin representante previo
+    (`EnrollmentServicio.enroll`, `CREACION`/`ALTA_PUBLICA`), alta desde el
+    panel o el dashboard del representante (`PersonaServicio.
+    crear_representado`, `CREACION`/`SESION_AUTENTICADA`), vinculación por
+    cédula de una persona ya existente (`PersonaServicio.
+    vincular_representado`, `REASIGNACION`/`AUTOSERVICIO_LEGADO` -- el
+    nombre "legado" es deliberado: este camino de autoservicio está en vías
+    de retiro, ver el issue) e independencia presencial
+    (`RelacionRepresentacionServicio.independizar_presencial`,
+    `INDEPENDENCIA`/`ADMIN_PRESENCIAL`). Append-only: la base rechaza
+    `UPDATE`/`DELETE`/`TRUNCATE` (migración `h1140rep_auditoria`)."""
+
     __tablename__ = "vinculacion_representante"
     __table_args__ = (
         Index("ix_vinculacion_representante_persona_id", "persona_id"),

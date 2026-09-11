@@ -3,8 +3,9 @@ from datetime import date
 import pytest
 
 from app.dominio.cedula import cedula_valida
+from app.dominio.enums import TipoRol
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
-from app.dominio.modelos import Persona, Usuario, FichaMedica
+from app.dominio.modelos import Persona, Rol, Usuario, FichaMedica
 from app.seguridad.gestor_auth import GestorAutenticacion
 
 
@@ -66,6 +67,31 @@ def test_registrar_persona_con_representante_mayor_de_edad_rechazada_por_dto(cli
         },
     )
     assert resp.status_code == 422
+
+
+def test_registrar_persona_con_representante_sin_el_rol_se_rechaza(client, db_session):
+    """Issue #1133: `registrar_persona` (alta admin genérica con
+    `representante_id`) usa el MISMO núcleo (`_crear_persona_validada`) que
+    `crear_representado` -- la regla del rol se aplica acá también."""
+    entrenador = Persona(
+        nombres="Carlos", apellidos="Ríos", cedula=cedula_valida(9401),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
+    )
+    db_session.add(entrenador)
+    db_session.flush()
+    db_session.add(Usuario(
+        correo="entrenador9401@cataclub.test",
+        contrasenia=GestorAutenticacion.obtener_hash_contrasenia("Secreta123"),
+        persona_id=entrenador.id, roles=[Rol(tipo_rol=TipoRol.ENTRENADOR, descripcion="Entrenador")],
+    ))
+    db_session.commit()
+
+    resp = client.post(
+        "/api/v1/personas/",
+        json={**_payload_persona(cedula_valida(9402)), "representante_id": entrenador.id},
+    )
+    assert resp.status_code == 400
+    assert "rol de representante" in resp.json()["message"].lower()
 
 
 # --- GET /personas/{persona_id}/representados: ownership (issue #122 IDOR) --
@@ -381,7 +407,12 @@ def test_crear_representado_mayor_de_edad_rechazado_por_dto(client, db_session):
 
 def test_crear_representado_admin_puede_usar_endpoint(client, db_session):
     representante = _crear_persona_representante(db_session)
-    _restaurar_override_token(persona_id=999, roles=["ADMINISTRADOR"])
+    # Issue #1133 (ledger completo): el actor del comando queda en
+    # `vinculacion_representante.actor_persona_id`, una FK real a
+    # `persona.id` -- a diferencia de un `persona_id` sintético, este admin
+    # necesita existir de verdad.
+    admin = _crear_persona_representante(db_session, cedula="1710034099")
+    _restaurar_override_token(persona_id=admin.id, roles=["ADMINISTRADOR"])
 
     resp = client.post(
         f"/api/v1/personas/{representante.id}/representados",

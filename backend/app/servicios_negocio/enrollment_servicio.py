@@ -14,7 +14,9 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
      Persona del alumno (con representante_id si aplica); crear FichaMedica
      y AntecedentesClub si se proporcionaron; crear Usuario + rol ALUMNO
      SOLO si el alumno se autoinscribe como adulto (issue #1137, invariante
-     B: un alumno representado nunca tiene Usuario propio).
+     B: un alumno representado nunca tiene Usuario propio). Cuando hay
+     representante, deja una fila en `vinculacion_representante` (issue
+     #1133, `origen='ALTA_PUBLICA'`).
   3. Un solo `commit()` al final del flujo feliz. Cualquier excepción hace
      `rollback()` de TODO lo escrito en el intento.
   4. Emitir tokens JWT para auto-login del representante (o del alumno adulto).
@@ -50,6 +52,9 @@ from app.infraestructura.repositorios.enrollment_notificacion_outbox_repositorio
 from app.infraestructura.repositorios.inscripcion_idempotencia_repositorio import (
     ESTADO_PENDIENTE,
     InscripcionIdempotenciaRepositorio,
+)
+from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
+    VinculacionRepresentanteRepositorio,
 )
 from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -108,6 +113,7 @@ class EnrollmentServicio:
         self.repo_antecedentes = AntecedentesClubRepositorio(db)
         self.repo_rol = RolRepositorio(db)
         self.repo_idempotencia = InscripcionIdempotenciaRepositorio(db)
+        self.repo_ledger = VinculacionRepresentanteRepositorio(db)
 
     def enroll(self, datos: EnrollmentCreateDTO, idempotency_key: str | None = None) -> dict:
         """
@@ -280,6 +286,29 @@ class EnrollmentServicio:
                 # inscribe a un menor entra como representante; si además
                 # quiere entrenar, es un cambio de rol explícito.
                 self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
+
+                # Issue #1133 (ledger completo, regla del rol): `alumno` ya
+                # nació con `representante_id` seteado (arriba), ANTES de
+                # que esta cuenta y su rol existieran -- el candado que
+                # exige el rol es un `CONSTRAINT TRIGGER ...  DEFERRED`
+                # (migración `k1143rolrep`) precisamente para tolerar este
+                # orden y evaluar recién al COMMIT, contra el estado FINAL
+                # de la transacción (rol ya otorgado). No hay chequeo de
+                # servicio equivalente acá: en este camino la cuenta y el rol
+                # SIEMPRE se otorgan juntos, así que no hay ninguna condición
+                # de negocio que un `if` pueda anticipar -- la única defensa
+                # útil es la de la base, contra un bug futuro que rompa ese
+                # supuesto.
+                self.repo_ledger.registrar(
+                    persona_id=alumno.id,
+                    actor_persona_id=representante_id,
+                    representante_anterior_id=None,
+                    representante_nuevo_id=representante_id,
+                    operacion="CREACION",
+                    origen="ALTA_PUBLICA",
+                    idempotency_key=None,
+                    request_fingerprint=None,
+                )
             elif datos.credenciales_alumno:
                 # Autoinscripción sin representante (adulto)
                 hash_pw = GestorAutenticacion.obtener_hash_contrasenia(

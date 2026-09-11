@@ -88,6 +88,19 @@ MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS = (
     "credenciales propias."
 )
 
+# Issue #1133, decisión del dueño (2026-09-11, opción B en #1134): solo una
+# cuenta con el rol REPRESENTANTE puede recibir representados.
+#
+# Mensaje ESPECÍFICO a propósito -- no hay disciplina anti-enumeración que
+# proteger acá: la cuenta que falla es la del `representante_id` que EL
+# PROPIO llamador proporcionó (su propia sesión en `vincular_representado`,
+# o un id que un ADMINISTRADOR ya conoce en `crear_representado`/
+# `registrar_persona`), nunca una cédula ajena que alguien esté sondeando.
+MENSAJE_REPRESENTANTE_SIN_ROL = (
+    "Esta cuenta no tiene el rol de Representante y no puede recibir "
+    "representados."
+)
+
 # Issue #790, misma disciplina anti-enumeración que la recuperación de
 # contraseña: el reenvío del enlace de verificación responde EXACTAMENTE esto
 # exista o no la cuenta, y esté o no ya verificada. Si difiriera en algún

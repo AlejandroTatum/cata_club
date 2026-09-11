@@ -480,6 +480,7 @@ async def crear_representado(
     # propias, `crear_representado` hashea con bcrypt.
     return await run_in_threadpool(
         PersonaServicio(db).crear_representado, persona_id, datos,
+        token_payload.get("persona_id"),
     )
 
 

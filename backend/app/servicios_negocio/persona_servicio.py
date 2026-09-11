@@ -18,7 +18,8 @@ from app.dominio.mensajes import (
 )
 from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.representados_alcanzables import (
-    exigir_representante_destino_alcanzable, exigir_sin_representados_menores_activos,
+    exigir_representante_con_rol_valido, exigir_representante_destino_alcanzable,
+    exigir_sin_representados_menores_activos,
 )
 from app.dominio.telefono import es_telefono_valido
 from app.soporte_transversal.tiempo import hoy_club
@@ -29,6 +30,9 @@ from app.infraestructura.repositorios.usuario_ficha_repositorio import (
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
+from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
+    VinculacionRepresentanteRepositorio,
+)
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
@@ -93,6 +97,7 @@ class PersonaServicio:
         self.db = db
         self.repo = PersonaRepositorio(db)
         self.repo_usuario = UsuarioRepositorio(db)
+        self.repo_ledger = VinculacionRepresentanteRepositorio(db)
         # Inyectable para tests (ningún test hace un sleep real de varios
         # segundos, mismo criterio que `AuthServicio`). Los routers de
         # producción no pasan `dormir`, así que usan el `time.sleep` real.
@@ -138,11 +143,22 @@ class PersonaServicio:
                     f"tiene {edad_representante} años."
                 )
             self._exigir_telefono_valido_de_representante(representante)
+            # Issue #1133: la regla del rol se evalúa en el MISMO lugar que
+            # las de arriba -- este es el núcleo que comparten
+            # `registrar_persona` (alta admin con representante_id) y
+            # `crear_representado`.
+            exigir_representante_con_rol_valido(
+                datos.representante_id,
+                self.repo_usuario.obtener_por_persona_id(datos.representante_id),
+            )
 
         nueva_persona = Persona(**datos.model_dump())
         return self.repo.crear(nueva_persona)
 
-    def crear_representado(self, representante_id: int, datos: RepresentadoCreateDTO) -> Persona:
+    def crear_representado(
+        self, representante_id: int, datos: RepresentadoCreateDTO,
+        actor_persona_id: int | None = None,
+    ) -> Persona:
         """Crea un dependiente (menor) para un representante o desde el panel admin.
 
         Flujo:
@@ -162,7 +178,16 @@ class PersonaServicio:
         Issue #1139: esta es la puerta de alta MÁS usada para un menor nuevo
         -- más que `vincular_representado`, que existe para reasignar a
         alguien ya cargado -- así que el mismo invariante se exige acá,
-        antes de crear nada, igual que en `vincular_representado`."""
+        antes de crear nada, igual que en `vincular_representado`.
+
+        Issue #1133 (ledger completo): `actor_persona_id` es quien ejecuta el
+        comando -- el propio representante desde su sesión, o un
+        ADMINISTRADOR actuando por otra persona (el router lo resuelve del
+        token). Por defecto es `representante_id`: todos los llamadores
+        existentes (tests, y el propio flujo de autoservicio) simulan al
+        representante creando para sí mismo."""
+        if actor_persona_id is None:
+            actor_persona_id = representante_id
         self._exigir_representante_destino_alcanzable(representante_id)
 
         persona_datos = PersonaCreateDTO(
@@ -197,6 +222,20 @@ class PersonaServicio:
                 for nombre in datos.ficha_medica.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
                 FichaMedicaRepositorio(self.db).crear(ficha)
+
+            # Issue #1133: el ledger completo -- alta inicial, no solo
+            # reasignación. Sin `idempotency_key`: este comando no tiene
+            # replay (a diferencia de `independizar_presencial`).
+            self.repo_ledger.registrar(
+                persona_id=representado.id,
+                actor_persona_id=actor_persona_id,
+                representante_anterior_id=None,
+                representante_nuevo_id=representante_id,
+                operacion="CREACION",
+                origen="SESION_AUTENTICADA",
+                idempotency_key=None,
+                request_fingerprint=None,
+            )
 
             self.db.commit()
         except IntegrityError as error:
@@ -358,9 +397,14 @@ class PersonaServicio:
         """Issue #1139: cierra el mismo invariante que `RolServicio.
         cambiar_estado_cuenta` y `cambiar_estado`, pero por la otra puerta --
         nada impedía vincular a un representado a una cuenta YA desactivada,
-        dejándolo en el mismo estado prohibido sin pasar por ninguna baja."""
+        dejándolo en el mismo estado prohibido sin pasar por ninguna baja.
+
+        Issue #1133: además exige el rol, sobre la MISMA cuenta ya resuelta
+        -- `crear_representado` y `vincular_representado` son los dos
+        caminos que llaman a este helper."""
         cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
         exigir_representante_destino_alcanzable(representante_id, cuenta)
+        exigir_representante_con_rol_valido(representante_id, cuenta)
 
     def _exigir_telefono_valido_de_representante(self, representante: Persona) -> None:
         """Issue #1138: el contacto de emergencia de un representado se
