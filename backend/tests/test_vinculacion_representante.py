@@ -69,7 +69,7 @@ def test_model_declares_migrated_origin_and_fingerprint_checks():
     }
     assert checks["ck_vinculacion_representante_origen"] == (
         "origen IN ('SESION_AUTENTICADA', 'ADMIN_PRESENCIAL', "
-        "'AUTOSERVICIO_LEGADO', 'REMEDIACION_LEGACY')"
+        "'AUTOSERVICIO_LEGADO', 'REMEDIACION_LEGACY', 'ALTA_PUBLICA')"
     )
     assert checks["ck_vinculacion_representante_fingerprint_sha256"] == (
         "request_fingerprint IS NULL OR request_fingerprint ~ '^[0-9a-f]{64}$'"
