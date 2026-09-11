@@ -50,14 +50,41 @@ describe("buildMemberStats", () => {
     // mock carries 6 roots plus 8 people they represent.
     expect(stats.totalAccounts).toBe(14);
     expect(stats.totalStudents).toBeGreaterThan(0);
-    // Validate counts are consistent: every student is counted once
-    const expectedStudents = MOCK_MEMBER_ACCOUNTS.reduce(
-      (acc, a) => acc + a.estudiantes.length,
-      0,
-    );
+    // Issue #1132: totalStudents counts a MEMBERSHIP on file, not every row —
+    // 5 self-managed roots (pure representatives, `membresia: null`) plus one
+    // represented dependent awaiting their first membership (Joaquín) are not
+    // players, so the count no longer coincides with totalAccounts.
+    const expectedStudents = MOCK_MEMBER_ACCOUNTS.flatMap((a) => a.estudiantes).filter(
+      (s) => s.membresia !== null,
+    ).length;
     expect(stats.totalStudents).toBe(expectedStudents);
-    // Every row is exactly one person now, so the two totals coincide.
-    expect(stats.totalStudents).toBe(stats.totalAccounts);
+    expect(stats.totalStudents).toBe(8);
+  });
+
+  // Issue #1132: "es jugador" is decided by the membership, never by the
+  // role — a pure representative (no `Membresia` on file for their own
+  // persona) is not counted as a student, even though `account.role` still
+  // reads "representante".
+  it("does not count a pure representative with no membership on file", () => {
+    const pureRepresentative: MemberAccount = {
+      id: "rep-only",
+      role: "representante",
+      nombres: "Solo",
+      apellidos: "Representa",
+      telefono: "+593 90 000 0000",
+      estudiantes: [
+        {
+          id: "rep-only",
+          nombres: "Solo",
+          apellidos: "Representa",
+          activo: true,
+          membresia: null,
+          ultimoPago: null,
+        },
+      ],
+    };
+    const stats = buildMemberStats([pureRepresentative]);
+    expect(stats.totalStudents).toBe(0);
   });
 
   it("counts active memberships correctly", () => {
@@ -73,8 +100,12 @@ describe("buildMemberStats", () => {
     expect(stats.pendingPayments).toBe(3);
   });
 
-  it("excludes archived and suspended students from operational metrics and chips", () => {
-    const active = MOCK_MEMBER_ACCOUNTS[0];
+  it("keeps a suspended member counted (they HAVE a membership) but excludes them from the pending-payment chip", () => {
+    // Issue #1132: `active` must actually carry a membership — a self-managed
+    // root with none (the old fixture used here) is exactly the "not a
+    // player" case this issue now excludes, which made this test's own
+    // premise (an "active" baseline) accidentally false.
+    const active = MOCK_MEMBER_ACCOUNTS.find((a) => a.id === "stu-001")!;
     const archived = {
       ...active,
       id: "archived",
@@ -91,7 +122,9 @@ describe("buildMemberStats", () => {
       }],
     };
     const stats = buildMemberStats([active, archived, paused]);
-    expect(stats.totalStudents).toBe(2);
+    // `activo` (Persona.activo) no longer decides this count — `archived`
+    // still has a real membership on file, so all three are students.
+    expect(stats.totalStudents).toBe(3);
     expect(stats.pendingPayments).toBe(0);
     expect(accountMatchesFlag(archived, "vencida")).toBe(false);
     expect(accountMatchesFlag(paused, "pendiente")).toBe(false);
@@ -112,7 +145,7 @@ describe("buildMemberStats", () => {
     ];
     const stats = buildMemberStats(accounts);
     expect(stats.totalAccounts).toBe(15);
-    expect(stats.totalStudents).toBe(14); // original 14 students
+    expect(stats.totalStudents).toBe(8); // original 8 students with a membership on file
     expect(stats.activeMemberships).toBe(4);
   });
 
