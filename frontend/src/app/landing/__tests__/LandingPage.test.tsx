@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-location";
 import { deriveContactHours, landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
 import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
@@ -28,7 +28,7 @@ vi.mock("@/app/landing/LandingMap", (): { default: () => React.ReactElement } =>
 // exactly when the real component function runs, whether that happens inside
 // a synchronous render (today) or only after a deferred `import()` resolves
 // (once `LandingMotionLoader` exists).
-const { motionMount } = vi.hoisted((): { motionMount: ReturnType<typeof vi.fn> } => ({
+const { motionMount } = vi.hoisted((): { motionMount: Mock<() => void> } => ({
   motionMount: vi.fn(),
 }));
 
@@ -40,8 +40,8 @@ vi.mock("@/app/landing/LandingMotion", (): { default: () => null } => ({
 }));
 
 interface MockedMediaQueryList extends MediaQueryList {
-  addEventListener: ReturnType<typeof vi.fn>;
-  removeEventListener: ReturnType<typeof vi.fn>;
+  addEventListener: Mock;
+  removeEventListener: Mock;
 }
 
 /**

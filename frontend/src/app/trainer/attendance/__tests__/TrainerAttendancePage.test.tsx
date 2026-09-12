@@ -2931,7 +2931,7 @@ describe("TrainerAttendancePage — el aviso de salida distingue datos del servi
   }
 
   function beforeUnloadRegistrations(spy: ReturnType<typeof vi.spyOn>): unknown[][] {
-    return spy.mock.calls.filter(([type]) => type === "beforeunload");
+    return spy.mock.calls.filter((call: unknown[]) => (call as unknown[])[0] === "beforeunload");
   }
 
   it("no registra el listener de beforeunload en modo lectura sin ninguna interacción", async () => {
