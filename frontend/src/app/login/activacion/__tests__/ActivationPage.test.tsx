@@ -18,7 +18,7 @@
  * @vitest-environment jsdom
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { fireEvent, render, screen, waitFor, type RenderResult } from "@testing-library/react";
 import ActivationPage from "@/app/login/activacion/page";
 
@@ -59,6 +59,7 @@ vi.mock("@/components/auth/AuthShell", async () => {
 import { useAuth } from "@/contexts/AuthContext";
 import { createAuthenticatedAuth, createMockSession, createUnauthenticatedAuth } from "@/components/__tests__/test-utils";
 import type { ActivationSession } from "@/lib/activation-reasons";
+import type { SessionOutcome } from "@/services/auth";
 
 const mockUseAuth = vi.mocked(useAuth);
 
@@ -163,7 +164,7 @@ async function submitToken(value: string): Promise<void> {
  * `useAuth()` at `nextSession` — standing in for the BFF round-trip that
  * really updates `AuthContext`'s state after a successful verification.
  */
-function mockRefreshTo(nextSession: ActivationSession): ReturnType<typeof vi.fn> {
+function mockRefreshTo(nextSession: ActivationSession): Mock<() => Promise<SessionOutcome>> {
   const mockRefreshSession = vi.fn().mockImplementation(async () => {
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("estudiante", "Test User", {

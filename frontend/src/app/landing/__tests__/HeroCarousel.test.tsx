@@ -19,14 +19,14 @@
 // comment on `landing-render-mocks.tsx` for why the mock lives there.
 import "./landing-render-mocks";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import HeroCarousel from "@/app/landing/HeroCarousel";
 
 const AUTO_ADVANCE_INTERVAL_MS = 6000;
 
 interface MockedMediaQueryList extends MediaQueryList {
-  addEventListener: ReturnType<typeof vi.fn>;
-  removeEventListener: ReturnType<typeof vi.fn>;
+  addEventListener: Mock;
+  removeEventListener: Mock;
 }
 
 /** Controlled per test, so each one states its own motion preference. */
