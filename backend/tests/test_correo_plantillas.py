@@ -104,6 +104,12 @@ def _enviar_verificacion() -> None:
     ServicioNotificaciones().enviar_verificacion_correo(CORREO_FICTICIO, TOKEN_FICTICIO)
 
 
+def _enviar_verificacion_con_nombre() -> None:
+    ServicioNotificaciones().enviar_verificacion_correo(
+        CORREO_FICTICIO, TOKEN_FICTICIO, "Ana Ficticia",
+    )
+
+
 def _enviar_vencimiento() -> None:
     asunto, texto = _render_vencimiento(
         "Ana Ficticia", f"Su membresía vence el {FECHA_FICTICIA_TXT}.",
@@ -176,14 +182,52 @@ def test_recuperacion_advierte_token_de_un_solo_uso_y_30_minutos(smtp_capturado)
     assert "30 minutos" in html
 
 
-def test_verificacion_advierte_24_horas_y_representado_ya_registrado(smtp_capturado):
+def test_verificacion_advierte_24_horas_y_cuenta_la_historia_de_la_inscripcion(smtp_capturado):
+    """Issue #1196: la misma historia que el resto de las superficies de
+    inscripción -- verificar el correo, acercarse al club o escribir por
+    WhatsApp para registrar la inscripción y el primer pago, y recién ahí se
+    activa la membresía."""
     _enviar_verificacion()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
     html = _decodificar(partes[1])
     assert "24 horas" in texto
-    assert "representad" in texto.lower()
     assert "Verificar mi correo" in html
+    assert "WhatsApp" in texto
+    assert "el primer pago" in texto
+    assert "el club lo valida" in texto
+    assert "se activa la membresía" in texto
+
+
+def test_verificacion_no_afirma_uso_normal_ni_vincular_representado(smtp_capturado):
+    """Guardia de no-regresión: ambas frases retiradas por el issue #1196 eran
+    falsas -- la activación bloquea la cuenta por completo mientras el correo
+    no esté verificado, y la vinculación de un representado por autoservicio
+    se retiró en #1186."""
+    _enviar_verificacion()
+    _, partes = _partes(smtp_capturado["mensaje"])
+    texto = _decodificar(partes[0]).lower()
+    html = _decodificar(partes[1]).lower()
+    assert "con normalidad" not in texto
+    assert "representad" not in texto
+    assert "con normalidad" not in html
+    assert "representad" not in html
+
+
+def test_verificacion_saluda_con_el_nombre_cuando_esta_disponible(smtp_capturado):
+    _enviar_verificacion_con_nombre()
+    _, partes = _partes(smtp_capturado["mensaje"])
+    texto = _decodificar(partes[0])
+    html = _decodificar(partes[1])
+    assert texto.startswith("Hola Ana Ficticia,")
+    assert "<p>Hola Ana Ficticia,</p>" in html
+
+
+def test_verificacion_saluda_generico_sin_nombre(smtp_capturado):
+    _enviar_verificacion()
+    _, partes = _partes(smtp_capturado["mensaje"])
+    texto = _decodificar(partes[0])
+    assert texto.startswith("Hola,")
 
 
 def test_vencimiento_menciona_ir_a_mis_pagos_whatsapp_y_fecha(smtp_capturado):

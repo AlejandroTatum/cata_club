@@ -31,7 +31,11 @@ function emailScreenSubtitle(activation: ActivationSession, altaCompletada: bool
     "Ábralo para verificar su cuenta; puede hacerlo desde este u otro dispositivo.",
   ];
   if (!altaCompletada) {
-    parts.push("Después queda un paso: la inscripción presencial en el club.");
+    parts.push(
+      "Después queda un paso: acérquese al club o escríbanos por WhatsApp para " +
+        "registrar la inscripción y el primer pago; el club lo valida y ahí se " +
+        "activa la membresía.",
+    );
   }
   return parts.join(" ");
 }
@@ -229,8 +233,8 @@ function ActivationPageContent(): React.ReactElement {
             Correo verificado
           </p>
           <p className="text-sm leading-relaxed text-ink-2">
-            La inscripción presencial se completa en el club, a cargo del personal. El acceso a los módulos se
-            habilita en cuanto quede registrada.
+            Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago. El club lo
+            valida y ahí se activa la membresía.
           </p>
           {emailJustVerified && (
             <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>

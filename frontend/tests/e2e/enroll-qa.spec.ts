@@ -190,9 +190,14 @@ const VALID_STUDENT = {
  * itself (issue #1189): using `VALID_STUDENT`'s adult birth date here would
  * make every "child" fixture describe the exact bug this rule exists to
  * catch.
+ *
+ * Issue #1197: no `telefono` — a represented minor has no phone of their
+ * own, and the CHILD path no longer renders that field at all.
  */
 const VALID_CHILD_STUDENT = {
-  ...VALID_STUDENT,
+  nombres: VALID_STUDENT.nombres,
+  apellidos: VALID_STUDENT.apellidos,
+  cedula: VALID_STUDENT.cedula,
   fechaNacimiento: isoYearsAgo(9),
 };
 
@@ -297,13 +302,16 @@ async function fillValidStudent(page: Page): Promise<void> {
   await field(page, F.telefono).fill(VALID_STUDENT.telefono);
 }
 
-/** Same as `fillValidStudent`, but with `VALID_CHILD_STUDENT`'s minor birth date. */
+/**
+ * Same as `fillValidStudent`, but with `VALID_CHILD_STUDENT`'s minor birth
+ * date and no phone — issue #1197: a represented minor has no phone field
+ * to fill on this path.
+ */
 async function fillValidChildStudent(page: Page): Promise<void> {
   await field(page, F.nombres).fill(VALID_CHILD_STUDENT.nombres);
   await field(page, F.apellidos).fill(VALID_CHILD_STUDENT.apellidos);
   await fillBirthDate(page, F.fechaNacimiento, VALID_CHILD_STUDENT.fechaNacimiento);
   await field(page, F.cedula).fill(VALID_CHILD_STUDENT.cedula);
-  await field(page, F.telefono).fill(VALID_CHILD_STUDENT.telefono);
 }
 
 async function fillValidRepresentative(page: Page): Promise<void> {
@@ -622,11 +630,21 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
   });
 
   test("C02 · el estudiante dependiente puede ser menor de edad", async ({ page }) => {
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(9));
     await expectFieldValid(page, F.fechaNacimiento);
     await expect(nextButton(page)).toBeEnabled();
     await shot(page, "C02", "menor-dependiente-valido");
+  });
+
+  test("C03 · el menor representado no tiene campo de teléfono propio (#1197)", async ({ page }) => {
+    // El menor no tiene celular propio: el contacto de emergencia ya se
+    // deriva del representante (#1138), así que este paso no debe renderizar
+    // ese campo para el camino representado.
+    await expect(field(page, F.telefono)).toHaveCount(0);
+    await fillValidChildStudent(page);
+    await expect(nextButton(page)).toBeEnabled();
+    await shot(page, "C03", "dependiente-sin-telefono");
   });
 });
 
@@ -811,6 +829,12 @@ test.describe("H · Salud y emergencia (camino representado)", () => {
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
     await expect(page.getByText(/se deriva del representante/i)).toBeVisible();
+    // Issue #1197: the summary shows the representative's own cédula and
+    // phone — the student no longer has a phone row on this path.
+    await expect(page.getByText("Cédula del representante")).toBeVisible();
+    await expect(page.getByText("Teléfono del representante")).toBeVisible();
+    await expect(page.getByText(VALID_REPRESENTATIVE.telefono)).toBeVisible();
+    await expect(field(page, F.telefono)).toHaveCount(0);
     await shot(page, "H07", "salud-representado-minima-valida");
   });
 });
@@ -1206,7 +1230,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
   test("G02 · una fecha FUTURA en un dependiente ahora también se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
 
     const nextYear = new Date().getFullYear() + 1;
     await fillAndBlur(page, F.fechaNacimiento, `${nextYear}-06-15`);
@@ -1276,7 +1300,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
   test("G08 · un dependiente de 3 años ya no pasa: el piso de 5 años ahora se aplica", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(3));
 
     // La regla compartida trae el mismo piso que ya exigía el backend (#224):

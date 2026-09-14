@@ -43,12 +43,19 @@ class EnrollmentAlumnoDTO(BaseModel):
     nunca tiene credenciales propias (issue #1137, invariante B: una persona
     con `representante_id` nunca tiene `Usuario`).
     Para inscripción "self" (adulto): las credenciales van en
-      `credenciales_alumno`."""
+      `credenciales_alumno`.
+
+    Issue #1197: `telefono` es opcional acá porque un menor representado no
+    tiene celular propio -- su contacto de emergencia se deriva del
+    representante, nunca de este campo. `EnrollmentCreateDTO.
+    _telefono_alumno_obligatorio_para_autoinscripcion_adulta` lo vuelve a
+    exigir en el camino "self" (sin `representante`), donde sí es el dato
+    de contacto del propio alumno."""
     nombres: NombreValidado = Field(..., max_length=100)
     apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
-    telefono: TelefonoValidado = Field(..., max_length=32)
+    telefono: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     institucion_id: Optional[int] = None
 
 
@@ -244,6 +251,18 @@ class EnrollmentCreateDTO(BaseModel):
         mensaje que `_ficha_medica_obligatoria`."""
         if self.representante is None and isinstance(self.ficha_medica, EnrollmentFichaMedicaMenorDTO):
             raise ValueError(MENSAJE_FICHA_MEDICA_OBLIGATORIA)
+        return self
+
+    @model_validator(mode="after")
+    def _telefono_alumno_obligatorio_para_autoinscripcion_adulta(self) -> "EnrollmentCreateDTO":
+        """Issue #1197. `EnrollmentAlumnoDTO.telefono` quedó opcional en el
+        DTO compartido para que un menor representado pueda inscribirse sin
+        celular propio (se deriva del representante). Sin `representante`
+        (camino adulto) el alumno ES el titular del contacto, así que acá se
+        vuelve a exigir -- mismo patrón que `_ficha_medica_completa_para_
+        autoinscripcion_adulta` un poco más abajo."""
+        if self.representante is None and not self.alumno.telefono:
+            raise ValueError("El teléfono es obligatorio.")
         return self
 
     @model_validator(mode="after")
