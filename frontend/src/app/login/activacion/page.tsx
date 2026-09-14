@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Mail } from "lucide-react";
@@ -52,10 +52,24 @@ function ActivationPageContent(): React.ReactElement {
    * request lands) does not apply to a plain status refresh.
    */
   const [emailJustVerified, setEmailJustVerified] = useState(false);
+  /**
+   * Set when "Ya verifiqué mi correo" re-checks and the email is STILL
+   * pending (#1195) — until now that press re-fetched the session and
+   * re-rendered the exact same screen, with nothing telling the visitor
+   * anything happened at all. Cleared on the next attempt (success or not),
+   * same as `resendMessage`/`resendError` below.
+   */
+  const [stillUnverified, setStillUnverified] = useState(false);
   const activation = session as ActivationSession | null;
   // The BFF defaults omitted fields to complete for pre-#858 sessions.
   const correoVerificado = activation?.correoVerificado !== false;
   const altaCompletada = activation?.altaPresencialCompletada !== false;
+  /**
+   * Guards the mount-time refresh below so it fires at most once per visit
+   * to this page, not on every re-render `isLoading`/`isAuthenticated`
+   * happen to produce.
+   */
+  const hasRefreshedOnMount = useRef(false);
 
   useEffect((): void => {
     if (isLoading) return;
@@ -70,12 +84,30 @@ function ActivationPageContent(): React.ReactElement {
     }
   }, [activation, isAuthenticated, isLoading, router]);
 
+  /**
+   * Re-reads activation status once the session is settled (#1195). Without
+   * this the gate rendered from whatever `session` held at login — so a
+   * visitor who verified their email in another tab, then followed
+   * "Iniciar sesión" back here, saw the pending screen again and had to
+   * press "Ya verifiqué mi correo" by hand to learn what the backend
+   * already knew. This is the same round trip `checkStatus` makes, but
+   * silent: it only updates `session`, with none of `checkStatus`'s own
+   * messaging (a background refresh is not something the visitor did).
+   */
+  useEffect((): void => {
+    if (isLoading || !isAuthenticated || !activation) return;
+    if (hasRefreshedOnMount.current) return;
+    hasRefreshedOnMount.current = true;
+    void refreshSession();
+  }, [activation, isAuthenticated, isLoading, refreshSession]);
+
   async function resendVerification(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!activation) return;
     setResending(true);
     setResendMessage(null);
     setResendError(null);
+    setStillUnverified(false);
     try {
       const result = await reenviarVerificacionCorreo(activation.user.email);
       setResendMessage(result.mensaje);
@@ -97,6 +129,7 @@ function ActivationPageContent(): React.ReactElement {
   async function checkStatus(): Promise<void> {
     setResendMessage(null);
     setResendError(null);
+    setStillUnverified(false);
     const wasEmailPending = !correoVerificado;
     const result = await refreshSession();
     if (result.kind === "outage") {
@@ -107,6 +140,11 @@ function ActivationPageContent(): React.ReactElement {
       const next = result.session as ActivationSession;
       if (next.correoVerificado !== false) {
         setEmailJustVerified(true);
+      } else {
+        // Issue #1195: "Ya verifiqué mi correo" re-fetched and re-rendered
+        // the same screen with no feedback when the email was still
+        // pending — this is the one branch that names that outcome.
+        setStillUnverified(true);
       }
     }
   }
@@ -135,11 +173,21 @@ function ActivationPageContent(): React.ReactElement {
   // another one.
   if (!correoVerificado) {
     return (
-      <AuthShell title="Verifique su correo" subtitle={emailScreenSubtitle(activation, altaCompletada)} hideBack>
+      <AuthShell
+        title="Verifique su correo"
+        subtitle={emailScreenSubtitle(activation, altaCompletada)}
+        eyebrow="Acceso al club"
+        hideBack
+      >
         <div className="flex flex-col gap-4">
           <Button type="button" variant="primary" onClick={checkStatus} disabled={resending} className="w-full">
             Ya verifiqué mi correo
           </Button>
+          {stillUnverified && (
+            <p role="status" className="text-sm leading-relaxed text-ink-2">
+              Todavía no encontramos la verificación. Abra el enlace del correo y vuelva a intentar.
+            </p>
+          )}
           {resendMessage && <p role="status" className="text-sm leading-relaxed text-state-ok">{resendMessage}</p>}
           {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
 
@@ -166,7 +214,7 @@ function ActivationPageContent(): React.ReactElement {
   // It is completed at the club by staff — there is nothing to submit here,
   // only the status to re-check once it lands.
   return (
-    <AuthShell title="Complete su inscripción en el club" hideBack>
+    <AuthShell title="Complete su inscripción en el club" eyebrow="Acceso al club" hideBack>
       <div className="flex flex-col gap-4">
         {/*
          * `aria-live="polite"`: this screen replaces the email screen in

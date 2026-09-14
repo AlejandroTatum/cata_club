@@ -193,6 +193,12 @@ describe("ActivationPage — the email screen", () => {
     const mockRefreshSession = mockRefreshTo(verified);
     const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
 
+    // Issue #1195: the gate's own mount-time refresh already fired once —
+    // let it settle before the click under test, so the assertion below is
+    // about the CLICK'S round trip, not an incidental sum of the two.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
     fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
 
     await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
@@ -208,6 +214,10 @@ describe("ActivationPage — the email screen", () => {
     const complete = { ...pending, correoVerificado: true, activacionCompleta: true };
     const mockRefreshSession = mockRefreshTo(complete);
     const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // See the note above — the mount-time refresh (#1195) runs first.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
 
     fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
 
@@ -226,6 +236,62 @@ describe("ActivationPage — the email screen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo consultar el estado/i);
     expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  // Issue #1195 — pressing "Ya verifiqué mi correo" while the email is still
+  // pending used to re-fetch and re-render the exact same screen with no
+  // feedback at all.
+  it("shows an inline message when checking status still reports the email pending", async () => {
+    const pending = pendingSession();
+    const mockRefreshSession = mockRefreshTo(pending);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // The mount-time refresh (#1195) also runs and, for this fixture, finds
+    // nothing changed — settle it before the click under test.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    expect(
+      await screen.findByText(/todavía no encontramos la verificación/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1195 — the gate re-reads activation status on mount instead of
+// rendering from whatever `session` held at login.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — refreshes on mount instead of rendering stale state", () => {
+  it("renders the enrolment screen on arrival when the backend already reports the email verified, with no click", async () => {
+    const pending = pendingSession();
+    const verified = { ...pending, correoVerificado: true };
+    const mockRefreshSession = mockRefreshTo(verified);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    expect(await screen.findByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ya verifiqué mi correo" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes only once per visit, not on every render", async () => {
+    const pending = pendingSession();
+    const mockRefreshSession = mockRefreshTo(pending);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+
+    expect(mockRefreshSession).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -261,6 +327,28 @@ describe("ActivationPage — the enrolment screen", () => {
     const confirmacion = await screen.findByText("Correo verificado");
     expect(confirmacion.closest('[aria-live="polite"]')).toBeInTheDocument();
   });
+
+  // Issue #1195 — the check line and a separate green status line both used
+  // to say "Correo verificado". There must be exactly one.
+  it("says 'Correo verificado' exactly once, even once emailJustVerified is set", async () => {
+    const pending = enrolmentPendingSession({ correoVerificado: false });
+    const verified = { ...pending, correoVerificado: true };
+    const mockRefreshSession = mockRefreshTo(verified);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // See the note in the email-screen block above — the mount-time refresh
+    // (#1195) runs first.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Ya verifiqué mi correo" }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    await screen.findByText("Su correo quedó verificado.");
+    expect(screen.getAllByText("Correo verificado")).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -283,5 +371,26 @@ describe("ActivationPage — the corner exit", () => {
 
     await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
     expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ hideBack: true }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1195 — this gate is reached by a parent enrolling a child, not by
+// staff signing in to manage the club.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — the eyebrow is not the admin one", () => {
+  it("passes a non-admin eyebrow on the email screen", async () => {
+    renderPending(pendingSession());
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
+  });
+
+  it("passes a non-admin eyebrow on the enrolment screen", async () => {
+    renderPending(pendingSession({ correoVerificado: true }));
+
+    await screen.findByRole("button", { name: "Consultar estado nuevamente" });
+    expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
   });
 });
