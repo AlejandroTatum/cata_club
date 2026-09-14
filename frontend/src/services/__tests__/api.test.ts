@@ -194,6 +194,21 @@ describe("enrollStudent", () => {
     })).resolves.toEqual({ enrolled: true });
   });
 
+  it("posts to /api/enrollment with no trailing slash (issue #1198)", async () => {
+    // The Next.js route lives at src/app/api/enrollment/route.ts (no
+    // trailing segment); a trailing slash on the client call cost every
+    // submission a 308 redirect before the real 201.
+    vi.mocked(global.fetch).mockResolvedValue(okResponse({ enrolled: true }, { status: 201 }));
+
+    await enrollStudent({
+      alumno: { nombres: "Ana", apellidos: "Pérez", cedula: "1712345678", fechaNacimiento: "2000-01-15", telefono: "0991234567" },
+      credencialesAlumno: { correo: "ana@example.com", contrasenia: "password8" },
+      fichaMedica: { tipoSangre: "O_POSITIVO", condicionesSalud: "", alergias: "", contactoEmergencia: "María", telefonoEmergencia: "0997654321" },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/enrollment", expect.anything());
+  });
+
   it("rejects enrollment responses with unexpected sensitive fields", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
       okResponse({ enrolled: true, accessToken: "unsafe" }, { status: 201 }),
