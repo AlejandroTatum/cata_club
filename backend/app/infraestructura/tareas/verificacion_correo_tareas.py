@@ -25,9 +25,13 @@ ETIQUETA = "Verificación de correo"
 def _enviar_enlace(usuario: Usuario) -> None:
     """El token se acuña ACÁ y no al aceptar la solicitud: solo el momento del
     envío sabe cuándo el correo sale de verdad, así el enlace no empieza a
-    envejecer mientras la fila espera en la cola. Nunca se persiste."""
+    envejecer mientras la fila espera en la cola. Nunca se persiste.
+
+    `usuario.persona.nombres` viaja como saludo (issue #1196): el destinatario
+    ya está cargado acá, así que el correo no tiene por qué abrir con un
+    "Hola," genérico cuando el nombre está a un atributo de distancia."""
     token = GestorAutenticacion.crear_token_verificacion_correo(usuario.correo)
-    ServicioNotificaciones().enviar_verificacion_correo(usuario.correo, token)
+    ServicioNotificaciones().enviar_verificacion_correo(usuario.correo, token, usuario.persona.nombres)
 
 
 @celery_app.task(
