@@ -909,6 +909,41 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
   });
 });
 
+describe("EnrollPage — one consistent story about what follows enrolment (#1196)", () => {
+  function goToSummaryStep(): void {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollHealthStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("summary tells the club-registers-enrolment-and-payment story and never mentions uploading proof", () => {
+    goToSummaryStep();
+
+    expect(
+      screen.getByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+
+  it("success screen names the email-verification step and never mentions uploading proof", async () => {
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+    await completeSelfEnrollmentWizard();
+
+    expect(
+      screen.getByText(/verifique su correo: le enviamos un enlace de confirmación/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // #1028, review round 2 — the public wizard's step-2 phone is LOCAL ONLY
 // (09XXXXXXXX). The 593/+593 forms are no longer normalized behind the

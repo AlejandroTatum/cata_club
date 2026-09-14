@@ -1088,9 +1088,9 @@ function EnrollWizard(): React.ReactElement {
         </DataRowList>
 
         <p className="text-sm text-ink-2">
-          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"}.
-          Después podrá subir el comprobante:{" "}
-          <b className="font-semibold text-ink">el club lo valida y recién ahí se activa la membresía</b>.
+          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"} y le enviamos un correo para verificarla.
+          Luego, acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago:{" "}
+          <b className="font-semibold text-ink">el club lo valida y ahí se activa la membresía</b>.
         </p>
 
         {/* `sunken`, not `canvas` — the same inverted ladder as the age well:
@@ -1268,6 +1268,10 @@ function EnrollWizard(): React.ReactElement {
                     sessionConfirmed
                       ? "Su cuenta ya está creada y la sesión, iniciada."
                       : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
+                    /* #1196: la historia completa empieza acá -- antes la
+                       confirmación no mencionaba la verificación de correo,
+                       aunque el enlace ya viaja apenas se crea la cuenta. */
+                    "Verifique su correo: le enviamos un enlace de confirmación.",
                     /* #348: "Mis pagos" no tiene ningún botón para el primer
                        pago -- registrarlo requiere una membresía que todavía
                        no existe, y crearla es una acción exclusiva del
@@ -1279,7 +1283,7 @@ function EnrollWizard(): React.ReactElement {
                        la misma que ya dice student-utils.ts para ese estado
                        ("El club crea la membresía al registrar el primer
                        pago. Acérquese a administración..."). */
-                    "Acérquese a administración o escríbanos por WhatsApp para registrar su primer pago.",
+                    "Acérquese a administración o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
                     "El club lo valida y ahí se activa la membresía.",
                   ].map((linea) => (
                     <li key={linea} className="flex items-start gap-3 text-sm text-ink-2">
