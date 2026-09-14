@@ -232,7 +232,11 @@ class EnrollmentServicio:
                 apellidos=datos.alumno.apellidos,
                 cedula=datos.alumno.cedula,
                 fecha_nacimiento=datos.alumno.fecha_nacimiento,
-                telefono=datos.alumno.telefono,
+                # Issue #1197: `Persona.telefono` no es nullable -- un menor
+                # representado sin celular propio (`EnrollmentAlumnoDTO.
+                # telefono` opcional) persiste como "", el mismo valor que
+                # `_exigir_telefono_valido` ya tolera como "sin teléfono".
+                telefono=datos.alumno.telefono or "",
                 representante_id=representante_id,
                 institucion_id=datos.alumno.institucion_id,
             )

@@ -48,6 +48,24 @@ describe("buildEnrollmentRequest", () => {
     expect(request).not.toHaveProperty("credencialesMenor");
   });
 
+  /**
+   * Issue #1197: a represented minor has no phone of their own — the
+   * emergency contact already derives from the representative (#1138), so
+   * the key is omitted entirely rather than sent as "" (which the backend's
+   * `TelefonoValidado` explicitly rejects as blank).
+   */
+  it("omits the student's phone entirely on a child enrollment", () => {
+    const request = buildEnrollmentRequest(form({
+      enrollmentType: "child", fechaNacimiento: "2015-06-15",
+      nombreRepresentante: "Marta", apellidosRepresentante: "Pérez",
+      cedulaRepresentante: "0998765432", fechaNacimientoRepresentante: "1985-04-10",
+      telefonoRepresentante: "0991234567", correoRepresentante: "marta@example.com",
+      contraseniaRepresentante: "password8",
+    }));
+    expect(request.alumno).not.toHaveProperty("telefono");
+    expect(JSON.stringify(request.alumno)).not.toContain("telefono");
+  });
+
   /** Issue #876: the confirmation is strictly a UI field — it never reaches the request built for the backend. */
   it("never includes the confirmation fields in the built request", () => {
     const request = buildEnrollmentRequest(form({
