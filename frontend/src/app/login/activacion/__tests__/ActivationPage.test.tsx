@@ -373,3 +373,24 @@ describe("ActivationPage — the corner exit", () => {
     expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ hideBack: true }));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #1195 — this gate is reached by a parent enrolling a child, not by
+// staff signing in to manage the club.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — the eyebrow is not the admin one", () => {
+  it("passes a non-admin eyebrow on the email screen", async () => {
+    renderPending(pendingSession());
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
+  });
+
+  it("passes a non-admin eyebrow on the enrolment screen", async () => {
+    renderPending(pendingSession({ correoVerificado: true }));
+
+    await screen.findByRole("button", { name: "Consultar estado nuevamente" });
+    expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
+  });
+});

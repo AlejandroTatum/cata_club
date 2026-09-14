@@ -173,7 +173,12 @@ function ActivationPageContent(): React.ReactElement {
   // another one.
   if (!correoVerificado) {
     return (
-      <AuthShell title="Verifique su correo" subtitle={emailScreenSubtitle(activation, altaCompletada)} hideBack>
+      <AuthShell
+        title="Verifique su correo"
+        subtitle={emailScreenSubtitle(activation, altaCompletada)}
+        eyebrow="Acceso al club"
+        hideBack
+      >
         <div className="flex flex-col gap-4">
           <Button type="button" variant="primary" onClick={checkStatus} disabled={resending} className="w-full">
             Ya verifiqué mi correo
@@ -209,7 +214,7 @@ function ActivationPageContent(): React.ReactElement {
   // It is completed at the club by staff — there is nothing to submit here,
   // only the status to re-check once it lands.
   return (
-    <AuthShell title="Complete su inscripción en el club" hideBack>
+    <AuthShell title="Complete su inscripción en el club" eyebrow="Acceso al club" hideBack>
       <div className="flex flex-col gap-4">
         {/*
          * `aria-live="polite"`: this screen replaces the email screen in

@@ -194,6 +194,18 @@ export interface AuthShellProps {
    * the exit exactly as before.
    */
   hideBack?: boolean;
+  /**
+   * The card's micro-label, above the title (#1195).
+   *
+   * Defaults to "Panel de gestión" — accurate for /login, /forgot-password
+   * and /reset-password, which exist to reach the administrator's own
+   * panel. It is wrong for /login/activacion: the person reading it there
+   * is a parent enrolling a child, not staff signing in to manage the club,
+   * and "Panel de gestión" (plus the root layout's "Cata Club Admin" title)
+   * told them otherwise. Callers on a visitor-facing screen pass their own,
+   * e.g. "Acceso al club".
+   */
+  eyebrow?: string;
   /** The screen's form, rendered inside the elevated card. */
   children: React.ReactNode;
 }
@@ -207,6 +219,7 @@ export default function AuthShell({
   note,
   backHref = "/",
   hideBack = false,
+  eyebrow = "Panel de gestión",
   children,
 }: AuthShellProps): React.ReactElement {
   const years = yearsSinceFounding();
@@ -591,7 +604,7 @@ export default function AuthShell({
            * red it replaces measures 4.10:1 and never did.
            */}
           <p className="text-2xs font-bold uppercase tracking-caps-wide text-ink-3">
-            Panel de gestión
+            {eyebrow}
           </p>
           {/*
            * Graduate, and the same correction `PageHeader` already made one

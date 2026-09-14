@@ -318,7 +318,7 @@ function LoginPageContent(): React.ReactElement {
   const invalidFieldClasses = credentialsRejected ? " border-state-bad" : "";
 
   return (
-    <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar">
+    <AuthShell title="Bienvenido de nuevo" subtitle="Inicie sesión para continuar" eyebrow="Acceso al club">
       {/* Issue #353/#1057: a redirect that lost the admin's session mid-form,
           or landed here right after a successful email verification, used to
           arrive with nothing to explain it — the toast on a FAILED login
