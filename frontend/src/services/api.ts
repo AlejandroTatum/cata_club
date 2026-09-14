@@ -1059,7 +1059,11 @@ interface PaginatedEnvelope<T> {
 
 /** Submit one public, backend-transactional enrollment request. */
 export async function enrollStudent(data: EnrollmentRequest): Promise<EnrollmentResponse> {
-  const response: unknown = await request<unknown>(apiEndpoint("/enrollment/"), {
+  // No trailing slash (issue #1198): the Next.js route lives at
+  // src/app/api/enrollment/route.ts, no trailing segment. Posting to
+  // "/enrollment/" made every submission take a 308 redirect before landing
+  // on the real handler.
+  const response: unknown = await request<unknown>(apiEndpoint("/enrollment"), {
     method: "POST",
     body: JSON.stringify(data),
   });
