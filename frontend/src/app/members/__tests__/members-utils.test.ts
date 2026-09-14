@@ -16,6 +16,8 @@ import {
   filterAccounts,
   getAccountStatusBadge,
   getAccountStateBadge,
+  getMembershipStatusBadge,
+  isRepresentativeOnlyAccount,
   normalizeText,
   accountMatchesFlag,
   countAccountsMatchingFlag,
@@ -167,6 +169,48 @@ describe("buildMemberStats", () => {
     // Pending payments: Mateo (stu-002), Emilia (stu-003), Santiago (stu-007).
     const stats = buildMemberStats(MOCK_MEMBER_ACCOUNTS);
     expect(stats.pendingPayments).toBe(3);
+  });
+
+  // Issue #1199: the KPI's "Pagos pendientes … por validar" tile and the
+  // "Pago pendiente" filter chip used to disagree (0 vs 15 on the same
+  // screen) because the KPI additionally filtered through
+  // `isOperationalStudent`, which excludes a just-created backend INACTIVA
+  // membership — even though its very first payment IS awaiting validation.
+  it("counts a just-created (INACTIVA) membership's own pending first payment toward the KPI, same as the chip", () => {
+    const account: MemberAccount = {
+      id: "inactiva-pendiente",
+      role: "estudiante",
+      nombres: "Nueva",
+      apellidos: "Inscripción",
+      telefono: "+593 90 000 0002",
+      estudiantes: [
+        {
+          id: "inactiva-pendiente",
+          nombres: "Nueva",
+          apellidos: "Inscripción",
+          activo: true,
+          membresia: {
+            id: 950,
+            tipo: "Adultos",
+            estado: "vencida",
+            estadoBackend: "INACTIVA",
+            fechaInicio: "",
+            fechaFin: "",
+            monto: 35,
+          },
+          ultimoPago: { estado: "pendiente_validacion", fechaPago: "2026-07-01", monto: 35, periodo: "Julio 2026" },
+        },
+      ],
+    };
+    const stats = buildMemberStats([account]);
+    expect(stats.pendingPayments).toBe(1);
+    expect(countAccountsMatchingFlag([account], "pendiente")).toBe(1);
+    expect(stats.pendingPayments).toBe(countAccountsMatchingFlag([account], "pendiente"));
+  });
+
+  it("keeps buildMemberStats.pendingPayments and the 'pendiente' chip count in agreement over the shared mock data", () => {
+    const stats = buildMemberStats(MOCK_MEMBER_ACCOUNTS);
+    expect(stats.pendingPayments).toBe(countAccountsMatchingFlag(MOCK_MEMBER_ACCOUNTS, "pendiente"));
   });
 
   it("keeps a suspended member counted (they HAVE a membership) but excludes them from the pending-payment chip", () => {
@@ -550,6 +594,216 @@ describe("getAccountStatusBadge", () => {
       tone: "neutral",
     });
   });
+
+  // Issue #1199: a just-created backend INACTIVA membership used to read
+  // the SAME "Membresía vencida" an actually lapsed membership does
+  // (`MEMBERSHIP_STATUS_BY_ESTADO` folds both into `estado: "vencida"`) —
+  // only `estadoBackend`, the raw enum, tells them apart.
+  function buildInactivaAccount(ultimoPago: MemberAccount["estudiantes"][number]["ultimoPago"]): MemberAccount {
+    return {
+      id: "inactiva-acct",
+      role: "estudiante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0001",
+      estudiantes: [
+        {
+          id: "inactiva-acct",
+          nombres: "Marta",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: {
+            id: 900,
+            tipo: "Adultos",
+            estado: "vencida",
+            estadoBackend: "INACTIVA",
+            fechaInicio: "",
+            fechaFin: "",
+            monto: 35,
+          },
+          ultimoPago,
+        },
+      ],
+    };
+  }
+
+  it('never reads a just-created INACTIVA membership as "Membresía vencida"', () => {
+    expect(getAccountStatusBadge(buildInactivaAccount(null)).label).not.toBe("Membresía vencida");
+  });
+
+  it('returns "Sin activar" + neutral for an INACTIVA membership with no payment awaiting review', () => {
+    expect(getAccountStatusBadge(buildInactivaAccount(null))).toEqual({
+      label: "Sin activar",
+      tone: "neutral",
+    });
+  });
+
+  it('returns "Pago pendiente de validación" for an INACTIVA membership whose first payment IS awaiting review', () => {
+    expect(
+      getAccountStatusBadge(
+        buildInactivaAccount({
+          estado: "pendiente_validacion",
+          fechaPago: "2026-07-01",
+          monto: 35,
+          periodo: "Julio 2026",
+        }),
+      ),
+    ).toEqual({ label: "Pago pendiente de validación", tone: "warn" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getMembershipStatusBadge (issue #1199)
+// ---------------------------------------------------------------------------
+
+describe("getMembershipStatusBadge", () => {
+  it('returns "Sin membresía" + neutral when there is no membership', () => {
+    expect(getMembershipStatusBadge({ membresia: null, ultimoPago: null })).toEqual({
+      label: "Sin membresía",
+      tone: "neutral",
+    });
+  });
+
+  it("reads a real ACTIVA/VENCIDA/SUSPENDIDA membership unchanged", () => {
+    expect(
+      getMembershipStatusBadge({
+        membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+        ultimoPago: null,
+      }),
+    ).toEqual({ label: "Activa", tone: "ok" });
+
+    expect(
+      getMembershipStatusBadge({
+        membresia: { id: 1, tipo: "Adultos", estado: "vencida", fechaInicio: "", fechaFin: "", monto: 35 },
+        ultimoPago: null,
+      }),
+    ).toEqual({ label: "Vencida", tone: "bad" });
+  });
+
+  it('returns "Sin activar" + neutral for a backend INACTIVA membership with no payment awaiting review', () => {
+    expect(
+      getMembershipStatusBadge({
+        membresia: {
+          id: 1,
+          tipo: "Adultos",
+          estado: "vencida",
+          estadoBackend: "INACTIVA",
+          fechaInicio: "",
+          fechaFin: "",
+          monto: 35,
+        },
+        ultimoPago: null,
+      }),
+    ).toEqual({ label: "Sin activar", tone: "neutral" });
+  });
+
+  it('returns "Pago pendiente" + warn for a backend INACTIVA membership with a payment awaiting review', () => {
+    expect(
+      getMembershipStatusBadge({
+        membresia: {
+          id: 1,
+          tipo: "Adultos",
+          estado: "vencida",
+          estadoBackend: "INACTIVA",
+          fechaInicio: "",
+          fechaFin: "",
+          monto: 35,
+        },
+        ultimoPago: { estado: "pendiente_validacion", fechaPago: "2026-07-01", monto: 35, periodo: "Julio 2026" },
+      }),
+    ).toEqual({ label: "Pago pendiente", tone: "warn" });
+  });
+
+  it('never returns "Vencida" for a backend INACTIVA membership', () => {
+    expect(
+      getMembershipStatusBadge({
+        membresia: {
+          id: 1,
+          tipo: "Adultos",
+          estado: "vencida",
+          estadoBackend: "INACTIVA",
+          fechaInicio: "",
+          fechaFin: "",
+          monto: 35,
+        },
+        ultimoPago: null,
+      }).label,
+    ).not.toBe("Vencida");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isRepresentativeOnlyAccount (issue #1199)
+// ---------------------------------------------------------------------------
+
+describe("isRepresentativeOnlyAccount", () => {
+  it("is true for a representative with no membership of her own on file", () => {
+    const account: MemberAccount = {
+      id: "rep-only",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      estudiantes: [
+        { id: "rep-only", nombres: "Marta", apellidos: "Reyes", activo: true, membresia: null, ultimoPago: null },
+      ],
+    };
+    expect(isRepresentativeOnlyAccount(account)).toBe(true);
+  });
+
+  it("is true for a representative with no estudiantes at all", () => {
+    const account: MemberAccount = {
+      id: "rep-empty",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      estudiantes: [],
+    };
+    expect(isRepresentativeOnlyAccount(account)).toBe(true);
+  });
+
+  it("is false for a representative who is also a player on her own row", () => {
+    const account: MemberAccount = {
+      id: "rep-jugadora",
+      role: "representante",
+      nombres: "Marta",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      estudiantes: [
+        {
+          id: "rep-jugadora",
+          nombres: "Marta",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+          ultimoPago: null,
+        },
+      ],
+    };
+    expect(isRepresentativeOnlyAccount(account)).toBe(false);
+  });
+
+  it("is false for a role: estudiante account even with no membership yet", () => {
+    const account: MemberAccount = {
+      id: "estudiante-sin-membresia",
+      role: "estudiante",
+      nombres: "Sofía",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      estudiantes: [
+        {
+          id: "estudiante-sin-membresia",
+          nombres: "Sofía",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: null,
+          ultimoPago: null,
+        },
+      ],
+    };
+    expect(isRepresentativeOnlyAccount(account)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -807,6 +1061,30 @@ describe("accountMatchesFlag", () => {
       estudiantes: [{ ...account.estudiantes[0], membresia: null }],
     };
     expect(accountMatchesFlag(noVencida, "vencida")).toBe(false);
+  });
+
+  // Issue #1199: `estado: "vencida"` alone also matches a just-created
+  // backend INACTIVA membership — the "Membresía vencida" chip must not
+  // count it, the same way `getAccountStatusBadge` no longer labels it.
+  it('"vencida" excludes a backend INACTIVA membership even though estado also folds to "vencida"', () => {
+    const account: MemberAccount = {
+      ...MOCK_MEMBER_ACCOUNTS[0],
+      estudiantes: [
+        {
+          ...MOCK_MEMBER_ACCOUNTS[0].estudiantes[0],
+          membresia: {
+            tipo: "mensual",
+            estado: "vencida",
+            estadoBackend: "INACTIVA",
+            fechaInicio: "2026-01-01",
+            fechaFin: "2026-02-01",
+            monto: 85,
+            id: 42,
+          },
+        },
+      ],
+    };
+    expect(accountMatchesFlag(account, "vencida")).toBe(false);
   });
 
   it('"pendiente" only matches accounts with at least one pending payment', () => {

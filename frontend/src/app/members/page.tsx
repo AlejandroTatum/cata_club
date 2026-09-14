@@ -73,12 +73,12 @@ import {
   countAccountsMatchingFlag,
   getAccountStatusBadge,
   getAccountStateBadge,
+  getMembershipStatusBadge,
+  isRepresentativeOnlyAccount,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
   MEMBERS_AGGREGATE_LIMIT,
-  MEMBERSHIP_STATUS_LABELS,
-  MEMBERSHIP_STATUS_TONE,
   PAYMENT_STATUS_LABELS,
   PAYMENT_STATUS_TONE,
   getPayerTypeLabel,
@@ -207,12 +207,7 @@ function StudentEditPanel({ student }: StudentRowProps): React.ReactElement {
     : NaN;
   const age = Number.isNaN(rawAge) ? null : rawAge;
 
-  const membershipLabel = student.membresia
-    ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]
-    : "Sin membresía";
-  const membershipTone = student.membresia
-    ? MEMBERSHIP_STATUS_TONE[student.membresia.estado]
-    : "neutral";
+  const { label: membershipLabel, tone: membershipTone } = getMembershipStatusBadge(student);
   const paymentLabel = student.ultimoPago
     ? PAYMENT_STATUS_LABELS[student.ultimoPago.estado]
     : "Sin pagos";
@@ -434,6 +429,10 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
+  // Issue #1199: a representative-only row (badge "Representante", no
+  // membership of her own) has no student to show a ficha médica or a
+  // payment for — hiding these keeps "Editar" as the only action offered.
+  const showStudentActions = !isRepresentativeOnlyAccount(account);
 
   return (
     <TableRow>
@@ -459,8 +458,8 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       </TableCell>
       <TableCell type="action">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <MedicalRecordAccessButton account={account} onMedical={onMedical} />
-          <PaymentsAccessButton account={account} onPayments={onPayments} />
+          {showStudentActions && <MedicalRecordAccessButton account={account} onMedical={onMedical} />}
+          {showStudentActions && <PaymentsAccessButton account={account} onPayments={onPayments} />}
           <EditAccountButton account={account} onEdit={onEdit} />
         </div>
       </TableCell>
@@ -472,6 +471,8 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
 function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
+  // Issue #1199: same rule as `AccountRow` above.
+  const showStudentActions = !isRepresentativeOnlyAccount(account);
 
   return (
     <DataRow
@@ -500,8 +501,8 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
       }
       actions={
         <>
-          <MedicalRecordAccessButton account={account} onMedical={onMedical} />
-          <PaymentsAccessButton account={account} onPayments={onPayments} />
+          {showStudentActions && <MedicalRecordAccessButton account={account} onMedical={onMedical} />}
+          {showStudentActions && <PaymentsAccessButton account={account} onPayments={onPayments} />}
           <EditAccountButton account={account} onEdit={onEdit} />
         </>
       }
@@ -1324,6 +1325,7 @@ export default function MembersPage(): React.ReactElement {
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
             onMembresiaChanged={() => void loadMembers({ silent: true })}
+            onPaymentRegistered={() => void loadMembers({ silent: true })}
           />
         )}
         {/* Issue #505: direct entry points, mutually exclusive with the
@@ -1340,6 +1342,7 @@ export default function MembersPage(): React.ReactElement {
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
             onMembresiaChanged={() => void loadMembers({ silent: true })}
+            onPaymentRegistered={() => void loadMembers({ silent: true })}
           />
         )}
       </AppShell>
