@@ -155,7 +155,7 @@ function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
   const alumno = value.alumno;
   const fichaMedica = value.fichaMedica;
   const hasRepresentative = isRepresentative(value.representante);
-  if (!isStudent(alumno) || !isMedicalRecord(fichaMedica, hasRepresentative)) return false;
+  if (!isStudent(alumno, hasRepresentative) || !isMedicalRecord(fichaMedica, hasRepresentative)) return false;
   if (value.aceptaConsentimientos !== true) return false;
   // Issue #860: mirrors the wizard's `emergencyPhoneDiffersRule` at the
   // boundary, same as `isValidEcuadorianPhone` above does for `phoneRule` —
@@ -182,16 +182,25 @@ function isEnrollmentRequest(value: unknown): value is EnrollmentRequest {
 }
 
 function isRepresentative(value: unknown): boolean {
-  return isStudent(value) && isCredentials(value) && isNonEmptyString(value.fechaNacimiento);
+  // The representative is never the "child" branch here: their own phone is
+  // always required, same as a self-enrolling student's.
+  return isStudent(value, false) && isCredentials(value) && isNonEmptyString(value.fechaNacimiento);
 }
 
-function isStudent(value: unknown): value is JsonRecord {
+/**
+ * Issue #1197: mirrors `isMedicalRecord`'s `isChild` gate. A represented
+ * minor has no phone of their own — the emergency contact derives from the
+ * representative — so `telefono` is required only when there is no
+ * representative (the self/adult path, or the representative's own record
+ * via `isRepresentative` above, which always passes `false`).
+ */
+function isStudent(value: unknown, isChild: boolean): value is JsonRecord {
   return isRecord(value) &&
     isNonEmptyString(value.nombres) &&
     isNonEmptyString(value.apellidos) &&
     isCedula(value.cedula) &&
     isDate(value.fechaNacimiento) &&
-    isNonEmptyString(value.telefono) &&
+    (isChild || isNonEmptyString(value.telefono)) &&
     isOptionalNumber(value.institucionId);
 }
 
