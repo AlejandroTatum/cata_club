@@ -155,7 +155,11 @@ describe("ActivationPage — the email screen", () => {
     renderPending(pendingSession());
 
     expect(await screen.findByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
-    expect(lastSubtitle()).toContain("Después queda un paso: la inscripción presencial en el club.");
+    expect(lastSubtitle()).toContain(
+      "Después queda un paso: acérquese al club o escríbanos por WhatsApp para " +
+        "registrar la inscripción y el primer pago; el club lo valida y ahí se " +
+        "activa la membresía.",
+    );
     // No trace of the checklist/summary/inline-form screen this replaces.
     expect(screen.queryByLabelText(/código o enlace de verificación/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inscripción presencial completada")).not.toBeInTheDocument();
@@ -348,6 +352,44 @@ describe("ActivationPage — the enrolment screen", () => {
 
     await screen.findByText("Su correo quedó verificado.");
     expect(screen.getAllByText("Correo verificado")).toHaveLength(1);
+  });
+
+  // Issue #1196: the enrolment screen's own body tells the same story as the
+  // wizard summary and the success screen — register the enrolment and the
+  // first payment in person at the club or by WhatsApp, and the club
+  // validates it before the membership activates.
+  it("tells the club-registers-enrolment-and-payment story in its body", async () => {
+    renderPending(enrolmentPendingSession());
+
+    expect(
+      await screen.findByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/el club lo\s*valida y ahí se activa la membresía/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1196: neither screen tells a different story than the wizard —
+// dropping proof-of-payment uploads and self-service linking, both retired.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — one consistent story about what follows enrolment (#1196)", () => {
+  it("email screen never mentions uploading proof of payment or linking a represented person", async () => {
+    renderPending(pendingSession());
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+
+  it("enrolment screen never mentions uploading proof of payment or linking a represented person", async () => {
+    renderPending(pendingSession({ correoVerificado: true }));
+
+    await screen.findByRole("button", { name: "Consultar estado nuevamente" });
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
   });
 });
 
