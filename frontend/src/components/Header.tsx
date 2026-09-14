@@ -53,6 +53,7 @@ import {
 import { isMinor } from "@/app/student/student-utils";
 import { hidesTopHeader } from "@/lib/shell-routes";
 import { SITE_NAV_SECTIONS, siteSectionHref } from "@/lib/site-navigation";
+import { isActivationComplete } from "@/lib/activation-reasons";
 import { useNotificaciones } from "@/lib/useNotificaciones";
 import NotificationBell from "@/components/NotificationBell";
 import { AccountMenu, AccountMobileItems } from "@/components/AccountControls";
@@ -361,8 +362,13 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
   const [menuOpen, setMenuOpen] = useState(false);
   const { isAuthenticated, session, logout, isLoading } = useAuth();
   const links = useNavLinks();
+  // Issue #1198: the backend refuses every request outside the limited auth
+  // surface with 403 while activation is pending (`GestorAutenticacion.
+  // decodificar_token`), so the poll must wait for the same gate decision
+  // `isActivationComplete` already owns — never a role check, a REPRESENTANTE
+  // with completed activation keeps polling like anyone else.
   const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
-    useNotificaciones(isAuthenticated && !!session);
+    useNotificaciones(isAuthenticated && !!session && isActivationComplete(session));
 
   const closeMenu = useCallback((): void => setMenuOpen(false), []);
 

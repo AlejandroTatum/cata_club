@@ -140,7 +140,7 @@ export async function enrollNewPlayerViaWizard(page: Page, player: NewPlayer): P
 
 /**
  * Crea el mismo Jugador que `enrollNewPlayerViaWizard`, pero por API
- * (`POST /api/enrollment/`) en vez de por UI.
+ * (`POST /api/enrollment`) en vez de por UI.
  *
  * Solo lo usa `recuperacion-contrasenia.live.spec.ts`, donde el alta NO es lo
  * que el spec certifica -- necesita una cuenta real para pedirle una
@@ -153,7 +153,7 @@ export async function enrollNewPlayerViaApi(
   request: APIRequestContext,
   player: NewPlayer,
 ): Promise<void> {
-  const response = await request.post(`${E2E_BASE_URL}/api/enrollment/`, {
+  const response = await request.post(`${E2E_BASE_URL}/api/enrollment`, {
     data: {
       alumno: {
         nombres: player.nombres,

@@ -97,6 +97,7 @@ import {
   createAuthenticatedAuth,
   createLoadingAuth,
   createMultiRoleAuth,
+  createMockSession,
 } from "./test-utils";
 
 const mockUseAuth = vi.mocked(useAuth);
@@ -632,6 +633,39 @@ describe("Header", (): void => {
 
     expect(screen.getAllByRole("button", { name: /notificaciones/i }).length).toBe(2);
     // One Header-level hook call feeds both — not one fetch per bell.
+    expect(mockFetchNotificaciones).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #1198: the backend refuses every request outside the limited auth
+  // surface with 403 while activation is pending — the poll must wait for
+  // `activacionCompleta`, not just "authenticated", or an enrolment-success
+  // screen / the activation gate / a login redirect all log a 403 on mount.
+  it("does not fetch notifications while activation is pending", (): void => {
+    const session = { ...createMockSession(), activacionCompleta: false };
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante", "Test User", { session }));
+
+    render(<Header />);
+
+    expect(mockFetchNotificaciones).not.toHaveBeenCalled();
+  });
+
+  it("fetches notifications for an activated player session", (): void => {
+    const session = { ...createMockSession(), activacionCompleta: true };
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("estudiante", "Test User", { session }));
+
+    render(<Header />);
+
+    expect(mockFetchNotificaciones).toHaveBeenCalledTimes(1);
+  });
+
+  // No role gating: a REPRESENTANTE with completed activation keeps polling
+  // like anyone else (test_representante_pagina_su_feed_y_el_de_sus_hijos).
+  it("fetches notifications for an activated representante session", (): void => {
+    const session = { ...createMockSession(), activacionCompleta: true };
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("representante", "Test User", { session }));
+
+    render(<Header />);
+
     expect(mockFetchNotificaciones).toHaveBeenCalledTimes(1);
   });
 
