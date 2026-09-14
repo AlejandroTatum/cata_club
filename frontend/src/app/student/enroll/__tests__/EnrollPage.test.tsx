@@ -182,7 +182,7 @@ describe("EnrollPage — autocomplete on the representative step", () => {
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
     fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
+    // Issue #1197: a represented minor has no phone field on this step.
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     // The representative step's own fields carry PLAIN labels ("Nombres",
@@ -197,6 +197,49 @@ describe("EnrollPage — autocomplete on the representative step", () => {
     expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
     expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
+  });
+});
+
+// Issue #1197: a represented minor has no phone of their own — the summary
+// shows the representative's own cédula and phone instead.
+describe("EnrollPage — the summary on the representative path (#1197)", () => {
+  function fillChildStudentStep(): void {
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
+  }
+
+  function fillRepresentativeStep(): void {
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Torres" } });
+    fillBirthDate(enrollFieldId("fechaNacimientoRepresentante"), "1990-05-20");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991112233" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
+  }
+
+  it("shows the representative's cédula and phone, not the (absent) student phone", async () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillChildStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillRepresentativeStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();
+    // The student's own phone row never rendered — it has nothing to show.
+    expect(screen.queryByText("Teléfono")).not.toBeInTheDocument();
+    // The representative's cédula and phone appear instead, each with its
+    // own "Corregir" pointing back at the representative step.
+    expect(screen.getByText("Cédula del representante")).toBeInTheDocument();
+    expect(screen.getByText("Teléfono del representante")).toBeInTheDocument();
+    expect(screen.getByText("0991112233")).toBeInTheDocument();
   });
 });
 
@@ -822,7 +865,7 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
     fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
+    // Issue #1197: a represented minor has no phone field on this step.
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   }
 

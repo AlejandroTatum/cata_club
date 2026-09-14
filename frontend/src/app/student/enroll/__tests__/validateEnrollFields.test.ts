@@ -88,6 +88,14 @@ describe("fieldsForStep", () => {
     expect(fieldsForStep("personal", "child")).not.toContain("contraseniaConfirmacion");
   });
 
+  /** Issue #1197: a represented minor has no phone of their own — the
+   *  emergency contact already derives from the representative (#1138), so
+   *  the child path's own student step never asks for one either. */
+  it("never blames the student's phone on a child enrollment's own student step", () => {
+    expect(fieldsForStep("personal", "child")).not.toContain("telefono");
+    expect(fieldsForStep("personal", "self")).toContain("telefono");
+  });
+
   it("has nothing to validate on the type and summary steps", () => {
     expect(fieldsForStep("type", "self")).toEqual([]);
     expect(fieldsForStep("summary", "child")).toEqual([]);
@@ -114,6 +122,16 @@ describe("validateEnrollFields", () => {
     // celular-or-landline sentence.
     expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
       .toBe("Escriba los 9 dígitos de su celular después del +593 (por ejemplo, 991234567).");
+  });
+
+  /** Issue #1197: an empty student phone never blocks the child path's
+   *  personal step — the field is not validated there at all. */
+  it("never blames an empty student phone on a child enrollment", () => {
+    const errors = validateEnrollFields(
+      "personal",
+      validForm({ enrollmentType: "child", fechaNacimiento: "2015-06-15", telefono: "" }),
+    );
+    expect(errors.telefono).toBeUndefined();
   });
 
   it("blames the birth date for the minors rule on a self enrollment", () => {
