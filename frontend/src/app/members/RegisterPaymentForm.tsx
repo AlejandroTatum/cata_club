@@ -35,11 +35,16 @@ interface RegisterPaymentFormProps {
   personaId: number;
   /** Only rendered when the student has one — its id and monthly price drive the whole form. */
   membresia: NonNullable<MemberStudentSummary["membresia"]>;
+  /** Issue #1199: called right after a successful registration so the
+   *  caller can refetch and show it — optional so callers/tests that don't
+   *  need a refresh (e.g. the standalone form tests) can omit it. */
+  onPaymentRegistered?: () => void;
 }
 
 export default function RegisterPaymentForm({
   personaId,
   membresia,
+  onPaymentRegistered,
 }: RegisterPaymentFormProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const monthlyPrice = membresia.monto != null ? Number(membresia.monto) : 0;
@@ -242,6 +247,9 @@ export default function RegisterPaymentForm({
       setOpen(false);
       setVoucherFile(null);
       showSuccess("Pago registrado correctamente.");
+      // Issue #1199: refresh the caller's data instead of asking the admin
+      // to reload manually — the message below no longer has to say so.
+      onPaymentRegistered?.();
     } catch (err) {
       // Issue #666: a 422 on THIS payload (`meses`, `tipoPago`, `personaId`,
       // `membresiaId`) can only realistically come from the backend's own
@@ -284,7 +292,7 @@ export default function RegisterPaymentForm({
     return (
       <p className="flex items-center gap-1 text-xs text-state-ok">
         <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        Pago registrado. Recarga para verlo.
+        Pago registrado.
       </p>
     );
   }

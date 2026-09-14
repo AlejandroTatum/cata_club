@@ -32,6 +32,9 @@ export interface MembresiaCallbacks {
   /** Called after a suspend/reactivate/cambiar-plan write (issue #400,
    *  criterios 1/3). */
   onMembresiaChanged: () => void;
+  /** Called after a payment is registered (issue #1199) so the page can
+   *  refetch and show it, instead of asking the admin to reload manually. */
+  onPaymentRegistered: () => void;
 }
 
 interface StudentMembershipActionsProps extends MembresiaCallbacks {
@@ -58,6 +61,7 @@ export default function StudentMembershipActions({
   onMembershipCreated,
   onDebtRegularized,
   onMembresiaChanged,
+  onPaymentRegistered,
 }: StudentMembershipActionsProps): React.ReactElement {
   const membresia = student.membresia;
   if (!student.activo) {
@@ -97,7 +101,7 @@ export default function StudentMembershipActions({
     />
   );
   const registerPayment = membresia && (
-    <RegisterPaymentForm personaId={personaId} membresia={membresia} />
+    <RegisterPaymentForm personaId={personaId} membresia={membresia} onPaymentRegistered={onPaymentRegistered} />
   );
   const primaryAction = hasDebt
     ? { name: "regularizar-deuda", content: regularizeDebt }

@@ -204,7 +204,12 @@ vi.mock("@/services/api", () => {
 
 const ACCOUNT: MemberAccount = {
   id: "1",
-  role: "representante",
+  // Issue #1199: this fixture models an ordinary Ficha médica/Pagos row —
+  // "estudiante", not "representante", so it does not hit the new
+  // representative-only hiding this issue adds (see `isRepresentativeOnlyAccount`
+  // and its own dedicated tests). A pure representative-only row is covered
+  // separately below.
+  role: "estudiante",
   nombres: "María",
   apellidos: "González",
   telefono: "0999999999",
@@ -4102,5 +4107,77 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
       expect(within(row).getByText("Sin membresía")).toBeInTheDocument();
       expect(within(row).getByText("Inactiva")).toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Representative-only row actions (issue #1199)
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — representative-only row actions (issue #1199)", () => {
+  const REPRESENTATIVE_ONLY_ACCOUNT: MemberAccount = {
+    id: "rep-only",
+    role: "representante",
+    nombres: "Laura",
+    apellidos: "Suárez",
+    telefono: "0988888888",
+    estudiantes: [
+      {
+        id: "20",
+        nombres: "Laura",
+        apellidos: "Suárez",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [REPRESENTATIVE_ONLY_ACCOUNT] });
+  });
+
+  it('hides "Ficha médica" and "Pagos" for a representative-only row, keeping "Editar"', async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const matches = await screen.findAllByText("Laura Suárez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+    expect(within(row).queryByRole("button", { name: /^ficha médica/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+  });
+
+  it('still offers "Ficha médica" and "Pagos" once the representative also carries her own membership', async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [
+        {
+          ...REPRESENTATIVE_ONLY_ACCOUNT,
+          estudiantes: [
+            {
+              ...REPRESENTATIVE_ONLY_ACCOUNT.estudiantes[0],
+              membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const matches = await screen.findAllByText("Laura Suárez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
   });
 });
