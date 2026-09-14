@@ -257,7 +257,7 @@ async function mockEnrollment(
   page: Page,
   response: { status: number; body: unknown },
 ): Promise<void> {
-  await page.route("**/api/enrollment/", (route: Route) =>
+  await page.route("**/api/enrollment", (route: Route) =>
     route.fulfill({
       status: response.status,
       contentType: "application/json",
@@ -1009,7 +1009,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
   test("S07 · doble clic en confirmar no envía la inscripción dos veces", async ({ page }) => {
     await goToSummary(page);
     let calls = 0;
-    await page.route("**/api/enrollment/", async (route: Route) => {
+    await page.route("**/api/enrollment", async (route: Route) => {
       calls += 1;
       // Una respuesta lenta es justo donde un segundo clic tiene tiempo de entrar.
       await new Promise((resolve) => setTimeout(resolve, 1_200));
@@ -1057,7 +1057,7 @@ test.describe("S07 · idempotencia de reintentos", () => {
         await goToSummary(page);
         let calls = 0;
         let retryCookie = "";
-        await page.route("**/api/enrollment/", async (route: Route) => {
+        await page.route("**/api/enrollment", async (route: Route) => {
           calls += 1;
           const cookie = route.request().headers().cookie ?? "";
           if (calls === 1) {
@@ -1427,7 +1427,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
 test.describe("X · Robustez del envío", () => {
   test("X01 · si la red se cae al confirmar, el visitante recibe un mensaje y no una pantalla muerta", async ({ page }) => {
     await goToSummary(page);
-    await page.route("**/api/enrollment/", (route: Route) => route.abort("failed"));
+    await page.route("**/api/enrollment", (route: Route) => route.abort("failed"));
 
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /confirmar inscripción/i }).click();

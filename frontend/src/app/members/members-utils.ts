@@ -351,20 +351,40 @@ function hasOperationalStudent(account: MemberAccount): boolean {
   return account.estudiantes.length === 0 || account.estudiantes.some(isActiveAccountHolder);
 }
 
-function isPendingOperationalPayment(student: MemberAccount["estudiantes"][number]): boolean {
-  return student.membresia?.estado !== "suspendida" && student.ultimoPago?.estado === "pendiente_validacion";
+/**
+ * Whether this student has a payment currently awaiting admin validation —
+ * the "por validar" definition shared by the KPI tile (`buildMemberStats`)
+ * and the "Pago pendiente" filter chip (`accountMatchesFlag`).
+ *
+ * Issue #1199: the two used to diverge — the KPI additionally filtered
+ * through `isOperationalStudent` (which excludes backend INACTIVA), so a
+ * just-created membership's very FIRST payment never counted toward "por
+ * validar" even though it is the textbook case of a payment waiting on the
+ * admin; the chip, which never applied that filter, counted it. `activo` is
+ * the same account-holder guard the chip already applied; `suspendida` stays
+ * excluded because a suspended membership does not accrue new dues to
+ * validate.
+ */
+function hasPaymentAwaitingValidation(student: MemberAccount["estudiantes"][number]): boolean {
+  return (
+    student.activo &&
+    student.membresia?.estado !== "suspendida" &&
+    student.ultimoPago?.estado === "pendiente_validacion"
+  );
 }
 
 /**
  * Build aggregate statistics from the member accounts list.
  */
 export function buildMemberStats(accounts: MemberAccount[]): MemberStats {
-  const operationalStudents = accounts.flatMap((account) => account.estudiantes).filter(isOperationalStudent);
+  const allStudents = accounts.flatMap((account) => account.estudiantes);
+  const operationalStudents = allStudents.filter(isOperationalStudent);
   return {
     totalAccounts: accounts.length,
     totalStudents: operationalStudents.length,
     activeMemberships: operationalStudents.filter((student) => student.membresia?.estado === "activa").length,
-    pendingPayments: operationalStudents.filter(isPendingOperationalPayment).length,
+    // Not filtered through `operationalStudents`: see `hasPaymentAwaitingValidation`'s doc comment.
+    pendingPayments: allStudents.filter(hasPaymentAwaitingValidation).length,
     sinDatosEmergencia: accounts.filter(
       (account) => account.sinDatosEmergencia && hasOperationalStudent(account),
     ).length,
@@ -472,11 +492,17 @@ export function accountMatchesFlag(
     case "all":
       return true;
     case "vencida":
-      return account.estudiantes.some((s) => s.activo && s.membresia?.estado === "vencida");
-    case "pendiente":
-      return account.estudiantes.some((s) =>
-        s.activo && s.membresia?.estado !== "suspendida" && s.ultimoPago?.estado === "pendiente_validacion",
+      // Issue #1199: `estado === "vencida"` alone also matches a just-created
+      // backend INACTIVA membership (`MEMBERSHIP_STATUS_BY_ESTADO` folds it
+      // into the same bucket as a real VENCIDA — see membership-status.ts).
+      // `estadoBackend` is the one field that still carries the raw enum;
+      // excluding INACTIVA here keeps this chip counting only memberships
+      // that were once current and lapsed, never one that never activated.
+      return account.estudiantes.some(
+        (s) => s.activo && s.membresia?.estado === "vencida" && s.membresia.estadoBackend !== "INACTIVA",
       );
+    case "pendiente":
+      return account.estudiantes.some(hasPaymentAwaitingValidation);
     /*
      * Issue #730. Reads the SAME field the "Sin datos de emergencia" stat
      * tile counts (`buildMemberStats`), so the tile and the chip can never
@@ -544,6 +570,8 @@ export function accountDisplayRoles(account: MemberAccount): BackendTipoRol[] {
  *  - "Activo" / ok — at least one student has an active membership.
  *  - "Pago pendiente de validación" / warn — no active memberships but a
  *    payment is awaiting review.
+ *  - "Sin activar" / neutral — a just-created (backend INACTIVA) membership
+ *    with no payment awaiting review (issue #1199).
  *  - the specific failure / bad — otherwise.
  */
 export function getAccountStatusBadge(account: MemberAccount): {
@@ -563,6 +591,15 @@ export function getAccountStatusBadge(account: MemberAccount): {
   ) {
     return { label: "Pago pendiente de validación", tone: "warn" };
   }
+  // Issue #1199: `MEMBERSHIP_STATUS_BY_ESTADO` folds a just-created backend
+  // INACTIVA membership into the same `"vencida"` bucket as a real VENCIDA
+  // (see membership-status.ts), so `estado` alone cannot tell them apart —
+  // only `estadoBackend`, the raw enum, can. Checked BEFORE the "vencida"
+  // branch below so an INACTIVA membership — never active, first payment
+  // not (or no longer) awaiting validation — never reads as "vencida".
+  if (account.estudiantes.some((a) => a.membresia?.estadoBackend === "INACTIVA")) {
+    return { label: "Sin activar", tone: "neutral" };
+  }
   if (account.estudiantes.some((a) => a.membresia?.estado === "vencida")) {
     return { label: "Membresía vencida", tone: "bad" };
   }
@@ -575,6 +612,46 @@ export function getAccountStatusBadge(account: MemberAccount): {
   // freshly registered account is in; a red badge told 29 of 44 accounts they
   // were broken when nothing had gone wrong.
   return { label: "Sin membresía", tone: "neutral" };
+}
+
+/**
+ * Membership status label for a SINGLE student — `StudentEditPanel`'s
+ * per-student "Membresía" field, distinct from `getAccountStatusBadge`'s
+ * account-level composite above.
+ *
+ * Issue #1199: a just-created backend INACTIVA membership — never active,
+ * first payment still pending or not yet made — used to read the plain
+ * `MEMBERSHIP_STATUS_LABELS[estado]` lookup, which is the SAME "Vencida" an
+ * actually lapsed membership gets (`MEMBERSHIP_STATUS_BY_ESTADO` folds both
+ * into `"vencida"`). This reads `estadoBackend`, the one field that still
+ * carries the raw enum, to tell them apart: "Pago pendiente" while a payment
+ * is queued for review, "Sin activar" once nothing is — never "Vencida".
+ */
+export function getMembershipStatusBadge(
+  student: Pick<MemberStudentSummary, "membresia" | "ultimoPago">,
+): { label: string; tone: BadgeTone } {
+  const { membresia } = student;
+  if (!membresia) return { label: "Sin membresía", tone: "neutral" };
+  if (membresia.estadoBackend === "INACTIVA") {
+    return student.ultimoPago?.estado === "pendiente_validacion"
+      ? { label: "Pago pendiente", tone: "warn" }
+      : { label: "Sin activar", tone: "neutral" };
+  }
+  return { label: MEMBERSHIP_STATUS_LABELS[membresia.estado], tone: MEMBERSHIP_STATUS_TONE[membresia.estado] };
+}
+
+/**
+ * Whether this account is a representative-only row: pays for others (or
+ * manages their own login) but has never had a membership of their own on
+ * file. Issue #1199: `MedicalRecordAccessButton`/`PaymentsAccessButton` used
+ * to render unconditionally, offering student-only actions on a row whose
+ * badge already says "Representante" and carries no membership at all.
+ * `role === "estudiante"` accounts are never hidden here even before their
+ * first membership exists — that is exactly the account the "Pagos" entry
+ * point's `CreateMembershipForm` fallback exists for.
+ */
+export function isRepresentativeOnlyAccount(account: MemberAccount): boolean {
+  return account.role === "representante" && !account.estudiantes.some((s) => s.membresia !== null);
 }
 
 /**
