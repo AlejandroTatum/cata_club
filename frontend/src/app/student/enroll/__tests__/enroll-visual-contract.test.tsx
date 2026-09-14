@@ -100,12 +100,12 @@ function chooseRepresentative(): void {
   fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
 }
 
+/** Fills the child/dependent flow's student step — no phone field (#1197). */
 function fillStudent(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
   fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
 }
 
 describe("the field ids are declared, not slugged from the label", () => {
