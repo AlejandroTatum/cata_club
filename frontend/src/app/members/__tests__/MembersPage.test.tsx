@@ -205,10 +205,10 @@ vi.mock("@/services/api", () => {
 const ACCOUNT: MemberAccount = {
   id: "1",
   // Issue #1199: this fixture models an ordinary Ficha médica/Pagos row —
-  // "estudiante", not "representante", so it does not hit the new
-  // representative-only hiding this issue adds (see `isRepresentativeOnlyAccount`
-  // and its own dedicated tests). A pure representative-only row is covered
-  // separately below.
+  // "estudiante", not "representante", so it does not hit the
+  // representative-only hiding this issue adds (see `isRepresentativePersonaRow`
+  // and its own dedicated tests). A pure representative-only row, plus a
+  // represented student's row (issue #1211), are covered separately below.
   role: "estudiante",
   nombres: "María",
   apellidos: "González",
@@ -4111,10 +4111,10 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
 });
 
 // ---------------------------------------------------------------------------
-// Representative-only row actions (issue #1199)
+// Representative-only row actions (issue #1199, #1211)
 // ---------------------------------------------------------------------------
 
-describe("MembersPage — representative-only row actions (issue #1199)", () => {
+describe("MembersPage — representative-only row actions (issue #1199, #1211)", () => {
   const REPRESENTATIVE_ONLY_ACCOUNT: MemberAccount = {
     id: "rep-only",
     role: "representante",
@@ -4179,5 +4179,78 @@ describe("MembersPage — representative-only row actions (issue #1199)", () => 
 
     expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+  });
+
+  it('issue #1211 regression: offers "Ficha médica" and "Pagos" on a represented student without a membership yet', async () => {
+    // A child just enrolled by a representative has no Usuario/login of her
+    // own, so the roles-bulk lookup never resolves ALUMNO and she defaults to
+    // role: "representante" same as her representative — representadoPor
+    // (set here) is what must keep her actions visible, not membership.
+    mockFetchMembers.mockResolvedValue({
+      accounts: [
+        {
+          id: "hijo-recien-inscrito",
+          role: "representante",
+          nombres: "Sofía",
+          apellidos: "Suárez",
+          telefono: "0988888888",
+          representadoPor: "Laura Suárez",
+          estudiantes: [
+            { id: "20", nombres: "Sofía", apellidos: "Suárez", activo: true, membresia: null, ultimoPago: null },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const matches = await screen.findAllByText("Sofía Suárez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+  });
+
+  it("offers \"Ficha médica\" and \"Pagos\" on a represented student that already has a membership", async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [
+        {
+          id: "hijo-con-membresia",
+          role: "estudiante",
+          nombres: "Sofía",
+          apellidos: "Suárez",
+          telefono: "0988888888",
+          representadoPor: "Laura Suárez",
+          estudiantes: [
+            {
+              id: "20",
+              nombres: "Sofía",
+              apellidos: "Suárez",
+              activo: true,
+              membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+              ultimoPago: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const matches = await screen.findAllByText("Sofía Suárez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
   });
 });
