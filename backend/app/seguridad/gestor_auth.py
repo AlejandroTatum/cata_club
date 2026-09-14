@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.soporte_transversal.configuracion import settings
 from app.dominio.enums import EstadoMembresia, TipoRol
 from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
-from app.dominio.modelos import HistorialEstadoMembresia, Membresia
+from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Persona
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 
@@ -33,14 +33,27 @@ class GestorAutenticacion:
         VENCIDA o SUSPENDIDA ya demuestra que estuvo activa, y las
         transiciones históricas hacia ACTIVA conservan el hecho aunque la
         fila hoy tenga otro estado. Una INACTIVA sola nunca habilita.
+
+        Issue #1194: una cuenta de representante nunca tiene membresía
+        propia -- la membresía vive en la persona del representado
+        (`Persona.representante_id`). El hito también se satisface cuando
+        CUALQUIER persona representada por `persona_id` cumple la misma
+        regla, no solo `persona_id` en sí.
         """
+        ids_representados = [
+            fila[0] for fila in db.query(Persona.id).filter(
+                Persona.representante_id == persona_id,
+            ).all()
+        ]
+        ids_habilitantes = [persona_id, *ids_representados]
+
         estado_habilitante = (
             EstadoMembresia.ACTIVA,
             EstadoMembresia.VENCIDA,
             EstadoMembresia.SUSPENDIDA,
         )
         if db.query(Membresia.id).filter(
-            Membresia.persona_id == persona_id,
+            Membresia.persona_id.in_(ids_habilitantes),
             Membresia.estado.in_(estado_habilitante),
         ).first() is not None:
             return True
@@ -48,7 +61,7 @@ class GestorAutenticacion:
         return db.query(HistorialEstadoMembresia.id).join(
             Membresia, Membresia.id == HistorialEstadoMembresia.membresia_id,
         ).filter(
-            Membresia.persona_id == persona_id,
+            Membresia.persona_id.in_(ids_habilitantes),
             or_(
                 HistorialEstadoMembresia.estado_nuevo == EstadoMembresia.ACTIVA,
                 HistorialEstadoMembresia.estado_anterior == EstadoMembresia.ACTIVA,
