@@ -179,6 +179,96 @@ def test_alumno_verificado_con_membresia_activa_tiene_activacion_completa(client
     assert respuesta.json()["activacionCompleta"] is True
 
 
+# --- Issue #1194: el gate también mira a los representados ------------------
+#
+# `alta_presencial_completada` evaluaba solo la persona del propio usuario.
+# La cuenta de un representante nunca tiene membresía propia -- vive en la
+# persona del representado (`Persona.representante_id`) -- así que la regla
+# nunca podía cumplirse para ese rol. El hito ahora también se satisface con
+# CUALQUIER persona representada.
+
+def _crear_representante_con_representado(db_session, *, correo, correo_verificado, estado_membresia_representado=None):
+    """Cuenta de representante (sin membresía propia) más una persona
+    representada (`representante_id`), con o sin membresía propia."""
+    persona_representante = Persona(
+        nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(abs(hash(correo)) % 90000 + 100),
+        fecha_nacimiento=date(1985, 1, 1), telefono="0991234567",
+    )
+    db_session.add(persona_representante)
+    db_session.flush()
+    usuario = Usuario(
+        correo=correo,
+        contrasenia=GestorAutenticacion.obtener_hash_contrasenia(_CONTRASENIA),
+        persona_id=persona_representante.id,
+        correo_verificado=correo_verificado,
+        roles=[Rol(tipo_rol=TipoRol.ALUMNO, descripcion=TipoRol.ALUMNO.value)],
+    )
+    db_session.add(usuario)
+
+    if estado_membresia_representado is not None:
+        persona_representada = Persona(
+            nombres="Mateo", apellidos="Martinez", cedula=cedula_valida(abs(hash(correo)) % 90000 + 200),
+            fecha_nacimiento=date(2015, 6, 15), telefono="0991234568",
+            representante_id=persona_representante.id,
+        )
+        plan = TipoMembresia(categoria="Mensual", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+        db_session.add_all([persona_representada, plan])
+        db_session.flush()
+        db_session.add(Membresia(
+            estado=estado_membresia_representado,
+            monto_aplicado=Decimal("25.00"),
+            fecha_activacion=datetime.now(timezone.utc),
+            persona_id=persona_representada.id,
+            tipo_membresia_id=plan.id,
+        ))
+
+    db_session.commit()
+    db_session.refresh(usuario)
+    return usuario
+
+
+def test_representante_con_representado_activo_tiene_activacion_completa(client_sin_token, db_session):
+    usuario = _crear_representante_con_representado(
+        db_session, correo="representante-activo@cataclub.test", correo_verificado=True,
+        estado_membresia_representado=EstadoMembresia.ACTIVA,
+    )
+    assert GestorAutenticacion.alta_presencial_completada(db_session, usuario.persona_id)
+    respuesta = client_sin_token.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {_token(usuario)}"},
+    )
+    assert respuesta.status_code == 200
+    assert respuesta.json()["activacionCompleta"] is True
+
+
+def test_representante_con_representado_inactivo_no_tiene_activacion_completa(client_sin_token, db_session):
+    usuario = _crear_representante_con_representado(
+        db_session, correo="representante-inactivo@cataclub.test", correo_verificado=True,
+        estado_membresia_representado=EstadoMembresia.INACTIVA,
+    )
+    assert not GestorAutenticacion.alta_presencial_completada(db_session, usuario.persona_id)
+    respuesta = client_sin_token.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {_token(usuario)}"},
+    )
+    assert respuesta.status_code == 200
+    assert respuesta.json()["activacionCompleta"] is False
+
+
+def test_representante_sin_representados_no_tiene_activacion_completa(client_sin_token, db_session):
+    usuario = _crear_representante_con_representado(
+        db_session, correo="representante-solo@cataclub.test", correo_verificado=True,
+        estado_membresia_representado=None,
+    )
+    assert not GestorAutenticacion.alta_presencial_completada(db_session, usuario.persona_id)
+    respuesta = client_sin_token.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {_token(usuario)}"},
+    )
+    assert respuesta.status_code == 200
+    assert respuesta.json()["activacionCompleta"] is False
+
+
 def test_login_de_admin_emite_el_claim_activacion_completa(client_sin_token, db_session):
     _crear_usuario(
         db_session, correo="admin-login@cataclub.test", correo_verificado=False,
