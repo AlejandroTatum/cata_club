@@ -138,6 +138,21 @@ describe("AuthShell", () => {
     expect(eyebrow.className).not.toContain("text-cata-red");
   });
 
+  // Issue #1195: /login/activacion is reached by an authenticated visitor
+  // enrolling a child, not by staff — "Panel de gestión" told them
+  // otherwise, and it must stay the DEFAULT for the three screens that never
+  // pass their own (this file's own `renderShell`, unchanged above).
+  it("lets a caller override the eyebrow for a visitor-facing screen", () => {
+    render(
+      <AuthShell title="Verifique su correo" eyebrow="Acceso al club">
+        <button type="submit">Continuar</button>
+      </AuthShell>,
+    );
+
+    expect(screen.getByText("Acceso al club")).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+  });
+
   /**
    * The same defect `PageHeader` was fixed for, one screen over: an `<h1>` in
    * `font-extrabold` is Barlow, and Barlow is the interface face. This is the
