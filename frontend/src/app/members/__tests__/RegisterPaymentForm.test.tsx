@@ -110,6 +110,32 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
     expect(fileInput()).not.toBeInTheDocument();
   });
 
+  // Issue #1199: the dialog used to tell the admin "Recarga para verlo" —
+  // this calls the caller's refresh instead, so the row/dialog updates on
+  // its own.
+  it("calls onPaymentRegistered after a successful registration, and never asks the admin to reload", async () => {
+    mockRegistrarPago.mockResolvedValue({ id: 501 });
+    const onPaymentRegistered = vi.fn();
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} onPaymentRegistered={onPaymentRegistered} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(onPaymentRegistered).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Pago registrado.")).toBeInTheDocument();
+    expect(screen.queryByText(/recarga/i)).not.toBeInTheDocument();
+  });
+
+  it("does not throw when onPaymentRegistered is omitted", async () => {
+    mockRegistrarPago.mockResolvedValue({ id: 501 });
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(screen.getByText("Pago registrado.")).toBeInTheDocument());
+  });
+
   it("clears the staged voucher and voucher error when switching to cash", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
