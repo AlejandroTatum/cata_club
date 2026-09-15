@@ -104,6 +104,7 @@ describe("POST /api/auth/login", () => {
       correoVerificado: true,
       altaPresencialCompletada: true,
       activacionCompleta: true,
+      primerPago: null,
       loggedInAt: expect.any(String),
     });
   });
