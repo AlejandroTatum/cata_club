@@ -766,7 +766,10 @@ def test_api_child_enrollment_sin_telefono_del_alumno_aceptada(client, db_sessio
     assert respuesta.status_code == 201, respuesta.text
 
     alumno = db_session.query(Persona).filter(Persona.cedula == cedula_alumno).one()
-    assert alumno.telefono == ""
+    # Issue #1207: `Persona.telefono` es nullable desde `l1207telnull` -- el
+    # alumno phoneless persiste `NULL`, no `""` (comportamiento anterior,
+    # forzado por la columna NOT NULL de entonces).
+    assert alumno.telefono is None
 
 
 def test_api_self_enrollment_sin_telefono_rechazada(client):

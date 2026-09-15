@@ -387,7 +387,13 @@ def test_el_guard_pasa_sobre_una_base_limpia(arnes_migracion):
 # --- El `downgrade()`/`upgrade()` hacen ida y vuelta -------------------------
 
 def test_el_round_trip_downgrade_upgrade_restaura_el_candado(arnes_migracion):
-    arnes_migracion.preparar("head")
+    # Issue #1207: `"head"` era equivalente a `REVISION_CANDADO` cuando este
+    # test se escribió (k1143rolrep era el último eslabón), pero deja de
+    # serlo en cuanto cualquier migración posterior se agrega -- exactamente
+    # lo que rompió al sumar `l1207telnull`. `preparar(REVISION_CANDADO)` es
+    # el mismo patrón que ya usa el hermano de este test,
+    # `test_cuenta_representada_triggers.py::test_el_round_trip_downgrade_upgrade_restaura_el_candado`.
+    arnes_migracion.preparar(REVISION_CANDADO)
     assert arnes_migracion.revision_actual() == REVISION_CANDADO
     assert arnes_migracion.consultar(SQL_TRIGGERS) == [
         ("trg_persona_exige_rol_representante",),

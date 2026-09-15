@@ -543,7 +543,11 @@ class Persona(Base):
     cedula: Mapped[str] = mapped_column(String(10), unique=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date)
     foto_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    telefono: Mapped[str] = mapped_column(String(15))
+    # Issue #1207: nullable -- un menor representado sin celular propio
+    # persiste `NULL` (antes `""`, cuando la columna era NOT NULL; ver la
+    # migración `l1207telnull`). `_exigir_telefono_valido` de abajo ya
+    # toleraba `None`/`""` desde antes de esta migración.
+    telefono: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
     telefono_contacto: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
 
     # E04-RF014: el reporte "alumnos nuevos por periodo" necesita saber
