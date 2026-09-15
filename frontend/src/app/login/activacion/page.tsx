@@ -64,6 +64,15 @@ function ActivationPageContent(): React.ReactElement {
    * same as `resendMessage`/`resendError` below.
    */
   const [stillUnverified, setStillUnverified] = useState(false);
+  /**
+   * Set when "Consultar estado nuevamente" re-checks and the in-person
+   * enrolment is STILL pending (#1222) — mirrors `stillUnverified` above,
+   * which the enrolment screen had no equivalent of: `checkStatus` only ever
+   * named the email-verified transition, so the button appeared dead when
+   * the enrolment fact did not change. Cleared on the next attempt (success
+   * or not), same as `stillUnverified`.
+   */
+  const [stillPending, setStillPending] = useState(false);
   const activation = session as ActivationSession | null;
   // The BFF defaults omitted fields to complete for pre-#858 sessions.
   const correoVerificado = activation?.correoVerificado !== false;
@@ -134,7 +143,9 @@ function ActivationPageContent(): React.ReactElement {
     setResendMessage(null);
     setResendError(null);
     setStillUnverified(false);
+    setStillPending(false);
     const wasEmailPending = !correoVerificado;
+    const wasEnrolmentPending = correoVerificado && !altaCompletada;
     const result = await refreshSession();
     if (result.kind === "outage") {
       setResendError("No se pudo consultar el estado. Intente nuevamente en unos minutos.");
@@ -149,6 +160,16 @@ function ActivationPageContent(): React.ReactElement {
         // the same screen with no feedback when the email was still
         // pending — this is the one branch that names that outcome.
         setStillUnverified(true);
+      }
+    } else if (wasEnrolmentPending && result.kind === "authenticated") {
+      const next = result.session as ActivationSession;
+      if (next.altaPresencialCompletada === false) {
+        // Issue #1222: "Consultar estado nuevamente" re-fetched and
+        // re-rendered the same screen with no feedback when the enrolment
+        // was still pending — this is the one branch that names that
+        // outcome. When it is no longer false, the gate effect above
+        // redirects once the backend's own decision confirms it.
+        setStillPending(true);
       }
     }
   }
@@ -238,6 +259,11 @@ function ActivationPageContent(): React.ReactElement {
           </p>
           {emailJustVerified && (
             <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>
+          )}
+          {stillPending && (
+            <p role="status" className="text-sm leading-relaxed text-ink-2">
+              Todavía no registramos su inscripción en el club. Vuelva a consultar más tarde.
+            </p>
           )}
         </div>
 
