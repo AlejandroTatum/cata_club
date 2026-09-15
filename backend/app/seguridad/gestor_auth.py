@@ -9,9 +9,9 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.soporte_transversal.configuracion import settings
-from app.dominio.enums import EstadoMembresia, TipoRol
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.excepciones import CredencialesInvalidas, PermisosInsuficientes
-from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Persona
+from app.dominio.modelos import HistorialEstadoMembresia, Membresia, Pago, Persona
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.usuario_ficha_repositorio import UsuarioRepositorio
 
@@ -94,6 +94,41 @@ class GestorAutenticacion:
         `decodificar_token` para bloquear módulos del club.
         """
         return GestorAutenticacion.puede_acceder_modulos(db, usuario)
+
+    @staticmethod
+    def primer_pago_gate(db: Session, persona_id: int) -> Optional[dict]:
+        """Issue #1228: el hecho del primer pago que le falta a la pantalla de
+        activación (screen B) para distinguir "en revisión" de "rechazado" en
+        vez de una sola copia genérica para las tres situaciones.
+
+        Solo tiene sentido llamarlo cuando `decision_activacion` ya dio
+        False -- el propio router lo hace condicional a eso, así que esta
+        consulta extra nunca corre para admin/entrenador (que siempre pasan
+        el gate) ni para una cuenta ya activada. Mira la membresía PROPIA de
+        `persona_id` (no la de sus representados, a diferencia de
+        `alta_presencial_completada`): una cuenta de representante sin
+        membresía propia no tiene "primer pago" que mostrar acá.
+
+        Devuelve None cuando no hay membresía, no hay ningún pago todavía, o
+        el pago más reciente ya está APROBADO (ese caso ya pasó el gate por
+        otro motivo -- p.ej. `alta_presencial_completada` histórica -- y no
+        hay nada pendiente que explicarle al visitante)."""
+        membresia = db.query(Membresia.id).filter(
+            Membresia.persona_id == persona_id,
+        ).first()
+        if membresia is None:
+            return None
+
+        ultimo_pago = db.query(Pago).filter(
+            Pago.membresia_id == membresia[0],
+        ).order_by(Pago.fecha_registro.desc()).first()
+        if ultimo_pago is None or ultimo_pago.estado_pago == EstadoPago.APROBADO:
+            return None
+
+        return {
+            "estado": ultimo_pago.estado_pago.value,
+            "motivo_rechazo": ultimo_pago.motivo_rechazo,
+        }
 
     @staticmethod
     def claims_estandar(db: Session, usuario: "Usuario") -> dict:
