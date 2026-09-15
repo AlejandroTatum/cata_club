@@ -82,6 +82,11 @@ export default function ScheduleDayGroup({
                     : "border-line-2 bg-paper hover:border-ink-3"
                 }`}
               >
+                {sched.categoriaLabel && (
+                  <span className="text-2xs font-bold uppercase tracking-wide text-ink-3">
+                    {sched.categoriaLabel}
+                  </span>
+                )}
                 <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                   <Clock size={ICON.sm} strokeWidth={2} className="text-ink-3" aria-hidden="true" />
                   {sched.horaInicio} — {sched.horaFin}

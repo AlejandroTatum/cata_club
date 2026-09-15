@@ -36,6 +36,12 @@ class HorarioResponseDTO(ResponseBase, HorarioCreateDTO):
     id: int
     hora_inicio: time
     hora_fin: time
+    # Issue #1238: el nombre humano de la categoría (`categoria_horario.label`)
+    # -- mismo patrón que `SolapeHorarioDTO.categoria_label` (#731). El
+    # servicio lo llena resolviendo la fila de `categoria_horario`; si esa
+    # fila desapareciera del catálogo, el código crudo hace de fallback en
+    # vez de perder el campo entero.
+    categoria_label: str
 
 
 class PublicScheduleBlockDTO(ResponseBase, BaseModel):

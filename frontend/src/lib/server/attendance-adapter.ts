@@ -30,6 +30,11 @@ export interface BackendHorario {
   diaSemana: BackendDiaSemana;
   horaInicio: string; // "HH:MM:SS"
   horaFin: string;
+  /** The category's human name (`categoria_horario.label`, issue #1238).
+   *  Optional for the same reason `TrainingSchedule.categoriaLabel` is — see
+   *  that field's own doc comment; every REAL `/asistencias/horarios`
+   *  response sets it. */
+  categoriaLabel?: string;
 }
 
 export interface BackendAsistencia {
@@ -122,6 +127,7 @@ export function buildTrainingSchedule(horario: BackendHorario): TrainingSchedule
     diaSemana: DIA_SEMANA_BACKEND_TO_FRONTEND[horario.diaSemana],
     horaInicio: trimSeconds(horario.horaInicio),
     horaFin: trimSeconds(horario.horaFin),
+    categoriaLabel: horario.categoriaLabel,
   };
 }
 
