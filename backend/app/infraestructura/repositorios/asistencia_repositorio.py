@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.dominio.modelos import (
-    Asistencia, AsistenciaCorreccion, HorarioEntrenamiento, AlumnoHorario, Membresia,
-    Persona, SesionAsistencia,
+    Asistencia, AsistenciaCorreccion, CategoriaHorario, HorarioEntrenamiento, AlumnoHorario,
+    Membresia, Persona, SesionAsistencia,
 )
 from app.dominio.enums import EstadoMembresia
 from app.infraestructura.repositorios.eliminacion_segura import eliminar_o_error_de_dominio
@@ -33,6 +33,18 @@ class HorarioRepositorio:
         if categoria is not None:
             stmt = stmt.where(HorarioEntrenamiento.categoria == categoria)
         return list(self.db.execute(stmt).scalars().unique().all())
+
+    def listar_con_categoria(self) -> List[tuple[HorarioEntrenamiento, CategoriaHorario]]:
+        """Todas las sesiones, cada una junto a la fila `categoria_horario`
+        que la respalda, en una sola consulta -- issue #1248: el catálogo
+        público agrupa sesiones por categoría y necesita `label`/`edades`
+        de cada una, sin una consulta por fila (no hay `relationship()`
+        entre `HorarioEntrenamiento` y `CategoriaHorario`, solo la FK, así
+        que el join se arma acá explícitamente)."""
+        stmt = select(HorarioEntrenamiento, CategoriaHorario).join(
+            CategoriaHorario, HorarioEntrenamiento.categoria == CategoriaHorario.codigo
+        )
+        return list(self.db.execute(stmt).all())
 
     def tiene_asistencias(self, horario_id: int) -> bool:
         """¿Tiene este horario algún registro de `Asistencia`? Usado por
