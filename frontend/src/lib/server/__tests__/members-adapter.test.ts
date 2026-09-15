@@ -446,4 +446,21 @@ describe("buildMemberAccounts", () => {
       expect(accounts[0].accountState).toBe("active");
     });
   });
+
+  // Issue #1207: `Persona.telefono` is nullable on the backend now (a
+  // represented minor without a phone of their own persists `NULL`, not
+  // `""`). `MemberAccount.telefono` stays `string` on purpose — every
+  // consumer (AccountInfoSection's `useState`/`.trim()`) already assumes a
+  // string — so the adapter is the one place that coerces `null` to `""`,
+  // on BOTH sites that read `persona.telefono`: the account row itself and
+  // its own `estudiantes[0]` entry (`buildMemberStudentSummary`).
+  describe("a persona with no phone", () => {
+    it("normalizes telefono: null to an empty string on the account row and its own estudiantes entry", () => {
+      const phoneless: BackendPersonaFull = { ...child, telefono: null };
+      const accounts = buildMemberAccounts([phoneless], new Map(), new Map(), new Map(), new Map());
+
+      expect(accounts[0].telefono).toBe("");
+      expect(accounts[0].estudiantes[0].telefono).toBe("");
+    });
+  });
 });
