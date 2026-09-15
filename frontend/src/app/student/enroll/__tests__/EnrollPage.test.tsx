@@ -373,7 +373,7 @@ describe("EnrollPage — error prevention on the student step", () => {
 
     const year = screen.getByLabelText(/^Año/);
     const thisYear = new Date().getFullYear();
-    expect(year).toHaveAttribute("min", `${thisYear - 75}`);
+    expect(year).toHaveAttribute("min", `${thisYear - 96}`);
     expect(year).toHaveAttribute("max", `${thisYear - 5}`);
   });
 

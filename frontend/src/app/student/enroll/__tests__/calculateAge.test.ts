@@ -137,7 +137,7 @@ describe("calculateAge", () => {
 
   // -----------------------------------------------------------------------
   // Root-cause candado: an implausible-but-real year must compute a real
-  // age, never NaN. `NaN < 18`, `NaN > 74` and every other comparison
+  // age, never NaN. `NaN < 18`, `NaN > 95` and every other comparison
   // against NaN are `false`, so an old artificial year cap here let this
   // exact defect reach production three times through three separately
   // hand-rolled "uncapped" copies of this same function. This is the test
