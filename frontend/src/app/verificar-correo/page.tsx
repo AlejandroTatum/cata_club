@@ -27,6 +27,7 @@ import { AlertCircle, CheckCircle2, Mail } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { reenviarVerificacionCorreo, verificarCorreo } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
+import { useAuth } from "@/contexts/AuthContext";
 import AuthShell, {
   AUTH_INPUT_CLASSES,
   AUTH_LABEL_CLASSES,
@@ -116,6 +117,10 @@ function FormularioReenvio(): React.ReactElement {
 function VerificarCorreoContent(): React.ReactElement {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  // #1196: a visitor who already has a session (mid-activation, in another
+  // tab or device) is sent to the activation gate instead of "Iniciar
+  // sesión" — that link would only bounce them right back here.
+  const { isAuthenticated } = useAuth();
   const [estado, setEstado] = useState<Estado>(token ? "verificando" : "enlace_invalido");
   // React 18 mounts effects twice in development StrictMode; without this the
   // page would POST the same token twice on every local run.
@@ -141,7 +146,7 @@ function VerificarCorreoContent(): React.ReactElement {
 
   if (estado === "verificando") {
     return (
-      <AuthShell title="Verificando su correo" note={LINK_LIFETIME_NOTE} backHref="/login">
+      <AuthShell title="Verificando su correo" note={LINK_LIFETIME_NOTE} backHref="/login" eyebrow="Acceso al club">
         <p role="status" className="py-2 text-center text-sm leading-relaxed text-ink-2">
           Un momento, estamos confirmando su dirección…
         </p>
@@ -151,19 +156,26 @@ function VerificarCorreoContent(): React.ReactElement {
 
   if (estado === "verificado") {
     return (
-      <AuthShell title="Correo verificado" backHref="/login">
+      <AuthShell title="Correo verificado" backHref="/login" eyebrow="Acceso al club">
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
-            Su dirección quedó confirmada. Ya puede agregar a su cuenta a un
-            representado que ya esté registrado en el club.
+            Su dirección quedó confirmada. Acérquese al club o escríbanos por
+            WhatsApp para registrar la inscripción y el primer pago: el club
+            lo valida y ahí se activa la membresía.
           </p>
         </div>
-        <Link href="/login" className={buttonClasses("primary", "md", "w-full")}>
-          Iniciar sesión
-        </Link>
+        {isAuthenticated ? (
+          <Link href="/login/activacion" className={buttonClasses("primary", "md", "w-full")}>
+            Continuar con mi activación
+          </Link>
+        ) : (
+          <Link href="/login" className={buttonClasses("primary", "md", "w-full")}>
+            Iniciar sesión
+          </Link>
+        )}
       </AuthShell>
     );
   }
@@ -174,6 +186,7 @@ function VerificarCorreoContent(): React.ReactElement {
       subtitle="Pida uno nuevo con su correo"
       note={LINK_LIFETIME_NOTE}
       backHref="/login"
+      eyebrow="Acceso al club"
     >
       <div className="flex flex-col items-center gap-2.5 py-2 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">

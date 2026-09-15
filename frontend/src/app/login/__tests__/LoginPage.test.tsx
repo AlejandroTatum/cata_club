@@ -35,12 +35,20 @@ vi.mock("@/contexts/AuthContext", () => ({
 // the link skin is one of them now and "the links look like links" below reads
 // it. Stubbing those to "" would make that case pass against nothing. See
 // ResetPasswordPage.test.tsx for coverage of the real shell.
-vi.mock("@/components/auth/AuthShell", async () => ({
-  ...(await vi.importActual<typeof import("@/components/auth/AuthShell")>(
+// Wrapped in a spy so the eyebrow test below (#1195) can assert on the prop
+// LoginPage hands the shell, without rendering the real composition.
+const mockAuthShell = vi.fn(
+  ({ children }: { children: React.ReactNode; eyebrow?: string }): React.ReactElement => <>{children}</>,
+);
+vi.mock("@/components/auth/AuthShell", async () => {
+  const actual = await vi.importActual<typeof import("@/components/auth/AuthShell")>(
     "@/components/auth/AuthShell",
-  )),
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+  );
+  return {
+    ...actual,
+    default: (props: Parameters<typeof actual.default>[0]) => mockAuthShell(props),
+  };
+});
 
 const mockShowError = vi.fn();
 const mockShowSuccess = vi.fn();
@@ -578,5 +586,18 @@ describe("LoginPage — the links look like links", () => {
       const link = screen.getByRole("link", { name });
       expect(link.querySelector("svg[aria-hidden='true']")).not.toBeNull();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1195 — /login is a visitor signing in, not staff at a panel.
+// ---------------------------------------------------------------------------
+
+describe("LoginPage — the eyebrow is not the admin one", () => {
+  it("passes a non-admin eyebrow to the shared shell", () => {
+    mockUseAuth.mockReturnValue(createUnauthenticatedAuth());
+    render(<LoginPage />);
+
+    expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
   });
 });

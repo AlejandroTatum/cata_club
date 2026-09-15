@@ -736,3 +736,56 @@ def test_api_inscripcion_sin_credenciales_devuelve_422_y_no_persiste(client, db_
     assert db_session.query(Persona).count() == total_antes
     assert db_session.query(Persona).filter(Persona.cedula == cedula).count() == 0
 
+
+# --- Issue #1197: el teléfono del alumno es opcional solo en el camino ----
+# representado -- un menor no tiene celular propio, y su contacto de
+# emergencia se deriva del representante (#1138). El camino adulto sigue
+# exigiéndolo: ahí el alumno ES el titular del contacto.
+
+def test_api_child_enrollment_sin_telefono_del_alumno_aceptada(client, db_session):
+    cedula_rep = cedula_valida(592)
+    cedula_alumno = cedula_valida(593)
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "representante": {
+                "nombres": "Sofia", "apellidos": "Martinez", "cedula": cedula_rep,
+                "fecha_nacimiento": "1990-05-20", "telefono": "0991234567",
+                "correo": "sofia-sin-tel-alumno@example.com", "contrasenia": "password8",
+            },
+            "alumno": {
+                "nombres": "Lucas", "apellidos": "Martinez", "cedula": cedula_alumno,
+                "fecha_nacimiento": "2015-06-15",
+            },
+            # Issue #1138: camino representado -- sin contacto de emergencia
+            # propio, se deriva del representante.
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "acepta_consentimientos": True,
+        },
+    )
+    assert respuesta.status_code == 201, respuesta.text
+
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_alumno).one()
+    assert alumno.telefono == ""
+
+
+def test_api_self_enrollment_sin_telefono_rechazada(client):
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "alumno": {
+                "nombres": "Ana", "apellidos": "Lopez", "cedula": cedula_valida(594),
+                "fecha_nacimiento": "2000-01-01",
+            },
+            "credenciales_alumno": {
+                "correo": "ana-sin-telefono@example.com", "contrasenia": "password8",
+            },
+            "ficha_medica": {
+                "tipo_sangre": "O_POSITIVO", "enfermedades": [],
+                "contacto_emergencia": "Pedro Lopez", "telefono_emergencia": "0991112233",
+            },
+            "acepta_consentimientos": True,
+        },
+    )
+    assert respuesta.status_code == 422, respuesta.text
+

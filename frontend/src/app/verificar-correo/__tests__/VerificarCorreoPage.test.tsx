@@ -39,6 +39,14 @@ vi.mock("@/contexts/ToastContext", () => ({
   }),
 }));
 
+// #1196: the success screen's primary CTA depends on whether the visitor
+// already has a session — most tests below have none, same as before this
+// mock existed.
+let mockIsAuthenticated = false;
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ isAuthenticated: mockIsAuthenticated }),
+}));
+
 const mockVerificarCorreo = vi.fn();
 const mockReenviarVerificacionCorreo = vi.fn();
 vi.mock("@/services/api", () => ({
@@ -52,6 +60,7 @@ const MENSAJE_CONSTANTE =
 beforeEach(() => {
   vi.clearAllMocks();
   mockToken = "token-valido";
+  mockIsAuthenticated = false;
   mockVerificarCorreo.mockResolvedValue(undefined);
   mockReenviarVerificacionCorreo.mockResolvedValue({ mensaje: MENSAJE_CONSTANTE });
 });
@@ -64,14 +73,36 @@ describe("VerificarCorreoPage", () => {
     expect(mockVerificarCorreo).toHaveBeenCalledWith("token-valido");
   });
 
-  it("says what the verified account can now do", async () => {
+  it("tells the same club-registers-enrolment-and-payment story as the rest of the flow (#1196)", async () => {
     // The screen exists to close a loop the visitor opened somewhere else; a
     // bare "done" would not tell them the loop is closed.
     render(<VerificarCorreoPage />);
 
     expect(
-      await screen.findByText(/agregar a su cuenta a un\s+representado/i),
+      await screen.findByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+
+  it("offers 'Iniciar sesión' when the visitor has no session", async () => {
+    render(<VerificarCorreoPage />);
+
+    await screen.findByText("Correo verificado");
+    const link = screen.getByRole("link", { name: "Iniciar sesión" });
+    expect(link).toHaveAttribute("href", "/login");
+  });
+
+  it("offers 'Continuar con mi activación' to the activation gate when a session already exists (#1196)", async () => {
+    mockIsAuthenticated = true;
+    render(<VerificarCorreoPage />);
+
+    await screen.findByText("Correo verificado");
+    const link = screen.getByRole("link", { name: "Continuar con mi activación" });
+    expect(link).toHaveAttribute("href", "/login/activacion");
+    expect(screen.queryByRole("link", { name: "Iniciar sesión" })).not.toBeInTheDocument();
   });
 
   it("verifies once per arrival even if the effect runs twice", async () => {
