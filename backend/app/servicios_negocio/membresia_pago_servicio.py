@@ -1681,7 +1681,7 @@ class PagoServicio:
         ):
             raise OperacionInvalida(MENSAJE_COBERTURA_YA_APLICADA)
 
-        self._activar_membresia_con_red_de_seguridad(membresia, fecha_inicio)
+        self._activar_membresia_con_red_de_seguridad(membresia)
 
         cobertura = CoberturaBonificada(
             membresia_id=membresia_id,
@@ -2077,7 +2077,7 @@ class PagoServicio:
             # `_activar_membresia_con_red_de_seguridad`, compartida con
             # `aplicar_beneficio_bonificado` (issue #400/4d) -- ver su
             # docstring.
-            self._activar_membresia_con_red_de_seguridad(membresia, pago.fecha_inicio)
+            self._activar_membresia_con_red_de_seguridad(membresia)
             try:
                 self._aplicar_regla_familiar_si_corresponde(membresia, pago)
                 self.repo.guardar_cambios(pago)
@@ -2128,12 +2128,11 @@ class PagoServicio:
         return pago
 
     # --- Activación compartida (issue #400/4d) -------------------------------
-    def _activar_membresia_con_red_de_seguridad(
-        self, membresia: Membresia, fecha_inicio: date,
-    ) -> None:
+    def _activar_membresia_con_red_de_seguridad(self, membresia: Membresia) -> None:
         """Activa la membresía (INACTIVA/VENCIDA -> ACTIVA) con `fecha_
-        activacion` derivada de `fecha_inicio`, y hace el `flush()` que la
-        vuelve visible a consultas posteriores en esta misma transacción.
+        activacion` en el instante real de la activación, y hace el
+        `flush()` que la vuelve visible a consultas posteriores en esta
+        misma transacción.
 
         Compartido por `validar_pago` (aprobar un pago) y
         `aplicar_beneficio_bonificado` (otorgar cobertura 100% bonificada):
@@ -2141,6 +2140,17 @@ class PagoServicio:
         los dos deben dejar la membresía ACTIVA -- a diferencia de
         `regularizar_deuda`, que es bookkeeping retroactivo del admin y
         deliberadamente NO activa nada.
+
+        Issue #1212: antes reconstruía `fecha_activacion` como medianoche
+        UTC del `fecha_inicio` del pago, descartando la hora real. Esa
+        medianoche cae en el día calendario ANTERIOR para cualquier browser
+        UTC-negativo, así que "Socio desde" se mostraba un día antes de lo
+        real. `datetime.now(timezone.utc)` es un instante genuino -- igual
+        que la creación INACTIVA (ver más arriba) -- y ningún llamador
+        depende de que sea la fecha calendario de `fecha_inicio`: el único
+        otro lector, `MembresiaRepositorio.listar` (`membresia_repositorio.
+        py`), solo la usa para el `ORDER BY ... DESC` de "más reciente
+        primero", al que le sirve cualquier instante real.
 
         Red de seguridad del invariante 2 (issue #8): dos escrituras
         concurrentes de ACTIVA para la misma persona (dos pagos, o un pago y
@@ -2150,10 +2160,7 @@ class PagoServicio:
         dos tiene que saber del índice. El `rollback()` es obligatorio: un
         flush fallido deja la sesión inválida para cualquier uso posterior."""
         membresia.estado = EstadoMembresia.ACTIVA
-        membresia.fecha_activacion = datetime(
-            year=fecha_inicio.year, month=fecha_inicio.month, day=fecha_inicio.day,
-            tzinfo=timezone.utc,
-        )
+        membresia.fecha_activacion = datetime.now(timezone.utc)
         try:
             self.db.flush()
         except IntegrityError as error:

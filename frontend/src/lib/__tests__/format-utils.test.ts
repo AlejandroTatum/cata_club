@@ -3,7 +3,7 @@
  * formatDateShort, formatDateTime, formatDateRange).
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   formatCurrency,
   formatDate,
@@ -79,6 +79,42 @@ describe("formatDate", () => {
     // Anchored at noon UTC: never rolls back to the previous day.
     expect(formatDate("2026-01-01")).toBe("01/01/2026");
     expect(formatDate("2026-12-31")).toBe("31/12/2026");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatDate — a UTC-midnight full ISO timestamp in a UTC-negative timezone
+// (issue #1212: the membership card showed "Socio desde" one day early).
+// A date-only or noon-UTC fixture never exercises this: it takes a real full
+// ISO timestamp whose time-of-day happens to be exactly UTC midnight, read
+// back in a timezone behind UTC.
+// ---------------------------------------------------------------------------
+
+describe("formatDate — UTC-midnight ISO timestamp in a UTC-negative timezone", () => {
+  const originalTZ = process.env.TZ;
+
+  beforeEach(() => {
+    // America/Montevideo is UTC-3 year-round (no DST), so the offset is
+    // deterministic regardless of when this suite runs.
+    process.env.TZ = "America/Montevideo";
+  });
+
+  afterEach(() => {
+    process.env.TZ = originalTZ;
+  });
+
+  it("renders the activation day, not the day before, for a UTC-midnight timestamp", () => {
+    // "2026-09-14T00:00:00Z" is 2026-09-13T21:00:00-03:00 in Montevideo.
+    // Reading it back with local getters (`getDate()`/`getMonth()`) — the
+    // bug this test guards against — renders "13/09/2026". The activation
+    // was on the 14th; the card must say "14/09/2026".
+    expect(formatDate("2026-09-14T00:00:00Z")).toBe("14/09/2026");
+  });
+
+  it("still crosses days for a genuine non-midnight instant", () => {
+    // 02:00 UTC is 23:00 the PREVIOUS day in Montevideo — a real instant,
+    // not a calendar-date marker, so the guard above must not swallow it.
+    expect(formatDate("2026-09-14T02:00:00Z")).toBe("13/09/2026");
   });
 });
 
