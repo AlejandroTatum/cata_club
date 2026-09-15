@@ -2129,8 +2129,7 @@ class PagoServicio:
 
     # --- Activación compartida (issue #400/4d) -------------------------------
     def _activar_membresia_con_red_de_seguridad(self, membresia: Membresia) -> None:
-        """Activa la membresía (INACTIVA/VENCIDA -> ACTIVA) con `fecha_
-        activacion` en el instante real de la activación, y hace el
+        """Activa la membresía (INACTIVA/VENCIDA -> ACTIVA) y hace el
         `flush()` que la vuelve visible a consultas posteriores en esta
         misma transacción.
 
@@ -2141,16 +2140,27 @@ class PagoServicio:
         `regularizar_deuda`, que es bookkeeping retroactivo del admin y
         deliberadamente NO activa nada.
 
-        Issue #1212: antes reconstruía `fecha_activacion` como medianoche
-        UTC del `fecha_inicio` del pago, descartando la hora real. Esa
-        medianoche cae en el día calendario ANTERIOR para cualquier browser
-        UTC-negativo, así que "Socio desde" se mostraba un día antes de lo
-        real. `datetime.now(timezone.utc)` es un instante genuino -- igual
-        que la creación INACTIVA (ver más arriba) -- y ningún llamador
-        depende de que sea la fecha calendario de `fecha_inicio`: el único
-        otro lector, `MembresiaRepositorio.listar` (`membresia_repositorio.
-        py`), solo la usa para el `ORDER BY ... DESC` de "más reciente
-        primero", al que le sirve cualquier instante real.
+        Issue #1225: `fecha_activacion` SOLO se escribe cuando la membresía
+        todavía está INACTIVA al entrar acá -- la primera activación real.
+        "Socio desde" lee esta columna (`frontend/src/app/student/page.tsx`),
+        y esa antigüedad es la PRIMERA vez que la persona tuvo cobertura,
+        nunca la renovación más reciente: una membresía ya ACTIVA, VENCIDA o
+        SUSPENDIDA conserva la que ya tenía. Antes se pisaba en cada pago
+        aprobado (aunque el docstring ya describía la transición INACTIVA/
+        VENCIDA -> ACTIVA); un segundo pago sobre una membresía ya ACTIVA
+        corría la misma línea y adelantaba la antigüedad del socio a la
+        fecha de la renovación (hallazgo en vivo, QA 2026-09-15, persona 91,
+        membresía 68).
+
+        Issue #1212: cuando SÍ corresponde escribirla, es el instante real
+        de la activación, no medianoche UTC del `fecha_inicio` del pago
+        (esa medianoche cae en el día calendario ANTERIOR para cualquier
+        browser UTC-negativo). `datetime.now(timezone.utc)` es un instante
+        genuino -- igual que la creación INACTIVA (ver más arriba) -- y
+        ningún llamador depende de que sea la fecha calendario de `fecha_
+        inicio`: el único otro lector, `MembresiaRepositorio.listar`
+        (`membresia_repositorio.py`), solo la usa para el `ORDER BY ... DESC`
+        de "más reciente primero", al que le sirve cualquier instante real.
 
         Red de seguridad del invariante 2 (issue #8): dos escrituras
         concurrentes de ACTIVA para la misma persona (dos pagos, o un pago y
@@ -2159,8 +2169,9 @@ class PagoServicio:
         al MISMO error de dominio para ambos llamadores, así ninguno de los
         dos tiene que saber del índice. El `rollback()` es obligatorio: un
         flush fallido deja la sesión inválida para cualquier uso posterior."""
+        if membresia.estado == EstadoMembresia.INACTIVA:
+            membresia.fecha_activacion = datetime.now(timezone.utc)
         membresia.estado = EstadoMembresia.ACTIVA
-        membresia.fecha_activacion = datetime.now(timezone.utc)
         try:
             self.db.flush()
         except IntegrityError as error:
