@@ -17,6 +17,7 @@ import {
   phoneRule,
   emergencyPhoneDiffersRule,
   personNameRule,
+  normalizePersonName,
   passwordRule,
   studentBirthDateRule,
   calculatePersonAge,
@@ -259,7 +260,7 @@ function enrollmentValidationField(error: unknown): EnrollField | undefined {
  */
 export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimientos = false): EnrollmentRequest {
   const alumno = {
-    nombres: data.nombres.trim(), apellidos: data.apellidos.trim(), cedula: data.cedula.trim(),
+    nombres: normalizePersonName(data.nombres), apellidos: normalizePersonName(data.apellidos), cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento,
     // Issue #1197: a represented minor has no phone of their own — the key
     // is omitted entirely on the CHILD path (never sent as "", which the
@@ -290,7 +291,7 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
   const result: EnrollmentRequest = {
     alumno, fichaMedica, aceptaConsentimientos,
     representante: {
-      nombres: data.nombreRepresentante.trim(), apellidos: data.apellidosRepresentante.trim(),
+      nombres: normalizePersonName(data.nombreRepresentante), apellidos: normalizePersonName(data.apellidosRepresentante),
       cedula: data.cedulaRepresentante.trim(), fechaNacimiento: data.fechaNacimientoRepresentante,
       telefono: data.telefonoRepresentante.trim(), correo: data.correoRepresentante.trim(),
       contrasenia: data.contraseniaRepresentante,

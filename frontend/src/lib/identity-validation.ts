@@ -244,6 +244,20 @@ export function emergencyPhoneDiffersRule(emergencyPhone: string, personalPhone:
 export const PERSON_NAME_MIN_LENGTH = 3;
 
 /**
+ * (issue #1246) Some input sources — iOS/macOS keyboards, text pasted from
+ * WhatsApp or Contacts — emit an accented letter in decomposed form (NFD):
+ * e.g. "ñ" as the plain letter "n" followed by U+0303 COMBINING TILDE,
+ * instead of the precomposed U+00F1. `PERSON_NAME_PATTERN` only accepts
+ * precomposed letters, so an NFD name used to fail validation while the
+ * same name typed on a desktop keyboard (NFC) passed. Trimming first, then
+ * normalizing, keeps the length check (`PERSON_NAME_MIN_LENGTH`) counting
+ * the same characters a visitor sees.
+ */
+export function normalizePersonName(value: string): string {
+  return value.trim().normalize("NFC");
+}
+
+/**
  * Letters (incl. accents), spaces, and the three connectors real names use:
  * apostrophe, hyphen, and interpunct. A connector may never open or close
  * the name, and two connectors may never sit next to each other — enforced
@@ -292,7 +306,7 @@ export function personNameRule(
   subject: string,
   { plural = true }: { plural?: boolean } = {},
 ): string | null {
-  const trimmed = value.trim();
+  const trimmed = normalizePersonName(value);
   if (!trimmed) return `${subject} ${plural ? "son" : "es"} obligatorio${plural ? "s" : ""}.`;
   if (trimmed.length < PERSON_NAME_MIN_LENGTH) {
     return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LENGTH} caracteres.`;
