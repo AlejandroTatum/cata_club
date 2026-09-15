@@ -163,7 +163,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "2015-01-15" }),
     );
-    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 74/);
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95/);
   });
 
   /**
@@ -181,7 +181,7 @@ describe("validateEnrollFields", () => {
       "representative",
       validForm({ enrollmentType: "child", fechaNacimientoRepresentante: "1800-01-15" }),
     );
-    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 74 años \(calculado: \d+\)/);
+    expect(errors.fechaNacimientoRepresentante).toMatch(/entre 18 y 95 años \(calculado: \d+\)/);
   });
 
   it("validates the health step's blood type and emergency contact", () => {

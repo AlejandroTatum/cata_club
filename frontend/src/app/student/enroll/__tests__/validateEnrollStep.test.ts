@@ -398,7 +398,7 @@ describe("validateEnrollStep — representative step", () => {
         contraseniaRepresentante: "password8",
       }),
     );
-    expect(errors.some((message) => /El representante debe tener entre 18 y 74 años/.test(message))).toBe(true);
+    expect(errors.some((message) => /El representante debe tener entre 18 y 95 años/.test(message))).toBe(true);
   });
 
   it("represents absent representante with whitespace correctly", () => {
