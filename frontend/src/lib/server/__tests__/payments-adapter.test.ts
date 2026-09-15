@@ -98,6 +98,19 @@ describe("buildPaymentValidationRequest", () => {
     expect(request.currentMembershipStatus).toBe("suspendida");
   });
 
+  // Issue #1208: MEMBERSHIP_STATUS_BY_ESTADO folds INACTIVA into the same
+  // "vencida" bucket as a real VENCIDA — before this fix that fold was the
+  // ONLY signal the DTO carried, so `/payments` had no way to tell a
+  // never-activated membership apart from an actually lapsed one.
+  // `estadoBackend` carries the raw enum instead, same convention as
+  // `MemberStudentSummary.membresia.estadoBackend` on `/members`.
+  it("carries the raw INACTIVA estado so it is not represented as vencida", () => {
+    const inactiva: BackendMembresia = { ...membresia, estado: "INACTIVA" };
+    const request = buildPaymentValidationRequest(pago, "Sofia Martinez", inactiva, tipo);
+    expect(request.estadoBackend).toBe("INACTIVA");
+    expect(request.estadoBackend).not.toBe(request.currentMembershipStatus);
+  });
+
   it("labels a REGULARIZACION payment distinctly from Efectivo and Transferencia", () => {
     const regularizacion: BackendPagoCore = { ...pago, tipoPago: "REGULARIZACION" };
     const request = buildPaymentValidationRequest(regularizacion, "Sofia Martinez", membresia, tipo);
