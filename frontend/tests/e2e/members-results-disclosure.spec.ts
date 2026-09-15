@@ -5,6 +5,25 @@ import { E2E_BASE_URL } from "./e2e-target";
 /** Resolved in ONE place — see `e2e-target.ts` for why it is not port 3000. */
 const BASE_URL = E2E_BASE_URL;
 const MOCK_ACCESS_TOKEN = "mock-header.mock-payload.mock-signature";
+// Issue #1221: `estudiantes` (the account's own row summary) and
+// `dependientes` (who this account represents) are two independent fields —
+// this fixture is genuinely a representative (María, id "1") with one
+// dependent (Sofía, id "10"), so the same summary backs both here.
+const SOFIA_SUMMARY = {
+  id: "10",
+  nombres: "Sofía",
+  apellidos: "González",
+  grupoId: null,
+  activo: true,
+  membresia: {
+    tipo: "mensual",
+    estado: "activa",
+    fechaInicio: "2026-07-01",
+    fechaFin: "2026-07-31",
+    monto: 85,
+  },
+  ultimoPago: null,
+};
 const ACCOUNT = {
   id: "1",
   role: "representante",
@@ -12,21 +31,8 @@ const ACCOUNT = {
   apellidos: "González",
   email: "maria@example.test",
   telefono: "0999999999",
-  estudiantes: [{
-    id: "10",
-    nombres: "Sofía",
-    apellidos: "González",
-    grupoId: null,
-    activo: true,
-    membresia: {
-      tipo: "mensual",
-      estado: "activa",
-      fechaInicio: "2026-07-01",
-      fechaFin: "2026-07-31",
-      monto: 85,
-    },
-    ultimoPago: null,
-  }],
+  estudiantes: [SOFIA_SUMMARY],
+  dependientes: [SOFIA_SUMMARY],
 };
 
 async function fulfillJson(route: Route, body: unknown): Promise<void> {

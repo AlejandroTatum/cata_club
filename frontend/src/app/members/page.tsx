@@ -846,14 +846,21 @@ function MemberEditDialog({
                 </>
               </ModalSection>
 
-              {account.estudiantes.length > 0 && (
+              {/* Issue #1221: the personas THIS account represents
+                  (`representanteId` pointing here), never this account's own
+                  `estudiantes[0]` — see `members-adapter.ts#
+                  buildMemberAccounts`'s doc comment. Hidden entirely for a
+                  represented minor and for a self-managed adult with no
+                  dependants, same "hide rather than show an empty card"
+                  convention the rest of this dialog already follows. */}
+              {account.dependientes && account.dependientes.length > 0 && (
                 <ModalSection title="Estudiantes a cargo" saveMode="manual">
                   {/* A list of people, so it takes the same divider hairlines
                       every other list of people in the product uses — not
                       `DataRowList`'s own outer border, which would nest a
                       second box inside this section's card. */}
                   <ul className="divide-y divide-line">
-                    {account.estudiantes.map((estudiante) => (
+                    {account.dependientes.map((estudiante) => (
                       <StudentEditPanel
                         key={estudiante.id}
                         student={estudiante}
