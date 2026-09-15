@@ -1538,6 +1538,22 @@ export async function reenviarVerificacionCorreo(correo: string): Promise<{ mens
   });
 }
 
+/**
+ * Correct the address of an account that has not verified its email yet
+ * (issue #1245) — PATCH /api/auth/correo. Only reachable while the caller's
+ * own account is still unverified; the backend rejects it otherwise.
+ *
+ * The BFF rotates the auth cookies under the hood (the backend's `sub` claim
+ * IS the correo), so callers must reload the session afterward — e.g. via
+ * AuthContext's `refreshSession` — to see the corrected address reflected.
+ */
+export async function cambiarCorreoNoVerificado(correo: string): Promise<{ correo: string; mensaje: string }> {
+  return request<{ correo: string; mensaje: string }>(apiEndpoint('/auth/correo'), {
+    method: 'PATCH',
+    body: JSON.stringify({ correo }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Types & API Methods — Memberships, Roles & Medical Record (Grupo B)
 // ---------------------------------------------------------------------------

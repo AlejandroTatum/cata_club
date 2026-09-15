@@ -179,6 +179,29 @@ class ConfirmarVerificacionCorreoDTO(BaseModel):
     token: str
 
 
+# --- Issue #1245: corregir el correo de una cuenta sin verificar -------------
+class CambiarCorreoNoVerificadoDTO(BaseModel):
+    """Payload de PATCH /auth/correo. `CorreoValidado` (no `EmailStr` a
+    secas) para exigir el mismo formato y la misma normalización
+    (trim + minúsculas) que usa la autoinscripción -- ver
+    `AuthServicio.cambiar_correo_no_verificado`."""
+    correo: CorreoValidado
+
+
+class CambiarCorreoNoVerificadoResponseDTO(ResponseBase, BaseModel):
+    """El `access_token`/`refresh_token` reemitidos son obligatorios (a
+    diferencia de `InvalidarSesionesResponseDTO`, que también los declara):
+    el `sub` del JWT es el correo, así que el par que autenticó esta misma
+    llamada queda apuntando a una dirección que ya no existe apenas se
+    aplica el cambio -- sin reemisión, el caller quedaría deslogueado en la
+    respuesta que le confirma que la corrección funcionó."""
+    correo: str
+    mensaje: str
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
 class RestablecerContraseniaDTO(BaseModel):
     token: str
     nueva_contrasenia: ContraseniaValidada
