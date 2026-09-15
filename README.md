@@ -243,6 +243,30 @@ pnpm exec playwright install chromium
 Si falta una dependencia o Chromium, la lane falla con un mensaje de setup en
 vez de descargar o instalar durante la verificación.
 
+### Qué corre en CI según el cambio
+
+En los PRs, los cuatro jobs pesados de CI (`backend`, `migraciones-desde-cero`,
+`frontend` e `imagenes Docker`) se escopian por las rutas que tocó el diff
+(issue #1217). La regla completa vive en `.github/workflows/ci.yml` y su candado
+en `tests/test_ci_workflow_paths.py`; el resumen:
+
+| Tocaste… | Corre |
+|---|---|
+| `backend/**` | Backend, Migraciones e imágenes Docker. |
+| `frontend/**` | Frontend e imágenes Docker. |
+| `Makefile`, `docker-compose*.yml`, `.github/workflows/ci.yml` | Los cuatro (archivos compartidos: los consumen todos los lados). |
+| `tests/` (raíz) | Backend e imágenes Docker (los tests raíz corren dentro del job backend). |
+| `Caddyfile` | Solo imágenes Docker. |
+| Solo documentación (`README.md`, `docs/`, `cata_club-docs/`) | Ninguno de los cuatro. |
+
+Invariantes: un push a `main` SIEMPRE corre la matriz completa, y el guard de
+`.env` trackeados corre en todos los casos. Los nombres de los checks requeridos
+no cambian: el escoping es una condición de ejecución, no un filtro del
+workflow. Si la detección de rutas falla, se cancela o no expone resultados,
+los cuatro jobs pesados corren COMPLETOS (fail-open: validación conservadora
+en vez de salteos silenciosos); el job de imágenes además sigue bloqueado si
+backend, frontend o migraciones terminan en falla o cancelación.
+
 ### Límites de la verificación local
 
 Las lanes son predictivas, no una afirmación de paridad total con GitHub
