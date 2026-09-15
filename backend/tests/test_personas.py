@@ -177,11 +177,21 @@ def test_actualizar_persona_con_apellido_vacio_da_mensaje_claro(client):
 # `_validar_telefono` solo comprobaba `isdigit()`, y `"".isdigit()` es False,
 # así que el campo vacío caía en la misma rama que "abc123" y mostraba "El
 # teléfono solo puede tener dígitos." en vez de avisar que es obligatorio.
+#
+# Issue #1207: el DTO ya NO decide esto solo -- `PersonaUpdateDTO.telefono`
+# tolera "" (necesario para poder reenviar sin 422 el de un menor
+# representado, ver `test_actualizar_persona_menor_representado_sin_telefono`
+# más abajo), así que la exigencia para un ADULTO se movió a
+# `PersonaServicio.actualizar_persona`, que sí sabe si la Persona objetivo
+# tiene `representante_id`. Eso cambia el código de la respuesta de 422
+# (`RequestValidationError`, puro formato de payload) a 400
+# (`OperacionInvalida`, regla de negocio que necesita la fila real) -- el
+# mensaje que lee el socio es exactamente el mismo.
 def test_actualizar_persona_con_telefono_vacio_da_mensaje_claro(client):
     persona = client.post("/api/v1/personas/", json=_payload_persona()).json()
 
     resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"telefono": ""})
-    assert resp.status_code == 422
+    assert resp.status_code == 400
     assert resp.json()["detail"] == "El teléfono es obligatorio."
 
 
@@ -191,6 +201,60 @@ def test_actualizar_persona_con_telefono_formato_invalido_da_mensaje_distinto(cl
     resp = client.patch(f"/api/v1/personas/{persona['id']}", json={"telefono": "abc123"})
     assert resp.status_code == 422
     assert resp.json()["detail"] == "El teléfono solo puede tener dígitos."
+
+
+# --- Issue #1207: el desk-edit de un menor representado sin celular propio --
+# El alta representada (#1197) puede dejar `Persona.telefono` vacío; antes de
+# esta migración, reenviar ese mismo "" desde el mostrador (el formulario de
+# edición manda el estado completo, no solo lo que cambió) chocaba siempre
+# con "El teléfono es obligatorio.", sin importar que la persona editada
+# fuera justo el menor para el que ese valor es legítimo.
+def test_actualizar_persona_menor_representado_sin_telefono_no_da_422(client, db_session):
+    representante = client.post("/api/v1/personas/", json=_payload_persona("1710034065")).json()
+    hijo = client.post(
+        "/api/v1/personas/",
+        json={
+            **_payload_persona("1710034073"),
+            "telefono": "",
+            "representante_id": representante["id"],
+        },
+    ).json()
+
+    resp = client.patch(f"/api/v1/personas/{hijo['id']}", json={"telefono": ""})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["telefono"] is None
+
+    guardado = db_session.query(Persona).filter(Persona.id == hijo["id"]).one()
+    assert guardado.telefono is None
+
+
+def test_registrar_persona_menor_representado_sin_telefono_se_acepta(client):
+    """El alta admin (`POST /personas/`) es la otra puerta de escritura que
+    comparte `TelefonoValidadoOpcional` -- `crear_representado` la reusa
+    internamente para el portal autoservicio."""
+    representante = client.post("/api/v1/personas/", json=_payload_persona("1710034065")).json()
+
+    resp = client.post(
+        "/api/v1/personas/",
+        json={
+            **_payload_persona("1710034073"),
+            "telefono": "",
+            "representante_id": representante["id"],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["telefono"] is None
+
+
+def test_registrar_persona_adulta_sin_telefono_rechazada(client):
+    """Sin `representante_id`, esta Persona es un adulto autogestionado: el
+    teléfono sigue siendo obligatorio, igual que antes de #1207."""
+    payload = _payload_persona()
+    payload["telefono"] = ""
+
+    resp = client.post("/api/v1/personas/", json=payload)
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "El teléfono es obligatorio."
 
 
 # El tramo de borrado que vivía en este test murió con `DELETE /personas/{id}`:
@@ -423,6 +487,28 @@ def test_crear_representado_mayor_de_edad_rechazado_por_dto(client, db_session):
     )
     assert resp.status_code == 422
     assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).first() is None
+
+
+# --- Issue #1207: "agregar dependiente" acepta un menor sin celular propio --
+# `RepresentadoCreateDTO` siempre crea un representado (invariante B), así
+# que el teléfono nunca fue obligatorio para lo que ESTE endpoint crea --
+# antes de #1207 lo era solo porque `TelefonoValidado` no distinguía.
+def test_crear_representado_sin_telefono_se_acepta(client, db_session):
+    representante = _crear_persona_representante(db_session)
+    _restaurar_override_token(persona_id=representante.id, roles=["REPRESENTANTE"])
+
+    payload = _payload_representado()
+    del payload["telefono"]
+
+    resp = client.post(
+        f"/api/v1/personas/{representante.id}/representados",
+        json=payload,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["telefono"] is None
+
+    hijo = db_session.query(Persona).filter(Persona.cedula == cedula_valida(520)).one()
+    assert hijo.telefono is None
 
 
 def test_crear_representado_admin_puede_usar_endpoint(client, db_session):

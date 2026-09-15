@@ -343,7 +343,14 @@ export interface PersonaReporte {
   apellidos: string;
   cedula: string;
   fechaNacimiento: string;
-  telefono: string;
+  /**
+   * Issue #1207: `PersonaResponseDTO.telefono` is nullable on the backend
+   * now — a represented minor with no phone of their own persists `NULL`.
+   * This report endpoint reuses that same DTO (`response_model=
+   * List[PersonaResponseDTO]`), so a minor registered within the reported
+   * period shows up here with `telefono: null` too.
+   */
+  telefono: string | null;
   telefonoContacto?: string | null;
   fechaRegistro?: string | null;
 }
@@ -355,7 +362,8 @@ export interface PersonaResponse {
   apellidos: string;
   cedula: string;
   fechaNacimiento: string;
-  telefono: string;
+  /** Issue #1207: see `PersonaReporte.telefono` above — same backend DTO. */
+  telefono: string | null;
   telefonoContacto?: string | null;
   fotoUrl?: string | null;
   representanteId?: number | null;

@@ -32,7 +32,11 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
   const personaId = Number(account.id);
   const [nombres, setNombres] = useState(account.nombres);
   const [apellidos, setApellidos] = useState(account.apellidos);
-  const [telefono, setTelefono] = useState(account.telefono);
+  // Issue #1207: `account.telefono` is typed `string`, but a represented
+  // minor without a phone of their own can still arrive here as `null` at
+  // runtime — `?? ""` defends this component on its own, on top of (not
+  // instead of) the `null` → `""` coercion `members-adapter.ts` now does.
+  const [telefono, setTelefono] = useState(account.telefono ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
