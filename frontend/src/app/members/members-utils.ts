@@ -10,7 +10,7 @@ import type {
   EstadoMembresia,
   BackendTipoRol,
 } from "@/types/domain";
-import type { BackendEstadoMembresia } from "@/lib/membership-status";
+import { inactivaMembershipBadge, type BackendEstadoMembresia } from "@/lib/membership-status";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -633,9 +633,7 @@ export function getMembershipStatusBadge(
   const { membresia } = student;
   if (!membresia) return { label: "Sin membresía", tone: "neutral" };
   if (membresia.estadoBackend === "INACTIVA") {
-    return student.ultimoPago?.estado === "pendiente_validacion"
-      ? { label: "Pago pendiente", tone: "warn" }
-      : { label: "Sin activar", tone: "neutral" };
+    return inactivaMembershipBadge(student.ultimoPago?.estado === "pendiente_validacion");
   }
   return { label: MEMBERSHIP_STATUS_LABELS[membresia.estado], tone: MEMBERSHIP_STATUS_TONE[membresia.estado] };
 }

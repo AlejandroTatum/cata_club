@@ -167,6 +167,7 @@ export function buildPaymentValidationRequest(
     paymentMethod: PAYMENT_METHOD_BY_TIPO_PAGO[pago.tipoPago],
     uploadedAt: pago.fechaRegistro,
     currentMembershipStatus: MEMBERSHIP_STATUS_BY_ESTADO[membresia.estado],
+    estadoBackend: membresia.estado,
     proofFileType: proofFileType(pago.voucherFormato),
     proofPreviewUrl: pago.voucherUrl ?? undefined,
     validationStatus: ESTADO_PAGO_TO_VALIDATION_STATUS[pago.estadoPago],
