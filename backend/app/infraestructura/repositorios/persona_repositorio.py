@@ -81,6 +81,19 @@ class PersonaRepositorio:
     def contar(self) -> int:
         return self.db.query(Persona).count()
 
+    def contar_representados(self, persona_id: int) -> int:
+        """Cuántas personas tienen a `persona_id` como representante actual.
+        La usa la guardia D2 de `SupresionDatosServicio.ejecutar` (issue
+        #1062): una persona con representados vigentes no puede ser
+        suprimida hasta transferir la representación por el flujo
+        autorizado (`RelacionRepresentacionServicio`)."""
+        return (
+            self.db.query(func.count(Persona.id))
+            .filter(Persona.representante_id == persona_id)
+            .scalar()
+            or 0
+        )
+
     def listar_representados(self, representante_id: int) -> List[Persona]:
         """Dependientes ACTIVOS de un representante.
 

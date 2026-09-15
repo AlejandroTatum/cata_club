@@ -466,7 +466,7 @@ class TestElCandadoMira:
         # `personas_router::independizar_persona`.
         assert MAPA.bloqueantes_directos == {
             ("app.infraestructura.cloudinary_cliente", "_subir"),
-            ("app.infraestructura.cloudinary_cliente", "eliminar_logo_sponsor"),
+            ("app.infraestructura.cloudinary_cliente", "_destruir_en_cloudinary"),
             ("app.seguridad.gestor_auth", "GestorAutenticacion.obtener_hash_contrasenia"),
             ("app.seguridad.gestor_auth", "GestorAutenticacion.verificar_contrasenia"),
             ("app.servicios_negocio.chatbot_servicio", "ChatbotServicio.consultar"),

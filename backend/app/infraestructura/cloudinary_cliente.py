@@ -407,6 +407,59 @@ def subir_logo_sponsor(contenido: bytes, nombre_publico: str, content_type: str)
     }, f"logo de patrocinador (public_id={nombre_publico})")
 
 
+def _destruir_en_cloudinary(
+    nombre_publico: str,
+    *,
+    carpeta: str,
+    resource_type: str,
+    tipo: str,
+    descripcion: str,
+    mensaje_no_disponible: str,
+) -> None:
+    """Core compartido de borrado en Cloudinary: circuito + timeout + redaccion
+    de credenciales (issue #838). Sus unicos callers son
+    `eliminar_logo_sponsor` y `eliminar_recurso_privado` (supresion de datos,
+    issue #1062); el mensaje de cara al usuario lo elige cada uno.
+
+    Nunca reintenta: la politica del modulo es un solo intento (ver
+    `_subir`). Ante un fallo el circuito se alimenta y la excepcion escala --
+    en el flujo de supresion el servicio la convierte en aborto de la
+    ejecucion, nunca en un pasa-silencioso (D5)."""
+    _configurar_cliente()
+
+    if not _circuito_cloudinary.permitir():
+        raise ServicioNoDisponible(
+            mensaje_no_disponible,
+            detalle_tecnico=(
+                "Cloudinary no disponible (circuito abierto): eliminar "
+                f"{descripcion} {nombre_publico}"
+            ),
+            seguro_mostrar=True,
+        )
+
+    try:
+        cloudinary.uploader.destroy(
+            f"{carpeta}/{nombre_publico}", resource_type=resource_type, type=tipo,
+            invalidate=True, timeout=_timeout_cloudinary(),
+        )
+    except Exception as exc:
+        _circuito_cloudinary.registrar_fallo()
+        detalle = _redactar_detalle_sensible(str(exc))
+        # Se registra el string YA redactado y SIN `exc_info`, igual que
+        # `_subir()` arriba. Un `logger.exception(...)` escribe el traceback
+        # completo, cuya ultima linea es `Tipo: str(exc)` sin pasar por
+        # `_redactar_detalle_sensible`: redactar solo `detalle_tecnico` no
+        # sirve de nada si el traceback ya copio la credencial al log.
+        logger.error("Fallo eliminando %s de Cloudinary: %s", descripcion, detalle)
+        raise ServicioNoDisponible(
+            mensaje_no_disponible,
+            detalle_tecnico=f"Error eliminando {descripcion}: {detalle}",
+            seguro_mostrar=True,
+        ) from exc
+
+    _circuito_cloudinary.registrar_exito()
+
+
 _MENSAJE_BORRADO_NO_DISPONIBLE = (
     "No se pudo eliminar el logo del patrocinador. Intente nuevamente."
 )
@@ -434,39 +487,51 @@ def eliminar_logo_sponsor(
         intentando. Con el circuito ABIERTO no se llama al SDK, igual que en
         `_subir()`.
     """
-    _configurar_cliente()
+    _destruir_en_cloudinary(
+        nombre_publico,
+        carpeta=carpeta,
+        resource_type=resource_type,
+        tipo=tipo,
+        descripcion=descripcion,
+        mensaje_no_disponible=_MENSAJE_BORRADO_NO_DISPONIBLE,
+    )
 
-    if not _circuito_cloudinary.permitir():
-        raise ServicioNoDisponible(
-            _MENSAJE_BORRADO_NO_DISPONIBLE,
-            detalle_tecnico=(
-                "Cloudinary no disponible (circuito abierto): eliminar logo "
-                f"sponsor {nombre_publico}"
-            ),
-            seguro_mostrar=True,
-        )
 
-    try:
-        cloudinary.uploader.destroy(
-            f"{carpeta}/{nombre_publico}", resource_type=resource_type, type=tipo,
-            invalidate=True, timeout=_timeout_cloudinary(),
-        )
-    except Exception as exc:
-        _circuito_cloudinary.registrar_fallo()
-        detalle = _redactar_detalle_sensible(str(exc))
-        # Se registra el string YA redactado y SIN `exc_info`, igual que
-        # `_subir()` arriba. Un `logger.exception(...)` escribe el traceback
-        # completo, cuya última línea es `Tipo: str(exc)` sin pasar por
-        # `_redactar_detalle_sensible`: redactar solo `detalle_tecnico` no
-        # sirve de nada si el traceback ya copió la credencial al log.
-        logger.error("Fallo eliminando %s de Cloudinary: %s", descripcion, detalle)
-        raise ServicioNoDisponible(
-            _MENSAJE_BORRADO_NO_DISPONIBLE,
-            detalle_tecnico=f"Error eliminando {descripcion}: {detalle}",
-            seguro_mostrar=True,
-        ) from exc
+_MENSAJE_BORRADO_SUPRESION_NO_DISPONIBLE = (
+    "No se pudo eliminar un archivo del almacenamiento externo. La supresion "
+    "de datos no se ejecuto; reintente mas tarde."
+)
 
-    _circuito_cloudinary.registrar_exito()
+
+def eliminar_recurso_privado(
+    nombre_publico: str,
+    *,
+    carpeta: str,
+    resource_type: str,
+    tipo: str = "authenticated",
+    descripcion: str = "recurso privado",
+) -> None:
+    """Destruye un recurso `type="authenticated"` del flujo de supresion de
+    datos (issue #1062, D5): foto de perfil, voucher de transferencia o
+    comprobante PDF oficial -- documentos que llevan identidad embebida.
+
+    Mismas dos protecciones que toda llamada de red del modulo (issue #838):
+    `timeout=` y `_circuito_cloudinary`; el cuerpo es
+    `_destruir_en_cloudinary`, el mismo de `eliminar_logo_sponsor`, con el
+    mensaje propio del flujo de supresion.
+
+    Idempotente a nivel del SDK: destruir un public_id que ya no existe
+    responde `not found` SIN excepcion, asi que reintentar una ejecucion
+    abortada nunca la rompe por el lado de Cloudinary.
+    """
+    _destruir_en_cloudinary(
+        nombre_publico,
+        carpeta=carpeta,
+        resource_type=resource_type,
+        tipo=tipo,
+        descripcion=descripcion,
+        mensaje_no_disponible=_MENSAJE_BORRADO_SUPRESION_NO_DISPONIBLE,
+    )
 
 
 # --- Entrega de PDF: endpoint de descarga de la API, no la CDN -------------
