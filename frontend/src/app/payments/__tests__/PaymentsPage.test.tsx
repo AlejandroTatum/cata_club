@@ -1030,6 +1030,81 @@ describe("PaymentsPage — rejection", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Issue #1230 — a renewal's membership is already active: rejecting it does
+// not stop the membership from existing, and approving it does not activate
+// it for the first time. The three sentences below read `currentMembership-
+// Status` instead of assuming every decision is a first activation.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — approvals and rejections read the membership status", () => {
+  const ACTIVE_RENEWAL_REQUEST: PaymentValidationRequest = {
+    ...PENDING_REQUEST,
+    id: "req-activa",
+    studentName: "Mateo Salazar",
+    currentMembershipStatus: "activa",
+  };
+
+  it("uses coverage wording — never activation wording — for a request whose membership is already active", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([ACTIVE_RENEWAL_REQUEST]);
+    mockUpdatePaymentValidation.mockResolvedValue({
+      ...ACTIVE_RENEWAL_REQUEST,
+      validationStatus: "validado",
+    });
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRequest("Mateo Salazar");
+
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+    expect(
+      screen.getByText(/La cobertura de Mateo Salazar no se extiende hasta entonces\./),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    completeChecklist();
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    expect(
+      screen.getByText(
+        /¿Confirma que aprueba este pago\? La cobertura se extiende de inmediato y esta acción no se puede deshacer\./,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    expect(
+      await screen.findByText(/Pago aprobado\. La cobertura de Mateo Salazar se extendió\./),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the activation wording for a request whose membership is not active yet", async () => {
+    // PENDING_REQUEST carries `currentMembershipStatus: "vencida"`.
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+    completeChecklist();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    expect(
+      screen.getByText(
+        /¿Confirma que aprueba este pago\? La membresía pasará a activa de inmediato y esta acción no se puede deshacer\./,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    expect(
+      await screen.findByText(/Pago aprobado\. La membresía ahora está activa\./),
+    ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Pre-existing contracts kept green
 // ---------------------------------------------------------------------------
 
