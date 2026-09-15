@@ -13,6 +13,7 @@ import {
   buildDateRange,
   calendarIsoDate,
   clubIsoDate,
+  clubTimeHHMM,
   clubToday,
   lastOccurrenceOfDiaSemana,
   todayDiaSemana,
@@ -45,6 +46,21 @@ describe("clubIsoDate", () => {
   it("crosses a year boundary in club time", () => {
     // 01:00Z on Jan 1 is still 20:00 on Dec 31 at the club.
     expect(clubIsoDate(new Date("2027-01-01T01:00:00Z"))).toBe("2026-12-31");
+  });
+});
+
+describe("clubTimeHHMM", () => {
+  it("reads the wall-clock time at the club, not on the device", () => {
+    // 02:00Z on the 24th is 21:00 the day before in Guayaquil.
+    expect(clubTimeHHMM(new Date("2026-07-24T02:00:00Z"))).toBe("21:00");
+  });
+
+  it("zero-pads so it sorts and compares lexicographically against horaInicio", () => {
+    expect(clubTimeHHMM(new Date("2026-07-24T05:03:00Z"))).toBe("00:03");
+  });
+
+  it("renders club midnight as 00:00, not 24:00", () => {
+    expect(clubTimeHHMM(new Date("2026-07-24T05:00:00Z"))).toBe("00:00");
   });
 });
 
