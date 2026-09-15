@@ -74,7 +74,7 @@ import {
   getAccountStatusBadge,
   getAccountStateBadge,
   getMembershipStatusBadge,
-  isRepresentativeOnlyAccount,
+  isRepresentativePersonaRow,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
@@ -429,10 +429,12 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
-  // Issue #1199: a representative-only row (badge "Representante", no
-  // membership of her own) has no student to show a ficha médica or a
-  // payment for — hiding these keeps "Editar" as the only action offered.
-  const showStudentActions = !isRepresentativeOnlyAccount(account);
+  // Issue #1199/#1211: the representative/payer's own row (badge
+  // "Representante", "—" in "Representado por") has no student to show a
+  // ficha médica or a payment for — hiding these keeps "Editar" as the only
+  // action offered. A represented student's own row is never affected, with
+  // or without a membership on file — see `isRepresentativePersonaRow`.
+  const showStudentActions = !isRepresentativePersonaRow(account);
 
   return (
     <TableRow>
@@ -472,7 +474,7 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
   // Issue #1199: same rule as `AccountRow` above.
-  const showStudentActions = !isRepresentativeOnlyAccount(account);
+  const showStudentActions = !isRepresentativePersonaRow(account);
 
   return (
     <DataRow
