@@ -369,6 +369,47 @@ describe("ActivationPage — the enrolment screen", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/el club lo\s*valida y ahí se activa la membresía/i)).toBeInTheDocument();
   });
+
+  // Issue #1222 — pressing "Consultar estado nuevamente" while the enrolment
+  // is still pending used to re-fetch and re-render the exact same screen
+  // with no feedback at all, unlike the email screen's own #1195 fix.
+  it("shows an inline message inside the live region when checking status still reports the enrolment pending", async () => {
+    const pending = enrolmentPendingSession();
+    const mockRefreshSession = mockRefreshTo(pending);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // The mount-time refresh (#1195) also runs and, for this fixture, finds
+    // nothing changed — settle it before the click under test.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Consultar estado nuevamente" }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    const mensaje = await screen.findByText(/todavía no registramos su inscripción en el club/i);
+    expect(mensaje.closest('[aria-live="polite"]')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
+  });
+
+  it("proceeds without showing the pending message when checking status reports the enrolment completed", async () => {
+    const pending = enrolmentPendingSession();
+    const complete = { ...pending, altaPresencialCompletada: true, activacionCompleta: true };
+    const mockRefreshSession = mockRefreshTo(complete);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Consultar estado nuevamente" }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
+    expect(screen.queryByText(/todavía no registramos su inscripción en el club/i)).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
