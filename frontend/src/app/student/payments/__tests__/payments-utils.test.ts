@@ -13,6 +13,9 @@ import {
   estimateTotal,
   formatFileSize,
   voucherFileTypeError,
+  voucherFileSizeError,
+  voucherFileError,
+  MAX_VOUCHER_BYTES,
   MAX_MESES_COBERTURA,
   MENSAJE_MESES_MAXIMO_EXCEDIDO,
   excedeMesesMaximo,
@@ -221,6 +224,52 @@ describe("voucherFileTypeError", () => {
   it("rejects a file with no declared type at all", () => {
     const file = new File(["contenido"], "comprobante", { type: "" });
     expect(voucherFileTypeError(file)).not.toBeNull();
+  });
+});
+
+/** A `File` of an exact byte size, without allocating a matching string. */
+function fileOfSize(bytes: number, type = "image/png"): File {
+  return new File([new Uint8Array(bytes)], "comprobante.png", { type });
+}
+
+// Issue #1226: the BFF already rejects a comprobante over 5 MB, but only
+// after `registrarPago` already created the payment — the reader is left
+// with a "Pendiente de validación — Falta el comprobante" payment and has to
+// retry from the history. This checks the same limit client-side, at
+// selection time.
+describe("voucherFileSizeError", () => {
+  it("accepts a file at exactly the 5 MB limit", () => {
+    expect(voucherFileSizeError(fileOfSize(MAX_VOUCHER_BYTES))).toBeNull();
+  });
+
+  it("rejects a file one byte over the 5 MB limit", () => {
+    expect(voucherFileSizeError(fileOfSize(MAX_VOUCHER_BYTES + 1))).toBe(
+      "El comprobante supera el límite de 5 MB (5,0 MB).",
+    );
+  });
+
+  it("formats the size with a decimal comma, matching the rest of the page", () => {
+    expect(voucherFileSizeError(fileOfSize(6 * 1024 * 1024))).toBe(
+      "El comprobante supera el límite de 5 MB (6,0 MB).",
+    );
+  });
+});
+
+describe("voucherFileError", () => {
+  it("reports the #482 type error first, without also checking size", () => {
+    const file = new File(["contenido"], "notas.txt", { type: "text/plain" });
+    expect(voucherFileError(file)).toBe("El comprobante debe ser un archivo PDF, JPG o PNG.");
+  });
+
+  it("reports the #1226 size error when the type is valid", () => {
+    expect(voucherFileError(fileOfSize(MAX_VOUCHER_BYTES + 1))).toBe(
+      "El comprobante supera el límite de 5 MB (5,0 MB).",
+    );
+  });
+
+  it("accepts a valid file within the size limit", () => {
+    const file = new File(["contenido"], "comprobante.png", { type: "image/png" });
+    expect(voucherFileError(file)).toBeNull();
   });
 });
 
