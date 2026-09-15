@@ -33,6 +33,15 @@ export interface TrainingSchedule {
   /** "HH:mm", seconds already trimmed by the adapter. */
   horaInicio: string;
   horaFin: string;
+  /** The category's human name (`categoria_horario.label`, issue #1238) —
+   *  lets the trainer picker tell same-day/different-category cards apart
+   *  without memorizing the timetable. Optional: not every fixture/consumer
+   *  of `TrainingSchedule` sets it, and a real response always does (the
+   *  backend fills it, falling back to the raw código when the category row
+   *  is gone from the catalog). `undefined` renders as "no label", same
+   *  ante-la-duda-no-se-muestra default this codebase already applies
+   *  elsewhere rather than showing a guess. */
+  categoriaLabel?: string;
 }
 
 /** A recent attendance record, enriched with the student's name. */
