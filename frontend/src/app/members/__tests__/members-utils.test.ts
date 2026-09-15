@@ -17,7 +17,7 @@ import {
   getAccountStatusBadge,
   getAccountStateBadge,
   getMembershipStatusBadge,
-  isRepresentativeOnlyAccount,
+  isRepresentativePersonaRow,
   normalizeText,
   accountMatchesFlag,
   countAccountsMatchingFlag,
@@ -733,11 +733,11 @@ describe("getMembershipStatusBadge", () => {
 });
 
 // ---------------------------------------------------------------------------
-// isRepresentativeOnlyAccount (issue #1199)
+// isRepresentativePersonaRow (issue #1199, fixed for the #1211 regression)
 // ---------------------------------------------------------------------------
 
-describe("isRepresentativeOnlyAccount", () => {
-  it("is true for a representative with no membership of her own on file", () => {
+describe("isRepresentativePersonaRow", () => {
+  it("is true for the representative/payer's own row: role representante, no representadoPor", () => {
     const account: MemberAccount = {
       id: "rep-only",
       role: "representante",
@@ -748,19 +748,7 @@ describe("isRepresentativeOnlyAccount", () => {
         { id: "rep-only", nombres: "Marta", apellidos: "Reyes", activo: true, membresia: null, ultimoPago: null },
       ],
     };
-    expect(isRepresentativeOnlyAccount(account)).toBe(true);
-  });
-
-  it("is true for a representative with no estudiantes at all", () => {
-    const account: MemberAccount = {
-      id: "rep-empty",
-      role: "representante",
-      nombres: "Marta",
-      apellidos: "Reyes",
-      telefono: "+593 90 000 0000",
-      estudiantes: [],
-    };
-    expect(isRepresentativeOnlyAccount(account)).toBe(true);
+    expect(isRepresentativePersonaRow(account)).toBe(true);
   });
 
   it("is false for a representative who is also a player on her own row", () => {
@@ -781,10 +769,58 @@ describe("isRepresentativeOnlyAccount", () => {
         },
       ],
     };
-    expect(isRepresentativeOnlyAccount(account)).toBe(false);
+    expect(isRepresentativePersonaRow(account)).toBe(false);
   });
 
-  it("is false for a role: estudiante account even with no membership yet", () => {
+  it("issue #1211 regression: is false for a represented student's row without a membership yet", () => {
+    // A child just enrolled by a representative has no Usuario/login of her
+    // own, so the roles-bulk lookup never resolves ALUMNO and she defaults
+    // to role: "representante" same as her representative — representadoPor
+    // is what tells the two apart, not membership.
+    const account: MemberAccount = {
+      id: "hijo-recien-inscrito",
+      role: "representante",
+      nombres: "Sofía",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      representadoPor: "Marta Reyes",
+      estudiantes: [
+        {
+          id: "hijo-recien-inscrito",
+          nombres: "Sofía",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: null,
+          ultimoPago: null,
+        },
+      ],
+    };
+    expect(isRepresentativePersonaRow(account)).toBe(false);
+  });
+
+  it("is false for a represented student's row that already has a membership", () => {
+    const account: MemberAccount = {
+      id: "hijo-con-membresia",
+      role: "estudiante",
+      nombres: "Sofía",
+      apellidos: "Reyes",
+      telefono: "+593 90 000 0000",
+      representadoPor: "Marta Reyes",
+      estudiantes: [
+        {
+          id: "hijo-con-membresia",
+          nombres: "Sofía",
+          apellidos: "Reyes",
+          activo: true,
+          membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+          ultimoPago: null,
+        },
+      ],
+    };
+    expect(isRepresentativePersonaRow(account)).toBe(false);
+  });
+
+  it("is false for a self-enrolled player's row even with no membership yet", () => {
     const account: MemberAccount = {
       id: "estudiante-sin-membresia",
       role: "estudiante",
@@ -802,7 +838,7 @@ describe("isRepresentativeOnlyAccount", () => {
         },
       ],
     };
-    expect(isRepresentativeOnlyAccount(account)).toBe(false);
+    expect(isRepresentativePersonaRow(account)).toBe(false);
   });
 });
 
