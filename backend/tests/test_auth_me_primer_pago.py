@@ -9,8 +9,9 @@ expone el hecho que faltaba; estos tests cubren su armado en el DTO real de
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago, TipoRol
-from app.dominio.modelos import Membresia, Pago
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoModalidad, TipoPago, TipoRol
+from app.dominio.modelos import Membresia, Pago, TipoMembresia
+from app.seguridad.gestor_auth import GestorAutenticacion
 from tests.test_auth_activation import _crear_usuario, _token
 
 
@@ -99,6 +100,62 @@ def test_primer_pago_es_el_mas_reciente_por_fecha_de_registro(client_sin_token, 
 
     body = _obtener_me(client_sin_token, usuario)
     assert body["primerPago"] == {"estado": "PENDIENTE_VALIDACION", "motivoRechazo": None}
+
+
+# --- Corrección de #1236: elegir la membresía más reciente, no cualquiera --
+#
+# El esquema permite más de una membresía NO-operativa por persona (el índice
+# único parcial `uq_membresia_activa_por_persona` solo cubre ACTIVA/
+# SUSPENDIDA; `inventario_anomalias_membresias.py` documenta esta condición
+# real como A4). Sin ORDER BY, la consulta podía devolver la VENCIDA vieja en
+# vez de la INACTIVA nueva, y entonces `primer_pago` mostraba el pago
+# APROBADO de la membresía equivocada en lugar del rechazo real más
+# reciente.
+#
+# Llama a `primer_pago_gate` directo, no a través de `/auth/me`: una VENCIDA
+# es uno de los estados "habilitantes" de `alta_presencial_completada` (junto
+# a ACTIVA y SUSPENDIDA), así que ESTE fixture en particular ya tiene
+# `activacion_completa=True` -- el router ni siquiera llamaría a
+# `primer_pago_gate`. Lo que este test aísla es el ordenamiento de la
+# consulta en sí, no el gate completo (ya cubierto por los tests de arriba).
+def test_primer_pago_usa_la_membresia_mas_reciente_no_cualquiera(db_session):
+    usuario = _crear_usuario(
+        db_session, correo="doble-membresia@cataclub.test", correo_verificado=True,
+        estado_membresia=None,
+    )
+    ahora = datetime.now(timezone.utc)
+    plan_viejo = TipoMembresia(categoria="Mensual", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+    plan_nuevo = TipoMembresia(categoria="Mensual", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+    db_session.add_all([plan_viejo, plan_nuevo])
+    db_session.flush()
+
+    membresia_vieja = Membresia(
+        estado=EstadoMembresia.VENCIDA, monto_aplicado=Decimal("25.00"),
+        fecha_activacion=ahora - timedelta(days=200),
+        persona_id=usuario.persona_id, tipo_membresia_id=plan_viejo.id,
+    )
+    db_session.add(membresia_vieja)
+    db_session.commit()
+    _registrar_pago(
+        db_session, membresia_id=membresia_vieja.id, persona_id=usuario.persona_id,
+        estado_pago=EstadoPago.APROBADO, fecha_registro=ahora - timedelta(days=200),
+    )
+
+    membresia_nueva = Membresia(
+        estado=EstadoMembresia.INACTIVA, monto_aplicado=Decimal("25.00"),
+        fecha_activacion=ahora,
+        persona_id=usuario.persona_id, tipo_membresia_id=plan_nuevo.id,
+    )
+    db_session.add(membresia_nueva)
+    db_session.commit()
+    _registrar_pago(
+        db_session, membresia_id=membresia_nueva.id, persona_id=usuario.persona_id,
+        estado_pago=EstadoPago.RECHAZADO, fecha_registro=ahora,
+        motivo_rechazo="Comprobante vencido",
+    )
+
+    resultado = GestorAutenticacion.primer_pago_gate(db_session, usuario.persona_id)
+    assert resultado == {"estado": "RECHAZADO", "motivo_rechazo": "Comprobante vencido"}
 
 
 def test_sin_ningun_pago_primer_pago_es_null(client_sin_token, db_session):

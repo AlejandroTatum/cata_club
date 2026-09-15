@@ -112,10 +112,19 @@ class GestorAutenticacion:
         Devuelve None cuando no hay membresía, no hay ningún pago todavía, o
         el pago más reciente ya está APROBADO (ese caso ya pasó el gate por
         otro motivo -- p.ej. `alta_presencial_completada` histórica -- y no
-        hay nada pendiente que explicarle al visitante)."""
+        hay nada pendiente que explicarle al visitante).
+
+        Corrección #1236: el esquema permite más de una membresía NO
+        operativa por persona -- `uq_membresia_activa_por_persona` solo
+        cubre ACTIVA/SUSPENDIDA, y `inventario_anomalias_membresias.py`
+        documenta esta condición real (A4). Sin ORDER BY, Postgres podía
+        devolver una VENCIDA vieja en vez de la INACTIVA nueva, leyendo el
+        pago de la membresía equivocada. `fecha_activacion.desc(), id.desc()`
+        replica el criterio de `MembresiaRepositorio.listar` para la misma
+        pregunta ("¿cuál es la más reciente?")."""
         membresia = db.query(Membresia.id).filter(
             Membresia.persona_id == persona_id,
-        ).first()
+        ).order_by(Membresia.fecha_activacion.desc(), Membresia.id.desc()).first()
         if membresia is None:
             return None
 
