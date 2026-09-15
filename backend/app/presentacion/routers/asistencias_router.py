@@ -4,7 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional
 from datetime import date
 
-from app.dominio.enums import DiaSemana
+from app.dominio.enums import DiaSemana, EstadoAsistencia
 from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.db import obtener_sesion
 from app.soporte_transversal.tiempo import hoy_club
@@ -34,6 +34,17 @@ router = APIRouter(prefix="/asistencias", tags=["Asistencias"])
 # ancho de página pueda medir las columnas REALES del reporte y no una copia
 # escrita a mano en el test, que envejecería sin que nadie se entere.
 _COLUMNAS_ASISTENCIA_PDF = ["Fecha", "Horario", "Estudiante", "Estado"]
+
+# Issue #1240: el PDF imprimía `r.estado.value`, el miembro crudo del enum
+# (p.ej. "ATRASADO"), mientras la tabla de la misma pantalla, el export a
+# Excel y el resto de la UI usan estas etiquetas en español. Un solo mapeo
+# para que ambos exports digan lo mismo.
+_ETIQUETAS_ESTADO_ASISTENCIA = {
+    EstadoAsistencia.PRESENTE: "Presente",
+    EstadoAsistencia.AUSENTE: "Ausente",
+    EstadoAsistencia.ATRASADO: "Tardanza",
+    EstadoAsistencia.JUSTIFICADO: "Justificado",
+}
 
 
 def _validar_rango_de_fechas(fecha_inicio: Optional[date], fecha_fin: Optional[date]) -> None:
@@ -317,7 +328,7 @@ async def reporte_asistencia_pdf(
             f"{r.horario.dia_semana.value} {r.horario.hora_inicio.strftime('%H:%M')}"
             f"–{r.horario.hora_fin.strftime('%H:%M')}",
             nombre_completo(r.persona.nombres, r.persona.apellidos),
-            r.estado.value,
+            _ETIQUETAS_ESTADO_ASISTENCIA[r.estado],
         ]
         for r in registros
     ]
