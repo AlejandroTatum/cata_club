@@ -109,7 +109,7 @@ import {
   formatFileSize,
   TIPO_PAGO_LABEL,
   PAGO_FILTER_LABELS,
-  voucherFileTypeError,
+  voucherFileError,
   type PagoStatusFilter,
 } from "./payments-utils";
 import {
@@ -888,16 +888,18 @@ function RenewPaymentForm({
   /**
    * Issue #482: `accept` on the voucher `<input>` only filters the OS
    * picker's own dropdown — a reader who switches it to "All Files" can
-   * still pick a `.txt`. Reject it here, the moment it is selected, instead
-   * of letting `registrarPago` succeed and only failing the follow-up
-   * `subirVoucherPago` call once the backend's own content-type check does.
+   * still pick a `.txt`. Issue #1226 adds the same reasoning for size: the
+   * BFF's own 5 MB limit only rejects after `registrarPago` already created
+   * the payment. Reject either case here, the moment it is selected,
+   * instead of letting `registrarPago` succeed and only failing the
+   * follow-up `subirVoucherPago` call once the backend checks catch it.
    */
   function handleVoucherChange(file: File | null): void {
     if (file) {
-      const typeError = voucherFileTypeError(file);
-      if (typeError) {
+      const error = voucherFileError(file);
+      if (error) {
         setVoucherFile(null);
-        action.setError(typeError);
+        action.setError(error);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
@@ -2092,11 +2094,13 @@ function PaymentsContent({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Issue #482: `accept` alone lets a reader pick a `.txt` via "All Files"
-    // — caught here before it ever reaches the preview/confirm step below.
-    const typeError = voucherFileTypeError(file);
-    if (typeError) {
-      setUploadError(typeError);
+    // Issue #482: `accept` alone lets a reader pick a `.txt` via "All Files".
+    // Issue #1226: the BFF's own 5 MB limit only rejects once the upload is
+    // already in flight. Both are caught here before the preview/confirm
+    // step below.
+    const error = voucherFileError(file);
+    if (error) {
+      setUploadError(error);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
