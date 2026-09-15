@@ -12,6 +12,7 @@ import {
   PERSON_NAME_PATTERN,
   personNameError,
   personNameRule,
+  normalizePersonName,
   EDAD_MINIMA_ALUMNO,
   EDAD_MAXIMA_ALUMNO,
   EDAD_MAYORIA_EDAD,
@@ -328,6 +329,44 @@ describe("nombre de persona", () => {
 
     it("passes a valid single-word contact name (singular)", () => {
       expect(personNameRule("María", "El nombre del contacto de emergencia", { plural: false })).toBeNull();
+    });
+  });
+
+  // Issue #1246: some input sources (iOS/macOS keyboards, text pasted from
+  // WhatsApp or Contacts) emit a name in decomposed form (NFD) — e.g. "ñ" as
+  // the letter "n" followed by U+0303 COMBINING TILDE. Combining marks sit
+  // outside PERSON_NAME_PATTERN's allowed range, so an NFD name used to fail
+  // validation while the same name typed on a desktop keyboard (NFC) passed.
+  describe("nombres con tilde combinante (NFD) — issue #1246", () => {
+    it("normalizePersonName recomposes an NFD name back to NFC", () => {
+      const nfd = "Muñoz".normalize("NFD");
+      // Sanity check the fixture actually is decomposed, or the rest of
+      // this test would pass for the wrong reason.
+      expect(nfd).not.toBe("Muñoz");
+      expect(normalizePersonName(nfd)).toBe("Muñoz");
+      expect(normalizePersonName(nfd)).toBe(normalizePersonName(nfd).normalize("NFC"));
+    });
+
+    it("personNameRule passes an NFD surname (Muñoz)", () => {
+      expect(personNameRule("Muñoz".normalize("NFD"), "Los apellidos")).toBeNull();
+    });
+
+    it("personNameRule passes an NFD compound surname (Peña Ríos)", () => {
+      expect(personNameRule("Peña Ríos".normalize("NFD"), "Los apellidos")).toBeNull();
+    });
+
+    it("personNameRule passes an NFD single name (José)", () => {
+      expect(
+        personNameRule("José".normalize("NFD"), "El nombre del contacto de emergencia", { plural: false }),
+      ).toBeNull();
+    });
+
+    it("a stray combining mark on a non-letter still fails", () => {
+      // U+0303 COMBINING TILDE after a space has no precomposed form to
+      // recompose into — NFC normalization leaves it as a bare combining
+      // mark, which stays outside the allowed character class.
+      const value = "Juan " + String.fromCharCode(0x0303) + "Carlos";
+      expect(personNameRule(value, "Los apellidos")).not.toBeNull();
     });
   });
 

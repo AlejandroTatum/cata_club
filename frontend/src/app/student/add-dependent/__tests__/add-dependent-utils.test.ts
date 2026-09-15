@@ -272,6 +272,19 @@ describe("buildRepresentadoPayload", () => {
     expect(payload.fichaMedica).not.toHaveProperty("contactoEmergencia");
     expect(payload.fichaMedica).not.toHaveProperty("telefonoEmergencia");
   });
+
+  /**
+   * Issue #1246: an iOS/macOS keyboard (or text pasted from WhatsApp or
+   * Contacts) can emit "ñ" in decomposed form (NFD) — the payload sent to
+   * the backend must carry the canonical NFC form regardless.
+   */
+  it("normalizes an NFD dependent name to NFC in the built payload", () => {
+    const payload = buildRepresentadoPayload(
+      validForm({ nombres: "José".normalize("NFD"), apellidos: "Muñoz".normalize("NFD") }),
+    );
+    expect(payload.nombres).toBe("José");
+    expect(payload.apellidos).toBe("Muñoz");
+  });
 });
 
 // ---------------------------------------------------------------------------

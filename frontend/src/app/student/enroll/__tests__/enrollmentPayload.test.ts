@@ -79,6 +79,29 @@ describe("buildEnrollmentRequest", () => {
     expect(JSON.stringify(request)).not.toContain("Confirmacion");
     expect(request.representante).not.toHaveProperty("contraseniaRepresentanteConfirmacion");
   });
+
+  /**
+   * Issue #1246: an iOS/macOS keyboard (or text pasted from WhatsApp or
+   * Contacts) can emit "ñ" in decomposed form (NFD) — the wizard must not
+   * carry that into the request as-is, since the request's name fields are
+   * expected to be canonical NFC.
+   */
+  it("normalizes an NFD student surname to NFC in the built request", () => {
+    const request = buildEnrollmentRequest(form({ apellidos: "Muñoz".normalize("NFD") }));
+    expect(request.alumno.apellidos).toBe("Muñoz");
+  });
+
+  it("normalizes an NFD representative name to NFC in the built request", () => {
+    const request = buildEnrollmentRequest(form({
+      enrollmentType: "child", fechaNacimiento: "2015-06-15",
+      nombreRepresentante: "Peña Ríos".normalize("NFD"), apellidosRepresentante: "Núñez".normalize("NFD"),
+      cedulaRepresentante: "0998765432", fechaNacimientoRepresentante: "1985-04-10",
+      telefonoRepresentante: "0991234567", correoRepresentante: "marta@example.com",
+      contraseniaRepresentante: "password8",
+    }));
+    expect(request.representante?.nombres).toBe("Peña Ríos");
+    expect(request.representante?.apellidos).toBe("Núñez");
+  });
 });
 
 describe("getEnrollmentErrorMessage", () => {
