@@ -3,7 +3,7 @@
  *
  * Covers the four behavioural decisions of the Fase 3 redesign, each of which
  * was a measured defect before it:
- *   1. the screen opens on Todos, not on a status-specific filter;
+ *   1. the screen opens on Pendientes, not on "Todos";
  *   2. every row is operable from the keyboard through a real button (the old
  *      `<tr onClick>` was unreachable without a mouse);
  *   3. approving or rejecting advances to the next pending request instead of
@@ -324,17 +324,17 @@ afterEach(() => {
 // 1. The queue opens on the work of the day
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — opens on all payments", () => {
-  it("defaults the state filter to Todos", async () => {
+describe("PaymentsPage — opens on the pending queue", () => {
+  it("defaults the state filter to Pendientes instead of Todos", async () => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
-    const todos = await screen.findByRole("button", { name: /^todos/i });
-    expect(todos).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^pendientes/i })).toHaveAttribute("aria-pressed", "false");
+    const pendientes = await screen.findByRole("button", { name: /^pendientes/i });
+    expect(pendientes).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^todos/i })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("shows every payment status in the default table", async () => {
+  it("shows only pending requests until the admin asks for the rest", async () => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
@@ -345,12 +345,9 @@ describe("PaymentsPage — opens on all payments", () => {
     // (header + the one pending row) is a positive, deterministic signal
     // that the filtered render is done, so the absence check that follows it
     // means something.
-    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
     expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
+    expect(within(queueTable()).queryByText("Kevin Sabando")).not.toBeInTheDocument();
 
     // Issue #400 (criterio 4/5): switching tabs now re-fetches the visible
     // page from the (mocked) backend — `activeFilter` drives `estadoPago`
@@ -358,6 +355,9 @@ describe("PaymentsPage — opens on all payments", () => {
     // synchronously, so this needs to wait for that round trip.
     fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
     await waitFor(() => expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument());
+    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
   });
 });
 
@@ -2014,6 +2014,8 @@ describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCI
   it('renders "Sin activar" — never "Vencida" — for a never-activated membership with nothing awaiting review', async () => {
     mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_RESOLVED_REQUEST]);
     renderPage();
+    // A "rechazado" request does not show under the default "Pendientes" tab.
+    fireEvent.click(await screen.findByRole("button", { name: /^todos/i }));
     await openRequest("Rosa Delgado");
     await screen.findByText("Sin activar");
     expect(screen.queryByText("Vencida")).not.toBeInTheDocument();

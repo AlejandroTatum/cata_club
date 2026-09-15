@@ -459,7 +459,7 @@ export default function PaymentsPage(): React.ReactElement {
    */
   const [activeFilter, setActiveFilter] = usePersistentPreference<FilterKey>(
     "payments-queue-filter",
-    "all",
+    "pendiente",
     isFilterKey,
   );
   const [query, setQuery] = useState("");
@@ -1035,15 +1035,10 @@ export default function PaymentsPage(): React.ReactElement {
   function renderRowActions(req: PaymentValidationRequest): React.ReactElement {
     return (
       <>
-        {/* Estado now has a dedicated column: the active tab already
-            filters to one status, so repeating it per row would only echo
-            the tab. Under "Todas" it is the one thing on the row that says
-            what state a payment is in. */}
-        {/* Estado is rendered in its dedicated column. */ false && (
-          <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-            {VALIDATION_STATUS_LABELS[req.validationStatus]}
-          </Badge>
-        )}
+        {/* Estado has a dedicated column: the active tab already filters to
+            one status, so repeating it per row would only echo the tab.
+            Under "Todas" it is the one thing on the row that says what
+            state a payment is in. */}
         {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for every pending row,
             and the default tab IS the pending queue: ten red buttons down one
             column. "Nunca hay dos botones rojos en una pantalla" — the real
