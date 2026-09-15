@@ -122,4 +122,74 @@ describe("summarizePeriodCoverage", () => {
     expect(coverage.sesionesProgramadas).toBe(0);
     expect(coverage.sinLista).toBe(0);
   });
+
+  describe("hoy con horaActual: una sesión de hoy que todavía no arrancó", () => {
+    // Issue #1239: a las 11:14 del martes, el horario de 15:00 no es una lista
+    // que falte — es una lista que todavía no toca, igual que un día futuro.
+    const SCHEDULES_DE_HOY: TrainingSchedule[] = [
+      { id: 15, diaSemana: "mar", horaInicio: "15:00", horaFin: "16:00" },
+      { id: 16, diaSemana: "mar", horaInicio: "16:00", horaFin: "17:00" },
+      { id: 17, diaSemana: "mar", horaInicio: "17:00", horaFin: "18:00" },
+      { id: 18, diaSemana: "mar", horaInicio: "18:00", horaFin: "19:00" },
+      { id: 20, diaSemana: "mar", horaInicio: "20:00", horaFin: "21:00" },
+    ];
+    // 2026-09-15 es un martes.
+    const HOY = "2026-09-15";
+
+    it("a las 11:14 ninguna sesión de hoy arrancó: cero programadas, cero huecos", () => {
+      const coverage = summarizePeriodCoverage({
+        sessions: [
+          { fecha: HOY, horarioId: 18 },
+          { fecha: HOY, horarioId: 20 },
+        ],
+        schedules: SCHEDULES_DE_HOY,
+        desde: HOY,
+        hasta: HOY,
+        hoy: HOY,
+        horaActual: "11:14",
+      });
+
+      expect(coverage.sesionesProgramadas).toBe(0);
+      expect(coverage.sinLista).toBe(0);
+      // Las listas de 18:00 y 20:00 se tomaron por adelantado — igual cuentan.
+      expect(coverage.listasTomadas).toBe(2);
+    });
+
+    it("a las 16:30 ya arrancaron 15:00 y 16:00: una con lista, una sin", () => {
+      const coverage = summarizePeriodCoverage({
+        sessions: [
+          { fecha: HOY, horarioId: 16 },
+          { fecha: HOY, horarioId: 18 },
+          { fecha: HOY, horarioId: 20 },
+        ],
+        schedules: SCHEDULES_DE_HOY,
+        desde: HOY,
+        hasta: HOY,
+        hoy: HOY,
+        horaActual: "16:30",
+      });
+
+      // Arrancaron 15:00 y 16:00; 17:00, 18:00 y 20:00 todavía no.
+      expect(coverage.sesionesProgramadas).toBe(2);
+      // 15:00 no tiene lista; 16:00 sí.
+      expect(coverage.sinLista).toBe(1);
+      expect(coverage.listasTomadas).toBe(3);
+    });
+
+    it("un día pasado no se filtra por horaActual: todo su horario cuenta", () => {
+      const coverage = summarizePeriodCoverage({
+        sessions: [],
+        schedules: SCHEDULES_DE_HOY,
+        desde: "2026-09-08",
+        hasta: "2026-09-08",
+        hoy: HOY,
+        horaActual: "00:00",
+      });
+
+      // 2026-09-08 también es martes: las cinco sesiones del día ya pasaron,
+      // aunque `horaActual` sea la más temprana posible.
+      expect(coverage.sesionesProgramadas).toBe(5);
+      expect(coverage.sinLista).toBe(5);
+    });
+  });
 });

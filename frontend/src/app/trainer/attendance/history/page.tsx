@@ -77,7 +77,7 @@ import {
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
-import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
+import { calendarIsoDate, clubIsoDate, clubTimeHHMM, clubToday } from "@/lib/club-date";
 import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
 import {
   SessionCompositionBar,
@@ -233,6 +233,9 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
         // El techo real: un rango personalizado puede terminar en el futuro, y
         // una sesión que todavía no ocurrió no es una lista que falte.
         hoy: clubIsoDate(),
+        // Dentro de hoy, el mismo razonamiento corre por hora: una sesión de
+        // esta tarde que todavía no arrancó tampoco es una lista que falte.
+        horaActual: clubTimeHHMM(),
         horarioId: query?.horarioId ?? null,
       }),
     [sessions, schedules, query],
