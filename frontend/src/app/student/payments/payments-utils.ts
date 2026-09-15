@@ -346,6 +346,34 @@ export function voucherFileTypeError(file: File): string | null {
   return "El comprobante debe ser un archivo PDF, JPG o PNG.";
 }
 
+/**
+ * Mirrors `MAX_SIZE_BYTES` in the BFF route
+ * (`api/membresias/pagos/[pagoId]/voucher/route.ts`) — keep both in sync.
+ */
+export const MAX_VOUCHER_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Issue #1226: the BFF already rejects a comprobante over 5 MB, but only
+ * after `POST /membresias/pagos` already created the payment — the reader
+ * sees "Pendiente de validación — Falta el comprobante" and has to retry
+ * from the history. Every voucher input calls this right after the user
+ * picks a file, same as `voucherFileTypeError` above, so the limit is
+ * caught before the payment ever exists.
+ */
+export function voucherFileSizeError(file: File): string | null {
+  if (file.size <= MAX_VOUCHER_BYTES) return null;
+  const mb = new Intl.NumberFormat("es-EC", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(file.size / 1024 / 1024);
+  return `El comprobante supera el límite de 5 MB (${mb} MB).`;
+}
+
+/** Runs the #482 type check, then the #1226 size check — one call per picked file. */
+export function voucherFileError(file: File): string | null {
+  return voucherFileTypeError(file) ?? voucherFileSizeError(file);
+}
+
 // ---------------------------------------------------------------------------
 // El descuento que el club ya aplicó
 // ---------------------------------------------------------------------------
