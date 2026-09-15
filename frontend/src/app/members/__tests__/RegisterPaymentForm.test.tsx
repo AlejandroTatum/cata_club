@@ -358,3 +358,50 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
     });
   });
 });
+
+// Issue #1231: an amount that is not a positive multiple of the monthly
+// price used to clear "Fin:" and grey out "Registrar pago" with nothing
+// said — the reader had to guess. `MEMBRESIA_40` matches the issue's own
+// numbers ($40/mes, $33 no compra meses enteros, $80 compra 2).
+describe("RegisterPaymentForm — el monto no múltiplo explica por qué el botón está deshabilitado (#1231)", () => {
+  const MEMBRESIA_40: NonNullable<MemberStudentSummary["membresia"]> = {
+    ...MEMBRESIA,
+    monto: 40,
+  };
+
+  function openWithMonto(amount: string): void {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA_40} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
+      target: { value: amount },
+    });
+  }
+
+  it("shows an inline hint tied to Monto via aria-describedby and keeps the button disabled", () => {
+    openWithMonto("33");
+
+    const monto = screen.getByRole("spinbutton", { name: /^Monto/ });
+    const hint = screen.getByText("El monto debe ser un múltiplo de $40 (un mes = $40).");
+    expect(monto).toHaveAttribute("aria-describedby", hint.id);
+    expect(screen.getByRole("button", { name: "Registrar pago" })).toBeDisabled();
+  });
+
+  it("shows no hint, '2 meses de vigencia' and an enabled button for a whole multiple", () => {
+    openWithMonto("80");
+
+    expect(
+      screen.queryByText("El monto debe ser un múltiplo de $40 (un mes = $40)."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/2 meses de vigencia/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar pago" })).toBeEnabled();
+  });
+
+  it("formats the Inicio/Fin preview as dd/mm/yyyy, not ISO", () => {
+    openWithMonto("80");
+
+    const inicio = screen.getByText("Inicio:").nextSibling;
+    const fin = screen.getByText("Fin:").nextSibling;
+    expect(inicio).toHaveTextContent(/^\d{2}\/\d{2}\/\d{4}$/);
+    expect(fin).toHaveTextContent(/^\d{2}\/\d{2}\/\d{4}$/);
+  });
+});
