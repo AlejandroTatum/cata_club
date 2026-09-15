@@ -83,6 +83,11 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         # respuesta.
         "reenviar_verificacion_correo": "10/minute",
         "verificar_correo": "20/minute",
+        # Issue #1245: autenticado (a diferencia de sus dos vecinos de
+        # arriba), pero mismo tier que el reenvío -- los dos terminan
+        # encolando el mismo tipo de trabajo (una fila de
+        # `VerificacionCorreoOutbox`).
+        "cambiar_correo_no_verificado": "10/minute",
     },
     enrollment_router: {
         "autoinscribir": "10/minute",

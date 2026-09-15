@@ -67,7 +67,13 @@ import {
   Mail,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
+import {
+  calculatePersonAge,
+  EDAD_MAXIMA_ALUMNO,
+  EDAD_MAYORIA_EDAD,
+  isPlausibleHumanAge,
+  studentBirthDateBounds,
+} from "@/lib/identity-validation";
 import type { NumericFieldMode } from "@/lib/numeric-input";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
@@ -921,8 +927,9 @@ function EnrollWizard(): React.ReactElement {
             Representante mayor de edad
           </p>
           <p className="mt-field">
-            El representante debe tener entre 18 y 74 años. Al inscribir a un
-            dependiente, usted confirma que es legalmente responsable del menor.
+            El representante debe tener entre {EDAD_MAYORIA_EDAD} y {EDAD_MAXIMA_ALUMNO}{" "}
+            años. Al inscribir a un dependiente, usted confirma que es
+            legalmente responsable del menor.
           </p>
         </div>
       </div>

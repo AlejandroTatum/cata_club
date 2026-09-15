@@ -183,6 +183,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/personas/{persona_id}/beneficio"),                 # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
+    ("PATCH", "/auth/correo"),                                   # (b) - propio via `sub`, solo mientras no verificado
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`
     ("PATCH", "/fichas-medicas/persona/{persona_id}"),           # (b) - admin o representante, SIN el titular
     ("PATCH", "/ranking/notificaciones/leer-todas"),             # (b) - propio via `persona_id` del token

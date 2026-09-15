@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { reenviarVerificacionCorreo } from "@/services/api";
+import { cambiarCorreoNoVerificado, reenviarVerificacionCorreo } from "@/services/api";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
-import AuthShell, { AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
+import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES, AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
 import { Button, buttonClasses } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 
@@ -96,6 +96,21 @@ function ActivationPageContent(): React.ReactElement {
    * or not), same as `stillUnverified`.
    */
   const [stillPending, setStillPending] = useState(false);
+  /**
+   * Issue #1245: "¿Correo equivocado? Corregirlo" on the email screen — the
+   * visitor who mistyped the address at enrolment never received the
+   * verification link and had no way to fix it (reinscribing collides with
+   * the identity-duplicate check before the correo is even looked at). No
+   * separate success banner on top of these three: the existing subtitle
+   * (`emailScreenSubtitle`) already names `activation.user.email`, so once
+   * `refreshSession` reloads the session under the corrected address, the
+   * screen's own status copy — and the resend button below it, which reads
+   * the same field — pick it up without any extra state here.
+   */
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCorrectionOpen, setEmailCorrectionOpen] = useState(false);
+  const [emailCorrectionSubmitting, setEmailCorrectionSubmitting] = useState(false);
+  const [emailCorrectionError, setEmailCorrectionError] = useState<string | null>(null);
   const activation = session as ActivationSession | null;
   // The BFF defaults omitted fields to complete for pre-#858 sessions.
   const correoVerificado = activation?.correoVerificado !== false;
@@ -151,6 +166,28 @@ function ActivationPageContent(): React.ReactElement {
       setResendError(toUserMessage(error, "No se pudo reenviar el correo. Intente nuevamente."));
     } finally {
       setResending(false);
+    }
+  }
+
+  /**
+   * "¿Correo equivocado? Corregirlo" (#1245): submits the new address through
+   * `PATCH /api/auth/correo`, then reloads the session so the screen's own
+   * status copy and the resend button both pick up the corrected value — see
+   * the state comment above for why no separate success banner is needed.
+   */
+  async function submitEmailCorrection(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setEmailCorrectionSubmitting(true);
+    setEmailCorrectionError(null);
+    try {
+      await cambiarCorreoNoVerificado(newEmail);
+      await refreshSession();
+      setEmailCorrectionOpen(false);
+      setNewEmail("");
+    } catch (error: unknown) {
+      setEmailCorrectionError(toUserMessage(error, "No se pudo corregir el correo. Intente nuevamente."));
+    } finally {
+      setEmailCorrectionSubmitting(false);
     }
   }
 
@@ -246,6 +283,56 @@ function ActivationPageContent(): React.ReactElement {
               {resending ? "Enviando…" : "Reenviar correo de verificación"}
             </Button>
           </form>
+
+          {!emailCorrectionOpen && (
+            <button
+              type="button"
+              onClick={() => setEmailCorrectionOpen(true)}
+              className={buttonClasses("tertiary", "sm")}
+            >
+              ¿Correo equivocado? Corregirlo
+            </button>
+          )}
+          {emailCorrectionOpen && (
+            <form className="flex flex-col gap-2.5" onSubmit={submitEmailCorrection}>
+              <div>
+                <label htmlFor="correo-corregido" className={AUTH_LABEL_CLASSES}>
+                  Correo correcto
+                </label>
+                <input
+                  type="email"
+                  id="correo-corregido"
+                  name="correo-corregido"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  required
+                  disabled={emailCorrectionSubmitting}
+                  className={AUTH_INPUT_CLASSES}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" variant="primary" disabled={emailCorrectionSubmitting} className="w-full">
+                  {emailCorrectionSubmitting ? "Guardando…" : "Guardar correo"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={emailCorrectionSubmitting}
+                  onClick={() => {
+                    setEmailCorrectionOpen(false);
+                    setEmailCorrectionError(null);
+                    setNewEmail("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+              {emailCorrectionError && (
+                <p role="alert" className="text-sm leading-relaxed text-state-bad">{emailCorrectionError}</p>
+              )}
+            </form>
+          )}
 
           <div className="flex flex-col items-center gap-2 text-center text-sm">
             <Link href="/ayuda" className={AUTH_LINK_CLASSES}>Necesito ayuda</Link>

@@ -569,13 +569,13 @@ describe("edad del alumno", () => {
       expect(studentBirthDateRule("2024-01-01", FROZEN_TODAY)).toBeNull();
     });
 
-    it("accepts the maximum boundary (exactly 74 years old today)", () => {
-      expect(studentBirthDateRule("1955-01-01", FROZEN_TODAY)).toBeNull();
+    it("accepts the maximum boundary (exactly 95 years old today)", () => {
+      expect(studentBirthDateRule("1934-01-01", FROZEN_TODAY)).toBeNull();
     });
 
-    it("rejects one day past the maximum boundary (75 years old)", () => {
-      expect(studentBirthDateRule("1954-01-01", FROZEN_TODAY)).toBe(
-        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 75).`,
+    it("rejects one day past the maximum boundary (96 years old)", () => {
+      expect(studentBirthDateRule("1933-01-01", FROZEN_TODAY)).toBe(
+        `La edad del alumno debe estar entre ${EDAD_MINIMA_ALUMNO} y ${EDAD_MAXIMA_ALUMNO} años (calculado: 96).`,
       );
     });
 
@@ -593,7 +593,7 @@ describe("edad del alumno", () => {
   describe("isPlausibleHumanAge", () => {
     it("accepts an ordinary human age", () => {
       expect(isPlausibleHumanAge(5)).toBe(true);
-      expect(isPlausibleHumanAge(74)).toBe(true);
+      expect(isPlausibleHumanAge(95)).toBe(true);
       expect(isPlausibleHumanAge(100)).toBe(true);
     });
 
