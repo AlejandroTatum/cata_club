@@ -138,6 +138,8 @@ import {
   MEMBERSHIP_STATUS_LABELS,
   MEMBERSHIP_STATUS_TONES,
 } from "@/lib/status-badges";
+import { inactivaMembershipBadge } from "@/lib/membership-status";
+import type { BadgeTone } from "@/components/ui/Badge";
 
 type FilterKey = "all" | ValidationStatus;
 
@@ -199,6 +201,28 @@ function actionLabel(request: PaymentValidationRequest): string {
   return request.validationStatus === "pendiente"
     ? `Revisar el pago de ${request.studentName}`
     : `Ver el detalle del pago de ${request.studentName}`;
+}
+
+/**
+ * Label/tone for the "Membresía" field of the detail panel.
+ *
+ * `estadoBackend === "INACTIVA"` is the never-activated membership
+ * `MEMBERSHIP_STATUS_BY_ESTADO` folds into `currentMembershipStatus:
+ * "vencida"` — reads that raw signal the same way `/members`'s
+ * `getMembershipStatusBadge` does, instead of the folded value, so a
+ * membership that has never been active never shows "Vencida" here either
+ * (issue #1208). `request.validationStatus` already IS this specific
+ * payment's own validation state, so it doubles as "is this payment the one
+ * still awaiting review" without a separate field.
+ */
+function membershipBadge(request: PaymentValidationRequest): { label: string; tone: BadgeTone } {
+  if (request.estadoBackend === "INACTIVA") {
+    return inactivaMembershipBadge(request.validationStatus === "pendiente");
+  }
+  return {
+    label: MEMBERSHIP_STATUS_LABELS[request.currentMembershipStatus],
+    tone: MEMBERSHIP_STATUS_TONES[request.currentMembershipStatus],
+  };
 }
 
 /** The five row facts, already formatted — shared by both queue renderings. */
@@ -1261,6 +1285,7 @@ export default function PaymentsPage(): React.ReactElement {
   function renderDetail(request: PaymentValidationRequest): React.ReactElement {
     const payer = request.responsablePagoName || request.representativeName || request.studentName;
     const isPending = request.validationStatus === "pendiente";
+    const membership = membershipBadge(request);
 
     return (
       <div>
@@ -1370,9 +1395,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <DataBox>{formatDateTime(request.uploadedAt)}</DataBox>
                 </DetailCell>
                 <DetailCell label="Membresía">
-                  <Badge tone={MEMBERSHIP_STATUS_TONES[request.currentMembershipStatus]}>
-                    {MEMBERSHIP_STATUS_LABELS[request.currentMembershipStatus]}
-                  </Badge>
+                  <Badge tone={membership.tone}>{membership.label}</Badge>
                 </DetailCell>
                 <DetailCell label="Tipo">
                   <DataBox>{request.membershipType}</DataBox>

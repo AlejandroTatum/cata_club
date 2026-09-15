@@ -7,7 +7,12 @@
  * validated indexed the map to `undefined` instead of a real status.
  */
 import { describe, it, expect } from "vitest";
-import { MEMBERSHIP_STATUS_BY_ESTADO, readsAsVencida, type BackendEstadoMembresia } from "../membership-status";
+import {
+  MEMBERSHIP_STATUS_BY_ESTADO,
+  readsAsVencida,
+  inactivaMembershipBadge,
+  type BackendEstadoMembresia,
+} from "../membership-status";
 
 describe("MEMBERSHIP_STATUS_BY_ESTADO", () => {
   it("maps SUSPENDIDA to its own status, not undefined", () => {
@@ -30,5 +35,24 @@ describe("MEMBERSHIP_STATUS_BY_ESTADO", () => {
 describe("readsAsVencida", () => {
   it("does not fold SUSPENDIDA into the vencida bucket", () => {
     expect(readsAsVencida("SUSPENDIDA")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// inactivaMembershipBadge (issue #1208)
+// ---------------------------------------------------------------------------
+
+describe("inactivaMembershipBadge", () => {
+  it('returns "Pago pendiente" + warn while the first payment awaits validation', () => {
+    expect(inactivaMembershipBadge(true)).toEqual({ label: "Pago pendiente", tone: "warn" });
+  });
+
+  it('returns "Sin activar" + neutral once nothing is awaiting validation', () => {
+    expect(inactivaMembershipBadge(false)).toEqual({ label: "Sin activar", tone: "neutral" });
+  });
+
+  it('never returns "Vencida"', () => {
+    expect(inactivaMembershipBadge(true).label).not.toBe("Vencida");
+    expect(inactivaMembershipBadge(false).label).not.toBe("Vencida");
   });
 });
