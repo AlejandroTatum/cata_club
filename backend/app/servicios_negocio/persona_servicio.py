@@ -533,6 +533,14 @@ class PersonaServicio:
     def actualizar_persona(self, persona_id: int, cambios: PersonaUpdateDTO) -> Persona:
         persona = self.obtener_persona(persona_id)
         datos = cambios.model_dump(exclude_unset=True)
+        # Issue #1207: `PersonaUpdateDTO.telefono` ya no exige el campo -- lo
+        # relajó para poder reenviar sin 422 el `""` de un menor
+        # representado sin celular propio (ver el docstring del DTO). Un
+        # adulto autogestionado (`representante_id is None`) sigue
+        # necesitando uno válido; esa distinción solo la puede hacer este
+        # servicio, que es quien tiene la fila real.
+        if "telefono" in datos and not datos["telefono"] and persona.representante_id is None:
+            raise OperacionInvalida("El teléfono es obligatorio.")
         resultado = self.repo.actualizar(persona, datos)
         self.db.commit()
         return resultado
