@@ -226,21 +226,20 @@ export interface NewDependent {
   nombres: string;
   apellidos: string;
   cedula: string;
-  telefono: string;
   fechaNacimiento: string;
 }
 
 /**
  * Un dependiente menor de edad nuevo. Issue #1137, invariante (B): un
  * representado nunca tiene `Usuario` propio, así que este dependiente no
- * lleva -- ni podría llevar -- credenciales.
+ * lleva -- ni podría llevar -- credenciales. Tampoco `telefono` (issue
+ * #1197): un representado no tiene teléfono propio.
  */
 export function newDependent(overrides: Partial<NewDependent> = {}): NewDependent {
   return {
     nombres: "QA Dependiente",
     apellidos: "De Representante",
     cedula: uniqueValidCedula(),
-    telefono: "0991234568",
     fechaNacimiento: isoYearsAgo(9),
     ...overrides,
   };
@@ -266,12 +265,15 @@ export async function enrollDependentViaWizard(
   await page.getByRole("button", { name: /siguiente/i }).click();
   await page.locator(`#${FIELD_ID.nombres}`).waitFor({ state: "attached", timeout: 20_000 });
 
-  // Paso "Datos del estudiante" -- acá describe al DEPENDIENTE, no al representante.
+  // Paso "Datos del estudiante" -- acá describe al DEPENDIENTE, no al
+  // representante. Issue #1197 removed the phone field from this step (a
+  // represented minor has no phone of their own), so this helper no longer
+  // fills one here -- doing so timed out waiting for a locator that no
+  // longer exists against a real wizard (issue #1219).
   await page.locator(`#${FIELD_ID.nombres}`).fill(dependent.nombres);
   await page.locator(`#${FIELD_ID.apellidos}`).fill(dependent.apellidos);
   await fillBirthDate(page, FIELD_ID.fechaNacimiento, dependent.fechaNacimiento);
   await page.locator(`#${FIELD_ID.cedula}`).fill(dependent.cedula);
-  await page.locator(`#${FIELD_ID.telefono}`).fill(dependent.telefono.replace(/^0/, ""));
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   // Paso "Datos del representante".
@@ -290,13 +292,14 @@ export async function enrollDependentViaWizard(
   await page.locator(`#${REPRESENTATIVE_FIELD_ID.contraseniaConfirmacion}`).fill(representative.contrasenia);
   await page.getByRole("button", { name: /siguiente/i }).click();
 
-  // Paso "Salud y emergencia" -- ficha médica del dependiente. El teléfono de
-  // emergencia debe DIFERIR del propio del dependiente (mismo criterio que
-  // `enrollNewPlayerViaWizard`).
+  // Paso "Salud y emergencia" -- ficha médica del dependiente. Issue #1138: a
+  // represented minor has no emergency contact of their own -- it derives
+  // from the representative already entered above -- so this step only asks
+  // for the blood type on the CHILD path; filling the SELF-only contact
+  // fields here timed out against a locator that doesn't exist (issue
+  // #1219, same root cause as the phone field on the student step).
   await page.getByRole("heading", { name: /salud y emergencia/i }).waitFor({ timeout: 20_000 });
   await page.locator(`#${FIELD_ID.tipoSangre}`).selectOption("O_POSITIVO");
-  await page.locator(`#${FIELD_ID.contactoEmergencia}`).fill("Contacto QA");
-  await page.locator(`#${FIELD_ID.telefonoEmergencia}`).fill("0987654321");
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   // Paso "Resumen y confirmación".
