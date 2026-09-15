@@ -91,6 +91,10 @@ export default function ForgotPasswordPage(): React.ReactElement {
       // Reached from the login form, so that is the step behind this one — the
       // shell's default ("/") would skip the user past what they were doing.
       backHref="/login"
+      // #1209: this is a visitor recovering their own password, not staff
+      // signing in to manage the club — the shell's default eyebrow,
+      // "Panel de gestión", is wrong here.
+      eyebrow="Acceso al club"
     >
       {submitted ? (
         /* Confirmation — deliberately identical regardless of whether the

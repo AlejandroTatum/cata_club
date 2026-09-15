@@ -205,3 +205,25 @@ describe("ForgotPasswordPage — the way back", () => {
     expect(screen.queryByRole("link", { name: /volver al inicio/i })).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #1209 — this screen is reached by a visitor recovering their own
+// password, not by staff signing in to manage the club.
+// ---------------------------------------------------------------------------
+
+describe("ForgotPasswordPage — the eyebrow is not the admin one", () => {
+  it("shows the non-admin eyebrow instead of AuthShell's default", async () => {
+    mockSolicitarRecuperacion.mockResolvedValue({ mensaje: "ok" });
+
+    render(<ForgotPasswordPage />);
+
+    expect(screen.getByText("Acceso al club")).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+
+    submitForgotPasswordForm();
+    await screen.findByText(/revise su correo/i);
+
+    expect(screen.getByText("Acceso al club")).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+  });
+});
