@@ -292,13 +292,14 @@ export async function enrollDependentViaWizard(
   await page.locator(`#${REPRESENTATIVE_FIELD_ID.contraseniaConfirmacion}`).fill(representative.contrasenia);
   await page.getByRole("button", { name: /siguiente/i }).click();
 
-  // Paso "Salud y emergencia" -- ficha médica del dependiente. El teléfono de
-  // emergencia debe DIFERIR del propio del dependiente (mismo criterio que
-  // `enrollNewPlayerViaWizard`).
+  // Paso "Salud y emergencia" -- ficha médica del dependiente. Issue #1138: a
+  // represented minor has no emergency contact of their own -- it derives
+  // from the representative already entered above -- so this step only asks
+  // for the blood type on the CHILD path; filling the SELF-only contact
+  // fields here timed out against a locator that doesn't exist (issue
+  // #1219, same root cause as the phone field on the student step).
   await page.getByRole("heading", { name: /salud y emergencia/i }).waitFor({ timeout: 20_000 });
   await page.locator(`#${FIELD_ID.tipoSangre}`).selectOption("O_POSITIVO");
-  await page.locator(`#${FIELD_ID.contactoEmergencia}`).fill("Contacto QA");
-  await page.locator(`#${FIELD_ID.telefonoEmergencia}`).fill("0987654321");
   await page.getByRole("button", { name: /siguiente/i }).click();
 
   // Paso "Resumen y confirmación".
