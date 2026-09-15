@@ -222,6 +222,19 @@ export interface BackendMeResponse {
    * #509, which is why AppShell's avatar could only ever render initials.
    */
   fotoUrl?: string | null;
+  /**
+   * Issue #1228: the latest payment's state, only when `activacionCompleta`
+   * is false and there is something to report — see backend
+   * `GestorAutenticacion.primer_pago_gate`. Null (not just omitted) when
+   * there is no payment, the gate already passed, or the latest payment is
+   * APROBADO. Optional for a pre-#1228 backend.
+   */
+  primerPago?: BackendPrimerPago | null;
+}
+
+export interface BackendPrimerPago {
+  estado: "PENDIENTE_VALIDACION" | "RECHAZADO";
+  motivoRechazo: string | null;
 }
 
 export interface BackendRefreshResponse {
@@ -239,6 +252,15 @@ function isBackendLoginResponse(value: unknown): value is BackendLoginResponse {
   );
 }
 
+function isBackendPrimerPago(value: unknown): value is BackendPrimerPago {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    (v.estado === "PENDIENTE_VALIDACION" || v.estado === "RECHAZADO") &&
+    (v.motivoRechazo === null || typeof v.motivoRechazo === "string")
+  );
+}
+
 function isBackendMeResponse(value: unknown): value is BackendMeResponse {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -250,7 +272,8 @@ function isBackendMeResponse(value: unknown): value is BackendMeResponse {
     Array.isArray(v.roles) && v.roles.every((r) => typeof r === "string") &&
     (v.correoVerificado === undefined || typeof v.correoVerificado === "boolean") &&
     (v.altaPresencialCompletada === undefined || typeof v.altaPresencialCompletada === "boolean") &&
-    (v.activacionCompleta === undefined || typeof v.activacionCompleta === "boolean")
+    (v.activacionCompleta === undefined || typeof v.activacionCompleta === "boolean") &&
+    (v.primerPago === undefined || v.primerPago === null || isBackendPrimerPago(v.primerPago))
   );
 }
 
@@ -763,6 +786,8 @@ export interface ServerSession {
   altaPresencialCompletada: boolean;
   /** Issue #940: the backend's gate decision — see `BackendMeResponse.activacionCompleta`. */
   activacionCompleta: boolean;
+  /** Issue #1228: see `BackendMeResponse.primerPago`. */
+  primerPago: BackendPrimerPago | null;
   loggedInAt: string;
 }
 
@@ -818,6 +843,7 @@ export function buildSession(me: BackendMeResponse): SessionBuildResult {
       // doesn't send the decision yet falls back to the old two-fact rule,
       // so nothing changes until it does.
       activacionCompleta: me.activacionCompleta ?? (correoVerificado && altaPresencialCompletada),
+      primerPago: me.primerPago ?? null,
       loggedInAt: new Date().toISOString(),
     },
   };

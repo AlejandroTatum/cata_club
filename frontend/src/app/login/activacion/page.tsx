@@ -40,6 +40,29 @@ function emailScreenSubtitle(activation: ActivationSession, altaCompletada: bool
   return parts.join(" ");
 }
 
+/**
+ * The status paragraph for screen B (#1228): one copy for a first payment in
+ * review, one for a rejected one (with the club's own `motivoRechazo`
+ * verbatim), and the pre-#1228 copy when there is nothing to report yet
+ * (`primerPago` null) — e.g. the enrolment was never registered at all.
+ */
+function enrolmentScreenMessage(activation: ActivationSession): string {
+  const primerPago = activation.primerPago;
+  if (!primerPago) {
+    return (
+      "Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago. El club lo " +
+      "valida y ahí se activa la membresía."
+    );
+  }
+  if (primerPago.estado === "PENDIENTE_VALIDACION") {
+    return "Su primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.";
+  }
+  const motivo = primerPago.motivoRechazo;
+  return motivo
+    ? `Su primer pago fue rechazado: ${motivo}. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.`
+    : "Su primer pago fue rechazado. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.";
+}
+
 function ActivationPageContent(): React.ReactElement {
   const router = useRouter();
   const { session, isAuthenticated, isLoading, refreshSession, logout } = useAuth();
@@ -253,10 +276,7 @@ function ActivationPageContent(): React.ReactElement {
             <Check size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Correo verificado
           </p>
-          <p className="text-sm leading-relaxed text-ink-2">
-            Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago. El club lo
-            valida y ahí se activa la membresía.
-          </p>
+          <p className="text-sm leading-relaxed text-ink-2">{enrolmentScreenMessage(activation)}</p>
           {emailJustVerified && (
             <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>
           )}
