@@ -29,7 +29,6 @@ from app.infraestructura.repositorios.descuento_repositorio import (
     AsignacionDescuentoRepositorio, DescuentoRepositorio,
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
-from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida
@@ -2277,14 +2276,23 @@ class PagoServicio:
         self, persona_id: int, entidad_relacionada_id: int,
         tipo: TipoNotificacion, mensaje: str, id_para_log: str,
     ) -> bool:
-        """Crea el aviso in-app para el titular y, si tiene, para su
-        representante. Devuelve `False` (y NUNCA levanta) si no se pudo
-        crear alguno de los dos -- NUNCA `True`/`False` a medias silenciado.
-        Compartida por `_crear_notificacion_pago` (aprobar/rechazar un pago)
-        y `aplicar_beneficio_bonificado` (issue #400/4d, otorgar cobertura
-        bonificada): las dos operaciones YA están commiteadas cuando esto
-        corre, así que un aviso fallido nunca debe convertirse en un 5xx
-        sobre una operación que en los hechos SÍ se procesó.
+        """Crea el aviso in-app para el titular. Devuelve `False` (y NUNCA
+        levanta) si no se pudo crear -- nunca `True`/`False` a medias
+        silenciado. Compartida por `_crear_notificacion_pago` (aprobar/
+        rechazar un pago) y `aplicar_beneficio_bonificado` (issue #400/4d,
+        otorgar cobertura bonificada): las dos operaciones YA están
+        commiteadas cuando esto corre, así que un aviso fallido nunca debe
+        convertirse en un 5xx sobre una operación que en los hechos SÍ se
+        procesó.
+
+        Ya NO escribe una segunda fila para `persona.representante_id`
+        (issue #1227): desde el #859 el feed del representante
+        (`NotificacionServicio.listar_para_persona_y_hijos`) YA incluye las
+        filas de sus dependientes activos, así que esa segunda fila era el
+        duplicado que veía el representante -- la misma novedad dos veces,
+        una con el prefijo "Para <nombre>: " y otra sin él. El prefijo se
+        arma ahora AL LEER, en `NotificacionServicio`, para cualquier fila
+        cuyo `persona_id` no sea el de quien pide el feed.
 
         Por qué no relanza: por diseño del frontend (`error-message.ts`: un
         `detail` 5xx nunca llega al usuario, porque describe una falla del
@@ -2308,20 +2316,6 @@ class PagoServicio:
                 entidad_relacionada_id=entidad_relacionada_id,
             )
             self.repo_notificacion.crear(notif)
-            if persona.representante_id:
-                # El nombre se acorta ACÁ, nunca `mensaje`: el motivo de un
-                # rechazo (o el detalle del beneficio) es lo que el
-                # representante necesita leer entero.
-                nombre_alumno = acortar_nombre_para_notificacion(
-                    nombre_completo(persona.nombres, persona.apellidos)
-                )
-                notif_rep = Notificacion(
-                    tipo=tipo,
-                    mensaje=f"Para {nombre_alumno}: {mensaje}",
-                    persona_id=persona.representante_id,
-                    entidad_relacionada_id=entidad_relacionada_id,
-                )
-                self.repo_notificacion.crear(notif_rep)
             # Commit PROPIO (issue #831): el repositorio ya solo flushea, así
             # que esta notificación necesita su propio `commit()` para
             # persistir -- deliberadamente SEPARADO del commit de la
