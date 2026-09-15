@@ -36,8 +36,10 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const mockReenviarVerificacionCorreo = vi.fn();
+const mockCambiarCorreoNoVerificado = vi.fn();
 vi.mock("@/services/api", () => ({
   reenviarVerificacionCorreo: (...args: unknown[]) => mockReenviarVerificacionCorreo(...args),
+  cambiarCorreoNoVerificado: (...args: unknown[]) => mockCambiarCorreoNoVerificado(...args),
 }));
 
 // Same stub as LoginPage.test.tsx: only the content under test matters here,
@@ -76,6 +78,11 @@ beforeEach(() => {
   mockAuthShell.mockClear();
   mockReenviarVerificacionCorreo.mockReset();
   mockReenviarVerificacionCorreo.mockResolvedValue({ mensaje: "Enviado." });
+  mockCambiarCorreoNoVerificado.mockReset();
+  mockCambiarCorreoNoVerificado.mockResolvedValue({
+    correo: "corregido@cataclub.com",
+    mensaje: "Si el correo está registrado y falta verificarlo, se envió un enlace de verificación",
+  });
 });
 
 describe("ActivationPage", () => {
@@ -532,5 +539,116 @@ describe("ActivationPage — the eyebrow is not the admin one", () => {
 
     await screen.findByRole("button", { name: "Consultar estado nuevamente" });
     expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1245: an enrolled visitor whose email was mistyped could never
+// correct it — the enrolment auto-logs them in with the address as typed
+// (`enrollment_servicio.py`), the resend button targets that same address,
+// and reinscribing collides with the identity-duplicate check before the
+// correo is even looked at. The affordance is reachable only from the email
+// screen — the one place `correoVerificado` is still false.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — correcting a mistyped email (#1245)", () => {
+  it("offers the correction affordance on the email screen", async () => {
+    renderPending(pendingSession());
+
+    expect(
+      await screen.findByRole("button", { name: /correo equivocado/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("never offers the correction affordance once the email is verified", async () => {
+    renderPending(pendingSession({ correoVerificado: true }));
+
+    await screen.findByRole("button", { name: "Consultar estado nuevamente" });
+    expect(screen.queryByRole("button", { name: /correo equivocado/i })).not.toBeInTheDocument();
+  });
+
+  it("reveals an inline field and submit only after the affordance is pressed", async () => {
+    renderPending(pendingSession());
+
+    expect(screen.queryByLabelText(/correo correcto/i)).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+
+    expect(screen.getByLabelText(/correo correcto/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /guardar correo/i })).toBeInTheDocument();
+  });
+
+  it("submits the corrected address through the BFF and reflects it via a session refresh", async () => {
+    const pending = pendingSession();
+    const corrected = { ...pending, user: { ...pending.user, email: "corregido@cataclub.com" } };
+    const mockRefreshSession = mockRefreshTo(corrected);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // Settle the mount-time refresh (#1195) before the interaction under test.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), {
+      target: { value: "corregido@cataclub.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    await waitFor(() => expect(mockCambiarCorreoNoVerificado).toHaveBeenCalledWith("corregido@cataclub.com"));
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    // The affordance closes and the existing status copy now names the
+    // corrected address — no separate confirmation banner is introduced.
+    expect(screen.queryByLabelText(/correo correcto/i)).not.toBeInTheDocument();
+    expect(lastSubtitle()).toContain("Le enviamos un enlace a corregido@cataclub.com.");
+  });
+
+  it("keeps the resend button working against the corrected address afterward", async () => {
+    const pending = pendingSession();
+    const corrected = { ...pending, user: { ...pending.user, email: "corregido@cataclub.com" } };
+    const mockRefreshSession = mockRefreshTo(corrected);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), {
+      target: { value: "corregido@cataclub.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /reenviar correo de verificación/i }));
+
+    await waitFor(() =>
+      expect(mockReenviarVerificacionCorreo).toHaveBeenCalledWith("corregido@cataclub.com"),
+    );
+  });
+
+  it("renders the backend's error message inline and keeps the field open on failure", async () => {
+    // `status` (not a plain Error) is what makes `toUserMessage` surface this
+    // sentence instead of the generic fallback — `ApiClientError` sets it the
+    // same way the real client does; see error-message.ts's `statusOf`.
+    const backendError = Object.assign(
+      new Error("El correo ya está verificado y no puede modificarse por esta vía."),
+      { status: 400 },
+    );
+    mockCambiarCorreoNoVerificado.mockRejectedValueOnce(backendError);
+    renderPending(pendingSession());
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), {
+      target: { value: "otro@cataclub.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El correo ya está verificado y no puede modificarse por esta vía.",
+    );
+    expect(screen.getByLabelText(/correo correcto/i)).toBeInTheDocument();
   });
 });
