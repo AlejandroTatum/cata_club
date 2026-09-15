@@ -42,6 +42,7 @@ import type {
 import type { EnrollmentRequest, EnrollmentResponse } from "@/types/enrollment";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { MemberAccount } from "@/app/members/members-utils";
+import type { BackendEstadoMembresia } from "@/lib/membership-status";
 import { GENERIC_FAILURE } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,16 @@ export interface PaymentValidationRequest {
   paymentMethod: string;
   uploadedAt: string;
   currentMembershipStatus: MembershipStatus;
+  /**
+   * Issue #1208: the RAW backend `Membresia.estado`, before
+   * `MEMBERSHIP_STATUS_BY_ESTADO` folds `INACTIVA` into the same `"vencida"`
+   * bucket `currentMembershipStatus` carries for a real `VENCIDA`
+   * membership — same convention as
+   * `MemberStudentSummary.membresia.estadoBackend` on `/members`. Optional
+   * so existing fixtures that don't care about this distinction can omit
+   * it; a missing value reads as "not INACTIVA".
+   */
+  estadoBackend?: BackendEstadoMembresia;
   proofFileType: ProofFileType;
   proofPreviewUrl?: string;
   validationStatus: ValidationStatus;
