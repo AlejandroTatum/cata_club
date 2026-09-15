@@ -530,6 +530,64 @@ def test_reporte_asistencia_pdf_admin_200(client, db_session):
     assert "reporte-asistencia_" in disposition
 
 
+def test_reporte_asistencia_pdf_imprime_las_etiquetas_de_la_ui_no_el_enum(
+    client, db_session, monkeypatch,
+):
+    """Issue #1240: el PDF armaba la columna Estado con `r.estado.value` --el
+    miembro crudo del enum-- mientras la tabla de la misma pantalla, el
+    export a Excel y el resto de la UI usan las etiquetas en español
+    (`Presente`, `Ausente`, `Tardanza`, `Justificado`). `ATRASADO` es una
+    palabra que la UI nunca usa. Se espían las filas que llegan a
+    `generar_reporte_pdf` --igual que en el PDF de personas-- porque los
+    bytes del PDF no son legibles como texto."""
+    import app.presentacion.routers.asistencias_router as router_mod
+
+    alumno = _crear_persona(client, cedula_valida(555))
+    _habilitar_como_jugador(db_session, alumno["id"])
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    # Un registro por estado, un lunes distinto cada uno.
+    for fecha, estado in (
+        ("2026-07-06", "PRESENTE"),
+        ("2026-07-13", "AUSENTE"),
+        ("2026-07-20", "ATRASADO"),
+        ("2026-07-27", "JUSTIFICADO"),
+    ):
+        client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": estado,
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+
+    filas_generadas = []
+
+    def _generar_espia(*args, filas, **kwargs):
+        filas_generadas.extend(filas)
+        return generar_reporte_pdf(*args, filas=filas, **kwargs)
+
+    monkeypatch.setattr(router_mod, "generar_reporte_pdf", _generar_espia)
+
+    resp = client.get(
+        "/api/v1/asistencias/reportes/pdf", params={"horario_id": horario["id"]},
+    )
+    assert resp.status_code == 200
+
+    columna_estado = [fila[-1] for fila in filas_generadas]
+    assert sorted(columna_estado) == ["Ausente", "Justificado", "Presente", "Tardanza"]
+    assert "ATRASADO" not in columna_estado
+    assert "PRESENTE" not in columna_estado
+    assert "AUSENTE" not in columna_estado
+    assert "JUSTIFICADO" not in columna_estado
+
+
 # --- Phase 5: regresión -- offload de `generar_reporte_pdf` fuera del ------
 # event loop. Los 3 handlers son `async def` pero `generar_reporte_pdf` es
 # CPU-bound (ReportLab). Sin `run_in_threadpool`, la generación corre inline
