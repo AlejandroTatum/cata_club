@@ -90,7 +90,15 @@ function ResetPasswordContent(): React.ReactElement {
 
   if (!token) {
     return (
-      <AuthShell title="Enlace no válido" note={LINK_LIFETIME_NOTE} backHref="/login">
+      <AuthShell
+        title="Enlace no válido"
+        note={LINK_LIFETIME_NOTE}
+        backHref="/login"
+        // #1209: this is a visitor resetting their own password, not staff
+        // signing in to manage the club — the shell's default eyebrow,
+        // "Panel de gestión", is wrong here.
+        eyebrow="Acceso al club"
+      >
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-bad-bg">
             {/* `state-bad`, not the action red: this disc reports a state, and
@@ -133,7 +141,11 @@ function ResetPasswordContent(): React.ReactElement {
 
   if (success) {
     return (
-      <AuthShell title="Contraseña actualizada" backHref="/login">
+      <AuthShell
+        title="Contraseña actualizada"
+        backHref="/login"
+        eyebrow="Acceso al club"
+      >
         <div className="flex flex-col items-center gap-2.5 py-2 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-state-ok-bg">
             <CheckCircle2 size={ICON.lg} className="text-state-ok" strokeWidth={1.5} aria-hidden="true" />
@@ -162,6 +174,7 @@ function ResetPasswordContent(): React.ReactElement {
       // never the landing. Arrival is from an email, so there is no history to
       // go back to either (#295).
       backHref="/login"
+      eyebrow="Acceso al club"
     >
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <div>
