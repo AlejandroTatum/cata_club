@@ -99,6 +99,22 @@ def test_get_horarios_filtra_por_query_param_categoria(client):
     assert body[0]["categoria"] == "ADULTOS"
 
 
+def test_get_horarios_incluye_categoria_label(client):
+    """Issue #1238: el picker de asistencia del entrenador necesita el
+    nombre humano de la categoría (`categoria_horario.label`), no solo el
+    código -- las cinco tarjetas del día se veían idénticas salvo por el
+    horario."""
+    client.post("/api/v1/asistencias/horarios", json={
+        "categoria": "ADULTOS", "dia_semana": "MARTES",
+    })
+
+    resp = client.get("/api/v1/asistencias/horarios", params={"categoria": "ADULTOS"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["categoriaLabel"] == "Adultos"
+
+
 # `test_actualizar_horario_sin_tocar_categoria_no_re_deriva_horas` murió con
 # `entrenador_id` (issue #13): categoria y dia_semana son hoy los únicos campos
 # actualizables y ambos re-derivan las horas, así que ya no existe una
