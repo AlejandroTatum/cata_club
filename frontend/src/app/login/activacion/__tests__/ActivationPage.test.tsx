@@ -370,6 +370,62 @@ describe("ActivationPage — the enrolment screen", () => {
     expect(screen.getByText(/el club lo\s*valida y ahí se activa la membresía/i)).toBeInTheDocument();
   });
 
+  // Issue #1228 — screen B's body used to say the same thing to a visitor
+  // whose first payment was already registered and to one who never
+  // registered anything: three situations, one copy.
+  it("tells the visitor their first payment is in review when primerPago is pending", async () => {
+    renderPending(
+      enrolmentPendingSession({
+        primerPago: { estado: "PENDIENTE_VALIDACION", motivoRechazo: null },
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Su primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("tells the visitor their first payment was rejected, with the club's own motivo verbatim", async () => {
+    renderPending(
+      enrolmentPendingSession({
+        primerPago: { estado: "RECHAZADO", motivoRechazo: "El voucher no corresponde a la cuenta del club" },
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Su primer pago fue rechazado: El voucher no corresponde a la cuenta del club. Acérquese al club o " +
+          "escríbanos por WhatsApp para registrarlo de nuevo.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the motiveless rejection copy when motivoRechazo is null", async () => {
+    renderPending(
+      enrolmentPendingSession({
+        primerPago: { estado: "RECHAZADO", motivoRechazo: null },
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Su primer pago fue rechazado. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the original copy when there is no primerPago to report", async () => {
+    renderPending(enrolmentPendingSession());
+
+    expect(
+      await screen.findByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
   // Issue #1222 — pressing "Consultar estado nuevamente" while the enrolment
   // is still pending used to re-fetch and re-render the exact same screen
   // with no feedback at all, unlike the email screen's own #1195 fix.

@@ -8,7 +8,7 @@ Patrón de nomenclatura consistente con el resto de schemas del proyecto:
 """
 from datetime import date, datetime
 from pydantic import BaseModel, EmailStr, Field, field_serializer
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from app.infraestructura.cloudinary_cliente import resolver_url_foto_perfil
 from app.servicios_negocio.dtos.base import ResponseBase
@@ -37,6 +37,13 @@ class LoginResponseDTO(ResponseBase, BaseModel):
 
 class RefreshTokenDTO(BaseModel):
     refresh_token: str
+
+
+# Issue #1228: el estado del primer pago, cuando la activación todavía no
+# está completa -- ver `GestorAutenticacion.primer_pago_gate`.
+class PrimerPagoDTO(ResponseBase, BaseModel):
+    estado: Literal["PENDIENTE_VALIDACION", "RECHAZADO"]
+    motivo_rechazo: Optional[str] = None
 
 
 class UsuarioMeResponseDTO(ResponseBase, BaseModel):
@@ -73,6 +80,12 @@ class UsuarioMeResponseDTO(ResponseBase, BaseModel):
     # frontend recalculaba el gate a partir de `alta_presencial_completada`
     # en vez de leer esta decisión.
     activacion_completa: bool
+    # Issue #1228: el estado del primer pago cuando `activacion_completa` es
+    # False, para que la pantalla de activación deje de dar la misma copia a
+    # "en revisión", "rechazado" y "nunca se registró nada". None también
+    # cuando la activación ya está completa o el pago más reciente fue
+    # APROBADO -- ver `GestorAutenticacion.primer_pago_gate`.
+    primer_pago: Optional[PrimerPagoDTO] = None
 
     @field_serializer("foto_url")
     def _firmar_foto_url(self, valor: Optional[str]) -> Optional[str]:
