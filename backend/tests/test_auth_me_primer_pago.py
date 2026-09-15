@@ -9,8 +9,6 @@ expone el hecho que faltaba; estos tests cubren su armado en el DTO real de
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-import pytest
-
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoPago, TipoRol
 from app.dominio.modelos import Membresia, Pago
 from tests.test_auth_activation import _crear_usuario, _token
