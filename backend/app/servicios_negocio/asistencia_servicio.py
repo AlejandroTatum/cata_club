@@ -29,6 +29,7 @@ from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, CategoriaCreateDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioResponseDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
+    PublicScheduleBlockDTO, PublicScheduleCategoryDTO,
     SolapeHorarioDTO, UltimaListaDTO,
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
@@ -160,6 +161,46 @@ class AsistenciaServicio:
 
     def listar_categorias(self) -> list[CategoriaResponseDTO]:
         return [self._a_categoria_dto(c) for c in self.repo_categoria.listar()]
+
+    def listar_horarios_publicos(self) -> list[PublicScheduleCategoryDTO]:
+        """Catálogo público de la landing, derivado de sesiones REALES
+        (`horario_entrenamiento`), no del catálogo de días permitidos de
+        `CategoriaHorario` (issue #1248). El catálogo dice qué días PUEDE
+        entrenar una categoría; esto publica qué días REALMENTE entrena,
+        según las sesiones que el admin dio de alta. Una categoría sin
+        ninguna sesión no se publica -- no es un catálogo vacío con
+        etiqueta, es la ausencia total de la categoría en la landing.
+
+        Una sola consulta con el join a `categoria_horario` (issue #811,
+        mismo criterio que evitó el índice simple): agrupar por categoría
+        sin volver a consultar por fila."""
+        orden_dias = {dia: i for i, dia in enumerate(DiaSemana)}
+        bloques_por_categoria: dict[str, dict[tuple[time, time], set[DiaSemana]]] = {}
+        etiquetas: dict[str, CategoriaHorario] = {}
+
+        for horario, categoria in self.repo_horario.listar_con_categoria():
+            etiquetas[categoria.codigo] = categoria
+            bloques = bloques_por_categoria.setdefault(categoria.codigo, {})
+            clave = (horario.hora_inicio, horario.hora_fin)
+            bloques.setdefault(clave, set()).add(horario.dia_semana)
+
+        resultado = [
+            PublicScheduleCategoryDTO(
+                category=etiquetas[codigo].label,
+                ages=etiquetas[codigo].edades,
+                blocks=[
+                    PublicScheduleBlockDTO(
+                        days=sorted(dias, key=lambda dia: orden_dias[dia]),
+                        start_time=inicio.strftime("%H:%M"),
+                        end_time=fin.strftime("%H:%M"),
+                    )
+                    for (inicio, fin), dias in sorted(bloques.items())
+                ],
+            )
+            for codigo, bloques in bloques_por_categoria.items()
+        ]
+        resultado.sort(key=lambda categoria: categoria.category)
+        return resultado
 
     @staticmethod
     def _a_categoria_dto(c: CategoriaHorario) -> CategoriaResponseDTO:
