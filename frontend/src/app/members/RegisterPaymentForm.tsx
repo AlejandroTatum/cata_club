@@ -20,6 +20,7 @@ import { registrarPago } from "@/services/api";
 import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
+import { formatDate } from "@/lib/format-utils";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
 import {
   addMonthsIso,
@@ -68,6 +69,9 @@ export default function RegisterPaymentForm({
   // instances of this form — one per student — never collide).
   const errorId = useId();
   const errorRef = useRef<HTMLParagraphElement>(null);
+  /** Issue #1231: ties the Monto field to its inline "múltiplo de $…" hint,
+   *  same `useId` pattern as `errorId` so two open instances never collide. */
+  const montoHintId = useId();
   // Bumped on every failed `validate()`, even when the message text repeats
   // (e.g. two submits in a row with the same missing field). `error` alone
   // cannot drive the focus effect below for that case: React bails out a
@@ -88,6 +92,23 @@ export default function RegisterPaymentForm({
     const months = wholeMonthsFor(amount, monthlyPrice);
     if (months === null) return "";
     return addMonthsIso(calendarIsoDate(baseDate), months);
+  }
+
+  /**
+   * Issue #1231: a typed amount that is not a positive multiple of the
+   * monthly price used to clear `fechaFin` and grey out "Registrar pago"
+   * with nothing said — the same silent-disable the over-cap check
+   * (`excedeMesesMaximo`) already has a message for. This is that message
+   * for the OTHER way `wholeMonthsFor` returns `null`: not over the cap, just
+   * not a whole number of months. `null` here — amount is blank/zero, or the
+   * over-cap message already covers it — hides the hint instead of stacking
+   * a second one.
+   */
+  function montoMultipleHint(amount: number): string | null {
+    if (amount <= 0 || monthlyPrice <= 0) return null;
+    if (excedeMesesMaximo(amount, monthlyPrice)) return null;
+    if (wholeMonthsFor(amount, monthlyPrice) !== null) return null;
+    return `El monto debe ser un múltiplo de $${monthlyPrice} (un mes = $${monthlyPrice}).`;
   }
 
   /**
@@ -321,6 +342,7 @@ export default function RegisterPaymentForm({
   const rawPreviewMonths = wholeMonthsFor(Number(monto) || 0, monthlyPrice);
   const previewMonths =
     rawPreviewMonths !== null && rawPreviewMonths <= MAX_MESES_COBERTURA ? rawPreviewMonths : null;
+  const montoHint = montoMultipleHint(Number(monto) || 0);
 
   return (
     <div className="space-y-field rounded-ctl border border-line bg-sunken p-3">
@@ -345,9 +367,15 @@ export default function RegisterPaymentForm({
             {...(monthlyPrice > 0 ? { max: monthlyPrice * MAX_MESES_COBERTURA } : {})}
             value={monto}
             onChange={(e) => handleMontoChange(e.target.value)}
+            aria-describedby={montoHint ? montoHintId : undefined}
             className="mt-0.5 h-ctl w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink"
             placeholder="0.00"
           />
+          {montoHint && (
+            <p id={montoHintId} className="mt-0.5 text-2xs text-state-bad">
+              {montoHint}
+            </p>
+          )}
         </label>
         <div className="text-sm font-semibold text-ink-2">
           Método
@@ -392,11 +420,11 @@ export default function RegisterPaymentForm({
       <div className="grid grid-cols-2 gap-2 rounded-ctl border border-line bg-paper px-2.5 py-2">
         <div className="text-xs">
           <span className="text-ink-3">Inicio: </span>
-          <span className="font-semibold text-ink">{fechaInicio || "—"}</span>
+          <span className="font-semibold text-ink">{fechaInicio ? formatDate(fechaInicio) : "—"}</span>
         </div>
         <div className="text-xs">
           <span className="text-ink-3">Fin: </span>
-          <span className="font-semibold text-ink">{fechaFin || "—"}</span>
+          <span className="font-semibold text-ink">{fechaFin ? formatDate(fechaFin) : "—"}</span>
         </div>
       </div>
 
