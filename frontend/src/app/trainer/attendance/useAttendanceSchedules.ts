@@ -32,6 +32,15 @@ export interface AttendanceSchedules {
   setShowAllDays: (updater: (prev: boolean) => boolean) => void;
   /** Per-horario attendance-record count for the trailing club week. */
   weekRecordCounts: Map<number, number>;
+  /**
+   * Re-runs the same trailing-week fetch the mount effect below performs.
+   * Issue #1237: `weekRecordCounts` only ever refreshed when `schedules`
+   * changed, which never happens on a wizard reset — exposed so
+   * `TrainerAttendancePage`'s `handleReset` can ask the server again after a
+   * submission, instead of leaving the just-filed horario looking untaken
+   * until the next reload.
+   */
+  loadWeekRecordCounts: () => Promise<void>;
   selectedScheduleId: number | null;
   setSelectedScheduleId: (id: number | null) => void;
   selectedSchedule: TrainingSchedule | null;
@@ -80,22 +89,28 @@ export function useAttendanceSchedules(): AttendanceSchedules {
     setExpandedDays((prev) => (prev.has(currentDay) ? prev : new Set(prev).add(currentDay)));
   }, [schedules]);
 
-  /** Issue #310/#22, extended by #483 to the full trailing week — see the page's own note. */
+  /**
+   * Issue #310/#22, extended by #483 to the full trailing week — see the
+   * page's own note. Pulled out into its own callback (issue #1237) so
+   * `handleReset` can call it directly instead of only reacting to a
+   * `schedules` change that a reset never causes.
+   */
+  const loadWeekRecordCounts = useCallback(async (): Promise<void> => {
+    try {
+      const records = await fetchAttendanceRecords({
+        fechaInicio: weekWindowStartIso(),
+        fechaFin: clubIsoDate(),
+      });
+      setWeekRecordCounts(countRecordsByHorario(records));
+    } catch (err) {
+      console.error("[trainer/attendance] fetchAttendanceRecords week-counts failed", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (schedules.length === 0) return;
-    let cancelled = false;
-    fetchAttendanceRecords({ fechaInicio: weekWindowStartIso(), fechaFin: clubIsoDate() })
-      .then((records) => {
-        if (cancelled) return;
-        setWeekRecordCounts(countRecordsByHorario(records));
-      })
-      .catch((err: unknown) => {
-        console.error("[trainer/attendance] fetchAttendanceRecords week-counts failed", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [schedules]);
+    void loadWeekRecordCounts();
+  }, [schedules, loadWeekRecordCounts]);
 
   const toggleDay = useCallback((day: DiaSemana): void => {
     setExpandedDays((prev) => {
@@ -125,6 +140,7 @@ export function useAttendanceSchedules(): AttendanceSchedules {
     showAllDays,
     setShowAllDays,
     weekRecordCounts,
+    loadWeekRecordCounts,
     selectedScheduleId,
     setSelectedScheduleId,
     selectedSchedule,

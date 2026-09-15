@@ -245,6 +245,10 @@ export default function TrainerAttendancePage(): React.ReactElement {
     roster.resetRoster();
     marking.resetMarking();
     submission.resetSubmission();
+    // Issue #1237: `weekRecordCounts` otherwise only refreshes when
+    // `schedules` changes, which a reset never causes — without this, the
+    // horario just filed still looked untaken on step 1 until a reload.
+    void schedules.loadWeekRecordCounts();
   }, [draftKey, marking, roster, schedules, submission, url]);
 
   /**

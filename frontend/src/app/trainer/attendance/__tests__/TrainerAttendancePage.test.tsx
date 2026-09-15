@@ -2136,6 +2136,101 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
   });
 });
 
+// ---------------------------------------------------------------------------
+// Issue #1237 — `handleReset` cleared the URL, the roster, the marking and
+// the submission state, but never refreshed `weekRecordCounts`: the map that
+// backs step 1's "Lista tomada" caption and its `disabled` card is only
+// populated by the effect in `useAttendanceSchedules` that runs on
+// `[schedules]`, which does not change on reset. "Registrar otra
+// asistencia" therefore showed the just-filed horario as selectable again,
+// until a reload re-ran that effect from scratch.
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — refreshes the week-taken guard after a reset (issue #1237)", () => {
+  beforeEach(() => {
+    mockReplace.mockReset();
+    mockFetchTrainingSchedules.mockReset().mockResolvedValue([SCHEDULE]);
+    mockFetchAlumnosPorHorario.mockReset().mockResolvedValue(buildAlumnoHorarios(3));
+    mockFetchAttendanceRecords.mockReset().mockResolvedValue([]);
+    mockRegisterAttendance.mockReset();
+    mockUseAuth.mockReturnValue(trainerAuthWithPersonaId());
+  });
+
+  async function fileSession(): Promise<void> {
+    await openRoster();
+    await screen.findByText("Student 01");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar restantes presentes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Revisar y confirmar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
+    await screen.findByText(/Asistencia registrada/i);
+  }
+
+  it('asks the server again and shows the just-filed horario disabled with its real count, without a page reload', async () => {
+    mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await fileSession();
+    const callsBeforeReset = mockFetchAttendanceRecords.mock.calls.length;
+
+    // The backend now has the session that was just filed — the NEXT fetch
+    // (triggered by the reset, not a reload) has to see it.
+    mockFetchAttendanceRecords.mockResolvedValue(
+      buildAlumnoHorarios(3).map((raw) => {
+        const s = raw as { personaId: number; personaNombreCompleto: string };
+        return {
+          id: `att-${s.personaId}`,
+          fecha: "2026-07-21",
+          horario: "Martes 18:00 — 19:00",
+          horarioId: 12,
+          personaId: s.personaId,
+          estudiante: s.personaNombreCompleto,
+          estado: "present",
+          entrenador: "Coach Torres",
+        };
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Registrar otra asistencia" }));
+    await screen.findByText("Elija el horario");
+
+    await waitFor(() =>
+      expect(mockFetchAttendanceRecords.mock.calls.length).toBeGreaterThan(callsBeforeReset),
+    );
+    // Same trailing club-week window the picker always asks for — the reset
+    // does not invent a different range, it re-runs the SAME fetch.
+    expect(mockFetchAttendanceRecords).toHaveBeenLastCalledWith({
+      fechaInicio: "2026-07-15",
+      fechaFin: "2026-07-21",
+    });
+
+    const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
+    expect(
+      await within(scheduleButton).findByText(/Lista tomada hoy · 3 registros/),
+    ).toBeInTheDocument();
+    expect(scheduleButton).toBeDisabled();
+  });
+
+  it("leaves the picker untouched when Atrás returns to step 1 without ever submitting", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+
+    await openRoster();
+    await screen.findByText("Student 01");
+    // Captured AFTER the roster opened: `useAttendanceRoster` fires its own
+    // per-day prefill fetch on top of the week-counts effect, so the
+    // meaningful baseline is "no further calls once step 2 is reached", not
+    // "zero since mount".
+    const callsBeforeBack = mockFetchAttendanceRecords.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /Atrás/ }));
+
+    expect(await screen.findByText("Elija el horario")).toBeInTheDocument();
+    const scheduleButton = await screen.findByRole("button", { name: /18:00/i });
+    // No session was ever filed — the card stays exactly as it was on mount.
+    expect(scheduleButton).toBeEnabled();
+    expect(within(scheduleButton).queryByText(/Lista tomada/)).not.toBeInTheDocument();
+    // Going Back is not a reset — it must not trigger the guard's refresh.
+    expect(mockFetchAttendanceRecords.mock.calls.length).toBe(callsBeforeBack);
+  });
+});
+
 describe("TrainerAttendancePage — partial failures name the students", () => {
   beforeEach(() => {
     mockReplace.mockReset();
