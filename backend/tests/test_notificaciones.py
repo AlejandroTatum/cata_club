@@ -662,8 +662,14 @@ class TestNotificacionPago:
         assert notif is not None
         assert "Comprobante ilegible" in notif.mensaje
 
-    def test_pago_aprobado_notifica_representante(self, client, db_session):
-        """Si el alumno tiene representante, el representante también recibe la notificación."""
+    def test_pago_aprobado_notifica_una_sola_vez_al_alumno_no_al_representante(
+        self, client, db_session
+    ):
+        """Issue #1227: la fila la crea SOLO el titular del pago (el
+        alumno). El representante ya no recibe una segunda fila -- su feed
+        (`listar_para_persona_y_hijos`) muestra la del alumno con el
+        prefijo "Para <nombre>: " al leerla, ver
+        `test_notificaciones_paginacion.py`."""
         from app.dominio.modelos import Notificacion
 
         representante = _crear_persona(client, cedula=cedula_valida(460))
@@ -692,14 +698,12 @@ class TestNotificacionPago:
         )
         assert resp.status_code == 200
 
-        notifs_representante = db_session.execute(
-            select(Notificacion).where(
-                Notificacion.persona_id == representante["id"],
-                Notificacion.tipo == "PAGO_APROBADO",
-            )
+        todas = db_session.execute(
+            select(Notificacion).where(Notificacion.tipo == "PAGO_APROBADO")
         ).scalars().all()
-        assert len(notifs_representante) == 1
-        assert "Hijo Representado" in notifs_representante[0].mensaje
+        assert len(todas) == 1
+        assert todas[0].persona_id == alumno["id"]
+        assert not todas[0].mensaje.startswith("Para ")
 
     def test_pago_rechazado_con_nota_larga_no_revienta_y_preserva_el_motivo(self, client, db_session):
         """Hallazgo en vivo, 2026-08-11: un motivo de rechazo de 250
@@ -760,17 +764,13 @@ class TestNotificacionPago:
         assert notif_alumno is not None
         assert motivo_largo in notif_alumno.mensaje
 
-        notif_rep = db_session.execute(
-            select(Notificacion).where(
-                Notificacion.persona_id == representante["id"],
-                Notificacion.tipo == "PAGO_RECHAZADO",
-            )
-        ).scalar_one_or_none()
-        assert notif_rep is not None
-        assert motivo_largo in notif_rep.mensaje, (
-            "el motivo de rechazo es lo que el representante necesita leer -- "
-            "lo que se acorta es el nombre decorativo, nunca esto"
-        )
+        # Issue #1227: ya no se escribe una segunda fila para el
+        # representante -- el motivo de rechazo llega igual a su feed,
+        # prefijado al leer, no duplicado al escribir.
+        notifs_rechazado = db_session.execute(
+            select(Notificacion).where(Notificacion.tipo == "PAGO_RECHAZADO")
+        ).scalars().all()
+        assert len(notifs_rechazado) == 1
 
     def test_pago_rechazado_si_notificacion_falla_avisa_sin_ocultar_el_rechazo(
         self, client, db_session, monkeypatch
