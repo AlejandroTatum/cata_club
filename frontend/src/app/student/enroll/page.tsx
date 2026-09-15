@@ -20,9 +20,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormE
 import Link from "next/link";
 import {
   enrollStudent,
-  fetchInstituciones,
   fetchTarifas,
-  type Institucion,
   type TarifaPublica,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,9 +55,9 @@ import {
   Stepper,
   buttonClasses,
 } from "@/components/ui";
-import ContextualHelp from "@/components/ContextualHelp";
 import { BLOOD_TYPES, BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import {
+  User,
   UserPlus,
   Heart,
   CheckCircle,
@@ -69,7 +67,7 @@ import {
   Mail,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculatePersonAge } from "@/lib/identity-validation";
+import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
 import type { NumericFieldMode } from "@/lib/numeric-input";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
@@ -117,26 +115,6 @@ const ENROLLMENT_CHOICES: { value: EnrollmentType; title: string; description: s
       "Gestiono la inscripción de un hijo o dependiente. El estudiante es distinto de mi cuenta.",
   },
 ];
-
-/**
- * What each `tipoEscuela` is CALLED, as opposed to how it is stored.
- *
- * The institution list printed the raw enum in the option text —
- * "Unidad Educativa Anexa · (FISCOMISIONAL)" — which is the backend's spelling
- * shouted at a family filling in a form. The filter right above it already
- * spelled the same four values properly; this is that list, reused instead of
- * re-derived.
- */
-const SCHOOL_TYPES: { value: string; label: string }[] = [
-  { value: "PARTICULAR", label: "Particular" },
-  { value: "FISCAL", label: "Fiscal" },
-  { value: "FISCOMISIONAL", label: "Fiscomisional" },
-  { value: "MUNICIPAL", label: "Municipal" },
-];
-
-function schoolTypeLabel(value: string): string {
-  return SCHOOL_TYPES.find((type) => type.value === value)?.label ?? value;
-}
 
 // ---------------------------------------------------------------------------
 // Confirmation copy when the auto-login could not be confirmed (issue #717)
@@ -235,22 +213,11 @@ function EnrollWizard(): React.ReactElement {
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
-  const [instituciones, setInstituciones] = useState<Institucion[]>([]);
-  /**
-   * The school catalogue is optional data, but its ABSENCE was not being
-   * distinguished from its failure: `fetchInstituciones().catch(() => {})` left
-   * the list empty, and the two selects — which only render when the list has
-   * entries — vanished without a word. A visitor who came to pick their child's
-   * school saw a step that simply never offered it.
-   */
-  const [institucionesFailed, setInstitucionesFailed] = useState(false);
-  const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
   /**
    * Issue #331: the public tariff catalog shown on step 1, BEFORE the
-   * visitor's first field. Unlike `instituciones`, a failure here gets its
-   * own visible `ErrorState` with retry rather than a silently empty list —
-   * a price is what this block exists to show, so its absence must be loud,
-   * not swallowed the way `institucionesFailed` swallows the school catalog.
+   * visitor's first field. A failure here gets its own visible `ErrorState`
+   * with retry — a price is what this block exists to show, so its absence
+   * must be loud, not silently empty.
    */
   const [tarifas, setTarifas] = useState<TarifaPublica[]>([]);
   const [tarifasLoading, setTarifasLoading] = useState(true);
@@ -357,12 +324,6 @@ function EnrollWizard(): React.ReactElement {
     saveEnrollDraft(formData);
   }, [formData, draftHydrated]);
 
-  useEffect(() => {
-    fetchInstituciones()
-      .then(setInstituciones)
-      .catch(() => setInstitucionesFailed(true));
-  }, []);
-
   const loadTarifas = useCallback(async (): Promise<void> => {
     setTarifasLoading(true);
     setTarifasError(null);
@@ -385,21 +346,7 @@ function EnrollWizard(): React.ReactElement {
     key: K,
     value: EnrollFormData[K],
   ): void {
-    setFormData((prev) => {
-      const next = { ...prev, [key]: value };
-      // A withdrawn optional child account takes its confirmation with it:
-      // once correo AND contrasenia are empty again, a leftover confirmation
-      // value could no longer describe anything the visitor can see (#876).
-      if (
-        next.enrollmentType === ENROLLMENT_TYPES.CHILD &&
-        (key === "correo" || key === "contrasenia") &&
-        !next.correo &&
-        !next.contrasenia
-      ) {
-        next.contraseniaConfirmacion = "";
-      }
-      return next;
-    });
+    setFormData((prev) => ({ ...prev, [key]: value }));
     setFormErrors([]);
     // The visitor is now actively working the form again — same moment the
     // attendance wizard's own "Recuperamos las marcas…" banner drops on the
@@ -564,6 +511,7 @@ function EnrollWizard(): React.ReactElement {
       icon?: React.ReactNode;
       pattern?: string;
       maxLength?: number;
+      minLength?: number;
       inputMode?: string;
       hint?: string;
       numericMode?: NumericFieldMode;
@@ -598,6 +546,9 @@ function EnrollWizard(): React.ReactElement {
       value: string;
       onChange: (v: string) => void;
       required?: boolean;
+      min?: string;
+      max?: string;
+      hint?: string;
     },
   ): React.ReactElement {
     return (
@@ -705,7 +656,12 @@ function EnrollWizard(): React.ReactElement {
 
   function renderPersonalStep(): React.ReactElement {
     const isSelf = formData.enrollmentType === ENROLLMENT_TYPES.SELF;
-    const childCredentialsRequired = !isSelf && Boolean(formData.correo || formData.contrasenia);
+    // Issue #1197: the represented minor's age preview, hand-computed for
+    // the CHILD branch below — `PersonIdentityFields` (SELF branch) already
+    // does this internally.
+    const childAge = calculatePersonAge(formData.fechaNacimiento);
+    const childAgePlausible = !isNaN(childAge) && isPlausibleHumanAge(childAge);
+    const childBirthDateBounds = studentBirthDateBounds();
     return (
       <div className="space-y-1">
         <p className="mb-page text-sm text-ink-2">
@@ -714,159 +670,152 @@ function EnrollWizard(): React.ReactElement {
             : "Ingrese los datos personales del estudiante a inscribir:"}
         </p>
 
-        {/* #1028 (review): this flow's phone is local-only — `09XXXXXXXX`, no
-            `593`/`+593` entry, no silent normalization. */}
-        <PersonIdentityFields
-          idPrefix="enroll"
-          disabled={submitting}
-          phoneFormat="local"
-          nombres={formData.nombres}
-          apellidos={formData.apellidos}
-          fechaNacimiento={formData.fechaNacimiento}
-          cedula={formData.cedula}
-          telefono={formData.telefono}
-          onNombresChange={(v) => updateField("nombres", v)}
-          onApellidosChange={(v) => updateField("apellidos", v)}
-          onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
-          onCedulaChange={(v) => updateField("cedula", v)}
-          onTelefonoChange={(v) => updateField("telefono", v)}
-          errors={{
-            nombres: shownError("nombres"),
-            apellidos: shownError("apellidos"),
-            fechaNacimiento: shownError("fechaNacimiento"),
-            cedula: shownError("cedula"),
-            telefono: shownError("telefono"),
-          }}
-          onFieldBlur={(field) => markTouched(field)}
-          renderAgeWarning={(age) =>
-            age < 18 && isSelf && (
-              <span className="ml-1 text-state-warn">
-                — Los menores de edad requieren un representante.
-              </span>
-            )
-          }
-        />
-
-        {/* The school block — child enrolment only.
-            It used to render on exactly one condition (`instituciones.length >
-            0`) and therefore had exactly one failure mode: silence. A catalogue
-            that could not be fetched and a club with no schools on file looked
-            identical, and both looked like a step that simply does not ask. */}
-        {!isSelf && institucionesFailed && (
-          <div className="mt-page rounded-ctl bg-sunken p-page text-sm text-ink-3-strong">
-            No pudimos cargar la lista de escuelas. Puede continuar sin
-            seleccionarla: la institución es opcional y el club la registra
-            después.
-          </div>
-        )}
-        {!isSelf && instituciones.length > 0 && (
-          <div className="mt-page">
-            <label htmlFor="enroll-tipo-escuela" className="mb-field block text-sm font-semibold text-ink">
-              Tipo de escuela
-              <span className="ml-1 font-normal text-ink-3">(opcional)</span>
-            </label>
-            <select
-              id="enroll-tipo-escuela"
-              value={tipoEscuelaFilter}
-              onChange={(e) => {
-                setTipoEscuelaFilter(e.target.value);
-                updateField("institucionId", "");
-              }}
-              disabled={submitting}
-              className="input-field"
-            >
-              <option value="">Todos los tipos</option>
-              {SCHOOL_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-
-            {/* The paragraph that used to sit here — "Seleccione la institución
-                educativa del estudiante (opcional)" — said the label's own
-                words back plus the marker the label now carries. D11c: no help
-                repeats the thing it explains. */}
-            <label htmlFor="enroll-institucion" className="mb-field mt-section block text-sm font-semibold text-ink">
-              Escuela o institución
-              <span className="ml-1 font-normal text-ink-3">(opcional)</span>
-            </label>
-            <select
-              id="enroll-institucion"
-              value={formData.institucionId}
-              onChange={(e) => updateField("institucionId", e.target.value)}
-              disabled={submitting}
-              className="input-field"
-            >
-              <option value="">Sin institución asignada</option>
-              {instituciones
-                .filter((inst) => !tipoEscuelaFilter || inst.tipoEscuela === tipoEscuelaFilter)
-                .map((inst) => (
-                  <option key={inst.id} value={String(inst.id)}>
-                    {inst.nombre} · {schoolTypeLabel(inst.tipoEscuela)}
-                  </option>
-                ))}
-            </select>
-          </div>
-        )}
-
-        {/* Student credentials */}
-        <div className="my-page h-px bg-line" />
-        <div>
-          {/* The icon lost its red. A decorative glyph beside a section heading
-              is not the primary action and not a destructive one, which are the
-              only two jobs the red has. */}
-          <div className="mb-section flex items-center gap-2">
-            <Mail size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
-            <h3 className="text-2xs font-bold uppercase text-ink-3">
-              {isSelf ? "Credenciales de acceso" : "Cuenta del estudiante"}
-            </h3>
-          </div>
-          {/* "(Opcional)" used to live in this heading AND in both placeholders
-              below. It is stated once now, by the two labels themselves. What
-              is left here is the part that explains HOW it works, which D11c
-              puts behind "Ver ayuda". */}
-          {!isSelf && (
-            <div className="mb-section">
-              <ContextualHelp title="Cuenta del estudiante">
-                El menor puede tener su propio acceso, o no tenerlo. Si ingresa
-                un correo y una contraseña, creamos también su cuenta; si deja
-                los dos campos vacíos, la inscripción se completa igual y usted
-                gestiona todo desde la suya.
-              </ContextualHelp>
-            </div>
-          )}
-          {renderField("correo", {
-            label: "Correo electrónico",
-            value: formData.correo,
-            onChange: (v) => updateField("correo", v),
-            type: "email",
-            required: isSelf || childCredentialsRequired,
-            placeholder: example("correo@ejemplo.com"),
-            autoComplete: "email",
-          })}
-          {renderField("contrasenia", {
-            label: "Contraseña",
-            value: formData.contrasenia,
-            onChange: (v) => updateField("contrasenia", v),
-            type: "password",
-            required: isSelf || childCredentialsRequired,
-            hint: "Al menos 8 caracteres.",
-            autoComplete: "new-password",
-          })}
-          {/* Only while credentials are actually being created — always for
-              a self enrollment, only once the child's optional account has
-              started, exactly like "Contraseña" above (#876). */}
-          {(isSelf || childCredentialsRequired) &&
-            renderField("contraseniaConfirmacion", {
-              label: "Confirmar contraseña",
-              value: formData.contraseniaConfirmacion,
-              onChange: (v) => updateField("contraseniaConfirmacion", v),
-              type: "password",
-              required: isSelf || childCredentialsRequired,
-              autoComplete: "new-password",
+        {isSelf ? (
+          // #1028 (review): this flow's phone is local-only —
+          // `09XXXXXXXX`, no `593`/`+593` entry, no silent normalization.
+          <PersonIdentityFields
+            idPrefix="enroll"
+            disabled={submitting}
+            phoneFormat="local"
+            nombres={formData.nombres}
+            apellidos={formData.apellidos}
+            fechaNacimiento={formData.fechaNacimiento}
+            cedula={formData.cedula}
+            telefono={formData.telefono}
+            onNombresChange={(v) => updateField("nombres", v)}
+            onApellidosChange={(v) => updateField("apellidos", v)}
+            onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
+            onCedulaChange={(v) => updateField("cedula", v)}
+            onTelefonoChange={(v) => updateField("telefono", v)}
+            errors={{
+              nombres: shownError("nombres"),
+              apellidos: shownError("apellidos"),
+              fechaNacimiento: shownError("fechaNacimiento"),
+              cedula: shownError("cedula"),
+              telefono: shownError("telefono"),
+            }}
+            onFieldBlur={(field) => markTouched(field)}
+            renderAgeWarning={(age) =>
+              age < 18 && (
+                <span className="ml-1 text-state-warn">
+                  — Los menores de edad requieren un representante.
+                </span>
+              )
+            }
+          />
+        ) : (
+          // Issue #1197: a represented minor has no phone of their own —
+          // the emergency contact already derives from the representative
+          // (#1138) — so this branch hand-renders the same four fields
+          // `PersonIdentityFields` would, in the same order, minus the
+          // phone. `PersonIdentityFields` itself stays untouched: other
+          // screens still use it as-is.
+          <>
+            {renderField("nombres", {
+              label: "Nombres",
+              value: formData.nombres,
+              onChange: (v) => updateField("nombres", v),
+              placeholder: example("Juan Carlos"),
+              required: true,
+              icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+              pattern: "[A-Za-zÀ-ɏ\\s]+",
+              maxLength: 100,
+              minLength: 3,
+              autoComplete: "given-name",
             })}
-        </div>
+            {renderField("apellidos", {
+              label: "Apellidos",
+              value: formData.apellidos,
+              onChange: (v) => updateField("apellidos", v),
+              placeholder: example("Rodríguez López"),
+              required: true,
+              icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+              pattern: "[A-Za-zÀ-ɏ\\s]+",
+              maxLength: 100,
+              minLength: 3,
+              autoComplete: "family-name",
+            })}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {renderBirthDateField("fechaNacimiento", {
+                label: "Fecha de nacimiento",
+                value: formData.fechaNacimiento,
+                onChange: (v) => updateField("fechaNacimiento", v),
+                required: true,
+                min: childBirthDateBounds.min,
+                max: childBirthDateBounds.max,
+                hint: "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).",
+              })}
+              {renderField("cedula", {
+                label: "Cédula de identidad",
+                value: formData.cedula,
+                onChange: (v) => updateField("cedula", v),
+                placeholder: example("1712345678"),
+                required: true,
+                icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+                pattern: "[0-9]{10}",
+                inputMode: "numeric",
+                numericMode: "cedula",
+                hint: CEDULA_HINT,
+              })}
+            </div>
+            {formData.fechaNacimiento && (
+              <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
+                Edad calculada:{" "}
+                <span className="font-semibold text-ink">
+                  {childAgePlausible
+                    ? `${childAge} años`
+                    : !isNaN(childAge) ? "Revise el año." : "—"}
+                </span>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Student credentials — self enrollment only (issue #1137,
+            invariante B: un menor representado nunca tiene Usuario propio,
+            así que este bloque no tiene sentido para un "child"). */}
+        {isSelf && (
+          <>
+            <div className="my-page h-px bg-line" />
+            <div>
+              {/* The icon lost its red. A decorative glyph beside a section
+                  heading is not the primary action and not a destructive
+                  one, which are the only two jobs the red has. */}
+              <div className="mb-section flex items-center gap-2">
+                <Mail size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />
+                <h3 className="text-2xs font-bold uppercase text-ink-3">
+                  Credenciales de acceso
+                </h3>
+              </div>
+              {renderField("correo", {
+                label: "Correo electrónico",
+                value: formData.correo,
+                onChange: (v) => updateField("correo", v),
+                type: "email",
+                required: true,
+                placeholder: example("correo@ejemplo.com"),
+                autoComplete: "email",
+              })}
+              {renderField("contrasenia", {
+                label: "Contraseña",
+                value: formData.contrasenia,
+                onChange: (v) => updateField("contrasenia", v),
+                type: "password",
+                required: true,
+                hint: "Al menos 8 caracteres.",
+                autoComplete: "new-password",
+              })}
+              {renderField("contraseniaConfirmacion", {
+                label: "Confirmar contraseña",
+                value: formData.contraseniaConfirmacion,
+                onChange: (v) => updateField("contraseniaConfirmacion", v),
+                type: "password",
+                required: true,
+                autoComplete: "new-password",
+              })}
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -903,6 +852,13 @@ function EnrollWizard(): React.ReactElement {
           autoComplete: "family-name",
         })}
 
+        {renderBirthDateField("fechaNacimientoRepresentante", {
+          label: "Fecha de nacimiento",
+          value: formData.fechaNacimientoRepresentante,
+          onChange: (v) => updateField("fechaNacimientoRepresentante", v),
+          required: true,
+        })}
+
         {renderField("cedulaRepresentante", {
           label: "Cédula de identidad",
           value: formData.cedulaRepresentante,
@@ -914,13 +870,6 @@ function EnrollWizard(): React.ReactElement {
           inputMode: "numeric",
           numericMode: "cedula",
           hint: CEDULA_HINT,
-        })}
-
-        {renderBirthDateField("fechaNacimientoRepresentante", {
-          label: "Fecha de nacimiento",
-          value: formData.fechaNacimientoRepresentante,
-          onChange: (v) => updateField("fechaNacimientoRepresentante", v),
-          required: true,
         })}
 
         {renderField("telefonoRepresentante", {
@@ -1040,18 +989,32 @@ function EnrollWizard(): React.ReactElement {
           rows: 2,
         })}
 
-        <EmergencyContactFields
-          idPrefix="enroll"
-          disabled={submitting}
-          contacto={formData.contactoEmergencia}
-          telefono={formData.telefonoEmergencia}
-          onContactoChange={(v) => updateField("contactoEmergencia", v)}
-          onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
-          contactoError={shownError("contactoEmergencia")}
-          telefonoError={shownError("telefonoEmergencia")}
-          onContactoBlur={() => markTouched("contactoEmergencia")}
-          onTelefonoBlur={() => markTouched("telefonoEmergencia")}
-        />
+        {/*
+         * Issue #1138: un menor representado no tiene contacto de
+         * emergencia propio -- se deriva del representante (nombre y
+         * teléfono actuales), así que este paso solo pide los dos campos
+         * en la inscripción de un adulto (jugador). El camino "child" ya
+         * cargó los datos del representante en el paso anterior.
+         */}
+        {formData.enrollmentType === ENROLLMENT_TYPES.SELF ? (
+          <EmergencyContactFields
+            idPrefix="enroll"
+            disabled={submitting}
+            contacto={formData.contactoEmergencia}
+            telefono={formData.telefonoEmergencia}
+            onContactoChange={(v) => updateField("contactoEmergencia", v)}
+            onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
+            contactoError={shownError("contactoEmergencia")}
+            telefonoError={shownError("telefonoEmergencia")}
+            onContactoBlur={() => markTouched("contactoEmergencia")}
+            onTelefonoBlur={() => markTouched("telefonoEmergencia")}
+          />
+        ) : (
+          <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
+            En caso de emergencia, el club lo contactará a usted con el
+            nombre y teléfono de representante que ya indicó.
+          </div>
+        )}
 
         {renderTextarea("observaciones", {
           label: "Observaciones adicionales",
@@ -1161,20 +1124,28 @@ function EnrollWizard(): React.ReactElement {
             "personal",
           )}
           {summaryRow("Cédula", formData.cedula || "—", "personal", { duplicateCandidate: true })}
-          {summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
+          {/* Issue #1197: a represented minor has no phone of their own —
+              this row only applies to the self (adult) path. The
+              representative's own cédula and phone appear below instead. */}
           {isChild
-            ? summaryRow(
-                "Institución",
-                instituciones.find((inst) => String(inst.id) === formData.institucionId)?.nombre
-                  ?? "Sin institución asignada",
-                "personal",
-              )
-            : null}
+            ? null
+            : summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
           {isChild
             ? summaryRow(
                 "Representante",
                 `${formData.nombreRepresentante} ${formData.apellidosRepresentante}`.trim() || "—",
                 "representative",
+              )
+            : null}
+          {isChild
+            ? summaryRow(
+                "Cédula del representante", formData.cedulaRepresentante || "—", "representative",
+                { duplicateCandidate: true },
+              )
+            : null}
+          {isChild
+            ? summaryRow(
+                "Teléfono del representante", formData.telefonoRepresentante || "—", "representative",
               )
             : null}
           {summaryRow(
@@ -1188,19 +1159,22 @@ function EnrollWizard(): React.ReactElement {
             // their cédula while the real collision was on this row (#999).
             { duplicateCandidate: true },
           )}
-          {isChild && formData.correo.trim()
-            ? summaryRow("Cuenta del estudiante", formData.correo, "personal")
-            : null}
           {summaryRow(
             "Tipo de sangre",
             formData.tipoSangre ? BLOOD_TYPE_LABELS[formData.tipoSangre] : "—",
             "health",
           )}
-          {summaryRow(
-            "Contacto de emergencia",
-            `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
-            "health",
-          )}
+          {isChild
+            ? summaryRow(
+                "Contacto de emergencia",
+                "Se deriva del representante indicado arriba",
+                "representative",
+              )
+            : summaryRow(
+                "Contacto de emergencia",
+                `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
+                "health",
+              )}
           {summaryRow("Condiciones de salud", formData.condicionesSalud || "Ninguna reportada", "health")}
           {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
           {formData.observaciones
@@ -1209,9 +1183,9 @@ function EnrollWizard(): React.ReactElement {
         </DataRowList>
 
         <p className="text-sm text-ink-2">
-          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"}.
-          Después podrá subir el comprobante:{" "}
-          <b className="font-semibold text-ink">el club lo valida y recién ahí se activa la membresía</b>.
+          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"} y le enviamos un correo para verificarla.
+          Luego, acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago:{" "}
+          <b className="font-semibold text-ink">el club lo valida y ahí se activa la membresía</b>.
         </p>
 
         {/* `sunken`, not `canvas` — the same inverted ladder as the age well:
@@ -1389,6 +1363,10 @@ function EnrollWizard(): React.ReactElement {
                     sessionConfirmed
                       ? "Su cuenta ya está creada y la sesión, iniciada."
                       : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
+                    /* #1196: la historia completa empieza acá -- antes la
+                       confirmación no mencionaba la verificación de correo,
+                       aunque el enlace ya viaja apenas se crea la cuenta. */
+                    "Verifique su correo: le enviamos un enlace de confirmación.",
                     /* #348: "Mis pagos" no tiene ningún botón para el primer
                        pago -- registrarlo requiere una membresía que todavía
                        no existe, y crearla es una acción exclusiva del
@@ -1400,7 +1378,7 @@ function EnrollWizard(): React.ReactElement {
                        la misma que ya dice student-utils.ts para ese estado
                        ("El club crea la membresía al registrar el primer
                        pago. Acérquese a administración..."). */
-                    "Acérquese a administración o escríbanos por WhatsApp para registrar su primer pago.",
+                    "Acérquese a administración o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
                     "El club lo valida y ahí se activa la membresía.",
                   ].map((linea) => (
                     <li key={linea} className="flex items-start gap-3 text-sm text-ink-2">
@@ -1605,11 +1583,9 @@ function EnrollWizard(): React.ReactElement {
               backend contract of #394) — shown ONLY on step 1, before the
               visitor's first field, so anyone knows the price before they
               start. Public and harmless data: unlike the demo panel above,
-              this is NOT gated on auth or environment, and unlike
-              `institucionesFailed` (a silently-empty auxiliary list), a
-              failure here gets its own loud `ErrorState` with retry — the
-              whole point of this block is showing a price, so its absence
-              must say so. */}
+              this is NOT gated on auth or environment, and a failure here
+              gets its own loud `ErrorState` with retry — the whole point of
+              this block is showing a price, so its absence must say so. */}
           {step === "type" && (
             <div className="card p-page">
               <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">

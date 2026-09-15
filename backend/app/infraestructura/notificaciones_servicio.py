@@ -308,36 +308,40 @@ class ServicioNotificaciones:
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[RECUPERAR_CONTRASENIA] correo=%s", _enmascarar_correo(correo))
 
-    def enviar_verificacion_correo(self, correo: str, token: str) -> None:
+    def enviar_verificacion_correo(self, correo: str, token: str, nombre: Optional[str] = None) -> None:
         """Envía el enlace que prueba el control de la dirección (issue #790).
 
-        El cuerpo dice para qué sirve verificar y qué pasa si no se hace: sin
-        eso, quien se inscribe en el club no tiene forma de relacionar este
-        correo con el rechazo que va a encontrar cuando intente agregar a otro
-        representado. Ronda 2 del issue #898: solo cambia el asunto, sobre la
-        misma estructura MIME/HTML que ya existía."""
+        El cuerpo cuenta la misma historia que el resto de las superficies de
+        inscripción (issue #1196): verificar el correo, acercarse al club o
+        escribir por WhatsApp para registrar la inscripción y el primer pago,
+        y recién entonces el club activa la membresía. Ya no afirma que la
+        cuenta funciona con normalidad sin verificar -- la activación la
+        bloquea por completo -- ni que falta vincular un representado ya
+        registrado, algo que #1186 retiró. `nombre` es opcional: quien
+        despacha la cola conoce a la persona y lo pasa cuando lo tiene."""
         enlace = f"{self._frontend_url}/verificar-correo?token={token}"
         asunto = "Cata Club | Verificación de correo"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
         texto = (
-            f"Hola,\n\n"
+            f"{saludo}\n\n"
             f"Gracias por registrarse en Cata Club. Para confirmar que esta "
             f"dirección es suya, abra el siguiente enlace (válido por 24 horas):\n\n"
             f"{enlace}\n\n"
-            f"Mientras no verifique su correo podrá usar su cuenta con "
-            f"normalidad, pero no podrá agregar a su cuenta a un representado "
-            f"que ya esté registrado en el club.\n\n"
+            f"Después, acérquese al club o escríbanos por WhatsApp para "
+            f"registrar la inscripción y el primer pago: el club lo valida y "
+            f"ahí se activa la membresía.\n\n"
             f"Si usted no se registró, ignore este correo.\n\n"
             f"Saludos,\nEquipo Cata Club"
         )
         html = (
             "<html><body>"
-            "<p>Hola,</p>"
+            f"<p>{saludo}</p>"
             "<p>Gracias por registrarse en Cata Club. Para confirmar que esta "
             "dirección es suya, abra el siguiente enlace:</p>"
             f'<p><a href="{enlace}">Verificar mi correo</a> (válido por 24 horas)</p>'
-            "<p>Mientras no verifique su correo podrá usar su cuenta con "
-            "normalidad, pero no podrá agregar a su cuenta a un representado "
-            "que ya esté registrado en el club.</p>"
+            "<p>Después, acérquese al club o escríbanos por WhatsApp para "
+            "registrar la inscripción y el primer pago: el club lo valida y "
+            "ahí se activa la membresía.</p>"
             "<p>Si usted no se registró, ignore este correo.</p>"
             "<p>Saludos,<br>Equipo Cata Club</p>"
             "</body></html>"

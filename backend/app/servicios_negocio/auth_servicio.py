@@ -10,14 +10,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
-    RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
+    Persona, RecuperacionOutbox, Sesion, Usuario, VerificacionCorreoOutbox,
 )
 from app.dominio.excepciones import (
     CredencialesInvalidas, EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida,
     ServicioNoDisponible,
 )
 from app.dominio.mensajes import (
-    MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_VERIFICACION_ENVIADA,
+    MENSAJE_IDENTIDAD_DUPLICADA, MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS,
+    MENSAJE_VERIFICACION_ENVIADA,
 )
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
@@ -263,8 +264,10 @@ class AuthServicio:
     # --- Registro de usuario para una Persona ya existente -------------------
     def registrar_usuario(self, datos: RegistroUsuarioDTO) -> dict:
         """
-        Crea el `Usuario` (credenciales) para una `Persona` que YA existe (dada
-        de alta antes por un ADMINISTRADOR vía POST /personas). NO crea Persona.
+        Solo ADMINISTRADOR (`POST /auth/registro` exige
+        `GestorPermisos(["ADMINISTRADOR"])`, ver `auth_router.py`): crea el
+        `Usuario` (credenciales) para una `Persona` que YA existe (dada de
+        alta antes por un ADMINISTRADOR vía POST /personas). NO crea Persona.
         Sin roles asignados (coherente con la asignación perezosa de roles ya
         implementada, los roles se asignan por separado).
 
@@ -281,9 +284,20 @@ class AuthServicio:
                 "Contacte al administrador del club."
             )
 
-        # Endpoint público: los dos casos comparten el mismo texto a propósito,
-        # para no revelar si lo que ya estaba tomado era la cédula o el correo
-        # (ver app/dominio/mensajes.py).
+        # Issue #1137, invariante (B): una Persona con `representante_id`
+        # nunca puede tener `Usuario` propio. Este endpoint no tenía este
+        # candado -- solo comprobaba "existe" y "no tiene ya una cuenta" --
+        # así que un ADMINISTRADOR podía acuñar credenciales para un menor
+        # representado pasando su cédula.
+        if persona.representante_id is not None:
+            raise OperacionInvalida(MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS)
+
+        # Endpoint ADMINISTRADOR-only (ver docstring arriba): los dos casos
+        # de abajo comparten el mismo texto a propósito -- no por el motivo
+        # anti-enumeración de `MENSAJE_IDENTIDAD_DUPLICADA` en un endpoint
+        # público (este no lo es), sino porque el mensaje ya es el texto
+        # estándar del producto para "cédula o correo ya en uso" y no hay
+        # razón para inventar uno distinto acá.
         if persona.usuario is not None:
             raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
 
@@ -326,6 +340,65 @@ class AuthServicio:
             "usuario_id": nuevo_usuario.id,
             "correo": nuevo_usuario.correo,
         }
+
+    # --- Núcleo presencial (#1137): credenciales de una Persona existente ----
+    def establecer_credenciales_persona_existente(
+        self, persona: Persona, correo: str, contrasenia: str
+    ) -> Usuario:
+        """Crea o actualiza las credenciales de una Persona YA existente y
+        BLOQUEADA, sin comitear y sin emitir token.
+
+        Es el núcleo de credenciales compartido de los comandos presenciales:
+        el administrador tiene a la persona enfrente, verificó su identidad y
+        su correo ACTUAL en el mostrador -- por eso la cuenta nace (o queda)
+        con `correo_verificado=True` sin ningún clic en ningún buzón. La
+        verificación de identidad ES el trámite presencial, no un email.
+
+        - No crea `Persona`: opera sobre el `persona_id` recibido, que no
+          cambia jamás.
+        - La unicidad del correo se chequea NORMALIZADA (`lower(btrim)`,
+          el mismo predicado de `obtener_por_correo` y del índice único
+          `ix_usuario_correo_lower`): si la dirección pertenece a OTRA
+          persona, el comando completo se rechaza sin desvincular nada.
+        - Solo `flush()`: credenciales, capacidad, vínculo, auditoría y
+          epoch comitean JUNTOS o no comitean. Quien llama hace el único
+          `commit()`.
+
+        Devuelve el `Usuario` establecido."""
+        correo_normalizado = correo.strip().lower()
+        cuenta_con_ese_correo = self.repo.obtener_por_correo(correo_normalizado)
+        if cuenta_con_ese_correo is not None and cuenta_con_ese_correo.persona_id != persona.id:
+            raise EntidadDuplicada(
+                "Ese correo ya pertenece a la cuenta de otra persona. "
+                "Verificá con el titular otra dirección actual antes de "
+                "continuar.",
+                detalle_tecnico=(
+                    f"correo normalizado ya usado por persona_id="
+                    f"{cuenta_con_ese_correo.persona_id}; pedido para "
+                    f"persona_id={persona.id}"
+                ),
+            )
+
+        usuario = self.repo.obtener_por_persona_id(persona.id)
+        hash_contrasenia = GestorAutenticacion.obtener_hash_contrasenia(contrasenia)
+        if usuario is None:
+            usuario = Usuario(
+                correo=correo_normalizado,
+                contrasenia=hash_contrasenia,
+                persona_id=persona.id,
+                # La verificación la hizo el personal en persona: nace
+                # verificada a propósito (mismo criterio documentado de
+                # `registrar_usuario`, con evidencia presencial de por medio).
+                correo_verificado=True,
+            )
+            self.repo.crear(usuario)
+            return usuario
+
+        usuario.correo = correo_normalizado
+        usuario.contrasenia = hash_contrasenia
+        usuario.correo_verificado = True
+        self.db.flush()
+        return usuario
 
     # --- Perfil del usuario autenticado -------------------------------------
     def obtener_usuario_actual(self, correo: str) -> Usuario:

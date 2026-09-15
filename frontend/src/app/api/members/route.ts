@@ -25,6 +25,7 @@ import {
 } from "@/lib/server/members-adapter";
 import { fetchAllPages, type PaginatedPage } from "@/lib/server/paged-fetch";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "@/lib/server/payments-adapter";
+import type { BackendTipoRol } from "@/types/domain";
 
 const PERSONAS_PAGE_LIMIT = 200;
 const MEMBRESIAS_PAGE_LIMIT = 200;
@@ -79,6 +80,26 @@ async function fetchMedicalRecordIds(
   if (!result.ok || !result.response.ok) return new Set();
   const body = (await result.response.json()) as { personaIdsConFicha?: number[] };
   return new Set(body.personaIdsConFicha ?? []);
+}
+
+type BackendRolesBulkItem = { personaId: number; roles: BackendTipoRol[] };
+
+/**
+ * Issue #1132: "who has which roles" — one bulk `?persona_ids=1&persona_ids=2`
+ * call, same shape and same best-effort degrade as `fetchMedicalRecordIds`
+ * right above (a failed lookup degrades to "no real roles known" rather than
+ * failing the whole page, and `members-adapter.ts` already falls back to the
+ * pre-#1132 default for any persona missing from the map).
+ */
+async function fetchRolesByPersonaId(
+  request: NextRequest,
+  personas: BackendPersonaFull[],
+): Promise<Map<number, BackendTipoRol[]>> {
+  const query = personas.map((persona) => `persona_ids=${persona.id}`).join("&");
+  const result = await backendFetchAuthed(request, `/personas/roles/bulk?${query}`);
+  if (!result.ok || !result.response.ok) return new Map();
+  const items = (await result.response.json()) as BackendRolesBulkItem[];
+  return new Map(items.map((item) => [item.personaId, item.roles]));
 }
 
 async function fetchDebtByMembership(
@@ -180,6 +201,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const personaIdsConFicha = await fetchMedicalRecordIds(request, personasBody.items);
 
   /*
+   * Issue #1132: "who has which roles" — closes gap #1 in
+   * `members-adapter.ts`'s module doc (a hardcoded `role: "representante"`
+   * on every row). Same one-bulk-call, sequential-after-`personasBody`,
+   * best-effort shape as the ficha-médica lookup right above.
+   */
+  const rolesByPersonaId = await fetchRolesByPersonaId(request, personasBody.items);
+
+  /*
    * Issue #326: overdue amount + months for the memberships the admin reads
    * as vencidas, one bulk `?membresia_ids=1&membresia_ids=2` call — same
    * shape as the ficha-médica lookup right above.
@@ -216,6 +245,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     new Map(tipos.map((tipo) => [tipo.id, tipo])),
     personaIdsConFicha,
     deudaByMembresiaId,
+    rolesByPersonaId,
   );
 
   const personasCapped = personasBody.total >= PERSONAS_PAGE_LIMIT;

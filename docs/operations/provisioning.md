@@ -102,6 +102,285 @@ frescura tolera la ausencia de dump solo durante ese deploy
 el cron de backup haya corrido; a partir del segundo deploy, el backup
 pre-deploy y el cron diario mantienen la alarma exigente.
 
+## Segundo operador SSH y endurecimiento del host
+
+> **Estado: runbook, no registro.** Nada de lo que sigue fue ejecutado contra
+> el host: no hay endurecimiento realizado ni verificación que citar, y este
+> documento no declara cierre del trabajo. Los datos reales (usuario, IP,
+> fingerprints) viven en el repo privado de operaciones (`cata_club-docs`);
+> acá solo hay placeholders. Cada etapa lista su verificación y su vuelta
+> atrás: entre etapas, el host queda en el estado anterior.
+
+La regla que ordena todo el runbook: **nunca cerrar la sesión que funciona**.
+Toda la operación se hace con la sesión conocida y verificada abierta en una
+terminal, y cualquier acceso nuevo se prueba en una sesión independiente
+antes de tocar algo existente.
+
+| Regla fija | Por qué |
+|---|---|
+| La sesión conocida queda abierta durante toda la operación | es el camino de vuelta si la sesión nueva no entra |
+| Solo `append` a `authorized_keys`, nunca `>` | un solo `>` trunca el archivo y puede dejar fuera al operador actual |
+| Ninguna baja de acceso antes de probar la sesión nueva en otro equipo | quitar primero y probar después es el error que encierra a todo el mundo |
+| Cero `systemctl restart/reload` de sshd en el camino normal | una sesión establecida no se arriesga por un cambio que no lo exige |
+| Los valores reales van a `cata_club-docs`, no acá | este archivo es público |
+
+### Etapa 0 — Línea base de solo lectura
+
+Todo lo siguiente lee estado y no cambia nada (`sshd -t` valida sintaxis, no
+recarga). Guardar la salida en el repo privado de operaciones: es la línea
+base contra la que se compara al final.
+
+```bash
+ssh <usuario>@<host>          # sesión conocida: queda abierta
+hostname && id                # confirmar host y usuario correctos
+getent group sudo             # quiénes tienen sudo hoy
+sudo -l                       # grants vigentes de este usuario
+ls -ld ~ ~/.ssh ~/.ssh/authorized_keys 2>/dev/null
+stat -c '%U %G %a' ~/.ssh ~/.ssh/authorized_keys 2>/dev/null
+sudo sshd -T | grep -E '^(port|pubkeyauthentication|passwordauthentication|permitrootlogin) '
+sudo sshd -t                  # 0 = configuración sshd válida
+systemctl is-active ssh; systemctl is-enabled ssh
+systemctl is-enabled ssh.socket 2>/dev/null || echo "sin socket activation"
+systemctl is-active fail2ban 2>/dev/null || echo "fail2ban no instalado"
+```
+
+### Etapa 1 — Verificar la clave pública del segundo operador fuera de banda
+
+La clave la genera el segundo operador en su propia máquina; la privada nunca
+viaja. La pública viaja como texto, pero pegarla en un chat no prueba de
+quién es: antes de escribir nada en el host, la huella se confirma por un
+segundo canal (llamada de voz/video) contra lo que imprime la máquina del
+operador.
+
+```bash
+# en la máquina del segundo operador
+ssh-keygen -t ed25519
+ssh-keygen -lf ~/.ssh/id_ed25519.pub    # anotar huella y comentario
+```
+
+Solo se continúa si la huella que llega al host es **carácter por carácter**
+la que el operador leyó por el segundo canal.
+
+### Etapa 2 — Agregar la clave: append y permisos
+
+```bash
+# en el host, con la sesión conocida abierta
+install -d -m 700 -o <usuario-2> -g <grupo-2> /home/<usuario-2>/.ssh
+sudo chown <usuario-2>:<grupo-2> /home/<usuario-2>/.ssh
+sudo chmod 700 /home/<usuario-2>/.ssh
+printf '%s\n' '<clave-publica-ed25519-del-operador-2>' \
+  | sudo tee -a /home/<usuario-2>/.ssh/authorized_keys > /dev/null
+sudo chown <usuario-2>:<grupo-2> /home/<usuario-2>/.ssh/authorized_keys
+sudo chmod 600 /home/<usuario-2>/.ssh/authorized_keys
+stat -c '%U %G %a' /home/<usuario-2>/.ssh /home/<usuario-2>/.ssh/authorized_keys
+```
+
+`tee -a` agrega; `tee` a secas sobrescribe. El dueño y el modo del directorio
+y del archivo se imponen **explícitamente**, sin apoyarse en el comportamiento
+de ninguna herramienta sobre rutas preexistentes, y se **verifican** con
+`stat`: la salida debe ser exactamente `<usuario-2> <grupo-2> 700` para
+`.ssh` y `<usuario-2> <grupo-2> 600` para `authorized_keys`. La verificación
+importa porque sshd con `StrictModes` rechaza en silencio un `authorized_keys`
+con dueño o permisos incorrectos: la sesión nueva fallaría y parecería un
+problema de clave.
+
+Vuelta atrás — quitar exactamente la línea agregada, a mano y por huella,
+sin `sed` ni ningún borrado por regex (un comentario repetido o un patrón
+amplio borra claves ajenas):
+
+```bash
+# 1) Backup dentro de ~/.ssh, con el mismo dueño y modo:
+sudo cp -a /home/<usuario-2>/.ssh/authorized_keys \
+           /home/<usuario-2>/.ssh/authorized_keys.bak-<fecha>
+sudo chown <usuario-2>:<grupo-2> /home/<usuario-2>/.ssh/authorized_keys.bak-<fecha>
+sudo chmod 600 /home/<usuario-2>/.ssh/authorized_keys.bak-<fecha>
+
+# 2) Ubicar la clave por su HUELLA (la anotada en la Etapa 1).
+#    Imprime una línea por clave; anotar cuál es la del operador-2:
+sudo ssh-keygen -lf /home/<usuario-2>/.ssh/authorized_keys
+
+# 3) Editar a mano y borrar SOLO esa entrada:
+sudoedit /home/<usuario-2>/.ssh/authorized_keys
+```
+
+Verificación de la baja, antes de cerrar la etapa: `sudo ssh-keygen -lf`
+vuelve a listar una clave menos, la huella del operador-2 desaparece y **todas
+las demás huellas siguen idénticas**; un `sudo diff` contra el backup muestra
+una única línea eliminada; `stat` sigue dando `600`/`<usuario-2>`; y la
+**sesión que sobrevive** — la conocida de las etapas previas — entra igual
+que antes.
+
+### Etapa 3 — Probar la segunda sesión ANTES de quitar cualquier acceso
+
+Desde **otra máquina o red**, terminal nueva:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 <usuario-2>@<host>
+hostname && id     # confirmar que entró al host correcto con el usuario correcto
+```
+
+Mientras esta sesión no entre, no se quita ninguna llave ni se cambia ninguna
+configuración: se vuelve a la Etapa 2 y se verifica. Recién con la sesión
+nueva probada, la baja del acceso anterior (si el dueño del club la decide)
+es otra operación con el mismo esquema append → probar → verificar, nunca un
+paso colateral de esta etapa.
+
+### Etapa 4 — fail2ban: jail sshd para Ubuntu/systemd
+
+En Ubuntu 20.04+ sshd escribe en el journal de systemd; en un host sin
+`rsyslog` ni siquiera existe `/var/log/auth.log`, así que el backend por
+defecto puede dejar el jail ciego. `backend = systemd` es el backend correcto
+para esta familia. La configuración va en un **drop-in con nombre propio**
+bajo `/etc/fail2ban/jail.d/`: un archivo nuevo acotado a este jail, que nunca
+trunca ni reemplaza un `jail.local` preexistente —que puede llevar
+configuración del operador— ni ningún archivo del paquete.
+
+**Antes de escribir nada**: fail2ban puede estar ya instalado y configurado
+(la Etapa 0 lo registró). La configuración existente se lee y se respalda una
+copia en el registro privado de operaciones: jamás se trunca ni se reemplaza.
+
+```bash
+sudo ls -la /etc/fail2ban/jail.d/ 2>/dev/null
+sudo cat /etc/fail2ban/jail.local 2>/dev/null
+sudo grep -rn '^\[sshd\]' /etc/fail2ban/jail.d/ /etc/fail2ban/jail.local 2>/dev/null
+```
+
+Si algún archivo ya define o habilita `sshd`, la etapa se detiene ahí:
+superponer un drop-in sobre un jail ya configurado es una decisión que se
+revisa con esa configuración a la vista, no un paso colateral.
+
+Instalación — el drop-in se niega a pisar un archivo existente, y la
+configuración efectiva se valida **antes** de tocar el servicio:
+
+```bash
+sudo apt-get update && sudo apt-get install -y fail2ban
+sudo test ! -e /etc/fail2ban/jail.d/sshd-journal.local \
+  || { echo 'ABORTAR: el drop-in ya existe'; exit 1; }
+sudo tee /etc/fail2ban/jail.d/sshd-journal.local > /dev/null <<'EOF'
+[sshd]
+enabled = true
+backend = systemd
+maxretry = 5
+findtime = 10m
+bantime = 1h
+bantime.increment = true
+bantime.maxtime = 1w
+ignoreip = 127.0.0.1/8 ::1
+EOF
+sudo fail2ban-client -t \
+  && sudo systemctl enable fail2ban \
+  && sudo systemctl restart fail2ban
+```
+
+Validación (todas antes de dar el jail por bueno):
+
+```bash
+sudo systemctl status fail2ban --no-pager
+sudo fail2ban-client status sshd          # debe listar el jail "sshd"
+sudo journalctl _COMM=sshd --since -30m --no-pager | tail -n 5
+```
+
+Smoke funcional — **obligatorio, no opcional**, desde un cliente desechable:
+`maxretry` intentos con contraseña errada deben incrementar `Total failed` en
+`fail2ban-client status sshd`. Si queda en `0`, el jail está ciego y no
+debió considerarse instalado. Si el propio smoke baneó al cliente de prueba:
+`sudo fail2ban-client set sshd unbanip <ip-de-prueba>` (o `sudo fail2ban-client
+unban --all`) — la sesión conocida no se toca.
+
+**Socket activation: mecanismo no verificado, sin remedio automático.** Si la
+Etapa 0 mostró `ssh.socket` habilitado, este runbook **no afirma** que esa
+modalidad deje al backend `systemd` del jail sin leer nada en esta versión
+del paquete ni en este host: la interacción real no fue verificada. El
+detector es el smoke de arriba, obligatorio en todos los casos. Si el smoke
+pasa, no se toca nada. Si el smoke queda en `0`, **no se deshabilita
+`ssh.socket` como remedio por defecto**: primero se releva el estado
+efectivo,
+
+```bash
+sudo fail2ban-client status sshd
+sudo fail2ban-client get sshd journalmatch 2>/dev/null || true
+sudo systemctl status ssh ssh.socket --no-pager
+sudo systemctl list-units 'ssh*' --no-pager
+sudo journalctl _COMM=sshd --since -30m --no-pager | tail -n 20
+```
+
+y con ese relevamiento la etapa **se detiene**: un cambio sobre el servicio
+SSH del host — por ejemplo pasar de socket a servicio — es una corrección
+específica de ese host, revisada de antemano y ejecutada con consola fuera de
+banda del proveedor a mano. Este runbook no la prescribe: no hay ningún paso
+que reinicie o reconfigure sshd, y **no se garantizan sesiones sin
+interrupción**.
+
+Vuelta atrás — revierte SOLO lo que esta etapa creó y devuelve el servicio
+al estado registrado en la Etapa 0:
+
+```bash
+sudo fail2ban-client set sshd unbanip <ip-de-prueba>   # si el smoke baneó
+sudo rm /etc/fail2ban/jail.d/sshd-journal.local        # SOLO el drop-in creado acá
+```
+
+Devolver el servicio al estado exacto de la Etapa 0:
+
+- estaba **activo**: `sudo systemctl restart fail2ban` (recarga sin el
+  drop-in) y `sudo systemctl disable fail2ban` solo si `is-enabled` dio
+  `disabled`;
+- estaba **inactivo** y esta etapa lo activó: `sudo systemctl disable --now
+  fail2ban`.
+
+Si esta etapa instaló el paquete y la Etapa 0 lo registraba ausente, removerlo
+es una decisión que se registra en `cata_club-docs`. Sobre una instalación
+**preexistente** jamás: `apt-get remove --purge fail2ban` destruiría
+configuración que este runbook no creó.
+
+### Etapa 5 — Política de sudo: decisión pendiente del operador
+
+> **AWAITING OPERATOR CHOICE.** Ninguno de los dos caminos fue elegido ni
+> ejecutado. La decisión es del operador/dueño y queda registrada en
+> `cata_club-docs`; este runbook no la inventa ni la ejecuta.
+
+**Alternativa A — sudo con contraseña** (default Ubuntu). Sumar al segundo
+operador al grupo `sudo` (`sudo adduser <usuario-2> sudo`): cada acción
+privilegiada pide su propia contraseña y cada comando queda registrado en el
+journal. Simple, auditado por defecto, sin editar sudoers. El costo: el
+perímetro de seguridad es la contraseña de la cuenta, y toda automatización
+necesita un humano delante.
+
+**Alternativa B — wrappers angostos auditados.** Sudoers que permite solo
+comandos específicos, envueltos en scripts **de root, no escribibles por el
+usuario**, más logging:
+
+```text
+# /etc/sudoers.d/<nombre> — editado SOLO con: sudo visudo -f /etc/sudoers.d/<nombre>
+Defaults logfile=/var/log/sudo.log
+<usuario-2> ALL=(root) /usr/local/sbin/<wrapper>, /usr/local/sbin/<wrapper-2>
+```
+
+Reglas duras de la alternativa B: los wrappers viven bajo `/usr/local/sbin`,
+`root:root`, modo `0755`; **nunca** bajo `/home` ni bajo ninguna ruta
+escribible por el usuario autorizado (un script escribible por quien lo
+ejecuta como root es escalada directa); se valida con `sudo visudo -c` antes
+de cerrar la sesión; opcionalmente `Defaults log_output` + `sudoreplay` para
+auditar sesiones completas. El costo: mantenimiento — cada comando operativo
+nuevo exige wrapper, entrada de sudoers y revisión.
+
+**Lo que ninguna alternativa admite.** No crear grants — con o sin
+`NOPASSWD` — para `docker`/`docker compose`, `tee`, `chmod`/`chown`,
+editores, gestores de paquetes (`apt`/`dpkg`), `su`, shells, ni para ningún
+script en ruta escribible por el usuario. Cada uno de esos binarios permite
+obtener root completo (`docker run -v /:/host` monta el filesystem entero,
+`tee` escribe `/etc/sudoers`, `apt` ejecuta hooks de instalación): el grant
+sería «sudo total con pasos extra y peor auditoría». Un grant así no
+endurece el host — disimula el problema.
+
+### Cuándo detenerse
+
+Ante cualquier resultado inesperado — la sesión nueva no entra, `visudo -c`
+falla, el jail queda ciego en el smoke — se conserva la sesión conocida, se
+revierte la etapa con su vuelta atrás documentada y se escala el caso en
+`cata_club-docs` con el relevamiento ya efectuado. Ninguna etapa de este
+runbook fue ejecutada: no hay endurecimiento de host realizado ni cierre que
+declarar.
+
 ## Primer administrador (una sola vez, tras el primer deploy)
 
 Una base recién migrada no tiene ningún usuario: el seed solo corre con

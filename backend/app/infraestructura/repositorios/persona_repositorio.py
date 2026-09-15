@@ -35,6 +35,20 @@ class PersonaRepositorio:
     def obtener_por_cedula(self, cedula: str) -> Optional[Persona]:
         return self.db.query(Persona).filter(Persona.cedula == cedula).first()
 
+    def obtener_por_id_bloqueando(self, persona_id: int) -> Optional[Persona]:
+        """`SELECT ... FOR UPDATE` de la fila (#1133/#1137): la lectura con
+        lock es responsabilidad del repositorio (design.md) y el commit
+        sigue siendo del caso de uso. La usa
+        `RelacionRepresentacionServicio.reasignar_presencial` para su orden
+        de locks documentado (objetivo primero, luego ex/nuevo ascendente
+        por `persona.id`)."""
+        return (
+            self.db.query(Persona)
+            .filter(Persona.id == persona_id)
+            .with_for_update()
+            .first()
+        )
+
     # Orden estable del roster: como se lee una nómina, por apellidos y luego
     # nombres. El id va de desempate para que el orden sea TOTAL -- sin él,
     # dos homónimos podrían repartirse de forma distinta entre páginas y

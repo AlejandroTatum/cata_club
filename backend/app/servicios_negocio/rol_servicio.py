@@ -52,6 +52,17 @@ class RolServicio:
         roles" / "activo" por defecto)."""
         return self._obtener_usuario_de_persona(persona_id)
 
+    def obtener_roles_bulk(self, persona_ids: list[int]) -> dict[int, list[str]]:
+        """Lectura pura en bloque (issue #1132): ids duplicados se
+        deduplican preservando el primer orden de aparición, mismo criterio
+        que `MembresiaServicio.obtener_deuda_bulk`. Ver
+        `UsuarioRepositorio.roles_por_persona_ids` para el porqué de un
+        único `IN` en vez de una consulta por persona."""
+        ids_unicos = list(dict.fromkeys(persona_ids))
+        if not ids_unicos:
+            return {}
+        return self.repo_usuario.roles_por_persona_ids(ids_unicos)
+
     def asignar_rol(self, persona_id: int, tipo_rol: TipoRol) -> Usuario:
         usuario = self._obtener_usuario_de_persona(persona_id)
         if any(r.tipo_rol == tipo_rol for r in usuario.roles):
@@ -145,42 +156,54 @@ class RolServicio:
         self.db.refresh(usuario)
         return usuario
 
-    def asignar_alumno_si_corresponde(self, persona_id: int) -> None:
-        """
-        Asignación perezosa (principio de diseño ya acordado: el rol ALUMNO
-        se otorga al matricularse, no al crear la cuenta). Se llama desde
-        MembresiaServicio.crear_membresia. Es un "mejor esfuerzo": si la
-        persona todavía no tiene Usuario (no se ha auto-registrado), no hace
-        nada -- no es un error, simplemente no hay nada que asignar todavía.
+    # --- Capacidad REPRESENTANTE (#1137, regla compartida #762) -------------
+    def establecer_capacidad_representante(self, usuario: Usuario) -> bool:
+        """Deja en `usuario` EXACTAMENTE un rol: REPRESENTANTE.
 
-        Solo `flush()` (issue #831): es un paso de la transacción atómica de
-        `crear_membresia`, que hace el único `commit()` al final -- antes
-        comiteaba acá, ANTES de que `crear_membresia` terminara de escribir.
-        """
-        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
-        if not usuario:
-            return None
-        # Issue #762: "mejor esfuerzo" nunca quiso decir "y si ya tiene otro
-        # rol, se lo sumo igual". Este era el camino más silencioso de los
-        # cuatro -- matricular a un entrenador le agregaba ALUMNO sin que
-        # nadie lo pidiera ni lo viera.
-        if not exigir_rol_unico(usuario, TipoRol.ALUMNO):
-            return None
-        rol_alumno = self.repo_rol.obtener_o_crear(TipoRol.ALUMNO)
-        usuario.roles.append(rol_alumno)
+        Es el núcleo de capacidad compartido de los caminos de cuenta: lo
+        invocan los comandos presenciales (y, más adelante, el alta de
+        cuenta de representante). La regla #762 se aplica de forma
+        determinista sobre las filas del usuario YA BLOQUEADAS:
+
+          1. multirol legado (debería ser imposible: el trigger
+             `trg_usuario_rol_unico_por_usuario` lo impide en la base) →
+             se RECHAZA para que lo remedie su dueño; jamás se adivina ni
+             se reescribe en silencio;
+          2. ya es REPRESENTANTE → se reusa, sin segunda inserción;
+          3. un único rol legal distinto → reemplazo EXPLÍCITO (quitar ese
+             rol y asignar REPRESENTANTE) -- solo existe en el comando
+             presencial autorizado por administración, nunca como
+             conversión genérica de roles;
+          4. sin roles → se inserta REPRESENTANTE (nunca ALUMNO: la
+             capacidad de representante no crea jugador).
+
+        No escribe columnas de relación y no comitea (solo `flush()`): la
+        transacción la cierra el comando. Devuelve `True` si la colección
+        cambió, `False` si se reusó."""
+        tipos_actuales = [rol.tipo_rol for rol in usuario.roles]
+        if len(tipos_actuales) > 1:
+            raise OperacionInvalida(
+                "Esta cuenta tiene más de un rol activo (estado legado) y la "
+                "capacidad de representante no se puede establecer "
+                "automáticamente: requiere que su dueño elija qué rol "
+                "conserva.",
+                detalle_tecnico=(
+                    f"usuario_id={usuario.id} tiene "
+                    f"{sorted(tipo.value for tipo in tipos_actuales)}"
+                ),
+            )
+        if TipoRol.REPRESENTANTE in tipos_actuales:
+            return False
+        if tipos_actuales:
+            # Reemplazo explícito del ÚNICO rol legal. Quitar y asignar son
+            # dos escrituras de la misma transacción: el trigger #762 ve la
+            # asociación vieja ya borrada cuando inserta la nueva.
+            usuario.roles.remove(usuario.roles[0])
+            self.db.flush()
+        rol = self.repo_rol.obtener_o_crear(TipoRol.REPRESENTANTE)
+        usuario.roles.append(rol)
         self.db.flush()
-
-    def exigir_que_pueda_ser_alumno(self, persona_id: int) -> None:
-        """La mitad de `asignar_alumno_si_corresponde` que NO muta, para que
-        `MembresiaServicio.crear_membresia` pueda rechazar ANTES de escribir.
-
-        Sin esto el rechazo llegaría al final del método, con la membresía ya
-        comiteada: la persona quedaría matriculada y el request devolvería un
-        error, que es el peor de los dos mundos."""
-        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
-        if usuario is None:
-            return
-        exigir_rol_unico(usuario, TipoRol.ALUMNO)
+        return True
 
     # --- E01-RF013: activar/desactivar cuenta sin borrar datos -------------
     def cambiar_estado_cuenta(self, persona_id: int, activo: bool) -> Usuario:

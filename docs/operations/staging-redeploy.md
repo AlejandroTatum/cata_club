@@ -6,6 +6,7 @@
 - URL pública: <https://staging.cataclub.com/>
 - Health: <https://staging.cataclub.com/api/health>
 - Operador/host: el usuario y la IP viven en el repo privado de operaciones (`cata_club-docs`), no en este archivo público
+- Acceso SSH del host y segundo operador: [provisioning.md](provisioning.md#segundo-operador-ssh-y-endurecimiento-del-host)
 - Checkout remoto: `/opt/cata-club`
 
 **Qué corre staging ahora mismo lo dice el propio staging, no este archivo.** El
@@ -161,8 +162,13 @@ citado no existe en el árbol.
 
 ## Ejecución en el host
 
+El usuario y el host de staging los provee el operador desde el repo privado
+de operaciones (`cata_club-docs`); este archivo público no los publica.
+Sustituye los marcadores del ejemplo y confirma con `hostname` que conectaste
+al host correcto antes de tocar nada:
+
 ```bash
-ssh deploy@104.248.115.57
+ssh <usuario-staging>@<host-staging>
 cd /opt/cata-club
 export IMAGE_TAG=<SHA-verificado>
 export MIGRATION_COMPATIBILITY=<none|backward-compatible|manual-review-required>

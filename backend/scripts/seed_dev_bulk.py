@@ -950,25 +950,50 @@ def _sembrar_vinculaciones_representante(
 ) -> int:
     """Log de eventos append-only (INS-2): cubre las dos ramas de
     `representante_anterior_id` -- con valor (cambio de representante) y NULL
-    (el representado no tenía uno antes). Nunca muta `Persona.
-    representante_id`: esta tabla es la traza histórica, no el estado
-    actual."""
+    (el representado no tenía uno antes).
+
+    La rama "con valor" necesita DOS representantes DISTINTOS -- el CHECK
+    `ck_vinculacion_representante_distintos` (migración `h1140rep_
+    auditoria`) lo exige, y `pares_representante_hijo[0]`/`[1]` casi nunca
+    lo son: `HIJOS_POR_REPRESENTANTE` le da varios hijos al primer
+    representante, así que ambos pares suelen compartirlo. Se busca el
+    primer par de la lista con un representante distinto del de
+    `pares_representante_hijo[0]`, en vez de asumir el índice `[1]` fijo.
+    Si ninguno lo es (lista de un solo representante), la rama se omite.
+
+    A diferencia de la rama huérfana, esta SÍ mueve `Persona.
+    representante_id` del hijo al representante nuevo: dejarlo apuntando al
+    representante viejo mientras el ledger dice que ya cambió de manos deja
+    el evento describiendo un estado que la base nunca tuvo. El evento queda
+    `REASIGNACION`/`AUTOSERVICIO_LEGADO` con el EX representante como actor
+    -- legado creíble, no la reasignación presencial completa que hace
+    `RelacionRepresentacionServicio.reasignar_presencial` (esa exige
+    `idempotency_key`, que este seed no necesita)."""
     if len(pares_representante_hijo) < 2:
         return 0
     creadas = 0
     rep_a, hijo_a = pares_representante_hijo[0]
-    rep_b, _hijo_b = pares_representante_hijo[1]
+    par_con_representante_distinto = next(
+        (par for par in pares_representante_hijo[1:] if par[0].id != rep_a.id),
+        None,
+    )
 
-    ya_existe = db.query(VinculacionRepresentante).filter(
-        VinculacionRepresentante.persona_id == hijo_a.id
-    ).first()
-    if not ya_existe:
-        db.add(VinculacionRepresentante(
-            persona_id=hijo_a.id,
-            representante_anterior_id=rep_a.id,
-            representante_nuevo_id=rep_b.id,
-        ))
-        creadas += 1
+    if par_con_representante_distinto is not None:
+        rep_b, _hijo_b = par_con_representante_distinto
+        ya_existe = db.query(VinculacionRepresentante).filter(
+            VinculacionRepresentante.persona_id == hijo_a.id
+        ).first()
+        if not ya_existe:
+            db.add(VinculacionRepresentante(
+                persona_id=hijo_a.id,
+                representante_anterior_id=rep_a.id,
+                representante_nuevo_id=rep_b.id,
+                actor_persona_id=rep_a.id,
+                operacion="REASIGNACION",
+                origen="AUTOSERVICIO_LEGADO",
+            ))
+            hijo_a.representante_id = rep_b.id
+            creadas += 1
 
     if len(pares_representante_hijo) >= 3:
         rep_c, hijo_c = pares_representante_hijo[2]
@@ -1274,24 +1299,26 @@ def main() -> None:
 
             for hijo_pos in range(cantidad_hijos):
                 edad = 8 + (indice % 9)  # 8..16 años
-                # El primer hijo de cada representante de índice par queda
-                # SIN cuenta propia: el "hijo gestionado" que el dominio
-                # contempla (menor sin login, todo pasa por su representante)
-                # pero que ninguna base de QA tenía -- la única ruta real que
-                # lo produce es `EnrollmentServicio.enroll` cuando el
-                # representante no manda credenciales del menor
-                # (`enrollment_servicio.py:284-286`), y el bulk anterior
-                # creaba `Usuario` siempre, así que el caso nunca ocurría.
-                crear_usuario = not (hijo_pos == 0 and rep_idx % 2 == 0)
+                # TODO hijo queda SIN cuenta propia: el "hijo gestionado" que
+                # el dominio contempla (menor sin login, todo pasa por su
+                # representante) -- la única ruta real que lo produce es
+                # `EnrollmentServicio.enroll` cuando el representante no
+                # manda credenciales del menor (`enrollment_servicio.py:
+                # 284-286`). Antes de la migración `j1142ctarep` (issue
+                # #1137, invariante B) esto era una elección de variedad
+                # (solo el primer hijo de un representante de índice par
+                # quedaba sin cuenta); ahora es OBLIGATORIO para TODO
+                # representado -- el trigger `trg_usuario_bloquea_cuenta_de_
+                # representado` rechaza cualquier `Usuario` cuya `Persona`
+                # tenga `representante_id`, sin excepción.
                 hijo, es_nuevo_hijo = _crear_persona_y_usuario(
                     db, rol_alumno, indice, femenino=(indice % 2 == 1),
                     edad_anios=edad, representante_id=representante.id,
-                    crear_usuario=crear_usuario,
+                    crear_usuario=False,
                 )
                 if es_nuevo_hijo:
                     hijos_creados += 1
-                    if not crear_usuario:
-                        hijos_sin_cuenta_creados += 1
+                    hijos_sin_cuenta_creados += 1
                 if tipo_infantil:
                     _asignar_membresia_y_pago(db, hijo, tipo_infantil, indice)
                 estudiantes.append((hijo, es_nuevo_hijo))

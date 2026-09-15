@@ -66,8 +66,6 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("@/services/api", () => ({
   enrollStudent: vi.fn(),
-  // The wizard loads the school catalogue on mount for the child flow.
-  fetchInstituciones: vi.fn().mockResolvedValue([]),
   // Public tariff catalog shown on step 1 (issue #331) — mocked so the
   // wizard's fetch-on-mount effect resolves instead of hanging in jsdom.
   fetchTarifas: vi.fn().mockResolvedValue([{ categoria: "Categoria Test", precio: "1.00" }]),
@@ -177,19 +175,71 @@ describe("EnrollPage — autocomplete on the representative step", () => {
     render(<EnrollPage />);
     fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    // Issue #1137, invariante (B): a child enrollment's personal step no
+    // longer has an optional credentials section that happens to reuse
+    // these same labels — fill it for real to reach the representative step.
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    // Issue #1197: a represented minor has no phone field on this step.
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     // The representative step's own fields carry PLAIN labels ("Nombres",
     // not "Nombres del representante") — the card title says whose data
     // this is, so only one "Nombres" field exists on screen at a time.
     expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("autoComplete", "given-name");
     expect(screen.getByLabelText(/^Apellidos/)).toHaveAttribute("autoComplete", "family-name");
-    const fechaParts = birthDatePartIds(enrollFieldId("fechaNacimiento"));
+    const fechaParts = birthDatePartIds(enrollFieldId("fechaNacimientoRepresentante"));
     expect(document.getElementById(fechaParts.day)).toHaveAttribute("autoComplete", "bday-day");
     expect(document.getElementById(fechaParts.month)).toHaveAttribute("autoComplete", "bday-month");
     expect(document.getElementById(fechaParts.year)).toHaveAttribute("autoComplete", "bday-year");
     expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
     expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
+  });
+});
+
+// Issue #1197: a represented minor has no phone of their own — the summary
+// shows the representative's own cédula and phone instead.
+describe("EnrollPage — the summary on the representative path (#1197)", () => {
+  function fillChildStudentStep(): void {
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
+  }
+
+  function fillRepresentativeStep(): void {
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Torres" } });
+    fillBirthDate(enrollFieldId("fechaNacimientoRepresentante"), "1990-05-20");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991112233" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
+  }
+
+  it("shows the representative's cédula and phone, not the (absent) student phone", async () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillChildStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillRepresentativeStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();
+    // The student's own phone row never rendered — it has nothing to show.
+    expect(screen.queryByText("Teléfono")).not.toBeInTheDocument();
+    // The representative's cédula and phone appear instead, each with its
+    // own "Corregir" pointing back at the representative step.
+    expect(screen.getByText("Cédula del representante")).toBeInTheDocument();
+    expect(screen.getByText("Teléfono del representante")).toBeInTheDocument();
+    expect(screen.getByText("0991112233")).toBeInTheDocument();
   });
 });
 
@@ -403,37 +453,20 @@ describe("EnrollPage — error prevention on the student step", () => {
 });
 
 /**
- * Issue #876: the dependent's account is optional, and its confirmation
- * follows the same "both-or-neither" gate the password and correo already
- * use — it only exists while an account is actually being created.
+ * Issue #1137, invariante (B): a represented minor never has a Usuario, so
+ * the "optional account" this describe block used to cover (#876) no
+ * longer exists — the child flow's personal step renders no credential
+ * field at all.
  */
-describe("EnrollPage — confirmación de la cuenta opcional del menor (#876)", () => {
-  it("hides and clears the confirmation once the optional account is withdrawn", () => {
+describe("EnrollPage — un enrolamiento de menor nunca pide sus credenciales (#1137)", () => {
+  it("never renders the student's own credential fields for a child enrollment", () => {
     render(<EnrollPage />);
     fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    const correo = screen.getByLabelText(/^Correo electrónico/);
-    fireEvent.change(correo, { target: { value: "lucas@example.com" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
-    const confirm = screen.getByLabelText(/^Confirmar contraseña/);
-    fireEvent.change(confirm, { target: { value: "otraClave9" } });
-    fireEvent.blur(confirm);
-    expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
-
-    // Withdraw the optional account: clearing both correo and contrasenia
-    // takes the confirmation with them.
-    fireEvent.change(correo, { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "" } });
-
+    expect(screen.queryByLabelText(/^Correo electrónico/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Contraseña/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^Confirmar contraseña/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Las contraseñas no coinciden.")).not.toBeInTheDocument();
-
-    // Re-entering credentials starts from a clean, unmatched confirmation —
-    // never resurrecting the withdrawn value.
-    fireEvent.change(correo, { target: { value: "lucas@example.com" } });
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
-    expect(screen.getByLabelText(/^Confirmar contraseña/)).toHaveValue("");
   });
 });
 
@@ -832,7 +865,7 @@ describe("EnrollPage — el borrador sobrevive a un reload (#317 / #62)", () => 
     fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
     fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
     fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
-    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
+    // Issue #1197: a represented minor has no phone field on this step.
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   }
 
@@ -916,6 +949,41 @@ describe("EnrollPage — la confirmación no manda a una acción que el rol nuev
 
     expect(screen.getByText("¡Le damos la bienvenida a Cata Club!")).toBeInTheDocument();
     expect(screen.getByText("Su camino en el tenis de mesa comienza aquí.")).toBeInTheDocument();
+  });
+});
+
+describe("EnrollPage — one consistent story about what follows enrolment (#1196)", () => {
+  function goToSummaryStep(): void {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollHealthStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("summary tells the club-registers-enrolment-and-payment story and never mentions uploading proof", () => {
+    goToSummaryStep();
+
+    expect(
+      screen.getByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+
+  it("success screen names the email-verification step and never mentions uploading proof", async () => {
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+    await completeSelfEnrollmentWizard();
+
+    expect(
+      screen.getByText(/verifique su correo: le enviamos un enlace de confirmación/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
   });
 });
 

@@ -25,10 +25,10 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchStudentPortal, crearRepresentado, vincularRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
+import { fetchStudentPortal, crearRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculatePersonAge } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
-import { WizardTextarea, WizardInput, PersonIdentityFields, EmergencyContactFields, WizardNavigation, example } from "@/components/wizard-fields";
+import { WizardTextarea, WizardInput, PersonIdentityFields, WizardNavigation, example } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
@@ -36,8 +36,6 @@ import {
   Heart,
   CheckCircle,
   AlertTriangle,
-  Mail,
-  Lock,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -56,7 +54,6 @@ import {
   validateAddDependentForm,
   buildRepresentadoPayload,
   getAddDependentErrorMessage,
-  getLinkExistingErrorMessage,
   type AddDependentField,
   type AddDependentFormData,
   type AddDependentStep,
@@ -73,7 +70,6 @@ function AddDependentContent(): React.ReactElement {
 
   const [formData, setFormData] = useState<AddDependentFormData>(initialAddDependentFormData);
   const [submitting, setSubmitting] = useState(false);
-  const [linkingExisting, setLinkingExisting] = useState(false);
   const [summaryReviewed, setSummaryReviewed] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<AddDependentField>>(new Set());
@@ -218,36 +214,6 @@ function AddDependentContent(): React.ReactElement {
     }
   }
 
-  /**
-   * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): the "Vincular a mi
-   * cuenta" action next to the duplicate-identity alert. Reuses the cédula
-   * the visitor already typed in the "child" step — no extra field, no extra
-   * page, no extra click beyond the one that reveals this button. The
-   * backend answers every ineligible cédula with the SAME generic message
-   * (anti-enumeration), so this handler shows whatever it gets back
-   * verbatim instead of trying to interpret it.
-   */
-  async function handleLinkExisting(): Promise<void> {
-    if (submitting || linkingExisting) return;
-    if (representanteId === null) {
-      setFormErrors([
-        representanteLoadError ??
-          "No se pudo identificar su cuenta de representante. Intente nuevamente.",
-      ]);
-      return;
-    }
-    setLinkingExisting(true);
-    try {
-      await vincularRepresentado(representanteId, formData.cedula.trim());
-      showSuccess("Persona vinculada a su cuenta correctamente.");
-      router.push("/student");
-    } catch (error: unknown) {
-      setLinkingExisting(false);
-      const message = getLinkExistingErrorMessage(error);
-      setFormErrors([message]);
-    }
-  }
-
   // ---- Render helpers ----
 
   /**
@@ -372,61 +338,6 @@ function AddDependentContent(): React.ReactElement {
     );
   }
 
-  function renderCredentialsStep(): React.ReactElement {
-    const credentialsRequired = Boolean(formData.correo || formData.contrasenia);
-    return (
-      <div className="space-y-section">
-        <p className="mb-4 text-sm leading-relaxed text-ink-2">
-          Si desea que el dependiente tenga su propia cuenta de acceso, ingrese
-          las credenciales. Deje estos campos vacíos si no requiere cuenta para el menor.
-        </p>
-
-        <WizardInput
-          idPrefix="add-dependent"
-          label="Correo electrónico"
-          value={formData.correo}
-          onChange={(v) => updateField("correo", v)}
-          type="email"
-          required={credentialsRequired}
-          placeholder="correo@ejemplo.com"
-          disabled={submitting}
-          icon={<Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          error={shownError("correo")}
-          onBlur={() => markTouched("correo")}
-        />
-
-        <WizardInput
-          idPrefix="add-dependent"
-          label="Contraseña"
-          value={formData.contrasenia}
-          onChange={(v) => updateField("contrasenia", v)}
-          type="password"
-          required={credentialsRequired}
-          placeholder="Mínimo 8 caracteres"
-          disabled={submitting}
-          icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          error={shownError("contrasenia")}
-          onBlur={() => markTouched("contrasenia")}
-        />
-
-        <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
-          <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Cuenta de acceso del menor
-          </p>
-          {/* `ink-2`, not `blue-700/80`: that was Tailwind's default palette
-              at 3.84:1 on this surface, and blue carries no meaning in a
-              system whose accents are red, coal and the ball. */}
-          <p className="mt-1">
-            Si crea estas credenciales, el menor podrá iniciar sesión de forma
-            independiente. Si las deja vacías, solo el representante tendrá acceso
-            a la cuenta.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   function renderHealthStep(): React.ReactElement {
     return (
       <div className="space-y-field">
@@ -505,18 +416,16 @@ function AddDependentContent(): React.ReactElement {
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
         })}
 
-        <EmergencyContactFields
-          idPrefix="add-dependent"
-          disabled={submitting}
-          contacto={formData.contactoEmergencia}
-          telefono={formData.telefonoEmergencia}
-          onContactoChange={(v) => updateField("contactoEmergencia", v)}
-          onTelefonoChange={(v) => updateField("telefonoEmergencia", v)}
-          contactoError={shownError("contactoEmergencia")}
-          telefonoError={shownError("telefonoEmergencia")}
-          onContactoBlur={() => markTouched("contactoEmergencia")}
-          onTelefonoBlur={() => markTouched("telefonoEmergencia")}
-        />
+        {/*
+         * Issue #1138: sin campos de contacto de emergencia propios -- este
+         * wizard siempre crea un menor representado, y su contacto de
+         * emergencia se deriva del representante (nombre y teléfono
+         * actuales), no de un texto libre que haya que mantener acá.
+         */}
+        <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
+          En caso de emergencia, el club lo contactará a usted con el nombre y
+          teléfono de su cuenta.
+        </div>
 
         {/* `rounded-ctl`, and the ramp's own ink instead of `amber-700/80` —
             which is Tailwind's default palette, and measures 3.25:1 on this
@@ -542,12 +451,10 @@ function AddDependentContent(): React.ReactElement {
    *
    * `duplicateCandidate: true` flags a row as one of the fields a
    * duplicate-identity 400 could not tell apart (issue #233): here, the
-   * dependent's cédula and its optional correo. When the backend answers
-   * with that error, EVERY candidate row gets the SAME "Revisar" marker —
-   * never just one — so the visitor's eye lands on the right "Corregir"
-   * button without the app ever singling out which field was actually the
-   * duplicate. The marker lives outside `WizardNavigation`'s alert box on
-   * purpose: that alert must never name a field either.
+   * dependent's cédula — the only identity field this wizard collects since
+   * issue #1137 retired the dependent's own correo. The marker lives
+   * outside `WizardNavigation`'s alert box on purpose: that alert must
+   * never name a field either.
    */
   function summaryRow(
     label: string,
@@ -604,19 +511,8 @@ function AddDependentContent(): React.ReactElement {
             "child",
           )}
           {summaryRow(
-            "Cuenta de acceso",
-            formData.correo.trim() || "Sin cuenta propia",
-            "credentials",
-            { duplicateCandidate: true },
-          )}
-          {summaryRow(
             "Tipo de sangre",
             formData.tipoSangre ? formData.tipoSangre.replace("_", " ") : "—",
-            "health",
-          )}
-          {summaryRow(
-            "Contacto de emergencia",
-            `${formData.contactoEmergencia} · ${formData.telefonoEmergencia}`.trim(),
             "health",
           )}
           {summaryRow("Enfermedades", formData.enfermedades || "Ninguna reportada", "health")}
@@ -700,18 +596,15 @@ function AddDependentContent(): React.ReactElement {
         <form onSubmit={handleConfirm}>
           {/* Step content */}
           {step === "child" && renderChildStep()}
-          {step === "credentials" && renderCredentialsStep()}
           {step === "health" && renderHealthStep()}
           {step === "summary" && renderSummary()}
 
           <WizardNavigation
             formErrors={formErrors}
             duplicateIdentityAudience="representative"
-            onLinkExisting={handleLinkExisting}
-            linkingExisting={linkingExisting}
             isFirst={isFirst}
             isLast={isLast}
-            submitting={submitting || linkingExisting}
+            submitting={submitting}
             onBack={handleBack}
             onNext={handleNext}
             nextDisabled={!stepComplete}
@@ -719,7 +612,7 @@ function AddDependentContent(): React.ReactElement {
             submitButton={
               <button
                 type="submit"
-                disabled={submitting || linkingExisting || !summaryReviewed || loadingRepresentante}
+                disabled={submitting || !summaryReviewed || loadingRepresentante}
                 className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
               >
                 {submitting ? (

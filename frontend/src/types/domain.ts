@@ -361,6 +361,42 @@ export interface PersonaResponse {
   representanteId?: number | null;
 }
 
+/**
+ * Result of the presencial, ADMINISTRADOR-only independence command (#1137):
+ * `POST /personas/{id}/independizar`. Deliberately carries no tokens — the
+ * admin ran this command, not the adult; they log in afterward through the
+ * normal flow with the credentials just established here.
+ *
+ * `IndependenciaResponseDTO` (backend) is a plain `BaseModel`, not
+ * `ResponseBase`, so the backend answers snake_case — the BFF route
+ * translates it into this camelCase shape.
+ */
+export interface IndependenciaResponse {
+  personaId: number;
+  representanteAnteriorId: number | null;
+  usuarioId: number | null;
+  cuentaCreada: boolean;
+  replay: boolean;
+  idempotencyKey: string;
+}
+
+/**
+ * Result of the presencial, ADMINISTRADOR-only reassignment command (#1133):
+ * `POST /personas/{id}/reasignar-representante`. Deliberately carries no
+ * tokens, same reasoning as `IndependenciaResponse` above.
+ *
+ * `ReasignacionResponseDTO` (backend) is a plain `BaseModel`, not
+ * `ResponseBase`, so the backend answers snake_case — the BFF route
+ * translates it into this camelCase shape.
+ */
+export interface ReasignacionResponse {
+  personaId: number;
+  representanteAnteriorId: number | null;
+  representanteNuevoId: number;
+  replay: boolean;
+  idempotencyKey: string;
+}
+
 /** Lightweight persona shape for autocomplete / search results. */
 export interface PersonaBusqueda {
   id: number;

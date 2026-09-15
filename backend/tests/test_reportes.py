@@ -30,6 +30,25 @@ def _crear_persona(client, cedula):
     ).json()
 
 
+def _habilitar_como_jugador(db_session, persona_id: int) -> None:
+    """Issue #1132: horario/asistencia exigen una membresía ya aprobada
+    alguna vez. Este archivo prueba reportes, no membresía, así que la
+    habilita directo por ORM en vez de recorrer el ciclo de pago completo."""
+    from decimal import Decimal
+
+    from app.dominio.enums import EstadoMembresia, TipoModalidad
+    from app.dominio.modelos import Membresia, TipoMembresia
+
+    tipo = TipoMembresia(categoria="Formativo", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+    db_session.add(tipo)
+    db_session.flush()
+    db_session.add(Membresia(
+        estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("25.00"),
+        fecha_activacion=date(2026, 1, 1), persona_id=persona_id, tipo_membresia_id=tipo.id,
+    ))
+    db_session.flush()
+
+
 def _crear_tipo_membresia(client, modalidad="MENSUAL"):
     return client.post(
         "/api/v1/membresias/tipos",
@@ -135,8 +154,9 @@ def test_reporte_asistencia_requiere_admin_o_entrenador(client_sin_permisos):
     assert resp.status_code == 403
 
 
-def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
+def test_reporte_asistencia_filtra_por_horario_y_periodo(client, db_session):
     alumno = _crear_persona(client, cedula_valida(550))
+    _habilitar_como_jugador(db_session, alumno["id"])
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
@@ -172,7 +192,7 @@ def test_reporte_asistencia_filtra_por_horario_y_periodo(client):
     assert body[0]["estado"] == "PRESENTE"
 
 
-def test_reporte_asistencia_expone_horario_id_y_persona_id(client):
+def test_reporte_asistencia_expone_horario_id_y_persona_id(client, db_session):
     """The report rows must carry the RAW ids, not just the values a UI would
     print. `AsistenciaResponseDTO` has always declared `horario_id`, but until
     the trainer history's "Corregir" deep link (#95) nothing downstream read
@@ -183,6 +203,7 @@ def test_reporte_asistencia_expone_horario_id_y_persona_id(client):
     that is the shape the adapter parses -- `ResponseBase`'s alias generator
     is part of what is being locked down here."""
     alumno = _crear_persona(client, cedula_valida(551))
+    _habilitar_como_jugador(db_session, alumno["id"])
 
     horario = client.post(
         "/api/v1/asistencias/horarios",
@@ -437,11 +458,12 @@ def test_reporte_asistencia_pdf_422_fechas_invertidas(client):
     assert resp.json()["detail"] == "La fecha de inicio debe ser anterior a la fecha de fin."
 
 
-def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client):
+def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client, db_session):
     """El rango es opcional y combinable: un único día (inicio == fin) y un
     extremo suelto siguen siendo consultas válidas, no errores -- y el filtro
     de un solo día de verdad filtra, no solo evita el 422."""
     alumno = _crear_persona(client, cedula_valida(553))
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario = client.post(
         "/api/v1/asistencias/horarios",
         json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
@@ -481,8 +503,9 @@ def test_reporte_asistencia_acepta_un_solo_dia_y_filtros_parciales(client):
     ).status_code == 200
 
 
-def test_reporte_asistencia_pdf_admin_200(client):
+def test_reporte_asistencia_pdf_admin_200(client, db_session):
     alumno = _crear_persona(client, cedula_valida(554))
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario = client.post(
         "/api/v1/asistencias/horarios",
         json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
@@ -756,11 +779,12 @@ def test_reporte_pagos_exactamente_en_el_limite_da_200(client, monkeypatch):
 # que matchean el filtro.
 
 
-def test_reporte_asistencia_pdf_supera_el_limite_maximo_da_422(client, monkeypatch):
+def test_reporte_asistencia_pdf_supera_el_limite_maximo_da_422(client, monkeypatch, db_session):
     monkeypatch.setattr(
         "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
     )
     alumno = _crear_persona(client, cedula_valida(600))
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario = client.post(
         "/api/v1/asistencias/horarios",
         json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
@@ -783,11 +807,12 @@ def test_reporte_asistencia_pdf_supera_el_limite_maximo_da_422(client, monkeypat
     assert "2" in resp.json()["detail"]
 
 
-def test_reporte_asistencia_pdf_exactamente_en_el_limite_da_200(client, monkeypatch):
+def test_reporte_asistencia_pdf_exactamente_en_el_limite_da_200(client, monkeypatch, db_session):
     monkeypatch.setattr(
         "app.presentacion.routers.asistencias_router.LIMITE_MAXIMO_REPORTE_ASISTENCIAS", 2,
     )
     alumno = _crear_persona(client, cedula_valida(601))
+    _habilitar_como_jugador(db_session, alumno["id"])
     horario = client.post(
         "/api/v1/asistencias/horarios",
         json={"categoria": "FORMATIVO", "dia_semana": "MARTES"},

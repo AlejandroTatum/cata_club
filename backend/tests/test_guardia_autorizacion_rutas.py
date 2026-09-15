@@ -192,7 +192,6 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("POST", "/membresias/{membresia_id}/aplicar-beneficio"),     # (b) - dueño/representante validado en el servicio
     ("POST", "/membresias/pagos"),                                # (b) - dueño/admin validado en el servicio
     ("POST", "/membresias/pagos/{pago_id}/voucher"),             # (b) - dueño/admin validado en el servicio
-    ("POST", "/personas/{persona_id}/independizar"),             # (b)
     ("POST", "/personas/{persona_id}/foto"),                      # (b) - dueño/representante/admin validado en el router
 }
 
@@ -278,6 +277,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("GET", "/personas/reportes/nuevos-por-periodo"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/reportes/nuevos-por-periodo/pdf"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/personas/roles/bulk"): frozenset({"ADMINISTRADOR"}),  # issue #1132
     ("PATCH", "/membresias/pagos/{pago_id}/validar"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}"): frozenset({"ADMINISTRADOR"}),
     ("PATCH", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
@@ -298,6 +298,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/geografia/paises"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/geografia/provincias"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/membresias/"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1132 (independent-verification fix): los dos roles del portal,
+    # nunca ADMINISTRADOR (que ya tiene la ruta de arriba, sin el límite de
+    # "solo mi persona") ni ENTRENADOR (fuera de este contrato).
+    ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,
@@ -326,9 +330,16 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/personas/{persona_id}/independizar"): frozenset({"ADMINISTRADOR"}),
+    # #1133/#1137: la reasignación de representación es un acto PRESENCIAL de
+    # administración -- reemplaza el vínculo de un menor, así que exige el
+    # mismo rol que su hermana `independizar`.
+    ("POST", "/personas/{persona_id}/reasignar-representante"): frozenset({"ADMINISTRADOR"}),
     # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo par de roles
-    # que su hermano `representados` -- un representante vincula su propio
-    # representado ya existente, un administrador puede hacerlo por cualquiera.
+    # que su hermano `representados` -- ambos actores siguen pasando la
+    # guardia de la ruta; #1133 punto 3 retiró la MUTACIÓN del lado
+    # REPRESENTANTE (ver `test_vincular_representado.py`), no el rol de la
+    # ruta -- un administrador sigue pudiendo vincular por cualquiera.
     ("POST", "/personas/{persona_id}/vincular-representado"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
     ("PUT", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
 }

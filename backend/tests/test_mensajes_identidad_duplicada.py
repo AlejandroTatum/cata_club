@@ -35,10 +35,7 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
     EnrollmentRepresentanteDTO,
 )
 from app.servicios_negocio.dtos.auth_schemas import RegistroUsuarioDTO
-from app.servicios_negocio.dtos.persona_schemas import (
-    PersonaCreateDTO,
-    RepresentadoCreateDTO,
-)
+from app.servicios_negocio.dtos.persona_schemas import PersonaCreateDTO
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
 from app.servicios_negocio.persona_servicio import PersonaServicio
@@ -98,10 +95,15 @@ _FICHA = dict(
     tipo_sangre="O_POSITIVO", enfermedades=[],
     contacto_emergencia="María Torres", telefono_emergencia="0991112233",
 )
+# Issue #1138: camino representado, sin contacto de emergencia propio.
+_FICHA_MENOR = dict(tipo_sangre="O_POSITIVO", enfermedades=[])
 
 
 def _inscripcion(**kwargs) -> EnrollmentCreateDTO:
-    kwargs.setdefault("ficha_medica", dict(_FICHA))
+    kwargs.setdefault(
+        "ficha_medica",
+        dict(_FICHA_MENOR) if kwargs.get("representante") is not None else dict(_FICHA),
+    )
     kwargs.setdefault("acepta_consentimientos", True)
     return EnrollmentCreateDTO(**kwargs)
 
@@ -135,17 +137,6 @@ def test_inscripcion_correo_de_representante_duplicado_no_divulga(db_session):
     datos = _inscripcion(
         representante=_representante(correo=CORREO_OCUPADO),
         alumno=_alumno(),
-    )
-    with pytest.raises(EntidadDuplicada) as error:
-        EnrollmentServicio(db_session).enroll(datos)
-    _afirmar_generico(error.value.mensaje)
-
-
-def test_inscripcion_correo_de_menor_duplicado_no_divulga(db_session):
-    _sembrar_persona_con_cuenta(db_session)
-    datos = _inscripcion(
-        representante=_representante(),
-        alumno=_alumno(correo=CORREO_OCUPADO, contrasenia="password8"),
     )
     with pytest.raises(EntidadDuplicada) as error:
         EnrollmentServicio(db_session).enroll(datos)
@@ -241,25 +232,6 @@ def test_registrar_persona_con_cedula_duplicada_no_divulga(db_session):
     )
     with pytest.raises(EntidadDuplicada) as error:
         PersonaServicio(db_session).registrar_persona(datos)
-    _afirmar_generico(error.value.mensaje)
-
-
-def test_crear_representado_con_correo_duplicado_no_divulga(db_session):
-    representante = Persona(
-        nombres="Rep", apellidos="Legal", cedula="1798765432",
-        fecha_nacimiento=date(1985, 1, 1), telefono="0990000002",
-    )
-    db_session.add(representante)
-    db_session.flush()
-    _sembrar_persona_con_cuenta(db_session)
-
-    datos = RepresentadoCreateDTO(
-        nombres="Hija", apellidos="Legal", cedula=cedula_valida(451),
-        fecha_nacimiento=date(2015, 6, 15), telefono="0991234567",
-        correo=CORREO_OCUPADO, contrasenia="password8",
-    )
-    with pytest.raises(EntidadDuplicada) as error:
-        PersonaServicio(db_session).crear_representado(representante.id, datos)
     _afirmar_generico(error.value.mensaje)
 
 

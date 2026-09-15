@@ -55,7 +55,6 @@ vi.mock("@/contexts/ToastContext", () => ({
 // silently absorbing the call.
 vi.mock("@/services/api", () => ({
   enrollStudent: vi.fn(),
-  fetchInstituciones: vi.fn().mockResolvedValue([]),
   fetchTarifas: vi.fn(),
   fetchTiposMembresia: vi.fn(),
 }));

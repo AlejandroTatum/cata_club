@@ -83,7 +83,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/?limit=200 (bulk)
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -93,6 +94,27 @@ describe("GET /api/members", () => {
     expect(body.accounts).toHaveLength(1);
     expect(body.accounts[0]).toMatchObject({ id: "3", role: "representante", estudiantes: [{ activo: false }] });
     expect(body.personasCapped).toBe(false);
+  });
+
+  // Issue #1132: closes gap #1 (members-adapter.ts's module doc) — `role`
+  // and `backendRoles` come from the ONE `/personas/roles/bulk` call fired
+  // right after `/fichas-medicas/existe`, never a hardcoded "representante".
+  it("reads role and backendRoles off the bulk roles endpoint", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 })) // /personas/
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
+      .mockResolvedValueOnce(jsonResponse([])) // /membresias/tipos
+      .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/?limit=200 (bulk)
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([{ personaId: 3, roles: ["ALUMNO"] }])); // /personas/roles/bulk
+
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/personas/roles/bulk?persona_ids=3"))).toBe(true);
+    expect(body.accounts[0]).toMatchObject({ role: "estudiante", backendRoles: ["ALUMNO"] });
   });
 
   it("preserves the upstream cap when 200 personas expand into one row each", async () => {
@@ -111,7 +133,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [] }))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({ items: [] }))
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -151,7 +174,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/ (bulk)
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -172,7 +196,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)) // /membresias/ (bulk)
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -193,7 +218,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos — none at all
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/ (bulk)
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -223,13 +249,14 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos — nobody has paid
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [], total: 0, skip: 0, limit: 200 })) // /membresias/ (bulk)
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
 
     expect(response.status).toBe(200);
-    // Exactly 5 calls total: personas, pagos, tipos, membresias, fichas-medicas/existe — never one per student.
-    expect(global.fetch).toHaveBeenCalledTimes(5);
+    // Exactly 6 calls total: personas, pagos, tipos, membresias, fichas-medicas/existe, roles/bulk — never one per student.
+    expect(global.fetch).toHaveBeenCalledTimes(6);
   });
 
   it("loops every backend page so a membership past the 200-row cap is never dropped", async () => {
@@ -254,6 +281,7 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: page1, total: 201, skip: 0, limit: 200 })) // /membresias/ page 1
       .mockResolvedValueOnce(jsonResponse({ items: page2, total: 201, skip: 200, limit: 200 })) // /membresias/ page 2
       .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])) // /personas/roles/bulk
       .mockResolvedValueOnce(jsonResponse([])); // /membresias/deuda/bulk — persona 3's page-1 row is VENCIDA
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
@@ -291,7 +319,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/
       .mockResolvedValueOnce(jsonResponse({ items: [pagoTardio], total: 201, skip: 200, limit: 200 })) // /membresias/pagos page 2
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -321,7 +350,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/
       .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)) // /membresias/pagos page 2
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
     const body = await response.json();
@@ -344,6 +374,12 @@ describe("GET /api/members", () => {
 
     vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
+      // Checked before the generic "/personas/" branch below — that
+      // substring also matches this URL, and would answer it with a
+      // personas page shape instead of a roles-bulk array.
+      if (url.includes("/personas/roles/bulk")) {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.includes("/personas/")) {
         return Promise.resolve(jsonResponse({ items: [persona], total: 1, skip: 0, limit: 200 }));
       }
@@ -387,7 +423,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe — fires only after personas resolves
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe — fires only after personas resolves
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk — fires right after
 
     const pending = GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
 
@@ -419,7 +456,8 @@ describe("GET /api/members", () => {
       .mockResolvedValueOnce(jsonResponse({ detail: "Forbidden" }, 403)) // /membresias/pagos
       .mockResolvedValueOnce(jsonResponse({ detail: "Forbidden" }, 403)) // /membresias/tipos
       .mockResolvedValueOnce(jsonResponse({ items: [] })) // /membresias/?limit=200 (bulk)
-      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+      .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
     const access = makeJwt(3600);
     const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
@@ -439,13 +477,14 @@ describe("GET /api/members", () => {
         .mockResolvedValueOnce(jsonResponse({ items: [pago] })) // /membresias/pagos
         .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
         .mockResolvedValueOnce(jsonResponse({ items: [membresia], total: 1, skip: 0, limit: 200 })) // /membresias/ (ACTIVA)
-        .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })); // /fichas-medicas/existe
+        .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(jsonResponse([])); // /personas/roles/bulk
 
       const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));
 
       expect(response.status).toBe(200);
-      // Exactly 5 calls: no /membresias/deuda/bulk fired for an ACTIVA-only page.
-      expect(global.fetch).toHaveBeenCalledTimes(5);
+      // Exactly 6 calls: no /membresias/deuda/bulk fired for an ACTIVA-only page.
+      expect(global.fetch).toHaveBeenCalledTimes(6);
     });
 
     it("calls the bulk debt endpoint ONCE for every VENCIDA membership and attaches amount + months", async () => {
@@ -455,6 +494,7 @@ describe("GET /api/members", () => {
         .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
         .mockResolvedValueOnce(jsonResponse({ items: [membresiaVencida], total: 1, skip: 0, limit: 200 })) // /membresias/
         .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(jsonResponse([])) // /personas/roles/bulk
         .mockResolvedValueOnce(
           jsonResponse([
             { membresiaId: 77, mesesAdeudados: 3, ultimaCoberturaFin: "2026-05-31", montoMensual: "30.00" },
@@ -465,7 +505,7 @@ describe("GET /api/members", () => {
       const body = await response.json();
 
       expect(response.status).toBe(200);
-      expect(global.fetch).toHaveBeenCalledTimes(6);
+      expect(global.fetch).toHaveBeenCalledTimes(7);
       const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
       const bulkCalls = urls.filter((url) => url.includes("/membresias/deuda/bulk"));
       expect(bulkCalls).toHaveLength(1);
@@ -492,6 +532,7 @@ describe("GET /api/members", () => {
         .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
         .mockResolvedValueOnce(jsonResponse({ items: [membresiaInactiva], total: 1, skip: 0, limit: 200 })) // /membresias/
         .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(jsonResponse([])) // /personas/roles/bulk
         .mockResolvedValueOnce(
           jsonResponse([
             { membresiaId: 77, mesesAdeudados: 0, ultimaCoberturaFin: null, montoMensual: "25.00" },
@@ -522,6 +563,7 @@ describe("GET /api/members", () => {
         .mockResolvedValueOnce(jsonResponse([tipo])) // /membresias/tipos
         .mockResolvedValueOnce(jsonResponse({ items: [membresiaVencida], total: 1, skip: 0, limit: 200 })) // /membresias/
         .mockResolvedValueOnce(jsonResponse({ personaIdsConFicha: [] })) // /fichas-medicas/existe
+        .mockResolvedValueOnce(jsonResponse([])) // /personas/roles/bulk
         .mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500)); // /membresias/deuda/bulk fails
 
       const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${makeJwt(3600)}`));

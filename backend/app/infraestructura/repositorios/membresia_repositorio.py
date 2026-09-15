@@ -109,6 +109,61 @@ class MembresiaRepositorio:
         )
         return self.db.execute(stmt).scalar_one()
 
+    def tiene_membresia_activa(self, persona_id: int) -> bool:
+        """El predicado único de "es jugador" (issue #1132): existe una
+        `Membresia` ACTIVA para esta persona. Ni el rol ni `Usuario` deciden
+        nada acá -- un representante que paga una membresía para sí mismo
+        pasa esto sin que nadie le otorgue ALUMNO.
+
+        No es lo mismo que `obtener_operativa_por_persona` (ACTIVA O
+        SUSPENDIDA): una membresía suspendida no cuenta como "es jugador"
+        para ESTA pregunta, aunque siga siendo operativa para otros
+        propósitos (deuda, beneficios)."""
+        stmt = (
+            select(Membresia.id)
+            .where(
+                Membresia.persona_id == persona_id,
+                Membresia.estado == EstadoMembresia.ACTIVA,
+            )
+            .limit(1)
+        )
+        return self.db.execute(stmt).first() is not None
+
+    def puede_entrenar(self, persona_id: int) -> bool:
+        """True si la persona tiene una `Membresia` en un estado que
+        habilita entrenar: ACTIVA o VENCIDA.
+
+        Allow-list explícita a propósito (issue #1132, hallazgo de
+        verificación independiente) -- NO "distinto de INACTIVA". De los
+        cuatro `EstadoMembresia`, una negación admitía SUSPENDIDA en
+        silencio, y SUSPENDIDA no es VENCIDA: la decisión de negocio #4
+        ("la cuota vencida no impide entrenar", 2026-08-11) habla puntual
+        de una cuota que expiró sola, nunca de una pausa que alguien pidió
+        a propósito. `AlumnoHorarioRepositorio._condiciones_persona_
+        operativa` (`asistencia_repositorio.py`) ya excluye a un
+        suspendido del roster de cada horario; esta consulta tiene que
+        bloquear el alta con el mismo criterio, o se lo podría asignar de
+        nuevo por esta puerta mientras el roster lo sigue mostrando
+        afuera.
+
+        Distinto de `tiene_membresia_activa` a propósito: una membresía
+        VENCIDA no es "es jugador" para el listado de Miembros, pero sí
+        habilita seguir entrenando (decisión de negocio #4, ver
+        `tests/test_asignacion_membresia_vencida.py`). Esta consulta es la
+        que usa `AsistenciaServicio.asignar_alumno_a_horario` para no
+        reabrir esa decisión: lo único nuevo que bloquea es la membresía
+        que TODAVÍA no se aprobó ni una vez (pago pendiente o rechazado) o
+        que está en pausa (SUSPENDIDA)."""
+        stmt = (
+            select(Membresia.id)
+            .where(
+                Membresia.persona_id == persona_id,
+                Membresia.estado.in_((EstadoMembresia.ACTIVA, EstadoMembresia.VENCIDA)),
+            )
+            .limit(1)
+        )
+        return self.db.execute(stmt).first() is not None
+
     def crear(self, membresia: Membresia) -> Membresia:
         self.db.add(membresia)
         self.db.flush()

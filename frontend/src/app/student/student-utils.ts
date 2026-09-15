@@ -42,20 +42,26 @@ export function isMinor(fechaNacimiento: string | null | undefined): boolean {
  * recognized backend role (`UserRole === "unsupported"`, see
  * src/lib/server/auth.ts's `resolveSessionRole`).
  *
- * Role assignment for ALUMNO is lazy (see backend
- * `rol_servicio.py::asignar_alumno_si_corresponde`'s docstring: granted only
- * once a Membresia is created, not at account creation) — so a freshly
- * self-enrolled persona genuinely has zero roles until someone (an admin,
- * today) creates their membership. `"pending"` names that state explicitly
- * instead of routing through the generic /unauthorized page. A persona who
- * has already added a dependent (representados.length > 0) is NOT pending —
- * they're an active representante account, even without an ALUMNO role of
- * their own.
+ * Issue #1132: "es jugador" is decided by the domain's single predicate — an
+ * ACTIVA `Membresia` (backend `app/dominio/jugador.py::es_jugador`) — never
+ * by the `ALUMNO` role alone. `crear_membresia` no longer grants `ALUMNO` on
+ * matriculation (`rol_servicio.py`), so a representante who pays a
+ * membership for their own persona keeps only `REPRESENTANTE` and would be
+ * invisible to a role-based check. `isPlayer` is whatever the caller already
+ * knows counts as "es jugador" for this account (their own role AND/OR their
+ * own membership — `page.tsx` is the one place that reconciles both signals,
+ * this function only ever reads the single boolean it resolves to), so a
+ * freshly self-enrolled persona with neither a role nor a membership yet
+ * genuinely has nothing to show until someone pays their first membership.
+ * `"pending"` names that state explicitly instead of routing through the
+ * generic /unauthorized page. A persona who has already added a dependent
+ * (representados.length > 0) is NOT pending — they're an active
+ * representante account, even without a player condition of their own.
  */
 export type StudentPortalMode = "pending" | "active";
 
-export function derivePortalMode(hasAlumnoRole: boolean, representadosCount: number): StudentPortalMode {
-  return !hasAlumnoRole && representadosCount === 0 ? "pending" : "active";
+export function derivePortalMode(isPlayer: boolean, representadosCount: number): StudentPortalMode {
+  return !isPlayer && representadosCount === 0 ? "pending" : "active";
 }
 
 /** True when the account manages one or more dependents — independent of whether it also has its own ALUMNO profile. */

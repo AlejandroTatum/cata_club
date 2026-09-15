@@ -154,6 +154,8 @@ const mockReactivarMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTI
 const mockCambiarPlanMembresia = vi.fn().mockResolvedValue({ id: 42, estado: "ACTIVA", tipoMembresiaId: 7 });
 const mockSearchStudents = vi.fn().mockResolvedValue([]);
 const mockVincularRepresentado = vi.fn();
+const mockIndependizarPersona = vi.fn();
+const mockReasignarRepresentante = vi.fn();
 
 vi.mock("@/services/api", () => {
   class MockApiClientError extends Error {
@@ -192,13 +194,22 @@ vi.mock("@/services/api", () => {
       mockCambiarPlanMembresia(membresiaId, nuevoTipoMembresiaId),
     searchStudents: (query: string, opts?: unknown) => mockSearchStudents(query, opts),
     vincularRepresentado: (personaId: number, cedula: string) => mockVincularRepresentado(personaId, cedula),
+    independizarPersona: (personaId: number, payload: unknown, idempotencyKey: string) =>
+      mockIndependizarPersona(personaId, payload, idempotencyKey),
+    reasignarRepresentante: (personaId: number, payload: unknown, idempotencyKey: string) =>
+      mockReasignarRepresentante(personaId, payload, idempotencyKey),
     ApiClientError: MockApiClientError,
   };
 });
 
 const ACCOUNT: MemberAccount = {
   id: "1",
-  role: "representante",
+  // Issue #1199: this fixture models an ordinary Ficha médica/Pagos row —
+  // "estudiante", not "representante", so it does not hit the new
+  // representative-only hiding this issue adds (see `isRepresentativeOnlyAccount`
+  // and its own dedicated tests). A pure representative-only row is covered
+  // separately below.
+  role: "estudiante",
   nombres: "María",
   apellidos: "González",
   telefono: "0999999999",
@@ -2035,10 +2046,30 @@ describe("MembersPage — the stats row doesn't repeat the student count", () =>
         },
       ],
     });
-    // 2 accounts with an active membership + 1 without → 3 students total,
-    // 2 with an active membership: two distinct, unambiguous figures.
+    // 2 accounts with an active membership + 1 with a lapsed one (a real
+    // membership on file, issue #1132 — a pure representative with none at
+    // all would not count as a student here) → 3 students total, 2 with an
+    // active membership: two distinct, unambiguous figures.
     mockFetchMembers.mockReset().mockResolvedValue({
-      accounts: [active("1"), active("2"), { ...ACCOUNT, id: "3" }],
+      accounts: [
+        active("1"),
+        active("2"),
+        {
+          ...ACCOUNT,
+          id: "3",
+          estudiantes: [{
+            ...ACCOUNT.estudiantes[0],
+            membresia: {
+              tipo: "Mensual",
+              estado: "vencida",
+              fechaInicio: "2026-06-01",
+              fechaFin: "2026-06-30",
+              monto: 50,
+              id: 3,
+            },
+          }],
+        },
+      ],
     });
 
     render(
@@ -2401,16 +2432,18 @@ describe("MembersPage — four tiles, four shapes (D7)", () => {
         {
           ...ACCOUNT.estudiantes[0],
           id: `${id}-e`,
-          membresia: activa
-            ? {
-                tipo: "Mensual",
-                estado: "activa",
-                fechaInicio: "2026-07-01",
-                fechaFin: "2026-07-31",
-                monto: 50,
-                id: Number(id),
-              }
-            : null,
+          // Issue #1132: a `null` membresia is a pure representative — not a
+          // student at all — so the "not active" leg of this fixture needs a
+          // REAL (lapsed) membership on file to still count toward the
+          // "Estudiantes" denominator this ratio divides by.
+          membresia: {
+            tipo: "Mensual",
+            estado: activa ? "activa" : "vencida",
+            fechaInicio: "2026-07-01",
+            fechaFin: "2026-07-31",
+            monto: 50,
+            id: Number(id),
+          },
         },
       ],
     };
@@ -3087,6 +3120,336 @@ describe("MembersPage — Representante legal (issue #460)", () => {
   });
 });
 
+/**
+ * #1133/#1137, decisión del dueño (2026-09-11, punto 2): a minor who ALREADY
+ * has a representative is reassigned through the atomic `reasignar-
+ * representante` command, not through `vincular-representado` (that one
+ * stays for the first-link case with nothing to conflict against — see the
+ * "Representante legal (issue #460)" suite above, whose fixtures omit
+ * `representadoPorId` on purpose to keep exercising that path).
+ */
+describe("MembersPage — Reasignar representante (issue #1133)", () => {
+  const MENOR_CON_REPRESENTANTE: MemberAccount = {
+    id: "24",
+    role: "representante",
+    nombres: "Menor",
+    apellidos: "ConRepresentante",
+    telefono: "0999999999",
+    representadoPor: "Pedro Ruiz",
+    representadoPorId: 30,
+    estudiantes: [
+      {
+        id: "24",
+        nombres: "Menor",
+        apellidos: "ConRepresentante",
+        cedula: "1710034065",
+        fechaNacimiento: "2015-01-01",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  const REPRESENTANTE_ENCONTRADO = { id: 40, nombres: "Marcela", apellidos: "Nueva" };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockSearchStudents.mockReset().mockResolvedValue([]);
+    mockReasignarRepresentante.mockReset();
+  });
+
+  async function openMenorConRepresentanteModal(): Promise<HTMLElement> {
+    mockFetchMembers.mockResolvedValue({ accounts: [MENOR_CON_REPRESENTANTE] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText("Menor ConRepresentante");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    return screen.getByRole("dialog");
+  }
+
+  it("offers Reasignar representante instead of Vincular for a minor who already has one", async () => {
+    const dialog = await openMenorConRepresentanteModal();
+
+    expect(within(dialog).getByRole("button", { name: /reasignar representante/i })).toBeInTheDocument();
+    expect(within(dialog).queryByPlaceholderText(/buscar representante por nombre/i)).not.toBeInTheDocument();
+  });
+
+  it("sends the current link, the new representative and a fresh Idempotency-Key", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockReasignarRepresentante.mockResolvedValue({
+      personaId: 24,
+      representanteAnteriorId: 30,
+      representanteNuevoId: 40,
+      replay: false,
+      idempotencyKey: "clave-1",
+    });
+    const dialog = await openMenorConRepresentanteModal();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reasignar representante/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar nuevo representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Nueva"));
+    fireEvent.change(within(dialog).getByLabelText(/evidencia del trámite/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar reasignación/i }));
+
+    await waitFor(() => expect(mockReasignarRepresentante).toHaveBeenCalledTimes(1));
+    const [personaId, payload, idempotencyKey] = mockReasignarRepresentante.mock.calls[0] as [
+      number,
+      Record<string, unknown>,
+      string,
+    ];
+    expect(personaId).toBe(24);
+    expect(payload).toEqual({
+      nuevoRepresentanteId: 40,
+      representanteActualId: 30,
+      evidenciaIdentidad: "Cédula verificada en el mostrador",
+    });
+    expect(idempotencyKey.length).toBeGreaterThan(0);
+    await waitFor(() => expect(mockFetchMembers).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows the backend's stale-conflict message verbatim on a 409", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockReasignarRepresentante.mockRejectedValue(
+      new (await import("@/services/api")).ApiClientError(
+        "El vínculo de representación cambió desde que se abrió el trámite: recargue la ficha y reintente.",
+        409,
+        true,
+      ),
+    );
+    const dialog = await openMenorConRepresentanteModal();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reasignar representante/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar nuevo representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Nueva"));
+    fireEvent.change(within(dialog).getByLabelText(/evidencia del trámite/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar reasignación/i }));
+
+    expect(await within(dialog).findByText(/recargue la ficha y reintente/i)).toBeInTheDocument();
+  });
+
+  it("shows the backend's domain-rule message verbatim on a 422", async () => {
+    mockSearchStudents.mockResolvedValue([REPRESENTANTE_ENCONTRADO]);
+    mockReasignarRepresentante.mockRejectedValue(
+      new (await import("@/services/api")).ApiClientError(
+        "Esta cuenta no tiene el rol de Representante y no puede recibir representados.",
+        422,
+        true,
+      ),
+    );
+    const dialog = await openMenorConRepresentanteModal();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /reasignar representante/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText(/buscar nuevo representante por nombre/i), {
+      target: { value: "Marcela" },
+    });
+    fireEvent.click(await within(dialog).findByText("Marcela Nueva"));
+    fireEvent.change(within(dialog).getByLabelText(/evidencia del trámite/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar reasignación/i }));
+
+    expect(await within(dialog).findByText(/no puede recibir representados/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Independence stopped being self-service (#1137): a represented ADULT is
+ * independized by an ADMINISTRADOR at the desk, from THIS dialog — never by
+ * the person confirming their own password on `/student`. A represented
+ * MINOR is never offered the action: the backend rejects a minor
+ * (`independizar_presencial`'s own doc comment), so offering it here would
+ * only be a guaranteed dead end.
+ */
+describe("MembersPage — Independizar (issue #1137)", () => {
+  const ADULTO_REPRESENTADO: MemberAccount = {
+    id: "22",
+    role: "representante",
+    nombres: "Adulto",
+    apellidos: "Representado",
+    telefono: "0999999999",
+    representadoPor: "Marcela Ruiz",
+    estudiantes: [
+      {
+        id: "22",
+        nombres: "Adulto",
+        apellidos: "Representado",
+        cedula: "1710034081",
+        fechaNacimiento: "1990-01-01",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  const MENOR_REPRESENTADO: MemberAccount = {
+    id: "23",
+    role: "representante",
+    nombres: "Menor",
+    apellidos: "Representado",
+    telefono: "0999999999",
+    representadoPor: "Marcela Ruiz",
+    estudiantes: [
+      {
+        id: "23",
+        nombres: "Menor",
+        apellidos: "Representado",
+        cedula: "1710034099",
+        fechaNacimiento: "2015-01-01",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockIndependizarPersona.mockReset();
+  });
+
+  async function openEditModal(account: MemberAccount): Promise<HTMLElement> {
+    mockFetchMembers.mockResolvedValue({ accounts: [account] });
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText(`${account.nombres} ${account.apellidos}`);
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    return screen.getByRole("dialog");
+  }
+
+  function fillIndependizarForm(dialog: HTMLElement, contrasenia = "unaClaveSegura1", confirmacion = contrasenia): void {
+    fireEvent.change(within(dialog).getByLabelText(/correo/i), { target: { value: "adulto@cataclub.com" } });
+    fireEvent.change(within(dialog).getByLabelText(/contraseña inicial/i), { target: { value: contrasenia } });
+    fireEvent.change(within(dialog).getByLabelText(/confirmar contraseña/i), { target: { value: confirmacion } });
+    fireEvent.change(within(dialog).getByLabelText(/evidencia/i), {
+      target: { value: "Cédula verificada en el mostrador" },
+    });
+  }
+
+  it("offers Independizar for a represented ADULT", async () => {
+    const dialog = await openEditModal(ADULTO_REPRESENTADO);
+
+    expect(within(dialog).getByRole("button", { name: /^independizar$/i })).toBeInTheDocument();
+  });
+
+  it("does not offer Independizar for a represented MINOR", async () => {
+    const dialog = await openEditModal(MENOR_REPRESENTADO);
+
+    expect(within(dialog).queryByRole("button", { name: /^independizar$/i })).not.toBeInTheDocument();
+  });
+
+  it("does not offer Independizar for a self-managed account", async () => {
+    const dialog = await openEditModal(ACCOUNT);
+
+    expect(within(dialog).queryByText(/^independizar$/i)).not.toBeInTheDocument();
+  });
+
+  it("submits the admin payload with a fresh Idempotency-Key and refreshes the list on success", async () => {
+    mockIndependizarPersona.mockResolvedValue({
+      personaId: 22,
+      representanteAnteriorId: 30,
+      usuarioId: 99,
+      cuentaCreada: true,
+      replay: false,
+      idempotencyKey: "clave-1",
+    });
+    const dialog = await openEditModal(ADULTO_REPRESENTADO);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^independizar$/i }));
+    fillIndependizarForm(dialog);
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar independencia/i }));
+
+    await waitFor(() => expect(mockIndependizarPersona).toHaveBeenCalledTimes(1));
+    const [personaId, payload, idempotencyKey] = mockIndependizarPersona.mock.calls[0] as [
+      number,
+      Record<string, string>,
+      string,
+    ];
+    expect(personaId).toBe(22);
+    expect(payload).toEqual({
+      correo: "adulto@cataclub.com",
+      contrasenia: "unaClaveSegura1",
+      evidenciaIdentidad: "Cédula verificada en el mostrador",
+    });
+    expect(idempotencyKey.length).toBeGreaterThan(0);
+    // Refresh comes through the same silent-reload path `LinkRepresentativeSection`
+    // already uses — a second `fetchMembers` call proves it fired.
+    await waitFor(() => expect(mockFetchMembers).toHaveBeenCalledTimes(2));
+  });
+
+  it("rejects mismatched password confirmation before calling the API", async () => {
+    const dialog = await openEditModal(ADULTO_REPRESENTADO);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^independizar$/i }));
+    fillIndependizarForm(dialog, "unaClaveSegura1", "otraClaveDistinta2");
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar independencia/i }));
+
+    expect(await within(dialog).findByText(/no coinciden/i)).toBeInTheDocument();
+    expect(mockIndependizarPersona).not.toHaveBeenCalled();
+  });
+
+  // #1137's own contract: a retry with a REUSED Idempotency-Key against a
+  // different request is the backend's 409 — the frontend must show that
+  // sentence verbatim, not a generic failure.
+  it("shows the backend's 409 message on screen verbatim", async () => {
+    const MENSAJE =
+      "La clave de idempotencia ya fue usada por otro comando. Genere una clave nueva para este intento.";
+    const { ApiClientError } = await import("@/services/api");
+    mockIndependizarPersona.mockRejectedValue(new ApiClientError(MENSAJE, 409));
+    const dialog = await openEditModal(ADULTO_REPRESENTADO);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^independizar$/i }));
+    fillIndependizarForm(dialog);
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar independencia/i }));
+
+    expect(await within(dialog).findByText(MENSAJE)).toBeInTheDocument();
+  });
+
+  it("shows the backend's 400 message on screen verbatim (business rule)", async () => {
+    const MENSAJE = "No se puede independizar a una persona menor de edad.";
+    const { ApiClientError } = await import("@/services/api");
+    mockIndependizarPersona.mockRejectedValue(new ApiClientError(MENSAJE, 400));
+    const dialog = await openEditModal(ADULTO_REPRESENTADO);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^independizar$/i }));
+    fillIndependizarForm(dialog);
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar independencia/i }));
+
+    expect(await within(dialog).findByText(MENSAJE)).toBeInTheDocument();
+  });
+
+  it("shows a real message on screen on a 403, never a silent failure", async () => {
+    const { ApiClientError } = await import("@/services/api");
+    mockIndependizarPersona.mockRejectedValue(
+      new ApiClientError("Permisos insuficientes para esta operación", 403),
+    );
+    const dialog = await openEditModal(ADULTO_REPRESENTADO);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^independizar$/i }));
+    fillIndependizarForm(dialog);
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar independencia/i }));
+
+    expect(await within(dialog).findByText(/no tiene permisos para realizar esta acción/i)).toBeInTheDocument();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Issue #505: the row's single "Editar" trigger used to be the only entry
 // point into ficha médica (behind an internal "Ficha médica" toggle inside
@@ -3744,5 +4107,77 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
       expect(within(row).getByText("Sin membresía")).toBeInTheDocument();
       expect(within(row).getByText("Inactiva")).toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Representative-only row actions (issue #1199)
+// ---------------------------------------------------------------------------
+
+describe("MembersPage — representative-only row actions (issue #1199)", () => {
+  const REPRESENTATIVE_ONLY_ACCOUNT: MemberAccount = {
+    id: "rep-only",
+    role: "representante",
+    nombres: "Laura",
+    apellidos: "Suárez",
+    telefono: "0988888888",
+    estudiantes: [
+      {
+        id: "20",
+        nombres: "Laura",
+        apellidos: "Suárez",
+        activo: true,
+        membresia: null,
+        ultimoPago: null,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [REPRESENTATIVE_ONLY_ACCOUNT] });
+  });
+
+  it('hides "Ficha médica" and "Pagos" for a representative-only row, keeping "Editar"', async () => {
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const matches = await screen.findAllByText("Laura Suárez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+    expect(within(row).queryByRole("button", { name: /^ficha médica/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^pagos/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+  });
+
+  it('still offers "Ficha médica" and "Pagos" once the representative also carries her own membership', async () => {
+    mockFetchMembers.mockResolvedValue({
+      accounts: [
+        {
+          ...REPRESENTATIVE_ONLY_ACCOUNT,
+          estudiantes: [
+            {
+              ...REPRESENTATIVE_ONLY_ACCOUNT.estudiantes[0],
+              membresia: { id: 1, tipo: "Adultos", estado: "activa", fechaInicio: "", fechaFin: "", monto: 35 },
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+
+    const matches = await screen.findAllByText("Laura Suárez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+
+    expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
   });
 });

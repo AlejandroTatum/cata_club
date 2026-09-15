@@ -12,19 +12,13 @@
  * backend real: `enroll-qa.spec.ts` prueba la sección "R" del asistente con
  * la red mockeada (~90 casos campo a campo), pero eso certifica el
  * FORMULARIO, no que el alta real deja un dependiente que el representante
- * puede ver. Este archivo cubre esa otra mitad, en tres partes:
+ * puede ver. Este archivo cubre esa otra mitad, en dos partes:
  *
- *   1. un representante inscribe a un dependiente SIN cuenta propia (el
- *      camino común: un menor gestionado, sin credenciales propias) y lo ve
- *      en su panel;
- *   2. la diferencia real entre eso y un dependiente CON cuenta propia es
- *      un solo flag del lado del backend (`EnrollmentAlumnoDTO.correo`/
- *      `contrasenia`, Opción B) -- confirmado leyendo `enrollment_schemas.py`
- *      y `enroll-utils.ts`, no asumido. No hay un segundo camino de UI que
- *      certificar, así que no hay un segundo spec completo: el mismo alta
- *      con esos dos campos llenos, más UNA aserción extra (el dependiente
- *      inicia sesión por su cuenta, de forma independiente);
- *   3. la frontera de autorización: un representante NO puede leer los
+ *   1. un representante inscribe a un dependiente (un menor gestionado, sin
+ *      credenciales propias -- issue #1137, invariante B: un representado
+ *      nunca tiene `Usuario` propio, así que este es el ÚNICO camino que
+ *      existe) y lo ve en su panel;
+ *   2. la frontera de autorización: un representante NO puede leer los
  *      datos del dependiente de otro representante.
  *
  * ## Por qué "el panel" se verifica contra el endpoint y no contra la página
@@ -52,7 +46,7 @@
  *
  * ## El hallazgo de autorización (verificado, no asumido)
  *
- * Antes de escribir la aserción de la parte 3 se reprodujo a mano contra el
+ * Antes de escribir la aserción de la parte 2 se reprodujo a mano contra el
  * stack real (dos representantes reales, vía `curl`, ver la sesión que
  * escribió este archivo): `GET /api/student?personaId=<id>` reenvía
  * `personaId` -- un query param que el CLIENTE controla -- tal cual a
@@ -67,15 +61,16 @@
  * legítimas lleva de un solicitante cualquiera a este dato?", auditoría de
  * producción #790) vuelta a probar después del arreglo, con un query param
  * libre en vez de un rol. El resultado es el esperado -- BLOQUEADO -- así
- * que el test de la parte 3 afirma eso, no lo contrario.
+ * que el test de la parte 2 afirma eso, no lo contrario.
  *
- * ## Por qué la parte 1 y la parte 3 comparten un representante
+ * ## Por qué la parte 1 y la parte 2 comparten un representante
  *
  * `POST /enrollment/` tiene `@limiter.limit("10/minute")` por IP (protección
- * real contra abuso, no un límite de QA). La primera versión de este archivo
- * inscribía SEIS identidades por corrida (dos por cada una de las tres
- * partes salvo la 3, que ya usaba dos) y, sumadas a las dos altas que ya
- * hacían `activacion.live.spec.ts`/`recuperacion-contrasenia.live.spec.ts`,
+ * real contra abuso, no un límite de QA). Este archivo llegó a inscribir
+ * hasta SEIS identidades por corrida cuando todavía tenía una tercera parte
+ * (un dependiente CON cuenta propia -- issue #1137 retiró ese camino: un
+ * representado nunca tiene `Usuario` propio) y, sumadas a las dos altas que
+ * ya hacían `activacion.live.spec.ts`/`recuperacion-contrasenia.live.spec.ts`,
  * dos corridas seguidas de la suite completa podían acumular más de diez
  * altas en la ventana de 60s y disparar un 429 real -- reproducido con los
  * logs del backend (`ratelimit 10 per 1 minute ... exceeded`). El síntoma en
@@ -83,18 +78,18 @@
  * encabezado YA presente en el DOM, porque la alta simplemente tardaba en
  * volver a intentar contra un límite que no iba a ceder dentro del test.
  *
- * La parte 1 (sin cuenta propia) y el lado "A" de la parte 3 (frontera de
- * autorización) son la MISMA situación -- un representante con un
- * dependiente sin cuenta propia -- así que comparten una única alta hecha
- * una vez en `beforeAll` (`test.describe.serial`, para que la parte 1 corra
- * antes y dependa del mismo estado que la parte 3 lee después). Sigue siendo
- * DOS páginas/contextos de navegador distintos donde hace falta demostrar
- * aislamiento real (representante A vs B en la parte 3), y cada corrida
+ * La parte 1 y el lado "A" de la parte 2 (frontera de autorización) son la
+ * MISMA situación -- un representante con un dependiente -- así que
+ * comparten una única alta hecha una vez en `beforeAll`
+ * (`test.describe.serial`, para que la parte 1 corra antes y dependa del
+ * mismo estado que la parte 2 lee después). Sigue siendo DOS
+ * páginas/contextos de navegador distintos donde hace falta demostrar
+ * aislamiento real (representante A vs B en la parte 2), y cada corrida
  * sigue generando identidades nuevas y únicas (`Date.now()` + cédula
  * aleatoria) -- lo que se comparte es la alta DENTRO de una corrida, nunca
- * entre corridas. Con esto la suite pasa de seis altas por corrida a TRES
- * (una compartida para las partes 1+3, una para la parte 2, una para el
- * representante B de la parte 3), la mitad de lo que hacía antes.
+ * entre corridas. Con esto la suite queda en DOS altas por corrida (una
+ * compartida para las partes 1+2, una para el representante B de la parte
+ * 2), un tercio de las seis que llegó a hacer.
  *
  * ## Cómo se corre
  *
@@ -172,7 +167,7 @@ async function enrollFreshRepresentative(
 
 test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de autorización", () => {
   // Compartido entre las dos partes de este bloque -- ver "Por qué la parte
-  // 1 y la parte 3 comparten un representante" en el encabezado del archivo:
+  // 1 y la parte 2 comparten un representante" en el encabezado del archivo:
   // una sola alta real, reusada, en vez de una por test.
   let contextA: BrowserContext;
   let pageA: Page;
@@ -240,56 +235,5 @@ test.describe.serial("Alta de un dependiente sin cuenta propia y frontera de aut
     } finally {
       await contextB.close();
     }
-  });
-});
-
-test.describe("Alta de un dependiente con cuenta propia", () => {
-  test("un representante inscribe a un dependiente CON cuenta propia, que además inicia sesión por su cuenta", async ({
-    page,
-  }) => {
-    // Mismo margen que el `beforeAll` de "Alta de un dependiente sin cuenta
-    // propia..." -- ver su comentario sobre el backoff del rate limit.
-    test.setTimeout(120_000);
-    const suffix = Date.now();
-    const representative = newRepresentative(`qa-rep-con-cuenta-${suffix}@cataclub.com`);
-    const credencialesDependiente = {
-      correo: `qa-hijo-con-cuenta-${suffix}@cataclub.com`,
-      contrasenia: "clave-segura-8",
-    };
-    const dependent = newDependent({ credenciales: credencialesDependiente });
-
-    await enrollDependentViaWizard(page, representative, dependent);
-
-    const portal = await fetchOwnStudentPortal(page);
-    expect(portal.representados).toHaveLength(1);
-    const [seen] = portal.representados;
-
-    // La única diferencia real con el caso anterior (Opción B,
-    // `EnrollmentAlumnoDTO.correo`/`contrasenia` en el backend): el
-    // dependiente TAMBIÉN tiene una cuenta propia. Se verifica con la única
-    // prueba que de verdad la distingue -- un login independiente, sin la
-    // sesión del representante -- en vez de un segundo spec completo que
-    // repetiría todo el camino de alta para probar el mismo flag.
-    //
-    // La pantalla de confirmación no tiene botón de cerrar sesión (solo "Ir
-    // a mi cuenta" y "Nueva inscripción"); `/login` ya autenticado redirige a
-    // `/login/activacion` (ver el comentario del encabezado), que sí lo tiene.
-    await page.goto("/login");
-    await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
-    await page.getByRole("button", { name: "Cerrar sesión" }).click();
-    await expect(page).toHaveURL(/\/login$/, { timeout: 20_000 });
-
-    await page.getByLabel(/correo electrónico/i).fill(credencialesDependiente.correo);
-    await page.getByRole("textbox", { name: /contraseña/i }).fill(credencialesDependiente.contrasenia);
-    await page.getByRole("button", { name: /iniciar sesión/i }).click();
-
-    // El correo del dependiente no está verificado (recién nace en este
-    // alta), así que aterriza en la puerta de activación -- no en `/student`
-    // directo. Lo que este assert certifica no es el destino, es que la
-    // cuenta PROPIA del dependiente autentica sola, sin la contraseña del
-    // representante.
-    const primerNombre = seen.nombres.split(" ")[0];
-    await expect(page.getByText(`Hola, ${primerNombre}`)).toBeVisible({ timeout: 20_000 });
-    await expect(page).toHaveURL(/\/login\/activacion$/, { timeout: 20_000 });
   });
 });

@@ -10,6 +10,7 @@ Creates:
   - 26 weekly schedules     (5 categories; Competitivo also runs Saturday)
   - 2 membership types      (Mensual Infantil, Mensual Adultos)
   - 2 representantes (padres/tutores): Laura con 2 hijos, Carlos con 1
+    (issue #1137: los hijos NUNCA tienen `Usuario`/cuenta propia)
   - 4 self-managed students (sin representante): Ana, Luis y Maria menores
     de edad (caso "el portal bloquea el pago"), Pedro mayor de edad (caso
     "el alumno paga por si mismo")
@@ -224,7 +225,6 @@ REPRESENTANTES = [
                 "nombres": "Sofia",
                 "apellidos": "Vera",
                 "cedula": cedula_valida(11),
-                "correo": "sofia@cataclub.com",
                 "telefono": "0981000011",
                 "edad_anios": 10,
                 "membresia_categoria": "Mensual Infantil",
@@ -233,7 +233,6 @@ REPRESENTANTES = [
                 "nombres": "Martin",
                 "apellidos": "Vera",
                 "cedula": cedula_valida(14),
-                "correo": "martin@cataclub.com",
                 "telefono": "0981000014",
                 "edad_anios": 16,
                 "membresia_categoria": "Mensual Adultos",
@@ -253,7 +252,6 @@ REPRESENTANTES = [
                 "nombres": "Diego",
                 "apellidos": "Mendoza",
                 "cedula": cedula_valida(13),
-                "correo": "diego@cataclub.com",
                 "telefono": "0981000013",
                 "edad_anios": 12,
                 "membresia_categoria": "Mensual Infantil",
@@ -500,14 +498,17 @@ def main() -> None:
                 db.add(rep_usuario)
                 representantes_creados += 1
 
-            # Hijos (rol ALUMNO, enlazados al representante). Un representante
-            # puede tener varios: cada uno se comprueba por separado, así que
-            # añadir un hermano nuevo a la lista lo crea también en las BD que
-            # ya tenían sembrados a los demás.
+            # Hijos: solo Persona (issue #1137, invariante B -- un representado
+            # nunca tiene `Usuario` propio, así que ya no hay credenciales
+            # `alumno123` para hijos). Un representante puede tener varios:
+            # cada uno se comprueba por separado (por CÉDULA, no por correo --
+            # sin `Usuario` no hay correo que comparar), así que añadir un
+            # hermano nuevo a la lista lo crea también en las BD que ya
+            # tenían sembrados a los demás.
             for hijo in rep_data["hijos"]:
-                existing_hijo_user = db.query(Usuario).filter(Usuario.correo == hijo["correo"]).first()
-                if existing_hijo_user:
-                    print(f"[seed] Hijo {hijo['correo']} ya existe — saltando.")
+                existing_hijo_persona = db.query(Persona).filter(Persona.cedula == hijo["cedula"]).first()
+                if existing_hijo_persona:
+                    print(f"[seed] Hijo con cédula {hijo['cedula']} ya existe — saltando.")
                     continue
 
                 hijo_persona, _ = _obtener_o_crear(
@@ -521,14 +522,6 @@ def main() -> None:
                         "representante_id": rep_persona.id,
                     },
                 )
-                hijo_usuario = Usuario(
-                    correo=hijo["correo"],
-                    contrasenia=GestorAutenticacion.obtener_hash_contrasenia("alumno123"),
-                    persona_id=hijo_persona.id,
-                    roles=[rol_alumno],
-                    correo_verificado=True,
-                )
-                db.add(hijo_usuario)
 
                 # Membresia + Pago for the child
                 tm = tipos_membresia.get(hijo["membresia_categoria"])
@@ -630,10 +623,22 @@ def main() -> None:
             "Mensual Adultos": [Categoria.ADULTOS],
         }
 
-        alumno_persona_ids = db.query(Persona.id).join(Usuario, Usuario.persona_id == Persona.id).join(
+        alumno_ids_por_rol = db.query(Persona.id).join(Usuario, Usuario.persona_id == Persona.id).join(
             Rol, Usuario.roles  # relación M2M_usuario_rol
         ).filter(Rol.tipo_rol == TipoRol.ALUMNO).all()
-        alumno_persona_ids = [pid[0] for pid in alumno_persona_ids]
+        # Issue #1137: un representado nunca tiene `Usuario`/rol ALUMNO
+        # propio (invariante B), así que la consulta de arriba sola ya no
+        # alcanza para los hijos de un representante -- se completa con
+        # `representante_id IS NOT NULL` (todo representado es, por
+        # definición, un alumno del club).
+        alumno_ids_por_representante = db.query(Persona.id).filter(
+            Persona.representante_id.isnot(None)
+        ).all()
+        alumno_persona_ids = sorted({
+            pid[0] for pid in alumno_ids_por_rol
+        } | {
+            pid[0] for pid in alumno_ids_por_representante
+        })
 
         horarios_por_categoria: dict[Categoria, list[HorarioEntrenamiento]] = {
             cat: db.query(HorarioEntrenamiento).filter(
@@ -649,13 +654,10 @@ def main() -> None:
         # Conflating the two made a fully-seeded database report itself as
         # broken on every subsequent run.
         alumnos_sin_mapeo: list[int] = []
-        # Holding the ALUMNO role without a membership is a LEGITIMATE state,
-        # not missing data: EnrollmentServicio grants a representante both
-        # REPRESENTANTE and ALUMNO (enrollment_servicio.py, `_asignar_rol`
-        # calls) while only the enrolled child gets a Membresia. Those parents
-        # are not training, so they must not be assigned to horarios and must
-        # not be reported as a defect. Only a membership whose category the
-        # mapping cannot place is a real gap.
+        # Holding the ALUMNO role (or being represented) without a
+        # membership is not, by itself, a defect -- only a membership whose
+        # category the mapping cannot place (`alumnos_sin_mapeo`, below) is
+        # a real gap. `sin_membresia` is informational.
         sin_membresia = 0
         for persona_id in alumno_persona_ids:
             membresia = db.query(Membresia).filter(Membresia.persona_id == persona_id).first()
@@ -690,7 +692,7 @@ def main() -> None:
         print(
             f"[seed] Asignaciones alumno_horario creadas: {asignaciones_creadas} "
             f"(total en tabla: {asignaciones_totales}); "
-            f"{sin_membresia} con rol ALUMNO sin membresía (representantes, esperado)."
+            f"{sin_membresia} alumno(s)/representado(s) sin membresía."
         )
 
         # Only a genuinely unusable state warrants a warning: a membership the

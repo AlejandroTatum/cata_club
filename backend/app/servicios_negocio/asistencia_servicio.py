@@ -847,6 +847,29 @@ class AsistenciaServicio:
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {datos.horario_id} no encontrado")
 
+        # Issue #1132: "ser jugador" habilita horario y asistencia -- nunca
+        # el rol. El chequeo va acá, antes de crear ninguna asignación,
+        # porque `registrar_asistencia` exige un `AlumnoHorario` previo
+        # (ver su propia validación LIFE-1): bloquear la asignación acá
+        # basta para bloquear también la asistencia en el camino normal.
+        #
+        # `puede_entrenar` (ACTIVA o VENCIDA), no `tiene_membresia_activa`
+        # a propósito: una membresía VENCIDA sigue habilitando (decisión de
+        # negocio #4, "la cuota vencida no impide entrenar"). Es una
+        # allow-list explícita, no "distinto de INACTIVA": SUSPENDIDA
+        # bloquea igual que INACTIVA -- ver el docstring de la consulta en
+        # `membresia_repositorio.py` para por qué una negación la admitía
+        # en silencio.
+        if not self.repo_membresia.puede_entrenar(datos.persona_id):
+            raise OperacionInvalida(
+                f"{nombre_completo(persona.nombres, persona.apellidos)} todavía no "
+                "tiene una membresía habilitada para entrenar.",
+                detalle_tecnico=(
+                    f"persona_id={datos.persona_id} sin Membresia en estado "
+                    "ACTIVA ni VENCIDA"
+                ),
+            )
+
         horarios_de_la_categoria = self.repo_horario.listar(horario.categoria)
         # Una sola lectura de las asignaciones previas: sus ids filtran lo que
         # falta crear, y las filas completas (con `horario` ya cargado por el

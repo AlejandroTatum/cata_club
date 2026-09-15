@@ -29,7 +29,7 @@
  * — and moved `<main>` off `space-y`. It did not move the eight wrappers that
  * sit one level inside it, and those wrappers have exactly the same shape: a
  * flow container whose children include, on several screens, a `ConfirmDialog`
- * or an `AgeUpConfirmation` rendered inline rather than through a portal. None
+ * rendered inline rather than through a portal. None
  * of the eight has a veil as a later sibling TODAY, so nothing is visibly
  * broken; that is precisely the state the doctrine described as "inmune por un
  * parche que la cascada puede revertir" rather than "inmune por construcción".

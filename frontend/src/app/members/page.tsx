@@ -58,6 +58,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Pencil,
+  UserMinus,
   X,
   Wallet,
 } from "lucide-react";
@@ -72,15 +73,16 @@ import {
   countAccountsMatchingFlag,
   getAccountStatusBadge,
   getAccountStateBadge,
+  getMembershipStatusBadge,
+  isRepresentativeOnlyAccount,
   paginateAccounts,
   getTotalPages,
   MEMBERS_PAGE_SIZE,
   MEMBERS_AGGREGATE_LIMIT,
-  MEMBERSHIP_STATUS_LABELS,
-  MEMBERSHIP_STATUS_TONE,
   PAYMENT_STATUS_LABELS,
   PAYMENT_STATUS_TONE,
   getPayerTypeLabel,
+  accountDisplayRoles,
   type MemberAccount,
   type MemberStudentSummary,
   type MemberFilterFlag,
@@ -93,6 +95,8 @@ import AccountInfoSection from "./AccountInfoSection";
 import { useAccountRolesAndStatus, ROLE_LABELS } from "./useAccountRolesAndStatus";
 import { type MembresiaCallbacks } from "./StudentMembershipActions";
 import LinkRepresentativeSection from "./LinkRepresentativeSection";
+import ReassignRepresentativeSection from "./ReassignRepresentativeSection";
+import IndependizarSection from "./IndependizarSection";
 import { useNativeDialog, NATIVE_DIALOG_SHELL_CLASS, NATIVE_DIALOG_BODY_CLASS } from "./useNativeDialog";
 import MedicalRecordDialog from "./MedicalRecordDialog";
 import PaymentsDialog from "./PaymentsDialog";
@@ -203,12 +207,7 @@ function StudentEditPanel({ student }: StudentRowProps): React.ReactElement {
     : NaN;
   const age = Number.isNaN(rawAge) ? null : rawAge;
 
-  const membershipLabel = student.membresia
-    ? MEMBERSHIP_STATUS_LABELS[student.membresia.estado]
-    : "Sin membresía";
-  const membershipTone = student.membresia
-    ? MEMBERSHIP_STATUS_TONE[student.membresia.estado]
-    : "neutral";
+  const { label: membershipLabel, tone: membershipTone } = getMembershipStatusBadge(student);
   const paymentLabel = student.ultimoPago
     ? PAYMENT_STATUS_LABELS[student.ultimoPago.estado]
     : "Sin pagos";
@@ -430,18 +429,23 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
   const fullName = `${account.nombres} ${account.apellidos}`;
+  // Issue #1199: a representative-only row (badge "Representante", no
+  // membership of her own) has no student to show a ficha médica or a
+  // payment for — hiding these keeps "Editar" as the only action offered.
+  const showStudentActions = !isRepresentativeOnlyAccount(account);
 
   return (
     <TableRow>
       {/* D9's shared identity cell, not a second drawing of the same layout.
           Issue #388 removed the row's disclosure along with the group it used
           to expand: `estudiantes` is now always this exact person, so there is
-          no relationship left to name or count here. `account.role` is still
-          not a role — see `lib/server/members-adapter.ts`'s module doc for why
-          — so this cell draws the name and nothing else; the account's real
-          roles are read one account at a time, in the edit dialog. */}
+          no relationship left to name or count here. Issue #1132 closed the
+          "no real roles" gap `lib/server/members-adapter.ts`'s module doc
+          used to document — `accountDisplayRoles` folds the bulk-fetched
+          roles with the membership-derived "jugador" signal (see its own doc
+          comment in `members-utils.ts`). */}
       <TableCell>
-        <IdentityCell name={fullName} />
+        <IdentityCell name={fullName} roles={accountDisplayRoles(account)} />
       </TableCell>
       <TableCell>{account.representadoPor ?? "—"}</TableCell>
       <TableCell type="badge">
@@ -454,8 +458,8 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
       </TableCell>
       <TableCell type="action">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <MedicalRecordAccessButton account={account} onMedical={onMedical} />
-          <PaymentsAccessButton account={account} onPayments={onPayments} />
+          {showStudentActions && <MedicalRecordAccessButton account={account} onMedical={onMedical} />}
+          {showStudentActions && <PaymentsAccessButton account={account} onPayments={onPayments} />}
           <EditAccountButton account={account} onEdit={onEdit} />
         </div>
       </TableCell>
@@ -467,6 +471,8 @@ function AccountRow({ account, onEdit, onMedical, onPayments }: AccountListItemP
 function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItemProps): React.ReactElement {
   const statusBadge = getAccountStatusBadge(account);
   const accountBadge = getAccountStateBadge(account);
+  // Issue #1199: same rule as `AccountRow` above.
+  const showStudentActions = !isRepresentativeOnlyAccount(account);
 
   return (
     <DataRow
@@ -495,8 +501,8 @@ function AccountCard({ account, onEdit, onMedical, onPayments }: AccountListItem
       }
       actions={
         <>
-          <MedicalRecordAccessButton account={account} onMedical={onMedical} />
-          <PaymentsAccessButton account={account} onPayments={onPayments} />
+          {showStudentActions && <MedicalRecordAccessButton account={account} onMedical={onMedical} />}
+          {showStudentActions && <PaymentsAccessButton account={account} onPayments={onPayments} />}
           <EditAccountButton account={account} onEdit={onEdit} />
         </>
       }
@@ -655,17 +661,57 @@ function MemberEditDialog({
               {/* Issue #460: the only in-app way to assign a representante to
                   a minor used to be knowing the endpoint existed and calling
                   it directly — this panel had roles, estado, and per-student
-                  membership/ficha médica, and no field for it. */}
+                  membership/ficha médica, and no field for it.
+
+                  #1133 split the two cases: a minor with NO representative
+                  yet has nothing to conflict with, so it keeps the original
+                  `vincular-representado` desk flow (`LinkRepresentativeSection`).
+                  A minor who ALREADY has one goes through the atomic
+                  `reasignar-representante` command instead
+                  (`ReassignRepresentativeSection`), which knows the CURRENT
+                  link and lets the backend reject a stale one (409) instead
+                  of silently overwriting it. */}
               {isMinorStudent && (
                 <ModalSection
                   title="Representante legal"
                   saveMode="manual"
                   icon={<Building2 size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
                 >
-                  <LinkRepresentativeSection
-                    studentCedula={primaryStudent?.cedula}
-                    currentRepresentativeName={account.representadoPor}
-                    onLinked={membresiaCallbacks.onMembresiaChanged}
+                  {account.representadoPor && account.representadoPorId ? (
+                    <ReassignRepresentativeSection
+                      personaId={personaId}
+                      personaNombreCompleto={accountFullName}
+                      representanteActualId={account.representadoPorId}
+                      representanteActualNombre={account.representadoPor}
+                      onReasignado={membresiaCallbacks.onMembresiaChanged}
+                    />
+                  ) : (
+                    <LinkRepresentativeSection
+                      studentCedula={primaryStudent?.cedula}
+                      currentRepresentativeName={account.representadoPor}
+                      onLinked={membresiaCallbacks.onMembresiaChanged}
+                    />
+                  )}
+                </ModalSection>
+              )}
+
+              {/* Issue #1137: independence stopped being self-service — it is
+                  now a PRESENCIAL command an ADMINISTRADOR runs from here,
+                  never from `/student`. Only offered to a represented ADULT:
+                  a represented minor is exactly the case the backend rejects
+                  (`independizar_presencial`'s own doc comment), so this
+                  never shows beside "Representante legal" above for the
+                  same student. */}
+              {account.representadoPor && !isMinorStudent && (
+                <ModalSection
+                  title="Independencia"
+                  saveMode="manual"
+                  icon={<UserMinus size={ICON.sm} strokeWidth={1.5} className="text-ink-3" aria-hidden="true" />}
+                >
+                  <IndependizarSection
+                    personaId={personaId}
+                    personaNombreCompleto={accountFullName}
+                    onIndependizado={membresiaCallbacks.onMembresiaChanged}
                   />
                 </ModalSection>
               )}
@@ -1279,6 +1325,7 @@ export default function MembersPage(): React.ReactElement {
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
             onMembresiaChanged={() => void loadMembers({ silent: true })}
+            onPaymentRegistered={() => void loadMembers({ silent: true })}
           />
         )}
         {/* Issue #505: direct entry points, mutually exclusive with the
@@ -1295,6 +1342,7 @@ export default function MembersPage(): React.ReactElement {
             onMembershipCreated={() => void loadMembers({ silent: true })}
             onDebtRegularized={() => void loadMembers({ silent: true })}
             onMembresiaChanged={() => void loadMembers({ silent: true })}
+            onPaymentRegistered={() => void loadMembers({ silent: true })}
           />
         )}
       </AppShell>

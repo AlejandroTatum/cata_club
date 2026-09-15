@@ -31,6 +31,8 @@ import type {
   PersonaReporte,
   PersonaResponse,
   PersonaBusqueda,
+  IndependenciaResponse,
+  ReasignacionResponse,
   Notificacion,
   PaginatedResponse,
   PerfilPropio,
@@ -1057,7 +1059,11 @@ interface PaginatedEnvelope<T> {
 
 /** Submit one public, backend-transactional enrollment request. */
 export async function enrollStudent(data: EnrollmentRequest): Promise<EnrollmentResponse> {
-  const response: unknown = await request<unknown>(apiEndpoint("/enrollment/"), {
+  // No trailing slash (issue #1198): the Next.js route lives at
+  // src/app/api/enrollment/route.ts, no trailing segment. Posting to
+  // "/enrollment/" made every submission take a 308 redirect before landing
+  // on the real handler.
+  const response: unknown = await request<unknown>(apiEndpoint("/enrollment"), {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -2054,6 +2060,22 @@ export async function crearMembresia(data: {
   });
 }
 
+/**
+ * Issue #1132: self-service — enroll the CALLER (never another persona) as a
+ * player. `POST /api/membresias/propia`. There is no `personaId` field here
+ * to send, by design: the backend derives it from the caller's own session,
+ * so this request says only WHICH PLAN. The membership is born INACTIVA;
+ * `registrarPago` (the existing `/student/payments` renewal flow) registers
+ * its first payment.
+ */
+export async function crearMembresiaPropia(tipoMembresiaId: number): Promise<MembresiaPorPersona> {
+  return request<MembresiaPorPersona>(apiEndpoint("/membresias/propia"), {
+    method: "POST",
+    body: JSON.stringify({ tipoMembresiaId }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Descuentos — catálogo del club (issue #12, admin-only)
 // ---------------------------------------------------------------------------
@@ -2267,21 +2289,21 @@ export async function actualizarPersona(
 // ---------------------------------------------------------------------------
 
 /** Ficha médica payload for a new dependent — mirrors the backend's
- *  `EnrollmentFichaMedicaDTO` (reused as-is by `RepresentadoCreateDTO`). */
+ *  `EnrollmentFichaMedicaMenorDTO` (issue #1138). No emergency-contact
+ *  fields: a dependent created here is always a represented minor, and the
+ *  backend derives that contact from the representante at read time. */
 export interface RepresentadoFichaMedicaPayload {
   tipoSangre: TipoSangre;
   enfermedades?: string[];
   alergias?: string;
-  contactoEmergencia?: string;
-  telefonoEmergencia?: string;
 }
 
 /** Payload for the self-service "add a dependent" endpoint. Deliberately
  *  narrow — no admin-only fields (e.g. `representanteId`) are accepted here;
  *  the backend always derives `representante_id` from the caller's own
  *  token, never from the request body.
- *  If `correo` + `contrasenia` are provided, a Usuario with rol ALUMNO is
- *  also created for the minor (Option B: minors with own account). */
+ *  Issue #1137, invariante (B): a represented dependent never has a
+ *  `Usuario` of their own — this payload carries no credentials. */
 export interface RepresentadoCreatePayload {
   nombres: string;
   apellidos: string;
@@ -2289,15 +2311,12 @@ export interface RepresentadoCreatePayload {
   fechaNacimiento: string;
   telefono: string;
   fichaMedica?: RepresentadoFichaMedicaPayload;
-  correo?: string;
-  contrasenia?: string;
   institucionId?: number;
 }
 
 /**
  * Representante-only self-service: add a second/third dependent (child)
- * from the authenticated portal. If `correo`/`contrasenia` are provided,
- * also creates a `Usuario` + ALUMNO for the minor (Option B).
+ * from the authenticated portal.
  * See `POST /personas/{persona_id}/representados`.
  */
 export async function crearRepresentado(
@@ -2328,14 +2347,68 @@ export async function vincularRepresentado(personaId: number, cedula: string): P
 }
 
 // ---------------------------------------------------------------------------
-// Aging Up / Independizar (Flow 4)
+// Independizar (Flow 4) — comando presencial del mostrador (#1137)
 // ---------------------------------------------------------------------------
 
-/** Independizar a persona de su representante legal (POST /personas/{id}/independizar). */
-export async function independizarPersona(personaId: number, contrasenia: string): Promise<PersonaResponse> {
-  return request<PersonaResponse>(apiEndpoint(`/personas/${personaId}/independizar`), {
+export interface IndependizarPayload {
+  correo: string;
+  contrasenia: string;
+  evidenciaIdentidad: string;
+}
+
+/**
+ * Independizar a un adulto representado: ya no es autoservicio (#1137) sino
+ * un comando PRESENCIAL que solo un ADMINISTRADOR ejecuta desde el
+ * mostrador — ver `POST /personas/{persona_id}/independizar`.
+ *
+ * `idempotencyKey` identifica ESTE intento: un reintento con la MISMA clave
+ * reproduce el resultado ya establecido en vez de duplicar el comando. El
+ * llamador acuña una clave nueva por cada envío (`crypto.randomUUID()`).
+ */
+export async function independizarPersona(
+  personaId: number,
+  payload: IndependizarPayload,
+  idempotencyKey: string,
+): Promise<IndependenciaResponse> {
+  return request<IndependenciaResponse>(apiEndpoint(`/personas/${personaId}/independizar`), {
     method: "POST",
-    body: JSON.stringify({ contrasenia }),
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Reasignar representante — comando presencial del mostrador (#1133)
+// ---------------------------------------------------------------------------
+
+export interface ReasignarRepresentantePayload {
+  nuevoRepresentanteId: number;
+  representanteActualId: number;
+  evidenciaIdentidad: string;
+}
+
+/**
+ * Reasigna al representante de un menor: comando PRESENCIAL que solo un
+ * ADMINISTRADOR ejecuta desde el mostrador — ver `POST
+ * /personas/{persona_id}/reasignar-representante`.
+ *
+ * `representanteActualId` es el vínculo que el administrador OBSERVÓ en
+ * pantalla al abrir el trámite: si cambió mientras tanto, el backend
+ * responde 409 en vez de pisar el cambio ajeno.
+ *
+ * `idempotencyKey` identifica ESTE intento, mismo contrato que
+ * `independizarPersona`: el llamador acuña una clave nueva por cada envío
+ * (`crypto.randomUUID()`).
+ */
+export async function reasignarRepresentante(
+  personaId: number,
+  payload: ReasignarRepresentantePayload,
+  idempotencyKey: string,
+): Promise<ReasignacionResponse> {
+  return request<ReasignacionResponse>(apiEndpoint(`/personas/${personaId}/reasignar-representante`), {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(payload),
   });
 }
 

@@ -7,13 +7,16 @@ en un solo request transaccional. Endpoint público (sin auth), rate-limited.
   Flujo (issue #338 -- todo o nada, validado antes de escribir):
   1. Validar edad del alumno (5-74 años) y, si hay representante, su cédula,
      correo y edad; validar cédula del alumno, la regla de menores y el
-     correo de cualquier cuenta propia (menor o adulto). Nada de esto
+     correo de la cuenta propia del adulto autoinscrito. Nada de esto
      escribe todavía.
   2. Dentro de una única transacción: crear Persona del representante (si
      aplica) + Usuario (credenciales) + rol REPRESENTANTE; crear
      Persona del alumno (con representante_id si aplica); crear FichaMedica
-     y AntecedentesClub si se proporcionaron; crear Usuario del alumno
-     (menor con cuenta propia, o adulto autoinscrito) + rol ALUMNO.
+     y AntecedentesClub si se proporcionaron; crear Usuario + rol ALUMNO
+     SOLO si el alumno se autoinscribe como adulto (issue #1137, invariante
+     B: un alumno representado nunca tiene Usuario propio). Cuando hay
+     representante, deja una fila en `vinculacion_representante` (issue
+     #1133, `origen='ALTA_PUBLICA'`).
   3. Un solo `commit()` al final del flujo feliz. Cualquier excepción hace
      `rollback()` de TODO lo escrito en el intento.
   4. Emitir tokens JWT para auto-login del representante (o del alumno adulto).
@@ -50,7 +53,10 @@ from app.infraestructura.repositorios.inscripcion_idempotencia_repositorio impor
     ESTADO_PENDIENTE,
     InscripcionIdempotenciaRepositorio,
 )
-from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentAlumnoDTO, EnrollmentCreateDTO
+from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
+    VinculacionRepresentanteRepositorio,
+)
+from app.servicios_negocio.dtos.enrollment_schemas import EnrollmentCreateDTO
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import (
@@ -107,6 +113,7 @@ class EnrollmentServicio:
         self.repo_antecedentes = AntecedentesClubRepositorio(db)
         self.repo_rol = RolRepositorio(db)
         self.repo_idempotencia = InscripcionIdempotenciaRepositorio(db)
+        self.repo_ledger = VinculacionRepresentanteRepositorio(db)
 
     def enroll(self, datos: EnrollmentCreateDTO, idempotency_key: str | None = None) -> dict:
         """
@@ -192,14 +199,6 @@ class EnrollmentServicio:
                 "El alumno es menor de edad y requiere un representante legal."
             )
 
-        # Validar correo único del menor con cuenta propia. Antes corría
-        # dentro de `_crear_usuario_alumno`, el ÚLTIMO paso del flujo (issue
-        # #338, el caso reportado): para entonces representante y alumno ya
-        # estaban commiteados.
-        if hay_representante and datos.alumno.correo and datos.alumno.contrasenia:
-            if self.repo_usuario.obtener_por_correo(datos.alumno.correo):
-                raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
-
         # Validar correo único de la autoinscripción sin representante
         # (adulto). Antes corría DESPUÉS de crear la Persona del alumno
         # (issue #338): dejaba al alumno huérfano en la base.
@@ -233,19 +232,30 @@ class EnrollmentServicio:
                 apellidos=datos.alumno.apellidos,
                 cedula=datos.alumno.cedula,
                 fecha_nacimiento=datos.alumno.fecha_nacimiento,
-                telefono=datos.alumno.telefono,
+                # Issue #1197: `Persona.telefono` no es nullable -- un menor
+                # representado sin celular propio (`EnrollmentAlumnoDTO.
+                # telefono` opcional) persiste como "", el mismo valor que
+                # `_exigir_telefono_valido` ya tolera como "sin teléfono".
+                telefono=datos.alumno.telefono or "",
                 representante_id=representante_id,
                 institucion_id=datos.alumno.institucion_id,
             )
             self.repo_persona.crear(alumno)
 
             if datos.ficha_medica:
+                # Issue #1138: en el camino representado, `datos.ficha_medica`
+                # resuelve como `EnrollmentFichaMedicaMenorDTO`, que no tiene
+                # `contacto_emergencia`/`telefono_emergencia` -- el contacto
+                # de ese menor se deriva del representante al LEER (ver
+                # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
+                # persiste acá. `getattr` cubre ambas formas del Union sin
+                # un `isinstance` explícito.
                 ficha = FichaMedica(
                     tipo_sangre=datos.ficha_medica.tipo_sangre,
                     persona_id=alumno.id,
                     alergias=datos.ficha_medica.alergias,
-                    contacto_emergencia=datos.ficha_medica.contacto_emergencia,
-                    telefono_emergencia=datos.ficha_medica.telefono_emergencia,
+                    contacto_emergencia=getattr(datos.ficha_medica, "contacto_emergencia", None),
+                    telefono_emergencia=getattr(datos.ficha_medica, "telefono_emergencia", None),
                 )
                 for nombre in datos.ficha_medica.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
@@ -281,9 +291,28 @@ class EnrollmentServicio:
                 # quiere entrenar, es un cambio de rol explícito.
                 self._asignar_rol(usuario, TipoRol.REPRESENTANTE)
 
-                # Si el menor tiene credenciales propias, crear cuenta también
-                if datos.alumno.correo and datos.alumno.contrasenia:
-                    self._crear_usuario_alumno(datos.alumno, alumno.id)
+                # Issue #1133 (ledger completo, regla del rol): `alumno` ya
+                # nació con `representante_id` seteado (arriba), ANTES de
+                # que esta cuenta y su rol existieran -- el candado que
+                # exige el rol es un `CONSTRAINT TRIGGER ...  DEFERRED`
+                # (migración `k1143rolrep`) precisamente para tolerar este
+                # orden y evaluar recién al COMMIT, contra el estado FINAL
+                # de la transacción (rol ya otorgado). No hay chequeo de
+                # servicio equivalente acá: en este camino la cuenta y el rol
+                # SIEMPRE se otorgan juntos, así que no hay ninguna condición
+                # de negocio que un `if` pueda anticipar -- la única defensa
+                # útil es la de la base, contra un bug futuro que rompa ese
+                # supuesto.
+                self.repo_ledger.registrar(
+                    persona_id=alumno.id,
+                    actor_persona_id=representante_id,
+                    representante_anterior_id=None,
+                    representante_nuevo_id=representante_id,
+                    operacion="CREACION",
+                    origen="ALTA_PUBLICA",
+                    idempotency_key=None,
+                    request_fingerprint=None,
+                )
             elif datos.credenciales_alumno:
                 # Autoinscripción sin representante (adulto)
                 hash_pw = GestorAutenticacion.obtener_hash_contrasenia(
@@ -427,22 +456,6 @@ class EnrollmentServicio:
         rol = self.repo_rol.obtener_o_crear(tipo_rol)
         usuario.roles.append(rol)
         self.db.flush()
-
-    def _crear_usuario_alumno(self, alumno_data: EnrollmentAlumnoDTO, persona_id: int) -> Usuario:
-        """Crea Usuario + ALUMNO para un menor con credenciales propias.
-
-        La unicidad del correo ya se validó en la Fase 1 de `enroll`; el
-        repositorio solo flushea (issue #831), así que esto es parte de la
-        misma transacción atómica en vez de comitear por separado."""
-        hash_pw = GestorAutenticacion.obtener_hash_contrasenia(alumno_data.contrasenia)
-        usuario = Usuario(
-            correo=alumno_data.correo,
-            contrasenia=hash_pw,
-            persona_id=persona_id,
-        )
-        self.repo_usuario.crear(usuario)
-        self._asignar_rol(usuario, TipoRol.ALUMNO)
-        return usuario
 
     def _emitir_tokens(self, usuario: Usuario) -> dict:
         """Emite el par access + refresh tokens para auto-login.

@@ -38,8 +38,6 @@ function validForm(overrides: Partial<AddDependentFormData> = {}): AddDependentF
     tipoSangre: "O_POSITIVO",
     enfermedades: "",
     alergias: "",
-    contactoEmergencia: "María Pérez",
-    telefonoEmergencia: "0997654321",
     ...overrides,
   };
 }
@@ -172,46 +170,20 @@ describe("validateAddDependentStep — health step", () => {
     ).toEqual([]);
   });
 
-  it("requires contactoEmergencia", () => {
-    expect(validateAddDependentStep("health", validForm({ contactoEmergencia: "" })))
-      .toContain("El nombre del contacto de emergencia es obligatorio.");
-  });
-
-  it("requires telefonoEmergencia", () => {
-    expect(validateAddDependentStep("health", validForm({ telefonoEmergencia: "" })))
-      .toContain("El teléfono de emergencia es obligatorio.");
-  });
-
-  /**
-   * Issue #860: the emergency phone must differ from the dependent's own —
-   * otherwise the contact of emergency cannot reach anyone the dependent
-   * cannot reach themselves.
-   */
-  describe("telefonoEmergencia must differ from telefono (#860)", () => {
-    const MENSAJE = "El teléfono de emergencia debe ser diferente del teléfono del estudiante.";
-
-    it.each([
-      ["the exact same number", "0991234567", "0991234567"],
-      ["the +593 form of the same number", "0991234567", "+593991234567"],
-      ["the 593 form of the same number (no plus sign)", "0991234567", "593991234567"],
-    ])("rejects %s as equivalent to the dependent's own", (_description, telefono, telefonoEmergencia) => {
-      expect(validateAddDependentStep("health", validForm({ telefono, telefonoEmergencia })))
-        .toContain(MENSAJE);
-    });
-
-    it("accepts a different valid emergency phone", () => {
-      expect(
-        validateAddDependentStep(
-          "health",
-          validForm({ telefono: "0991234567", telefonoEmergencia: "0987654321" }),
-        ),
-      ).not.toContain(MENSAJE);
-    });
-  });
-
   it("enfermedades and alergias are optional", () => {
     expect(validateAddDependentStep("health", validForm({ enfermedades: "", alergias: "" })))
       .toEqual([]);
+  });
+
+  /**
+   * Issue #1138: a dependent created through this endpoint is always a
+   * represented minor — no emergency-contact fields exist on the health
+   * step. `tipoSangre` alone must be enough for the step to be valid.
+   */
+  it("does not require an emergency contact — it no longer exists as a field", () => {
+    expect("contactoEmergencia" in initialAddDependentFormData).toBe(false);
+    expect("telefonoEmergencia" in initialAddDependentFormData).toBe(false);
+    expect(validateAddDependentStep("health", validForm())).toEqual([]);
   });
 });
 
@@ -263,8 +235,6 @@ describe("buildRepresentadoPayload", () => {
       fichaMedica: {
         tipoSangre: "O_POSITIVO",
         enfermedades: [],
-        contactoEmergencia: "María Pérez",
-        telefonoEmergencia: "0997654321",
       },
     });
   });
@@ -286,18 +256,21 @@ describe("buildRepresentadoPayload", () => {
     expect(payload.fichaMedica?.enfermedades).toEqual(["Asma", "Diabetes", "Alergia al polen"]);
   });
 
-  it("omits alergias/contactoEmergencia/telefonoEmergencia when blank", () => {
-    const payload = buildRepresentadoPayload(
-      validForm({ alergias: "", contactoEmergencia: "", telefonoEmergencia: "" }),
-    );
+  it("omits alergias when blank", () => {
+    const payload = buildRepresentadoPayload(validForm({ alergias: "" }));
     expect(payload.fichaMedica).not.toHaveProperty("alergias");
-    expect(payload.fichaMedica).not.toHaveProperty("contactoEmergencia");
-    expect(payload.fichaMedica).not.toHaveProperty("telefonoEmergencia");
   });
 
   it("includes alergias when present", () => {
     const payload = buildRepresentadoPayload(validForm({ alergias: "  Penicilina  " }));
     expect(payload.fichaMedica?.alergias).toBe("Penicilina");
+  });
+
+  /** Issue #1138: never build a payload carrying the removed fields. */
+  it("never includes contactoEmergencia/telefonoEmergencia — the backend rejects them (422)", () => {
+    const payload = buildRepresentadoPayload(validForm());
+    expect(payload.fichaMedica).not.toHaveProperty("contactoEmergencia");
+    expect(payload.fichaMedica).not.toHaveProperty("telefonoEmergencia");
   });
 });
 

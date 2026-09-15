@@ -43,23 +43,15 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     telefono: body.telefono,
   };
   if (body.fichaMedica) {
+    // Issue #1138: sin contacto de emergencia propio -- ese contacto se
+    // deriva del representante, y el backend rechaza explícitamente
+    // (422) `contacto_emergencia`/`telefono_emergencia` en este camino.
     backendBody.ficha_medica = {
       tipo_sangre: body.fichaMedica.tipoSangre,
       enfermedades: body.fichaMedica.enfermedades ?? [],
       alergias: body.fichaMedica.alergias,
-      contacto_emergencia: body.fichaMedica.contactoEmergencia,
-      telefono_emergencia: body.fichaMedica.telefonoEmergencia,
     };
   }
-  // FIC-2: these three used to be dropped here. The wizard's credentials
-  // step builds them into the payload and the backend's RepresentadoCreateDTO
-  // accepts them (correo/contrasenia create the minor's own Usuario — Option
-  // B, optional account), but this route silently discarded them before
-  // forwarding: the API still answered 201 and the toast still said
-  // "agregado correctamente", so the account never existed and nobody found
-  // out until the child tried to log in.
-  if (body.correo !== undefined) backendBody.correo = body.correo;
-  if (body.contrasenia !== undefined) backendBody.contrasenia = body.contrasenia;
   if (body.institucionId !== undefined) backendBody.institucion_id = body.institucionId;
 
   const result = await backendFetchAuthed(request, `/personas/${personaId}/representados`, {

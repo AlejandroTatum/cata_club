@@ -20,14 +20,23 @@ from app.dominio.modelos import Membresia, Pago, Persona, TipoMembresia
 from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 
 
-def _crear_persona(db_session, cedula: str, *, representante_id: Optional[int] = None) -> Persona:
+def _crear_persona(
+    db_session, cedula: str, *, representante_id: Optional[int] = None,
+    fecha_nacimiento: date = date(1990, 1, 1),
+) -> Persona:
+    # Ver `test_alertas_mora.py::_crear_persona`: el representado legado se
+    # siembra como menor y envejece en el sitio.
+    vinculado = representante_id is not None
     persona = Persona(
         nombres="Ana", apellidos="Torres", cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0991234567",
-        representante_id=representante_id,
+        fecha_nacimiento=date(2015, 1, 1) if vinculado else fecha_nacimiento,
+        telefono="0991234567", representante_id=representante_id,
     )
     db_session.add(persona)
     db_session.flush()
+    if vinculado:
+        persona.fecha_nacimiento = fecha_nacimiento  # envejece en el sitio
+        db_session.flush()
     return persona
 
 

@@ -86,8 +86,15 @@ export interface EnrollmentMedicalRecord {
   tipoSangre: BloodType;
   condicionesSalud: string;
   alergias: string;
-  contactoEmergencia: string;
-  telefonoEmergencia: string;
+  /**
+   * Issue #1138: required for a "self" (adult) enrollment (no
+   * `representante`); must be ABSENT for a "child" enrollment — a
+   * represented minor's emergency contact is derived from the
+   * representante, and the backend rejects these two fields explicitly
+   * (422) rather than ignoring them.
+   */
+  contactoEmergencia?: string;
+  telefonoEmergencia?: string;
   observaciones?: string;
 }
 
@@ -95,9 +102,6 @@ export interface EnrollmentRequest {
   alumno: EnrollmentStudent;
   fichaMedica: EnrollmentMedicalRecord;
   credencialesAlumno?: EnrollmentCredentials;
-  /** Optional credentials for the minor (child enrollment). When provided,
-   *  a Usuario with rol ALUMNO is also created for the student. */
-  credencialesMenor?: EnrollmentCredentials;
   representante?: EnrollmentRepresentative;
   /** Explicit affirmative action for the grouped legal consent. */
   aceptaConsentimientos?: boolean;
@@ -115,12 +119,15 @@ export interface AddChildStudent {
   telefono: string;
 }
 
+/**
+ * Issue #1138: no emergency-contact fields — a dependent added through this
+ * endpoint is always a represented minor, and their emergency contact is
+ * derived from the representante at read time.
+ */
 export interface AddChildMedicalRecord {
   tipoSangre: BloodType;
   condicionesSalud: string;
   alergias: string;
-  contactoEmergencia: string;
-  telefonoEmergencia: string;
   observaciones?: string;
 }
 

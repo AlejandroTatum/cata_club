@@ -21,7 +21,7 @@ import {
   findNextTrainingSessions,
   COVERAGE_ENDING_SOON_DAYS,
 } from "../student-utils";
-import type { PaymentSituationInput } from "../student-utils";
+import type { PaymentSituationInput, StudentPortalMode } from "../student-utils";
 import type { PagoPersona, StudentSessionSummary } from "@/services/api";
 
 // ---------------------------------------------------------------------------
@@ -29,20 +29,50 @@ import type { PagoPersona, StudentSessionSummary } from "@/services/api";
 // ---------------------------------------------------------------------------
 
 describe("derivePortalMode", () => {
-  it('returns "pending" when there is no ALUMNO role and no representados', () => {
+  it('returns "pending" when the account is not a player and has no representados', () => {
     expect(derivePortalMode(false, 0)).toBe("pending");
   });
 
-  it('returns "active" when there is an ALUMNO role, even with no representados', () => {
+  it('returns "active" when the account is a player, even with no representados', () => {
     expect(derivePortalMode(true, 0)).toBe("active");
   });
 
-  it('returns "active" when there are representados, even with no ALUMNO role', () => {
+  it('returns "active" when there are representados, even without a player condition of its own', () => {
     expect(derivePortalMode(false, 2)).toBe("active");
   });
 
-  it('returns "active" when both an ALUMNO role and representados are present', () => {
+  it('returns "active" when both a player condition and representados are present', () => {
     expect(derivePortalMode(true, 1)).toBe("active");
+  });
+
+  // Issue #1132: "es jugador" comes from an ACTIVA Membresia, never from the
+  // ALUMNO role alone — a representante who pays a membership for their own
+  // persona keeps only REPRESENTANTE, so the caller resolves `isPlayer` from
+  // role OR membership before calling this function.
+  it('returns "active" for a representative with an own active membership and zero representados', () => {
+    const hasOwnActiveMembership = true;
+    const hasAlumnoRole = false;
+    expect(derivePortalMode(hasAlumnoRole || hasOwnActiveMembership, 0)).toBe("active");
+  });
+
+  it('returns "active" for a representative with representados and no membership of their own', () => {
+    const hasOwnActiveMembership = false;
+    const hasAlumnoRole = false;
+    expect(derivePortalMode(hasAlumnoRole || hasOwnActiveMembership, 1)).toBe("active");
+  });
+
+  it('still returns "pending" for a person with neither a membership nor representados (no regression)', () => {
+    const hasOwnActiveMembership = false;
+    const hasAlumnoRole = false;
+    expect(derivePortalMode(hasAlumnoRole || hasOwnActiveMembership, 0)).toBe("pending");
+  });
+
+  it("inverts to red when the predicate is flipped", () => {
+    function invertedDerivePortalMode(isPlayer: boolean, representadosCount: number): StudentPortalMode {
+      return isPlayer && representadosCount === 0 ? "pending" : "active";
+    }
+    expect(invertedDerivePortalMode(true, 0)).not.toBe(derivePortalMode(true, 0));
+    expect(invertedDerivePortalMode(false, 0)).not.toBe(derivePortalMode(false, 0));
   });
 });
 

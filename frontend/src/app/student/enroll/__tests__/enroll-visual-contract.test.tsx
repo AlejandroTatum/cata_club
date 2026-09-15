@@ -20,9 +20,6 @@
  *    heading left at the title step in the interface face; it cannot see a
  *    heading written at the DENSE step, which is what the card title was —
  *    13.5px, smaller than the labels of the fields inside it.
- *  · **A catalogue that fails to load says so.** `fetchInstituciones` was
- *    caught into `() => {}`, and the two school selects — which render only
- *    when the list has entries — vanished without a word.
  *
  * @vitest-environment jsdom
  */
@@ -31,7 +28,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
-import { fetchInstituciones } from "@/services/api";
 import {
   ENROLL_FIELD_TOKEN,
   enrollFieldId,
@@ -70,7 +66,6 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("@/services/api", () => ({
   enrollStudent: vi.fn(),
-  fetchInstituciones: vi.fn().mockResolvedValue([]),
   // Public tariff catalog shown on step 1 (issue #331) — mocked so the
   // wizard's fetch-on-mount effect resolves instead of hanging in jsdom.
   fetchTarifas: vi.fn().mockResolvedValue([{ categoria: "Categoria Test", precio: "1.00" }]),
@@ -81,7 +76,6 @@ vi.mock("@/lib/enrollment-session", () => ({
 }));
 
 beforeEach(() => {
-  vi.mocked(fetchInstituciones).mockResolvedValue([]);
   resetTestHistory("/student/enroll");
   // The wizard now persists a draft to sessionStorage (#317 / #62) — real
   // jsdom storage, not a fixture, so a draft an earlier case left behind
@@ -106,12 +100,12 @@ function chooseRepresentative(): void {
   fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
 }
 
+/** Fills the child/dependent flow's student step — no phone field (#1197). */
 function fillStudent(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
   fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
   fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "991234567" } });
 }
 
 describe("the field ids are declared, not slugged from the label", () => {
@@ -180,26 +174,15 @@ describe("the red is the action and nothing else", () => {
     }
   });
 
-  it("marks the dependent's optional account with a word, not with the absence of a mark", () => {
+  /** Issue #1137, invariante (B): a represented minor never has a Usuario —
+   *  the child flow's "personal" step renders no credential input at all. */
+  it("never renders a credential input on the child flow's personal step", () => {
     render(<EnrollPage />);
     chooseRepresentative();
     next();
 
-    // The child flow's student credentials are the two optional inputs.
-    expect(screen.getAllByText("(opcional)").length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("requires both child credentials as soon as either one is entered", () => {
-    render(<EnrollPage />);
-    chooseRepresentative();
-    next();
-    const correo = screen.getByLabelText(/^Correo electrónico/);
-    const contrasenia = screen.getByLabelText(/^Contraseña/);
-    expect(correo).not.toBeRequired();
-    expect(contrasenia).not.toBeRequired();
-    fireEvent.change(correo, { target: { value: "menor@ejemplo.com" } });
-    expect(correo).toBeRequired();
-    expect(contrasenia).toBeRequired();
+    expect(screen.queryByLabelText(/^Correo electrónico/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Contraseña/)).not.toBeInTheDocument();
   });
 
   it("keeps the action colour off a field in error", () => {
@@ -238,27 +221,6 @@ describe("the titles are in the club's face", () => {
     const heading = screen.getByRole("heading", { level: 1, name: /inscripción de estudiante/i });
     expect(heading.className).toContain("font-display");
     expect(heading.className).not.toMatch(/font-extrabold/);
-  });
-});
-
-describe("the school catalogue never fails in silence", () => {
-  it("says so when the catalogue cannot be loaded", async () => {
-    vi.mocked(fetchInstituciones).mockRejectedValueOnce(new Error("502"));
-    render(<EnrollPage />);
-    chooseRepresentative();
-    next();
-
-    expect(await screen.findByText(/no pudimos cargar la lista de escuelas/i)).toBeInTheDocument();
-  });
-
-  it("says nothing when the catalogue simply has no entries", async () => {
-    render(<EnrollPage />);
-    chooseRepresentative();
-    next();
-
-    // An empty club catalogue is not a failure, and the step must not claim
-    // one: there is just nothing to choose from.
-    expect(screen.queryByText(/no pudimos cargar la lista de escuelas/i)).not.toBeInTheDocument();
   });
 });
 

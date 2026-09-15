@@ -184,6 +184,23 @@ const VALID_STUDENT = {
   telefono: "991234567",
 };
 
+/**
+ * The same fixture, but a minor — for the "Representante" (child/dependent)
+ * flow. An adult student under that flow is rejected on the personal step
+ * itself (issue #1189): using `VALID_STUDENT`'s adult birth date here would
+ * make every "child" fixture describe the exact bug this rule exists to
+ * catch.
+ *
+ * Issue #1197: no `telefono` — a represented minor has no phone of their
+ * own, and the CHILD path no longer renders that field at all.
+ */
+const VALID_CHILD_STUDENT = {
+  nombres: VALID_STUDENT.nombres,
+  apellidos: VALID_STUDENT.apellidos,
+  cedula: VALID_STUDENT.cedula,
+  fechaNacimiento: isoYearsAgo(9),
+};
+
 const VALID_CREDENTIALS = {
   correo: "juan.perez@example.com",
   contrasenia: "clave-segura-8",
@@ -240,7 +257,7 @@ async function mockEnrollment(
   page: Page,
   response: { status: number; body: unknown },
 ): Promise<void> {
-  await page.route("**/api/enrollment/", (route: Route) =>
+  await page.route("**/api/enrollment", (route: Route) =>
     route.fulfill({
       status: response.status,
       contentType: "application/json",
@@ -283,6 +300,18 @@ async function fillValidStudent(page: Page): Promise<void> {
   await fillBirthDate(page, F.fechaNacimiento, VALID_STUDENT.fechaNacimiento);
   await field(page, F.cedula).fill(VALID_STUDENT.cedula);
   await field(page, F.telefono).fill(VALID_STUDENT.telefono);
+}
+
+/**
+ * Same as `fillValidStudent`, but with `VALID_CHILD_STUDENT`'s minor birth
+ * date and no phone — issue #1197: a represented minor has no phone field
+ * to fill on this path.
+ */
+async function fillValidChildStudent(page: Page): Promise<void> {
+  await field(page, F.nombres).fill(VALID_CHILD_STUDENT.nombres);
+  await field(page, F.apellidos).fill(VALID_CHILD_STUDENT.apellidos);
+  await fillBirthDate(page, F.fechaNacimiento, VALID_CHILD_STUDENT.fechaNacimiento);
+  await field(page, F.cedula).fill(VALID_CHILD_STUDENT.cedula);
 }
 
 async function fillValidRepresentative(page: Page): Promise<void> {
@@ -590,70 +619,32 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
     await goToPersonal(page, "Representante");
   });
 
-  test("C01 · sin credenciales del estudiante el paso es válido: son opcionales", async ({ page }) => {
-    await fillValidStudent(page);
+  test("C01 · sin credenciales el paso es válido: el dependiente nunca tiene cuenta propia (#1137)", async ({ page }) => {
+    await fillValidChildStudent(page);
     await expect(nextButton(page)).toBeEnabled();
-    await shot(page, "C01", "credenciales-opcionales-vacias");
+    // Issue #1137, invariante (B): un representado nunca tiene `Usuario` —
+    // este paso no renderiza ningún campo de credenciales para él.
+    await expect(page.locator(`#${F.correo}`)).toHaveCount(0);
+    await expect(page.locator(`#${F.contrasenia}`)).toHaveCount(0);
+    await shot(page, "C01", "sin-cuenta-propia");
   });
 
   test("C02 · el estudiante dependiente puede ser menor de edad", async ({ page }) => {
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(9));
     await expectFieldValid(page, F.fechaNacimiento);
     await expect(nextButton(page)).toBeEnabled();
     await shot(page, "C02", "menor-dependiente-valido");
   });
 
-  test("C03 · credenciales a medias: solo el correo bloquea Siguiente en el campo (#226)", async ({ page }) => {
-    await fillValidStudent(page);
-    await field(page, F.correo).fill("hijo@example.com");
-    // La regla ahora es de CAMPO, como el resto del asistente: "Siguiente" se
-    // deshabilita apenas el correo queda solo, sin esperar a que se clickee.
-    await expect(nextButton(page)).toBeDisabled();
-    await expect(page.getByText(/^Para continuar, revise:/)).toContainText("Contraseña");
-
-    await field(page, F.contrasenia).focus();
-    await field(page, F.contrasenia).blur();
-    await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
-    );
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
-    await shot(page, "C03", "credenciales-a-medias-solo-correo");
-  });
-
-  test("C04 · credenciales a medias: solo la contraseña bloquea Siguiente en el campo", async ({ page }) => {
-    await fillValidStudent(page);
-    await field(page, F.contrasenia).fill("clave-segura-8");
-    await expect(nextButton(page)).toBeDisabled();
-
-    await field(page, F.correo).focus();
-    await field(page, F.correo).blur();
-    await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo del estudiante es obligatorio si se desea crear una cuenta.",
-    );
-    await shot(page, "C04", "credenciales-a-medias-solo-clave");
-  });
-
-  test("C05 · correo del estudiante inválido cuando sí se piden credenciales", async ({ page }) => {
-    await fillValidStudent(page);
-    await fillAndBlur(page, F.correo, "hijo@example");
-    await field(page, F.contrasenia).fill("clave-segura-8");
-    await expect(fieldError(page, F.correo)).toHaveText(
-      "El correo del estudiante no es válido.",
-    );
-    await expect(nextButton(page)).toBeDisabled();
-    await shot(page, "C05", "correo-estudiante-invalido");
-  });
-
-  test("C06 · contraseña del estudiante de menos de 8 caracteres", async ({ page }) => {
-    await fillValidStudent(page);
-    await field(page, F.correo).fill("hijo@example.com");
-    await fillAndBlur(page, F.contrasenia, "1234567");
-    await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña del estudiante debe tener al menos 8 caracteres.",
-    );
-    await expect(nextButton(page)).toBeDisabled();
-    await shot(page, "C06", "clave-estudiante-corta");
+  test("C03 · el menor representado no tiene campo de teléfono propio (#1197)", async ({ page }) => {
+    // El menor no tiene celular propio: el contacto de emergencia ya se
+    // deriva del representante (#1138), así que este paso no debe renderizar
+    // ese campo para el camino representado.
+    await expect(field(page, F.telefono)).toHaveCount(0);
+    await fillValidChildStudent(page);
+    await expect(nextButton(page)).toBeEnabled();
+    await shot(page, "C03", "dependiente-sin-telefono");
   });
 });
 
@@ -665,7 +656,7 @@ test.describe("R · Datos del representante", () => {
   test.beforeEach(async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /datos del representante/i })).toBeVisible();
   });
@@ -809,6 +800,42 @@ test.describe("H · Salud y emergencia", () => {
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
     await shot(page, "H05", "salud-minima-valida");
+  });
+});
+
+// Issue #1138: un menor representado no tiene contacto de emergencia
+// propio -- se deriva del representante ya cargado en el paso anterior.
+test.describe("H · Salud y emergencia (camino representado)", () => {
+  test.beforeEach(async ({ page }) => {
+    await enterFromLogin(page);
+    await goToPersonal(page, "Representante");
+    await fillValidChildStudent(page);
+    await nextButton(page).click();
+    await fillValidRepresentative(page);
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /salud y emergencia/i })).toBeVisible();
+  });
+
+  test("H06 · el paso de salud no pide contacto de emergencia propio", async ({ page }) => {
+    await expect(field(page, F.contactoEmergencia)).toHaveCount(0);
+    await expect(field(page, F.telefonoEmergencia)).toHaveCount(0);
+    await shot(page, "H06", "salud-representado-sin-contacto-propio");
+  });
+
+  test("H07 · solo el tipo de sangre habilita Siguiente en el camino representado", async ({ page }) => {
+    await expect(nextButton(page)).toBeDisabled();
+    await field(page, F.tipoSangre).selectOption(VALID_HEALTH.tipoSangre);
+    await expect(nextButton(page)).toBeEnabled();
+    await nextButton(page).click();
+    await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
+    await expect(page.getByText(/se deriva del representante/i)).toBeVisible();
+    // Issue #1197: the summary shows the representative's own cédula and
+    // phone — the student no longer has a phone row on this path.
+    await expect(page.getByText("Cédula del representante")).toBeVisible();
+    await expect(page.getByText("Teléfono del representante")).toBeVisible();
+    await expect(page.getByText(VALID_REPRESENTATIVE.telefono)).toBeVisible();
+    await expect(field(page, F.telefono)).toHaveCount(0);
+    await shot(page, "H07", "salud-representado-minima-valida");
   });
 });
 
@@ -982,7 +1009,7 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
   test("S07 · doble clic en confirmar no envía la inscripción dos veces", async ({ page }) => {
     await goToSummary(page);
     let calls = 0;
-    await page.route("**/api/enrollment/", async (route: Route) => {
+    await page.route("**/api/enrollment", async (route: Route) => {
       calls += 1;
       // Una respuesta lenta es justo donde un segundo clic tiene tiempo de entrar.
       await new Promise((resolve) => setTimeout(resolve, 1_200));
@@ -1030,7 +1057,7 @@ test.describe("S07 · idempotencia de reintentos", () => {
         await goToSummary(page);
         let calls = 0;
         let retryCookie = "";
-        await page.route("**/api/enrollment/", async (route: Route) => {
+        await page.route("**/api/enrollment", async (route: Route) => {
           calls += 1;
           const cookie = route.request().headers().cookie ?? "";
           if (calls === 1) {
@@ -1203,7 +1230,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
   test("G02 · una fecha FUTURA en un dependiente ahora también se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
 
     const nextYear = new Date().getFullYear() + 1;
     await fillAndBlur(page, F.fechaNacimiento, `${nextYear}-06-15`);
@@ -1270,33 +1297,10 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     );
   });
 
-  test("G06 · credenciales a medias ahora bloquea en el campo, ya no hace falta clickear", async ({ page }) => {
-    await enterFromLogin(page);
-    await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
-    await field(page, F.correo).fill("hijo@example.com");
-
-    // La regla de "ambos o ninguno" corre ahora desde `validateEnrollFields`,
-    // igual que el resto del modelo de prevención de errores (#226): ya no es
-    // la única regla de paso del asistente. "Siguiente" se deshabilita apenas
-    // el correo queda solo.
-    await expect(nextButton(page)).toBeDisabled();
-    await expect(page.getByText(/^Para continuar, revise:/)).toContainText("Contraseña");
-    await shot(page, "G06a", "siguiente-deshabilitado-consistente");
-
-    await field(page, F.contrasenia).focus();
-    await field(page, F.contrasenia).blur();
-    await expect(fieldError(page, F.contrasenia)).toHaveText(
-      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
-    );
-    await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
-    await shot(page, "G06b", "mensaje-en-el-campo");
-  });
-
   test("G08 · un dependiente de 3 años ya no pasa: el piso de 5 años ahora se aplica", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(3));
 
     // La regla compartida trae el mismo piso que ya exigía el backend (#224):
@@ -1423,7 +1427,7 @@ test.describe("V · Laxitud frente a la norma ecuatoriana — CERRADA (issues #2
 test.describe("X · Robustez del envío", () => {
   test("X01 · si la red se cae al confirmar, el visitante recibe un mensaje y no una pantalla muerta", async ({ page }) => {
     await goToSummary(page);
-    await page.route("**/api/enrollment/", (route: Route) => route.abort("failed"));
+    await page.route("**/api/enrollment", (route: Route) => route.abort("failed"));
 
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /confirmar inscripción/i }).click();

@@ -13,6 +13,7 @@ validador -- no `Field(pattern=...)` -- para poder distinguir en castellano
 "no tiene el largo correcto" de "ese número no es válido": son dos errores
 y se corrigen distinto.
 """
+from datetime import date
 from typing import Annotated, Optional
 
 from pydantic import AfterValidator, EmailStr
@@ -21,12 +22,14 @@ from app.dominio.cedula import es_cedula_valida
 from app.dominio.contrasenia import validar_contrasenia
 from app.dominio.enums import TipoSangre
 from app.dominio.nombre_propio import normalizar_nombre_propio
+from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.telefono import (
     MENSAJE_TELEFONO_EMERGENCIA_IGUAL,
     es_telefono_valido,
     normalizar_telefono,
     telefonos_coinciden,
 )
+from app.soporte_transversal.tiempo import hoy_club
 
 
 # `isascii()` antes de `isdigit()`, igual que en `dominio/cedula.py` y
@@ -145,6 +148,30 @@ def validar_telefono_emergencia_distinto(
     regla nunca lo vuelve obligatorio."""
     if telefonos_coinciden(telefono_personal, telefono_emergencia):
         raise ValueError(MENSAJE_TELEFONO_EMERGENCIA_IGUAL)
+
+
+# Issue #1137, invariante (A): "una persona con `representante_id` es
+# siempre menor de edad". El trigger de base `i1141relinteg`
+# (`exigir_relacion_representacion_valida`) ya lo exige como defensa de
+# última línea; esta función lo adelanta a la capa de DTO -- ANTES de
+# escribir -- para que la respuesta sea un 422 en castellano y no el
+# `IntegrityError` genérico que translada `main.py`.
+#
+# Comparten esta función `EnrollmentCreateDTO` (enrollment_schemas.py) y
+# `PersonaCreateDTO`/`RepresentadoCreateDTO` (persona_schemas.py): las tres
+# puertas de escritura que pueden dejar una fila con `representante_id`
+# seteado. `VincularRepresentadoDTO` no la necesita -- no recibe
+# `fecha_nacimiento`, reasigna una Persona ya existente, y
+# `PersonaServicio._resolver_representado_elegible` ya exige la misma edad
+# contra la fila real antes de reasignar.
+def validar_representante_solo_para_menor(
+    fecha_nacimiento: date, representante_presente: bool,
+) -> None:
+    if representante_presente and calcular_edad(fecha_nacimiento, hoy_club()) >= EDAD_MAYORIA_EDAD:
+        raise ValueError(
+            "Un representante legal no puede vincularse a una persona mayor "
+            "de edad."
+        )
 
 
 CedulaValidada = Annotated[str, AfterValidator(_validar_cedula)]

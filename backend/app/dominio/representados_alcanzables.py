@@ -3,6 +3,17 @@ Issue #1139: ningún menor puede quedar con `representante_id` apuntando a
 una cuenta inactiva, ni con `representante_id` nulo mientras siga siendo
 menor.
 
+Issue #1133 (decisión del dueño de 2026-09-11, opción B en #1134) añade
+`exigir_representante_con_rol_valido`: solo una cuenta con el rol
+REPRESENTANTE puede recibir representados. Vive acá, junto a
+`exigir_representante_destino_alcanzable`, porque ambas funciones evalúan la
+misma cosa -- la cuenta (`Usuario`) del destino -- y las consumen los mismos
+tres caminos de escritura (`PersonaServicio.crear_representado`,
+`vincular_representado`, `registrar_persona`, todos vía
+`_crear_persona_validada`/`_exigir_representante_destino_alcanzable`). La
+garantía de base equivalente es el trigger diferido de la migración
+`k1143rolrep`.
+
 Vive en `dominio`, mismo criterio que `rol_unico.py` para #762: la tienen
 que aplicar DOS servicios que no dependen entre sí en esta dirección --
 `RolServicio.cambiar_estado_cuenta` y `PersonaServicio.cambiar_estado` (la
@@ -26,7 +37,9 @@ en Postgres, en los triggers `TRIGGER_USUARIO_BLOQUEA_BAJA` y
 """
 from datetime import date
 
+from app.dominio.enums import TipoRol
 from app.dominio.excepciones import OperacionInvalida
+from app.dominio.mensajes import MENSAJE_REPRESENTANTE_SIN_ROL
 from app.dominio.modelos import Persona
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
@@ -87,4 +100,34 @@ def exigir_representante_destino_alcanzable(representante_id: int, cuenta_repres
         "cuenta (PATCH /personas/{id}/cuenta/estado) antes de vincular a este "
         "representado.",
         detalle_tecnico=f"representante_id={representante_id} tiene usuario.activo=False",
+    )
+
+
+def exigir_representante_con_rol_valido(representante_id: int, cuenta_representante) -> None:
+    """Issue #1133, decisión del dueño (2026-09-11, opción B en #1134): la
+    ÚNICA cuenta habilitada para recibir representados es una con el rol
+    REPRESENTANTE.
+
+    `cuenta_representante` es lo mismo que devuelve
+    `UsuarioRepositorio.obtener_por_persona_id`: `None` cuando el
+    representante NO tiene cuenta propia (un tutor cargado a mano, sin
+    login) -- ese caso NO se rechaza acá. La decisión dice "una CUENTA con
+    rol REPRESENTANTE", no "toda persona necesita cuenta", y ese patrón es
+    anterior a este issue: está probado en
+    `test_representante_no_deja_menores_huerfanos.py` y
+    `test_verificacion_correo_representante.py`, y ningún comentario del
+    issue reconoce retirarlo. Cerrar también ESE caso es una ampliación del
+    alcance decidido, no una consecuencia obvia de "una cuenta con rol
+    REPRESENTANTE" -- ver el PR de este cambio para el punto exacto que
+    queda pendiente de confirmación del dueño."""
+    if cuenta_representante is None:
+        return
+    if any(rol.tipo_rol == TipoRol.REPRESENTANTE for rol in cuenta_representante.roles):
+        return
+    raise OperacionInvalida(
+        MENSAJE_REPRESENTANTE_SIN_ROL,
+        detalle_tecnico=(
+            f"representante_id={representante_id} usuario_id="
+            f"{cuenta_representante.id} no tiene el rol REPRESENTANTE"
+        ),
     )

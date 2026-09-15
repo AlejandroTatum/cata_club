@@ -80,6 +80,22 @@ describe("fieldsForStep", () => {
     expect(fieldsForStep("representative", "self")).toEqual([]);
   });
 
+  /** Issue #1137, invariante (B): a represented minor never has a Usuario,
+   *  so the personal step of a child enrollment never asks for credentials. */
+  it("never blames a credential field on a child enrollment's own student step", () => {
+    expect(fieldsForStep("personal", "child")).not.toContain("correo");
+    expect(fieldsForStep("personal", "child")).not.toContain("contrasenia");
+    expect(fieldsForStep("personal", "child")).not.toContain("contraseniaConfirmacion");
+  });
+
+  /** Issue #1197: a represented minor has no phone of their own — the
+   *  emergency contact already derives from the representative (#1138), so
+   *  the child path's own student step never asks for one either. */
+  it("never blames the student's phone on a child enrollment's own student step", () => {
+    expect(fieldsForStep("personal", "child")).not.toContain("telefono");
+    expect(fieldsForStep("personal", "self")).toContain("telefono");
+  });
+
   it("has nothing to validate on the type and summary steps", () => {
     expect(fieldsForStep("type", "self")).toEqual([]);
     expect(fieldsForStep("summary", "child")).toEqual([]);
@@ -106,6 +122,16 @@ describe("validateEnrollFields", () => {
     // celular-or-landline sentence.
     expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
       .toBe("Escriba los 9 dígitos de su celular después del +593 (por ejemplo, 991234567).");
+  });
+
+  /** Issue #1197: an empty student phone never blocks the child path's
+   *  personal step — the field is not validated there at all. */
+  it("never blames an empty student phone on a child enrollment", () => {
+    const errors = validateEnrollFields(
+      "personal",
+      validForm({ enrollmentType: "child", fechaNacimiento: "2015-06-15", telefono: "" }),
+    );
+    expect(errors.telefono).toBeUndefined();
   });
 
   it("blames the birth date for the minors rule on a self enrollment", () => {
@@ -259,37 +285,10 @@ describe("validateEnrollFields", () => {
       },
     );
 
-    it("does not require the child's optional confirmation while no account is being created", () => {
-      const errors = validateEnrollFields(
-        "personal",
-        validForm({ enrollmentType: "child", correo: "", contrasenia: "", contraseniaConfirmacion: "" }),
-      );
-      expect(errors.contraseniaConfirmacion).toBeUndefined();
-    });
-
-    it("requires the child's optional confirmation once its account starts being created", () => {
-      const errors = validateEnrollFields(
-        "personal",
-        validForm({
-          enrollmentType: "child",
-          correo: "lucas@example.com",
-          contrasenia: "password8",
-          contraseniaConfirmacion: "",
-        }),
-      );
-      expect(errors.contraseniaConfirmacion).toBe("La confirmación de contraseña es obligatoria.");
-    });
-
-    it("accepts the child's optional confirmation once it repeats the password", () => {
-      const errors = validateEnrollFields(
-        "personal",
-        validForm({
-          enrollmentType: "child",
-          correo: "lucas@example.com",
-          contrasenia: "password8",
-          contraseniaConfirmacion: "password8",
-        }),
-      );
+    /** Issue #1137, invariante (B): a child enrollment never renders (or
+     *  validates) student credentials — there is no confirmation to gate. */
+    it("never blames the student's confirmation field on a child enrollment", () => {
+      const errors = validateEnrollFields("personal", validForm({ enrollmentType: "child" }));
       expect(errors.contraseniaConfirmacion).toBeUndefined();
     });
   });
@@ -311,23 +310,15 @@ describe("isStepComplete", () => {
     expect(isStepComplete("summary", initialFormData)).toBe(true);
   });
 
-  /**
-   * Root-cause fix for #226: `validateOptionalStudentCredentials` used to run
-   * only from `validateEnrollStep` (on click), never from the field-level
-   * rules that gate "Siguiente" — so the button stayed enabled with half-filled
-   * optional credentials and only failed once clicked. `validateEnrollFields`
-   * now applies the same both-or-neither rule the personal step's flat
-   * validation already enforced.
-   */
-  it("blocks a child enrollment's personal step when the optional student account is half-filled (#226)", () => {
-    const halfFilled = validForm({
-      enrollmentType: "child",
-      correo: "lucas@example.com",
-      contrasenia: "",
-    });
-    expect(isStepComplete("personal", halfFilled)).toBe(false);
-    expect(validateEnrollFields("personal", halfFilled).contrasenia).toBe(
-      "La contraseña del estudiante es obligatoria si se desea crear una cuenta.",
-    );
+  /** Issue #1137, invariante (B): the personal step of a child enrollment
+   *  has nothing to validate beyond the student's own identity fields —
+   *  there is no optional account to half-fill anymore. */
+  it("completes a child enrollment's personal step without any credential field", () => {
+    expect(
+      isStepComplete(
+        "personal",
+        validForm({ enrollmentType: "child", fechaNacimiento: "2015-06-15" }),
+      ),
+    ).toBe(true);
   });
 });

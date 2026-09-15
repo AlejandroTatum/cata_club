@@ -221,6 +221,40 @@ def test_registro_falla_si_persona_ya_tiene_usuario(client, db_session):
     assert "cuenta" in resp.json()["detail"].lower()
 
 
+def test_registro_falla_si_persona_esta_representada(client, db_session):
+    """Issue #1137, invariante (B): una Persona con `representante_id` nunca
+    puede tener `Usuario` propio -- ni siquiera por esta puerta
+    administrador-only (`POST /auth/registro`), que hasta ahora solo
+    comprobaba "existe" y "no tiene ya una cuenta", nunca si estaba
+    representada."""
+    from app.dominio.modelos import Persona
+
+    _override_admin_token()
+    representante = _crear_persona(db_session, cedula=cedula_valida(701))
+    representado = Persona(
+        nombres="Hijo", apellidos="Torres", cedula=cedula_valida(702),
+        fecha_nacimiento=date(2015, 1, 1), telefono="0991234567",
+        representante_id=representante.id,
+    )
+    db_session.add(representado)
+    db_session.commit()
+    db_session.refresh(representado)
+
+    resp = client.post(
+        "/api/v1/auth/registro",
+        json={
+            "cedula": cedula_valida(702),
+            "correo": "hijo@cataclub.com",
+            "contrasenia": "clave12345",
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert "representante legal" in resp.json()["detail"].lower()
+    assert db_session.query(Usuario).filter(
+        Usuario.persona_id == representado.id
+    ).count() == 0
+
+
 def test_registro_falla_si_correo_ya_existe(client, db_session):
     _override_admin_token()
     p1 = _crear_persona(db_session, cedula="1710034081", nombres="Carlos")

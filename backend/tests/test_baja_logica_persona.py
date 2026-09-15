@@ -34,10 +34,11 @@ from main import app
 
 # --- Fábricas ---------------------------------------------------------------
 def _crear_persona(db_session, cedula: str = "1710034065", nombres: str = "Ana",
-                   apellidos: str = "Vega") -> Persona:
+                   apellidos: str = "Vega",
+                   fecha_nacimiento: date = date(1990, 1, 1)) -> Persona:
     persona = Persona(
         nombres=nombres, apellidos=apellidos, cedula=cedula,
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+        fecha_nacimiento=fecha_nacimiento, telefono="0990000000",
     )
     db_session.add(persona)
     db_session.commit()
@@ -306,7 +307,8 @@ def test_desactivada_desaparece_del_autocomplete_de_busqueda(client, db_session)
 
 def test_desactivada_desaparece_de_los_representados(client, db_session):
     representante = _crear_persona(db_session, cedula="1710034065")
-    hijo = _crear_persona(db_session, cedula="1710034073", nombres="Beto")
+    hijo = _crear_persona(db_session, cedula="1710034073", nombres="Beto",
+                              fecha_nacimiento=date(2015, 1, 1))
     hijo.representante_id = representante.id
     db_session.commit()
 
@@ -326,7 +328,8 @@ def test_desactivada_desaparece_del_feed_de_notificaciones_del_representante(
     dependiente dado de baja le seguían llegando para siempre, aunque el
     dependiente ya no aparezca en ningún otro listado del portal."""
     representante = _crear_persona(db_session, cedula="1710034065")
-    hijo = _crear_persona(db_session, cedula="1710034073", nombres="Beto")
+    hijo = _crear_persona(db_session, cedula="1710034073", nombres="Beto",
+                              fecha_nacimiento=date(2015, 1, 1))
     hijo.representante_id = representante.id
     db_session.add_all([
         Notificacion(

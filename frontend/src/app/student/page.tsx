@@ -9,7 +9,6 @@ import {
   fetchStudentPortal,
   fetchPagosDePersona,
   fetchHorariosPorAlumno,
-  independizarPersona,
   subirFotoPersona,
 } from "@/services/api";
 import type {
@@ -35,12 +34,12 @@ import {
 // strip's, already owned by `/groups` — see `toStripDia`'s own comment for why
 // the two tables are joined by the WORD they both print and not by position.
 import { toStripDias } from "@/app/groups/groups-page-utils";
-import AgeUpConfirmation from "@/components/AgeUpConfirmation";
 import ManagedStudentPicker, {
   useManagedProfiles,
   withSelectedStudent,
 } from "./ManagedStudentPicker";
 import CuotaCard from "./CuotaCard";
+import JoinAsPlayerAction from "./JoinAsPlayerAction";
 import {
   derivePortalMode,
   isRepresentative,
@@ -56,7 +55,7 @@ import {
   daysUntil,
   type UpcomingTraining,
 } from "./student-utils";
-import { CalendarDays, ShieldCheck, User, UserPlus, UserMinus, ArrowRight } from "lucide-react";
+import { CalendarDays, ShieldCheck, User, UserPlus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
@@ -968,7 +967,20 @@ function MembershipPlansGrid({ data }: { data: StudentPortalSummary }): React.Re
 // `derivePortalMode` doc comment for why this is not /unauthorized).
 // ---------------------------------------------------------------------------
 
-function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.ReactElement {
+function PendingEnrollmentView({
+  data,
+  accountPersonaId,
+}: {
+  data: StudentPortalSummary;
+  /** The SESSION's own persona id (independent-verification fix, issue
+   *  #1132): a pure representative with zero representados and no own
+   *  membership lands here, and their "Inscribirme como jugador" CTA used
+   *  to be a plain `<Link href="/student/enroll?type=self">` — the PUBLIC
+   *  wizard, which creates a brand-new Persona/Usuario instead of a
+   *  membership for this existing one. `JoinAsPlayerAction` (the same
+   *  component `ActivePortalView` already uses) fixes this here too. */
+  accountPersonaId: string;
+}): React.ReactElement {
   return (
     <>
       <section className="card p-6">
@@ -984,11 +996,7 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
       <MembershipPlansGrid data={data} />
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/student/enroll?type=self" className={buttonClasses("primary")}>
-          <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Inscribirme como jugador
-          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-        </Link>
+        <JoinAsPlayerAction accountPersonaId={accountPersonaId} />
         <Link href="/student/enroll?type=child" className={buttonClasses("secondary")}>
           <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           Inscribir a un hijo o dependiente
@@ -1005,24 +1013,30 @@ function PendingEnrollmentView({ data }: { data: StudentPortalSummary }): React.
 
 function ActivePortalView({
   data,
-  hasAlumnoRole,
+  isPlayer,
   accountPersonaId,
-  onIndependizar,
   onPhotoUploaded,
   onOwnPhotoUploaded,
 }: {
   data: StudentPortalSummary;
-  hasAlumnoRole: boolean;
+  /**
+   * Issue #1132: whether the SESSION account itself counts as a player —
+   * its own `ALUMNO` role (still granted at direct self-enrollment, before
+   * any membership exists) OR its own active membership (a representante
+   * who paid for themselves; `crear_membresia` no longer grants `ALUMNO`).
+   * Neither signal alone is reliable on its own, so this is already the
+   * union of both — see `StudentPortalContent`.
+   */
+  isPlayer: boolean;
   /** The persona behind the SESSION — not the profile currently selected. */
   accountPersonaId: string;
-  onIndependizar: () => void;
   onPhotoUploaded: () => void;
   /** Extra refresh for the SESSION avatar, fired only when the OWN profile uploaded. */
   onOwnPhotoUploaded?: () => void;
 }): React.ReactElement {
   const { managedProfiles, selectedId, setSelectedId, selectedProfile } = useManagedProfiles(
     data,
-    hasAlumnoRole,
+    isPlayer,
     accountPersonaId,
   );
 
@@ -1140,8 +1154,12 @@ function ActivePortalView({
    * or an ADMINISTRADOR), so they get the real CTA.
    */
   const paymentsAreReadOnly = selectedIsMinor && viewingOwnProfile;
-  const hasAccountActions =
-    representative || !hasAlumnoRole || data.self?.representanteId != null;
+  // #1137: a represented adult used to have one action here — "Independizarse
+  // del representante" — which is gone (independence is now a PRESENCIAL
+  // command an ADMINISTRADOR runs from "Miembros", never self-service). That
+  // account has nothing left to trigger from its own portal, so it no longer
+  // counts toward `hasAccountActions`.
+  const hasAccountActions = representative || !isPlayer;
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
@@ -1406,7 +1424,7 @@ function ActivePortalView({
       )}
 
       {/* A minor manages nothing on their own account: no dependents, no
-          payments, no independentization. Everything below is gated on that.
+          payments. Everything below is gated on that.
 
           A self-managed student with no dependents sees no "agregar
           dependiente" either: that CTA used to point at the PUBLIC enrolment
@@ -1416,9 +1434,12 @@ function ActivePortalView({
 
           `hasAccountActions` exists because the row is now genuinely optional:
           the payments CTA lives in `CuotaCard` in the rail above (on the fact
-          it acts on), so a self-managed adult with no dependents and no
-          representative has nothing left to put here, and an empty flex row
-          still costs a 20px gap under the panel. */}
+          it acts on), so a self-managed adult with no dependents has nothing
+          left to put here, and an empty flex row still costs a 20px gap
+          under the panel. A represented adult ALSO has nothing here anymore
+          (#1137): "Independizarse del representante" is gone — independence
+          is a PRESENCIAL command an ADMINISTRADOR runs from "Miembros", not
+          self-service. */}
       {!selfIsMinor && hasAccountActions && (
         <div className="flex flex-wrap gap-3 pt-1">
           {representative && (
@@ -1428,19 +1449,16 @@ function ActivePortalView({
               <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
             </Link>
           )}
-          {!hasAlumnoRole && (
-            <Link href="/student/enroll?type=self" className={buttonClasses("secondary")}>
-              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Unirme como jugador
-              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            </Link>
-          )}
-          {data.self?.representanteId != null && (
-            <button type="button" onClick={onIndependizar} className={buttonClasses("secondary")}>
-              <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Independizarse del representante
-            </button>
-          )}
+          {/* Issue #1132: gated on `isPlayer` (role OR own active membership),
+              never on the role alone — a representante who already paid a
+              membership for themselves must not be offered this CTA again.
+              This used to point at `/student/enroll?type=self`, the PUBLIC
+              wizard — for an already-authenticated representante it opened a
+              SECOND account instead of a membership for their existing one.
+              `JoinAsPlayerAction` picks a plan and creates that membership
+              for `accountPersonaId` (never the selected profile, which can
+              be a dependent) — see its own doc comment. */}
+          {!isPlayer && <JoinAsPlayerAction accountPersonaId={accountPersonaId} />}
         </div>
       )}
     </>
@@ -1457,9 +1475,19 @@ function StudentPortalContent(): React.ReactElement {
   const hasAlumnoRole = session?.roles.includes("ALUMNO") ?? false;
 
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const hasOwnActiveMembership = state.status === "ready" && state.data.self?.membership?.estado === "ACTIVA";
+  /**
+   * Issue #1132: "es jugador" (the domain's single predicate — an ACTIVA
+   * Membresia, `app/dominio/jugador.py::es_jugador`) is the union of both
+   * signals this session can carry, never the role alone. `ALUMNO` is still
+   * granted at direct self-enrollment (`POST /enrollment/`, before any
+   * membership exists), but `crear_membresia` no longer grants it when a
+   * representante pays a membership for their OWN persona — so that account
+   * would otherwise read as "not a player" forever despite having exactly
+   * the membership this feature is about.
+   */
+  const isPlayer = hasAlumnoRole || hasOwnActiveMembership;
   const [reloadToken, setReloadToken] = useState(0);
-  const [showAgeUpModal, setShowAgeUpModal] = useState(false);
-  const [ageUpLoading, setAgeUpLoading] = useState(false);
 
   useEffect(() => {
     if (!personaId) return;
@@ -1486,25 +1514,12 @@ function StudentPortalContent(): React.ReactElement {
       ? firstNameOf(state.data.self.nombres)
       : firstNameOf(session?.user.name ?? "");
 
-  async function handleAgeUpConfirm(contrasenia: string): Promise<void> {
-    if (!personaId) return;
-    setAgeUpLoading(true);
-    try {
-      await independizarPersona(Number(personaId), contrasenia);
-      await refreshSession();
-      setReloadToken((n) => n + 1);
-      setShowAgeUpModal(false);
-    } finally {
-      setAgeUpLoading(false);
-    }
-  }
-
   // The greeting rides on the header row rather than in a heading of its own
   // (see `ActivePortalView`). While the portal is still loading there is no
   // name to greet, so the slot stays empty instead of flashing a placeholder.
   const portalMode =
     state.status === "ready"
-      ? derivePortalMode(hasAlumnoRole, state.data.representados.length)
+      ? derivePortalMode(isPlayer, state.data.representados.length)
       : null;
   const subtitle =
     portalMode === "active" && greetingName
@@ -1523,22 +1538,16 @@ function StudentPortalContent(): React.ReactElement {
       )}
       {state.status === "ready" &&
         (portalMode === "pending" ? (
-          <PendingEnrollmentView data={state.data} />
+          <PendingEnrollmentView data={state.data} accountPersonaId={personaId} />
         ) : (
           <ActivePortalView
             data={state.data}
-            hasAlumnoRole={hasAlumnoRole}
+            isPlayer={isPlayer}
             accountPersonaId={personaId}
-            onIndependizar={() => setShowAgeUpModal(true)}
             onPhotoUploaded={() => setReloadToken((n) => n + 1)}
             onOwnPhotoUploaded={() => void refreshSession()}
           />
         ))}
-      <AgeUpConfirmation
-        open={showAgeUpModal}
-        onConfirm={handleAgeUpConfirm}
-        onCancel={() => setShowAgeUpModal(false)}
-      />
     </AppShell>
   );
 }

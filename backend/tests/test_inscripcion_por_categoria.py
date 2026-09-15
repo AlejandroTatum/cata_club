@@ -19,6 +19,27 @@ def _crear_persona_api(client, cedula="1710034065", nombres="Ana"):
     ).json()
 
 
+def _habilitar_como_jugador(db_session, persona_id: int) -> None:
+    """Issue #1132: horario exige una membresía ya aprobada alguna vez. Este
+    archivo prueba la inscripción atómica por categoría, no membresía, así
+    que la habilita directo por ORM en vez de recorrer el ciclo de pago
+    completo."""
+    from datetime import date
+    from decimal import Decimal
+
+    from app.dominio.enums import EstadoMembresia, TipoModalidad
+    from app.dominio.modelos import Membresia, TipoMembresia
+
+    tipo = TipoMembresia(categoria="Formativo", precio=Decimal("25.00"), modalidad=TipoModalidad.MENSUAL)
+    db_session.add(tipo)
+    db_session.flush()
+    db_session.add(Membresia(
+        estado=EstadoMembresia.ACTIVA, monto_aplicado=Decimal("25.00"),
+        fecha_activacion=date(2026, 1, 1), persona_id=persona_id, tipo_membresia_id=tipo.id,
+    ))
+    db_session.flush()
+
+
 def _crear_horario(client, categoria, dia_semana):
     return client.post(
         "/api/v1/asistencias/horarios",
@@ -38,8 +59,9 @@ def _horarios_del_alumno(client, persona_id):
     return {fila["horarioId"] for fila in resp.json()}
 
 
-def test_asignar_alumno_lo_inscribe_en_todos_los_horarios_de_la_categoria(client):
+def test_asignar_alumno_lo_inscribe_en_todos_los_horarios_de_la_categoria(client, db_session):
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "JUVENIL", "LUNES")
     martes = _crear_horario(client, "JUVENIL", "MARTES")
 
@@ -52,13 +74,14 @@ def test_asignar_alumno_lo_inscribe_en_todos_los_horarios_de_la_categoria(client
     assert _horarios_del_alumno(client, alumno["id"]) == {lunes["id"], martes["id"]}
 
 
-def test_asignar_alumno_no_deja_forma_de_quedar_en_un_subconjunto(client):
+def test_asignar_alumno_no_deja_forma_de_quedar_en_un_subconjunto(client, db_session):
     """No importa por cuál horario puntual de la categoría se dispare el
     alta: el resultado es siempre el conjunto completo. Si quedara algún
     camino para una inscripción parcial, disparar el alta desde el OTRO
     horario del grupo (martes) tras ya estar en ambos rechazaría el pedido en
     vez de dejarlo a medio camino."""
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "JUVENIL", "LUNES")
     martes = _crear_horario(client, "JUVENIL", "MARTES")
 
@@ -75,8 +98,9 @@ def test_asignar_alumno_no_deja_forma_de_quedar_en_un_subconjunto(client):
     assert _horarios_del_alumno(client, alumno["id"]) == {lunes["id"], martes["id"]}
 
 
-def test_asignar_alumno_ya_inscripto_en_toda_la_categoria_rechaza_sin_vocabulario_interno(client):
+def test_asignar_alumno_ya_inscripto_en_toda_la_categoria_rechaza_sin_vocabulario_interno(client, db_session):
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "JUVENIL", "LUNES")
 
     client.post(
@@ -95,8 +119,9 @@ def test_asignar_alumno_ya_inscripto_en_toda_la_categoria_rechaza_sin_vocabulari
     assert "alumno_horario" not in detail
 
 
-def test_desasignar_alumno_lo_remueve_de_todos_los_horarios_de_la_categoria(client):
+def test_desasignar_alumno_lo_remueve_de_todos_los_horarios_de_la_categoria(client, db_session):
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "JUVENIL", "LUNES")
     martes = _crear_horario(client, "JUVENIL", "MARTES")
     client.post(
@@ -121,10 +146,11 @@ def test_desasignar_alumno_lo_remueve_de_todos_los_horarios_de_la_categoria(clie
     assert roster_martes["items"] == []
 
 
-def test_asignar_alumno_incluye_sabado_para_competitivo(client):
+def test_asignar_alumno_incluye_sabado_para_competitivo(client, db_session):
     """COMPETITIVO corre Lunes-Sábado mientras el resto corre Lunes-Viernes:
     'todos los días de la categoría' tiene que alcanzar al sábado acá."""
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "COMPETITIVO", "LUNES")
     sabado = _crear_horario(client, "COMPETITIVO", "SABADO")
 
@@ -137,10 +163,11 @@ def test_asignar_alumno_incluye_sabado_para_competitivo(client):
     assert _horarios_del_alumno(client, alumno["id"]) == {lunes["id"], sabado["id"]}
 
 
-def test_asignar_alumno_no_se_desborda_a_otra_categoria(client):
+def test_asignar_alumno_no_se_desborda_a_otra_categoria(client, db_session):
     """El alta atómica es por categoría: no debe alcanzar horarios de una
     categoría distinta, aunque existan al mismo tiempo."""
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     juvenil = _crear_horario(client, "JUVENIL", "LUNES")
     infantil = _crear_horario(client, "INFANTIL", "LUNES")
 
@@ -158,8 +185,9 @@ def test_asignar_alumno_no_se_desborda_a_otra_categoria(client):
 # Dropping one día from a categoria's schedule (admin editing `/groups`) must
 # unassign students from exactly that row, never from the whole categoria --
 # the opposite mistake from the one this file guards above.
-def test_eliminar_horario_no_requiere_desasignar_antes_y_no_afecta_otro_dia_de_la_categoria(client):
+def test_eliminar_horario_no_requiere_desasignar_antes_y_no_afecta_otro_dia_de_la_categoria(client, db_session):
     alumno = _crear_persona_api(client, "1710034073", "Ana")
+    _habilitar_como_jugador(db_session, alumno["id"])
     lunes = _crear_horario(client, "JUVENIL", "LUNES")
     martes = _crear_horario(client, "JUVENIL", "MARTES")
     client.post(

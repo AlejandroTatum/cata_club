@@ -360,6 +360,94 @@ describe("POST /api/enrollment — fichaMedica field contract", () => {
 });
 
 /**
+ * Issue #1138: a represented child (`representante` present) has no
+ * emergency contact of their own — it is derived from the representante.
+ */
+describe("POST /api/enrollment — represented child's fichaMedica contract (#1138)", () => {
+  const representanteBody = {
+    alumno: { nombres: "Lucas", apellidos: "Martinez", cedula: "1798765432", fechaNacimiento: "2015-06-15", telefono: "0991234568" },
+    representante: {
+      nombres: "Sofia", apellidos: "Martinez", cedula: "1798765433", fechaNacimiento: "1990-05-20",
+      telefono: "0991234567", correo: "sofia@example.com", contrasenia: "password8",
+    },
+    fichaMedica: { tipoSangre: BLOOD_TYPES.O_POSITIVO, condicionesSalud: "", alergias: "" },
+    aceptaConsentimientos: true,
+  };
+
+  it("accepts a fichaMedica with no emergency-contact fields at all", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(representanteBody));
+
+    expect(response.status).toBe(201);
+    expect(global.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a body that still carries contactoEmergencia, with 400, without calling the backend", async () => {
+    const body = {
+      ...representanteBody,
+      fichaMedica: { ...representanteBody.fichaMedica, contactoEmergencia: "Sofia Martinez" },
+    };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body that still carries telefonoEmergencia, with 400, without calling the backend", async () => {
+    const body = {
+      ...representanteBody,
+      fichaMedica: { ...representanteBody.fichaMedica, telefonoEmergencia: "0991112233" },
+    };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Issue #1197: a represented minor has no phone of their own — the
+ * emergency contact already derives from the representative (#1138) — so
+ * `alumno.telefono` is required only on the self (adult) path, mirroring
+ * `isMedicalRecord`'s `isChild` gate.
+ */
+describe("POST /api/enrollment — student phone contract (#1197)", () => {
+  const representanteBody = {
+    alumno: { nombres: "Lucas", apellidos: "Martinez", cedula: "1798765432", fechaNacimiento: "2015-06-15" },
+    representante: {
+      nombres: "Sofia", apellidos: "Martinez", cedula: "1798765433", fechaNacimiento: "1990-05-20",
+      telefono: "0991234567", correo: "sofia@example.com", contrasenia: "password8",
+    },
+    fichaMedica: { tipoSangre: BLOOD_TYPES.O_POSITIVO, condicionesSalud: "", alergias: "" },
+    aceptaConsentimientos: true,
+  };
+
+  it("accepts a child enrolment whose alumno carries no telefono, and forwards it without the key", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
+
+    const response = await POST(enrollRequest(representanteBody));
+
+    expect(response.status).toBe(201);
+    const [, options] = vi.mocked(global.fetch).mock.calls[0] ?? [];
+    const forwarded = JSON.parse((options as RequestInit).body as string);
+    expect(forwarded.alumno).not.toHaveProperty("telefono");
+  });
+
+  it("rejects a self enrolment without telefono, with 400, without calling the backend", async () => {
+    const { telefono: _telefono, ...alumnoSinTelefono } = validBody.alumno;
+    const body = { ...validBody, alumno: alumnoSinTelefono };
+
+    const response = await POST(enrollRequest(body));
+
+    expect(response.status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * Same drift class as fichaMedica: fields the type declares but the validator
  * never inspected, so a malformed value was forwarded to the backend.
  */
@@ -382,22 +470,24 @@ describe("POST /api/enrollment — optional field contract", () => {
     expect(response.status).toBe(201);
   });
 
-  it("rejects a malformed credencialesMenor with 400", async () => {
-    const body = { ...validBody, credencialesMenor: { correo: "not-an-email", contrasenia: "short" } };
-
-    const response = await POST(enrollRequest(body));
-
-    expect(response.status).toBe(400);
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it("accepts a well-formed credencialesMenor", async () => {
+  /**
+   * Issue #1137, invariante (B): a represented minor never has a Usuario,
+   * so `credencialesMenor` is no longer part of the contract — an extra
+   * field with that name in the body is simply ignored, never rejected and
+   * never forwarded.
+   */
+  it("ignores a stray credencialesMenor field in the body", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse(tokenBody));
     const body = { ...validBody, credencialesMenor: { correo: "hijo@example.com", contrasenia: "password8" } };
 
     const response = await POST(enrollRequest(body));
 
     expect(response.status).toBe(201);
+    const [, options] = vi.mocked(global.fetch).mock.calls[0] ?? [];
+    const forwardedBody = JSON.parse((options as RequestInit).body as string);
+    expect(forwardedBody).not.toHaveProperty("credenciales_menor");
+    expect(forwardedBody.alumno).not.toHaveProperty("correo");
+    expect(forwardedBody.alumno).not.toHaveProperty("contrasenia");
   });
 });
 

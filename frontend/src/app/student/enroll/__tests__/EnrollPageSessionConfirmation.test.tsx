@@ -38,7 +38,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import EnrollPage from "@/app/student/enroll/page";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { enrollStudent, fetchInstituciones, fetchTarifas } from "@/services/api";
+import { enrollStudent, fetchTarifas } from "@/services/api";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import {
   completeSelfEnrollmentWizard,
@@ -76,7 +76,6 @@ vi.mock("@/contexts/ToastContext", () => ({
 
 vi.mock("@/services/api", () => ({
   enrollStudent: vi.fn(),
-  fetchInstituciones: vi.fn(),
   fetchTarifas: vi.fn(),
   // `AuthContext` imports these three from the API client.
   subscribeAuthFailure: () => () => undefined,
@@ -183,9 +182,8 @@ beforeEach(() => {
   resetTestHistory("/student/enroll");
   window.sessionStorage.clear();
   // Re-armed per test, not in the `vi.mock` factory: `restoreAllMocks` below
-  // strips implementations, and the wizard's fetch-on-mount effects would
+  // strips implementations, and the wizard's fetch-on-mount effect would
   // then hang on an `undefined` return.
-  vi.mocked(fetchInstituciones).mockResolvedValue([]);
   vi.mocked(fetchTarifas).mockResolvedValue([{ categoria: "Categoria Test", precio: "1.00" }]);
   vi.spyOn(global, "fetch");
 });

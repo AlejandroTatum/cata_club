@@ -5,7 +5,12 @@
  * export conflicts — no React dependencies.
  */
 
-import { isSelectableBloodType, type BloodType, type EnrollmentRequest } from "@/types/enrollment";
+import {
+  isSelectableBloodType,
+  type BloodType,
+  type EnrollmentRequest,
+  type EnrollmentStudent,
+} from "@/types/enrollment";
 import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
@@ -52,8 +57,6 @@ export interface EnrollFormData {
   contrasenia: string;
   /** UI-only: never read by the draft serializer or the payload builder (#876). */
   contraseniaConfirmacion: string;
-  /** School/institution (child enrollment only) — optional. */
-  institucionId: string;
   nombreRepresentante: string;
   apellidosRepresentante: string;
   cedulaRepresentante: string;
@@ -66,6 +69,12 @@ export interface EnrollFormData {
   tipoSangre: BloodType | "";
   condicionesSalud: string;
   alergias: string;
+  /**
+   * Issue #1138: only collected/sent for a "self" (adult) enrollment. A
+   * "child" enrollment never renders or sends these two — the represented
+   * minor's emergency contact is derived from the representante, never a
+   * free-text field this form collects.
+   */
   contactoEmergencia: string;
   telefonoEmergencia: string;
   observaciones: string;
@@ -126,7 +135,6 @@ export const initialFormData: EnrollFormData = {
   correo: "",
   contrasenia: "",
   contraseniaConfirmacion: "",
-  institucionId: "",
   nombreRepresentante: "",
   apellidosRepresentante: "",
   cedulaRepresentante: "",
@@ -167,11 +175,6 @@ export function validateEnrollStep(
       break;
     case "personal":
       errors.push(...collect(fieldsForStep("personal", data.enrollmentType), data));
-      // A child enrollment may create an optional account for the student:
-      // blank is fine, half-filled is not.
-      if (data.enrollmentType !== ENROLLMENT_TYPES.SELF) {
-        errors.push(...validateOptionalStudentCredentials(data));
-      }
       break;
     case "representative":
       // NOT `fieldsForStep`: this runs as an aggregate check too, so it must
@@ -179,7 +182,7 @@ export function validateEnrollStep(
       errors.push(...validateRepresentative(data));
       break;
     case "health":
-      errors.push(...collect(HEALTH_FIELDS, data));
+      errors.push(...collect(healthFieldsFor(data.enrollmentType), data));
       break;
     case "summary":
       break;
@@ -190,9 +193,7 @@ export function validateEnrollStep(
 export function validateEnrollment(data: EnrollFormData): string[] {
   return [
     ...validateStudent(data),
-    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
-      ? validateStudentCredentials(data)
-      : validateOptionalStudentCredentials(data)),
+    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF ? validateStudentCredentials(data) : []),
     ...(data.enrollmentType === ENROLLMENT_TYPES.CHILD
       ? validateRepresentative(data)
       : []),
@@ -260,15 +261,27 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
   const alumno = {
     nombres: data.nombres.trim(), apellidos: data.apellidos.trim(), cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento,
-    // #1028 (round 3): the visitor typed the 9 digits after the +593; the
-    // contract the backend expects is the local 09XXXXXXXX form.
-    telefono: canonicalStudentPhone(data.telefono),
-    ...(data.institucionId ? { institucionId: Number(data.institucionId) } : {}),
-  };
+    // Issue #1197: a represented minor has no phone of their own — the key
+    // is omitted entirely on the CHILD path (never sent as "", which the
+    // backend's TelefonoValidado explicitly rejects as blank). #1028
+    // (round 3): on the SELF path the visitor typed the 9 digits after the
+    // +593; the contract the backend expects is the local 09XXXXXXXX form.
+    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
+      ? { telefono: canonicalStudentPhone(data.telefono) }
+      : {}),
+  } as EnrollmentStudent;
   const fichaMedica = {
     tipoSangre: data.tipoSangre as BloodType, condicionesSalud: data.condicionesSalud.trim(),
-    alergias: data.alergias.trim(), contactoEmergencia: data.contactoEmergencia.trim(),
-    telefonoEmergencia: data.telefonoEmergencia.trim(),
+    alergias: data.alergias.trim(),
+    // Issue #1138: a "child" enrollment never sends these two — the
+    // represented minor's emergency contact is derived from the
+    // representante, and the backend rejects them explicitly if sent.
+    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
+      ? {
+          contactoEmergencia: data.contactoEmergencia.trim(),
+          telefonoEmergencia: data.telefonoEmergencia.trim(),
+        }
+      : {}),
     ...(data.observaciones.trim() ? { observaciones: data.observaciones.trim() } : {}),
   };
   if (data.enrollmentType === ENROLLMENT_TYPES.SELF) {
@@ -283,9 +296,6 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
       contrasenia: data.contraseniaRepresentante,
     },
   };
-  if (data.correo.trim() && data.contrasenia) {
-    result.credencialesMenor = { correo: data.correo.trim(), contrasenia: data.contrasenia };
-  }
   return result;
 }
 
@@ -317,10 +327,9 @@ export type EnrollField = keyof EnrollFormData;
  * free to change; the id only changes when the FIELD does, which is a change
  * the tests should notice.
  *
- * Two of the entries name no input on purpose and exist so this table stays a
- * total function of `EnrollField`: `enrollmentType` is the pair of choice
- * cards on the first step, and `institucionId` is a `<select>` the page
- * renders itself. A new form field cannot be added without answering "what is
+ * One entry names no input on purpose and exists so this table stays a total
+ * function of `EnrollField`: `enrollmentType` is the pair of choice cards on
+ * the first step. A new form field cannot be added without answering "what is
  * its id" here first.
  */
 export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
@@ -333,7 +342,6 @@ export const ENROLL_FIELD_TOKEN: Record<EnrollField, string> = {
   correo: "correo",
   contrasenia: "contrasenia",
   contraseniaConfirmacion: "confirmar-contrasena",
-  institucionId: "institucion",
   nombreRepresentante: "nombres-representante",
   apellidosRepresentante: "apellidos-representante",
   cedulaRepresentante: "cedula-representante",
@@ -369,9 +377,7 @@ export function digitsOf(value: string): string {
 /**
  * Confirmation must repeat the password exactly (issue #876). The helper is
  * unconditional; whether a confirmation is required at all is decided by the
- * caller — `FIELD_RULES` for self/representante credentials, and the
- * both-or-neither gate inside `optionalStudentCredentialErrors` for the
- * child's optional account.
+ * caller — `FIELD_RULES` for self/representante credentials.
  */
 function passwordConfirmRule(confirm: string, password: string): string | null {
   if (confirm.length === 0) return "La confirmación de contraseña es obligatoria.";
@@ -439,6 +445,12 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     ) {
       return "Los menores de edad no pueden autoinscribirse. Seleccione 'Inscribo a un hijo / dependiente' o un representante debe completar la inscripción.";
     }
+    if (
+      d.enrollmentType === ENROLLMENT_TYPES.CHILD &&
+      !isMinorAge(calculatePersonAge(d.fechaNacimiento))
+    ) {
+      return "Un mayor de edad no puede inscribirse con representante. Seleccione 'Me inscribo yo' para gestionar su propia cuenta.";
+    }
     return null;
   },
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
@@ -483,13 +495,20 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     emergencyPhoneDiffersRule(d.telefonoEmergencia, canonicalStudentPhone(d.telefono)),
 };
 
-const STUDENT_FIELDS: EnrollField[] = [
+// Issue #1197: a represented minor has no phone of their own — the
+// emergency contact already derives from the representative — so the
+// CHILD path never renders or validates the student phone field.
+const STUDENT_FIELDS_CHILD: EnrollField[] = [
   "nombres",
   "apellidos",
   "fechaNacimiento",
   "cedula",
-  "telefono",
 ];
+const STUDENT_FIELDS_SELF: EnrollField[] = [...STUDENT_FIELDS_CHILD, "telefono"];
+
+function studentFieldsFor(type: EnrollmentType): EnrollField[] {
+  return type === ENROLLMENT_TYPES.CHILD ? STUDENT_FIELDS_CHILD : STUDENT_FIELDS_SELF;
+}
 
 const CREDENTIAL_FIELDS: EnrollField[] = ["correo", "contrasenia", "contraseniaConfirmacion"];
 
@@ -505,7 +524,15 @@ const REPRESENTATIVE_FIELDS: EnrollField[] = [
   "contraseniaRepresentanteConfirmacion",
 ];
 
-const HEALTH_FIELDS: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+// Issue #1138: a represented child never has a contact of their own — the
+// health step only asks for the two emergency-contact fields on the "self"
+// (adult) path.
+const HEALTH_FIELDS_SELF: EnrollField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+const HEALTH_FIELDS_CHILD: EnrollField[] = ["tipoSangre"];
+
+function healthFieldsFor(type: EnrollmentType): EnrollField[] {
+  return type === ENROLLMENT_TYPES.CHILD ? HEALTH_FIELDS_CHILD : HEALTH_FIELDS_SELF;
+}
 
 /**
  * The fields a given step actually renders — so a disabled "Siguiente" can
@@ -518,13 +545,14 @@ export function fieldsForStep(step: WizardStep, type: EnrollmentType): EnrollFie
       return [];
     case "personal":
       // A self enrollment signs in as the student, so its credentials are
-      // required here. A child's are optional and validated separately.
-      return isChild ? STUDENT_FIELDS : [...STUDENT_FIELDS, ...CREDENTIAL_FIELDS];
+      // required here. A represented child never has credentials (issue
+      // #1137, invariante B: un representado nunca tiene Usuario propio).
+      return isChild ? studentFieldsFor(type) : [...studentFieldsFor(type), ...CREDENTIAL_FIELDS];
     case "representative":
       // Skipped entirely for a self enrollment — there is no representante.
       return isChild ? REPRESENTATIVE_FIELDS : [];
     case "health":
-      return HEALTH_FIELDS;
+      return healthFieldsFor(type);
     case "summary":
       return [];
   }
@@ -540,13 +568,6 @@ export function validateEnrollFields(step: WizardStep, data: EnrollFormData): En
   for (const field of fieldsForStep(step, data.enrollmentType)) {
     const message = FIELD_RULES[field]?.(data) ?? null;
     if (message !== null) errors[field] = message;
-  }
-  // A child enrollment's student account is optional, but half-filled blocks
-  // the step the same way `validateAddDependentFields` gates its own
-  // "credentials" step — the message has to land on the field that is
-  // actually wrong, and "Siguiente" has to see it too (#226).
-  if (step === "personal" && data.enrollmentType !== ENROLLMENT_TYPES.SELF) {
-    Object.assign(errors, optionalStudentCredentialErrors(data));
   }
   return errors;
 }
@@ -596,39 +617,11 @@ export function describeStepBlocker(errors: EnrollFieldErrors): string | null {
 }
 
 function validateStudent(data: EnrollFormData): string[] {
-  return collect(STUDENT_FIELDS, data);
+  return collect(studentFieldsFor(data.enrollmentType), data);
 }
 
 function validateStudentCredentials(data: EnrollFormData): string[] {
   return collect(CREDENTIAL_FIELDS, data);
-}
-
-/**
- * The "both-or-neither" rule for a child enrollment's optional student
- * account, keyed to the field that owns each message — mirrors
- * `validateAddDependentFields`'s "credentials" step in `add-dependent-utils.ts`.
- */
-function optionalStudentCredentialErrors(data: EnrollFormData): EnrollFieldErrors {
-  const errors: EnrollFieldErrors = {};
-  const hasCorreo = data.correo.trim().length > 0;
-  const hasContrasenia = data.contrasenia.length > 0;
-  if (hasCorreo || hasContrasenia) {
-    if (!hasCorreo) errors.correo = "El correo del estudiante es obligatorio si se desea crear una cuenta.";
-    else if (!isEmail(data.correo)) errors.correo = "El correo del estudiante no es válido.";
-    if (!hasContrasenia) {
-      errors.contrasenia = "La contraseña del estudiante es obligatoria si se desea crear una cuenta.";
-    } else {
-      const passwordError = passwordRule(data.contrasenia, "La contraseña del estudiante");
-      if (passwordError) errors.contrasenia = passwordError;
-    }
-    const confirmError = passwordConfirmRule(data.contraseniaConfirmacion, data.contrasenia);
-    if (confirmError) errors.contraseniaConfirmacion = confirmError;
-  }
-  return errors;
-}
-
-function validateOptionalStudentCredentials(data: EnrollFormData): string[] {
-  return Object.values(optionalStudentCredentialErrors(data));
 }
 
 function validateRepresentative(data: EnrollFormData): string[] {
@@ -737,10 +730,22 @@ function parseStoredEnrollDraft(raw: string | null): {
   }
   if (!isStoredEnrollDraft(parsed)) return { draft: null, hadStoredPasswords: false };
   const record = parsed as Record<string, unknown>;
+  // Built key-by-key from `initialFormData` rather than `{ ...parsed }`: a
+  // draft saved by an older build can still carry a field this version no
+  // longer has (e.g. `institucionId`, removed by #1190) — spreading the raw
+  // stored object would let it ride straight into `formData` again.
+  const draft = { ...initialFormData } as EnrollFormData;
+  for (const key of Object.keys(initialFormData) as EnrollField[]) {
+    if (key === "enrollmentType") continue;
+    if (typeof record[key] === "string") {
+      (draft as Record<EnrollField, string>)[key] = record[key] as string;
+    }
+  }
+  draft.enrollmentType = record.enrollmentType as EnrollmentType;
   return {
     // Passwords are ALWAYS blanked, never read back from storage.
     draft: {
-      ...parsed,
+      ...draft,
       contrasenia: "",
       contraseniaConfirmacion: "",
       contraseniaRepresentante: "",

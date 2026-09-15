@@ -6,37 +6,38 @@ from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.dominio.modelos import Persona, Usuario, FichaMedica, Enfermedades, Notificacion, VinculacionRepresentante
-from app.dominio.enums import TipoRol, TipoNotificacion
+from app.dominio.modelos import Persona, FichaMedica, Enfermedades, Notificacion
+from app.dominio.enums import TipoNotificacion
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida, PermisosInsuficientes,
 )
 from app.dominio.mensajes import (
     MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_IDENTIDAD_DUPLICADA,
-    MENSAJE_VINCULACION_NO_DISPONIBLE,
+    MENSAJE_VINCULACION_NO_DISPONIBLE, MENSAJE_VINCULACION_SOLO_PRESENCIAL,
 )
 from app.dominio.reglas_negocio import EDAD_MAYORIA_EDAD, calcular_edad
 from app.dominio.representados_alcanzables import (
-    exigir_representante_destino_alcanzable, exigir_sin_representados_menores_activos,
+    exigir_representante_con_rol_valido, exigir_representante_destino_alcanzable,
+    exigir_sin_representados_menores_activos,
 )
-from app.dominio.rol_unico import exigir_rol_unico
+from app.dominio.telefono import es_telefono_valido
 from app.soporte_transversal.tiempo import hoy_club
 from app.soporte_transversal.firma_archivos import es_firma_valida
-from app.seguridad.gestor_auth import GestorAutenticacion
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.usuario_ficha_repositorio import (
     UsuarioRepositorio, FichaMedicaRepositorio,
 )
-from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
-from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.infraestructura.repositorios.restricciones_identidad import identidad_en_conflicto
+from app.infraestructura.repositorios.vinculacion_representante_repositorio import (
+    VinculacionRepresentanteRepositorio,
+)
 from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.auth_servicio import AuthServicio
 from app.servicios_negocio.rol_servicio import RolServicio
 from app.servicios_negocio.dtos.persona_schemas import (
-    PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO, IndependizarDTO,
+    PersonaCreateDTO, PersonaUpdateDTO, RepresentadoCreateDTO,
     VincularRepresentadoDTO,
 )
 
@@ -96,7 +97,7 @@ class PersonaServicio:
         self.db = db
         self.repo = PersonaRepositorio(db)
         self.repo_usuario = UsuarioRepositorio(db)
-        self.repo_rol = RolRepositorio(db)
+        self.repo_ledger = VinculacionRepresentanteRepositorio(db)
         # Inyectable para tests (ningún test hace un sleep real de varios
         # segundos, mismo criterio que `AuthServicio`). Los routers de
         # producción no pasan `dormir`, así que usan el `time.sleep` real.
@@ -141,30 +142,52 @@ class PersonaServicio:
                     f"({EDAD_MAYORIA_EDAD} años o más); el representante indicado "
                     f"tiene {edad_representante} años."
                 )
+            self._exigir_telefono_valido_de_representante(representante)
+            # Issue #1133: la regla del rol se evalúa en el MISMO lugar que
+            # las de arriba -- este es el núcleo que comparten
+            # `registrar_persona` (alta admin con representante_id) y
+            # `crear_representado`.
+            exigir_representante_con_rol_valido(
+                datos.representante_id,
+                self.repo_usuario.obtener_por_persona_id(datos.representante_id),
+            )
 
         nueva_persona = Persona(**datos.model_dump())
         return self.repo.crear(nueva_persona)
 
-    def crear_representado(self, representante_id: int, datos: RepresentadoCreateDTO) -> Persona:
+    def crear_representado(
+        self, representante_id: int, datos: RepresentadoCreateDTO,
+        actor_persona_id: int | None = None,
+    ) -> Persona:
         """Crea un dependiente (menor) para un representante o desde el panel admin.
 
         Flujo:
         1. Crear Persona (vía `registrar_persona`, reusando reglas de edad/duplicado).
         2. Crear FichaMedica si se proporcionó.
-        3. Si se proporcionaron `correo` + `contrasenia`: crear Usuario con
-           rol ALUMNO para el menor (Opción B: menores con cuenta propia).
+
+        Issue #1137, invariante (B): este método NUNCA crea un `Usuario` para
+        el representado -- solo crea la `Persona` (y su ficha médica). El
+        "Opción B: menores con cuenta propia" que existía acá se eliminó.
 
         Todo o nada (issue #831): un solo `commit()` al final, después de la
-        Persona, la ficha médica y el Usuario+rol del menor. Usa
-        `_crear_persona_validada` (el núcleo SIN commit de
-        `registrar_persona`), no `registrar_persona` en sí -- comitear acá
-        antes de escribir la ficha o el usuario reproduciría exactamente el
+        Persona y la ficha médica. Usa `_crear_persona_validada` (el núcleo
+        SIN commit de `registrar_persona`), no `registrar_persona` en sí --
+        comitear acá antes de escribir la ficha reproduciría exactamente el
         bug que el issue #831 cierra.
 
         Issue #1139: esta es la puerta de alta MÁS usada para un menor nuevo
         -- más que `vincular_representado`, que existe para reasignar a
         alguien ya cargado -- así que el mismo invariante se exige acá,
-        antes de crear nada, igual que en `vincular_representado`."""
+        antes de crear nada, igual que en `vincular_representado`.
+
+        Issue #1133 (ledger completo): `actor_persona_id` es quien ejecuta el
+        comando -- el propio representante desde su sesión, o un
+        ADMINISTRADOR actuando por otra persona (el router lo resuelve del
+        token). Por defecto es `representante_id`: todos los llamadores
+        existentes (tests, y el propio flujo de autoservicio) simulan al
+        representante creando para sí mismo."""
+        if actor_persona_id is None:
+            actor_persona_id = representante_id
         self._exigir_representante_destino_alcanzable(representante_id)
 
         persona_datos = PersonaCreateDTO(
@@ -177,48 +200,48 @@ class PersonaServicio:
             institucion_id=datos.institucion_id,
         )
         # El `try` abarca desde la Persona hasta el `commit()`, igual que el
-        # de `AdminCuentaServicio.crear_cuenta` (issue #1016, ADR-3/ADR-6).
-        # No alcanza con envolver el INSERT del Usuario: el pre-check de
-        # cédula de `_crear_persona_validada` es tan racy como el de correo,
-        # y ese método ya flushea la Persona -- dos altas casi simultáneas
-        # con la misma cédula caían en el 409 genérico de `main.py`, que es
-        # justo lo que este catch existe para evitar. Las dos rutas que
-        # acuñan credenciales tienen que tratar igual la misma carrera.
+        # de `AdminCuentaServicio.crear_cuenta` (issue #1016, ADR-3/ADR-6):
+        # el pre-check de cédula de `_crear_persona_validada` es racy, y ese
+        # método ya flushea la Persona -- dos altas casi simultáneas con la
+        # misma cédula caían en el 409 genérico de `main.py`, que es justo lo
+        # que este catch existe para evitar.
         try:
             representado = self._crear_persona_validada(persona_datos)
 
             if datos.ficha_medica:
+                # Issue #1138: `EnrollmentFichaMedicaMenorDTO` no tiene
+                # `contacto_emergencia`/`telefono_emergencia` -- ese contacto
+                # se deriva del representante al leer (ver
+                # `FichaMedicaServicio.obtener_ficha_emergencia`), nunca se
+                # persiste acá.
                 ficha = FichaMedica(
                     tipo_sangre=datos.ficha_medica.tipo_sangre,
                     persona_id=representado.id,
                     alergias=datos.ficha_medica.alergias,
-                    contacto_emergencia=datos.ficha_medica.contacto_emergencia,
-                    telefono_emergencia=datos.ficha_medica.telefono_emergencia,
                 )
                 for nombre in datos.ficha_medica.enfermedades:
                     ficha.enfermedades.append(Enfermedades(nombre_enfermedad=nombre))
                 FichaMedicaRepositorio(self.db).crear(ficha)
 
-            # Opción B: si el admin/representante provee credenciales,
-            # crear también el Usuario + rol ALUMNO para el menor.
-            if datos.correo and datos.contrasenia:
-                if self.repo_usuario.obtener_por_correo(datos.correo):
-                    raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
-                hash_pw = GestorAutenticacion.obtener_hash_contrasenia(datos.contrasenia)
-                usuario = Usuario(
-                    correo=datos.correo,
-                    contrasenia=hash_pw,
-                    persona_id=representado.id,
-                )
-                self.repo_usuario.crear(usuario)
-                self._asignar_rol(usuario, TipoRol.ALUMNO)
+            # Issue #1133: el ledger completo -- alta inicial, no solo
+            # reasignación. Sin `idempotency_key`: este comando no tiene
+            # replay (a diferencia de `independizar_presencial`).
+            self.repo_ledger.registrar(
+                persona_id=representado.id,
+                actor_persona_id=actor_persona_id,
+                representante_anterior_id=None,
+                representante_nuevo_id=representante_id,
+                operacion="CREACION",
+                origen="SESION_AUTENTICADA",
+                idempotency_key=None,
+                request_fingerprint=None,
+            )
 
             self.db.commit()
         except IntegrityError as error:
             # Carrera (issue #1016, ADR-3): dos altas casi simultáneas con la
-            # misma cédula, o con el mismo correo (o una variante de
-            # mayúsculas), pasan las dos los pre-checks de arriba. Mismo
-            # mensaje genérico que esos pre-checks ya usan.
+            # misma cédula pasan las dos el pre-check de arriba. Mismo
+            # mensaje genérico que ese pre-check ya usa.
             self.db.rollback()
             # `None` es una restricción que NO es de identidad: se re-lanza
             # para que la trate el handler de `main.py`. `INDETERMINADA` (el
@@ -249,56 +272,81 @@ class PersonaServicio:
 
         return representado
 
-    # --- INS-2: vincular un representado ya existente ------------------------
-    # docs/product/decisiones-de-negocio-2026-08-11.md §1: "Un chico tiene un solo
-    # representante, y el representante lo vincula solo". Antes no existía
-    # ninguna vía (ni endpoint ni pantalla) para pasar una Persona ya
-    # registrada de un representante a otro, pese a que el mensaje de cédula
-    # duplicada se lo prometía al usuario (INS-2).
+    # --- INS-2 retirada: parada segura de la vinculación de autoservicio -----
+    # Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la
+    # vinculación por cédula desde la sesión del propio REPRESENTANTE se
+    # retira. La ruta `POST /{persona_id}/vincular-representado` sigue viva
+    # -- el router la despacha acá para ese actor -- pero deja de leer y de
+    # escribir: responde SIEMPRE el mismo error, para cualquier cédula (exista,
+    # no exista, o ya esté vinculada a otra cuenta), así que no hay ningún
+    # oráculo de existencia ni de relación que filtrar. Vincular una persona ya
+    # existente sigue siendo posible, pero solo como acción de mostrador --
+    # ver `vincular_representado` más abajo, el camino que el router reserva
+    # para un ADMINISTRADOR.
+    def parar_vinculacion_representado(self, representante_id: int) -> None:
+        """Nunca devuelve: siempre levanta el corte seguro no divulgativo.
+
+        No lee la cédula recibida ni la cuenta de `representante_id`: la
+        única forma de no filtrar por timing ni por el motivo del rechazo es
+        directamente no resolver nada. No escribe nada tampoco -- ni
+        `representante_id`, ni auditoría, ni notificaciones."""
+        raise OperacionInvalida(
+            MENSAJE_VINCULACION_SOLO_PRESENCIAL,
+            detalle_tecnico=(
+                f"vinculación de autoservicio retirada (#1133): intento de "
+                f"representante_id={representante_id} derivado a administración"
+            ),
+        )
+
+    # --- Vincular un representado ya existente: acción de mostrador ---------
+    # docs/product/decisiones-de-negocio-2026-08-11.md §1 creó esta vía; la
+    # decisión del dueño de 2026-09-11 (#1133, punto 3) la retiró del
+    # autoservicio y la dejó como acción de mostrador: solo la ejecuta un
+    # ADMINISTRADOR (el router la despacha acá únicamente para ese rol; ver
+    # `parar_vinculacion_representado` arriba para el actor REPRESENTANTE).
     def vincular_representado(
-        self, representante_id: int, datos: VincularRepresentadoDTO
+        self, representante_id: int, datos: VincularRepresentadoDTO,
+        actor_persona_id: int | None = None,
     ) -> Persona:
         """Vincula a `representante_id` una Persona YA EXISTENTE (típicamente
         cargada por otro representante), identificada por cédula. Sin
-        aprobación de nadie -- decisión de negocio explícita, ver docstring
-        del módulo de tests `test_vinculacion_representado.py`. Cuatro
-        guardarraíles, ninguno agrega un clic al padre que vincula:
+        aprobación de nadie más que la del administrador que lo ejecuta en el
+        mostrador. Guardarraíles que sobreviven al retiro del autoservicio:
 
         1. Auditoría: la vinculación exitosa deja una fila en
-           `VinculacionRepresentante` (quién, a quién, cuándo).
+           `VinculacionRepresentante` (quién, a quién, cuándo), escrita por
+           el repositorio del ledger -- no un `INSERT` suelto.
         2. Si el representado ya tenía representante, se le notifica
            DESPUÉS del hecho por el feed de notificaciones existente.
-           "Deshacerlo" es repetir esta misma llamada con la misma cédula
-           -- que el representante anterior ya conocía, porque fue quien
-           dio de alta a ese representado.
         3. ANTI-ENUMERACIÓN: toda falla de elegibilidad -- cédula
            inexistente, representado mayor de edad, ya vinculado a este
            mismo representante, o la cédula del propio representante --
            levanta el MISMO error (`MENSAJE_VINCULACION_NO_DISPONIBLE`).
-           Ni el mensaje ni el código HTTP distinguen "no existe" de "existe
-           pero no es elegible": esta llamada NUNCA revela el nombre de la
-           persona antes de vincularla.
         4. Tope de intentos: freno progresivo por representante (mismo
            patrón que `AuthServicio._calcular_retraso_login`, nunca bloqueo
-           duro).
+           duro) -- se conserva aunque el actor típico ya no sea quien prueba
+           cédulas en serie desde su propia sesión.
         5. Issue #790: la cuenta que ejerce esta capacidad tiene que haber
-           probado el control de su dirección de correo. Es lo ÚNICO que
-           agrega ese issue, y no toca ninguno de los cuatro guardarraíles
-           de arriba: la vinculación sigue sin requerir la aprobación de
-           nadie.
+           probado el control de su dirección de correo.
 
-        Por qué el candado va acá y no en el rol ni en la política de acceso:
-        `REPRESENTANTE` desbloquea también cosas inofensivas, y
-        `PoliticaAccesoPersona` concede a partir de `representante_id`, que es
-        el vínculo que un representante recién inscripto YA tiene sobre el
-        hijo que él mismo dio de alta. Cerrar ahí dejaría a una familia real
-        sin acceso a la ficha de su propio chico mientras espera un correo.
-        Esta llamada es la única que ATA una cuenta a una persona que no creó,
-        que es exactamente el paso que convierte "controlo una dirección de
-        correo" en "puedo leer y escribir la ficha médica de un menor".
-        """
+        `actor_persona_id` es quien ejecuta el comando (issue #1133, ledger
+        completo). Por defecto es `representante_id`: los llamadores directos
+        existentes (tests unitarios) simulan al representante vinculando para
+        sí mismo; el router de producción pasa el `persona_id` del
+        administrador autenticado."""
+        if actor_persona_id is None:
+            actor_persona_id = representante_id
         self._exigir_correo_verificado_del_representante(representante_id)
         self._exigir_representante_destino_alcanzable(representante_id)
+        # Issue #1138: solo valida el teléfono si el representante EXISTE.
+        # Un `representante_id` inexistente (issue #460, TRIANGULATE: un
+        # ADMINISTRADOR puede llamar este endpoint con cualquier id) sigue
+        # cayendo, sin chequeo nuevo de por medio, en el `IntegrityError` de
+        # la FK que `main.py` ya traduce a un 409 legible -- agregar acá un
+        # 404 anticipado rompería ESE contrato deliberado.
+        representante = self.repo.obtener_por_id(representante_id)
+        if representante is not None:
+            self._exigir_telefono_valido_de_representante(representante)
 
         try:
             representado = self._resolver_representado_elegible(representante_id, datos.cedula)
@@ -311,11 +359,19 @@ class PersonaServicio:
         representante_anterior_id = representado.representante_id
         self.repo.actualizar(representado, {"representante_id": representante_id})
 
-        self.db.add(VinculacionRepresentante(
+        # Issue #1133: el ledger completo -- la vinculación de mostrador
+        # también pasa por el repositorio, nunca por un `self.db.add(...)`
+        # suelto (esa era la única escritura del ledger que lo bypaseaba).
+        self.repo_ledger.registrar(
             persona_id=representado.id,
+            actor_persona_id=actor_persona_id,
             representante_anterior_id=representante_anterior_id,
             representante_nuevo_id=representante_id,
-        ))
+            operacion="REASIGNACION",
+            origen="ADMIN_PRESENCIAL",
+            idempotency_key=None,
+            request_fingerprint=None,
+        )
         self.db.commit()
 
         if representante_anterior_id is not None:
@@ -365,9 +421,30 @@ class PersonaServicio:
         """Issue #1139: cierra el mismo invariante que `RolServicio.
         cambiar_estado_cuenta` y `cambiar_estado`, pero por la otra puerta --
         nada impedía vincular a un representado a una cuenta YA desactivada,
-        dejándolo en el mismo estado prohibido sin pasar por ninguna baja."""
+        dejándolo en el mismo estado prohibido sin pasar por ninguna baja.
+
+        Issue #1133: además exige el rol, sobre la MISMA cuenta ya resuelta
+        -- `crear_representado` y `vincular_representado` son los dos
+        caminos que llaman a este helper."""
         cuenta = self.repo_usuario.obtener_por_persona_id(representante_id)
         exigir_representante_destino_alcanzable(representante_id, cuenta)
+        exigir_representante_con_rol_valido(representante_id, cuenta)
+
+    def _exigir_telefono_valido_de_representante(self, representante: Persona) -> None:
+        """Issue #1138: el contacto de emergencia de un representado se
+        deriva del teléfono ACTUAL del representante (ver
+        `FichaMedicaServicio.obtener_ficha_emergencia`), así que un vínculo
+        NUEVO no puede apuntar a alguien sin un teléfono al que efectivamente
+        se pueda llamar. `Persona.telefono` no tiene CHECK en la base (ver
+        `dominio/modelos.py`) porque tolera filas legadas con `""` -- ese
+        vacío es memoria histórica, no un candidato válido para un vínculo
+        que se crea o reasigna HOY."""
+        if not representante.telefono or not es_telefono_valido(representante.telefono):
+            raise OperacionInvalida(
+                "El representante legal debe tener un teléfono válido "
+                "registrado: de él se deriva el contacto de emergencia del "
+                "representado."
+            )
 
     def _resolver_representado_elegible(self, representante_id: int, cedula: str) -> Persona:
         """Devuelve la Persona elegible para ser vinculada, o levanta
@@ -435,18 +512,6 @@ class PersonaServicio:
                 "vinculación de persona_id=%s. La vinculación YA está commiteada.",
                 representante_anterior_id, representado.id,
             )
-
-    def _asignar_rol(self, usuario: Usuario, tipo_rol: TipoRol) -> None:
-        """Asigna un rol al usuario si aún no lo tiene (idempotente).
-
-        Regla de un solo rol activo compartida (issue #762). Solo `flush()`
-        (issue #831): forma parte de la transacción atómica de
-        `crear_representado`, que hace el único `commit()` al final."""
-        if not exigir_rol_unico(usuario, tipo_rol):
-            return
-        rol = self.repo_rol.obtener_o_crear(tipo_rol)
-        usuario.roles.append(rol)
-        self.db.flush()
 
     def listar_personas(self, skip: int = 0, limit: int = 50) -> tuple[list[Persona], int]:
         items = self.repo.listar(skip, limit)
@@ -577,64 +642,6 @@ class PersonaServicio:
         resultado = self.repo.actualizar(persona, {"activo": activo})
         self.db.commit()
         return resultado
-
-    def independizar(self, persona_id: int, datos: IndependizarDTO) -> Persona:
-        """Permite a un ex-menor (mayor de edad) independizarse de su
-        representante legal. Validaciones:
-        1. La persona debe existir y tener representante_id.
-        2. Debe ser mayor de edad (>= 18).
-        3. La contraseña proporcionada debe coincidir con la del Usuario.
-        4. No debe tener deudas pendientes (membresías sin pago o pagos
-           pendientes de validación).
-
-        Resultado: representante_id = None. El rol NO cambia.
-
-        Issue #762: acá se asignaba además el rol REPRESENTANTE. Como quien
-        se independiza es siempre un ex-menor con rol ALUMNO, esa línea era
-        una fábrica garantizada de cuentas ALUMNO+REPRESENTANTE -- el único
-        camino de los cinco que producía el segundo rol en el 100% de los
-        casos. Se quita, y no se reemplaza por un rechazo, porque lo que
-        independiza a la persona es cortar el VÍNCULO (`representante_id =
-        None`), no el rol: la autorización de representación se resuelve por
-        ese vínculo (`PoliticaAcceso.puede_acceder`), y el rol REPRESENTANTE
-        solo habilita "agregar/vincular dependiente", que un recién
-        independizado no tiene. Si más adelante llega a representar a
-        alguien, el rol se le asigna como una decisión explícita desde el
-        panel de administración."""
-        persona = self.obtener_persona(persona_id)
-
-        if not persona.representante_id:
-            raise OperacionInvalida("Esta persona no tiene un representante legal asociado.")
-
-        edad = _calcular_edad(persona.fecha_nacimiento)
-        if edad < EDAD_MAYORIA_EDAD:
-            raise OperacionInvalida(
-                f"La persona debe ser mayor de edad ({EDAD_MAYORIA_EDAD}+ años) "
-                f"para independizarse (calculado: {edad})."
-            )
-
-        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
-        if not usuario:
-            raise EntidadNoEncontrada("Esta persona no tiene una cuenta de usuario activa.")
-        if not GestorAutenticacion.verificar_contrasenia(datos.contrasenia, usuario.contrasenia):
-            raise EntidadDuplicada("La contraseña proporcionada es incorrecta.")
-
-        if MembresiaRepositorio(self.db).tiene_deudas_pendientes(persona_id):
-            raise OperacionInvalida(
-                "No es posible independizarse: existen membresías o pagos pendientes. "
-                "Regularice su situación antes de continuar."
-            )
-
-        persona.representante_id = None
-        self.repo.actualizar(persona, {"representante_id": None})
-        self.db.commit()
-        # Issue #826 (ver el comentario de `crear_representado`/
-        # `actualizar_foto`): esta llamada corre dentro de `run_in_threadpool`
-        # y `persona` se serializa después, ya en el event loop.
-        if inspeccionar_orm(persona).expired:
-            self.db.refresh(persona)
-
-        return persona
 
     # --- Reportes (E04-RF014) --------------------------------------------------
     def reporte_nuevos_por_periodo(self, fecha_inicio, fecha_fin) -> list[Persona]:

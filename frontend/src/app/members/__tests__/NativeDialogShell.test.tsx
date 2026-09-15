@@ -91,6 +91,7 @@ describe("PaymentsDialog — shared shell chain (issue #856)", () => {
     onMembershipCreated: () => {},
     onDebtRegularized: () => {},
     onMembresiaChanged: () => {},
+    onPaymentRegistered: () => {},
   };
 
   it("dialog has no fit-content height, and the body is a min-h-0 flex-auto scroll container", () => {

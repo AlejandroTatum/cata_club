@@ -315,10 +315,12 @@ describe("StudentPaymentsPage — whose payment this is", () => {
  * Issue #460, Escenario 2: a representative account with zero managed
  * profiles — e.g. a representative whose child is already registered under
  * someone else, so the child never appears in "sus estudiantes". Before this
- * fix the only action here was "Ir a mi cuenta", a dead end that never leads
- * to `vincular-representado`. `/student/add-dependent` is the existing
- * self-service door: entering the child's real cédula there surfaces
- * "Vincular a mi cuenta" (`DuplicateIdentityHelp`'s `representative` variant).
+ * fix the only action here was "Ir a mi cuenta", a dead end. `/student/add-
+ * dependent` is the existing self-service door: entering the child's real
+ * cédula there surfaces `DuplicateIdentityHelp`'s `representative` guidance,
+ * which since #1133 (decisión del dueño, 2026-09-11, punto 3) points to
+ * administration instead of an in-wizard "Vincular a mi cuenta" — linking an
+ * existing person is desk-only now.
  */
 describe("StudentPaymentsPage — a representative who manages nobody yet", () => {
   it("offers a real next step, not just a link back to the account", async () => {

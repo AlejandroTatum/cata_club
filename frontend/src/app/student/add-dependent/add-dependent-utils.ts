@@ -1,10 +1,11 @@
 /**
  * Pure utility functions for the authenticated "Add Dependent" wizard.
  *
- * 4-step wizard (child data → credentials → medical record → summary/confirm)
- * for a representante already logged into the portal. If the representative
- * provides credentials for the minor, a Usuario with rol ALUMNO is also
- * created (Option B: minors with own account).
+ * 3-step wizard (child data → medical record → summary/confirm) for a
+ * representante already logged into the portal. Issue #1137, invariante
+ * (B): a represented dependent never has a `Usuario` of their own — the
+ * "credentials" step this wizard used to have (Option B: minors with own
+ * account) was retired, not hidden.
  *
  * Extracted for testability — no React dependencies.
  */
@@ -15,9 +16,7 @@ import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
-  emergencyPhoneDiffersRule,
   personNameRule,
-  passwordRule,
   studentBirthDateRule,
 } from "@/lib/identity-validation";
 
@@ -25,11 +24,11 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-/** Wizard step identifiers — 4 steps (child, credentials, health, summary). */
-export type AddDependentStep = "child" | "credentials" | "health" | "summary";
+/** Wizard step identifiers — 3 steps (child, health, summary). */
+export type AddDependentStep = "child" | "health" | "summary";
 
 /** Step order used by the wizard. */
-export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "credentials", "health", "summary"];
+export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "health", "summary"];
 
 /** Human-readable labels for each step, in Spanish. */
 /**
@@ -45,7 +44,6 @@ export const ADD_DEPENDENT_STEP_ORDER: AddDependentStep[] = ["child", "credentia
  */
 export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
   child: "Datos del dependiente",
-  credentials: "Cuenta de acceso",
   health: "Salud y emergencia",
   summary: "Resumen y confirmación",
 };
@@ -53,32 +51,35 @@ export const ADD_DEPENDENT_STEP_LABELS: Record<AddDependentStep, string> = {
 /**
  * One-word names for the stepper pills — the same named-stepper contract the
  * public wizard uses (`STEP_SHORT_LABELS` in enroll-utils.ts). This flow has
- * four steps, not five, because it creates no representante: the caller
- * already is one. The `Usuario` it may create is optional.
+ * three steps, not five, because it creates no representante (the caller
+ * already is one) and no `Usuario` for the dependent (issue #1137).
  */
 export const ADD_DEPENDENT_SHORT_LABELS: Record<AddDependentStep, string> = {
   child: "Estudiante",
-  credentials: "Cuenta",
   health: "Salud",
   summary: "Confirmar",
 };
 
-/** Shape of the add-dependent wizard form data. */
+/**
+ * Shape of the add-dependent wizard form data.
+ *
+ * Issue #1138: no `contactoEmergencia`/`telefonoEmergencia` fields. A
+ * dependent created here is always a minor (this wizard always assigns
+ * `representanteId`), and a represented minor's emergency contact is
+ * derived from the representante at read time — never a free-text field
+ * this form collects and the visitor has to keep in sync by hand.
+ */
 export interface AddDependentFormData {
   nombres: string;
   apellidos: string;
   fechaNacimiento: string;
   cedula: string;
   telefono: string;
-  correo: string;
-  contrasenia: string;
   institucionId: string;
   tipoSangre: TipoSangre | "";
   /** Raw comma-separated input — parsed into a string[] by `buildRepresentadoPayload`. */
   enfermedades: string;
   alergias: string;
-  contactoEmergencia: string;
-  telefonoEmergencia: string;
 }
 
 /** Default empty form data. */
@@ -88,14 +89,10 @@ export const initialAddDependentFormData: AddDependentFormData = {
   fechaNacimiento: "",
   cedula: "",
   telefono: "",
-  correo: "",
-  contrasenia: "",
   institucionId: "",
   tipoSangre: "",
   enfermedades: "",
   alergias: "",
-  contactoEmergencia: "",
-  telefonoEmergencia: "",
 };
 
 /**
@@ -136,8 +133,6 @@ export function validateAddDependentStep(
   switch (step) {
     case "child":
       return validateChildData(data);
-    case "credentials":
-      return validateCredentialsData(data);
     case "health":
       return validateHealthData(data);
     case "summary":
@@ -147,7 +142,7 @@ export function validateAddDependentStep(
 
 /** Validate the whole form at once (all steps) — used before final submit. */
 export function validateAddDependentForm(data: AddDependentFormData): string[] {
-  return [...validateChildData(data), ...validateCredentialsData(data), ...validateHealthData(data)];
+  return [...validateChildData(data), ...validateHealthData(data)];
 }
 
 // ---------------------------------------------------------------------------
@@ -188,14 +183,10 @@ export const ADD_DEPENDENT_FIELD_TOKEN: Record<AddDependentField, string> = {
   fechaNacimiento: "fecha-nacimiento",
   cedula: "cedula",
   telefono: "telefono",
-  correo: "correo",
-  contrasenia: "contrasenia",
   institucionId: "institucion",
   tipoSangre: "tipo-sangre",
   enfermedades: "enfermedades",
   alergias: "alergias",
-  contactoEmergencia: "contacto-emergencia",
-  telefonoEmergencia: "telefono-emergencia",
 };
 
 /** The id prefix every field on this wizard shares. */
@@ -226,12 +217,6 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
   telefono: (d) => phoneRule(d.telefono, "El teléfono"),
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
-  contactoEmergencia: (d) =>
-    personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
-  // Issue #860: chained after `phoneRule`, same order the public wizard uses.
-  telefonoEmergencia: (d) =>
-    phoneRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
-    emergencyPhoneDiffersRule(d.telefonoEmergencia, d.telefono),
 };
 
 const CHILD_FIELDS: AddDependentField[] = [
@@ -242,17 +227,15 @@ const CHILD_FIELDS: AddDependentField[] = [
   "telefono",
 ];
 
-const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre", "contactoEmergencia", "telefonoEmergencia"];
+// Issue #1138: sin contacto de emergencia propio -- se deriva del
+// representante.
+const HEALTH_FIELDS: AddDependentField[] = ["tipoSangre"];
 
 /** The fields a given step actually renders. */
 export function fieldsForAddDependentStep(step: AddDependentStep): AddDependentField[] {
   switch (step) {
     case "child":
       return CHILD_FIELDS;
-    case "credentials":
-      // Both fields are optional, so neither is ever "missing". The
-      // both-or-neither rule is applied by `validateAddDependentFields`.
-      return [];
     case "health":
       return HEALTH_FIELDS;
     case "summary":
@@ -269,22 +252,6 @@ export function validateAddDependentFields(
   for (const field of fieldsForAddDependentStep(step)) {
     const message = FIELD_RULES[field]?.(data) ?? null;
     if (message !== null) errors[field] = message;
-  }
-  // An optional account is all-or-nothing: half-filled credentials block the
-  // step, and the message has to land on the field that is actually wrong.
-  if (step === "credentials") {
-    const hasCorreo = data.correo.trim().length > 0;
-    const hasContrasenia = data.contrasenia.length > 0;
-    if (hasCorreo || hasContrasenia) {
-      if (!hasCorreo) errors.correo = "El correo electrónico es obligatorio si se desea crear una cuenta.";
-      else if (!isEmail(data.correo)) errors.correo = "El correo electrónico no es válido.";
-      if (!hasContrasenia) {
-        errors.contrasenia = "La contraseña es obligatoria si se desea crear una cuenta.";
-      } else {
-        const passwordError = passwordRule(data.contrasenia, "La contraseña");
-        if (passwordError) errors.contrasenia = passwordError;
-      }
-    }
   }
   return errors;
 }
@@ -303,11 +270,7 @@ const FIELD_LABELS: Partial<Record<AddDependentField, string>> = {
   fechaNacimiento: "Fecha de nacimiento",
   cedula: "Cédula de identidad",
   telefono: "Teléfono",
-  correo: "Correo electrónico",
-  contrasenia: "Contraseña",
   tipoSangre: "Tipo de sangre",
-  contactoEmergencia: "Nombre del contacto de emergencia",
-  telefonoEmergencia: "Teléfono de emergencia",
 };
 
 /** Why "Siguiente" is disabled, in one sentence naming the fields. `null` when nothing is missing. */
@@ -319,17 +282,6 @@ export function describeAddDependentBlocker(errors: AddDependentFieldErrors): st
   if (labels.length === 1) return `Para continuar, revise: ${labels[0]}.`;
   const last = labels[labels.length - 1];
   return `Para continuar, revise: ${labels.slice(0, -1).join(", ")} y ${last}.`;
-}
-
-/**
- * Validate credentials: optional, but if either `correo` or `contrasenia`
- * is provided, BOTH must be present and valid.
- *
- * Composed from `validateAddDependentFields` so the flat list and the
- * beside-the-field message can never drift apart.
- */
-function validateCredentialsData(data: AddDependentFormData): string[] {
-  return Object.values(validateAddDependentFields("credentials", data));
 }
 
 function collect(fields: AddDependentField[], data: AddDependentFormData): string[] {
@@ -350,10 +302,6 @@ function isTipoSangre(value: string): value is TipoSangre {
   return TIPO_SANGRE_VALUES.includes(value as TipoSangre);
 }
 
-function isEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
 /**
  * The observation this used to encode by hand — that a 400 carries a clean
  * Spanish sentence worth showing ("Ya existe una persona con la cédula …")
@@ -367,16 +315,11 @@ export function getAddDependentErrorMessage(error: unknown): string {
   return toUserMessage(error, "No se pudo agregar el dependiente. Revise los datos ingresados e intente nuevamente.");
 }
 
-/**
- * Same translator, different fallback — for the "Vincular a mi cuenta"
- * action (INS-2). The backend's real message
- * (`MENSAJE_VINCULACION_NO_DISPONIBLE`) is user-facing text and reaches the
- * caller as-is via `toUserMessage`; this fallback only fires for a network
- * failure or an unexpected shape, never to replace the backend's answer.
- */
-export function getLinkExistingErrorMessage(error: unknown): string {
-  return toUserMessage(error, "No se pudo vincular esa cédula a su cuenta. Intente nuevamente.");
-}
+// `getLinkExistingErrorMessage` ("Vincular a mi cuenta", INS-2) was removed
+// with the self-service linking action itself — decisión del dueño
+// 2026-09-11 (#1133, punto 3). Linking an existing person by cédula is now
+// desk-only (`LinkRepresentativeSection`/`ReassignRepresentativeSection` in
+// `app/members`), which use `toUserMessage` directly.
 
 // ---------------------------------------------------------------------------
 // Domain helpers
@@ -395,8 +338,13 @@ function parseEnfermedades(raw: string): string[] {
  * the backend's `RepresentadoCreateDTO` shape (camelCase here — the BFF
  * route converts to snake_case before calling FastAPI).
  *
- * If the user provided optional `correo` + `contrasenia`, they are included
- * in the payload so the backend also creates a `Usuario` with rol ALUMNO.
+ * Issue #1137, invariante (B): no credentials are ever built into this
+ * payload — a represented dependent never has a `Usuario` of their own.
+ *
+ * Issue #1138: `fichaMedica` never carries `contactoEmergencia`/
+ * `telefonoEmergencia` — this endpoint always creates a represented minor,
+ * and the backend rejects those two fields explicitly (422) rather than
+ * ignoring them.
  */
 export function buildRepresentadoPayload(data: AddDependentFormData): RepresentadoCreatePayload {
   const payload: RepresentadoCreatePayload = {
@@ -409,14 +357,8 @@ export function buildRepresentadoPayload(data: AddDependentFormData): Representa
       tipoSangre: data.tipoSangre as TipoSangre,
       enfermedades: parseEnfermedades(data.enfermedades),
       ...(data.alergias.trim() ? { alergias: data.alergias.trim() } : {}),
-      ...(data.contactoEmergencia.trim() ? { contactoEmergencia: data.contactoEmergencia.trim() } : {}),
-      ...(data.telefonoEmergencia.trim() ? { telefonoEmergencia: data.telefonoEmergencia.trim() } : {}),
     },
   };
-  if (data.correo.trim() && data.contrasenia) {
-    payload.correo = data.correo.trim();
-    payload.contrasenia = data.contrasenia;
-  }
   if (data.institucionId) {
     payload.institucionId = Number(data.institucionId);
   }

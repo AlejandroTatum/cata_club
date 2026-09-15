@@ -11,6 +11,7 @@ o ADMINISTRADOR.
 `POST`/`DELETE /personas/{persona_id}/beneficio` NO cambian -- siguen
 ADMINISTRADOR-only, ya cubierto por `test_beneficio_asignacion.py`.
 """
+from datetime import date
 from decimal import Decimal
 
 from app.dominio.cedula import cedula_valida
@@ -58,7 +59,9 @@ def test_el_dueno_puede_leer_su_propio_beneficio(client, db_session):
 
 def test_el_representante_puede_leer_el_beneficio_de_su_representado(client, db_session):
     representante = crear_persona_orm(db_session, cedula_valida(721))
-    hijo = crear_persona_orm(db_session, cedula_valida(722))
+    hijo = crear_persona_orm(
+            db_session, cedula_valida(722), fecha_nacimiento=date(2015, 1, 1),
+        )
     hijo.representante_id = representante.id
     descuento = _crear_descuento(db_session, nombre="Becado hijo", porcentaje=Decimal("100.00"))
     db_session.commit()

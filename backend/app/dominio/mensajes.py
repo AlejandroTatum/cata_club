@@ -59,6 +59,20 @@ MENSAJE_VINCULACION_NO_DISPONIBLE = (
     "intente nuevamente."
 )
 
+# Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la vinculación
+# de AUTOSERVICIO (un REPRESENTANTE atando por cédula a una Persona ya
+# existente desde su propia sesión) se retira -- vincular queda como acción de
+# mostrador. La ruta pública sigue viva, pero para ese actor deja de mutar y
+# responde esta parada segura, sin importar si la cédula existe, ya está
+# vinculada a otra cuenta o no existe en absoluto: los tres casos devuelven el
+# MISMO texto y el MISMO código HTTP, igual criterio anti-enumeración que
+# `MENSAJE_VINCULACION_NO_DISPONIBLE` de arriba, solo que acá no hay ninguna
+# cédula que resolver -- la parada corre ANTES de leer nada.
+MENSAJE_VINCULACION_SOLO_PRESENCIAL = (
+    "La vinculación de un representado se realiza únicamente en persona. "
+    "Acérquese a administración del club."
+)
+
 # Issue #790: respuesta cuando la cuenta que intenta vincular a un representado
 # todavía no probó que la dirección de correo con la que se inscribió es suya.
 #
@@ -71,6 +85,57 @@ MENSAJE_VINCULACION_NO_DISPONIBLE = (
 MENSAJE_CORREO_SIN_VERIFICAR = (
     "Para vincular a un representado primero debe verificar su correo. "
     "Revise su bandeja de entrada o solicite un nuevo enlace de verificación."
+)
+
+# Issue #1137, invariante (B): una Persona con `representante_id` nunca
+# puede tener `Usuario` propio. La mitad de este invariante que corre en la
+# capa de DTO (`validar_representante_solo_para_menor`,
+# `dtos/validadores.py`) usa su propio texto porque ahí la regla es sobre la
+# EDAD del representado; acá (`AuthServicio.registrar_usuario`, detrás de
+# `POST /auth/registro`) el candidato ya existe como Persona y lo que falla
+# es que está representado. Sin la disciplina anti-enumeración de los
+# mensajes de arriba: este endpoint es ADMINISTRADOR-only, y quien lo llama
+# ya conoce a la persona por su cédula -- nombrar el motivo no revela nada
+# que ese administrador no supiera.
+MENSAJE_REPRESENTADO_SIN_CREDENCIALES_PROPIAS = (
+    "Esta persona tiene un representante legal asignado y no puede tener "
+    "credenciales propias."
+)
+
+# Issue #1133, decisión del dueño (2026-09-11, opción B en #1134): solo una
+# cuenta con el rol REPRESENTANTE puede recibir representados.
+#
+# Mensaje ESPECÍFICO a propósito -- no hay disciplina anti-enumeración que
+# proteger acá: la cuenta que falla es la del `representante_id` que EL
+# PROPIO llamador proporcionó (su propia sesión en `vincular_representado`,
+# o un id que un ADMINISTRADOR ya conoce en `crear_representado`/
+# `registrar_persona`), nunca una cédula ajena que alguien esté sondeando.
+MENSAJE_REPRESENTANTE_SIN_ROL = (
+    "Esta cuenta no tiene el rol de Representante y no puede recibir "
+    "representados."
+)
+
+# Issue #1133/#1137, comando de reasignación presencial: rechazar un no-op
+# ANTES de tocar cualquier fila. `reasignar_presencial` reemplaza el vínculo
+# de un menor -- pedir que el "nuevo" representante sea el MISMO que el
+# actual no es una reasignación, es un trámite sin ningún cambio, y dejarlo
+# pasar hasta `_ejecutar_reasignacion` bloqueaba filas y revocaba la sesión
+# del representante que sigue representando a la misma persona.
+MENSAJE_REASIGNACION_SIN_CAMBIO = (
+    "El nuevo representante es el mismo que el actual: no hay ningún cambio "
+    "que reasignar."
+)
+
+# Issue #1133/#1137: la auto-referencia (un menor no puede ser su propio
+# representante) ya la rechaza el trigger de base
+# `trg_relacion_representacion_valida` (`i1141relinteg`), pero llegar hasta
+# ahí significa bloquear las tres filas primero y responder con el
+# `IntegrityError` genérico traducido a un 409 -- un código que no describe
+# el motivo real. El comando de reasignación la rechaza acá, antes de
+# cualquier lock, con el mismo criterio ya legible que el resto de sus
+# validaciones de dominio.
+MENSAJE_REPRESENTANTE_AUTORREFERENCIA = (
+    "Una persona no puede ser su propio representante legal."
 )
 
 # Issue #790, misma disciplina anti-enumeración que la recuperación de

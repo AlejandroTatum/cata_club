@@ -28,14 +28,23 @@ from main import app
 FECHA = datetime(2029, 1, 1, tzinfo=timezone.utc)
 
 
-def _crear_persona(db_session, secuencia_cedula: int, representante_id: int = None) -> Persona:
+def _crear_persona(
+    db_session, secuencia_cedula: int, representante_id: int = None,
+    fecha_nacimiento: date = date(1990, 1, 1),
+) -> Persona:
+    # Ver `test_alertas_mora.py::_crear_persona`: el representado legado se
+    # siembra como menor y envejece en el sitio.
+    vinculado = representante_id is not None
     persona = Persona(
         nombres="Ana", apellidos="Vega", cedula=cedula_valida(secuencia_cedula),
-        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
-        representante_id=representante_id,
+        fecha_nacimiento=date(2015, 1, 1) if vinculado else fecha_nacimiento,
+        telefono="0990000000", representante_id=representante_id,
     )
     db_session.add(persona)
     db_session.commit()
+    if vinculado:
+        persona.fecha_nacimiento = fecha_nacimiento  # envejece en el sitio
+        db_session.commit()
     db_session.refresh(persona)
     return persona
 

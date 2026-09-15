@@ -70,6 +70,24 @@ let mockAuthSession = {
 
 const { mockRefreshSession } = vi.hoisted(() => ({ mockRefreshSession: vi.fn() }));
 
+/**
+ * Issue #1132 (independent-verification fix): `JoinAsPlayerAction` calls
+ * `useToast`, and this file's `render(<StudentPage />)` calls never wrap a
+ * real `ToastProvider` (production mounts one at the root layout — see
+ * `app/layout.tsx` — this test tree does not). Same pass-through mock
+ * `MembersPage.test.tsx` uses for the same reason.
+ */
+vi.mock("@/contexts/ToastContext", () => ({
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useToast: () => ({
+    showToast: vi.fn(),
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+    showInfo: vi.fn(),
+    showWarning: vi.fn(),
+  }),
+}));
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     session: mockAuthSession,
@@ -84,7 +102,6 @@ vi.mock("@/contexts/AuthContext", () => ({
 const mockFetchStudentPortal = vi.fn();
 const mockFetchPagosDePersona = vi.fn();
 const mockFetchHorariosPorAlumno = vi.fn();
-const mockIndependizarPersona = vi.fn();
 const mockSubirFotoPersona = vi.fn();
 
 vi.mock("@/services/api", () => ({
@@ -95,7 +112,6 @@ vi.mock("@/services/api", () => ({
   // The student's REAL schedule assignments — the only source the "Próximos
   // entrenamientos" panel is allowed to state a future session from.
   fetchHorariosPorAlumno: (...args: unknown[]) => mockFetchHorariosPorAlumno(...args),
-  independizarPersona: (...args: unknown[]) => mockIndependizarPersona(...args),
   subirFotoPersona: (...args: unknown[]) => mockSubirFotoPersona(...args),
 }));
 
@@ -177,7 +193,6 @@ beforeEach(() => {
   mockFetchStudentPortal.mockReset().mockResolvedValue(PORTAL);
   mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
   mockFetchHorariosPorAlumno.mockReset().mockResolvedValue([]);
-  mockIndependizarPersona.mockReset().mockResolvedValue(undefined);
   mockSubirFotoPersona.mockReset().mockResolvedValue(undefined);
   mockRefreshSession.mockReset();
   mockRefreshSession.mockResolvedValue(undefined);
@@ -282,6 +297,24 @@ describe("StudentPage — contextual dependent CTA", () => {
     const link = await screen.findByText("Agregar hijo o dependiente");
     expect(link.closest("a")).toHaveAttribute("href", "/student/add-dependent");
   });
+
+  // #1137: independence stopped being self-service — it is now a PRESENCIAL
+  // command only an ADMINISTRADOR can run, from "Miembros". A represented
+  // adult (still carrying `representanteId`) used to see an "Independizarse
+  // del representante" button here; that button, its confirmation modal, and
+  // the client call it made are all gone, regardless of what the account
+  // looks like.
+  it("offers no self-service independence action to a represented adult", async () => {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, representanteId: 5 } });
+
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByText(/independizarse/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
 
 /**
@@ -319,7 +352,10 @@ describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
     // The dual account keeps its representante CTA...
     expect(await screen.findByText("Agregar hijo o dependiente")).toBeInTheDocument();
     // ...but is never offered the role it already has (#269 symptom 1).
-    expect(screen.queryByRole("link", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+    // `JoinAsPlayerAction`'s trigger is a `<button>` (from `TipoSelectorForm`),
+    // never a `<Link>` — querying by "link" here always passes regardless of
+    // whether the CTA is wrongly shown (independent-verification fix).
+    expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
   });
 
   it("keeps the account's own student profile selected instead of rewriting to the first dependent (#269 symptom 2)", async () => {
@@ -328,6 +364,70 @@ describe("StudentPage — dual-role account (REPRESENTANTE + ALUMNO)", () => {
     // Without the fix, hasAlumnoRole was false (primary role: representante),
     // the self profile fell out of managedProfiles and the picker silently
     // fell back to the first dependent as the subject.
+    expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
+      "aria-label",
+      "Carnet de socio de Alumno Test",
+    );
+  });
+});
+
+/**
+ * Issue #1132: "es jugador" comes from an ACTIVA Membresia, never from the
+ * ALUMNO role alone — `crear_membresia` no longer grants ALUMNO when a
+ * representante pays a membership for their own persona (issue #762 stays
+ * intact: they keep only REPRESENTANTE). Before this fix, `derivePortalMode`
+ * and `useManagedProfiles` both read `hasAlumnoRole`, so this exact account
+ * would be stuck on the "pending" screen forever and, even if it reached the
+ * active portal some other way, would never see its own schedule/payments.
+ */
+describe("StudentPage — a representative with an own active membership (#1132)", () => {
+  const ACTIVE_MEMBERSHIP_PORTAL: StudentPortalSummary = {
+    self: {
+      ...PORTAL.self!,
+      membership: {
+        id: 11,
+        estado: "ACTIVA",
+        personaId: 9,
+        montoAplicado: "35.00",
+        categoria: "Mensual",
+        modalidad: "MENSUAL",
+        fechaActivacion: "2026-07-01",
+        fechaFin: "2026-07-31",
+      },
+    },
+    representados: [],
+    membershipPlans: [],
+  };
+
+  beforeEach(() => {
+    mockAuthSession = {
+      user: { id: "9", name: "Representante Test", email: "rep@cataclub.com", role: "representante", representanteId: null },
+      roles: ["REPRESENTANTE"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+    mockFetchStudentPortal.mockReset().mockResolvedValue(ACTIVE_MEMBERSHIP_PORTAL);
+  });
+
+  it("shows the active portal instead of the pending-enrollment screen", async () => {
+    render(<StudentPage />);
+
+    expect(await screen.findByTestId("student-carnet")).toBeInTheDocument();
+    expect(screen.queryByText(/todavía no completaste/i)).not.toBeInTheDocument();
+  });
+
+  it("does not offer the join-as-player CTA — the account is already a player", async () => {
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    // Same button-vs-link correction as the dual-role scenario above.
+    expect(screen.queryByRole("button", { name: /unirme como jugador/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps its own profile selected, enabling its own schedule and payments", async () => {
+    render(<StudentPage />);
+
+    // Without the fix, `useManagedProfiles` only included `data.self` when
+    // `hasAlumnoRole` was true — this account never holds that role.
     expect(await screen.findByTestId("student-carnet")).toHaveAttribute(
       "aria-label",
       "Carnet de socio de Alumno Test",
@@ -2573,5 +2673,54 @@ describe("StudentPage — la fila de pulso", () => {
     const pulso = within(await screen.findByTestId("student-pulse"));
 
     expect(pulso.getByText("Pagos en revisión")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #1132 (independent-verification fix): a PURE representative — no
+ * ALUMNO role, no own active membership, zero representados — is the exact
+ * persona `derivePortalMode` sends to `PendingEnrollmentView`, not
+ * `ActivePortalView`. That view's own "Inscribirme como jugador" CTA used to
+ * be a plain `<Link href="/student/enroll?type=self">` — the PUBLIC wizard,
+ * which creates a brand-new Persona/Usuario instead of a membership for this
+ * existing one. `JoinAsPlayerAction` (already wired into `ActivePortalView`
+ * for the dual-role/own-membership cases below) belongs here too.
+ */
+describe("StudentPage — a pure representative with no dependents and no membership (#1132 pending state)", () => {
+  beforeEach(() => {
+    mockAuthSession = {
+      user: { id: "9", name: "Representante Test", email: "rep@cataclub.com", role: "representante", representanteId: null },
+      roles: ["REPRESENTANTE"],
+      loggedInAt: "2026-07-01T12:00:00Z",
+    };
+    // `PORTAL`: self.membership is null and representados is [] — exactly
+    // the zero-signal account `derivePortalMode` reads as "pending".
+    mockFetchStudentPortal.mockReset().mockResolvedValue(PORTAL);
+  });
+
+  it("sees the in-portal join action (a button), never a link to the public wizard", async () => {
+    render(<StudentPage />);
+
+    // Reaches the pending screen at all — the ancla this scenario needs
+    // before the CTA assertion below means anything.
+    await screen.findByText(/todavía no tiene una matrícula activa/i);
+
+    expect(
+      screen.getByRole("button", { name: /unirme como jugador/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /inscribirme como jugador/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /unirme como jugador/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still offers the honest dependent-enrollment link untouched", async () => {
+    render(<StudentPage />);
+
+    await screen.findByText(/todavía no tiene una matrícula activa/i);
+    const link = screen.getByRole("link", { name: /inscribir a un hijo o dependiente/i });
+    expect(link).toHaveAttribute("href", "/student/enroll?type=child");
   });
 });

@@ -24,9 +24,6 @@ export interface BackendEnrollmentAlumno {
   cedula: string;
   fecha_nacimiento: string;
   telefono: string;
-  /** Optional: when provided (child enrollment), a Usuario + ALUMNO is also created. */
-  correo?: string;
-  contrasenia?: string;
   institucion_id?: number;
 }
 
@@ -44,10 +41,14 @@ export interface BackendEnrollmentFichaMedica {
   tipo_sangre: BloodType;
   enfermedades: string[];
   alergias?: string;
-  /** Required by `EnrollmentFichaMedicaDTO`; always sent, blank included. */
-  contacto_emergencia: string;
-  /** Required by `EnrollmentFichaMedicaDTO`; always sent, blank included. */
-  telefono_emergencia: string;
+  /**
+   * Issue #1138: present (required by `EnrollmentFichaMedicaDTO`) only for a
+   * self (adult) enrollment. ABSENT for a "child" enrollment — the backend's
+   * `EnrollmentFichaMedicaMenorDTO` forbids these two keys outright and
+   * answers 422 if they arrive.
+   */
+  contacto_emergencia?: string;
+  telefono_emergencia?: string;
 }
 
 export interface BackendEnrollmentCreateDTO {
@@ -85,14 +86,19 @@ function buildFichaMedica(fichaMedica: EnrollmentMedicalRecord): BackendEnrollme
     // `alergias` is optional in the backend DTO, so omitting a blank one is
     // the honest encoding of "nothing to record".
     ...(fichaMedica.alergias ? { alergias: fichaMedica.alergias } : {}),
-    // The two emergency fields are NOT optional there — `EnrollmentFichaMedicaDTO`
-    // has always declared both as required — so they are sent unconditionally,
-    // blank included. Spreading them away when falsy turned "you left the
-    // emergency phone blank" into "field missing", which is a different
-    // Pydantic error about a different problem, and the sentence the person
-    // read named the wrong one.
-    contacto_emergencia: fichaMedica.contactoEmergencia,
-    telefono_emergencia: fichaMedica.telefonoEmergencia,
+    // Issue #1138: for a SELF enrollment these two are required by
+    // `EnrollmentFichaMedicaDTO` — sent unconditionally, blank included, same
+    // reasoning as `alergias` above but inverted (a missing key there reads
+    // as a different, wrong Pydantic error). For a CHILD enrollment,
+    // `buildEnrollmentRequest`/`EnrollFormData` never populate these two, so
+    // they stay `undefined` here and are correctly omitted — the backend's
+    // `EnrollmentFichaMedicaMenorDTO` does not accept the keys at all.
+    ...(fichaMedica.contactoEmergencia !== undefined
+      ? { contacto_emergencia: fichaMedica.contactoEmergencia }
+      : {}),
+    ...(fichaMedica.telefonoEmergencia !== undefined
+      ? { telefono_emergencia: fichaMedica.telefonoEmergencia }
+      : {}),
   };
 }
 
@@ -105,9 +111,6 @@ export function buildEnrollmentCreateDTO(data: EnrollmentRequest): BackendEnroll
       fecha_nacimiento: data.alumno.fechaNacimiento,
       telefono: data.alumno.telefono,
       ...(data.alumno.institucionId ? { institucion_id: data.alumno.institucionId } : {}),
-      ...(data.credencialesMenor
-        ? { correo: data.credencialesMenor.correo, contrasenia: data.credencialesMenor.contrasenia }
-        : {}),
     },
     ...(data.credencialesAlumno
       ? { credenciales_alumno: { correo: data.credencialesAlumno.correo, contrasenia: data.credencialesAlumno.contrasenia } }
