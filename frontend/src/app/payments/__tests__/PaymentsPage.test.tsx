@@ -192,6 +192,36 @@ const REJECTED_REQUEST: PaymentValidationRequest = {
   rejectionReason: "El monto no coincide",
 };
 
+// Issue #1208: MEMBERSHIP_STATUS_BY_ESTADO folds a never-activated backend
+// INACTIVA membership into the same "vencida" bucket as a real VENCIDA one —
+// `estadoBackend` is what tells them apart, same as `/members`.
+const NEVER_ACTIVATED_PENDING_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-inactiva-pendiente",
+  studentName: "Lucía Andrade",
+  estadoBackend: "INACTIVA",
+  validationStatus: "pendiente",
+};
+
+/** Same never-activated membership, but with nothing left awaiting review. */
+const NEVER_ACTIVATED_RESOLVED_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-inactiva-rechazado",
+  studentName: "Rosa Delgado",
+  estadoBackend: "INACTIVA",
+  validationStatus: "rechazado",
+  rejectionReason: "El monto no coincide",
+};
+
+/** An actually lapsed membership — must keep reading "Vencida". */
+const LAPSED_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-vencida",
+  studentName: "Mario Chávez",
+  estadoBackend: "VENCIDA",
+  currentMembershipStatus: "vencida",
+};
+
 function renderPage(): void {
   render(<ToastProvider><PaymentsPage /></ToastProvider>);
 }
@@ -1965,5 +1995,34 @@ describe("PaymentsPage — panel único de validar pago (issue #510)", () => {
     expect(
       within(proof).getByText(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod)),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La insignia de membresía distingue INACTIVA de VENCIDA (issue #1208)
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCIDA", () => {
+  it('renders "Pago pendiente" — never "Vencida" — for a never-activated membership with its first payment pending', async () => {
+    mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_PENDING_REQUEST]);
+    renderPage();
+    await openRequest("Lucía Andrade");
+    await screen.findByText("Pago pendiente");
+    expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
+  });
+
+  it('renders "Sin activar" — never "Vencida" — for a never-activated membership with nothing awaiting review', async () => {
+    mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_RESOLVED_REQUEST]);
+    renderPage();
+    await openRequest("Rosa Delgado");
+    await screen.findByText("Sin activar");
+    expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
+  });
+
+  it('still renders "Vencida" for an actually lapsed membership', async () => {
+    mockFetchPaymentValidations.mockResolvedValue([LAPSED_REQUEST]);
+    renderPage();
+    await openRequest("Mario Chávez");
+    await screen.findByText("Vencida");
   });
 });

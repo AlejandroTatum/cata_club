@@ -4,6 +4,7 @@
  * `lib/server/payments-adapter.ts` (which re-exports it for backward
  * compatibility) so no `"use client"` file has to reach into `lib/server/`.
  */
+import type { BadgeTone } from "@/components/ui/Badge";
 import type { MembershipStatus } from "@/services/api";
 
 export type BackendEstadoMembresia = "INACTIVA" | "ACTIVA" | "VENCIDA" | "SUSPENDIDA";
@@ -40,4 +41,19 @@ export const MEMBERSHIP_STATUS_BY_ESTADO: Record<BackendEstadoMembresia, Members
  */
 export function readsAsVencida(estado: BackendEstadoMembresia): boolean {
   return MEMBERSHIP_STATUS_BY_ESTADO[estado] === "vencida";
+}
+
+/**
+ * Label/tone for a backend INACTIVA membership — the state
+ * `MEMBERSHIP_STATUS_BY_ESTADO` folds into the same `"vencida"` bucket as a
+ * real VENCIDA one, for a display type with no `"inactiva"` value of its
+ * own. "Pago pendiente" while its first payment awaits validation,
+ * otherwise "Sin activar" — never "Vencida" (issue #1199, #1208). `/members`
+ * (`getMembershipStatusBadge`) and `/payments` both render this state and
+ * share the rule so it cannot drift between the two screens.
+ */
+export function inactivaMembershipBadge(paymentPending: boolean): { label: string; tone: BadgeTone } {
+  return paymentPending
+    ? { label: "Pago pendiente", tone: "warn" }
+    : { label: "Sin activar", tone: "neutral" };
 }
