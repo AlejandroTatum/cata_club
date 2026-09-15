@@ -187,6 +187,18 @@ export interface MemberAccount {
    * ONLY `REPRESENTANTE` here, per the #1132 contract).
    */
   backendRoles?: BackendTipoRol[];
+  /**
+   * Issue #1221: the personas whose `representanteId` equals THIS persona's
+   * id — never this persona's own `estudiantes[0]`. `members-adapter.ts#
+   * buildMemberAccounts` groups the SAME `/personas/` payload by
+   * `representanteId` (no extra request per row), reusing each dependent's
+   * own already-built `MemberStudentSummary` (the summary that persona's own
+   * row also carries). Optional/omitted (never fabricated) for a represented
+   * minor, a self-managed adult with no representados, and any fixture built
+   * before this field existed — the "Estudiantes a cargo" section in
+   * page.tsx reads a missing value as "no dependents" and hides the section.
+   */
+  dependientes?: MemberStudentSummary[];
 }
 
 /**

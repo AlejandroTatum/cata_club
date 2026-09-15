@@ -3,7 +3,7 @@
  * no fetching. Mirrors src/lib/server/__tests__/attendance-adapter.test.ts.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildMemberAccounts, selectMembresiaParaPersona, type BackendPersonaFull } from "../members-adapter";
 import type { BackendMembresia, BackendPagoListItem, BackendTipoMembresia } from "../payments-adapter";
 
@@ -461,6 +461,77 @@ describe("buildMemberAccounts", () => {
 
       expect(accounts[0].telefono).toBe("");
       expect(accounts[0].estudiantes[0].telefono).toBe("");
+    });
+  });
+
+  // Issue #1221: the edit dialog's "Estudiantes a cargo" section was reusing
+  // `estudiantes` (the row's own single-element self-summary) as if it were
+  // the list of people this account represents — so every dialog listed the
+  // account holder, never their actual dependents. `dependientes` is the
+  // real list: every OTHER persona whose `representanteId` is this row's id,
+  // grouped from the same `/personas/` payload the adapter already has.
+  describe("dependientes (issue #1221)", () => {
+    const secondChild: BackendPersonaFull = {
+      id: 4,
+      nombres: "Mateo",
+      apellidos: "Martinez",
+      telefono: "0999999004",
+      fechaNacimiento: "2016-01-01",
+      representanteId: 2,
+      activo: true,
+    };
+
+    it("lists a representative's two dependents, built from the same payload — never the representative themself", () => {
+      const accounts = buildMemberAccounts(
+        [parent, child, secondChild],
+        new Map([[3, pago]]),
+        new Map([[100, membresia]]),
+        new Map(),
+        new Map([[5, tipo]]),
+      );
+
+      const carlos = accounts.find((a) => a.id === "2");
+      expect(carlos?.dependientes).toHaveLength(2);
+      expect(carlos?.dependientes?.map((d) => d.id).sort()).toEqual(["3", "4"]);
+      // Carlos himself (id "2") is never in his own dependientes list.
+      expect(carlos?.dependientes?.some((d) => d.id === "2")).toBe(false);
+      // Each dependent carries the same summary their OWN row also shows —
+      // Sofia's membership/payment status, not a re-derived stub.
+      const sofiaAsDependiente = carlos?.dependientes?.find((d) => d.id === "3");
+      expect(sofiaAsDependiente?.membresia?.estado).toBe("activa");
+      expect(sofiaAsDependiente?.ultimoPago?.estado).toBe("aprobado");
+    });
+
+    it("leaves dependientes empty for a represented minor — never lists themself", () => {
+      const accounts = buildMemberAccounts([parent, child], new Map(), new Map(), new Map(), new Map());
+      const sofia = accounts.find((a) => a.id === "3");
+      expect(sofia?.dependientes).toEqual([]);
+    });
+
+    it("leaves dependientes empty for a self-managed adult with no representados", () => {
+      const accounts = buildMemberAccounts([admin], new Map(), new Map(), new Map(), new Map());
+      expect(accounts[0].dependientes).toEqual([]);
+    });
+
+    it("resolves each persona's membership exactly once — a dependent reuses its own row's summary, never a second lookup", () => {
+      const membresiaById = new Map([[100, membresia]]);
+      const getSpy = vi.spyOn(membresiaById, "get");
+
+      buildMemberAccounts(
+        [parent, child],
+        new Map([[3, pago]]),
+        membresiaById,
+        new Map(),
+        new Map([[5, tipo]]),
+      );
+
+      // Only Sofia (id 3) has a `pago`, so only her resolution reaches
+      // `membresiaById.get` (Carlos has none, so `resolveMembresiaParaPersona`
+      // short-circuits before it). One call total — not a second one when
+      // Carlos' row attaches Sofia's already-built summary as a dependiente.
+      // A second call here would mean this feature added a per-row lookup,
+      // exactly what the issue's acceptance criteria rules out.
+      expect(getSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -202,6 +202,23 @@ vi.mock("@/services/api", () => {
   };
 });
 
+// Issue #1221: `estudiantes` (the row's own summary) and `dependientes` (who
+// this account represents) are two independent fields now — most of this
+// file's fixtures only care that SOME `MemberStudentSummary` renders inside
+// "Estudiantes a cargo", so `SOFIA_SUMMARY` is shared by both to keep every
+// pre-existing test below unchanged. Tests that specifically exercise the
+// issue's fix (a representative's real dependents list) build their own
+// distinct fixtures — see "MembersPage — Estudiantes a cargo lists real
+// dependents (issue #1221)" further down.
+const SOFIA_SUMMARY: MemberStudentSummary = {
+  id: "10",
+  nombres: "Sofía",
+  apellidos: "González",
+  activo: true,
+  membresia: null,
+  ultimoPago: null,
+};
+
 const ACCOUNT: MemberAccount = {
   id: "1",
   // Issue #1199: this fixture models an ordinary Ficha médica/Pagos row —
@@ -213,16 +230,8 @@ const ACCOUNT: MemberAccount = {
   nombres: "María",
   apellidos: "González",
   telefono: "0999999999",
-  estudiantes: [
-    {
-      id: "10",
-      nombres: "Sofía",
-      apellidos: "González",
-      activo: true,
-      membresia: null,
-      ultimoPago: null,
-    },
-  ],
+  estudiantes: [SOFIA_SUMMARY],
+  dependientes: [SOFIA_SUMMARY],
 };
 
 function createAccounts(count: number): MemberAccount[] {
@@ -432,7 +441,7 @@ describe("MembersPage — Editar member modal", () => {
       accounts: [
         {
           ...ACCOUNT,
-          estudiantes: [{ ...ACCOUNT.estudiantes[0], fechaNacimiento: "2010-01-01" }],
+          dependientes: [{ ...SOFIA_SUMMARY, fechaNacimiento: "2010-01-01" }],
         },
       ],
     });
@@ -464,7 +473,7 @@ describe("MembersPage — Editar member modal", () => {
         accounts: [
           {
             ...ACCOUNT,
-            estudiantes: [{ ...ACCOUNT.estudiantes[0], fechaNacimiento: "2008-07-15" }],
+            dependientes: [{ ...SOFIA_SUMMARY, fechaNacimiento: "2008-07-15" }],
           },
         ],
       });
@@ -534,9 +543,9 @@ describe("MembersPage — Editar member modal", () => {
       accounts: [
         {
           ...ACCOUNT,
-          estudiantes: [
-            { ...ACCOUNT.estudiantes[0], id: "10", nombres: "Sofía", apellidos: "González" },
-            { ...ACCOUNT.estudiantes[0], id: "11", nombres: "Mateo", apellidos: "González" },
+          dependientes: [
+            { ...SOFIA_SUMMARY, id: "10", nombres: "Sofía", apellidos: "González" },
+            { ...SOFIA_SUMMARY, id: "11", nombres: "Mateo", apellidos: "González" },
           ],
         },
       ],
@@ -1102,15 +1111,20 @@ describe("MembersPage — Registrar pago inline form", () => {
           entryPoint?: "edit" | "payments";
     } = {},
   ): Promise<HTMLElement> {
+    // Issue #1221: `entryPoint: "edit"` opens the account dialog, which now
+    // renders "Estudiantes a cargo" from `dependientes`, not `estudiantes` —
+    // this same summary object has to back both fields so the (majority)
+    // default entryPoint ("payments", PaymentsDialog reading `estudiantes`)
+    // and the one "edit" test below keep seeing the same data.
+    const estudianteConMembresia: MemberStudentSummary = {
+      ...ACCOUNT.estudiantes[0],
+      membresia: options.membresia ?? MEMBRESIA_VENCIDA,
+      ...(options.ultimoPago !== undefined ? { ultimoPago: options.ultimoPago } : {}),
+    };
     const cuentaConMembresia: MemberAccount = {
       ...ACCOUNT,
-      estudiantes: [
-        {
-          ...ACCOUNT.estudiantes[0],
-          membresia: options.membresia ?? MEMBRESIA_VENCIDA,
-          ...(options.ultimoPago !== undefined ? { ultimoPago: options.ultimoPago } : {}),
-        },
-      ],
+      estudiantes: [estudianteConMembresia],
+      dependientes: [estudianteConMembresia],
     };
     mockFetchMembers.mockResolvedValue({ accounts: [cuentaConMembresia] });
     mockFetchDescuentos.mockResolvedValue(options.descuentos ?? []);
@@ -4252,5 +4266,163 @@ describe("MembersPage — representative-only row actions (issue #1199, #1211)",
     expect(within(row).getByRole("button", { name: /^ficha médica/i })).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /^pagos/i })).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /^editar/i })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1221: "Estudiantes a cargo" was rendering `account.estudiantes` —
+// the row's OWN summary — instead of the personas this account actually
+// represents. Every dialog showed the account holder themself; a
+// representative's real dependents never appeared. This suite exercises the
+// fixed section directly: it reads `account.dependientes`, shows name + age,
+// and hides (rather than fakes an entry) when there are none.
+// ---------------------------------------------------------------------------
+
+describe('MembersPage — "Estudiantes a cargo" lists real dependents (issue #1221)', () => {
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+  });
+
+  it("lists a representative's two dependents by name and age, never the representative themself", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 8, 15));
+    try {
+      const representative: MemberAccount = {
+        id: "50",
+        role: "representante",
+        nombres: "Carla",
+        apellidos: "Reyes",
+        telefono: "0987654321",
+        estudiantes: [
+          { id: "50", nombres: "Carla", apellidos: "Reyes", activo: true, membresia: null, ultimoPago: null },
+        ],
+        dependientes: [
+          {
+            id: "51",
+            nombres: "Ana",
+            apellidos: "Reyes",
+            fechaNacimiento: "2016-09-01",
+            activo: true,
+            membresia: null,
+            ultimoPago: null,
+          },
+          {
+            id: "52",
+            nombres: "Luis",
+            apellidos: "Reyes",
+            fechaNacimiento: "2018-09-01",
+            activo: true,
+            membresia: null,
+            ultimoPago: null,
+          },
+        ],
+      };
+      mockFetchMembers.mockResolvedValue({ accounts: [representative] });
+
+      render(
+        <ToastProvider>
+          <MembersPage />
+        </ToastProvider>,
+      );
+      const matches = await screen.findAllByText("Carla Reyes");
+      const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+      fireEvent.click(getEditButton(row));
+      const dialog = screen.getByRole("dialog");
+
+      expect(within(dialog).getByText("Estudiantes a cargo")).toBeInTheDocument();
+      expect(within(dialog).getByText("Ana Reyes")).toBeInTheDocument();
+      expect(within(dialog).getByText("10 años")).toBeInTheDocument();
+      expect(within(dialog).getByText("Luis Reyes")).toBeInTheDocument();
+      expect(within(dialog).getByText("8 años")).toBeInTheDocument();
+
+      // The account holder's own name only ever appears in the dialog's
+      // header/identity fields, never as an entry inside this section's list.
+      const section = within(dialog).getByText("Estudiantes a cargo").closest("section") as HTMLElement;
+      expect(within(section).queryByText("Carla Reyes")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hides "Estudiantes a cargo" for a represented minor — it never lists themself', async () => {
+    const minor: MemberAccount = {
+      id: "60",
+      role: "representante",
+      nombres: "Pablo",
+      apellidos: "Nuñez",
+      telefono: "0987654322",
+      representadoPor: "Carla Reyes",
+      representadoPorId: 50,
+      estudiantes: [
+        { id: "60", nombres: "Pablo", apellidos: "Nuñez", activo: true, membresia: null, ultimoPago: null },
+      ],
+      dependientes: [],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [minor] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText("Pablo Nuñez");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
+  });
+
+  it('hides "Estudiantes a cargo" for a self-managed adult with no dependientes', async () => {
+    const selfManaged: MemberAccount = {
+      id: "70",
+      role: "representante",
+      nombres: "Diego",
+      apellidos: "Salas",
+      telefono: "0987654323",
+      estudiantes: [
+        { id: "70", nombres: "Diego", apellidos: "Salas", activo: true, membresia: null, ultimoPago: null },
+      ],
+      dependientes: [],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [selfManaged] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText("Diego Salas");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
+  });
+
+  it('hides "Estudiantes a cargo" when the fixture omits dependientes entirely (older/unmigrated data)', async () => {
+    const noDependientesField: MemberAccount = {
+      id: "80",
+      role: "representante",
+      nombres: "Elena",
+      apellidos: "Vera",
+      telefono: "0987654324",
+      estudiantes: [
+        { id: "80", nombres: "Elena", apellidos: "Vera", activo: true, membresia: null, ultimoPago: null },
+      ],
+    };
+    mockFetchMembers.mockResolvedValue({ accounts: [noDependientesField] });
+
+    render(
+      <ToastProvider>
+        <MembersPage />
+      </ToastProvider>,
+    );
+    const matches = await screen.findAllByText("Elena Vera");
+    const row = matches.map((el) => el.closest("tr")).find(Boolean) as HTMLElement;
+    fireEvent.click(getEditButton(row));
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).queryByText("Estudiantes a cargo")).not.toBeInTheDocument();
   });
 });
