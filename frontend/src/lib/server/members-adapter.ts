@@ -79,7 +79,15 @@ export interface BackendPersonaFull {
    * credential with one field fewer.
    */
   cedula?: string | null;
-  telefono: string;
+  /**
+   * Issue #1207: `PersonaResponseDTO.telefono` is nullable on the backend
+   * now — a represented minor with no phone of their own persists `NULL`
+   * (used to be `""`, forced by a NOT NULL column). `MemberAccount.telefono`
+   * stays `string` on purpose (every consumer already assumes one), so
+   * `null` is coerced to `""` right where this type is read, not pushed
+   * downstream — see the two `telefono: persona.telefono ?? ""` sites below.
+   */
+  telefono: string | null;
   fechaNacimiento: string;
   representanteId: number | null;
   /** `Persona.activo`, supplied by the admin personas listing. */
@@ -205,7 +213,7 @@ function buildMemberStudentSummary(
     // `BackendPersonaFull.cedula` above: never fabricated when the backend
     // omits it.
     cedula: persona.cedula ?? undefined,
-    telefono: persona.telefono,
+    telefono: persona.telefono ?? "",
     fechaNacimiento: persona.fechaNacimiento,
     activo: persona.activo ?? false,
     membresia: membresia
@@ -313,7 +321,7 @@ export function buildMemberAccounts(
       backendRoles: backendRoles.length > 0 ? backendRoles : undefined,
       nombres: persona.nombres,
       apellidos: persona.apellidos,
-      telefono: persona.telefono,
+      telefono: persona.telefono ?? "",
       representadoPor: representante ? `${representante.nombres} ${representante.apellidos}` : undefined,
       representadoPorId: persona.representanteId ?? undefined,
       // Issue #362's exact gap: no legal representative at all AND no ficha
