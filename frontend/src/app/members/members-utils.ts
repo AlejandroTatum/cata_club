@@ -639,17 +639,37 @@ export function getMembershipStatusBadge(
 }
 
 /**
- * Whether this account is a representative-only row: pays for others (or
- * manages their own login) but has never had a membership of their own on
+ * Whether this row IS the representative/payer's own persona row — the root
+ * account that pays for others but has never had a membership of her own on
  * file. Issue #1199: `MedicalRecordAccessButton`/`PaymentsAccessButton` used
  * to render unconditionally, offering student-only actions on a row whose
  * badge already says "Representante" and carries no membership at all.
+ *
+ * Issue #1211 (regression from #1202/#1199): the original predicate here —
+ * `role === "representante" && no membership` — also matched a REPRESENTED
+ * student's own row: a child enrolled by a representative has no `Usuario`/
+ * login of her own, so the roles-bulk lookup
+ * (`members-adapter.ts#buildMemberAccounts`) never resolves her `ALUMNO`
+ * role and she defaults to `role: "representante"`, same as her
+ * representative. Every row is already one persona (issue #388 — no nesting
+ * to unwrap), so `representadoPor` is what actually tells the payer's own
+ * row apart from a represented student's row: it is set ONLY on the latter
+ * (see `members-adapter.ts#buildMemberAccounts`). Checking it first — and
+ * short-circuiting to "not the payer's row" whenever it is set — fixes that
+ * misclassification without touching the backend role lookup, while the
+ * membership check keeps covering the representative who also plays and
+ * carries her own membership (`tests/e2e/members-payments-dialog.spec.ts`).
+ *
  * `role === "estudiante"` accounts are never hidden here even before their
  * first membership exists — that is exactly the account the "Pagos" entry
  * point's `CreateMembershipForm` fallback exists for.
  */
-export function isRepresentativeOnlyAccount(account: MemberAccount): boolean {
-  return account.role === "representante" && !account.estudiantes.some((s) => s.membresia !== null);
+export function isRepresentativePersonaRow(account: MemberAccount): boolean {
+  return (
+    account.role === "representante" &&
+    account.representadoPor === undefined &&
+    !account.estudiantes.some((s) => s.membresia !== null)
+  );
 }
 
 /**
