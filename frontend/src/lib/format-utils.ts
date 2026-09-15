@@ -25,11 +25,23 @@
  * This behaviour is load-bearing: without it a payment dated today displays
  * as yesterday for every user in Ecuador. Do not "simplify" it away.
  *
+ * Issue #1212: a FULL ISO timestamp whose time-of-day is exactly UTC
+ * midnight (e.g. `"2026-09-14T00:00:00Z"`) carries the same intent as a
+ * date-only string — it means to convey a calendar day, not a precise
+ * instant — but the regex above only matches bare "YYYY-MM-DD" and let it
+ * fall through to `new Date(dateStr)`, whose components are then read with
+ * LOCAL getters. In any UTC-negative timezone that reads back as the day
+ * BEFORE (e.g. "Socio desde" showing one day early). Detecting this exact
+ * shape and anchoring it the same way closes that gap without touching
+ * genuine sub-second instants, which never land on the zero second exactly.
+ *
  * Returns `null` for invalid or empty inputs.
  */
 function parseDateStringLocal(dateStr: string): Date | null {
   if (!dateStr) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const utcMidnight = /^(\d{4})-(\d{2})-(\d{2})T00:00:00(\.0+)?(Z|\+00:00)$/.exec(dateStr);
+  const match = dateOnly ?? utcMidnight;
   if (match) {
     const year = Number(match[1]);
     const month = Number(match[2]) - 1; // 0-indexed
