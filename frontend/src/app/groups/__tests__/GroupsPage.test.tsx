@@ -1405,17 +1405,36 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
   });
 
-  it("desasignating a student calls desasignarAlumnoDeHorario ONCE, anchored on the first row of the group (backend unassigns the whole categoria atomically)", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-
+  /** Opens the roster panel and returns Ana Pérez's row `<li>`. */
+  async function openFormativoRosterAndFindAna(): Promise<HTMLElement> {
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
+    return (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
+  }
 
-    const anaRow = (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
-    fireEvent.click(within(anaRow).getByTitle("Desasignar alumno"));
+  it("clicking Desasignar does NOT call the API — it opens a confirmation naming the student and the categoría", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Ana Pérez");
+    expect(dialog).toHaveTextContent("Formativo");
+  });
+
+  it("confirming the dialog calls desasignarAlumnoDeHorario ONCE, anchored on the first row of the group (backend unassigns the whole categoria atomically)", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
 
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledWith(20, 601);
@@ -1424,18 +1443,47 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(await screen.findByText("Alumno desasignado del horario.")).toBeInTheDocument();
   });
 
+  it("cancelling via the Cancelar button calls nothing and returns focus to the trigger", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+    const trigger = within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("cancelling via Escape calls nothing and returns focus to the trigger", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+    const trigger = within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog");
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("shows a real error (not a false success) on a server failure while desasignating", async () => {
     mockDesasignarAlumnoDeHorario.mockRejectedValue(new ApiClientError("Error de red al desasignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
 
-    const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
-    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
-
-    const anaRow = (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
-    fireEvent.click(within(anaRow).getByTitle("Desasignar alumno"));
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
 
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);
@@ -1445,9 +1493,73 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     ).toBeInTheDocument();
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });
+
+  it("offers Deshacer on the unassign toast, which re-assigns the same student to the same horario", async () => {
+    render(
+      <ToastProvider>
+        <GroupsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
+    await waitFor(() => expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1));
+
+    const undoButton = await screen.findByRole("button", { name: "Deshacer" });
+    fireEvent.click(undoButton);
+
+    await waitFor(() => {
+      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledWith({ persona_id: 20, horario_id: 601 });
+    });
+  });
+
+  it("keeps the card badge and the panel count in sync after an unassign, instead of the badge going stale", async () => {
+    const anaAt601 = { id: 1, personaId: 20, personaNombreCompleto: "Ana Pérez", edad: 12, horarioId: 601, horarioDia: "LUNES", horarioHoraInicio: "15:00", horarioHoraFin: "16:00", fechaAsignacion: "2026-01-01" };
+    const anaAt602 = { ...anaAt601, id: 2, horarioId: 602, horarioDia: "MIERCOLES" };
+    const brunoAt602 = { id: 3, personaId: 21, personaNombreCompleto: "Bruno Díaz", edad: 15, horarioId: 602, horarioDia: "MIERCOLES", horarioHoraInicio: "15:00", horarioHoraFin: "16:00", fechaAsignacion: "2026-01-01" };
+    // The bulk roster call (card badge) reports the same two students as the
+    // per-row roster (panel) BEFORE the unassign — both sources agree at the
+    // start, which is what makes a later disagreement provably the unassign's
+    // doing rather than a pre-existing mismatch between the two endpoints.
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([
+      { personaId: 20, horarioId: 601 }, { personaId: 21, horarioId: 601 },
+      { personaId: 20, horarioId: 602 }, { personaId: 21, horarioId: 602 },
+    ]);
+    let anaStillAssigned = true;
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) => {
+      if (horarioId === 601) return Promise.resolve(anaStillAssigned ? [anaAt601] : []);
+      if (horarioId === 602) return Promise.resolve(anaStillAssigned ? [anaAt602, brunoAt602] : [brunoAt602]);
+      return Promise.resolve([]);
+    });
+    mockDesasignarAlumnoDeHorario.mockImplementation(() => {
+      anaStillAssigned = false;
+      return Promise.resolve(undefined);
+    });
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    expect(await screen.findByText("2 inscritos")).toBeInTheDocument();
+    const anaRow = await openFormativoRosterAndFindAna();
+    await screen.findByText("Alumnos asignados (2)");
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
+
+    await screen.findByText("Alumnos asignados (1)");
+    // The regression this guards: the card badge used to keep whatever the
+    // ONE bulk fetch on mount returned, so it stayed at "2 inscritos" forever
+    // — disagreeing with the panel it sits right next to.
+    expect(await screen.findByText("1 inscrito")).toBeInTheDocument();
+    expect(screen.queryByText("2 inscritos")).not.toBeInTheDocument();
+  });
 });
 
-describe("GroupsPage — deleting removes the categoría entera atomically (docs/archive/fixes/24-abm-categorias.md)", () => {
+describe("GroupsPage — deleting removes la categoría entera atomically (docs/archive/fixes/24-abm-categorias.md)", () => {
   /** The delete action lives inside the edit panel (`15-horario-editar.html`),
    *  not on the card, because it removes every weekday of the categoría. */
   async function openDeleteFromEditPanel(): Promise<void> {
