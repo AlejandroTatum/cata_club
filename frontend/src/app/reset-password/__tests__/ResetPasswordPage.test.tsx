@@ -467,3 +467,46 @@ describe("ResetPasswordPage — the way back", () => {
     expect(screen.queryByRole("link", { name: /volver al inicio/i })).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #1209 — this screen is reached by a visitor resetting their own
+// password from an email link, not by staff signing in to manage the club.
+// ---------------------------------------------------------------------------
+
+describe("ResetPasswordPage — the eyebrow is not the admin one", () => {
+  beforeEach(() => {
+    mockToken = "valid-token";
+    mockShowError.mockReset();
+    mockShowSuccess.mockReset();
+    mockRestablecerContrasenia.mockReset();
+  });
+
+  it("shows the non-admin eyebrow on the form state", () => {
+    render(<ResetPasswordPage />);
+
+    expect(screen.getByText("Acceso al club")).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+  });
+
+  it("shows the non-admin eyebrow on the invalid-token state", () => {
+    mockToken = null;
+
+    render(<ResetPasswordPage />);
+
+    expect(screen.getByText("Acceso al club")).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+  });
+
+  it("shows the non-admin eyebrow on the success state", async () => {
+    mockRestablecerContrasenia.mockResolvedValue(undefined);
+
+    render(<ResetPasswordPage />);
+    fillMatchingPasswords();
+    submitResetForm();
+
+    await screen.findByText(/contraseña actualizada/i);
+
+    expect(screen.getByText("Acceso al club")).toBeInTheDocument();
+    expect(screen.queryByText("Panel de gestión")).not.toBeInTheDocument();
+  });
+});

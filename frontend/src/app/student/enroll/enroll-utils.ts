@@ -5,13 +5,19 @@
  * export conflicts — no React dependencies.
  */
 
-import { isSelectableBloodType, type BloodType, type EnrollmentRequest } from "@/types/enrollment";
+import {
+  isSelectableBloodType,
+  type BloodType,
+  type EnrollmentRequest,
+  type EnrollmentStudent,
+} from "@/types/enrollment";
 import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
   emergencyPhoneDiffersRule,
   personNameRule,
+  normalizePersonName,
   passwordRule,
   studentBirthDateRule,
   calculatePersonAge,
@@ -254,12 +260,17 @@ function enrollmentValidationField(error: unknown): EnrollField | undefined {
  */
 export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimientos = false): EnrollmentRequest {
   const alumno = {
-    nombres: data.nombres.trim(), apellidos: data.apellidos.trim(), cedula: data.cedula.trim(),
+    nombres: normalizePersonName(data.nombres), apellidos: normalizePersonName(data.apellidos), cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento,
-    // #1028 (round 3): the visitor typed the 9 digits after the +593; the
-    // contract the backend expects is the local 09XXXXXXXX form.
-    telefono: canonicalStudentPhone(data.telefono),
-  };
+    // Issue #1197: a represented minor has no phone of their own — the key
+    // is omitted entirely on the CHILD path (never sent as "", which the
+    // backend's TelefonoValidado explicitly rejects as blank). #1028
+    // (round 3): on the SELF path the visitor typed the 9 digits after the
+    // +593; the contract the backend expects is the local 09XXXXXXXX form.
+    ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
+      ? { telefono: canonicalStudentPhone(data.telefono) }
+      : {}),
+  } as EnrollmentStudent;
   const fichaMedica = {
     tipoSangre: data.tipoSangre as BloodType, condicionesSalud: data.condicionesSalud.trim(),
     alergias: data.alergias.trim(),
@@ -280,7 +291,7 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
   const result: EnrollmentRequest = {
     alumno, fichaMedica, aceptaConsentimientos,
     representante: {
-      nombres: data.nombreRepresentante.trim(), apellidos: data.apellidosRepresentante.trim(),
+      nombres: normalizePersonName(data.nombreRepresentante), apellidos: normalizePersonName(data.apellidosRepresentante),
       cedula: data.cedulaRepresentante.trim(), fechaNacimiento: data.fechaNacimientoRepresentante,
       telefono: data.telefonoRepresentante.trim(), correo: data.correoRepresentante.trim(),
       contrasenia: data.contraseniaRepresentante,
@@ -485,13 +496,20 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     emergencyPhoneDiffersRule(d.telefonoEmergencia, canonicalStudentPhone(d.telefono)),
 };
 
-const STUDENT_FIELDS: EnrollField[] = [
+// Issue #1197: a represented minor has no phone of their own — the
+// emergency contact already derives from the representative — so the
+// CHILD path never renders or validates the student phone field.
+const STUDENT_FIELDS_CHILD: EnrollField[] = [
   "nombres",
   "apellidos",
   "fechaNacimiento",
   "cedula",
-  "telefono",
 ];
+const STUDENT_FIELDS_SELF: EnrollField[] = [...STUDENT_FIELDS_CHILD, "telefono"];
+
+function studentFieldsFor(type: EnrollmentType): EnrollField[] {
+  return type === ENROLLMENT_TYPES.CHILD ? STUDENT_FIELDS_CHILD : STUDENT_FIELDS_SELF;
+}
 
 const CREDENTIAL_FIELDS: EnrollField[] = ["correo", "contrasenia", "contraseniaConfirmacion"];
 
@@ -530,7 +548,7 @@ export function fieldsForStep(step: WizardStep, type: EnrollmentType): EnrollFie
       // A self enrollment signs in as the student, so its credentials are
       // required here. A represented child never has credentials (issue
       // #1137, invariante B: un representado nunca tiene Usuario propio).
-      return isChild ? STUDENT_FIELDS : [...STUDENT_FIELDS, ...CREDENTIAL_FIELDS];
+      return isChild ? studentFieldsFor(type) : [...studentFieldsFor(type), ...CREDENTIAL_FIELDS];
     case "representative":
       // Skipped entirely for a self enrollment — there is no representante.
       return isChild ? REPRESENTATIVE_FIELDS : [];
@@ -600,7 +618,7 @@ export function describeStepBlocker(errors: EnrollFieldErrors): string | null {
 }
 
 function validateStudent(data: EnrollFormData): string[] {
-  return collect(STUDENT_FIELDS, data);
+  return collect(studentFieldsFor(data.enrollmentType), data);
 }
 
 function validateStudentCredentials(data: EnrollFormData): string[] {

@@ -183,6 +183,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/personas/{persona_id}/beneficio"),                 # (b)
     ("GET", "/personas/{persona_id}/representados"),             # (b)
     ("GET", "/ranking/notificaciones/mias"),                     # (b) - propio via `persona_id` del token
+    ("PATCH", "/auth/correo"),                                   # (b) - propio via `sub`, solo mientras no verificado
     ("PATCH", "/auth/me"),                                       # (b) - propio via `sub`
     ("PATCH", "/fichas-medicas/persona/{persona_id}"),           # (b) - admin o representante, SIN el titular
     ("PATCH", "/ranking/notificaciones/leer-todas"),             # (b) - propio via `persona_id` del token
@@ -202,6 +203,14 @@ RUTAS_SOLO_AUTENTICADAS = {
 # usados en su vecindario, es una decision que este test obliga a hacer
 # visible en el diff.
 RUTAS_ROLES_REQUERIDOS = {
+    # Supresión de datos (issue #1062): procedimiento admin-revisado (D1) --
+    # no existe autogestión; incluso listar/ver una solicitud es dato sensible.
+    ("GET", "/supresion-datos/"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/supresion-datos/{solicitud_id}"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/supresion-datos/"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/supresion-datos/{solicitud_id}/aprobar"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/supresion-datos/{solicitud_id}/ejecutar"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/supresion-datos/{solicitud_id}/rechazar"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/desasignar-alumno"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     # ABM de categorías (docs/archive/fixes/24-abm-categorias.md): alta/edición/baja
     # atómica de la categoria + sus días + sus horarios. Mismo tier que

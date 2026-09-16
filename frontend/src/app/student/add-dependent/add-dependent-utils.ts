@@ -17,6 +17,7 @@ import {
   cedulaRule,
   phoneRule,
   personNameRule,
+  normalizePersonName,
   studentBirthDateRule,
 } from "@/lib/identity-validation";
 
@@ -348,8 +349,8 @@ function parseEnfermedades(raw: string): string[] {
  */
 export function buildRepresentadoPayload(data: AddDependentFormData): RepresentadoCreatePayload {
   const payload: RepresentadoCreatePayload = {
-    nombres: data.nombres.trim(),
-    apellidos: data.apellidos.trim(),
+    nombres: normalizePersonName(data.nombres),
+    apellidos: normalizePersonName(data.apellidos),
     cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento,
     telefono: data.telefono.trim(),

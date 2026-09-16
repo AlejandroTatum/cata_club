@@ -559,6 +559,53 @@ describe("backendMe", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("invalid_response");
   });
+
+  // Issue #1228: `primerPago` carries the latest payment's estado/motivoRechazo
+  // — a malformed shape here must not silently pass through as a session.
+  it("accepts a response with a null primerPago", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({
+        correo: "a@a.com", personaId: 1, nombres: "A", apellidos: "B", roles: ["ALUMNO"],
+        primerPago: null,
+      }),
+    );
+
+    const result = await backendMe("token");
+
+    expect(result).toEqual({ ok: true, data: expect.objectContaining({ primerPago: null }) });
+  });
+
+  it("accepts a response with a well-formed primerPago", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({
+        correo: "a@a.com", personaId: 1, nombres: "A", apellidos: "B", roles: ["ALUMNO"],
+        primerPago: { estado: "RECHAZADO", motivoRechazo: "Comprobante ilegible" },
+      }),
+    );
+
+    const result = await backendMe("token");
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        primerPago: { estado: "RECHAZADO", motivoRechazo: "Comprobante ilegible" },
+      }),
+    });
+  });
+
+  it("rejects a primerPago with an unrecognized estado as invalid_response", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({
+        correo: "a@a.com", personaId: 1, nombres: "A", apellidos: "B", roles: ["ALUMNO"],
+        primerPago: { estado: "APROBADO", motivoRechazo: null },
+      }),
+    );
+
+    const result = await backendMe("token");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_response");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -725,6 +772,36 @@ describe("buildSession", () => {
       roles: ["ALUMNO"],
     });
     expect(complete.activacionCompleta).toBe(true);
+  });
+
+  // Issue #1228: `primerPago` maps straight through when the backend sends
+  // it, and defaults to null (never undefined) when it omits it.
+  it("maps primerPago straight through when the backend sends it", () => {
+    const session = sessionFrom({
+      correo: "pendiente-pago@cataclub.com",
+      personaId: 19,
+      nombres: "Mia",
+      apellidos: "Solis",
+      roles: ["ALUMNO"],
+      correoVerificado: true,
+      altaPresencialCompletada: false,
+      activacionCompleta: false,
+      primerPago: { estado: "PENDIENTE_VALIDACION", motivoRechazo: null },
+    });
+
+    expect(session.primerPago).toEqual({ estado: "PENDIENTE_VALIDACION", motivoRechazo: null });
+  });
+
+  it("defaults primerPago to null when the backend omits it", () => {
+    const session = sessionFrom({
+      correo: "sin-primer-pago@cataclub.com",
+      personaId: 20,
+      nombres: "Leo",
+      apellidos: "Vera",
+      roles: ["ALUMNO"],
+    });
+
+    expect(session.primerPago).toBeNull();
   });
 
   it("builds an estudiante session with the extra discriminated fields", () => {

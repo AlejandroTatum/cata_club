@@ -5,7 +5,7 @@ Orquesta la creación de Persona, Usuario, FichaMedica y AntecedentesClub
 en un solo request transaccional. Endpoint público (sin auth), rate-limited.
 
   Flujo (issue #338 -- todo o nada, validado antes de escribir):
-  1. Validar edad del alumno (5-74 años) y, si hay representante, su cédula,
+  1. Validar edad del alumno (5-95 años) y, si hay representante, su cédula,
      correo y edad; validar cédula del alumno, la regla de menores y el
      correo de la cuenta propia del adulto autoinscrito. Nada de esto
      escribe todavía.
@@ -232,7 +232,11 @@ class EnrollmentServicio:
                 apellidos=datos.alumno.apellidos,
                 cedula=datos.alumno.cedula,
                 fecha_nacimiento=datos.alumno.fecha_nacimiento,
-                telefono=datos.alumno.telefono,
+                # Issue #1207: `Persona.telefono` ahora es nullable -- un
+                # menor representado sin celular propio (`EnrollmentAlumnoDTO.
+                # telefono` opcional) persiste `NULL`, no `""` (issue #1197
+                # dejaba "" porque la columna todavía era NOT NULL).
+                telefono=datos.alumno.telefono or None,
                 representante_id=representante_id,
                 institucion_id=datos.alumno.institucion_id,
             )

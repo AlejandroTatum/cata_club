@@ -3,7 +3,7 @@
  *
  * Covers the four behavioural decisions of the Fase 3 redesign, each of which
  * was a measured defect before it:
- *   1. the screen opens on Todos, not on a status-specific filter;
+ *   1. the screen opens on Pendientes, not on "Todos";
  *   2. every row is operable from the keyboard through a real button (the old
  *      `<tr onClick>` was unreachable without a mouse);
  *   3. approving or rejecting advances to the next pending request instead of
@@ -192,6 +192,36 @@ const REJECTED_REQUEST: PaymentValidationRequest = {
   rejectionReason: "El monto no coincide",
 };
 
+// Issue #1208: MEMBERSHIP_STATUS_BY_ESTADO folds a never-activated backend
+// INACTIVA membership into the same "vencida" bucket as a real VENCIDA one —
+// `estadoBackend` is what tells them apart, same as `/members`.
+const NEVER_ACTIVATED_PENDING_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-inactiva-pendiente",
+  studentName: "Lucía Andrade",
+  estadoBackend: "INACTIVA",
+  validationStatus: "pendiente",
+};
+
+/** Same never-activated membership, but with nothing left awaiting review. */
+const NEVER_ACTIVATED_RESOLVED_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-inactiva-rechazado",
+  studentName: "Rosa Delgado",
+  estadoBackend: "INACTIVA",
+  validationStatus: "rechazado",
+  rejectionReason: "El monto no coincide",
+};
+
+/** An actually lapsed membership — must keep reading "Vencida". */
+const LAPSED_REQUEST: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  id: "req-vencida",
+  studentName: "Mario Chávez",
+  estadoBackend: "VENCIDA",
+  currentMembershipStatus: "vencida",
+};
+
 function renderPage(): void {
   render(<ToastProvider><PaymentsPage /></ToastProvider>);
 }
@@ -294,17 +324,17 @@ afterEach(() => {
 // 1. The queue opens on the work of the day
 // ---------------------------------------------------------------------------
 
-describe("PaymentsPage — opens on all payments", () => {
-  it("defaults the state filter to Todos", async () => {
+describe("PaymentsPage — opens on the pending queue", () => {
+  it("defaults the state filter to Pendientes instead of Todos", async () => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
-    const todos = await screen.findByRole("button", { name: /^todos/i });
-    expect(todos).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^pendientes/i })).toHaveAttribute("aria-pressed", "false");
+    const pendientes = await screen.findByRole("button", { name: /^pendientes/i });
+    expect(pendientes).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^todos/i })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("shows every payment status in the default table", async () => {
+  it("shows only pending requests until the admin asks for the rest", async () => {
     mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, RESOLVED_REQUEST]);
     renderPage();
 
@@ -315,12 +345,9 @@ describe("PaymentsPage — opens on all payments", () => {
     // (header + the one pending row) is a positive, deterministic signal
     // that the filtered render is done, so the absence check that follows it
     // means something.
-    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(3));
+    await waitFor(() => expect(within(queueTable()).getAllByRole("row")).toHaveLength(2));
     expect(within(queueTable()).getByText("Juan Pérez")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
-    expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
+    expect(within(queueTable()).queryByText("Kevin Sabando")).not.toBeInTheDocument();
 
     // Issue #400 (criterio 4/5): switching tabs now re-fetches the visible
     // page from the (mocked) backend — `activeFilter` drives `estadoPago`
@@ -328,6 +355,9 @@ describe("PaymentsPage — opens on all payments", () => {
     // synchronously, so this needs to wait for that round trip.
     fireEvent.click(screen.getByRole("button", { name: /^todos/i }));
     await waitFor(() => expect(within(queueTable()).getByText("Kevin Sabando")).toBeInTheDocument());
+    expect(within(queueTable()).getByText("Pendiente de validar")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Validado")).toBeInTheDocument();
+    expect(within(queueTable()).getByText("Estado")).toBeInTheDocument();
   });
 });
 
@@ -996,6 +1026,81 @@ describe("PaymentsPage — rejection", () => {
     // the constant instead of reading it.
     expect(nota.value).toHaveLength(200);
     expect(screen.getByText("200/200")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1230 — a renewal's membership is already active: rejecting it does
+// not stop the membership from existing, and approving it does not activate
+// it for the first time. The three sentences below read `currentMembership-
+// Status` instead of assuming every decision is a first activation.
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — approvals and rejections read the membership status", () => {
+  const ACTIVE_RENEWAL_REQUEST: PaymentValidationRequest = {
+    ...PENDING_REQUEST,
+    id: "req-activa",
+    studentName: "Mateo Salazar",
+    currentMembershipStatus: "activa",
+  };
+
+  it("uses coverage wording — never activation wording — for a request whose membership is already active", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([ACTIVE_RENEWAL_REQUEST]);
+    mockUpdatePaymentValidation.mockResolvedValue({
+      ...ACTIVE_RENEWAL_REQUEST,
+      validationStatus: "validado",
+    });
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRequest("Mateo Salazar");
+
+    fireEvent.click(await screen.findByRole("button", { name: /rechazar pago/i }));
+    expect(
+      screen.getByText(/La cobertura de Mateo Salazar no se extiende hasta entonces\./),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    completeChecklist();
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    expect(
+      screen.getByText(
+        /¿Confirma que aprueba este pago\? La cobertura se extiende de inmediato y esta acción no se puede deshacer\./,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    expect(
+      await screen.findByText(/Pago aprobado\. La cobertura de Mateo Salazar se extendió\./),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the activation wording for a request whose membership is not active yet", async () => {
+    // PENDING_REQUEST carries `currentMembershipStatus: "vencida"`.
+    render(
+      <ToastProvider>
+        <PaymentsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await openRequest("Juan Pérez");
+    await screen.findByRole("button", { name: /aprobar pago/i });
+    completeChecklist();
+
+    fireEvent.click(screen.getByRole("button", { name: /aprobar pago/i }));
+    expect(
+      screen.getByText(
+        /¿Confirma que aprueba este pago\? La membresía pasará a activa de inmediato y esta acción no se puede deshacer\./,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+
+    expect(
+      await screen.findByText(/Pago aprobado\. La membresía ahora está activa\./),
+    ).toBeInTheDocument();
   });
 });
 
@@ -1965,5 +2070,36 @@ describe("PaymentsPage — panel único de validar pago (issue #510)", () => {
     expect(
       within(proof).getByText(humanizePaymentPeriod(PENDING_REQUEST.membershipPeriod)),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// La insignia de membresía distingue INACTIVA de VENCIDA (issue #1208)
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — la insignia de membresía distingue INACTIVA de VENCIDA", () => {
+  it('renders "Pago pendiente" — never "Vencida" — for a never-activated membership with its first payment pending', async () => {
+    mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_PENDING_REQUEST]);
+    renderPage();
+    await openRequest("Lucía Andrade");
+    await screen.findByText("Pago pendiente");
+    expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
+  });
+
+  it('renders "Sin activar" — never "Vencida" — for a never-activated membership with nothing awaiting review', async () => {
+    mockFetchPaymentValidations.mockResolvedValue([NEVER_ACTIVATED_RESOLVED_REQUEST]);
+    renderPage();
+    // A "rechazado" request does not show under the default "Pendientes" tab.
+    fireEvent.click(await screen.findByRole("button", { name: /^todos/i }));
+    await openRequest("Rosa Delgado");
+    await screen.findByText("Sin activar");
+    expect(screen.queryByText("Vencida")).not.toBeInTheDocument();
+  });
+
+  it('still renders "Vencida" for an actually lapsed membership', async () => {
+    mockFetchPaymentValidations.mockResolvedValue([LAPSED_REQUEST]);
+    renderPage();
+    await openRequest("Mario Chávez");
+    await screen.findByText("Vencida");
   });
 });

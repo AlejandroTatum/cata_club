@@ -11,6 +11,7 @@ from app.servicios_negocio.dtos.auth_schemas import (
     SolicitarRecuperacionDTO, SolicitarRecuperacionResponseDTO, RestablecerContraseniaDTO,
     SolicitarVerificacionCorreoDTO, SolicitarVerificacionCorreoResponseDTO,
     ConfirmarVerificacionCorreoDTO,
+    CambiarCorreoNoVerificadoDTO, CambiarCorreoNoVerificadoResponseDTO,
     ActualizarPerfilPropioDTO, ActualizarPerfilPropioResponseDTO, ActualizarFotoPerfilResponseDTO,
     SesionResponseDTO,
 )
@@ -99,6 +100,11 @@ async def obtener_perfil(
     db: Session = Depends(obtener_sesion),
 ):
     usuario = AuthServicio(db).obtener_usuario_actual(token_payload["sub"])
+    # Issue #940: la MISMA decisión que lleva el claim del token, para que
+    # el frontend la consuma en vez de recomputarla de los dos hechos.
+    # Issue #1056: `decision_activacion` es el único armado de esta
+    # decisión -- `claims_estandar` (claim del token) lo llama igual.
+    activacion_completa = GestorAutenticacion.decision_activacion(db, usuario)
     return {
         "correo": usuario.correo,
         "persona_id": usuario.persona_id,
@@ -113,11 +119,13 @@ async def obtener_perfil(
         "alta_presencial_completada": GestorAutenticacion.alta_presencial_completada(
             db, usuario.persona_id,
         ),
-        # Issue #940: la MISMA decisión que lleva el claim del token, para que
-        # el frontend la consuma en vez de recomputarla de los dos hechos.
-        # Issue #1056: `decision_activacion` es el único armado de esta
-        # decisión -- `claims_estandar` (claim del token) lo llama igual.
-        "activacion_completa": GestorAutenticacion.decision_activacion(db, usuario),
+        "activacion_completa": activacion_completa,
+        # Issue #1228: una consulta extra, solo cuando el gate todavía no
+        # pasó -- nunca para admin/entrenador ni para una cuenta ya activada.
+        "primer_pago": (
+            None if activacion_completa
+            else GestorAutenticacion.primer_pago_gate(db, usuario.persona_id)
+        ),
     }
 
 
@@ -292,3 +300,20 @@ async def verificar_correo(
     db: Session = Depends(obtener_sesion),
 ):
     AuthServicio(db).confirmar_verificacion_correo(datos.token)
+
+
+# --- Issue #1245: corregir el correo de una cuenta sin verificar ------------
+# A diferencia de sus dos vecinos de arriba, AUTENTICADO: solo la cuenta que
+# tiene la sesión abierta puede corregir SU PROPIA dirección, y solo
+# mientras sigue sin verificar (ver `AuthServicio.cambiar_correo_no_verificado`
+# para el resto de las reglas). Mismo tier de rate limit que el reenvío:
+# los dos terminan encolando el mismo tipo de trabajo.
+@router.patch("/correo", response_model=CambiarCorreoNoVerificadoResponseDTO)
+@limiter.limit("10/minute")
+async def cambiar_correo_no_verificado(
+    request: Request,
+    datos: CambiarCorreoNoVerificadoDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    return AuthServicio(db).cambiar_correo_no_verificado(token_payload["sub"], datos.correo)

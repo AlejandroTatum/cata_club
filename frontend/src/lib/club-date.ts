@@ -50,6 +50,7 @@ export interface DateRange {
  */
 let clubDateFormatter: Intl.DateTimeFormat | null = null;
 let clubWeekdayFormatter: Intl.DateTimeFormat | null = null;
+let clubTimeFormatter: Intl.DateTimeFormat | null = null;
 
 /**
  * `YYYY-MM-DD` from a `Date`'s LOCAL components.
@@ -96,6 +97,32 @@ export function clubIsoDate(instant: Date = new Date()): string {
     // or a request handler — a date off by a day is recoverable, a 500 is
     // not.
     return calendarIsoDate(instant);
+  }
+}
+
+/**
+ * The club's current wall-clock time, as `"HH:mm"` — the same shape a
+ * `TrainingSchedule.horaInicio` is stored in, so a caller can compare the two
+ * directly (issue #1239: has today's session actually started yet?).
+ *
+ * Built from `formatToParts` in the club's zone for the same reason
+ * `clubIsoDate` is: the device's own zone is not the club's.
+ */
+export function clubTimeHHMM(instant: Date = new Date()): string {
+  try {
+    clubTimeFormatter ??= new Intl.DateTimeFormat("en-US", {
+      timeZone: CLUB_TIME_ZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    const parts = clubTimeFormatter.formatToParts(instant);
+    const hour = parts.find((p) => p.type === "hour")?.value;
+    const minute = parts.find((p) => p.type === "minute")?.value;
+    if (!hour || !minute) return "00:00";
+    return `${hour}:${minute}`;
+  } catch {
+    return "00:00";
   }
 }
 

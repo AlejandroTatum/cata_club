@@ -12,6 +12,8 @@ import {
   countPaymentsWaitingOverAWeek,
   buildFourWeekAttendance,
   buildActivityFeed,
+  getActivityMarker,
+  type ActivityKind,
 } from "../dashboard-utils";
 import type { AttendanceDayStats, AttendanceRecord } from "@/app/attendance/attendance-utils";
 import type { PaymentValidationRequest } from "@/services/api";
@@ -360,5 +362,37 @@ describe("buildActivityFeed", () => {
       [buildRecord({ fecha: "" })],
     );
     expect(feed).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getActivityMarker
+// ---------------------------------------------------------------------------
+
+describe("getActivityMarker", () => {
+  it("marks a validated payment ok", () => {
+    expect(getActivityMarker("payment-validated")).toEqual({ tone: "ok", label: "Pago validado" });
+  });
+
+  it("marks a rejected payment bad — the only tone meant to stand out while scanning", () => {
+    expect(getActivityMarker("payment-rejected")).toEqual({ tone: "bad", label: "Pago rechazado" });
+  });
+
+  it("marks an attendance session neutral", () => {
+    expect(getActivityMarker("attendance-session")).toEqual({ tone: "neutral", label: "Asistencia" });
+  });
+
+  it("marks an uploaded payment neutral — it has not been resolved yet", () => {
+    expect(getActivityMarker("payment-uploaded")).toEqual({
+      tone: "neutral",
+      label: "Comprobante subido",
+    });
+  });
+
+  it("falls back to neutral for an unrecognized kind instead of throwing", () => {
+    expect(getActivityMarker("something-new" as ActivityKind)).toEqual({
+      tone: "neutral",
+      label: "Actividad",
+    });
   });
 });

@@ -79,7 +79,15 @@ export interface BackendPersonaFull {
    * credential with one field fewer.
    */
   cedula?: string | null;
-  telefono: string;
+  /**
+   * Issue #1207: `PersonaResponseDTO.telefono` is nullable on the backend
+   * now — a represented minor with no phone of their own persists `NULL`
+   * (used to be `""`, forced by a NOT NULL column). `MemberAccount.telefono`
+   * stays `string` on purpose (every consumer already assumes one), so
+   * `null` is coerced to `""` right where this type is read, not pushed
+   * downstream — see the two `telefono: persona.telefono ?? ""` sites below.
+   */
+  telefono: string | null;
   fechaNacimiento: string;
   representanteId: number | null;
   /** `Persona.activo`, supplied by the admin personas listing. */
@@ -205,7 +213,7 @@ function buildMemberStudentSummary(
     // `BackendPersonaFull.cedula` above: never fabricated when the backend
     // omits it.
     cedula: persona.cedula ?? undefined,
-    telefono: persona.telefono,
+    telefono: persona.telefono ?? "",
     fechaNacimiento: persona.fechaNacimiento,
     activo: persona.activo ?? false,
     membresia: membresia
@@ -263,6 +271,11 @@ function buildMemberStudentSummary(
  * represented personas nested inside. Each row's `estudiantes` is always a
  * single-element array holding that exact persona's own summary.
  *
+ * Issue #1221: each row's `dependientes` is the OTHER personas whose
+ * `representanteId` is this row's id — grouped from the same `personas`
+ * payload, never this row's own `estudiantes[0]`. Empty for a represented
+ * minor and for a self-managed adult with no representados.
+ *
  * @param personas — every Persona (`GET /personas/`).
  * @param latestPagoByPersona — each persona's most recent Pago, keyed by `personaId`.
  * @param membresiaById — `Membresia` lookups keyed by `membresiaId`.
@@ -297,6 +310,52 @@ export function buildMemberAccounts(
     personas.map((persona) => [persona.id, persona]),
   );
 
+  /*
+   * Issue #1221: each persona's OWN `MemberStudentSummary`, built once here
+   * and reused for BOTH that persona's own `estudiantes[0]` row AND — when
+   * they're represented — as the entry a dependents list carries for them.
+   * Reusing this map instead of calling `buildMemberStudentSummary` a second
+   * time per dependent is what keeps this whole function a single O(n) pass
+   * over the already-fetched payload: no persona's membership/payment/tipo
+   * lookup runs twice, and no second request is possible (this function
+   * doesn't fetch at all).
+   */
+  const studentSummaryByPersonaId = new Map<number, MemberStudentSummary>(
+    personas.map((persona) => [
+      persona.id,
+      buildMemberStudentSummary(
+        persona,
+        latestPagoByPersona.get(persona.id),
+        membresiaById,
+        membresiaByPersona,
+        tipoById,
+        deudaByMembresiaId,
+      ),
+    ]),
+  );
+
+  /*
+   * Issue #1221's actual fix: group the SAME payload by `representanteId`
+   * once, so every representative's account can look up its dependents in
+   * O(1) below — never a per-row `GET /personas/{id}/representados`. If a
+   * future caller passes a paginated/filtered `personas` slice where some
+   * representative's dependents live on another page, this grouping (built
+   * only from what's IN `personas`) simply won't see them; that caller is
+   * responsible for widening the payload or adding a bulk representados
+   * lookup keyed by the page's representative ids, same pattern as
+   * `rolesByPersonaId`/`personaIdsConFicha` above — this function has no way
+   * to know it's missing rows it was never given.
+   */
+  const dependientesByRepresentanteId = new Map<number, MemberStudentSummary[]>();
+  for (const persona of personas) {
+    if (persona.representanteId == null) continue;
+    const dependiente = studentSummaryByPersonaId.get(persona.id);
+    if (!dependiente) continue;
+    const siblings = dependientesByRepresentanteId.get(persona.representanteId) ?? [];
+    siblings.push(dependiente);
+    dependientesByRepresentanteId.set(persona.representanteId, siblings);
+  }
+
   return personas.map((persona) => {
     const representante =
       persona.representanteId != null ? personaById.get(persona.representanteId) : undefined;
@@ -313,7 +372,7 @@ export function buildMemberAccounts(
       backendRoles: backendRoles.length > 0 ? backendRoles : undefined,
       nombres: persona.nombres,
       apellidos: persona.apellidos,
-      telefono: persona.telefono,
+      telefono: persona.telefono ?? "",
       representadoPor: representante ? `${representante.nombres} ${representante.apellidos}` : undefined,
       representadoPorId: persona.representanteId ?? undefined,
       // Issue #362's exact gap: no legal representative at all AND no ficha
@@ -324,16 +383,11 @@ export function buildMemberAccounts(
       // not this one).
       sinDatosEmergencia: persona.representanteId == null && !personaIdsConFicha.has(persona.id),
       accountState: resolveAccountState(persona.cuentaActiva),
-      estudiantes: [
-        buildMemberStudentSummary(
-          persona,
-          latestPagoByPersona.get(persona.id),
-          membresiaById,
-          membresiaByPersona,
-          tipoById,
-          deudaByMembresiaId,
-        ),
-      ],
+      estudiantes: [studentSummaryByPersonaId.get(persona.id)!],
+      // Issue #1221: the personas represented BY this persona — empty for a
+      // represented minor and for a self-managed adult with no representados,
+      // never this persona's own `estudiantes[0]`.
+      dependientes: dependientesByRepresentanteId.get(persona.id) ?? [],
     };
   });
 }

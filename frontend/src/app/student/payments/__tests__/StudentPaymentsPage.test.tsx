@@ -970,6 +970,29 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
   });
+
+  // Issue #1226: the BFF already rejects a comprobante over 5 MB, but only
+  // after `subirVoucherPago` already hit it — same "ghost payment" class
+  // #482 closed for the type check, checked client-side at selection time.
+  it("rejects a file over 5 MB with an inline error instead of staging a preview (#1226)", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 77, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
+    ]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+    fireEvent.click(within(historyTable()).getByRole("button", { name: /^reintentar subir comprobante$/i }));
+
+    const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "comprobante.png", { type: "image/png" });
+    fireEvent.change(screen.getByTestId("pago-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El comprobante supera el límite de 5 MB (5,0 MB).",
+    );
+    expect(screen.queryByText("comprobante.png")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirmar y subir/i })).not.toBeInTheDocument();
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+  });
 });
 
 /**
@@ -1257,6 +1280,25 @@ describe("StudentPaymentsPage — registering a payment", () => {
     });
 
     expect(screen.queryByText(/adjunte el comprobante/i)).not.toBeInTheDocument();
+  });
+
+  // Issue #1226: same "ghost payment" class #482 closed for the type check —
+  // an oversized comprobante used to reach `registrarPago` and only fail on
+  // the follow-up `subirVoucherPago` call, once the backend's own 5 MB limit
+  // rejected it.
+  it("rejects a comprobante over 5 MB before the payment is ever registered (#1226)", async () => {
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "comprobante.png", { type: "image/png" });
+    fireEvent.change(screen.getByTestId("renew-voucher-input"), { target: { files: [file] } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El comprobante supera el límite de 5 MB (5,0 MB).",
+    );
+    expect(screen.queryByText("comprobante.png")).not.toBeInTheDocument();
+    expect(mockRegistrarPago).not.toHaveBeenCalled();
   });
 });
 

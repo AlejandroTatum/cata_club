@@ -244,6 +244,20 @@ export function emergencyPhoneDiffersRule(emergencyPhone: string, personalPhone:
 export const PERSON_NAME_MIN_LENGTH = 3;
 
 /**
+ * (issue #1246) Some input sources — iOS/macOS keyboards, text pasted from
+ * WhatsApp or Contacts — emit an accented letter in decomposed form (NFD):
+ * e.g. "ñ" as the plain letter "n" followed by U+0303 COMBINING TILDE,
+ * instead of the precomposed U+00F1. `PERSON_NAME_PATTERN` only accepts
+ * precomposed letters, so an NFD name used to fail validation while the
+ * same name typed on a desktop keyboard (NFC) passed. Trimming first, then
+ * normalizing, keeps the length check (`PERSON_NAME_MIN_LENGTH`) counting
+ * the same characters a visitor sees.
+ */
+export function normalizePersonName(value: string): string {
+  return value.trim().normalize("NFC");
+}
+
+/**
  * Letters (incl. accents), spaces, and the three connectors real names use:
  * apostrophe, hyphen, and interpunct. A connector may never open or close
  * the name, and two connectors may never sit next to each other — enforced
@@ -292,7 +306,7 @@ export function personNameRule(
   subject: string,
   { plural = true }: { plural?: boolean } = {},
 ): string | null {
-  const trimmed = value.trim();
+  const trimmed = normalizePersonName(value);
   if (!trimmed) return `${subject} ${plural ? "son" : "es"} obligatorio${plural ? "s" : ""}.`;
   if (trimmed.length < PERSON_NAME_MIN_LENGTH) {
     return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LENGTH} caracteres.`;
@@ -314,7 +328,7 @@ export function personNameRule(
 // ---------------------------------------------------------------------------
 
 export const EDAD_MINIMA_ALUMNO = 5;
-export const EDAD_MAXIMA_ALUMNO = 74;
+export const EDAD_MAXIMA_ALUMNO = 95;
 export const EDAD_MAYORIA_EDAD = 18;
 
 /**
@@ -343,7 +357,7 @@ export function isMinorAge(age: number): boolean {
  * is a domain rule (`EDAD_MINIMA_ALUMNO`/`EDAD_MAXIMA_ALUMNO`), not a parsing
  * concern. A parser that rejects implausible years by returning `NaN` makes
  * every numeric bound comparison against it silently `false` (`NaN < 5` and
- * `NaN > 74` both are), which is how an 1800 birth year used to sail through
+ * `NaN > 95` both are), which is how an 1800 birth year used to sail through
  * every age check in this codebase instead of failing the one meant to catch
  * it — see `calculateAge.test.ts`'s "computes a real (large) age" cases for
  * the regression this guards.
@@ -406,7 +420,7 @@ export function isFutureBirthDate(birthDate: string, today: Date = new Date()): 
 
 /**
  * The student birth-date rule the backend enforces
- * (`5 <= edad <= 74`), applied at the field instead of discovered only after
+ * (`5 <= edad <= 95`), applied at the field instead of discovered only after
  * a full wizard and a rejected submit (issue #224).
  *
  * A future date is rejected for BEING future, with its own message — never
@@ -428,7 +442,7 @@ export function studentBirthDateRule(value: string, today: Date = new Date()): s
 /**
  * The oldest age a real, living human can plausibly hold — 120, the usual
  * figure real-world age validators use (the verified record is 122). This is
- * NOT `EDAD_MAXIMA_ALUMNO` (the club's own 74-year policy cutoff, enforced by
+ * NOT `EDAD_MAXIMA_ALUMNO` (the club's own 95-year policy cutoff, enforced by
  * `studentBirthDateRule`) — it exists only so a LIVE preview (still-focused
  * field, before that rule's message has appeared) can tell "a typo produced
  * an impossible age" apart from "a real age the club's policy happens to
@@ -448,7 +462,7 @@ export function isPlausibleHumanAge(age: number): boolean {
  * from 0001 to 9999). Padded to whole calendar years — Jan 1 on the old end,
  * Dec 31 on the young end — so nobody whose birthday has not landed yet this
  * year is excluded by an exact day-of-year boundary; `studentBirthDateRule`
- * is still what enforces the real 5-74 cutoff precisely.
+ * is still what enforces the real 5-95 cutoff precisely.
  */
 export function studentBirthDateBounds(today: Date = new Date()): { min: string; max: string } {
   const year = today.getFullYear();

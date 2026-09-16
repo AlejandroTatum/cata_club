@@ -460,6 +460,40 @@ def test_representante_edad_maxima_rechazada(db_session):
         EnrollmentServicio(db_session).enroll(datos)
 
 
+def test_alumno_edad_maxima_aceptada(db_session):
+    """El nuevo techo (EDAD_MAXIMA_ALUMNO = 95) admite a un alumno de 90 años
+    autoinscrito, no solo al rango histórico de 74 (issue #1247: el club
+    tiene socios activos en sus 80s que el techo viejo rechazaba)."""
+    hoy = date.today()
+    noventa_anios = date(hoy.year - 90, hoy.month, min(hoy.day, 28))
+    datos = _enrollment_dto(
+        alumno=_alumno_dto(cedula=cedula_valida(261), fecha_nacimiento=noventa_anios),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="alumno90@example.com", contrasenia="password8",
+        ),
+    )
+
+    resultado = EnrollmentServicio(db_session).enroll(datos)
+
+    assert resultado["access_token"]
+
+
+def test_alumno_edad_maxima_rechazada(db_session):
+    """Un alumno de 96 años sigue superando el techo (95) tras la suba desde
+    74 (issue #1247)."""
+    hoy = date.today()
+    noventa_y_seis_anios = date(hoy.year - 96, hoy.month, min(hoy.day, 28))
+    datos = _enrollment_dto(
+        alumno=_alumno_dto(cedula=cedula_valida(262), fecha_nacimiento=noventa_y_seis_anios),
+        credenciales_alumno=EnrollmentCredencialesDTO(
+            correo="alumno96@example.com", contrasenia="password8",
+        ),
+    )
+
+    with pytest.raises(OperacionInvalida, match="entre 5 y 95 años"):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
 def test_representante_correo_duplicado_rechazado(db_session):
     """Si el correo del representante ya está en uso, se rechaza."""
     persona = Persona(
@@ -735,4 +769,60 @@ def test_api_inscripcion_sin_credenciales_devuelve_422_y_no_persiste(client, db_
     assert "representante" in respuesta.text and "credenciales" in respuesta.text
     assert db_session.query(Persona).count() == total_antes
     assert db_session.query(Persona).filter(Persona.cedula == cedula).count() == 0
+
+
+# --- Issue #1197: el teléfono del alumno es opcional solo en el camino ----
+# representado -- un menor no tiene celular propio, y su contacto de
+# emergencia se deriva del representante (#1138). El camino adulto sigue
+# exigiéndolo: ahí el alumno ES el titular del contacto.
+
+def test_api_child_enrollment_sin_telefono_del_alumno_aceptada(client, db_session):
+    cedula_rep = cedula_valida(592)
+    cedula_alumno = cedula_valida(593)
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "representante": {
+                "nombres": "Sofia", "apellidos": "Martinez", "cedula": cedula_rep,
+                "fecha_nacimiento": "1990-05-20", "telefono": "0991234567",
+                "correo": "sofia-sin-tel-alumno@example.com", "contrasenia": "password8",
+            },
+            "alumno": {
+                "nombres": "Lucas", "apellidos": "Martinez", "cedula": cedula_alumno,
+                "fecha_nacimiento": "2015-06-15",
+            },
+            # Issue #1138: camino representado -- sin contacto de emergencia
+            # propio, se deriva del representante.
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "acepta_consentimientos": True,
+        },
+    )
+    assert respuesta.status_code == 201, respuesta.text
+
+    alumno = db_session.query(Persona).filter(Persona.cedula == cedula_alumno).one()
+    # Issue #1207: `Persona.telefono` es nullable desde `l1207telnull` -- el
+    # alumno phoneless persiste `NULL`, no `""` (comportamiento anterior,
+    # forzado por la columna NOT NULL de entonces).
+    assert alumno.telefono is None
+
+
+def test_api_self_enrollment_sin_telefono_rechazada(client):
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "alumno": {
+                "nombres": "Ana", "apellidos": "Lopez", "cedula": cedula_valida(594),
+                "fecha_nacimiento": "2000-01-01",
+            },
+            "credenciales_alumno": {
+                "correo": "ana-sin-telefono@example.com", "contrasenia": "password8",
+            },
+            "ficha_medica": {
+                "tipo_sangre": "O_POSITIVO", "enfermedades": [],
+                "contacto_emergencia": "Pedro Lopez", "telefono_emergencia": "0991112233",
+            },
+            "acepta_consentimientos": True,
+        },
+    )
+    assert respuesta.status_code == 422, respuesta.text
 

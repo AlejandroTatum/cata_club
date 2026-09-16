@@ -14,10 +14,18 @@
 import type { AuthSession } from "@/services/auth";
 import { getDefaultRoute } from "@/lib/auth-utils";
 
+/** Issue #1228: the latest payment's state, only meaningful while the gate is
+ *  still pending — see `BackendMeResponse.primerPago` in src/lib/server/auth.ts. */
+export interface ActivationPrimerPago {
+  estado: "PENDIENTE_VALIDACION" | "RECHAZADO";
+  motivoRechazo: string | null;
+}
+
 export type ActivationSession = AuthSession & {
   correoVerificado?: boolean;
   altaPresencialCompletada?: boolean;
   activacionCompleta?: boolean;
+  primerPago?: ActivationPrimerPago | null;
 };
 
 /** The one gate decision — never re-derive it from the two facts elsewhere. */

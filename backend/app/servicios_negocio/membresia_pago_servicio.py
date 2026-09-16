@@ -29,7 +29,6 @@ from app.infraestructura.repositorios.descuento_repositorio import (
     AsignacionDescuentoRepositorio, DescuentoRepositorio,
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
-from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
 from app.soporte_transversal.firma_archivos import es_firma_valida
@@ -1681,7 +1680,7 @@ class PagoServicio:
         ):
             raise OperacionInvalida(MENSAJE_COBERTURA_YA_APLICADA)
 
-        self._activar_membresia_con_red_de_seguridad(membresia, fecha_inicio)
+        self._activar_membresia_con_red_de_seguridad(membresia)
 
         cobertura = CoberturaBonificada(
             membresia_id=membresia_id,
@@ -2077,7 +2076,7 @@ class PagoServicio:
             # `_activar_membresia_con_red_de_seguridad`, compartida con
             # `aplicar_beneficio_bonificado` (issue #400/4d) -- ver su
             # docstring.
-            self._activar_membresia_con_red_de_seguridad(membresia, pago.fecha_inicio)
+            self._activar_membresia_con_red_de_seguridad(membresia)
             try:
                 self._aplicar_regla_familiar_si_corresponde(membresia, pago)
                 self.repo.guardar_cambios(pago)
@@ -2128,12 +2127,10 @@ class PagoServicio:
         return pago
 
     # --- Activación compartida (issue #400/4d) -------------------------------
-    def _activar_membresia_con_red_de_seguridad(
-        self, membresia: Membresia, fecha_inicio: date,
-    ) -> None:
-        """Activa la membresía (INACTIVA/VENCIDA -> ACTIVA) con `fecha_
-        activacion` derivada de `fecha_inicio`, y hace el `flush()` que la
-        vuelve visible a consultas posteriores en esta misma transacción.
+    def _activar_membresia_con_red_de_seguridad(self, membresia: Membresia) -> None:
+        """Activa la membresía (INACTIVA/VENCIDA -> ACTIVA) y hace el
+        `flush()` que la vuelve visible a consultas posteriores en esta
+        misma transacción.
 
         Compartido por `validar_pago` (aprobar un pago) y
         `aplicar_beneficio_bonificado` (otorgar cobertura 100% bonificada):
@@ -2142,6 +2139,28 @@ class PagoServicio:
         `regularizar_deuda`, que es bookkeeping retroactivo del admin y
         deliberadamente NO activa nada.
 
+        Issue #1225: `fecha_activacion` SOLO se escribe cuando la membresía
+        todavía está INACTIVA al entrar acá -- la primera activación real.
+        "Socio desde" lee esta columna (`frontend/src/app/student/page.tsx`),
+        y esa antigüedad es la PRIMERA vez que la persona tuvo cobertura,
+        nunca la renovación más reciente: una membresía ya ACTIVA, VENCIDA o
+        SUSPENDIDA conserva la que ya tenía. Antes se pisaba en cada pago
+        aprobado (aunque el docstring ya describía la transición INACTIVA/
+        VENCIDA -> ACTIVA); un segundo pago sobre una membresía ya ACTIVA
+        corría la misma línea y adelantaba la antigüedad del socio a la
+        fecha de la renovación (hallazgo en vivo, QA 2026-09-15, persona 91,
+        membresía 68).
+
+        Issue #1212: cuando SÍ corresponde escribirla, es el instante real
+        de la activación, no medianoche UTC del `fecha_inicio` del pago
+        (esa medianoche cae en el día calendario ANTERIOR para cualquier
+        browser UTC-negativo). `datetime.now(timezone.utc)` es un instante
+        genuino -- igual que la creación INACTIVA (ver más arriba) -- y
+        ningún llamador depende de que sea la fecha calendario de `fecha_
+        inicio`: el único otro lector, `MembresiaRepositorio.listar`
+        (`membresia_repositorio.py`), solo la usa para el `ORDER BY ... DESC`
+        de "más reciente primero", al que le sirve cualquier instante real.
+
         Red de seguridad del invariante 2 (issue #8): dos escrituras
         concurrentes de ACTIVA para la misma persona (dos pagos, o un pago y
         un otorgamiento, aprobándose a la vez) las serializa el índice
@@ -2149,11 +2168,9 @@ class PagoServicio:
         al MISMO error de dominio para ambos llamadores, así ninguno de los
         dos tiene que saber del índice. El `rollback()` es obligatorio: un
         flush fallido deja la sesión inválida para cualquier uso posterior."""
+        if membresia.estado == EstadoMembresia.INACTIVA:
+            membresia.fecha_activacion = datetime.now(timezone.utc)
         membresia.estado = EstadoMembresia.ACTIVA
-        membresia.fecha_activacion = datetime(
-            year=fecha_inicio.year, month=fecha_inicio.month, day=fecha_inicio.day,
-            tzinfo=timezone.utc,
-        )
         try:
             self.db.flush()
         except IntegrityError as error:
@@ -2259,14 +2276,23 @@ class PagoServicio:
         self, persona_id: int, entidad_relacionada_id: int,
         tipo: TipoNotificacion, mensaje: str, id_para_log: str,
     ) -> bool:
-        """Crea el aviso in-app para el titular y, si tiene, para su
-        representante. Devuelve `False` (y NUNCA levanta) si no se pudo
-        crear alguno de los dos -- NUNCA `True`/`False` a medias silenciado.
-        Compartida por `_crear_notificacion_pago` (aprobar/rechazar un pago)
-        y `aplicar_beneficio_bonificado` (issue #400/4d, otorgar cobertura
-        bonificada): las dos operaciones YA están commiteadas cuando esto
-        corre, así que un aviso fallido nunca debe convertirse en un 5xx
-        sobre una operación que en los hechos SÍ se procesó.
+        """Crea el aviso in-app para el titular. Devuelve `False` (y NUNCA
+        levanta) si no se pudo crear -- nunca `True`/`False` a medias
+        silenciado. Compartida por `_crear_notificacion_pago` (aprobar/
+        rechazar un pago) y `aplicar_beneficio_bonificado` (issue #400/4d,
+        otorgar cobertura bonificada): las dos operaciones YA están
+        commiteadas cuando esto corre, así que un aviso fallido nunca debe
+        convertirse en un 5xx sobre una operación que en los hechos SÍ se
+        procesó.
+
+        Ya NO escribe una segunda fila para `persona.representante_id`
+        (issue #1227): desde el #859 el feed del representante
+        (`NotificacionServicio.listar_para_persona_y_hijos`) YA incluye las
+        filas de sus dependientes activos, así que esa segunda fila era el
+        duplicado que veía el representante -- la misma novedad dos veces,
+        una con el prefijo "Para <nombre>: " y otra sin él. El prefijo se
+        arma ahora AL LEER, en `NotificacionServicio`, para cualquier fila
+        cuyo `persona_id` no sea el de quien pide el feed.
 
         Por qué no relanza: por diseño del frontend (`error-message.ts`: un
         `detail` 5xx nunca llega al usuario, porque describe una falla del
@@ -2290,20 +2316,6 @@ class PagoServicio:
                 entidad_relacionada_id=entidad_relacionada_id,
             )
             self.repo_notificacion.crear(notif)
-            if persona.representante_id:
-                # El nombre se acorta ACÁ, nunca `mensaje`: el motivo de un
-                # rechazo (o el detalle del beneficio) es lo que el
-                # representante necesita leer entero.
-                nombre_alumno = acortar_nombre_para_notificacion(
-                    nombre_completo(persona.nombres, persona.apellidos)
-                )
-                notif_rep = Notificacion(
-                    tipo=tipo,
-                    mensaje=f"Para {nombre_alumno}: {mensaje}",
-                    persona_id=persona.representante_id,
-                    entidad_relacionada_id=entidad_relacionada_id,
-                )
-                self.repo_notificacion.crear(notif_rep)
             # Commit PROPIO (issue #831): el repositorio ya solo flushea, así
             # que esta notificación necesita su propio `commit()` para
             # persistir -- deliberadamente SEPARADO del commit de la

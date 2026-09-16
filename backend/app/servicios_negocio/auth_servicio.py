@@ -857,3 +857,64 @@ class AuthServicio:
 
         usuario.correo_verificado = True
         self.db.commit()
+
+    # --- Issue #1245: corregir el correo de una cuenta sin verificar --------
+    def cambiar_correo_no_verificado(self, correo_actual: str, correo_nuevo: str) -> dict:
+        """Corrige la dirección con la que la cuenta AUTENTICADA se
+        inscribió, mientras `correo_verificado` sigue en False.
+
+        Cierra el callejón sin salida del issue: quien se autoinscribió con
+        un correo mal tipeado nunca recibía el enlace de verificación y no
+        tenía forma de arreglarlo -- reinscribirse choca con el 400 de
+        identidad duplicada (`enrollment_servicio.enroll`) antes de llegar
+        siquiera a mirar el correo. Deliberadamente distinto de
+        `actualizar_perfil_propio` (`PATCH /auth/me`): ese endpoint excluye
+        `correo` a propósito porque la edición propia fue removida por
+        diseño para una cuenta YA verificada -- esta es la única puerta, y
+        se cierra sola en cuanto la cuenta lo está.
+
+        Reusa `obtener_por_correo` para la unicidad (misma comparación
+        normalizada que login/registro/recuperación) y
+        `solicitar_verificacion_correo` para encolar el enlace a la
+        dirección nueva, con la MISMA disciplina de outbox que cualquier
+        otra alta -- pero antes retira las filas todavía activas de la
+        dirección vieja: si sobrevivieran, el próximo reintento del worker
+        entregaría el enlace a un correo que el titular ya dijo que estaba
+        mal.
+
+        El `sub` del JWT es el correo: reemite el par de tokens al final,
+        igual que `invalidar_otras_sesiones`, para que el caller siga
+        autenticado bajo la dirección nueva en la misma respuesta que
+        confirma el cambio.
+        """
+        usuario = self.obtener_usuario_actual(correo_actual)
+        if usuario.correo_verificado:
+            raise OperacionInvalida(
+                "El correo ya está verificado y no puede modificarse por esta vía."
+            )
+
+        cuenta_existente = self.repo.obtener_por_correo(correo_nuevo)
+        if cuenta_existente is not None and cuenta_existente.id != usuario.id:
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
+
+        usuario.correo = correo_nuevo
+        self.db.query(VerificacionCorreoOutbox).filter(
+            VerificacionCorreoOutbox.usuario_id == usuario.id,
+            VerificacionCorreoOutbox.status.in_(("PENDIENTE", "ENVIANDO")),
+        ).delete(synchronize_session=False)
+
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            # Carrera (mismo criterio que `registrar_usuario`): dos
+            # correcciones casi simultáneas hacia la misma dirección nueva
+            # pasan las dos el pre-check de arriba.
+            self.db.rollback()
+            if identidad_en_conflicto(error) is None:
+                raise
+            raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA) from error
+
+        self.db.refresh(usuario)
+        self.solicitar_verificacion_correo(usuario.correo)
+        tokens = self._emitir_par_tokens(usuario)
+        return {"correo": usuario.correo, "mensaje": MENSAJE_VERIFICACION_ENVIADA, **tokens}

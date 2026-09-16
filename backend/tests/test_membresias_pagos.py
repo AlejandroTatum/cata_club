@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time, timezone
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia
@@ -104,6 +104,60 @@ def test_pago_aprobado_activa_membresia(client):
 
     membresia_actualizada = client.get(f"/api/v1/membresias/{membresia['id']}").json()
     assert membresia_actualizada["estado"] == "ACTIVA"
+
+
+def test_pago_aprobado_fija_fecha_activacion_al_instante_real_no_a_medianoche_utc(client):
+    """Issue #1212: `_activar_membresia_con_red_de_seguridad` persistía
+    `fecha_activacion` como medianoche UTC de `pago.fecha_inicio`,
+    descartando la hora real de aprobación. En un browser UTC-negativo esa
+    medianoche cae en el día calendario ANTERIOR (`getDate()` lee hora
+    local), así que el carnet mostraba "Socio desde" un día antes del pago
+    aprobado. Ahora se persiste el instante real (`datetime.now(timezone.
+    utc)`), igual que la creación INACTIVA (`membresia_pago_servicio.py:
+    274`) -- ningún llamador depende de que sea la fecha calendario de
+    `fecha_inicio` (ver `Membresia.fecha_activacion.desc()` en
+    `membresia_repositorio.py`, un `ORDER BY` al que le sirve cualquier
+    instante real)."""
+    persona = _crear_persona(client)
+    tipo = _crear_tipo_membresia(client)
+    membresia = client.post(
+        "/api/v1/membresias/",
+        json={
+            "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+            "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+        },
+    ).json()
+
+    pago = client.post(
+        "/api/v1/membresias/pagos",
+        json={
+            "meses": 1, "tipo_pago": "TRANSFERENCIA",
+            "fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31",
+            "persona_id": persona["id"], "membresia_id": membresia["id"],
+        },
+    ).json()
+
+    antes = datetime.now(timezone.utc)
+    resp = client.patch(
+        f"/api/v1/membresias/pagos/{pago['id']}/validar",
+        # Issue #459: TRANSFERENCIA sin voucher adjunto.
+        json={
+            "estado_pago": "APROBADO",
+            "motivo_excepcion_sin_comprobante": "Verificado directamente en la cuenta del club.",
+        },
+    )
+    despues = datetime.now(timezone.utc)
+    assert resp.status_code == 200
+
+    membresia_actualizada = client.get(f"/api/v1/membresias/{membresia['id']}").json()
+    fecha_activacion = datetime.fromisoformat(
+        membresia_actualizada["fechaActivacion"].replace("Z", "+00:00"),
+    )
+    assert antes <= fecha_activacion <= despues
+    # La regresión concreta que motivó el issue: `fecha_inicio` es
+    # "2026-07-01", así que la reconstrucción vieja daba exactamente
+    # medianoche UTC. El instante real de este test no cae ahí.
+    assert fecha_activacion.timetz() != time(0, 0, 0, tzinfo=timezone.utc)
 
 
 def test_rechazar_pago_sin_motivo_falla(client):

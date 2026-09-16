@@ -543,7 +543,11 @@ class Persona(Base):
     cedula: Mapped[str] = mapped_column(String(10), unique=True)
     fecha_nacimiento: Mapped[date] = mapped_column(Date)
     foto_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    telefono: Mapped[str] = mapped_column(String(15))
+    # Issue #1207: nullable -- un menor representado sin celular propio
+    # persiste `NULL` (antes `""`, cuando la columna era NOT NULL; ver la
+    # migración `l1207telnull`). `_exigir_telefono_valido` de abajo ya
+    # toleraba `None`/`""` desde antes de esta migración.
+    telefono: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
     telefono_contacto: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
 
     # E04-RF014: el reporte "alumnos nuevos por periodo" necesita saber
@@ -1876,7 +1880,12 @@ class FichaMedica(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    tipo_sangre: Mapped[TipoSangre] = mapped_column(SAEnum(TipoSangre))
+    # Issue #1062 (D9): la supresión de datos borra TODO el contenido médico,
+    # incluido el tipo de sangre -- la columna es NULLABLE y la ejecución la
+    # pone en NULL (ver `SupresionDatosServicio`). Los DTOs de escritura
+    # siguen exigiéndolo al CREAR la ficha; solo la lectura tras una supresión
+    # puede verlo vacío.
+    tipo_sangre: Mapped[Optional[TipoSangre]] = mapped_column(SAEnum(TipoSangre), nullable=True)
 
     # --- Campos agregados: el frontend los necesita para su ficha de
     # emergencia (alergias + a quién/cómo contactar), y no existían en el
@@ -2356,3 +2365,96 @@ class VerificacionCorreoOutbox(Base):
         DateTime(timezone=True), nullable=True
     )
     usuario: Mapped["Usuario"] = relationship()
+
+
+class SolicitudSupresionDatos(Base):
+    """Petición admin-revisada de supresión de datos personales (issue #1062).
+
+    D9 (decisión del dueño, 2026-09-15): la ejecución BORRA los campos de
+    identidad de la `Persona`, la foto (DB + Cloudinary), el contenido de la
+    `FichaMedica`, las sesiones/tokens y las comunicaciones pendientes que
+    llevan el correo; CONSERVA la fila `Persona` anonimizada con TODO su
+    historial contable (pagos, membresías, asistencias), el registro de
+    consentimiento legal y la auditoría de consultas a la ficha de emergencia,
+    todos enlazados a la persona anonimizada.
+
+    Estados mínimos (String + CheckConstraint, no `SAEnum`: el catálogo de
+    `dominio/enums.py` no necesita un tipo nuevo para un flujo único y la
+    misma forma ya la usan las tablas de outbox):
+
+      - `RECIBIDA`: la petición existe, aún dentro del plazo de gracia de
+        30 días (D8 -- el plazo se DERIVA de `fecha_solicitud`, no hay estado
+        `EN_GRACIA` que mantener sincronizado con el reloj).
+      - `APROBADA`: un administrador autorizó la supresión; puede ejecutarse
+        cuando el plazo de gracia haya vencido.
+      - `EJECUTADA`: la anonimización corrió; `fecha_ejecucion` y
+        `detalle_ejecucion` son el asiento de auditoría.
+      - `RECHAZADA`: no procede; `razon_rechazo` es obligatoria.
+
+    La fila `Persona` NUNCA se borra (`PersonaRepositorio` lo prohíbe), así
+    que la FK a `persona.id` no necesita `ondelete`.
+    """
+
+    __tablename__ = "solicitud_supresion_datos"
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('RECIBIDA', 'APROBADA', 'EJECUTADA', 'RECHAZADA')",
+            name="ck_solicitud_supresion_datos_estado",
+        ),
+        Index("ix_solicitud_supresion_datos_persona_id", "persona_id"),
+        Index(
+            "ix_solicitud_supresion_datos_solicitada_por_persona_id",
+            "solicitada_por_persona_id",
+        ),
+        Index(
+            "ix_solicitud_supresion_datos_aprobada_por_persona_id",
+            "aprobada_por_persona_id",
+        ),
+        Index("ix_solicitud_supresion_datos_estado_fecha", "estado", "fecha_solicitud"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # La persona cuya supresión se pide.
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    persona: Mapped["Persona"] = relationship(foreign_keys=[persona_id])
+
+    # Actor admin que REGISTRÓ la petición (D1: nunca hay autogestión).
+    solicitada_por_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id"), nullable=False
+    )
+    solicitada_por: Mapped["Persona"] = relationship(foreign_keys=[solicitada_por_persona_id])
+
+    # Actor admin que aprobó. NULL mientras esté RECIBIDA.
+    aprobada_por_persona_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    aprobada_por: Mapped[Optional["Persona"]] = relationship(
+        foreign_keys=[aprobada_por_persona_id]
+    )
+
+    estado: Mapped[str] = mapped_column(String(12), nullable=False, default="RECIBIDA")
+
+    fecha_solicitud: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_ahora_utc, nullable=False
+    )
+    fecha_aprobacion: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fecha_ejecucion: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Por qué la persona (o su representante acreditado, D4) pidió la
+    # supresión. Obligatorio: una petición sin motivo no es auditable.
+    motivo: Mapped[str] = mapped_column(String(500), nullable=False)
+    # D3: tratamiento documentado de pagos pendientes. Lo lee `ejecutar`
+    # antes de borrar: si hay pagos PENDIENTE_VALIDACION y esto está vacío,
+    # la ejecución se rechaza.
+    notas: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    # Obligatoria al rechazar.
+    razon_rechazo: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Asiento de auditoría de la ejecución: qué se borró, qué se conservó,
+    # y cualquier residual honesto (ej. voucher legado de URL pública que
+    # Cloudinary no puede destruir por public_id).
+    detalle_ejecucion: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)

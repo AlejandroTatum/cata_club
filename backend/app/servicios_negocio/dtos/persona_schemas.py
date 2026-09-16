@@ -16,6 +16,7 @@ from app.servicios_negocio.dtos.validadores import (
     NombrePresentadoOpcional,
     NombreValidado,
     TelefonoValidado,
+    TelefonoValidadoOpcional,
     TipoSangreValidado,
     validar_representante_solo_para_menor,
 )
@@ -38,7 +39,13 @@ class PersonaCreateDTO(BaseModel):
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     foto_url: Optional[str] = None
-    telefono: TelefonoValidado = Field(..., max_length=32)
+    # Issue #1207: `TelefonoValidadoOpcional` en vez de `TelefonoValidado`
+    # -- un menor representado (`representante_id` presente) puede no tener
+    # celular propio. La obligatoriedad para un adulto autogestionado
+    # (`representante_id` ausente) se exige abajo, en
+    # `_representante_solo_para_menor`: acá SÍ hay contexto suficiente en el
+    # mismo payload, a diferencia de `PersonaUpdateDTO`.
+    telefono: TelefonoValidadoOpcional = Field(default=None, max_length=32)
     telefono_contacto: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     representante_id: Optional[int] = None
     direccion_id: Optional[int] = None
@@ -51,6 +58,11 @@ class PersonaCreateDTO(BaseModel):
         validar_representante_solo_para_menor(
             self.fecha_nacimiento, self.representante_id is not None,
         )
+        # Issue #1207: el teléfono solo es opcional para un menor
+        # representado. Sin `representante_id`, esta Persona es un adulto
+        # autogestionado y sigue necesitando uno válido.
+        if self.representante_id is None and not self.telefono:
+            raise ValueError("El teléfono es obligatorio.")
         return self
 
 
@@ -77,7 +89,12 @@ class RepresentadoCreateDTO(BaseModel):
     apellidos: ApellidoValidado = Field(..., max_length=100)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
-    telefono: TelefonoValidado = Field(..., max_length=32)
+    # Issue #1207: este endpoint SIEMPRE crea un representado (invariante B
+    # de abajo), así que el teléfono nunca necesita ser obligatorio acá -- un
+    # menor sin celular propio ya no puede acuñar uno para pasar la
+    # validación. `TelefonoValidadoOpcional` tolera ausencia y "" explícito,
+    # y normaliza ambos a `None`.
+    telefono: TelefonoValidadoOpcional = Field(default=None, max_length=32)
     ficha_medica: Optional[EnrollmentFichaMedicaMenorDTO] = None
     institucion_id: Optional[int] = None
 
@@ -104,7 +121,14 @@ class VincularRepresentadoDTO(BaseModel):
 class PersonaUpdateDTO(BaseModel):
     nombres: Optional[NombreValidado] = Field(default=None, max_length=100)
     apellidos: Optional[ApellidoValidado] = Field(default=None, max_length=100)
-    telefono: Optional[TelefonoValidado] = Field(default=None, max_length=32)
+    # Issue #1207: `TelefonoValidadoOpcional` en vez de `TelefonoValidado` --
+    # un desk-edit reenvía el formulario completo, y para un menor
+    # representado sin celular propio eso incluye `telefono: ""`. Este DTO
+    # no sabe si la Persona objetivo es un menor representado o un adulto
+    # autogestionado (no lleva `representante_id`, y no lo puede llevar: no
+    # se reasigna acá), así que NO puede decidir la obligatoriedad -- la
+    # decide `PersonaServicio.actualizar_persona`, que sí tiene la fila real.
+    telefono: TelefonoValidadoOpcional = Field(default=None, max_length=32)
     telefono_contacto: Optional[TelefonoValidado] = Field(default=None, max_length=32)
     foto_url: Optional[str] = None
     direccion_id: Optional[int] = None
@@ -175,7 +199,10 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
     cedula: str = Field(..., examples=["1710034065"])
     fecha_nacimiento: date = Field(..., examples=["1990-05-14"])
     foto_url: Optional[str] = Field(default=None, examples=["https://res.cloudinary.com/..."])
-    telefono: str = Field(..., examples=["0991234567"])
+    # Issue #1207: `Optional` -- un menor representado sin celular propio
+    # ahora persiste `Persona.telefono = NULL` (antes `""`), y este DTO
+    # sirve esa fila tal cual en GET/POST/PATCH /personas/.
+    telefono: Optional[str] = Field(default=None, examples=["0991234567"])
     telefono_contacto: Optional[str] = Field(default=None, examples=["0998765432"])
     representante_id: Optional[int] = Field(default=None, examples=[None])
     fecha_registro: Optional[datetime] = Field(default=None, examples=["2024-01-15T10:30:00Z"])

@@ -13,6 +13,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detección de rutas cambiadas (issue #1217): los cuatro jobs pesados de
+  # abajo se escopan por lo que tocó el diff. Es una CONDICIÓN de ejecución,
+  # no un filtro de workflow: los `name:` de los checks requeridos no cambian
+  # y un push a main SIEMPRE corre la matriz completa. El guard de secretos
+  # queda incondicional a propósito.
+  cambios:
+    name: "Deteccion de rutas cambiadas"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Exigido por la doc oficial de dorny/paths-filter para resolver la
+      # base de un PR (lee los metadatos del pull request).
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.rutas.outputs.backend }}
+      frontend: ${{ steps.rutas.outputs.frontend }}
+      docker: ${{ steps.rutas.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detectar rutas cambiadas
+        # dorny/paths-filter resuelve la base correcta para cada evento: en un
+        # PR compara contra su rama base REAL (así un PR apilado que apunta a
+        # su padre se evalúa contra el padre, no contra main), y en push contra
+        # el commit anterior. Pineada al SHA del commit, misma práctica que
+        # setup-uv y setup-buildx.
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        id: rutas
+        with:
+          # Cobertura de archivos compartidos (tests/test_ci_workflow_paths.py
+          # es el candado de esta matriz):
+          #   - `tests/**`: los tests raíz corren DENTRO del job backend.
+          #   - los docker-compose: entrada de los tests raíz y del stack que
+          #     levanta `docker-images`.
+          #   - este workflow: tocarlo puede cambiar cualquier job.
+          # El grupo `docker` cubre AMBOS contextos de build (backend/ y
+          # frontend/) a propósito: un cambio solo de frontend SÍ construye la
+          # imagen frontend.
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'tests/**'
+              - 'Makefile'
+              - 'docker-compose.yml'
+              - 'docker-compose.prod.yml'
+              - 'docker-compose.qa.yml'
+              - 'docker-compose.override.yml'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - 'Makefile'
+              - 'docker-compose.yml'
+              - 'docker-compose.prod.yml'
+              - 'docker-compose.qa.yml'
+              - 'docker-compose.override.yml'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'backend/**'
+              - 'frontend/**'
+              - 'tests/**'
+              - 'Makefile'
+              - 'docker-compose.yml'
+              - 'docker-compose.prod.yml'
+              - 'docker-compose.qa.yml'
+              - 'docker-compose.override.yml'
+              - 'Caddyfile'
+              - '.github/workflows/ci.yml'
+
   guard-secretos:
     name: "Guard: sin .env reales trackeados"
     runs-on: ubuntu-latest
@@ -49,6 +117,19 @@ jobs:
   backend:
     name: Backend (Python)
     runs-on: ubuntu-latest
+    # Escoping por rutas (issue #1217) con criterio FAIL-OPEN: ante cambios
+    # de backend o archivos compartidos corre escopado; en push a main,
+    # siempre; y si el detector falla, se cancela o no expone outputs, corre
+    # COMPLETO (validación conservadora). NUNCA se saltean los checks
+    # requeridos por un detector roto: un skip no pone el check en rojo. El
+    # guard de secretos sigue siendo obligatorio en todos los casos.
+    needs: [guard-secretos, cambios]
+    if: >
+      always() &&
+      needs.guard-secretos.result == 'success' &&
+      (github.event_name == 'push' ||
+       needs.cambios.result != 'success' ||
+       needs.cambios.outputs.backend != 'false')
     defaults:
       run:
         working-directory: backend
@@ -156,6 +237,15 @@ jobs:
   migraciones-desde-cero:
     name: Migraciones desde DB vacia (empty -> head)
     runs-on: ubuntu-latest
+    # Mismo grupo que `backend` (las migraciones viven en backend/) y mismo
+    # criterio fail-open ante un detector roto (issue #1217).
+    needs: [guard-secretos, cambios]
+    if: >
+      always() &&
+      needs.guard-secretos.result == 'success' &&
+      (github.event_name == 'push' ||
+       needs.cambios.result != 'success' ||
+       needs.cambios.outputs.backend != 'false')
     defaults:
       run:
         working-directory: backend
@@ -210,6 +300,14 @@ jobs:
   frontend:
     name: Frontend (Node)
     runs-on: ubuntu-latest
+    # Mismo criterio fail-open que backend (issue #1217).
+    needs: [guard-secretos, cambios]
+    if: >
+      always() &&
+      needs.guard-secretos.result == 'success' &&
+      (github.event_name == 'push' ||
+       needs.cambios.result != 'success' ||
+       needs.cambios.outputs.frontend != 'false')
     defaults:
       run:
         working-directory: frontend
@@ -292,7 +390,24 @@ jobs:
     # verificación de arranque sigue corriendo en todos los PRs, solo que
     # después de los gates baratos. `guard-secretos` también entra: jamás
     # construir ni publicar imágenes de un árbol que committeó un `.env`.
-    needs: [guard-secretos, backend, frontend, migraciones-desde-cero]
+    needs: [guard-secretos, cambios, backend, frontend, migraciones-desde-cero]
+    # Escoping por rutas (issue #1217) + candado del #552 intacto: corre ante
+    # cambios que afecten CUALQUIERA de las dos imágenes (backend/ o frontend/
+    # -- saltarlo en frontend-only fue evaluado y rechazado), ante archivos
+    # compartidos, o siempre en push a main (ahí publica). FAIL-OPEN ante un
+    # detector roto/cancelado/sin outputs: corre completo, nunca se saltea.
+    # Los upstream exitosos O SALTEADOS habilitan; un failure/cancelled real
+    # de backend/frontend/migraciones bloquea -- jamás se construye una imagen
+    # de un run rojo.
+    if: >
+      always() &&
+      needs.guard-secretos.result == 'success' &&
+      (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
+      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
+      (needs.migraciones-desde-cero.result == 'success' || needs.migraciones-desde-cero.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       needs.cambios.result != 'success' ||
+       needs.cambios.outputs.docker != 'false')
     # Hasta este job, NINGUNA parte del pipeline construía un contenedor ni
     # levantaba la pila: las imágenes que corre producción no las validaba
     # nadie. Ese hueco fue el que dejó pasar un contenedor de frontend que

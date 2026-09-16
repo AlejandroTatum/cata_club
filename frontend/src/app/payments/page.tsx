@@ -138,6 +138,8 @@ import {
   MEMBERSHIP_STATUS_LABELS,
   MEMBERSHIP_STATUS_TONES,
 } from "@/lib/status-badges";
+import { inactivaMembershipBadge } from "@/lib/membership-status";
+import type { BadgeTone } from "@/components/ui/Badge";
 
 type FilterKey = "all" | ValidationStatus;
 
@@ -199,6 +201,57 @@ function actionLabel(request: PaymentValidationRequest): string {
   return request.validationStatus === "pendiente"
     ? `Revisar el pago de ${request.studentName}`
     : `Ver el detalle del pago de ${request.studentName}`;
+}
+
+/**
+ * Issue #1230: rejecting a renewal (the membership is already `"activa"`,
+ * the same status the detail card's badge shows) does not stop it from
+ * existing — it stops the paid-through date from moving. Only a first-ever
+ * payment actually gates activation, so that sentence stays reserved for a
+ * membership that was never active to begin with.
+ */
+function rejectionCoverageNote(request: PaymentValidationRequest): string {
+  return request.currentMembershipStatus === "activa"
+    ? `La cobertura de ${request.studentName} no se extiende hasta entonces.`
+    : `La membresía de ${request.studentName} sigue sin activarse hasta entonces.`;
+}
+
+/** Same distinction as `rejectionCoverageNote`, for the approve confirmation dialog. */
+function approveConfirmMessage(request: PaymentValidationRequest | null): string {
+  const consequence =
+    request?.currentMembershipStatus === "activa"
+      ? "La cobertura se extiende de inmediato"
+      : "La membresía pasará a activa de inmediato";
+  return `¿Confirma que aprueba este pago? ${consequence} y esta acción no se puede deshacer.`;
+}
+
+/** Same distinction as `rejectionCoverageNote`, for the approval success toast. */
+function approvalSuccessMessage(request: PaymentValidationRequest): string {
+  return request.currentMembershipStatus === "activa"
+    ? `Pago aprobado. La cobertura de ${request.studentName} se extendió.`
+    : "Pago aprobado. La membresía ahora está activa.";
+}
+
+/**
+ * Label/tone for the "Membresía" field of the detail panel.
+ *
+ * `estadoBackend === "INACTIVA"` is the never-activated membership
+ * `MEMBERSHIP_STATUS_BY_ESTADO` folds into `currentMembershipStatus:
+ * "vencida"` — reads that raw signal the same way `/members`'s
+ * `getMembershipStatusBadge` does, instead of the folded value, so a
+ * membership that has never been active never shows "Vencida" here either
+ * (issue #1208). `request.validationStatus` already IS this specific
+ * payment's own validation state, so it doubles as "is this payment the one
+ * still awaiting review" without a separate field.
+ */
+function membershipBadge(request: PaymentValidationRequest): { label: string; tone: BadgeTone } {
+  if (request.estadoBackend === "INACTIVA") {
+    return inactivaMembershipBadge(request.validationStatus === "pendiente");
+  }
+  return {
+    label: MEMBERSHIP_STATUS_LABELS[request.currentMembershipStatus],
+    tone: MEMBERSHIP_STATUS_TONES[request.currentMembershipStatus],
+  };
 }
 
 /** The five row facts, already formatted — shared by both queue renderings. */
@@ -435,7 +488,7 @@ export default function PaymentsPage(): React.ReactElement {
    */
   const [activeFilter, setActiveFilter] = usePersistentPreference<FilterKey>(
     "payments-queue-filter",
-    "all",
+    "pendiente",
     isFilterKey,
   );
   const [query, setQuery] = useState("");
@@ -974,7 +1027,7 @@ export default function PaymentsPage(): React.ReactElement {
         : { action: "approved" },
       {
         label: `Aprobación de ${request.studentName}`,
-        message: "Pago aprobado. La membresía ahora está activa.",
+        message: approvalSuccessMessage(request),
         failure: "No se pudo aprobar el pago.",
       },
     );
@@ -1011,15 +1064,10 @@ export default function PaymentsPage(): React.ReactElement {
   function renderRowActions(req: PaymentValidationRequest): React.ReactElement {
     return (
       <>
-        {/* Estado now has a dedicated column: the active tab already
-            filters to one status, so repeating it per row would only echo
-            the tab. Under "Todas" it is the one thing on the row that says
-            what state a payment is in. */}
-        {/* Estado is rendered in its dedicated column. */ false && (
-          <Badge tone={VALIDATION_STATUS_TONES[req.validationStatus]}>
-            {VALIDATION_STATUS_LABELS[req.validationStatus]}
-          </Badge>
-        )}
+        {/* Estado has a dedicated column: the active tab already filters to
+            one status, so repeating it per row would only echo the tab.
+            Under "Todas" it is the one thing on the row that says what
+            state a payment is in. */}
         {/* LA REGLA DEL ROJO ÚNICO. This was `primary` for every pending row,
             and the default tab IS the pending queue: ten red buttons down one
             column. "Nunca hay dos botones rojos en una pantalla" — the real
@@ -1261,6 +1309,7 @@ export default function PaymentsPage(): React.ReactElement {
   function renderDetail(request: PaymentValidationRequest): React.ReactElement {
     const payer = request.responsablePagoName || request.representativeName || request.studentName;
     const isPending = request.validationStatus === "pendiente";
+    const membership = membershipBadge(request);
 
     return (
       <div>
@@ -1370,9 +1419,7 @@ export default function PaymentsPage(): React.ReactElement {
                   <DataBox>{formatDateTime(request.uploadedAt)}</DataBox>
                 </DetailCell>
                 <DetailCell label="Membresía">
-                  <Badge tone={MEMBERSHIP_STATUS_TONES[request.currentMembershipStatus]}>
-                    {MEMBERSHIP_STATUS_LABELS[request.currentMembershipStatus]}
-                  </Badge>
+                  <Badge tone={membership.tone}>{membership.label}</Badge>
                 </DetailCell>
                 <DetailCell label="Tipo">
                   <DataBox>{request.membershipType}</DataBox>
@@ -1573,7 +1620,7 @@ export default function PaymentsPage(): React.ReactElement {
                         enrolment — so the warning names them (prototype 11). */}
                     <p className="rounded-ctl border border-line bg-canvas px-3 py-2.5 text-xs text-ink-2">
                       {payer} va a recibir este motivo tal cual y va a tener que subir un comprobante
-                      nuevo. La membresía de {request.studentName} sigue sin activarse hasta entonces.
+                      nuevo. {rejectionCoverageNote(request)}
                     </p>
 
                     <fieldset className="flex flex-col gap-2">
@@ -1714,7 +1761,7 @@ export default function PaymentsPage(): React.ReactElement {
           open={confirmApproveOpen}
           variant="state-ok"
           title="Aprobar pago"
-          message="¿Confirma que aprueba este pago? La membresía pasará a activa de inmediato y esta acción no se puede deshacer."
+          message={approveConfirmMessage(selectedRequest)}
           onConfirm={() => {
             if (confirmApproveInFlightRef.current) return;
             confirmApproveInFlightRef.current = true;

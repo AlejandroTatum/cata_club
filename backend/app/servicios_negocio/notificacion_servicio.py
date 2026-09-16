@@ -8,6 +8,7 @@ funcionalidad del ranking competitivo. Compartían módulo solo por historia
 de implementación; con el ranking eliminado por completo, quedan en su
 propio servicio.
 """
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import func
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Notificacion
 from app.dominio.excepciones import EntidadNoEncontrada, PermisosInsuficientes
+from app.dominio.nombre_propio import nombre_completo
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
 
 
@@ -55,11 +57,11 @@ class NotificacionServicio:
         total = self.repo.contar_por_persona(persona_id)
         return items, total
 
-    def _resolver_ids_autorizados(self, persona_id: int) -> list[int]:
-        """Persona propia + sus dependientes ACTIVOS -- el mismo alcance que
-        ve el feed paginado del representante. Extraído para que
-        `listar_para_persona_y_hijos` y `marcar_todas_leidas` (issue #859)
-        nunca puedan divergir sobre a quién representa `persona_id`.
+    def _listar_dependientes_activos(self, persona_id: int) -> list:
+        """Dependientes ACTIVOS de `persona_id` -- extraído para que
+        `_resolver_ids_autorizados` y `listar_para_persona_y_hijos` (que
+        además necesita nombres, no solo ids) consulten una sola vez y nunca
+        puedan divergir sobre a quién representa `persona_id`.
 
         Baja lógica: los dependientes salen de
         `PersonaRepositorio.listar_representados`, que filtra por `activo`, y
@@ -70,25 +72,43 @@ class NotificacionServicio:
         colgadas para siempre sería la única traza de alguien que el sistema
         dice que ya no está.
         """
-        from app.dominio.modelos import Persona
         from app.infraestructura.repositorios.persona_repositorio import (
             PersonaRepositorio,
         )
+        return PersonaRepositorio(self.db).listar_representados(persona_id)
+
+    def _resolver_ids_autorizados(self, persona_id: int) -> list[int]:
+        """Persona propia + sus dependientes ACTIVOS -- el mismo alcance que
+        ve el feed paginado del representante. Extraído para que
+        `listar_para_persona_y_hijos` y `marcar_todas_leidas` (issue #859)
+        nunca puedan divergir sobre a quién representa `persona_id`."""
+        from app.dominio.modelos import Persona
         persona = self.db.get(Persona, persona_id)
         if not persona:
             return []
-        hijos_ids = [
-            h.id for h in PersonaRepositorio(self.db).listar_representados(persona_id)
-        ]
+        hijos_ids = [h.id for h in self._listar_dependientes_activos(persona_id)]
         return [persona_id] + hijos_ids
 
     def listar_para_persona_y_hijos(
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None
     ) -> tuple[list[Notificacion], int]:
-        """Para representantes: incluye notificaciones propias y de sus hijos."""
-        todos_ids = self._resolver_ids_autorizados(persona_id)
-        if not todos_ids:
+        """Para representantes: incluye notificaciones propias y de sus
+        hijos. Desde el #1227 cada fila SIEMPRE pertenece a su titular real
+        (nunca hay una copia escrita para el representante -- ver
+        `MembresiaPagoServicio._crear_notificacion`), así que acá, al leer,
+        se antepone "Para <nombre acortado>: " al `mensaje` de toda fila cuyo
+        `persona_id` no sea el de quien pide el feed. Un solo query resuelve
+        los nombres de los dependientes (nunca uno por fila -- `contar_
+        selects` en `conftest.py` lo mide)."""
+        from app.dominio.modelos import Persona
+        persona = self.db.get(Persona, persona_id)
+        if not persona:
             return [], 0
+        hijos = self._listar_dependientes_activos(persona_id)
+        nombres_hijos = {
+            h.id: nombre_completo(h.nombres, h.apellidos) for h in hijos
+        }
+        todos_ids = [persona_id] + list(nombres_hijos.keys())
         query = (
             self.db.query(Notificacion)
             .filter(Notificacion.persona_id.in_(todos_ids))
@@ -103,7 +123,38 @@ class NotificacionServicio:
             .filter(Notificacion.persona_id.in_(todos_ids))
             .scalar()
         )
+        items = [
+            self._con_prefijo_si_es_de_un_hijo(item, persona_id, nombres_hijos)
+            for item in items
+        ]
         return items, total
+
+    @staticmethod
+    def _con_prefijo_si_es_de_un_hijo(
+        item: Notificacion, persona_id: int, nombres_hijos: dict[int, str]
+    ) -> Notificacion | SimpleNamespace:
+        """Devuelve `item` sin tocar si es propia de `persona_id`, o una
+        vista de solo lectura con `mensaje` prefijado si es de un hijo.
+
+        Nunca muta `item.mensaje` en el lugar: es una instancia mapeada del
+        ORM, viva en el identity map de la sesión -- mutarla filtraría el
+        prefijo hacia cualquier otra lectura de la MISMA fila dentro de la
+        misma sesión (ej. el propio feed del hijo, si comparte sesión con el
+        del representante, como en los tests). `SimpleNamespace` expone los
+        mismos campos que `NotificacionResponseDTO` (`from_attributes=True`
+        los lee por atributo, no le importa si el objeto es ORM o no) sin
+        crear una segunda fila ni tocar la persistida."""
+        if item.persona_id == persona_id:
+            return item
+        nombre = acortar_nombre_para_notificacion(nombres_hijos[item.persona_id])
+        return SimpleNamespace(
+            id=item.id,
+            tipo=item.tipo,
+            mensaje=f"Para {nombre}: {item.mensaje}",
+            leida=item.leida,
+            fecha_creacion=item.fecha_creacion,
+            entidad_relacionada_id=item.entidad_relacionada_id,
+        )
 
     def marcar_todas_leidas(self, persona_id: int) -> int:
         """Marca como leídas TODAS las notificaciones pendientes que

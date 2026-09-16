@@ -45,12 +45,12 @@ logger = logging.getLogger("cataclub.servicios.personas")
 
 
 # --- Restricciones de dominio: edad y tutor legal ---------------------------
-# Solo se admiten alumnos entre 5 y 74 años. Si el alumno es menor de edad
+# Solo se admiten alumnos entre 5 y 95 años. Si el alumno es menor de edad
 # (5 a 17 años), el Representante/Tutor legal es OBLIGATORIO; no basta con
 # que la columna sea nullable a nivel de BD: la regla se aplica en el
 # servicio de dominio, no en el ORM ni en el router.
 EDAD_MINIMA_ALUMNO = 5
-EDAD_MAXIMA_ALUMNO = 74
+EDAD_MAXIMA_ALUMNO = 95
 # `EDAD_MAYORIA_EDAD` se movió a `app.dominio.reglas_negocio` (issue #1139):
 # `rol_servicio.cambiar_estado_cuenta` también la necesita y no puede
 # importarla desde acá sin armar un ciclo (ver el comentario de ese
@@ -533,6 +533,14 @@ class PersonaServicio:
     def actualizar_persona(self, persona_id: int, cambios: PersonaUpdateDTO) -> Persona:
         persona = self.obtener_persona(persona_id)
         datos = cambios.model_dump(exclude_unset=True)
+        # Issue #1207: `PersonaUpdateDTO.telefono` ya no exige el campo -- lo
+        # relajó para poder reenviar sin 422 el `""` de un menor
+        # representado sin celular propio (ver el docstring del DTO). Un
+        # adulto autogestionado (`representante_id is None`) sigue
+        # necesitando uno válido; esa distinción solo la puede hacer este
+        # servicio, que es quien tiene la fila real.
+        if "telefono" in datos and not datos["telefono"] and persona.representante_id is None:
+            raise OperacionInvalida("El teléfono es obligatorio.")
         resultado = self.repo.actualizar(persona, datos)
         self.db.commit()
         return resultado

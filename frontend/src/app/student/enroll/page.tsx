@@ -57,6 +57,7 @@ import {
 } from "@/components/ui";
 import { BLOOD_TYPES, BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import {
+  User,
   UserPlus,
   Heart,
   CheckCircle,
@@ -66,7 +67,13 @@ import {
   Mail,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { calculatePersonAge } from "@/lib/identity-validation";
+import {
+  calculatePersonAge,
+  EDAD_MAXIMA_ALUMNO,
+  EDAD_MAYORIA_EDAD,
+  isPlausibleHumanAge,
+  studentBirthDateBounds,
+} from "@/lib/identity-validation";
 import type { NumericFieldMode } from "@/lib/numeric-input";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
@@ -510,6 +517,7 @@ function EnrollWizard(): React.ReactElement {
       icon?: React.ReactNode;
       pattern?: string;
       maxLength?: number;
+      minLength?: number;
       inputMode?: string;
       hint?: string;
       numericMode?: NumericFieldMode;
@@ -544,6 +552,9 @@ function EnrollWizard(): React.ReactElement {
       value: string;
       onChange: (v: string) => void;
       required?: boolean;
+      min?: string;
+      max?: string;
+      hint?: string;
     },
   ): React.ReactElement {
     return (
@@ -651,6 +662,12 @@ function EnrollWizard(): React.ReactElement {
 
   function renderPersonalStep(): React.ReactElement {
     const isSelf = formData.enrollmentType === ENROLLMENT_TYPES.SELF;
+    // Issue #1197: the represented minor's age preview, hand-computed for
+    // the CHILD branch below — `PersonIdentityFields` (SELF branch) already
+    // does this internally.
+    const childAge = calculatePersonAge(formData.fechaNacimiento);
+    const childAgePlausible = !isNaN(childAge) && isPlausibleHumanAge(childAge);
+    const childBirthDateBounds = studentBirthDateBounds();
     return (
       <div className="space-y-1">
         <p className="mb-page text-sm text-ink-2">
@@ -659,38 +676,106 @@ function EnrollWizard(): React.ReactElement {
             : "Ingrese los datos personales del estudiante a inscribir:"}
         </p>
 
-        {/* #1028 (review): this flow's phone is local-only — `09XXXXXXXX`, no
-            `593`/`+593` entry, no silent normalization. */}
-        <PersonIdentityFields
-          idPrefix="enroll"
-          disabled={submitting}
-          phoneFormat="local"
-          nombres={formData.nombres}
-          apellidos={formData.apellidos}
-          fechaNacimiento={formData.fechaNacimiento}
-          cedula={formData.cedula}
-          telefono={formData.telefono}
-          onNombresChange={(v) => updateField("nombres", v)}
-          onApellidosChange={(v) => updateField("apellidos", v)}
-          onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
-          onCedulaChange={(v) => updateField("cedula", v)}
-          onTelefonoChange={(v) => updateField("telefono", v)}
-          errors={{
-            nombres: shownError("nombres"),
-            apellidos: shownError("apellidos"),
-            fechaNacimiento: shownError("fechaNacimiento"),
-            cedula: shownError("cedula"),
-            telefono: shownError("telefono"),
-          }}
-          onFieldBlur={(field) => markTouched(field)}
-          renderAgeWarning={(age) =>
-            age < 18 && isSelf && (
-              <span className="ml-1 text-state-warn">
-                — Los menores de edad requieren un representante.
-              </span>
-            )
-          }
-        />
+        {isSelf ? (
+          // #1028 (review): this flow's phone is local-only —
+          // `09XXXXXXXX`, no `593`/`+593` entry, no silent normalization.
+          <PersonIdentityFields
+            idPrefix="enroll"
+            disabled={submitting}
+            phoneFormat="local"
+            nombres={formData.nombres}
+            apellidos={formData.apellidos}
+            fechaNacimiento={formData.fechaNacimiento}
+            cedula={formData.cedula}
+            telefono={formData.telefono}
+            onNombresChange={(v) => updateField("nombres", v)}
+            onApellidosChange={(v) => updateField("apellidos", v)}
+            onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
+            onCedulaChange={(v) => updateField("cedula", v)}
+            onTelefonoChange={(v) => updateField("telefono", v)}
+            errors={{
+              nombres: shownError("nombres"),
+              apellidos: shownError("apellidos"),
+              fechaNacimiento: shownError("fechaNacimiento"),
+              cedula: shownError("cedula"),
+              telefono: shownError("telefono"),
+            }}
+            onFieldBlur={(field) => markTouched(field)}
+            renderAgeWarning={(age) =>
+              age < 18 && (
+                <span className="ml-1 text-state-warn">
+                  — Los menores de edad requieren un representante.
+                </span>
+              )
+            }
+          />
+        ) : (
+          // Issue #1197: a represented minor has no phone of their own —
+          // the emergency contact already derives from the representative
+          // (#1138) — so this branch hand-renders the same four fields
+          // `PersonIdentityFields` would, in the same order, minus the
+          // phone. `PersonIdentityFields` itself stays untouched: other
+          // screens still use it as-is.
+          <>
+            {renderField("nombres", {
+              label: "Nombres",
+              value: formData.nombres,
+              onChange: (v) => updateField("nombres", v),
+              placeholder: example("Juan Carlos"),
+              required: true,
+              icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+              pattern: "[A-Za-zÀ-ɏ\\s]+",
+              maxLength: 100,
+              minLength: 3,
+              autoComplete: "given-name",
+            })}
+            {renderField("apellidos", {
+              label: "Apellidos",
+              value: formData.apellidos,
+              onChange: (v) => updateField("apellidos", v),
+              placeholder: example("Rodríguez López"),
+              required: true,
+              icon: <User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+              pattern: "[A-Za-zÀ-ɏ\\s]+",
+              maxLength: 100,
+              minLength: 3,
+              autoComplete: "family-name",
+            })}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {renderBirthDateField("fechaNacimiento", {
+                label: "Fecha de nacimiento",
+                value: formData.fechaNacimiento,
+                onChange: (v) => updateField("fechaNacimiento", v),
+                required: true,
+                min: childBirthDateBounds.min,
+                max: childBirthDateBounds.max,
+                hint: "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).",
+              })}
+              {renderField("cedula", {
+                label: "Cédula de identidad",
+                value: formData.cedula,
+                onChange: (v) => updateField("cedula", v),
+                placeholder: example("1712345678"),
+                required: true,
+                icon: <Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+                pattern: "[0-9]{10}",
+                inputMode: "numeric",
+                numericMode: "cedula",
+                hint: CEDULA_HINT,
+              })}
+            </div>
+            {formData.fechaNacimiento && (
+              <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
+                Edad calculada:{" "}
+                <span className="font-semibold text-ink">
+                  {childAgePlausible
+                    ? `${childAge} años`
+                    : !isNaN(childAge) ? "Revise el año." : "—"}
+                </span>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Student credentials — self enrollment only (issue #1137,
             invariante B: un menor representado nunca tiene Usuario propio,
@@ -773,6 +858,13 @@ function EnrollWizard(): React.ReactElement {
           autoComplete: "family-name",
         })}
 
+        {renderBirthDateField("fechaNacimientoRepresentante", {
+          label: "Fecha de nacimiento",
+          value: formData.fechaNacimientoRepresentante,
+          onChange: (v) => updateField("fechaNacimientoRepresentante", v),
+          required: true,
+        })}
+
         {renderField("cedulaRepresentante", {
           label: "Cédula de identidad",
           value: formData.cedulaRepresentante,
@@ -784,13 +876,6 @@ function EnrollWizard(): React.ReactElement {
           inputMode: "numeric",
           numericMode: "cedula",
           hint: CEDULA_HINT,
-        })}
-
-        {renderBirthDateField("fechaNacimientoRepresentante", {
-          label: "Fecha de nacimiento",
-          value: formData.fechaNacimientoRepresentante,
-          onChange: (v) => updateField("fechaNacimientoRepresentante", v),
-          required: true,
         })}
 
         {renderField("telefonoRepresentante", {
@@ -842,8 +927,9 @@ function EnrollWizard(): React.ReactElement {
             Representante mayor de edad
           </p>
           <p className="mt-field">
-            El representante debe tener entre 18 y 74 años. Al inscribir a un
-            dependiente, usted confirma que es legalmente responsable del menor.
+            El representante debe tener entre {EDAD_MAYORIA_EDAD} y {EDAD_MAXIMA_ALUMNO}{" "}
+            años. Al inscribir a un dependiente, usted confirma que es
+            legalmente responsable del menor.
           </p>
         </div>
       </div>
@@ -1045,12 +1131,28 @@ function EnrollWizard(): React.ReactElement {
             "personal",
           )}
           {summaryRow("Cédula", formData.cedula || "—", "personal", { duplicateCandidate: true })}
-          {summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
+          {/* Issue #1197: a represented minor has no phone of their own —
+              this row only applies to the self (adult) path. The
+              representative's own cédula and phone appear below instead. */}
+          {isChild
+            ? null
+            : summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
           {isChild
             ? summaryRow(
                 "Representante",
                 `${formData.nombreRepresentante} ${formData.apellidosRepresentante}`.trim() || "—",
                 "representative",
+              )
+            : null}
+          {isChild
+            ? summaryRow(
+                "Cédula del representante", formData.cedulaRepresentante || "—", "representative",
+                { duplicateCandidate: true },
+              )
+            : null}
+          {isChild
+            ? summaryRow(
+                "Teléfono del representante", formData.telefonoRepresentante || "—", "representative",
               )
             : null}
           {summaryRow(
@@ -1088,9 +1190,9 @@ function EnrollWizard(): React.ReactElement {
         </DataRowList>
 
         <p className="text-sm text-ink-2">
-          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"}.
-          Después podrá subir el comprobante:{" "}
-          <b className="font-semibold text-ink">el club lo valida y recién ahí se activa la membresía</b>.
+          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"} y le enviamos un correo para verificarla.
+          Luego, acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago:{" "}
+          <b className="font-semibold text-ink">el club lo valida y ahí se activa la membresía</b>.
         </p>
 
         {/* `sunken`, not `canvas` — the same inverted ladder as the age well:
@@ -1268,6 +1370,10 @@ function EnrollWizard(): React.ReactElement {
                     sessionConfirmed
                       ? "Su cuenta ya está creada y la sesión, iniciada."
                       : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
+                    /* #1196: la historia completa empieza acá -- antes la
+                       confirmación no mencionaba la verificación de correo,
+                       aunque el enlace ya viaja apenas se crea la cuenta. */
+                    "Verifique su correo: le enviamos un enlace de confirmación.",
                     /* #348: "Mis pagos" no tiene ningún botón para el primer
                        pago -- registrarlo requiere una membresía que todavía
                        no existe, y crearla es una acción exclusiva del
@@ -1279,7 +1385,7 @@ function EnrollWizard(): React.ReactElement {
                        la misma que ya dice student-utils.ts para ese estado
                        ("El club crea la membresía al registrar el primer
                        pago. Acérquese a administración..."). */
-                    "Acérquese a administración o escríbanos por WhatsApp para registrar su primer pago.",
+                    "Acérquese a administración o escríbanos por WhatsApp para registrar la inscripción y el primer pago.",
                     "El club lo valida y ahí se activa la membresía.",
                   ].map((linea) => (
                     <li key={linea} className="flex items-start gap-3 text-sm text-ink-2">

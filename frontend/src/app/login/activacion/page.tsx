@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Mail } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { reenviarVerificacionCorreo } from "@/services/api";
+import { cambiarCorreoNoVerificado, reenviarVerificacionCorreo } from "@/services/api";
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
-import AuthShell, { AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
+import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES, AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
 import { Button, buttonClasses } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 
@@ -31,9 +31,36 @@ function emailScreenSubtitle(activation: ActivationSession, altaCompletada: bool
     "Ábralo para verificar su cuenta; puede hacerlo desde este u otro dispositivo.",
   ];
   if (!altaCompletada) {
-    parts.push("Después queda un paso: la inscripción presencial en el club.");
+    parts.push(
+      "Después queda un paso: acérquese al club o escríbanos por WhatsApp para " +
+        "registrar la inscripción y el primer pago; el club lo valida y ahí se " +
+        "activa la membresía.",
+    );
   }
   return parts.join(" ");
+}
+
+/**
+ * The status paragraph for screen B (#1228): one copy for a first payment in
+ * review, one for a rejected one (with the club's own `motivoRechazo`
+ * verbatim), and the pre-#1228 copy when there is nothing to report yet
+ * (`primerPago` null) — e.g. the enrolment was never registered at all.
+ */
+function enrolmentScreenMessage(activation: ActivationSession): string {
+  const primerPago = activation.primerPago;
+  if (!primerPago) {
+    return (
+      "Acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago. El club lo " +
+      "valida y ahí se activa la membresía."
+    );
+  }
+  if (primerPago.estado === "PENDIENTE_VALIDACION") {
+    return "Su primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.";
+  }
+  const motivo = primerPago.motivoRechazo;
+  return motivo
+    ? `Su primer pago fue rechazado: ${motivo}. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.`
+    : "Su primer pago fue rechazado. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.";
 }
 
 function ActivationPageContent(): React.ReactElement {
@@ -60,6 +87,30 @@ function ActivationPageContent(): React.ReactElement {
    * same as `resendMessage`/`resendError` below.
    */
   const [stillUnverified, setStillUnverified] = useState(false);
+  /**
+   * Set when "Consultar estado nuevamente" re-checks and the in-person
+   * enrolment is STILL pending (#1222) — mirrors `stillUnverified` above,
+   * which the enrolment screen had no equivalent of: `checkStatus` only ever
+   * named the email-verified transition, so the button appeared dead when
+   * the enrolment fact did not change. Cleared on the next attempt (success
+   * or not), same as `stillUnverified`.
+   */
+  const [stillPending, setStillPending] = useState(false);
+  /**
+   * Issue #1245: "¿Correo equivocado? Corregirlo" on the email screen — the
+   * visitor who mistyped the address at enrolment never received the
+   * verification link and had no way to fix it (reinscribing collides with
+   * the identity-duplicate check before the correo is even looked at). No
+   * separate success banner on top of these three: the existing subtitle
+   * (`emailScreenSubtitle`) already names `activation.user.email`, so once
+   * `refreshSession` reloads the session under the corrected address, the
+   * screen's own status copy — and the resend button below it, which reads
+   * the same field — pick it up without any extra state here.
+   */
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCorrectionOpen, setEmailCorrectionOpen] = useState(false);
+  const [emailCorrectionSubmitting, setEmailCorrectionSubmitting] = useState(false);
+  const [emailCorrectionError, setEmailCorrectionError] = useState<string | null>(null);
   const activation = session as ActivationSession | null;
   // The BFF defaults omitted fields to complete for pre-#858 sessions.
   const correoVerificado = activation?.correoVerificado !== false;
@@ -119,6 +170,28 @@ function ActivationPageContent(): React.ReactElement {
   }
 
   /**
+   * "¿Correo equivocado? Corregirlo" (#1245): submits the new address through
+   * `PATCH /api/auth/correo`, then reloads the session so the screen's own
+   * status copy and the resend button both pick up the corrected value — see
+   * the state comment above for why no separate success banner is needed.
+   */
+  async function submitEmailCorrection(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setEmailCorrectionSubmitting(true);
+    setEmailCorrectionError(null);
+    try {
+      await cambiarCorreoNoVerificado(newEmail);
+      await refreshSession();
+      setEmailCorrectionOpen(false);
+      setNewEmail("");
+    } catch (error: unknown) {
+      setEmailCorrectionError(toUserMessage(error, "No se pudo corregir el correo. Intente nuevamente."));
+    } finally {
+      setEmailCorrectionSubmitting(false);
+    }
+  }
+
+  /**
    * Re-reads the session from the BFF — the one way this page learns the
    * email link (opened elsewhere, maybe on another device) was followed.
    * Used both as the email screen's primary action ("Ya verifiqué mi
@@ -130,7 +203,9 @@ function ActivationPageContent(): React.ReactElement {
     setResendMessage(null);
     setResendError(null);
     setStillUnverified(false);
+    setStillPending(false);
     const wasEmailPending = !correoVerificado;
+    const wasEnrolmentPending = correoVerificado && !altaCompletada;
     const result = await refreshSession();
     if (result.kind === "outage") {
       setResendError("No se pudo consultar el estado. Intente nuevamente en unos minutos.");
@@ -145,6 +220,16 @@ function ActivationPageContent(): React.ReactElement {
         // the same screen with no feedback when the email was still
         // pending — this is the one branch that names that outcome.
         setStillUnverified(true);
+      }
+    } else if (wasEnrolmentPending && result.kind === "authenticated") {
+      const next = result.session as ActivationSession;
+      if (next.altaPresencialCompletada === false) {
+        // Issue #1222: "Consultar estado nuevamente" re-fetched and
+        // re-rendered the same screen with no feedback when the enrolment
+        // was still pending — this is the one branch that names that
+        // outcome. When it is no longer false, the gate effect above
+        // redirects once the backend's own decision confirms it.
+        setStillPending(true);
       }
     }
   }
@@ -199,6 +284,56 @@ function ActivationPageContent(): React.ReactElement {
             </Button>
           </form>
 
+          {!emailCorrectionOpen && (
+            <button
+              type="button"
+              onClick={() => setEmailCorrectionOpen(true)}
+              className={buttonClasses("tertiary", "sm")}
+            >
+              ¿Correo equivocado? Corregirlo
+            </button>
+          )}
+          {emailCorrectionOpen && (
+            <form className="flex flex-col gap-2.5" onSubmit={submitEmailCorrection}>
+              <div>
+                <label htmlFor="correo-corregido" className={AUTH_LABEL_CLASSES}>
+                  Correo correcto
+                </label>
+                <input
+                  type="email"
+                  id="correo-corregido"
+                  name="correo-corregido"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  required
+                  disabled={emailCorrectionSubmitting}
+                  className={AUTH_INPUT_CLASSES}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" variant="primary" disabled={emailCorrectionSubmitting} className="w-full">
+                  {emailCorrectionSubmitting ? "Guardando…" : "Guardar correo"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={emailCorrectionSubmitting}
+                  onClick={() => {
+                    setEmailCorrectionOpen(false);
+                    setEmailCorrectionError(null);
+                    setNewEmail("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+              {emailCorrectionError && (
+                <p role="alert" className="text-sm leading-relaxed text-state-bad">{emailCorrectionError}</p>
+              )}
+            </form>
+          )}
+
           <div className="flex flex-col items-center gap-2 text-center text-sm">
             <Link href="/ayuda" className={AUTH_LINK_CLASSES}>Necesito ayuda</Link>
             <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "sm")}>
@@ -228,12 +363,14 @@ function ActivationPageContent(): React.ReactElement {
             <Check size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Correo verificado
           </p>
-          <p className="text-sm leading-relaxed text-ink-2">
-            La inscripción presencial se completa en el club, a cargo del personal. El acceso a los módulos se
-            habilita en cuanto quede registrada.
-          </p>
+          <p className="text-sm leading-relaxed text-ink-2">{enrolmentScreenMessage(activation)}</p>
           {emailJustVerified && (
             <p role="status" className="text-sm leading-relaxed text-state-ok">Su correo quedó verificado.</p>
+          )}
+          {stillPending && (
+            <p role="status" className="text-sm leading-relaxed text-ink-2">
+              Todavía no registramos su inscripción en el club. Vuelva a consultar más tarde.
+            </p>
           )}
         </div>
 

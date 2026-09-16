@@ -169,7 +169,7 @@ async function fillAndBlur(page: Page, id: FieldId, value: string): Promise<void
 /**
  * Un adulto de 30 años, recalculado en cada corrida. Una fecha literal como
  * "1996-05-20" convierte a este test en una bomba de tiempo: el mismo dato
- * cruza el límite de 18 o el de 74 con solo dejar pasar los años.
+ * cruza el límite de 18 o el de 95 con solo dejar pasar los años.
  */
 function isoYearsAgo(years: number, month = 5, day = 20): string {
   const y = new Date().getFullYear() - years;
@@ -190,9 +190,14 @@ const VALID_STUDENT = {
  * itself (issue #1189): using `VALID_STUDENT`'s adult birth date here would
  * make every "child" fixture describe the exact bug this rule exists to
  * catch.
+ *
+ * Issue #1197: no `telefono` — a represented minor has no phone of their
+ * own, and the CHILD path no longer renders that field at all.
  */
 const VALID_CHILD_STUDENT = {
-  ...VALID_STUDENT,
+  nombres: VALID_STUDENT.nombres,
+  apellidos: VALID_STUDENT.apellidos,
+  cedula: VALID_STUDENT.cedula,
   fechaNacimiento: isoYearsAgo(9),
 };
 
@@ -297,13 +302,16 @@ async function fillValidStudent(page: Page): Promise<void> {
   await field(page, F.telefono).fill(VALID_STUDENT.telefono);
 }
 
-/** Same as `fillValidStudent`, but with `VALID_CHILD_STUDENT`'s minor birth date. */
+/**
+ * Same as `fillValidStudent`, but with `VALID_CHILD_STUDENT`'s minor birth
+ * date and no phone — issue #1197: a represented minor has no phone field
+ * to fill on this path.
+ */
 async function fillValidChildStudent(page: Page): Promise<void> {
   await field(page, F.nombres).fill(VALID_CHILD_STUDENT.nombres);
   await field(page, F.apellidos).fill(VALID_CHILD_STUDENT.apellidos);
   await fillBirthDate(page, F.fechaNacimiento, VALID_CHILD_STUDENT.fechaNacimiento);
   await field(page, F.cedula).fill(VALID_CHILD_STUDENT.cedula);
-  await field(page, F.telefono).fill(VALID_CHILD_STUDENT.telefono);
 }
 
 async function fillValidRepresentative(page: Page): Promise<void> {
@@ -622,11 +630,21 @@ test.describe("C · Datos del estudiante (inscripción de un dependiente)", () =
   });
 
   test("C02 · el estudiante dependiente puede ser menor de edad", async ({ page }) => {
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(9));
     await expectFieldValid(page, F.fechaNacimiento);
     await expect(nextButton(page)).toBeEnabled();
     await shot(page, "C02", "menor-dependiente-valido");
+  });
+
+  test("C03 · el menor representado no tiene campo de teléfono propio (#1197)", async ({ page }) => {
+    // El menor no tiene celular propio: el contacto de emergencia ya se
+    // deriva del representante (#1138), así que este paso no debe renderizar
+    // ese campo para el camino representado.
+    await expect(field(page, F.telefono)).toHaveCount(0);
+    await fillValidChildStudent(page);
+    await expect(nextButton(page)).toBeEnabled();
+    await shot(page, "C03", "dependiente-sin-telefono");
   });
 });
 
@@ -660,16 +678,20 @@ test.describe("R · Datos del representante", () => {
   test("R03 · un representante de 17 años queda fuera del piso de edad", async ({ page }) => {
     await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(17));
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe tener entre 18 y 74 años (calculado: 17).",
+      "El representante debe tener entre 18 y 95 años (calculado: 17).",
     );
     await expect(nextButton(page)).toBeDisabled();
     await shot(page, "R03", "representante-menor");
   });
 
-  test("R04 · un representante de 80 años queda fuera del techo de edad", async ({ page }) => {
-    await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(80));
+  test("R04 · un representante de 96 años queda fuera del techo de edad", async ({ page }) => {
+    // Issue #1247: el club tiene socios activos en sus 80s, así que el techo
+    // subió de 74 a 95 — un representante de 80 años ya está DENTRO del
+    // rango; este caso mueve la prueba del techo al primer año que sigue
+    // quedando afuera.
+    await fillAndBlur(page, F.fechaNacimientoRepresentante, isoYearsAgo(96));
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
-      "El representante debe tener entre 18 y 74 años (calculado: 80).",
+      "El representante debe tener entre 18 y 95 años (calculado: 96).",
     );
     await shot(page, "R04", "representante-sobre-el-techo");
   });
@@ -680,7 +702,7 @@ test.describe("R · Datos del representante", () => {
     // atajaba. Hoy devuelve el número real y el techo lo frena.
     await fillAndBlur(page, F.fechaNacimientoRepresentante, "1750-03-15");
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toContainText(
-      "El representante debe tener entre 18 y 74 años",
+      "El representante debe tener entre 18 y 95 años",
     );
     await expect(nextButton(page)).toBeDisabled();
     await shot(page, "R05", "anio-implausible-1750");
@@ -691,7 +713,7 @@ test.describe("R · Datos del representante", () => {
     await birthDatePart(page, F.fechaNacimientoRepresentante, "dia").blur();
     // "(18+)" salió del mensaje: era una abreviatura de la propia frase que lo
     // contenía, y la regla de las palabras no admite abreviaturas. El número
-    // sigue estando, en la rama que sí puede nombrarlo (R05, "entre 18 y 74").
+    // sigue estando, en la rama que sí puede nombrarlo (R05, "entre 18 y 95").
     await expect(fieldError(page, F.fechaNacimientoRepresentante)).toHaveText(
       "El representante debe ser mayor de edad.",
     );
@@ -811,6 +833,12 @@ test.describe("H · Salud y emergencia (camino representado)", () => {
     await nextButton(page).click();
     await expect(page.getByRole("heading", { name: /resumen y confirmación/i })).toBeVisible();
     await expect(page.getByText(/se deriva del representante/i)).toBeVisible();
+    // Issue #1197: the summary shows the representative's own cédula and
+    // phone — the student no longer has a phone row on this path.
+    await expect(page.getByText("Cédula del representante")).toBeVisible();
+    await expect(page.getByText("Teléfono del representante")).toBeVisible();
+    await expect(page.getByText(VALID_REPRESENTATIVE.telefono)).toBeVisible();
+    await expect(field(page, F.telefono)).toHaveCount(0);
     await shot(page, "H07", "salud-representado-minima-valida");
   });
 });
@@ -1206,7 +1234,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
   test("G02 · una fecha FUTURA en un dependiente ahora también se rechaza", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
 
     const nextYear = new Date().getFullYear() + 1;
     await fillAndBlur(page, F.fechaNacimiento, `${nextYear}-06-15`);
@@ -1229,11 +1257,11 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(120));
 
     // El estudiante que se autoinscribe ahora comparte el mismo techo que ya
-    // tenía el representante (74 años) — la regla compartida no distingue por
+    // tenía el representante (95 años) — la regla compartida no distingue por
     // tipo de inscripción, así que la misma persona ya no puede ser rechazada
     // como representante y aceptada como jugador (ver también G04).
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 5 y 74 años",
+      "La edad del alumno debe estar entre 5 y 95 años",
     );
     await expect(nextButton(page)).toBeDisabled();
     await shot(page, "G03", "techo-de-edad-jugador-120");
@@ -1246,7 +1274,7 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
     await fillAndBlur(page, F.fechaNacimiento, "1750-03-15");
 
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 5 y 74 años",
+      "La edad del alumno debe estar entre 5 y 95 años",
     );
     await expect(nextButton(page)).toBeDisabled();
     await shot(page, "G04", "jugador-anio-1750-rechazado");
@@ -1276,13 +1304,13 @@ test.describe("G · Huecos de validación — CERRADOS (issues #224, #225, #226)
   test("G08 · un dependiente de 3 años ya no pasa: el piso de 5 años ahora se aplica", async ({ page }) => {
     await enterFromLogin(page);
     await goToPersonal(page, "Representante");
-    await fillValidStudent(page);
+    await fillValidChildStudent(page);
     await fillAndBlur(page, F.fechaNacimiento, isoYearsAgo(3));
 
     // La regla compartida trae el mismo piso que ya exigía el backend (#224):
     // un dependiente de 3 años bloquea en el primer paso, no en el resumen.
     await expect(fieldError(page, F.fechaNacimiento)).toContainText(
-      "La edad del alumno debe estar entre 5 y 74 años",
+      "La edad del alumno debe estar entre 5 y 95 años",
     );
     await expect(nextButton(page)).toBeDisabled();
     await shot(page, "G08", "dependiente-menor-de-5-rechazado");

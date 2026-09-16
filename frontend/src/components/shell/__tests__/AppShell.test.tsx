@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import AppShell, { MAIN_CONTENT_ID, resolveActiveHref } from "@/components/shell/AppShell";
+import { LAUNCHER_CONTENT_CLEARANCE_PX } from "@/components/chatbot/HelpChatDock";
 
 interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: React.ReactNode;
@@ -822,6 +823,32 @@ describe("AppShell — the page header row", (): void => {
     );
 
     expect(screen.getByRole("button", { name: "Tomar asistencia" })).toBeInTheDocument();
+  });
+
+  it("reserves bottom clearance so a scrolling list can clear the chat launcher (A2)", (): void => {
+    // `HelpChatDock` mounts once in the root layout and only steers clear of
+    // FIXED/STICKY furniture — see its own header comment. It never moves for
+    // ordinary scrolling content, so the last rows of a long list can never
+    // scroll out from under it unless the scrolling surface itself reserves
+    // the space. This shell's `<main>` wrapper is that surface for every
+    // route it renders, so it must carry the reservation, sized off the
+    // launcher's own exported constant rather than a number typed twice.
+    const { container } = render(
+      <AppShell title="Miembros">
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    const main = container.querySelector("main") as HTMLElement;
+    const wrapper = main.parentElement as HTMLElement;
+
+    expect(wrapper.style.getPropertyValue("--dock-clearance")).toBe(
+      `${LAUNCHER_CONTENT_CLEARANCE_PX}px`,
+    );
+    expect(wrapper.className).toMatch(/pb-\[calc\([^)]*var\(--dock-clearance\)\)\]/);
+    // Still resets from `lg` up, where the launcher steps down for this
+    // shell's own rail and there is nothing left to clear.
+    expect(wrapper).toHaveClass("lg:pb-8");
   });
 });
 

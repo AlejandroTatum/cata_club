@@ -48,9 +48,7 @@ def _validar_cedula(valor: str) -> str:
     return valor
 
 
-def _validar_telefono(valor: str) -> str:
-    if not valor.strip():
-        raise ValueError("El teléfono es obligatorio.")
+def _validar_formato_telefono(valor: str) -> str:
     # Issue #855: normaliza ANTES de exigir solo dígitos, así un celular
     # autocompletado en formato internacional (`+593991234567`) se convierte
     # a `09XXXXXXXX` antes de que el `+`/código de país lleguen a esta
@@ -64,6 +62,35 @@ def _validar_telefono(valor: str) -> str:
             "o 9 dígitos empezando en 0."
         )
     return normalizado
+
+
+def _validar_telefono(valor: str) -> str:
+    if not valor.strip():
+        raise ValueError("El teléfono es obligatorio.")
+    return _validar_formato_telefono(valor)
+
+
+# Issue #1207: un menor representado no tiene celular propio, y el desk-edit
+# del admin (o el "agregar dependiente" del portal) reenvía el valor tal como
+# lo lee -- "" para ese menor. `_validar_telefono` de arriba lo rechazaba
+# siempre con "obligatorio", sin importar de quién era el teléfono. Este
+# validador tolera la ausencia Y la cadena vacía EXPLÍCITA (a diferencia de
+# envolver `TelefonoValidado` en `Optional[...]`, que solo tolera que el
+# campo no venga en el payload -- ver `EnrollmentAlumnoDTO.telefono`). Ambos
+# casos se normalizan a `None`, así `Persona.telefono` (nullable desde la
+# migración `l1207telnull`) persiste `NULL` y no `""`. Si el valor SÍ trae
+# contenido, corre la misma regla de forma que `_validar_telefono` -- lo que
+# esto relaja es la obligatoriedad, no el formato. Quién puede quedarse sin
+# teléfono (un menor representado, nunca un adulto autogestionado) es una
+# regla de negocio que necesita la fila real y no vive acá: la exige
+# `PersonaCreateDTO._representante_solo_para_menor` en el alta (donde
+# `representante_id` es parte del mismo payload) y
+# `PersonaServicio.actualizar_persona` en la edición (donde solo el servicio
+# conoce la Persona objetivo).
+def _validar_telefono_opcional(valor: Optional[str]) -> Optional[str]:
+    if valor is None or not valor.strip():
+        return None
+    return _validar_formato_telefono(valor)
 
 
 def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:
@@ -176,6 +203,8 @@ def validar_representante_solo_para_menor(
 
 CedulaValidada = Annotated[str, AfterValidator(_validar_cedula)]
 TelefonoValidado = Annotated[str, AfterValidator(_validar_telefono)]
+# Issue #1207. Ver el docstring de `_validar_telefono_opcional`.
+TelefonoValidadoOpcional = Annotated[Optional[str], AfterValidator(_validar_telefono_opcional)]
 # Issue #643. `TipoSangre` a secas sigue sirviendo para LEER una ficha
 # (`FichaMedicaResponseDTO`, `FichaEmergenciaResponseDTO`); este alias es el
 # que se usa para ESCRIBIR una.

@@ -174,6 +174,73 @@ describe("DiscountsPage — listado", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Search — issue A3: the catalog mixes real discounts with QA noise and had
+// no way to narrow it, unlike /members and /payments.
+// ---------------------------------------------------------------------------
+
+describe("DiscountsPage — búsqueda", () => {
+  it("has an accessible search field, consistent with /members", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    expect(screen.getByLabelText("Buscar descuentos")).toBeInTheDocument();
+  });
+
+  it("narrows the list to discounts whose name matches the typed term", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    fireEvent.change(screen.getByLabelText("Buscar descuentos"), {
+      target: { value: "beca" },
+    });
+
+    expect(screen.getAllByText("Beca municipal").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Convenio empresa")).not.toBeInTheDocument();
+  });
+
+  it("restores the full list when the search term is cleared", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    const search = screen.getByLabelText("Buscar descuentos");
+    fireEvent.change(search, { target: { value: "beca" } });
+    expect(screen.queryByText("Convenio empresa")).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "" } });
+
+    expect(screen.getAllByText("Beca municipal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Convenio empresa").length).toBeGreaterThan(0);
+  });
+
+  it("shows the no-results empty state when nothing matches the search", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    fireEvent.change(screen.getByLabelText("Buscar descuentos"), {
+      target: { value: "nadie con este nombre" },
+    });
+
+    expect(await screen.findByText("No se encontraron descuentos")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("clears the search from the no-results empty state action", async () => {
+    renderPage();
+    await screen.findByTestId("discounts-table");
+
+    fireEvent.change(screen.getByLabelText("Buscar descuentos"), {
+      target: { value: "nadie con este nombre" },
+    });
+    await screen.findByText("No se encontraron descuentos");
+
+    fireEvent.click(screen.getByRole("button", { name: /limpiar búsqueda/i }));
+
+    expect(await screen.findByTestId("discounts-table")).toBeInTheDocument();
+    expect((screen.getByLabelText("Buscar descuentos") as HTMLInputElement).value).toBe("");
+  });
+});
+
 describe("DiscountsPage — crear", () => {
   it("creates a percentage discount from the form", async () => {
     mockCrearDescuento.mockResolvedValueOnce({ ...BECA, id: 3, nombre: "Media beca", porcentaje: "50" });

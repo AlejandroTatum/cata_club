@@ -42,6 +42,7 @@ import type {
 import type { EnrollmentRequest, EnrollmentResponse } from "@/types/enrollment";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { MemberAccount } from "@/app/members/members-utils";
+import type { BackendEstadoMembresia } from "@/lib/membership-status";
 import { GENERIC_FAILURE } from "@/lib/error-message";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,16 @@ export interface PaymentValidationRequest {
   paymentMethod: string;
   uploadedAt: string;
   currentMembershipStatus: MembershipStatus;
+  /**
+   * Issue #1208: the RAW backend `Membresia.estado`, before
+   * `MEMBERSHIP_STATUS_BY_ESTADO` folds `INACTIVA` into the same `"vencida"`
+   * bucket `currentMembershipStatus` carries for a real `VENCIDA`
+   * membership — same convention as
+   * `MemberStudentSummary.membresia.estadoBackend` on `/members`. Optional
+   * so existing fixtures that don't care about this distinction can omit
+   * it; a missing value reads as "not INACTIVA".
+   */
+  estadoBackend?: BackendEstadoMembresia;
   proofFileType: ProofFileType;
   proofPreviewUrl?: string;
   validationStatus: ValidationStatus;
@@ -1523,6 +1534,22 @@ export async function verificarCorreo(token: string): Promise<void> {
 export async function reenviarVerificacionCorreo(correo: string): Promise<{ mensaje: string }> {
   return request<{ mensaje: string }>(apiEndpoint('/auth/verificar-correo/reenviar'), {
     method: 'POST',
+    body: JSON.stringify({ correo }),
+  });
+}
+
+/**
+ * Correct the address of an account that has not verified its email yet
+ * (issue #1245) — PATCH /api/auth/correo. Only reachable while the caller's
+ * own account is still unverified; the backend rejects it otherwise.
+ *
+ * The BFF rotates the auth cookies under the hood (the backend's `sub` claim
+ * IS the correo), so callers must reload the session afterward — e.g. via
+ * AuthContext's `refreshSession` — to see the corrected address reflected.
+ */
+export async function cambiarCorreoNoVerificado(correo: string): Promise<{ correo: string; mensaje: string }> {
+  return request<{ correo: string; mensaje: string }>(apiEndpoint('/auth/correo'), {
+    method: 'PATCH',
     body: JSON.stringify({ correo }),
   });
 }

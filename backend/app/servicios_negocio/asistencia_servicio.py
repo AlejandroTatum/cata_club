@@ -27,8 +27,9 @@ from app.infraestructura.repositorios.asistencia_repositorio import (
 )
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, CategoriaCreateDTO, CategoriaResponseDTO,
-    CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO,
+    CategoriaUpdateDTO, HorarioCreateDTO, HorarioResponseDTO, HorarioUpdateDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
+    PublicScheduleBlockDTO, PublicScheduleCategoryDTO,
     SolapeHorarioDTO, UltimaListaDTO,
 )
 from app.servicios_negocio.persona_servicio import _calcular_edad
@@ -115,7 +116,7 @@ class AsistenciaServicio:
         horario.hora_fin = categoria.hora_fin
         return categoria
 
-    def crear_horario(self, datos: HorarioCreateDTO) -> HorarioEntrenamiento:
+    def crear_horario(self, datos: HorarioCreateDTO) -> HorarioResponseDTO:
         horario = HorarioEntrenamiento(**datos.model_dump())
         categoria = self._validar_dia_y_derivar_horas(horario)
         # INS-3 (decisión de negocio #5, 2026-08-11): una sola fila por
@@ -137,13 +138,69 @@ class AsistenciaServicio:
             )
         resultado = self.repo_horario.crear(horario)
         self.db.commit()
-        return resultado
+        return self._a_horario_dto(resultado, categoria.label)
 
-    def listar_horarios(self, categoria: Optional[str] = None) -> list[HorarioEntrenamiento]:
-        return self.repo_horario.listar(categoria)
+    def listar_horarios(self, categoria: Optional[str] = None) -> list[HorarioResponseDTO]:
+        horarios = self.repo_horario.listar(categoria)
+        # Issue #1238: los labels salen de un único `listar()` del catálogo de
+        # categorías -- un puñado de filas, no una consulta por horario. Mismo
+        # criterio que `_detectar_solapamientos` (#731).
+        labels = {c.codigo: c.label for c in self.repo_categoria.listar()}
+        return [
+            self._a_horario_dto(h, labels.get(h.categoria, h.categoria))
+            for h in horarios
+        ]
+
+    @staticmethod
+    def _a_horario_dto(h: HorarioEntrenamiento, categoria_label: str) -> HorarioResponseDTO:
+        return HorarioResponseDTO(
+            id=h.id, categoria=h.categoria, dia_semana=h.dia_semana,
+            hora_inicio=h.hora_inicio, hora_fin=h.hora_fin,
+            categoria_label=categoria_label,
+        )
 
     def listar_categorias(self) -> list[CategoriaResponseDTO]:
         return [self._a_categoria_dto(c) for c in self.repo_categoria.listar()]
+
+    def listar_horarios_publicos(self) -> list[PublicScheduleCategoryDTO]:
+        """Catálogo público de la landing, derivado de sesiones REALES
+        (`horario_entrenamiento`), no del catálogo de días permitidos de
+        `CategoriaHorario` (issue #1248). El catálogo dice qué días PUEDE
+        entrenar una categoría; esto publica qué días REALMENTE entrena,
+        según las sesiones que el admin dio de alta. Una categoría sin
+        ninguna sesión no se publica -- no es un catálogo vacío con
+        etiqueta, es la ausencia total de la categoría en la landing.
+
+        Una sola consulta con el join a `categoria_horario` (issue #811,
+        mismo criterio que evitó el índice simple): agrupar por categoría
+        sin volver a consultar por fila."""
+        orden_dias = {dia: i for i, dia in enumerate(DiaSemana)}
+        bloques_por_categoria: dict[str, dict[tuple[time, time], set[DiaSemana]]] = {}
+        etiquetas: dict[str, CategoriaHorario] = {}
+
+        for horario, categoria in self.repo_horario.listar_con_categoria():
+            etiquetas[categoria.codigo] = categoria
+            bloques = bloques_por_categoria.setdefault(categoria.codigo, {})
+            clave = (horario.hora_inicio, horario.hora_fin)
+            bloques.setdefault(clave, set()).add(horario.dia_semana)
+
+        resultado = [
+            PublicScheduleCategoryDTO(
+                category=etiquetas[codigo].label,
+                ages=etiquetas[codigo].edades,
+                blocks=[
+                    PublicScheduleBlockDTO(
+                        days=sorted(dias, key=lambda dia: orden_dias[dia]),
+                        start_time=inicio.strftime("%H:%M"),
+                        end_time=fin.strftime("%H:%M"),
+                    )
+                    for (inicio, fin), dias in sorted(bloques.items())
+                ],
+            )
+            for codigo, bloques in bloques_por_categoria.items()
+        ]
+        resultado.sort(key=lambda categoria: categoria.category)
+        return resultado
 
     @staticmethod
     def _a_categoria_dto(c: CategoriaHorario) -> CategoriaResponseDTO:
@@ -412,7 +469,7 @@ class AsistenciaServicio:
         self.repo_categoria.eliminar_con_horarios(categoria, horarios, alumno_horario_a_borrar)
         self.db.commit()
 
-    def actualizar_horario(self, horario_id: int, datos: HorarioUpdateDTO) -> HorarioEntrenamiento:
+    def actualizar_horario(self, horario_id: int, datos: HorarioUpdateDTO) -> HorarioResponseDTO:
         horario = self.repo_horario.obtener_por_id(horario_id)
         if not horario:
             raise EntidadNoEncontrada(f"Horario con id {horario_id} no encontrado")
@@ -424,10 +481,10 @@ class AsistenciaServicio:
         # Sin `entrenador_id` (issue #13), categoria y dia_semana son los
         # únicos campos actualizables y ambos re-derivan las horas: se
         # valida/deriva siempre.
-        self._validar_dia_y_derivar_horas(horario)
+        categoria = self._validar_dia_y_derivar_horas(horario)
         resultado = self.repo_horario.actualizar(horario)
         self.db.commit()
-        return resultado
+        return self._a_horario_dto(resultado, categoria.label)
 
     def eliminar_horario(self, horario_id: int) -> None:
         """Todo o nada (issue #831): antes, `eliminar_por_horario` comiteaba

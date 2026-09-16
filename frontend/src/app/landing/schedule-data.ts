@@ -82,6 +82,30 @@ function mapBlock(block: unknown): LandingScheduleSlot | null {
   };
 }
 
+const LEADING_NUMBER = /(\d{1,2})/;
+
+/**
+ * The tab `ScheduleSelector` opens on by default (issue #1256). The hero
+ * addresses a parent of a 6-17 year old, so the initial category should be
+ * the one written for the youngest audience rather than whichever the API
+ * happened to list first. `audience` stays an orientation label the club
+ * writes ("5 a 10 años", "Mayores de 18 años") — this only reads its leading
+ * number, it never validates a student's age or reorders the catalog. Ties
+ * resolve to the first matching category, and a catalog where nothing
+ * parses falls back to index 0, today's behaviour.
+ */
+export function defaultScheduleIndex(schedules: LandingSchedule[]): number {
+  let bestIndex = 0;
+  let bestAge = Number.POSITIVE_INFINITY;
+  schedules.forEach((schedule, index): void => {
+    const match = schedule.audience !== undefined ? LEADING_NUMBER.exec(schedule.audience) : null;
+    if (match === null) return;
+    const age = Number.parseInt(match[1], 10);
+    if (age < bestAge) { bestAge = age; bestIndex = index; }
+  });
+  return bestAge === Number.POSITIVE_INFINITY ? 0 : bestIndex;
+}
+
 export function mapPublicSchedules(payload: unknown): LandingSchedule[] {
   if (!Array.isArray(payload)) return [];
   return payload.flatMap((entry): LandingSchedule[] => {

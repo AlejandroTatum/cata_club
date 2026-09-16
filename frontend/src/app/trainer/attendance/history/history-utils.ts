@@ -58,6 +58,11 @@ export interface PeriodCoverageInput {
   hasta: string;
   /** Hoy en la zona del club — el rango se recorta acá. Ver abajo. */
   hoy: string;
+  /**
+   * Hora actual en la zona del club, `"HH:mm"` — mismo formato que
+   * `horaInicio`. Solo importa para `fecha === hoy`: ver abajo.
+   */
+  horaActual?: string;
   /** El filtro de horario, cuando hay uno: expande solo ese. */
   horarioId?: number | null;
 }
@@ -84,9 +89,15 @@ function sessionKey(fecha: string, horarioId: number): string {
  * en el futuro, y una sesión que todavía no ocurrió no es una lista que falte:
  * es una lista que no toca. Los presets ya terminan hoy (`buildDateRange`), así
  * que el recorte solo muerde en el rango personalizado.
+ *
+ * El mismo razonamiento se aplica DENTRO de hoy, a la hora: una sesión de esta
+ * tarde que todavía no arrancó tampoco es una lista que falte (issue #1239).
+ * Por eso `fecha === hoy` descarta además los horarios cuyo `horaInicio` es
+ * posterior a `horaActual` — un día pasado no se toca, porque todo lo suyo ya
+ * arrancó.
  */
 export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCoverage {
-  const { sessions, schedules, desde, hasta, hoy, horarioId } = input;
+  const { sessions, schedules, desde, hasta, hoy, horaActual, horarioId } = input;
 
   const listasTomadas = sessions.length;
   const tomadas = new Set(sessions.map((s) => sessionKey(s.fecha, s.horarioId)));
@@ -114,6 +125,11 @@ export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCover
       if (diaSemana !== null) {
         for (const schedule of expandibles) {
           if (schedule.diaSemana !== diaSemana) continue;
+          // Hoy, un horario que todavía no arrancó no es "programada sin
+          // lista": es una sesión que aún no toca, igual que un día futuro.
+          if (fecha === hoy && horaActual !== undefined && schedule.horaInicio > horaActual) {
+            continue;
+          }
           sesionesProgramadas += 1;
           if (!tomadas.has(sessionKey(fecha, schedule.id))) sinLista += 1;
         }

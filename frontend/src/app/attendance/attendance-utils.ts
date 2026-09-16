@@ -33,6 +33,15 @@ export interface TrainingSchedule {
   /** "HH:mm", seconds already trimmed by the adapter. */
   horaInicio: string;
   horaFin: string;
+  /** The category's human name (`categoria_horario.label`, issue #1238) —
+   *  lets the trainer picker tell same-day/different-category cards apart
+   *  without memorizing the timetable. Optional: not every fixture/consumer
+   *  of `TrainingSchedule` sets it, and a real response always does (the
+   *  backend fills it, falling back to the raw código when the category row
+   *  is gone from the catalog). `undefined` renders as "no label", same
+   *  ante-la-duda-no-se-muestra default this codebase already applies
+   *  elsewhere rather than showing a guess. */
+  categoriaLabel?: string;
 }
 
 /** A recent attendance record, enriched with the student's name. */
@@ -463,4 +472,53 @@ export function groupSchedulesByDay(
       schedules: daySchedules ?? [],
     }))
     .sort((a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day));
+}
+
+// ---------------------------------------------------------------------------
+// Schedule ↔ category grouping (issue A1 — the admin/trainer Horario filter)
+// ---------------------------------------------------------------------------
+
+/** Bucket label for a schedule with no `categoriaLabel` (issue #1238 made the
+ *  field optional) — grouped together rather than dropped from the picker,
+ *  the same ante-la-duda-no-se-muestra default `getAttendanceLabel` applies. */
+export const UNCATEGORIZED_SCHEDULE_LABEL = "Sin categoría";
+
+/** One category's worth of schedules, in the grouped Horario select. */
+export interface ScheduleCategoryGroup {
+  category: string;
+  schedules: TrainingSchedule[];
+}
+
+/**
+ * Group schedules by `categoriaLabel` for the Horario filter shared by
+ * `/attendance` and `/trainer/attendance/history` (`AttendanceFilters`) — one
+ * `<optgroup>` per category instead of one flat list of ~26 options.
+ *
+ * Categories are ordered alphabetically: `categoria_horario` is an
+ * admin-editable catalog with no `orden` column, so there is no canonical
+ * category order to defer to. Inside each category, schedules follow the
+ * same Monday→Sunday order as `groupSchedulesByDay` (`DIA_SEMANA_LABELS`'
+ * key order), then by `horaInicio` for same-day schedules.
+ */
+export function groupSchedulesByCategory(
+  schedules: TrainingSchedule[],
+): ScheduleCategoryGroup[] {
+  const grouped = new Map<string, TrainingSchedule[]>();
+  for (const schedule of schedules) {
+    const category = schedule.categoriaLabel || UNCATEGORIZED_SCHEDULE_LABEL;
+    const bucket = grouped.get(category) ?? [];
+    bucket.push(schedule);
+    grouped.set(category, bucket);
+  }
+
+  const dayOrder = Object.keys(DIA_SEMANA_LABELS) as DiaSemana[];
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => a.localeCompare(b, "es"))
+    .map(([category, categorySchedules]) => ({
+      category,
+      schedules: [...categorySchedules].sort((a, b) => {
+        const dayDiff = dayOrder.indexOf(a.diaSemana) - dayOrder.indexOf(b.diaSemana);
+        return dayDiff !== 0 ? dayDiff : a.horaInicio.localeCompare(b.horaInicio);
+      }),
+    }));
 }

@@ -11,6 +11,7 @@ import {
   descuentosActivos,
   descuentoExcedeTarifa,
   descuentoValorLabel,
+  filterDescuentos,
 } from "../discounts-utils";
 
 function makeDescuento(overrides: Partial<DescuentoCatalogo> = {}): DescuentoCatalogo {
@@ -73,5 +74,38 @@ describe("descuentoExcedeTarifa", () => {
   it("never flags a percentage discount, even 100% against a tiny tarifa", () => {
     const descuento = makeDescuento({ porcentaje: "100", monto: null });
     expect(descuentoExcedeTarifa(descuento, 5)).toBe(false);
+  });
+});
+
+/**
+ * The search box behind issue A3: `/discounts` had no way to narrow a catalog
+ * that mixes real discounts with QA noise. `filterDescuentos` mirrors
+ * `filterAccounts` on `/members` — accent-insensitive substring match on the
+ * discount's visible name.
+ */
+describe("filterDescuentos", () => {
+  it("keeps only discounts whose name matches the search term", () => {
+    const catalogo = [
+      makeDescuento({ id: 1, nombre: "Beca municipal" }),
+      makeDescuento({ id: 2, nombre: "Convenio empresa" }),
+    ];
+    expect(filterDescuentos(catalogo, "beca").map((d) => d.id)).toEqual([1]);
+  });
+
+  it("matches accent-insensitively, like /members' own search", () => {
+    const catalogo = [makeDescuento({ nombre: "Convenio institución" })];
+    expect(filterDescuentos(catalogo, "INSTITUCION")).toHaveLength(1);
+  });
+
+  it("returns a shallow copy of the full catalog when the search term is blank", () => {
+    const catalogo = [makeDescuento({ id: 1 }), makeDescuento({ id: 2 })];
+    const result = filterDescuentos(catalogo, "   ");
+    expect(result).toEqual(catalogo);
+    expect(result).not.toBe(catalogo);
+  });
+
+  it("returns an empty array when nothing matches", () => {
+    const catalogo = [makeDescuento({ nombre: "Beca municipal" })];
+    expect(filterDescuentos(catalogo, "inexistente")).toEqual([]);
   });
 });

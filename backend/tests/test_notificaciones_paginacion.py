@@ -157,7 +157,58 @@ class TestFeedNotificacionesRepresentante:
         assert respuesta.status_code == 200
         body = respuesta.json()
         assert body["total"] == 2
-        assert set(_mensajes(body)) == {"propia", "del hijo"}
+        # La propia va sin decorar; la del hijo lleva el prefijo "Para
+        # <nombre>: " al LEERLA (issue #1227) -- ya no hay una segunda fila
+        # escrita para el representante.
+        assert set(_mensajes(body)) == {"propia", "Para Ana Vega: del hijo"}
+
+    def test_notificacion_de_un_hijo_lleva_el_prefijo_una_sola_vez(self, db_session):
+        """Acceptance criteria del #1227: exactamente una fila en la base
+        (nunca dos), el feed del representante la muestra una sola vez con
+        el prefijo, y esa fila cuenta una sola vez como no leída."""
+        from app.dominio.modelos import Notificacion
+
+        representante = _crear_persona(db_session, cedula="1710034065")
+        hijo = _crear_persona(db_session, cedula="1710034073",
+                                fecha_nacimiento=date(2015, 1, 1))
+        hijo.representante_id = representante.id
+        db_session.commit()
+        _crear_notificaciones(db_session, hijo.id, ["Su pago fue rechazado: motivo"])
+
+        assert db_session.query(Notificacion).count() == 1
+
+        try:
+            with _client_como(db_session, representante.id, ["REPRESENTANTE"]) as c:
+                respuesta = c.get("/api/v1/ranking/notificaciones/mias")
+        finally:
+            app.dependency_overrides.clear()
+
+        body = respuesta.json()
+        assert body["total"] == 1
+        assert _mensajes(body) == ["Para Ana Vega: Su pago fue rechazado: motivo"]
+        assert sum(1 for n in body["items"] if not n["leida"]) == 1
+
+    def test_el_hijo_ve_su_propia_notificacion_sin_prefijo(self, db_session):
+        """El hijo con cuenta propia lee la misma fila directo (`listar_
+        propias`, no `listar_para_persona_y_hijos`): el prefijo es una
+        decoración del feed del REPRESENTANTE, no algo que se guarde en el
+        mensaje."""
+        representante = _crear_persona(db_session, cedula="1710034065")
+        hijo = _crear_persona(db_session, cedula="1710034073",
+                                fecha_nacimiento=date(2015, 1, 1))
+        hijo.representante_id = representante.id
+        db_session.commit()
+        _crear_notificaciones(db_session, hijo.id, ["Su pago fue rechazado: motivo"])
+
+        try:
+            with _client_como(db_session, hijo.id, []) as c:
+                respuesta = c.get("/api/v1/ranking/notificaciones/mias")
+        finally:
+            app.dependency_overrides.clear()
+
+        body = respuesta.json()
+        assert body["total"] == 1
+        assert _mensajes(body) == ["Su pago fue rechazado: motivo"]
 
     def test_representante_paginacion_con_desempate(self, db_session):
         representante = _crear_persona(db_session, cedula="1710034065")

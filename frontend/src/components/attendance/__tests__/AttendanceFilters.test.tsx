@@ -6,11 +6,12 @@
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import AttendanceFilters, {
   type AttendanceFiltersController,
 } from "@/components/attendance/AttendanceFilters";
 import type { PersonaBusqueda } from "@/types/domain";
+import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
 
 // The panel is what is under test; the student typeahead pulls in the API layer
 // and answers a different question. The seam mirrors the shared primitive's own
@@ -109,5 +110,107 @@ describe("AttendanceFilters — alumno clear contract (issue #200)", () => {
     fireEvent.click(screen.getByRole("button", { name: /clear search/i }));
 
     expect(clearStudent).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Horario select grouping (issue A1) — shared by /attendance and
+// /trainer/attendance/history, both of which pass the same flat schedule
+// list, so the grouping lives here rather than in either caller.
+// ---------------------------------------------------------------------------
+
+function buildSchedule(overrides: Partial<TrainingSchedule> = {}): TrainingSchedule {
+  return {
+    id: 1,
+    diaSemana: "lun",
+    horaInicio: "15:00",
+    horaFin: "16:30",
+    categoriaLabel: "Competitivo",
+    ...overrides,
+  };
+}
+
+describe("AttendanceFilters — horario select grouping (issue A1)", () => {
+  it("keeps 'Todos los horarios' first and ungrouped, ahead of any optgroup", () => {
+    render(
+      <AttendanceFilters
+        filters={controller}
+        schedules={[buildSchedule({ id: 1, categoriaLabel: "Competitivo" })]}
+      />,
+    );
+
+    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
+    const first = select.children[0] as HTMLOptionElement;
+    expect(first.tagName).toBe("OPTION");
+    expect(first.value).toBe("");
+    expect(first.textContent).toBe("Todos los horarios");
+  });
+
+  it("groups options into one optgroup per category", () => {
+    render(
+      <AttendanceFilters
+        filters={controller}
+        schedules={[
+          buildSchedule({ id: 1, categoriaLabel: "Competitivo" }),
+          buildSchedule({ id: 2, categoriaLabel: "Recreativo" }),
+          buildSchedule({ id: 3, categoriaLabel: "Competitivo" }),
+        ]}
+      />,
+    );
+
+    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
+    const groups = select.querySelectorAll("optgroup");
+    expect(groups).toHaveLength(2);
+    expect(Array.from(groups).map((g) => g.label)).toEqual(["Competitivo", "Recreativo"]);
+    expect(within(groups[0] as HTMLOptGroupElement).getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("orders options inside a group by weekday (Monday→Sunday), then start time", () => {
+    render(
+      <AttendanceFilters
+        filters={controller}
+        schedules={[
+          buildSchedule({ id: 1, diaSemana: "vie", horaInicio: "17:00", horaFin: "18:00" }),
+          buildSchedule({ id: 2, diaSemana: "lun", horaInicio: "16:00", horaFin: "17:00" }),
+          buildSchedule({ id: 3, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00" }),
+        ]}
+      />,
+    );
+
+    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
+    const group = select.querySelector("optgroup") as HTMLOptGroupElement;
+    const labels = Array.from(group.querySelectorAll("option")).map((o) => o.textContent);
+    expect(labels).toEqual([
+      "Lunes 15:00 — 16:00",
+      "Lunes 16:00 — 17:00",
+      "Viernes 17:00 — 18:00",
+    ]);
+  });
+
+  it("groups a schedule with no categoriaLabel under its own fallback group instead of dropping it", () => {
+    render(
+      <AttendanceFilters
+        filters={controller}
+        schedules={[buildSchedule({ id: 1, categoriaLabel: undefined })]}
+      />,
+    );
+
+    const select = screen.getByLabelText("Filtrar por horario") as HTMLSelectElement;
+    expect(within(select).getByRole("option", { name: /lunes/i })).toBeInTheDocument();
+    expect(select.querySelectorAll("optgroup")).toHaveLength(1);
+  });
+
+  it("keeps the same id semantics when an option is selected", () => {
+    const setScheduleId = vi.fn();
+    render(
+      <AttendanceFilters
+        filters={{ ...controller, setScheduleId }}
+        schedules={[buildSchedule({ id: 7, categoriaLabel: "Competitivo" })]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filtrar por horario"), { target: { value: "7" } });
+
+    expect(setScheduleId).toHaveBeenCalledWith(7);
   });
 });

@@ -21,7 +21,7 @@
  * @vitest-environment jsdom
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { fireEvent, render, screen, waitFor, type RenderResult } from "@testing-library/react";
 import ActivationPage from "@/app/login/activacion/page";
 
@@ -36,8 +36,10 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 const mockReenviarVerificacionCorreo = vi.fn();
+const mockCambiarCorreoNoVerificado = vi.fn();
 vi.mock("@/services/api", () => ({
   reenviarVerificacionCorreo: (...args: unknown[]) => mockReenviarVerificacionCorreo(...args),
+  cambiarCorreoNoVerificado: (...args: unknown[]) => mockCambiarCorreoNoVerificado(...args),
 }));
 
 // Same stub as LoginPage.test.tsx: only the content under test matters here,
@@ -61,6 +63,7 @@ vi.mock("@/components/auth/AuthShell", async () => {
 import { useAuth } from "@/contexts/AuthContext";
 import { createAuthenticatedAuth, createMockSession, createUnauthenticatedAuth } from "@/components/__tests__/test-utils";
 import type { ActivationSession } from "@/lib/activation-reasons";
+import type { SessionOutcome } from "@/services/auth";
 
 const mockUseAuth = vi.mocked(useAuth);
 
@@ -75,6 +78,11 @@ beforeEach(() => {
   mockAuthShell.mockClear();
   mockReenviarVerificacionCorreo.mockReset();
   mockReenviarVerificacionCorreo.mockResolvedValue({ mensaje: "Enviado." });
+  mockCambiarCorreoNoVerificado.mockReset();
+  mockCambiarCorreoNoVerificado.mockResolvedValue({
+    correo: "corregido@cataclub.com",
+    mensaje: "Si el correo está registrado y falta verificarlo, se envió un enlace de verificación",
+  });
 });
 
 describe("ActivationPage", () => {
@@ -137,7 +145,7 @@ function renderPending(session: ActivationSession = pendingSession(), authOverri
  * really updates `AuthContext`'s state after "Ya verifiqué mi correo" /
  * "Consultar estado nuevamente" is pressed.
  */
-function mockRefreshTo(nextSession: ActivationSession): ReturnType<typeof vi.fn> {
+function mockRefreshTo(nextSession: ActivationSession): Mock<() => Promise<SessionOutcome>> {
   const mockRefreshSession = vi.fn().mockImplementation(async () => {
     mockUseAuth.mockReturnValue(
       createAuthenticatedAuth("estudiante", "Test User", {
@@ -155,7 +163,11 @@ describe("ActivationPage — the email screen", () => {
     renderPending(pendingSession());
 
     expect(await screen.findByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
-    expect(lastSubtitle()).toContain("Después queda un paso: la inscripción presencial en el club.");
+    expect(lastSubtitle()).toContain(
+      "Después queda un paso: acérquese al club o escríbanos por WhatsApp para " +
+        "registrar la inscripción y el primer pago; el club lo valida y ahí se " +
+        "activa la membresía.",
+    );
     // No trace of the checklist/summary/inline-form screen this replaces.
     expect(screen.queryByLabelText(/código o enlace de verificación/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inscripción presencial completada")).not.toBeInTheDocument();
@@ -349,6 +361,141 @@ describe("ActivationPage — the enrolment screen", () => {
     await screen.findByText("Su correo quedó verificado.");
     expect(screen.getAllByText("Correo verificado")).toHaveLength(1);
   });
+
+  // Issue #1196: the enrolment screen's own body tells the same story as the
+  // wizard summary and the success screen — register the enrolment and the
+  // first payment in person at the club or by WhatsApp, and the club
+  // validates it before the membership activates.
+  it("tells the club-registers-enrolment-and-payment story in its body", async () => {
+    renderPending(enrolmentPendingSession());
+
+    expect(
+      await screen.findByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/el club lo\s*valida y ahí se activa la membresía/i)).toBeInTheDocument();
+  });
+
+  // Issue #1228 — screen B's body used to say the same thing to a visitor
+  // whose first payment was already registered and to one who never
+  // registered anything: three situations, one copy.
+  it("tells the visitor their first payment is in review when primerPago is pending", async () => {
+    renderPending(
+      enrolmentPendingSession({
+        primerPago: { estado: "PENDIENTE_VALIDACION", motivoRechazo: null },
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Su primer pago está en revisión. El club lo valida y ahí se activa la membresía; no hace falta volver al club.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("tells the visitor their first payment was rejected, with the club's own motivo verbatim", async () => {
+    renderPending(
+      enrolmentPendingSession({
+        primerPago: { estado: "RECHAZADO", motivoRechazo: "El voucher no corresponde a la cuenta del club" },
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Su primer pago fue rechazado: El voucher no corresponde a la cuenta del club. Acérquese al club o " +
+          "escríbanos por WhatsApp para registrarlo de nuevo.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the motiveless rejection copy when motivoRechazo is null", async () => {
+    renderPending(
+      enrolmentPendingSession({
+        primerPago: { estado: "RECHAZADO", motivoRechazo: null },
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Su primer pago fue rechazado. Acérquese al club o escríbanos por WhatsApp para registrarlo de nuevo.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the original copy when there is no primerPago to report", async () => {
+    renderPending(enrolmentPendingSession());
+
+    expect(
+      await screen.findByText(
+        /acérquese al club o escríbanos por whatsapp para registrar la inscripción y el primer pago/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // Issue #1222 — pressing "Consultar estado nuevamente" while the enrolment
+  // is still pending used to re-fetch and re-render the exact same screen
+  // with no feedback at all, unlike the email screen's own #1195 fix.
+  it("shows an inline message inside the live region when checking status still reports the enrolment pending", async () => {
+    const pending = enrolmentPendingSession();
+    const mockRefreshSession = mockRefreshTo(pending);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // The mount-time refresh (#1195) also runs and, for this fixture, finds
+    // nothing changed — settle it before the click under test.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Consultar estado nuevamente" }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    const mensaje = await screen.findByText(/todavía no registramos su inscripción en el club/i);
+    expect(mensaje.closest('[aria-live="polite"]')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Consultar estado nuevamente" })).toBeInTheDocument();
+  });
+
+  it("proceeds without showing the pending message when checking status reports the enrolment completed", async () => {
+    const pending = enrolmentPendingSession();
+    const complete = { ...pending, altaPresencialCompletada: true, activacionCompleta: true };
+    const mockRefreshSession = mockRefreshTo(complete);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Consultar estado nuevamente" }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/student"));
+    expect(screen.queryByText(/todavía no registramos su inscripción en el club/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1196: neither screen tells a different story than the wizard —
+// dropping proof-of-payment uploads and self-service linking, both retired.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — one consistent story about what follows enrolment (#1196)", () => {
+  it("email screen never mentions uploading proof of payment or linking a represented person", async () => {
+    renderPending(pendingSession());
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+
+  it("enrolment screen never mentions uploading proof of payment or linking a represented person", async () => {
+    renderPending(pendingSession({ correoVerificado: true }));
+
+    await screen.findByRole("button", { name: "Consultar estado nuevamente" });
+    expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -392,5 +539,116 @@ describe("ActivationPage — the eyebrow is not the admin one", () => {
 
     await screen.findByRole("button", { name: "Consultar estado nuevamente" });
     expect(mockAuthShell).toHaveBeenCalledWith(expect.objectContaining({ eyebrow: "Acceso al club" }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1245: an enrolled visitor whose email was mistyped could never
+// correct it — the enrolment auto-logs them in with the address as typed
+// (`enrollment_servicio.py`), the resend button targets that same address,
+// and reinscribing collides with the identity-duplicate check before the
+// correo is even looked at. The affordance is reachable only from the email
+// screen — the one place `correoVerificado` is still false.
+// ---------------------------------------------------------------------------
+
+describe("ActivationPage — correcting a mistyped email (#1245)", () => {
+  it("offers the correction affordance on the email screen", async () => {
+    renderPending(pendingSession());
+
+    expect(
+      await screen.findByRole("button", { name: /correo equivocado/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("never offers the correction affordance once the email is verified", async () => {
+    renderPending(pendingSession({ correoVerificado: true }));
+
+    await screen.findByRole("button", { name: "Consultar estado nuevamente" });
+    expect(screen.queryByRole("button", { name: /correo equivocado/i })).not.toBeInTheDocument();
+  });
+
+  it("reveals an inline field and submit only after the affordance is pressed", async () => {
+    renderPending(pendingSession());
+
+    expect(screen.queryByLabelText(/correo correcto/i)).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+
+    expect(screen.getByLabelText(/correo correcto/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /guardar correo/i })).toBeInTheDocument();
+  });
+
+  it("submits the corrected address through the BFF and reflects it via a session refresh", async () => {
+    const pending = pendingSession();
+    const corrected = { ...pending, user: { ...pending.user, email: "corregido@cataclub.com" } };
+    const mockRefreshSession = mockRefreshTo(corrected);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    // Settle the mount-time refresh (#1195) before the interaction under test.
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), {
+      target: { value: "corregido@cataclub.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    await waitFor(() => expect(mockCambiarCorreoNoVerificado).toHaveBeenCalledWith("corregido@cataclub.com"));
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    // The affordance closes and the existing status copy now names the
+    // corrected address — no separate confirmation banner is introduced.
+    expect(screen.queryByLabelText(/correo correcto/i)).not.toBeInTheDocument();
+    expect(lastSubtitle()).toContain("Le enviamos un enlace a corregido@cataclub.com.");
+  });
+
+  it("keeps the resend button working against the corrected address afterward", async () => {
+    const pending = pendingSession();
+    const corrected = { ...pending, user: { ...pending.user, email: "corregido@cataclub.com" } };
+    const mockRefreshSession = mockRefreshTo(corrected);
+    const { rerender } = renderPending(pending, { refreshSession: mockRefreshSession });
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    mockRefreshSession.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), {
+      target: { value: "corregido@cataclub.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    await waitFor(() => expect(mockRefreshSession).toHaveBeenCalledTimes(1));
+    rerender(<ActivationPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /reenviar correo de verificación/i }));
+
+    await waitFor(() =>
+      expect(mockReenviarVerificacionCorreo).toHaveBeenCalledWith("corregido@cataclub.com"),
+    );
+  });
+
+  it("renders the backend's error message inline and keeps the field open on failure", async () => {
+    // `status` (not a plain Error) is what makes `toUserMessage` surface this
+    // sentence instead of the generic fallback — `ApiClientError` sets it the
+    // same way the real client does; see error-message.ts's `statusOf`.
+    const backendError = Object.assign(
+      new Error("El correo ya está verificado y no puede modificarse por esta vía."),
+      { status: 400 },
+    );
+    mockCambiarCorreoNoVerificado.mockRejectedValueOnce(backendError);
+    renderPending(pendingSession());
+
+    fireEvent.click(await screen.findByRole("button", { name: /correo equivocado/i }));
+    fireEvent.change(screen.getByLabelText(/correo correcto/i), {
+      target: { value: "otro@cataclub.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /guardar correo/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El correo ya está verificado y no puede modificarse por esta vía.",
+    );
+    expect(screen.getByLabelText(/correo correcto/i)).toBeInTheDocument();
   });
 });
