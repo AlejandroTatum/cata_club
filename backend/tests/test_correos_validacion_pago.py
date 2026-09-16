@@ -224,3 +224,94 @@ def test_validar_pago_aprobado_sigue_aprobando_sin_smtp_configurado(db_session, 
 
     assert resultado.estado_pago == EstadoPago.APROBADO
     assert db_session.get(Membresia, membresia.id).estado == EstadoMembresia.ACTIVA
+
+
+def test_pago_rechazado_cuenta_el_motivo_y_los_tres_pasos_para_reintentar(smtp_capturado):
+    """T2: el correo dice qué pasó y cómo volver a intentarlo, con el mismo
+    procedimiento de tres pasos que la ayuda del portal del alumno (meses y
+    forma de pago, comprobante, en revisión)."""
+    ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_FICTICIO, nombre="Ana Ficticia", motivo_rechazo=MOTIVO_RECHAZO,
+    )
+
+    assert len(smtp_capturado) == 1
+    parsed, partes = _partes(smtp_capturado[0]["mensaje"])
+    texto = _decodificar(partes[0])
+
+    assert _asunto_decodificado(parsed) == "Cata Club | Pago rechazado"
+    assert parsed["To"] == CORREO_FICTICIO
+    assert len(partes) == 2
+    assert texto.startswith("Hola Ana Ficticia,")
+    assert MOTIVO_RECHAZO in texto
+    assert "cuántos meses" in texto
+    assert "forma de pago" in texto
+    assert "comprobante" in texto
+    assert "en revisión" in texto
+    assert "/student/payments" in texto
+    assert MOTIVO_RECHAZO in _html(smtp_capturado[0])
+
+
+def test_pago_rechazado_es_neutral_y_no_menciona_deuda_ni_presion(smtp_capturado):
+    """Restricción de negocio del club flexible: los correos informan, no
+    presionan. Ni deuda, ni mora, ni suspensiones, ni montos."""
+    ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_FICTICIO, nombre="Ana Ficticia", motivo_rechazo=MOTIVO_RECHAZO,
+    )
+
+    texto = _texto(smtp_capturado[0]).lower()
+    for prohibido in ("deuda", "mora", "suspend", "bloque", "pierde", "ultimátum"):
+        assert prohibido not in texto
+
+
+def test_pago_rechazado_sin_motivo_no_inventa_uno(smtp_capturado):
+    """El motivo es opcional (`Pago.motivo_rechazo` es nullable): sin
+    motivo, el correo omite la frase en vez de escribir "None"."""
+    ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_FICTICIO, nombre=None, motivo_rechazo=None,
+    )
+
+    texto = _texto(smtp_capturado[0])
+    assert texto.startswith("Hola,")
+    assert "no pudo aprobar su pago." in texto
+    assert "None" not in texto
+    assert "Motivo:" not in texto
+
+
+def test_validar_pago_rechazado_manda_el_correo_junto_con_el_aviso_in_app(db_session, smtp_capturado):
+    """Misma frontera que la aprobación: el correo de rechazo sale del punto
+    donde nace el aviso in-app, con el motivo que cargó el club."""
+    admin, titular, membresia, pago = _pago_pendiente(db_session, con_cuenta=True)
+
+    PagoServicio(db_session).validar_pago(
+        pago.id,
+        PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
+        actor_persona_id=admin.id,
+    )
+
+    assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_FICTICIO]
+    mensaje = smtp_capturado[0]["mensaje"]
+    assert _asunto_decodificado(_partes(mensaje)[0]) == "Cata Club | Pago rechazado"
+    assert MOTIVO_RECHAZO in _texto(smtp_capturado[0])
+    aviso = (
+        db_session.query(Notificacion)
+        .filter_by(
+            tipo=TipoNotificacion.PAGO_RECHAZADO,
+            persona_id=titular.id,
+            entidad_relacionada_id=pago.id,
+        )
+        .one()
+    )
+    assert MOTIVO_RECHAZO in aviso.mensaje
+
+
+def test_validar_pago_rechazado_sin_cuenta_no_manda_correo_ni_falla(db_session, smtp_capturado):
+    admin, titular, membresia, pago = _pago_pendiente(db_session, con_cuenta=False)
+
+    resultado = PagoServicio(db_session).validar_pago(
+        pago.id,
+        PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
+        actor_persona_id=admin.id,
+    )
+
+    assert resultado.estado_pago == EstadoPago.RECHAZADO
+    assert smtp_capturado == []

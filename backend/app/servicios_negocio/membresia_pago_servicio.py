@@ -2113,6 +2113,7 @@ class PagoServicio:
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
                 mensaje=f"Su pago fue rechazado{motivo}.",
             )
+            self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_RECHAZADO)
         # Issue #826/#451 (ver el comentario de `PersonaServicio.
         # crear_representado`): este método corre dentro de
         # `run_in_threadpool` y el router arma la respuesta (`pago_a_
@@ -2277,7 +2278,7 @@ class PagoServicio:
         )
 
     def _enviar_correo_de_validacion_pago(self, pago: Pago, tipo: TipoNotificacion) -> None:
-        """Correo al titular por la aprobación de su pago.
+        """Correo al titular por la aprobación o el rechazo de su pago.
 
         Best-effort y NUNCA levanta: cuando esto corre, la validación ya está
         commiteada (mismo criterio que `_crear_notificacion`) y un correo
@@ -2317,6 +2318,12 @@ class PagoServicio:
                     vigente_hasta=(
                         self._fecha_fin_maxima_combinada(pago.membresia_id) or pago.fecha_fin
                     ),
+                )
+            else:
+                servicio.enviar_pago_rechazado(
+                    correo=persona.usuario.correo,
+                    nombre=persona.nombres,
+                    motivo_rechazo=pago.motivo_rechazo,
                 )
         except (RuntimeError, ServicioNoDisponible) as exc:
             logger.warning(

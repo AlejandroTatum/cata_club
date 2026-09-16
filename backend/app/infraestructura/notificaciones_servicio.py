@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape as escapar_html
 from typing import Optional
 
 from app.dominio.excepciones import (
@@ -399,3 +400,61 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_APROBADO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_pago_rechazado(
+        self, correo: str, nombre: Optional[str], motivo_rechazo: Optional[str] = None,
+    ) -> None:
+        """Avisa al titular que el club no pudo aprobar su pago (PR 1,
+        mejoras de la experiencia del alumno).
+
+        Incluye el motivo que cargó el club y los tres pasos para volver a
+        intentarlo -- el mismo procedimiento de la ayuda "Cómo se registra
+        un pago" del portal (meses y forma de pago, comprobante, en
+        revisión). Tono neutro: informa un hecho y ofrece el camino de
+        vuelta, sin presión, sin amenazas y sin montos. El club es flexible;
+        el correo no cobra.
+
+        `motivo_rechazo` es texto libre de administración y viaja escapado
+        en la parte HTML: un motivo con `<` o `&` no puede romper (ni
+        inyectar en) el cuerpo del mensaje.
+        """
+        asunto = "Cata Club | Pago rechazado"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        motivo = (motivo_rechazo or "").strip()
+        parrafo_motivo = (
+            f"El club no pudo aprobar su pago. Motivo: {motivo}."
+            if motivo
+            else "El club no pudo aprobar su pago."
+        )
+        enlace = f"{self._frontend_url}/student/payments"
+        pasos = (
+            'Ingrese a "Registrar un pago" y elija cuántos meses va a pagar y '
+            "la forma de pago.",
+            "Si paga por transferencia, adjunte el comprobante (PDF, JPG o PNG).",
+            "El pago queda en revisión en su historial hasta que el club lo "
+            "apruebe.",
+        )
+        texto = (
+            f"{saludo}\n\n"
+            f"{parrafo_motivo}\n\n"
+            f"Para volver a intentarlo, el procedimiento es el mismo de siempre:\n\n"
+            f"1. {pasos[0]}\n"
+            f"2. {pasos[1]}\n"
+            f"3. {pasos[2]}\n\n"
+            f"El formulario está en {enlace}.\n\n"
+            f"Ante cualquier duda, escríbanos por WhatsApp.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            f"<p>{saludo}</p>"
+            f"<p>{escapar_html(parrafo_motivo)}</p>"
+            "<p>Para volver a intentarlo, el procedimiento es el mismo de siempre:</p>"
+            f"<p>1. {pasos[0]}<br>2. {pasos[1]}<br>3. {pasos[2]}</p>"
+            f'<p>El formulario está en <a href="{enlace}">{enlace}</a>.</p>'
+            "<p>Ante cualquier duda, escríbanos por WhatsApp.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[PAGO_RECHAZADO] correo=%s", _enmascarar_correo(correo))
