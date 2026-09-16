@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ProfilePage from "@/app/profile/page";
 import type { PerfilPropio } from "@/types/domain";
-import type { MembershipSummary, StudentProfileSummary } from "@/services/api";
+import type { MembershipSummary, PagoPersona, StudentProfileSummary } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
 
@@ -61,6 +61,7 @@ const mockFetchMiPerfil = vi.fn();
 const mockActualizarMiPerfil = vi.fn();
 const mockSolicitarRecuperacion = vi.fn();
 const mockFetchStudentPortal = vi.fn();
+const mockFetchPagosDePersona = vi.fn();
 const mockSubirFotoPerfil = vi.fn();
 const mockFetchNotificaciones = vi.fn().mockResolvedValue({ items: [], total: 0, skip: 0, limit: 20 });
 const mockMarcarNotificacionLeida = vi.fn().mockResolvedValue(undefined);
@@ -86,6 +87,7 @@ vi.mock("@/services/api", () => ({
   actualizarMiPerfil: (data: unknown) => mockActualizarMiPerfil(data),
   solicitarRecuperacion: (correo: string) => mockSolicitarRecuperacion(correo),
   fetchStudentPortal: (personaId: string) => mockFetchStudentPortal(personaId),
+  fetchPagosDePersona: (personaId: string) => mockFetchPagosDePersona(personaId),
   subirFotoPerfil: (archivo: File) => mockSubirFotoPerfil(archivo),
   fetchNotificaciones: () => mockFetchNotificaciones(),
   marcarNotificacionLeida: (id: number) => mockMarcarNotificacionLeida(id),
@@ -194,6 +196,11 @@ beforeEach(() => {
     telefono: "",
     fechaCreacion: "2024-01-01T00:00:00",
   });
+  // Same treatment for the student branch's payments call: no approved payment
+  // by default, so an absent coverage end is the shipped case unless a test
+  // seeds one. Both are supplementary — see ProfileContent.
+  mockFetchPagosDePersona.mockReset();
+  mockFetchPagosDePersona.mockResolvedValue([]);
 });
 
 // ---------------------------------------------------------------------------
@@ -2035,9 +2042,13 @@ describe("ProfilePage — issue #204 redesign: prototype elements the first pass
  * `.fechaFin` and `recentSessions`; the screen read `estado` and
  * `fechaNacimiento` and dropped the rest.
  *
- * Every assertion below therefore reads a field that ALREADY arrives. No test
- * here mocks a new endpoint, and none should: the change is what the screen
- * shows, never what it asks for.
+ * Every assertion below therefore reads a field that ALREADY arrives — with
+ * ONE exception, and it is the one date the payload cannot carry:
+ * `MembershipSummary.fechaFin` is declared on the client type but no adapter
+ * populates it (see `buildMembershipView`), so the membership card's
+ * "Vigente hasta" reads the persona's APPROVED payments through
+ * `resolveCoverageEnd` — the same reading `/student/payments` prints, from the
+ * same endpoint, and not a second interpretation of the field.
  */
 describe("ProfilePage — the club on the screen (faro: perfil y login)", () => {
   // Typed against the real payload shape, so the fixture cannot drift from
@@ -2070,6 +2081,7 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
 
   async function renderStudent(
     overrides: Partial<StudentProfileSummary> = {},
+    pagos: PagoPersona[] = [],
   ): Promise<HTMLElement> {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
@@ -2077,12 +2089,35 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
       representados: [],
       membershipPlans: [],
     });
+    mockFetchPagosDePersona.mockResolvedValue(pagos);
     render(
       <ToastProvider>
         <ProfilePage />
       </ToastProvider>,
     );
     return screen.findByTestId("profile-hero");
+  }
+
+  /** An APPROVED payment covering one period — the only rows that define coverage. */
+  function makePago(overrides: Partial<PagoPersona> = {}): PagoPersona {
+    return {
+      id: 1,
+      monto: "25.00",
+      motivoRechazo: null,
+      estadoPago: "APROBADO",
+      tipoPago: "TRANSFERENCIA",
+      fechaRegistro: "2026-08-01T10:00:00",
+      fechaValidacion: "2026-08-02T10:00:00",
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-31",
+      personaId: 1,
+      membresiaId: 4,
+      voucherUrl: null,
+      voucherFormato: null,
+      descuentoValorAplicado: null,
+      descuentoPorcentajeAplicado: null,
+      ...overrides,
+    };
   }
 
   it("states the plan and the joining date the portal payload already carried", async () => {
@@ -2095,39 +2130,69 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     expect(within(membership).getByText("13/08/2026")).toBeInTheDocument();
   });
 
-  it("asks for nothing new to do it — the same single portal call as before", async () => {
+  it("asks for nothing new about the membership — plan, modalidad and joining date are all in the payload", async () => {
     // D14: this pass changes how the screen looks, not what it does. If the
     // club facts had needed a second request, they would not have been in
-    // scope at all.
+    // scope at all. Coverage is the ONE fact the payload cannot carry (see
+    // this describe's header), so it is the only extra call.
     await renderStudent();
     await screen.findByTestId("profile-membership");
 
     expect(mockFetchStudentPortal).toHaveBeenCalledTimes(1);
     expect(mockFetchStudentPortal).toHaveBeenCalledWith("1");
+    expect(mockFetchPagosDePersona).toHaveBeenCalledTimes(1);
+    expect(mockFetchPagosDePersona).toHaveBeenCalledWith("1");
   });
 
-  it("keeps quiet about a fecha de fin the payload does not carry", async () => {
+  it("ignores the membership's own fechaFin, which no adapter populates", async () => {
     // Every membership row in the QA dataset comes back without `fechaFin`,
-    // so this is the shipped case, not a corner one. An absent end date is
-    // not "vigente hasta —": it is a row that does not exist.
-    await renderStudent();
+    // and `buildMembershipView` has no line that could ever fill it. A
+    // membership carrying one anyway must still not be believed: that field
+    // is the shape a reader would trust hardest and the one this product
+    // cannot produce. Nothing approved means no coverage row at all — an
+    // absent end date is not "Vigente hasta —".
+    await renderStudent({ membership: { ...STUDENT_MEMBERSHIP, fechaFin: "2099-12-31" } });
 
     const membership = await screen.findByTestId("profile-membership");
     expect(within(membership).queryByText(/Vigente hasta/)).not.toBeInTheDocument();
+    expect(within(membership).queryByText("31/12/2099")).not.toBeInTheDocument();
     expect(membership.textContent).not.toContain("—");
   });
 
-  it("states the end of the paid period when the payload does carry one", async () => {
-    await renderStudent({
-      // Date-only, the shape the backend sends for a coverage end. A UTC
-      // midnight timestamp would render as the 30th anywhere west of Greenwich
-      // — the exact bug `parseDateStringLocal` exists to avoid.
-      membership: { ...STUDENT_MEMBERSHIP, fechaFin: "2026-12-31" },
-    });
+  it("states the furthest APPROVED payment's fechaFin as the end of paid coverage", async () => {
+    // The date is the same reading `/student/payments` prints, from the same
+    // function: the furthest `fechaFin` among APPROVED payments. A later
+    // REJECTED payment must not extend coverage, and a PENDIENTE_VALIDACION
+    // one must not either — neither has been approved by the club.
+    await renderStudent({}, [
+      makePago({ id: 1, fechaFin: "2026-08-31" }),
+      makePago({ id: 2, fechaInicio: "2026-09-01", fechaFin: "2026-09-30" }),
+      makePago({ id: 3, estadoPago: "RECHAZADO", fechaFin: "2026-12-31" }),
+      makePago({ id: 4, estadoPago: "PENDIENTE_VALIDACION", fechaFin: "2027-01-31" }),
+    ]);
 
     const membership = await screen.findByTestId("profile-membership");
     expect(within(membership).getByText("Vigente hasta")).toBeInTheDocument();
-    expect(within(membership).getByText("31/12/2026")).toBeInTheDocument();
+    // `30/09/2026` is date-only, the shape the backend sends for a coverage
+    // end (a UTC midnight timestamp would render as the previous day anywhere
+    // west of Greenwich — the bug `parseDateStringLocal` exists to avoid).
+    expect(within(membership).getByText("30/09/2026")).toBeInTheDocument();
+    expect(within(membership).queryByText("31/12/2026")).not.toBeInTheDocument();
+    expect(within(membership).queryByText("31/01/2027")).not.toBeInTheDocument();
+  });
+
+  it("leaves the coverage row out, without erroring the page, when the payments call fails (triangulation)", async () => {
+    // Supplementary, exactly like the `/auth/me` call beside it: the card is
+    // one fact on a screen that answers a different question, so a failed
+    // lookup drops a row instead of replacing the account with an error.
+    mockFetchPagosDePersona.mockRejectedValueOnce(new Error("No se pudo cargar los pagos."));
+
+    await renderStudent();
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText("Mensual Infantil")).toBeInTheDocument();
+    expect(within(membership).queryByText(/Vigente hasta/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   /**

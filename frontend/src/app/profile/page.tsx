@@ -50,6 +50,11 @@
  *   `/auth/me` payload. Correo stays read-only on both branches: it is the
  *   JWT `sub`, and the DTO does not even accept the field.
  *
+ *   A third, supplementary call — `fetchPagosDePersona()` — exists for the
+ *   single date no adapter fills: `MembershipSummary.fechaFin` is `undefined`
+ *   on every real payload, so the membership card's "Vigente hasta" is the
+ *   furthest APPROVED payment instead (see `MembershipCard`).
+ *
  *   The faro pass added no call. What it added is the rest of the payload
  *   that call was already returning: `membership.categoria`, `.modalidad`,
  *   `.fechaActivacion`, `.fechaFin` and `recentSessions` were all arriving
@@ -119,7 +124,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -130,6 +135,7 @@ import {
   actualizarMiPerfil,
   solicitarRecuperacion,
   fetchStudentPortal,
+  fetchPagosDePersona,
   subirFotoPerfil,
   invalidarOtrasSesiones,
   ApiClientError,
@@ -140,9 +146,10 @@ import type {
   StudentProfileSummary,
   StudentSessionSummary,
   MembershipSummary,
+  PagoPersona,
 } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
-import { personInitials } from "@/app/student/student-utils";
+import { personInitials, resolveCoverageEnd } from "@/app/student/student-utils";
 import SessionsCard from "./SessionsCard";
 import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
@@ -664,13 +671,30 @@ function PanelFact({ label, children }: { label: string; children: React.ReactNo
  * The club's side of the relationship, assembled from `self.membership` —
  * which this page has been fetching since #36 and reading two fields of.
  *
- * `fetchStudentPortal()` returns `categoria`, `modalidad`, `fechaActivacion`,
- * `fechaFin` and `montoAplicado` on every membership row, and the screen used
- * `estado` for a badge and dropped the rest. That is the whole of "perfil
- * genérico": not missing data, discarded data. Nothing here is a new request —
- * see the module docstring's data-sources note, which is unchanged.
+ * `fetchStudentPortal()` returns `categoria`, `modalidad`, `fechaActivacion`
+ * and `montoAplicado` on every membership row, and the screen used `estado`
+ * for a badge and dropped the rest. That is the whole of "perfil genérico":
+ * not missing data, discarded data.
  *
- * Three of the five are drawn, and the two that are not each have a reason:
+ * ## "Vigente hasta" is the coverage end, not `membership.fechaFin`
+ *
+ * `MembershipSummary.fechaFin` is declared on the client type and produced by
+ * nobody: `buildMembershipView` (src/lib/server/student-adapter.ts) has no line
+ * that fills it, so the row this card used to draw from that field never
+ * appeared on a real payload. The end of paid coverage is the furthest
+ * `fechaFin` among the persona's APPROVED payments — `resolveCoverageEnd`, the
+ * same reading `/student/payments` prints — so it arrives here as
+ * `coverageEnd`, from the supplementary lookup `ProfileContent` makes. That
+ * ONE date is the only fact on this card the portal payload does not carry.
+ *
+ * An absent coverage end draws no row, never a labelled dash: this card's rule
+ * is that a datum the club cannot prove is left out, which is why `hasta` is a
+ * plain empty string rather than a placeholder. The reader who needs to know
+ * whether coverage is current is not left guessing either way — the identity
+ * panel above carries the membership's own state badge.
+ *
+ * Of the four fields the payload does carry, three are drawn and the one that
+ * is not has its reason:
  *
  * - **`montoAplicado`** is money. On its own a figure does not say whether it
  *   is owed, paid or overdue, and "Mis pagos" exists to answer precisely that.
@@ -681,7 +705,14 @@ function PanelFact({ label, children }: { label: string; children: React.ReactNo
  *   `PERSONALIZADA` against a plan named for its season is the case that keeps
  *   the field alive.
  */
-function MembershipCard({ membership }: { membership: MembershipSummary }): React.ReactElement {
+function MembershipCard({
+  membership,
+  coverageEnd,
+}: {
+  membership: MembershipSummary;
+  /** Furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`), or `null`. */
+  coverageEnd: string | null;
+}): React.ReactElement {
   const plan = membership.categoria?.trim();
   const modalidad = membership.modalidad?.trim();
   const modalidadLabel = modalidad
@@ -693,7 +724,7 @@ function MembershipCard({ membership }: { membership: MembershipSummary }): Reac
   const modalidadIsRedundant =
     !modalidad || (plan?.toLowerCase().includes(modalidad.toLowerCase()) ?? false);
   const desde = membership.fechaActivacion ? formatDate(membership.fechaActivacion) : "";
-  const hasta = membership.fechaFin ? formatDate(membership.fechaFin) : "";
+  const hasta = coverageEnd ? formatDate(coverageEnd) : "";
 
   return (
     <section data-testid="profile-membership" className="card flex flex-none flex-col overflow-hidden">
@@ -790,6 +821,14 @@ type ProfileLayoutProps =
       role: UserRole;
       data: StudentPortalSummary;
       perfil: PerfilPropio | null;
+      /**
+       * Furthest `fechaFin` among the profile's APPROVED payments, or `null`.
+       *
+       * Not on the `staff` member because the membership card it feeds exists
+       * only here: `self` — and therefore `self.membership` — is the student
+       * branch's own profile.
+       */
+      coverageEnd: string | null;
       sessionEmail: string;
       sessionName: string;
       onPerfilUpdated: (perfil: PerfilPropio) => void;
@@ -1023,11 +1062,19 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // lo que de verdad mide, en vez de forzar que las dos fechas coincidan.
   const memberSince = fechaCreacion ? `Cuenta creada el ${formatDate(fechaCreacion)}` : null;
 
-  // The two payload fields this screen used to fetch and discard. Both are
-  // read straight off `self` — no second request, and no default when the
-  // field is absent (see `MembershipCard` / `RecentSessionsCard`).
+  // The membership and the session history the screen used to fetch and
+  // discard. Both are read straight off `self` — no default when a field is
+  // absent (see `MembershipCard` / `RecentSessionsCard`). The one date the
+  // payload cannot carry, the end of paid coverage, is the separate
+  // `coverageEnd` above.
   const selfMembership = self?.membership ?? null;
   const recentSessions = self?.recentSessions ?? [];
+  // `MembershipSummary.fechaFin` is declared on the client type and populated
+  // by no adapter, so the card cannot read coverage off the membership; it
+  // reads the same `resolveCoverageEnd` date `/student/payments` prints. `self`
+  // exists only on the student branch, so the `null` here is unreachable
+  // rather than a second reading of the field.
+  const coverageEnd = props.kind === "student" ? props.coverageEnd : null;
 
   // The quick-recognition badge in the identity panel — only when there IS a
   // real membership status to report. When `self` exists but has no
@@ -1128,7 +1175,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             onFotoChange={(e) => void handleFotoChange(e)}
           />
 
-          {selfMembership && <MembershipCard membership={selfMembership} />}
+          {selfMembership && (
+            <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
+          )}
 
           {/*
             Lo que cierra el hueco que este archivo venía documentando: "a
@@ -1525,6 +1574,36 @@ function ProfileContent(): React.ReactElement | null {
     };
   }, [isStudentRole]);
 
+  // The one fact the portal payload cannot carry: the end of PAID coverage.
+  // `buildMembershipView` never fills `MembershipSummary.fechaFin`, so the
+  // real date is the furthest `fechaFin` among APPROVED payments — the same
+  // `resolveCoverageEnd` reading `/student/payments` prints, from the same
+  // endpoint, fetched with the same ownership criterion. Supplementary in
+  // exactly the way the call above is: a failure drops the "Vigente hasta"
+  // row instead of replacing the account with an error.
+  const [studentPagos, setStudentPagos] = useState<PagoPersona[]>([]);
+
+  useEffect(() => {
+    if (!isStudentRole || !personaId) return;
+    let cancelled = false;
+    fetchPagosDePersona(personaId)
+      .then((pagos) => {
+        if (!cancelled) setStudentPagos(pagos);
+      })
+      .catch(() => {
+        // Supplementary only — see comment above.
+        if (!cancelled) setStudentPagos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isStudentRole, personaId]);
+
+  // Cheap, but memoised the way `/student/payments` does it: the list is
+  // re-derived on every keystroke of the teléfono field above, and the answer
+  // cannot change while the fetched array does not.
+  const coverageEnd = useMemo(() => resolveCoverageEnd(studentPagos), [studentPagos]);
+
   if (role === null) return null;
 
   // `ProfileLayout` renders its OWN `AppShell` — the page action has to reach
@@ -1538,6 +1617,7 @@ function ProfileContent(): React.ReactElement | null {
           role={role}
           data={studentState.data}
           perfil={studentPerfil}
+          coverageEnd={coverageEnd}
           sessionEmail={session?.user.email ?? ""}
           sessionName={session?.user.name ?? ""}
           onPerfilUpdated={setStudentPerfil}
