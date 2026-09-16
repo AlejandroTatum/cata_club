@@ -28,9 +28,11 @@ import {
   DataRow,
   EmptyState,
   ErrorState,
+  FilterPanel,
   LoadingState,
   PAGE_RAIL,
   ResponsiveListTable,
+  SearchInput,
   TableCell,
   TableHeaderCell,
   TableNameCell,
@@ -40,7 +42,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { fetchDescuentos, crearDescuento, actualizarDescuento } from "@/services/api";
 import type { DescuentoCatalogo } from "@/services/api";
 import { cn } from "@/components/ui/cn";
-import { descuentoValorLabel } from "./discounts-utils";
+import { descuentoValorLabel, filterDescuentos } from "./discounts-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { AMOUNT_MAX_VALUE } from "@/lib/numeric-input";
 
@@ -95,6 +97,9 @@ export default function DiscountsPage(): React.ReactElement {
   const [descuentos, setDescuentos] = useState<DescuentoCatalogo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Issue A3: /members and /payments both expose a search; /discounts mixes
+  // real discounts with QA noise and had no way to narrow the list at all.
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [form, setForm] = useState<FormState | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -256,6 +261,9 @@ export default function DiscountsPage(): React.ReactElement {
    */
   const splitting = form !== null;
 
+  /** The catalog narrowed by the search box — issue A3. */
+  const filteredDescuentos = filterDescuentos(descuentos, searchTerm);
+
   /**
    * Whether the catalog CARD stretches to the page's height.
    *
@@ -265,8 +273,11 @@ export default function DiscountsPage(): React.ReactElement {
    * INSIDE the card, which reads worse than short canvas — bare canvas says
    * "the page ends here", a card with a floor of empty space says something
    * failed to render. `/members` draws its own table card the same way.
+   *
+   * Reads `filteredDescuentos`, not `descuentos`: a search that finds nobody
+   * needs the same tall parent as a genuinely empty catalog.
    */
-  const fillsHeight = form === null && descuentos.length === 0;
+  const fillsHeight = form === null && filteredDescuentos.length === 0;
 
   /**
    * The two actions a discount carries, shared verbatim between the table row
@@ -443,6 +454,24 @@ export default function DiscountsPage(): React.ReactElement {
         >
           <div className="flex min-w-0 flex-1 flex-col gap-page">
             {/*
+             * Search — issue A3. `/members` and `/payments` both frame their
+             * own search in a `FilterPanel`; the discount catalog gets the
+             * same slot, with no chips of its own to fill (there are no
+             * quick-filter flags here, only the free-text search).
+             */}
+            <FilterPanel
+              label="Filtros de descuentos"
+              search={
+                <SearchInput
+                  label="Buscar descuentos"
+                  placeholder="Buscar por nombre…"
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                />
+              }
+            />
+
+            {/*
              * The catalog block, and the home the "Ver ayuda" disclosure never
              * had.
              *
@@ -487,7 +516,7 @@ export default function DiscountsPage(): React.ReactElement {
 
               {loading ? (
                 <LoadingState label="Cargando descuentos…" />
-              ) : !loadError && descuentos.length === 0 ? (
+              ) : !loadError && filteredDescuentos.length === 0 ? (
                 <EmptyState
                   surface="inset"
                   // The screen's whole problem, in one prop. An empty catalog
@@ -498,20 +527,28 @@ export default function DiscountsPage(): React.ReactElement {
                   // 15% on a search that found nobody).
                   fill
                   icon={<Percent size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title="Sin descuentos en el catálogo"
-                  description="Cree el primer descuento para poder aplicarlo al registrar pagos."
+                  title={searchTerm ? "No se encontraron descuentos" : "Sin descuentos en el catálogo"}
+                  description={
+                    searchTerm
+                      ? "Ningún descuento coincide con la búsqueda."
+                      : "Cree el primer descuento para poder aplicarlo al registrar pagos."
+                  }
                   action={
-                    // Worded distinctly from the header's "Nuevo descuento" —
-                    // same "Nueva categoría" / "Crear primera categoría" split
-                    // Groups already draws — so the two controls read as one
-                    // clear action for this moment, not a duplicate (issue #199).
-                    <Button variant="dark" onClick={openCreateForm}>
-                      <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                      Crear primer descuento
-                    </Button>
+                    searchTerm ? (
+                      <Button onClick={() => setSearchTerm("")}>Limpiar búsqueda</Button>
+                    ) : (
+                      // Worded distinctly from the header's "Nuevo descuento" —
+                      // same "Nueva categoría" / "Crear primera categoría" split
+                      // Groups already draws — so the two controls read as one
+                      // clear action for this moment, not a duplicate (issue #199).
+                      <Button variant="dark" onClick={openCreateForm}>
+                        <Plus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                        Crear primer descuento
+                      </Button>
+                    )
                   }
                 />
-            ) : descuentos.length > 0 ? (
+            ) : filteredDescuentos.length > 0 ? (
               // Below `sm` a four-column table does not fit the viewport at
               // all (issue #339): at 320/375px the old single `overflow-x-auto`
               // wrapper left 522px of content scrolling the BODY sideways,
@@ -531,7 +568,7 @@ export default function DiscountsPage(): React.ReactElement {
               // token. There was no header at all, so the value column
               // ("100%", "$5") had nothing naming it. It has one now.
               <ResponsiveListTable
-                items={descuentos}
+                items={filteredDescuentos}
                 getKey={(descuento) => descuento.id}
                 mobileListTestId="discounts-cards"
                 desktopTableTestId="discounts-table"
