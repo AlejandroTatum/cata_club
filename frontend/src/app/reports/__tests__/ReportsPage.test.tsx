@@ -848,6 +848,46 @@ describe("ReportsPage — Exportar a Excel", () => {
 });
 
 /**
+ * A4 — "Exportar a Excel" used to render in the header alongside "Generar
+ * PDF", above the report-type selector and the date range, so it read as
+ * available before the scope it exports was even defined. `AppShellProps`'
+ * own doc comment already draws this line ("Per-row actions and secondary
+ * controls stay in the body, where the thing they act on is"): the Excel
+ * button is exactly that secondary control, so it now renders in the body,
+ * right after the scope controls it exports.
+ *
+ * "Generar PDF" stays in the header `actions` slot: it is this screen's one
+ * primary/red CTA, and `components/shell/__tests__/primary-action.test.ts`
+ * requires `app/reports/page.tsx` to keep a header action.
+ */
+describe("ReportsPage — la acción de Excel vive después del alcance del reporte (A4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchTrainingSchedules.mockResolvedValue([]);
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    mockFetchPagosReporte.mockResolvedValue([]);
+    mockFetchNuevosPorPeriodo.mockResolvedValue([]);
+    mockSearchStudents.mockResolvedValue([]);
+  });
+
+  it("renders the Excel export after the report-type selector and the date range", async () => {
+    render(<ReportsPage />);
+    await waitFor(() => expect(mockFetchTrainingSchedules).toHaveBeenCalled());
+
+    const typeSelector = screen.getByRole("radiogroup", { name: "Tipo de reporte" });
+    const dateRange = screen.getByRole("region", { name: "Filtros del reporte" });
+    const excelButton = screen.getByRole("button", { name: /exportar a excel/i });
+
+    expect(
+      typeSelector.compareDocumentPosition(excelButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      dateRange.compareDocumentPosition(excelButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+/**
  * #821 — the mobile listing container scrolls horizontally but held nothing
  * focusable, so a keyboard user had no way to reach or scroll it: axe flags
  * this as `scrollable-region-focusable` (serious). jsdom cannot compute

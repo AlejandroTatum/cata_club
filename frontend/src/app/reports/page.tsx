@@ -478,42 +478,31 @@ function ReportsContent(): React.ReactElement {
     <AppShell
       title="Reportes"
       /*
-       * Two named actions rather than one button behind a format menu: the PDF
-       * is the club's document (server-rendered, the one to hand in) and the
-       * Excel file is the same rows as data (built here in the browser). They
-       * are different artefacts, so they say so. Red stays on the PDF alone —
-       * it is the primary CTA of the screen and the only red control.
+       * The PDF is the club's document (server-rendered, the one to hand in)
+       * and it is the primary CTA of the screen — red, the only red control.
+       * It lives in the header `actions` slot, the one place `AppShellProps`
+       * reserves for a screen's primary action.
        *
-       * They used to live INSIDE the filter card, which made "generar" read as
-       * one more filter control rather than as the thing the screen is for.
+       * "Exportar a Excel" used to render here too — issue A4 (K6 hallazgo):
+       * it read as available above the report-type selector and the date
+       * range, before the scope it exports was even chosen. It is a secondary
+       * control, and `AppShellProps`' own doc comment already says where one
+       * of those belongs: "in the body, where the thing they act on is". It
+       * now renders after the scope controls — see below.
        */
       actions={
-        <>
-          <Button
-            variant="primary"
-            onClick={() => void handleGeneratePdf()}
-            disabled={exportingPdf || !canQuery || resultCount === 0}
-          >
-            {exportingPdf ? (
-              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            )}
-            {exportingPdf ? "Generando…" : "Generar PDF"}
-          </Button>
-
-          <Button
-            onClick={() => void handleDownloadXlsx()}
-            disabled={exportingXlsx || !canQuery || resultCount === 0}
-          >
-            {exportingXlsx ? (
-              <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            )}
-            {exportingXlsx ? "Generando…" : "Exportar a Excel"}
-          </Button>
-        </>
+        <Button
+          variant="primary"
+          onClick={() => void handleGeneratePdf()}
+          disabled={exportingPdf || !canQuery || resultCount === 0}
+        >
+          {exportingPdf ? (
+            <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {exportingPdf ? "Generando…" : "Generar PDF"}
+        </Button>
       }
     >
       {/* Preset cards. Even height via `items-stretch` + `h-full`, selection
@@ -660,6 +649,23 @@ function ReportsContent(): React.ReactElement {
           </div>
         }
       />
+
+      {/* Issue A4: the secondary export sits right after the controls that
+          define what it exports, never above them — see the note beside
+          "Generar PDF" in the header for the full reasoning. */}
+      <div className="flex justify-end">
+        <Button
+          onClick={() => void handleDownloadXlsx()}
+          disabled={exportingXlsx || !canQuery || resultCount === 0}
+        >
+          {exportingXlsx ? (
+            <Loader2 size={ICON.sm} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Table2 size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          )}
+          {exportingXlsx ? "Generando…" : "Exportar a Excel"}
+        </Button>
+      </div>
 
       {rangeInverted && (
         <div className="alert-error" role="alert">
