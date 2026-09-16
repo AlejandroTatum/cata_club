@@ -30,10 +30,16 @@ import { cn } from "./cn";
  * column count is the variation on top. `gap-section` IS that 14px — the
  * vertical rhythm's middle step, which is the card radius.
  *
+ * `.c2` is the FLOOR the spec draws, not a step reached at `sm:` — a phone
+ * that stacks all four tiles one-per-row turns the pulse into four screens'
+ * worth of scrolling between the action card above it and the lists below
+ * (#1274). So the row is two-up from the base breakpoint and `lg:grid-cols-4`
+ * is the only column step layered on top of it.
+ *
  * It carries no margin: the distance to the next block belongs to the page
  * rhythm on `<main>`. See `docs/ux/ritmo-vertical.md`.
  */
-export const STAT_GRID = "grid gap-section sm:grid-cols-2 lg:grid-cols-4";
+export const STAT_GRID = "grid grid-cols-2 gap-section lg:grid-cols-4";
 
 export interface StatTrackProps {
   /** The part. */

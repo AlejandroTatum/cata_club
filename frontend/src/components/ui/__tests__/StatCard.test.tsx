@@ -293,8 +293,16 @@ describe("STAT_GRID — the shared stat row", () => {
     expect(STAT_GRID).not.toMatch(/\bm[btyx]?-/);
   });
 
-  it("is the four-up arrangement, collapsing to two and then one", () => {
-    expect(STAT_GRID).toBe("grid gap-section sm:grid-cols-2 lg:grid-cols-4");
+  it("is two-up from the base breakpoint, widening to four", () => {
+    // #1274: `sm:grid-cols-2` left the row stacked one-per-row below 640px,
+    // four screens' worth of scrolling on a phone. `.c2` is the floor, never
+    // a single column.
+    expect(STAT_GRID).toBe("grid grid-cols-2 gap-section lg:grid-cols-4");
+  });
+
+  it("never relies on `sm:` for its first column step", () => {
+    expect(STAT_GRID).toContain("grid-cols-2");
+    expect(STAT_GRID).not.toMatch(/\bsm:grid-cols-2\b/);
   });
 
   it("is the only spelling the four-tile screens use", () => {
