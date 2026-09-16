@@ -24,6 +24,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.verificacion_correo_tareas",
         "app.infraestructura.tareas.enrollment_notificacion_tareas",
         "app.infraestructura.tareas.vencimientos_tareas",
+        "app.infraestructura.tareas.contador_correo_tareas",
     ],
 )
 
@@ -116,5 +117,13 @@ celery_app.conf.beat_schedule = {
     "limpiar-verificaciones-expiradas": {
         "task": "app.infraestructura.tareas.verificacion_correo_tareas.limpiar_verificaciones_expiradas",
         "schedule": crontab(minute=10),
+    },
+    # 03:00 del club, no 02:30: la retención del contador de correos no depende
+    # de ninguna otra tarea nocturna -- solo borra filas viejas -- así que se
+    # corre cuando la banda diaria ya terminó, para no sumarle trabajo al mismo
+    # minuto que `despachar`/`limpiar` de inscripción, vencimientos y mora.
+    "limpiar-contador-correo-diario": {
+        "task": "app.infraestructura.tareas.contador_correo_tareas.limpiar_contador_correo_diario",
+        "schedule": _parsear_hora_crontab("03:00"),
     },
 }
