@@ -732,6 +732,77 @@ describe("AppShell — closed mobile drawer leaves the tab order", (): void => {
 });
 
 // ---------------------------------------------------------------------------
+// Escape closes the mobile drawer (#1276).
+//
+// The command palette's Escape handler (`handleKeyDown`, above) was the only
+// keyboard exit registered on `window` — a drawer opened by "Abrir menú
+// principal"/"Más secciones" had a visible close button but nothing bound to
+// the key every other dismissible overlay in the shell answers to. Escape now
+// closes the drawer through the same `setSidebarOpen(false)` path the "Cerrar
+// menú" button uses, and returns focus to whichever control opened it.
+// ---------------------------------------------------------------------------
+
+describe("AppShell — Escape closes the mobile drawer", (): void => {
+  beforeEach((): void => {
+    vi.unstubAllGlobals();
+    stubViewport(false);
+    mockPush.mockReset();
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Entrenador"));
+    Object.defineProperty(window, "localStorage", { value: createMemoryStorage(), writable: true });
+  });
+
+  it("closes the drawer opened by the hamburger and returns focus to it", (): void => {
+    const { container } = render(<AppShell title="Panel">{null}</AppShell>);
+    const trigger = screen.getByRole("button", { name: "Abrir menú principal" });
+
+    fireEvent.click(trigger);
+    const aside = container.querySelector("aside") as HTMLElement;
+    expect(aside).toHaveClass("translate-x-0");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(aside).toHaveClass("-translate-x-full");
+    expect(aside).toHaveAttribute("aria-hidden", "true");
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("closes the drawer opened by the tab bar's Más and returns focus to it", (): void => {
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
+
+    const { container } = render(<AppShell title="Dashboard">{null}</AppShell>);
+    const trigger = screen.getByRole("button", { name: MOBILE_NAV_TRIGGER });
+
+    fireEvent.click(trigger);
+    const aside = container.querySelector("aside") as HTMLElement;
+    expect(aside).toHaveClass("translate-x-0");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(aside).toHaveClass("-translate-x-full");
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("leaves the drawer open and closes the palette first when both are open", (): void => {
+    const { container } = render(<AppShell title="Panel">{null}</AppShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir menú principal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buscar secciones" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const aside = container.querySelector("aside") as HTMLElement;
+    expect(aside).toHaveClass("translate-x-0");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(aside).toHaveClass("-translate-x-full");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Phase 3a — the shell must show the screen its own name.
 //
 // `AppShell` used to render `title`/`subtitle` as `sr-only`. Every
