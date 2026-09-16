@@ -11,6 +11,7 @@ El módulo es puro Python stdlib; no añade dependencias externas.
 import logging
 import smtplib
 from collections.abc import Mapping
+from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -348,3 +349,53 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[VERIFICAR_CORREO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_pago_aprobado(
+        self,
+        correo: str,
+        nombre: Optional[str],
+        plan: str,
+        fecha_inicio: date,
+        fecha_fin: date,
+        vigente_hasta: date,
+    ) -> None:
+        """Avisa al titular que su pago quedó aprobado (PR 1, mejoras de la
+        experiencia del alumno).
+
+        Informa, nunca cobra ni presiona: plan, período cubierto por ESTE
+        pago, hasta cuándo queda vigente la membresía y una línea corta de
+        agradecimiento. Sin montos -- el club es flexible y el dinero se
+        conversa en el club, no por correo.
+
+        `vigente_hasta` llega resuelto por el llamador (la cobertura más
+        lejana de la membresía, no solo la de este pago): aprobar un pago
+        viejo después de uno nuevo no debe acortar lo que el correo declara.
+        """
+        asunto = "Cata Club | Pago aprobado"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        inicio_txt = fecha_inicio.strftime("%d/%m/%Y")
+        fin_txt = fecha_fin.strftime("%d/%m/%Y")
+        vigencia_txt = vigente_hasta.strftime("%d/%m/%Y")
+        parrafo_periodo = (
+            f"Su pago del plan {plan} fue aprobado. El período cubierto va del "
+            f"{inicio_txt} al {fin_txt}."
+        )
+        parrafo_vigencia = f"Su membresía queda vigente hasta el {vigencia_txt}."
+        texto = (
+            f"{saludo}\n\n"
+            f"{parrafo_periodo}\n\n"
+            f"{parrafo_vigencia}\n\n"
+            f"Gracias por seguir siendo parte de Cata Club.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            f"<p>{saludo}</p>"
+            f"<p>{parrafo_periodo}</p>"
+            f"<p>{parrafo_vigencia}</p>"
+            "<p>Gracias por seguir siendo parte de Cata Club.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[PAGO_APROBADO] correo=%s", _enmascarar_correo(correo))
