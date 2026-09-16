@@ -636,6 +636,21 @@ describe("Header", (): void => {
     expect(mockFetchNotificaciones).toHaveBeenCalledTimes(1);
   });
 
+  // Issue #A6: `Header` fetched even on the routes where it renders nothing.
+  // `hidesTopHeader` makes it return null on every app-shell route, but that
+  // check ran AFTER the hook call, so an admin on `/groups` fired this
+  // request from the invisible Header AND from AppShell's own bell — two
+  // identical GETs for the same feed on one page load.
+  it("does not fetch notifications on an app-shell route, where it renders nothing", (): void => {
+    mockPathname.mockReturnValue("/groups");
+    mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin"));
+
+    const { container } = render(<Header />);
+
+    expect(container).toBeEmptyDOMElement();
+    expect(mockFetchNotificaciones).not.toHaveBeenCalled();
+  });
+
   // Issue #1198: the backend refuses every request outside the limited auth
   // surface with 403 while activation is pending — the poll must wait for
   // `activacionCompleta`, not just "authenticated", or an enrolment-success
