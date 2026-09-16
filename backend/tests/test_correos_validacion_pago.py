@@ -26,8 +26,8 @@ from email.utils import parseaddr
 import pytest
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import EstadoMembresia, EstadoPago, TipoNotificacion, TipoPago
-from app.dominio.modelos import Membresia, Notificacion, Pago, Persona, Usuario
+from app.dominio.enums import EstadoMembresia, EstadoPago, TipoNotificacion, TipoPago, TipoRol
+from app.dominio.modelos import Membresia, Notificacion, Pago, Persona, Rol, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
@@ -35,6 +35,7 @@ from app.soporte_transversal.configuracion import settings
 from tests.fabricas_pagos import crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm
 
 CORREO_FICTICIO = "socio.ficticio@cataclub.test"
+CORREO_REPRESENTANTE = "representante.ficticio@cataclub.test"
 INICIO = date(2026, 8, 1)
 FIN = date(2026, 8, 31)
 INICIO_TXT = "01/08/2026"
@@ -131,6 +132,47 @@ def _pago_pendiente(db_session, *, con_cuenta: bool) -> tuple[Persona, Persona, 
     db_session.add(pago)
     db_session.commit()
     return admin, titular, membresia, pago
+
+
+def _pago_de_representado(db_session, *, representante_con_cuenta: bool = True):
+    """Admin + representante (+ cuenta con correo y rol, opcional) +
+    representado MENOR sin cuenta + membresía + pago PENDIENTE_VALIDACION.
+
+    Es el escenario real de F2b: el invariante B (#1137) prohíbe que una
+    persona representada tenga `Usuario` propio, así que hasta acá su pago
+    quedaba sin aviso por correo. El representante lleva el rol
+    REPRESENTANTE, igual que cuando lo crea el alta real."""
+    admin = crear_persona_orm(db_session, cedula_valida(930), telefono="0990000930")
+    representante = crear_persona_orm(
+        db_session, cedula_valida(931), nombres="Marta", apellidos="Torres",
+        telefono="0990000931",
+    )
+    if representante_con_cuenta:
+        db_session.add(Usuario(
+            correo=CORREO_REPRESENTANTE, contrasenia="hash", persona_id=representante.id,
+            correo_verificado=True,
+            roles=[Rol(tipo_rol=TipoRol.REPRESENTANTE, descripcion="Representante")],
+        ))
+        db_session.flush()
+    # El menor se crea YA vinculado (como lo hace el alta real), no por un
+    # UPDATE posterior.
+    representado = Persona(
+        nombres="Nico", apellidos="Torres", cedula=cedula_valida(932),
+        fecha_nacimiento=date(2015, 1, 1), telefono="0990000932",
+        representante_id=representante.id,
+    )
+    db_session.add(representado)
+    db_session.flush()
+    tipo = crear_tipo_membresia_orm(db_session, categoria=PLAN, precio=Decimal("30.00"))
+    membresia = crear_membresia_orm(db_session, representado, tipo, EstadoMembresia.INACTIVA)
+    pago = Pago(
+        monto=Decimal("30.00"), estado_pago=EstadoPago.PENDIENTE_VALIDACION,
+        tipo_pago=TipoPago.EFECTIVO, fecha_inicio=INICIO, fecha_fin=FIN,
+        persona_id=representado.id, membresia_id=membresia.id,
+    )
+    db_session.add(pago)
+    db_session.commit()
+    return admin, representante, representado, membresia, pago
 
 
 def test_pago_aprobado_cuenta_plan_periodo_vigencia_y_agradecimiento(smtp_capturado):
@@ -315,3 +357,105 @@ def test_validar_pago_rechazado_sin_cuenta_no_manda_correo_ni_falla(db_session, 
 
     assert resultado.estado_pago == EstadoPago.RECHAZADO
     assert smtp_capturado == []
+
+
+# --- F2b: fallback al representante de un alumno sin cuenta ---------------
+
+def test_pago_aprobado_para_otro_destinatario_nombra_al_alumno(smtp_capturado):
+    """Cuando el aviso viaja al representante, el cuerpo nombra al alumno y
+    ajusta la concordancia ("el pago ... de Nico", "la membresía de Nico");
+    el saludo sigue siendo para quien recibe. El nombre del alumno viaja
+    escapado en la parte HTML."""
+    ServicioNotificaciones().enviar_pago_aprobado(
+        correo=CORREO_REPRESENTANTE, nombre="Marta Torres", plan=PLAN,
+        fecha_inicio=INICIO, fecha_fin=FIN, vigente_hasta=FIN,
+        nombre_alumno="Nico <Torres>",
+    )
+
+    texto = _texto(smtp_capturado[0])
+    html = _html(smtp_capturado[0])
+    assert texto.startswith("Hola Marta Torres,")
+    assert f"El pago del plan {PLAN} de Nico <Torres> fue aprobado" in texto
+    assert "La membresía de Nico <Torres> queda vigente" in texto
+    assert "Nico &lt;Torres&gt;" in html
+
+
+def test_pago_rechazado_para_otro_destinatario_nombra_al_alumno(smtp_capturado):
+    ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_REPRESENTANTE, nombre="Marta Torres",
+        motivo_rechazo=MOTIVO_RECHAZO, nombre_alumno="Nico",
+    )
+
+    texto = _texto(smtp_capturado[0])
+    assert texto.startswith("Hola Marta Torres,")
+    assert "El club no pudo aprobar el pago de Nico." in texto
+    assert MOTIVO_RECHAZO in texto
+
+
+def test_validar_pago_aprobado_de_representado_avisa_al_representante(
+    db_session, smtp_capturado,
+):
+    """F2b: el representado no puede tener cuenta propia (invariante B), así
+    que el aviso de aprobación va a la cuenta de su representante y nombra al
+    alumno. La aprobación sigue igual."""
+    admin, representante, representado, membresia, pago = _pago_de_representado(db_session)
+
+    resultado = PagoServicio(db_session).validar_pago(
+        pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
+    )
+
+    assert resultado.estado_pago == EstadoPago.APROBADO
+    assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
+    texto = _texto(smtp_capturado[0])
+    assert texto.startswith("Hola Marta,")
+    assert "Nico" in texto
+    assert f"El pago del plan {PLAN} de Nico fue aprobado" in texto
+    assert f"vigente hasta el {FIN_TXT}" in texto
+    # El aviso in-app sigue naciendo en el mismo punto, para el ALUMNO.
+    aviso = (
+        db_session.query(Notificacion)
+        .filter_by(
+            tipo=TipoNotificacion.PAGO_APROBADO,
+            persona_id=representado.id,
+            entidad_relacionada_id=pago.id,
+        )
+        .one()
+    )
+    assert "aprobado" in aviso.mensaje
+
+
+def test_validar_pago_rechazado_de_representado_avisa_al_representante(
+    db_session, smtp_capturado,
+):
+    admin, representante, representado, membresia, pago = _pago_de_representado(db_session)
+
+    resultado = PagoServicio(db_session).validar_pago(
+        pago.id,
+        PagoValidarDTO(estado_pago=EstadoPago.RECHAZADO, motivo_rechazo=MOTIVO_RECHAZO),
+        actor_persona_id=admin.id,
+    )
+
+    assert resultado.estado_pago == EstadoPago.RECHAZADO
+    assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
+    texto = _texto(smtp_capturado[0])
+    assert texto.startswith("Hola Marta,")
+    assert "El club no pudo aprobar el pago de Nico." in texto
+    assert MOTIVO_RECHAZO in texto
+
+
+def test_validar_pago_de_representado_sin_representante_alcanzable_no_falla(
+    db_session, smtp_capturado,
+):
+    """Sin cuenta propia ni representante con cuenta no hay a quién
+    escribirle: el correo se omite y la validación sigue igual, sin error."""
+    admin, representante, representado, membresia, pago = _pago_de_representado(
+        db_session, representante_con_cuenta=False,
+    )
+
+    resultado = PagoServicio(db_session).validar_pago(
+        pago.id, PagoValidarDTO(estado_pago=EstadoPago.APROBADO), actor_persona_id=admin.id,
+    )
+
+    assert resultado.estado_pago == EstadoPago.APROBADO
+    assert smtp_capturado == []
+    assert db_session.get(Membresia, membresia.id).estado == EstadoMembresia.ACTIVA

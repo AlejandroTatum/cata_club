@@ -4,13 +4,14 @@ from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, date, timezone
 from decimal import Decimal
+from typing import Optional
 from sqlalchemy import inspect as inspeccionar_orm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import (
     Membresia, TipoMembresia, Pago, ComprobantePago, Notificacion, CoberturaBonificada,
-    HistorialEstadoMembresia, CorreccionPago, HistorialCambioPlanMembresia,
+    HistorialEstadoMembresia, CorreccionPago, HistorialCambioPlanMembresia, Persona,
 )
 from app.dominio.enums import (
     EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, EfectoCoberturaCorreccion,
@@ -2277,6 +2278,25 @@ class PagoServicio:
             id_para_log=f"pago {pago.id}",
         )
 
+    def _responsable_del_correo_de_pago(self, persona: Persona) -> Optional[Persona]:
+        """Cuenta que recibe el aviso de un pago: la de la persona, o la de su
+        representante cuando la persona no tiene cuenta propia.
+
+        Un menor representado NUNCA tiene `Usuario` (issue #1137, invariante
+        B, con candado de base): hasta acá eso significaba quedarse sin
+        correo. La resolución del titular es la misma que ya usa
+        `alertas_tareas._responsable_de_pago` -- el representante manda si
+        `persona.representante_id` está seteado -- con un requisito extra:
+        ese representante tiene que TENER cuenta con correo. Devuelve `None`
+        cuando no hay ninguna cuenta alcanzable; el llamador loguea y omite,
+        nunca inventa una dirección."""
+        if persona.usuario is not None:
+            return persona
+        representante = persona.representante if persona.representante_id else None
+        if representante is not None and representante.usuario is not None:
+            return representante
+        return None
+
     def _enviar_correo_de_validacion_pago(self, pago: Pago, tipo: TipoNotificacion) -> None:
         """Correo al titular por la aprobación o el rechazo de su pago.
 
@@ -2287,27 +2307,38 @@ class PagoServicio:
         in-app, para que la campana y el correo no se separen.
 
         El destinatario es la cuenta de la propia persona
-        (`persona.usuario.correo`), la misma resolución que ya usan
-        `alertas_tareas` y `verificacion_correo_tareas`. Una persona sin
-        cuenta -- típicamente un menor representado -- se queda sin correo y
-        eso se loguea: nunca se inventa una dirección.
+        (`persona.usuario.correo`). Si no tiene -- típicamente un menor
+        representado -- el aviso va a la cuenta de su representante
+        (`_responsable_del_correo_de_pago`) y el cuerpo nombra al alumno para
+        que se entienda de quién es el pago. Solo si NINGUNA de las dos
+        cuentas es alcanzable se omite el correo y se loguea: nunca se
+        inventa una dirección.
 
         Ni el log ni el detalle de la excepción escriben el correo completo
         (issue #1066): el mensaje de `ServicioNoDisponible` trae el
         destinatario en su texto, así que solo se registra el tipo."""
         persona = self.repo_persona.obtener_por_id(pago.persona_id)
-        if persona is None or persona.usuario is None:
+        destinatario = (
+            self._responsable_del_correo_de_pago(persona) if persona is not None else None
+        )
+        if destinatario is None:
             logger.warning(
-                "Correo de %s omitido: persona_id=%s no tiene cuenta con correo",
+                "Correo de %s omitido: persona_id=%s no tiene cuenta con correo "
+                "ni representante alcanzable",
                 tipo.value, pago.persona_id,
             )
             return
+        # Solo cuando el aviso va a OTRA persona el cuerpo nombra al alumno;
+        # si el destinatario es el propio alumno, el texto de siempre queda
+        # correcto y no cambia.
+        nombre_alumno = persona.nombres if destinatario.id != persona.id else None
         try:
             servicio = ServicioNotificaciones()
             if tipo == TipoNotificacion.PAGO_APROBADO:
                 servicio.enviar_pago_aprobado(
-                    correo=persona.usuario.correo,
-                    nombre=persona.nombres,
+                    correo=destinatario.usuario.correo,
+                    nombre=destinatario.nombres,
+                    nombre_alumno=nombre_alumno,
                     plan=pago.membresia.tipo_membresia.categoria,
                     fecha_inicio=pago.fecha_inicio,
                     fecha_fin=pago.fecha_fin,
@@ -2321,9 +2352,10 @@ class PagoServicio:
                 )
             else:
                 servicio.enviar_pago_rechazado(
-                    correo=persona.usuario.correo,
-                    nombre=persona.nombres,
+                    correo=destinatario.usuario.correo,
+                    nombre=destinatario.nombres,
                     motivo_rechazo=pago.motivo_rechazo,
+                    nombre_alumno=nombre_alumno,
                 )
         except (RuntimeError, ServicioNoDisponible) as exc:
             logger.warning(

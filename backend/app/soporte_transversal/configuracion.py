@@ -232,6 +232,13 @@ _CAMPOS_EXCLUIDOS_A_PROPOSITO: dict[str, str] = {
         "lo pise, y eso lo cubre docker-compose.prod.yml + "
         "tests/test_docker_compose_config.py"
     ),
+    "limite_correos_diario": (
+        "default operativo que refleja el plan gratuito de Resend (100/día); "
+        "un club con plan pago lo sube, así que exigir un valor en producción "
+        "bloquearía un despliegue válido. Al ser entero nunca queda vacío, y "
+        "el peor valor posible solo omite envíos con un warning: nunca tumba "
+        "el arranque ni falla la operación envuelta"
+    ),
     "opencode_api_key": (
         "el chatbot de FAQ es una función OPCIONAL: ante cualquier falla del "
         "proveedor ChatbotServicio degrada a su FAQ local y responde 200 (el "
@@ -524,6 +531,11 @@ class Settings(BaseSettings):
     smtp_from: str = "no-reply@cataclub.com"
     smtp_starttls: bool = True
     frontend_url: str = "http://localhost:3000"  # base para enlaces de recuperación
+    # Guardarraíl del plan gratuito de Resend (100 correos/día): el envío que
+    # pase el cupo se omite y se loguea, nunca rompe la operación envuelta.
+    # `0` (o negativo) DESACTIVA el límite -- escape operativo para entornos
+    # donde no aplica, no el default. Ver `notificaciones_servicio`.
+    limite_correos_diario: int = 100
 
     # --- Chatbot de FAQ (gateway OpenCode Zen, OpenAI-compatible) ---
     opencode_api_key: str = ""
