@@ -386,6 +386,11 @@ export default function AppShell({
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const paletteDialogRef = useRef<HTMLDivElement>(null);
   const paletteListId = useId();
+  // Whichever control opened the mobile drawer — the hamburger for every
+  // role except admin, "Más secciones" in the tab bar for admin (see
+  // `MOBILE_TABS`) — so Escape can hand focus back to it, the same way
+  // closing any other overlay in this shell returns focus to its opener.
+  const drawerTriggerRef = useRef<HTMLElement | null>(null);
   // The panel itself is `HelpChatDock`'s, mounted once in the root layout —
   // the shell only triggers it and reports its state.
   const chatOpen = useHelpChatOpen();
@@ -560,8 +565,18 @@ export default function AppShell({
         e.preventDefault();
         setPaletteOpen(true);
       }
+      // Escape closes the topmost overlay: the command palette sits above
+      // the drawer (it opens on top of it — see the "Buscar secciones"
+      // trigger in the topbar, reachable whether or not the drawer is
+      // open), so it takes the key first. The drawer only answers to
+      // Escape once the palette isn't there to answer instead.
       if (e.key === "Escape") {
-        setPaletteOpen(false);
+        if (paletteOpen) {
+          setPaletteOpen(false);
+        } else if (sidebarOpen) {
+          setSidebarOpen(false);
+          drawerTriggerRef.current?.focus();
+        }
       }
       // Focus trap: while the command palette is open, Tab/Shift+Tab must
       // cycle only among its own focusable elements — otherwise focus can
@@ -592,7 +607,7 @@ export default function AppShell({
     }
     window.addEventListener("keydown", handleKeyDown);
     return (): void => window.removeEventListener("keydown", handleKeyDown);
-  }, [paletteOpen]);
+  }, [paletteOpen, sidebarOpen]);
 
   useEffect((): void => {
     if (paletteOpen) {
@@ -980,7 +995,10 @@ export default function AppShell({
           {!showMobileTabs && (
             <button
               type="button"
-              onClick={(): void => setSidebarOpen(true)}
+              onClick={(e): void => {
+                drawerTriggerRef.current = e.currentTarget;
+                setSidebarOpen(true);
+              }}
               className="inline-flex h-ctl items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-3 text-xs font-semibold text-ink-2 hover:bg-sunken lg:hidden"
               aria-label="Abrir menú principal"
             >
@@ -1121,7 +1139,10 @@ export default function AppShell({
                 handling is unchanged. */}
             <button
               type="button"
-              onClick={(): void => setSidebarOpen(true)}
+              onClick={(e): void => {
+                drawerTriggerRef.current = e.currentTarget;
+                setSidebarOpen(true);
+              }}
               aria-label="Más secciones"
               aria-expanded={sidebarOpen}
               className={`${TAB_CLASSES} ${activeTab ? "text-ink-3" : "text-ink"}`}
