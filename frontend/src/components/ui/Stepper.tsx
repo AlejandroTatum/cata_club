@@ -74,7 +74,7 @@ export default function Stepper({
                   DISC,
                   done && "bg-state-ok-bg text-state-ok",
                   active && "bg-ball text-coal",
-                  !done && !active && "bg-state-neutral-bg text-ink-3",
+                  !done && !active && "bg-state-neutral-bg text-ink-3-strong",
                 )}
               >
                 {done ? <Check size={ICON.sm} strokeWidth={3} /> : position}
