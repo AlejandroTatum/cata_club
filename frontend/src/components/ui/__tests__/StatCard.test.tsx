@@ -1,5 +1,5 @@
 /**
- * StatCard — 116px fixed, ink numbers, and a coal `hot` variant that carries
+ * StatCard — 116px floor, ink numbers, and a coal `hot` variant that carries
  * the ball dot rather than a second color.
  *
  * @vitest-environment jsdom
@@ -10,21 +10,26 @@ import { render, screen } from "@testing-library/react";
 import StatCard, { STAT_GRID, StatSpark, StatTrack } from "@/components/ui/StatCard";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { committedHeight, committedRadius } from "./ui-test-utils";
+import { committedMinHeight, committedRadius } from "./ui-test-utils";
 
 function card(): HTMLElement {
   return screen.getByText("Miembros").parentElement as HTMLElement;
 }
 
 describe("StatCard — committed dimensions", () => {
-  it("is exactly 116px tall", () => {
+  it("is at least 116px tall, not fixed at it (#1278)", () => {
+    // A fixed `h-stat` with no `overflow-hidden` let a long hint bleed past
+    // the tile's own border; `min-h-stat` keeps the floor and lets the rare
+    // long one grow the row instead.
     render(<StatCard label="Miembros" value={86} />);
-    expect(committedHeight(card())).toBe("116px");
+    expect(committedMinHeight(card())).toBe("116px");
+    expect(Array.from(card().classList)).toContain("min-h-stat");
+    expect(Array.from(card().classList)).not.toContain("h-stat");
   });
 
-  it("stays 116px in the hot variant", () => {
+  it("stays at the 116px floor in the hot variant", () => {
     render(<StatCard label="Miembros" value={86} variant="hot" hint="14 pendientes" />);
-    expect(committedHeight(card())).toBe("116px");
+    expect(committedMinHeight(card())).toBe("116px");
   });
 
   it("uses the 14px card radius", () => {
@@ -206,7 +211,7 @@ describe("StatTrack — a proportion drawn as a proportion", () => {
       <StatCard label="Miembros" value={21} hint={<StatTrack value={21} total={69} />} />,
     );
     expect(screen.getByTestId("stat-track")).toBeInTheDocument();
-    expect(committedHeight(card())).toBe("116px");
+    expect(committedMinHeight(card())).toBe("116px");
   });
 });
 
@@ -276,7 +281,7 @@ describe("StatSpark — a series drawn as a series", () => {
       <StatCard label="Miembros" value={52} unit="%" hint={<StatSpark values={[52, 61, 48, 70]} />} />,
     );
     expect(screen.getByTestId("stat-spark")).toBeInTheDocument();
-    expect(committedHeight(card())).toBe("116px");
+    expect(committedMinHeight(card())).toBe("116px");
   });
 });
 

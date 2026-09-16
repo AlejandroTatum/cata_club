@@ -1,10 +1,18 @@
 /**
- * StatCard — the 116px fixed-height pulse tile.
+ * StatCard — the 116px pulse tile.
  *
  * `_sistema.css` `.stat` (:216-220): `--h-stat` 116px, `--r-card` 14px radius,
  * `--paper` surface on a `--line` border, 16px/18px padding, label
  * 10.5px/700/.1em uppercase in `--ink-3`, value 32px/800/-.04em tabular in
  * `--ink`, `small` unit 14px/600 in `--ink-3`, hint 12px in `--ink-3`.
+ *
+ * 116px is a FLOOR (`min-h-stat`), not a fixed height (#1278): a degraded or
+ * edge-case hint can run longer than the grammar the row was designed for,
+ * and a fixed `h-stat` with no `overflow-hidden` let that hint bleed past the
+ * tile's own border with nothing to catch it. `min-h-stat` keeps every
+ * ordinary tile at exactly 116px — the grid's `align-items: stretch` default
+ * still holds the row's tiles level with each other — and lets the rare long
+ * one grow the row instead of overflowing its own box.
  *
  * Non-negotiable: the number is ALWAYS ink. Color lives in badges and pills,
  * never in a stat value — a green "17" is a defect, not a nicety.
@@ -204,7 +212,7 @@ export default function StatCard({
   return (
     <div
       className={cn(
-        "h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
+        "min-h-stat rounded-card border px-[18px] py-4 flex flex-col justify-between",
         hot ? "bg-coal border-coal" : "bg-paper border-line",
         className,
       )}
