@@ -12,6 +12,7 @@
 
 import type { DescuentoCatalogo } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
+import { normalizeText } from "@/app/members/members-utils";
 
 /** Only active discounts are offered for application; the full catalog
  *  (inactive included) is the admin management view at /discounts. */
@@ -25,6 +26,24 @@ export function descuentoValorLabel(descuento: DescuentoCatalogo): string {
     return `${Number(descuento.porcentaje)}%`;
   }
   return formatCurrency(descuento.monto);
+}
+
+/**
+ * Filter the catalog by discount name — issue A3. The catalog has no
+ * separate description field, so the visible `nombre` is the only thing a
+ * search term can match. Uses the same accent-insensitive substring match
+ * `filterAccounts` (`/members`) applies to its own search.
+ *
+ * Returns a shallow copy of the input array when the search term is empty
+ * or blank.
+ */
+export function filterDescuentos(
+  catalogo: DescuentoCatalogo[],
+  searchTerm: string,
+): DescuentoCatalogo[] {
+  const term = normalizeText(searchTerm.trim());
+  if (!term) return [...catalogo];
+  return catalogo.filter((descuento) => normalizeText(descuento.nombre).includes(term));
 }
 
 /**
