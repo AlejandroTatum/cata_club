@@ -3,13 +3,65 @@ import logging
 from sqlalchemy import func
 
 from app.dominio.enums import TipoNotificacion
-from app.dominio.modelos import EnrollmentNotificacionOutbox, Notificacion
+from app.dominio.excepciones import ServicioNoDisponible
+from app.dominio.modelos import EnrollmentNotificacionOutbox, Notificacion, Persona
 from app.infraestructura.db import SessionLocal
+from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.enrollment_notificacion_outbox_repositorio import EnrollmentNotificacionOutboxRepositorio
 from app.infraestructura.tareas import outbox_despacho
 from app.infraestructura.tareas.celery_app import celery_app
 
 logger = logging.getLogger("cataclub.tareas.enrollment_notificacion")
+
+
+def _enviar_bienvenida_al_alumno(db, event: EnrollmentNotificacionOutbox) -> None:
+    """Correo de bienvenida al alumno, UNA sola vez por inscripción.
+
+    El outbox tiene una fila por administrador (`EnrollmentServicio.
+    _notificar_nueva_inscripcion` encola un aviso por cada admin), así que
+    enviar desde cada entrega mandaría N correos idénticos al mismo alumno.
+    Manda solo la fila LÍDER -- la de menor `id` para ese alumno. Es una
+    elección que NO depende del orden de entrega ni del timing: dos workers
+    concurrentes calculan el mismo líder, así que el alumno recibe un correo
+    y nada más.
+
+    Best-effort a propósito: cuando esto corre, el aviso in-app del admin ya
+    está commiteado y la fila marcada `ENVIADO` -- la entrega durable de esta
+    cola es ese aviso, no el correo. Por eso un SMTP sin configurar, un fallo
+    de transporte o un rechazo permanente (issue #837) se loguean y la fila
+    NO vuelve a la cola: reencolarla reenviaría un aviso que ya se entregó y
+    expiraría la inscripción sin ninguna ganancia. Tampoco se reintenta el
+    correo en la entrega repetida (`existente` sale antes), justamente para
+    no duplicarlo.
+
+    El destinatario es la cuenta de la propia persona
+    (`persona.usuario.correo`): un alumno sin cuenta se queda sin correo y
+    eso se loguea, nunca se inventa una dirección. El log no escribe el
+    correo completo (issue #1066) ni el mensaje de la excepción, que trae el
+    destinatario en su texto.
+    """
+    lider_id = db.query(func.min(EnrollmentNotificacionOutbox.id)).filter(
+        EnrollmentNotificacionOutbox.alumno_persona_id == event.alumno_persona_id
+    ).scalar()
+    if event.id != lider_id:
+        return
+    alumno = db.get(Persona, event.alumno_persona_id)
+    if alumno is None or alumno.usuario is None:
+        logger.warning(
+            "Correo de bienvenida omitido: alumno persona_id=%s no tiene cuenta "
+            "con correo",
+            event.alumno_persona_id,
+        )
+        return
+    try:
+        ServicioNotificaciones().enviar_bienvenida_inscripcion(
+            alumno.usuario.correo, alumno.nombres,
+        )
+    except (RuntimeError, ServicioNoDisponible) as exc:
+        logger.warning(
+            "Correo de bienvenida no enviado a persona_id=%s: %s",
+            event.alumno_persona_id, type(exc).__name__,
+        )
 
 
 @celery_app.task(name="app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones")
@@ -95,6 +147,7 @@ def entregar_inscripcion_notificacion(event_id: int):
                         event_id,
                     )
             return {"enviado": False}
+        _enviar_bienvenida_al_alumno(db, event)
         return {"enviado": True}
     finally:
         db.close()

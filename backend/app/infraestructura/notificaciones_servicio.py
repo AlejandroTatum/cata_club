@@ -11,8 +11,10 @@ El módulo es puro Python stdlib; no añade dependencias externas.
 import logging
 import smtplib
 from collections.abc import Mapping
+from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape as escapar_html
 from typing import Optional
 
 from app.dominio.excepciones import (
@@ -348,3 +350,146 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[VERIFICAR_CORREO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_pago_aprobado(
+        self,
+        correo: str,
+        nombre: Optional[str],
+        plan: str,
+        fecha_inicio: date,
+        fecha_fin: date,
+        vigente_hasta: date,
+    ) -> None:
+        """Avisa al titular que su pago quedó aprobado (PR 1, mejoras de la
+        experiencia del alumno).
+
+        Informa, nunca cobra ni presiona: plan, período cubierto por ESTE
+        pago, hasta cuándo queda vigente la membresía y una línea corta de
+        agradecimiento. Sin montos -- el club es flexible y el dinero se
+        conversa en el club, no por correo.
+
+        `vigente_hasta` llega resuelto por el llamador (la cobertura más
+        lejana de la membresía, no solo la de este pago): aprobar un pago
+        viejo después de uno nuevo no debe acortar lo que el correo declara.
+        """
+        asunto = "Cata Club | Pago aprobado"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        inicio_txt = fecha_inicio.strftime("%d/%m/%Y")
+        fin_txt = fecha_fin.strftime("%d/%m/%Y")
+        vigencia_txt = vigente_hasta.strftime("%d/%m/%Y")
+        parrafo_periodo = (
+            f"Su pago del plan {plan} fue aprobado. El período cubierto va del "
+            f"{inicio_txt} al {fin_txt}."
+        )
+        parrafo_vigencia = f"Su membresía queda vigente hasta el {vigencia_txt}."
+        texto = (
+            f"{saludo}\n\n"
+            f"{parrafo_periodo}\n\n"
+            f"{parrafo_vigencia}\n\n"
+            f"Gracias por seguir siendo parte de Cata Club.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            f"<p>{saludo}</p>"
+            f"<p>{parrafo_periodo}</p>"
+            f"<p>{parrafo_vigencia}</p>"
+            "<p>Gracias por seguir siendo parte de Cata Club.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[PAGO_APROBADO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_pago_rechazado(
+        self, correo: str, nombre: Optional[str], motivo_rechazo: Optional[str] = None,
+    ) -> None:
+        """Avisa al titular que el club no pudo aprobar su pago (PR 1,
+        mejoras de la experiencia del alumno).
+
+        Incluye el motivo que cargó el club y los tres pasos para volver a
+        intentarlo -- el mismo procedimiento de la ayuda "Cómo se registra
+        un pago" del portal (meses y forma de pago, comprobante, en
+        revisión). Tono neutro: informa un hecho y ofrece el camino de
+        vuelta, sin presión, sin amenazas y sin montos. El club es flexible;
+        el correo no cobra.
+
+        `motivo_rechazo` es texto libre de administración y viaja escapado
+        en la parte HTML: un motivo con `<` o `&` no puede romper (ni
+        inyectar en) el cuerpo del mensaje.
+        """
+        asunto = "Cata Club | Pago rechazado"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        motivo = (motivo_rechazo or "").strip()
+        parrafo_motivo = (
+            f"El club no pudo aprobar su pago. Motivo: {motivo}."
+            if motivo
+            else "El club no pudo aprobar su pago."
+        )
+        enlace = f"{self._frontend_url}/student/payments"
+        pasos = (
+            'Ingrese a "Registrar un pago" y elija cuántos meses va a pagar y '
+            "la forma de pago.",
+            "Si paga por transferencia, adjunte el comprobante (PDF, JPG o PNG).",
+            "El pago queda en revisión en su historial hasta que el club lo "
+            "apruebe.",
+        )
+        texto = (
+            f"{saludo}\n\n"
+            f"{parrafo_motivo}\n\n"
+            f"Para volver a intentarlo, el procedimiento es el mismo de siempre:\n\n"
+            f"1. {pasos[0]}\n"
+            f"2. {pasos[1]}\n"
+            f"3. {pasos[2]}\n\n"
+            f"El formulario está en {enlace}.\n\n"
+            f"Ante cualquier duda, escríbanos por WhatsApp.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            f"<p>{saludo}</p>"
+            f"<p>{escapar_html(parrafo_motivo)}</p>"
+            "<p>Para volver a intentarlo, el procedimiento es el mismo de siempre:</p>"
+            f"<p>1. {pasos[0]}<br>2. {pasos[1]}<br>3. {pasos[2]}</p>"
+            f'<p>El formulario está en <a href="{enlace}">{enlace}</a>.</p>'
+            "<p>Ante cualquier duda, escríbanos por WhatsApp.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[PAGO_RECHAZADO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_bienvenida_inscripcion(self, correo: str, nombre: Optional[str] = None) -> None:
+        """Da la bienvenida al alumno recién inscripto (PR 1, mejoras de la
+        experiencia del alumno).
+
+        Corto y con los próximos pasos reales: el primer pago se hace en
+        persona en el club, el club lo registra, y recién entonces se activa
+        la membresía -- la misma historia que la verificación de correo
+        (issue #1196). Sin repetir el enlace de verificación ni pedir nada:
+        es un saludo, no una gestión.
+        """
+        asunto = "Cata Club | Bienvenida"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        texto = (
+            f"{saludo}\n\n"
+            f"Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.\n\n"
+            f"Próximos pasos:\n\n"
+            f"1. El primer pago se hace en persona, en administración del club.\n"
+            f"2. El club registra ese pago y activa su membresía.\n\n"
+            f"Cuando la membresía esté activa, va a poder verla en su cuenta.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            f"<p>{saludo}</p>"
+            "<p>Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.</p>"
+            "<p>Próximos pasos:</p>"
+            "<p>1. El primer pago se hace en persona, en administración del club."
+            "<br>2. El club registra ese pago y activa su membresía.</p>"
+            "<p>Cuando la membresía esté activa, va a poder verla en su cuenta.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[BIENVENIDA_INSCRIPCION] correo=%s", _enmascarar_correo(correo))
