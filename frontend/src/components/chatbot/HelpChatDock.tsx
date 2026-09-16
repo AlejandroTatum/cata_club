@@ -333,6 +333,35 @@ export const LAUNCHER_CLASSES =
   "transition-[transform,opacity,background-color] duration-200 ease-out hover:bg-coal-2 " +
   "lg:bottom-5 lg:right-5 lg:h-[76px] lg:w-[76px]";
 
+/** The phone disc's own footprint — `h-11`/`w-11` (44px) — read out of the
+ *  Tailwind size this component already declares, not retyped as a number. */
+const LAUNCHER_PHONE_SIZE_PX = 44;
+
+/** The phone disc's rest inset from the viewport edge — `bottom-4` (16px). */
+const LAUNCHER_PHONE_INSET_PX = 16;
+
+/**
+ * How much bottom clearance ordinary SCROLLING content needs so its last
+ * rows can scroll clear of the launcher's phone rest position.
+ *
+ * This is a different problem from `useDockClearance` above: that logic
+ * answers "what fixed/sticky furniture is under the corner?" and moves the
+ * launcher out of ITS way. Page content that simply scrolls past is not
+ * furniture, so the launcher never climbs for it — and a viewport-fixed
+ * launcher sitting over ordinary scrolling content means the last rows of
+ * any long list can never scroll out from under it, however far the page
+ * scrolls. The fix belongs to the scrolling surface, not to this component:
+ * reserve this much space at its own bottom so its last rows land above the
+ * disc instead of under it. `AppShell` is the one place that does — see the
+ * comment above its content wrapper.
+ *
+ * Built from the same numbers `LAUNCHER_CLASSES` and `useDockClearance`
+ * already use (the phone disc's size and inset, plus the obstacle gap they
+ * climb by) rather than a value hand-picked to look right once.
+ */
+export const LAUNCHER_CONTENT_CLEARANCE_PX =
+  LAUNCHER_PHONE_SIZE_PX + LAUNCHER_PHONE_INSET_PX + OBSTACLE_GAP_PX;
+
 /**
  * The step-down, as a media query and not as a measurement.
  *
