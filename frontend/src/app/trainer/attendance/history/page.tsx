@@ -84,7 +84,7 @@ import {
   SessionCompositionCounts,
 } from "../../SessionComposition";
 import { buildWizardQuery } from "../attendance-utils";
-import { summarizePeriodCoverage } from "./history-utils";
+import { summarizePeriodCoverage, AVISO_ESTIMACION } from "./history-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
@@ -123,22 +123,6 @@ function buildCorrectionHref(session: SessionSummary): string {
 function buildReasonId(session: SessionSummary): string {
   return `correccion-vencida-${session.fecha}-${session.horarioId}`;
 }
-
-/**
- * La advertencia que convierte una cifra en una estimación.
- *
- * "Sin lista" no sale del backend: se deriva expandiendo el horario semanal
- * sobre el rango del filtro (ver `history-utils.ts` para las tres formas en que
- * eso miente hacia arriba, y para por qué el modelo no puede hacerlo exacto).
- *
- * Va escrita, entera y al lado de la cifra, en vez de un asterisco: un
- * asterisco solo avisa a quien ya sospecha. Y por el mismo motivo la cifra no
- * se pinta de rojo — el rojo afirma un problema confirmado, y acá lo confirmado
- * es únicamente que el horario semanal dice una cosa y las listas dicen otra.
- */
-const AVISO_ESTIMACION =
-  "Estimación: se compara contra el horario semanal, que no contempla feriados, " +
-  "cancelaciones ni desde cuándo rige cada horario.";
 
 /**
  * Por qué el cruce desaparece al elegir un alumno.

@@ -14,7 +14,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
-import { summarizePeriodCoverage } from "../history-utils";
+import { summarizePeriodCoverage, findMissingSessions } from "../history-utils";
 
 const SCHEDULES: TrainingSchedule[] = [
   { id: 7, diaSemana: "lun", horaInicio: "15:00", horaFin: "16:00" },
@@ -191,5 +191,58 @@ describe("summarizePeriodCoverage", () => {
       expect(coverage.sesionesProgramadas).toBe(5);
       expect(coverage.sinLista).toBe(5);
     });
+  });
+});
+
+describe("findMissingSessions", () => {
+  it("excluye una sesión con lista tomada, y la incluye cuando no la tiene", () => {
+    const missing = findMissingSessions({
+      sessions: [
+        { fecha: "2026-07-20", horarioId: 7 },
+        { fecha: "2026-07-17", horarioId: 9 },
+      ],
+      schedules: SCHEDULES,
+      desde: "2026-07-13",
+      hasta: "2026-07-20",
+      hoy: "2026-08-15",
+    });
+
+    // Lunes 13 y 20 (horario 7) + viernes 17 (horario 9); el lunes 20 y el
+    // viernes 17 tienen lista, así que el único hueco es el lunes 13.
+    expect(missing).toEqual([{ fecha: "2026-07-13", schedule: SCHEDULES[0] }]);
+  });
+
+  it("no incluye una sesión de hoy que todavía no arrancó", () => {
+    const SCHEDULES_DE_HOY: TrainingSchedule[] = [
+      { id: 15, diaSemana: "mar", horaInicio: "15:00", horaFin: "16:00" },
+      { id: 16, diaSemana: "mar", horaInicio: "16:00", horaFin: "17:00" },
+    ];
+    const HOY = "2026-09-15";
+
+    const missing = findMissingSessions({
+      sessions: [],
+      schedules: SCHEDULES_DE_HOY,
+      desde: HOY,
+      hasta: HOY,
+      hoy: HOY,
+      horaActual: "15:30",
+    });
+
+    // Arrancó la de las 15:00 y le falta lista; la de las 16:00 todavía no toca.
+    expect(missing).toEqual([{ fecha: HOY, schedule: SCHEDULES_DE_HOY[0] }]);
+  });
+
+  it("ordena de más reciente a más antiguo, y por hora dentro del mismo día", () => {
+    const missing = findMissingSessions({
+      sessions: [],
+      schedules: SCHEDULES,
+      desde: "2026-07-13",
+      hasta: "2026-07-20",
+      hoy: "2026-08-15",
+    });
+
+    // Lunes 13, lunes 20 (horario 7, 15:00) y viernes 17 (horario 9, 17:00) —
+    // ninguno tiene lista. Más reciente primero: 20, luego 17, luego 13.
+    expect(missing.map((m) => m.fecha)).toEqual(["2026-07-20", "2026-07-17", "2026-07-13"]);
   });
 });

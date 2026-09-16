@@ -39,6 +39,13 @@ export interface TakenSession {
   horarioId: number;
 }
 
+/** Una sesión programada que el cruce no encontró entre las tomadas. */
+export interface MissingSession {
+  /** `"YYYY-MM-DD"`. */
+  fecha: string;
+  schedule: TrainingSchedule;
+}
+
 /** Las tres cifras del período, en el orden en que se leen. */
 export interface PeriodCoverage {
   /** Sesiones con lista pasada — una por `(fecha, horarioId)`. */
@@ -82,8 +89,17 @@ function sessionKey(fecha: string, horarioId: number): string {
   return `${fecha}|${horarioId}`;
 }
 
+interface ScheduledSessionsExpansion {
+  sesionesProgramadas: number;
+  faltantes: MissingSession[];
+}
+
 /**
  * Cruzar el horario semanal contra las listas tomadas en el período.
+ *
+ * El único recorrido del calendario que este módulo hace — `summarizePeriodCoverage`
+ * (una cifra) y `findMissingSessions` (la lista misma) son sus dos lecturas, para
+ * que nunca puedan quedar desincronizadas.
  *
  * El rango se recorta contra `hoy` porque un rango personalizado puede terminar
  * en el futuro, y una sesión que todavía no ocurrió no es una lista que falte:
@@ -96,10 +112,9 @@ function sessionKey(fecha: string, horarioId: number): string {
  * posterior a `horaActual` — un día pasado no se toca, porque todo lo suyo ya
  * arrancó.
  */
-export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCoverage {
+function expandScheduledSessions(input: PeriodCoverageInput): ScheduledSessionsExpansion {
   const { sessions, schedules, desde, hasta, hoy, horaActual, horarioId } = input;
 
-  const listasTomadas = sessions.length;
   const tomadas = new Set(sessions.map((s) => sessionKey(s.fecha, s.horarioId)));
 
   // El filtro de horario tiene que aplicarse a AMBOS lados del cruce: la
@@ -113,7 +128,7 @@ export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCover
   const fin = hasta < hoy ? hasta : hoy;
 
   let sesionesProgramadas = 0;
-  let sinLista = 0;
+  const faltantes: MissingSession[] = [];
 
   if (expandibles.length > 0 && desde && fin && desde <= fin) {
     const cursor = new Date(`${desde}T12:00:00`);
@@ -131,7 +146,7 @@ export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCover
             continue;
           }
           sesionesProgramadas += 1;
-          if (!tomadas.has(sessionKey(fecha, schedule.id))) sinLista += 1;
+          if (!tomadas.has(sessionKey(fecha, schedule.id))) faltantes.push({ fecha, schedule });
         }
       }
 
@@ -139,5 +154,45 @@ export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCover
     }
   }
 
-  return { listasTomadas, sesionesProgramadas, sinLista };
+  return { sesionesProgramadas, faltantes };
 }
+
+export function summarizePeriodCoverage(input: PeriodCoverageInput): PeriodCoverage {
+  const { sesionesProgramadas, faltantes } = expandScheduledSessions(input);
+  return { listasTomadas: input.sessions.length, sesionesProgramadas, sinLista: faltantes.length };
+}
+
+/**
+ * La lista que `summarizePeriodCoverage` solo cuenta — mismo cruce, mismo
+ * `PeriodCoverageInput`, y la misma ESTIMACIÓN (ver el encabezado del módulo).
+ *
+ * Devuelta más reciente primero: cada consumidor (el historial cuenta, el
+ * panel del entrenador lista) lee "lo último que falta" antes que "lo más
+ * viejo que falta".
+ */
+export function findMissingSessions(input: PeriodCoverageInput): MissingSession[] {
+  const { faltantes } = expandScheduledSessions(input);
+  return [...faltantes].sort((a, b) => {
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1;
+    return b.schedule.horaInicio.localeCompare(a.schedule.horaInicio);
+  });
+}
+
+/**
+ * La advertencia que convierte una cifra en una estimación.
+ *
+ * "Sin lista" no sale del backend: se deriva expandiendo el horario semanal
+ * sobre el rango del filtro (ver el encabezado de este módulo para las tres
+ * formas en que eso miente hacia arriba, y para por qué el modelo no puede
+ * hacerlo exacto). Compartida por el historial y por la columna "Sesiones sin
+ * lista" del panel del entrenador — las dos leen la misma estimación y la
+ * dicen con las mismas palabras.
+ *
+ * Va escrita, entera y al lado de la cifra, en vez de un asterisco: un
+ * asterisco solo avisa a quien ya sospecha. Y por el mismo motivo la cifra no
+ * se pinta de rojo — el rojo afirma un problema confirmado, y acá lo confirmado
+ * es únicamente que el horario semanal dice una cosa y las listas dicen otra.
+ */
+export const AVISO_ESTIMACION =
+  "Estimación: se compara contra el horario semanal, que no contempla feriados, " +
+  "cancelaciones ni desde cuándo rige cada horario.";
