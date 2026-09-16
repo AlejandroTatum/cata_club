@@ -19,6 +19,60 @@ import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import ContextualHelp from "@/components/ContextualHelp";
 
+/**
+ * `defaultOpen` exists for exactly one situation: a state whose next step IS
+ * the procedure the panel holds. Hiding it there is the defect the disclosure
+ * was written to avoid, one click later — so `/student/payments` opens the
+ * how-to-pay panel for a reader whose coverage lapsed or who never paid.
+ *
+ * Everywhere else the caller does not pass it, and the default has to stay
+ * false: this component is the product's one "la ayuda no vive suelta" shape
+ * (D11c) and six screens rely on the panel starting closed.
+ */
+describe("ContextualHelp — the panel starts closed unless the caller says otherwise", () => {
+  it("keeps the panel closed when no caller asks for it — the D11c default", () => {
+    render(
+      <ContextualHelp title="Ayuda sobre límite de resultados">
+        <p>Hasta 200 registros.</p>
+      </ContextualHelp>,
+    );
+
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Ayuda sobre límite de resultados" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("starts open, with the state announced, when the caller asks for it", () => {
+    render(
+      <ContextualHelp title="Cómo se registra un pago" defaultOpen>
+        <p>Son tres pasos.</p>
+      </ContextualHelp>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Cómo se registra un pago" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("region", { name: "Cómo se registra un pago" })).toBeInTheDocument();
+  });
+
+  it("lets the reader close a panel that started open (triangulation)", () => {
+    // `defaultOpen` seeds `useState`, it does not lock the panel: a reader who
+    // has read the steps must be able to fold them away like any other help.
+    render(
+      <ContextualHelp title="Cómo se registra un pago" defaultOpen>
+        <p>Son tres pasos.</p>
+      </ContextualHelp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cómo se registra un pago" }));
+
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
 // Issue #818 (WCAG 2.5.8, AA): "Ver ayuda" measured 56 × 18.8px — bare 12px
 // type with no padding or min-height, on every screen that renders it. jsdom
 // cannot measure layout, so the lock is class-based: `MIN_TARGET_CLASS`

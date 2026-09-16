@@ -199,8 +199,9 @@ export interface ManagedStudentPickerProps {
  * choice evaporate between two screens has no way to tell from the screen that
  * it no longer does, and the whole point of the control is that she can trust
  * whose money she is about to move. It is a "cómo funciona", so D11c puts it
- * behind "Ver ayuda" rather than beside the select on all three screens at
- * once.
+ * behind "Ver ayuda" rather than beside the select on all four screens at
+ * once, and it names all four: the promise is about the SCREENS, so a list
+ * that leaves one out reads as if the selection dies there.
  */
 export default function ManagedStudentPicker({
   id,
@@ -241,12 +242,12 @@ export default function ManagedStudentPicker({
       {/* D11c — the note explains HOW the selection behaves, not what the
           control is, so it lives behind "Ver ayuda" like every other procedure
           note in the product. It used to be a permanent paragraph beside the
-          select, which meant three copies of the same floating sentence: this
-          component draws on `/student`, `/student/payments` and
-          `/student/medical-record` at once. */}
+          select, which meant four copies of the same floating sentence: this
+          component draws on `/student`, `/student/payments`,
+          `/student/attendance` and `/student/medical-record` at once. */}
       <ContextualHelp title="Cómo funciona esta elección">
-        Se mantiene en Mi cuenta, Pagos y Asistencias hasta que usted lo cambie, y viaja en la
-        dirección de la página, así que un enlace compartido abre la misma persona.
+        Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica hasta que usted lo cambie, y
+        viaja en la dirección de la página, así que un enlace compartido abre la misma persona.
       </ContextualHelp>
     </div>
   );

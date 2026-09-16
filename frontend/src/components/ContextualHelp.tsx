@@ -6,10 +6,27 @@ import { MIN_TARGET_CLASS } from "@/lib/target-size";
 interface ContextualHelpProps {
   title: string;
   children: ReactNode;
+  /**
+   * Start the panel open. Defaults to `false` — the D11c rule is that help
+   * lives behind "Ver ayuda", and every caller that does not pass this keeps
+   * exactly the behavior it had.
+   *
+   * The one caller that does is `/student/payments`, and only for a reader
+   * whose coverage lapsed or who never paid: there the procedure the panel
+   * holds IS their next step, so folding it away repeats the defect the
+   * disclosure was written to prevent, one click later. It seeds the initial
+   * state only — the reader can still close it, and a later change of state on
+   * the same mounted instance never slams it back open.
+   */
+  defaultOpen?: boolean;
 }
 
-export default function ContextualHelp({ title, children }: ContextualHelpProps): React.ReactElement {
-  const [isOpen, setIsOpen] = useState(false);
+export default function ContextualHelp({
+  title,
+  children,
+  defaultOpen = false,
+}: ContextualHelpProps): React.ReactElement {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const panelId = `contextual-help-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
   // No margin of its own. `docs/ux/ritmo-vertical.md` is explicit that no rule

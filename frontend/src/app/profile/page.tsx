@@ -42,6 +42,19 @@
  *   the identity fields the portal payload does not carry (teléfono, fecha
  *   de creación, foto).
  *
+ *   Teléfono is edited inline on this branch too: `PATCH /auth/me` is
+ *   self-service for EVERY authenticated role — it resolves the person from
+ *   the JWT `sub` and checks no role at all (see `auth_router.
+ *   actualizar_perfil_propio`) — so the writer here is the same
+ *   `actualizarMiPerfil()` call the staff branch makes, seeded from the same
+ *   `/auth/me` payload. Correo stays read-only on both branches: it is the
+ *   JWT `sub`, and the DTO does not even accept the field.
+ *
+ *   A third, supplementary call — `fetchPagosDePersona()` — exists for the
+ *   single date no adapter fills: `MembershipSummary.fechaFin` is `undefined`
+ *   on every real payload, so the membership card's "Vigente hasta" is the
+ *   furthest APPROVED payment instead (see `MembershipCard`).
+ *
  *   The faro pass added no call. What it added is the rest of the payload
  *   that call was already returning: `membership.categoria`, `.modalidad`,
  *   `.fechaActivacion`, `.fechaFin` and `recentSessions` were all arriving
@@ -111,7 +124,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -122,6 +135,7 @@ import {
   actualizarMiPerfil,
   solicitarRecuperacion,
   fetchStudentPortal,
+  fetchPagosDePersona,
   subirFotoPerfil,
   invalidarOtrasSesiones,
   ApiClientError,
@@ -132,9 +146,10 @@ import type {
   StudentProfileSummary,
   StudentSessionSummary,
   MembershipSummary,
+  PagoPersona,
 } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
-import { personInitials } from "@/app/student/student-utils";
+import { personInitials, resolveCoverageEnd } from "@/app/student/student-utils";
 import SessionsCard from "./SessionsCard";
 import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
@@ -656,13 +671,30 @@ function PanelFact({ label, children }: { label: string; children: React.ReactNo
  * The club's side of the relationship, assembled from `self.membership` —
  * which this page has been fetching since #36 and reading two fields of.
  *
- * `fetchStudentPortal()` returns `categoria`, `modalidad`, `fechaActivacion`,
- * `fechaFin` and `montoAplicado` on every membership row, and the screen used
- * `estado` for a badge and dropped the rest. That is the whole of "perfil
- * genérico": not missing data, discarded data. Nothing here is a new request —
- * see the module docstring's data-sources note, which is unchanged.
+ * `fetchStudentPortal()` returns `categoria`, `modalidad`, `fechaActivacion`
+ * and `montoAplicado` on every membership row, and the screen used `estado`
+ * for a badge and dropped the rest. That is the whole of "perfil genérico":
+ * not missing data, discarded data.
  *
- * Three of the five are drawn, and the two that are not each have a reason:
+ * ## "Vigente hasta" is the coverage end, not `membership.fechaFin`
+ *
+ * `MembershipSummary.fechaFin` is declared on the client type and produced by
+ * nobody: `buildMembershipView` (src/lib/server/student-adapter.ts) has no line
+ * that fills it, so the row this card used to draw from that field never
+ * appeared on a real payload. The end of paid coverage is the furthest
+ * `fechaFin` among the persona's APPROVED payments — `resolveCoverageEnd`, the
+ * same reading `/student/payments` prints — so it arrives here as
+ * `coverageEnd`, from the supplementary lookup `ProfileContent` makes. That
+ * ONE date is the only fact on this card the portal payload does not carry.
+ *
+ * An absent coverage end draws no row, never a labelled dash: this card's rule
+ * is that a datum the club cannot prove is left out, which is why `hasta` is a
+ * plain empty string rather than a placeholder. The reader who needs to know
+ * whether coverage is current is not left guessing either way — the identity
+ * panel above carries the membership's own state badge.
+ *
+ * Of the four fields the payload does carry, three are drawn and the one that
+ * is not has its reason:
  *
  * - **`montoAplicado`** is money. On its own a figure does not say whether it
  *   is owed, paid or overdue, and "Mis pagos" exists to answer precisely that.
@@ -673,7 +705,14 @@ function PanelFact({ label, children }: { label: string; children: React.ReactNo
  *   `PERSONALIZADA` against a plan named for its season is the case that keeps
  *   the field alive.
  */
-function MembershipCard({ membership }: { membership: MembershipSummary }): React.ReactElement {
+function MembershipCard({
+  membership,
+  coverageEnd,
+}: {
+  membership: MembershipSummary;
+  /** Furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`), or `null`. */
+  coverageEnd: string | null;
+}): React.ReactElement {
   const plan = membership.categoria?.trim();
   const modalidad = membership.modalidad?.trim();
   const modalidadLabel = modalidad
@@ -685,7 +724,7 @@ function MembershipCard({ membership }: { membership: MembershipSummary }): Reac
   const modalidadIsRedundant =
     !modalidad || (plan?.toLowerCase().includes(modalidad.toLowerCase()) ?? false);
   const desde = membership.fechaActivacion ? formatDate(membership.fechaActivacion) : "";
-  const hasta = membership.fechaFin ? formatDate(membership.fechaFin) : "";
+  const hasta = coverageEnd ? formatDate(coverageEnd) : "";
 
   return (
     <section data-testid="profile-membership" className="card flex flex-none flex-col overflow-hidden">
@@ -782,6 +821,14 @@ type ProfileLayoutProps =
       role: UserRole;
       data: StudentPortalSummary;
       perfil: PerfilPropio | null;
+      /**
+       * Furthest `fechaFin` among the profile's APPROVED payments, or `null`.
+       *
+       * Not on the `staff` member because the membership card it feeds exists
+       * only here: `self` — and therefore `self.membership` — is the student
+       * branch's own profile.
+       */
+      coverageEnd: string | null;
       sessionEmail: string;
       sessionName: string;
       onPerfilUpdated: (perfil: PerfilPropio) => void;
@@ -791,10 +838,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const { logout, refreshSession } = useAuth();
 
-  // ---- Staff-only inline edit state. Always declared (hooks can't be
-  // conditional) — simply unused on the student branch. ----
+  // ---- Inline teléfono edit. Both branches use it — see `handleSave`. ----
   const [editing, setEditing] = useState(false);
-  const [telefono, setTelefono] = useState(props.kind === "staff" ? props.perfil.telefono : "");
+  const [telefono, setTelefono] = useState(props.perfil?.telefono ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   /**
@@ -870,37 +916,39 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   }
 
   function startEditing(): void {
-    if (props.kind !== "staff") return;
-    setTelefono(props.perfil.telefono);
+    // `perfil` is `null` only while the student branch's supplementary
+    // `/auth/me` call is still in flight or failed; the trigger is not drawn
+    // then (see `headerAction`), so this is unreachable with nothing to seed.
+    setTelefono(perfil?.telefono ?? "");
     setSaveError(null);
     setEditing(true);
     telefonoMasking.reset();
   }
 
   function cancelEditing(): void {
-    if (props.kind !== "staff") return;
-    setTelefono(props.perfil.telefono);
+    setTelefono(perfil?.telefono ?? "");
     setSaveError(null);
     setEditing(false);
     telefonoMasking.reset();
   }
 
   async function handleSave(): Promise<void> {
-    if (props.kind !== "staff") return;
-    const current = props.perfil;
     setSaving(true);
     setSaveError(null);
     try {
       // Correo is never sent here — it's the JWT `sub` claim, and self-service
       // editing was removed by design (see auth_servicio.py).
       const updated = await actualizarMiPerfil({ telefono: telefono.trim() });
-      props.onSaved(updated);
+      // Each branch owns its own state: staff replaces its `staffState`
+      // profile, the student branch its supplementary one.
+      if (props.kind === "staff") props.onSaved(updated);
+      else props.onPerfilUpdated(updated);
       setEditing(false);
       showSuccess("Perfil actualizado correctamente.");
     } catch (error: unknown) {
       // Revert — a rejected edit must never be left displayed as if it were
       // persisted (no silent data loss, per spec).
-      setTelefono(current.telefono);
+      setTelefono(perfil?.telefono ?? "");
       setEditing(false);
       const message = toErrorMessage(error, "No se pudo guardar los cambios.");
       setSaveError(message);
@@ -1014,11 +1062,19 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // lo que de verdad mide, en vez de forzar que las dos fechas coincidan.
   const memberSince = fechaCreacion ? `Cuenta creada el ${formatDate(fechaCreacion)}` : null;
 
-  // The two payload fields this screen used to fetch and discard. Both are
-  // read straight off `self` — no second request, and no default when the
-  // field is absent (see `MembershipCard` / `RecentSessionsCard`).
+  // The membership and the session history the screen used to fetch and
+  // discard. Both are read straight off `self` — no default when a field is
+  // absent (see `MembershipCard` / `RecentSessionsCard`). The one date the
+  // payload cannot carry, the end of paid coverage, is the separate
+  // `coverageEnd` above.
   const selfMembership = self?.membership ?? null;
   const recentSessions = self?.recentSessions ?? [];
+  // `MembershipSummary.fechaFin` is declared on the client type and populated
+  // by no adapter, so the card cannot read coverage off the membership; it
+  // reads the same `resolveCoverageEnd` date `/student/payments` prints. `self`
+  // exists only on the student branch, so the `null` here is unreachable
+  // rather than a second reading of the field.
+  const coverageEnd = props.kind === "student" ? props.coverageEnd : null;
 
   // The quick-recognition badge in the identity panel — only when there IS a
   // real membership status to report. When `self` exists but has no
@@ -1039,30 +1095,38 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   // The page action lives in `PageHeader`'s own row (`.rowline` in the
   // prototype), passed up through `AppShell`.
-  const headerAction =
-    props.kind === "student" ? (
-      <Link href="/student" className={buttonClasses("secondary")}>
-        Ver portal completo
-        <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-      </Link>
-    ) : editing ? (
-      <>
-        <Button variant="tertiary" onClick={cancelEditing} disabled={saving}>
-          <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Cancelar
-        </Button>
-        <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
-          {saving ? (
-            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          )}
-          {saving ? "Guardando…" : "Guardar"}
-        </Button>
-      </>
-    ) : (
-      <Button onClick={startEditing}>Editar datos</Button>
-    );
+  //
+  // One edit affordance for both branches. The student branch keeps its "Ver
+  // portal completo" link beside it: editing a teléfono is not the way out of
+  // this screen, and retiring the link to make room would trade a navigation
+  // for an edit nobody asked to lose. The trigger is withheld only when there
+  // is no `perfil` to seed from — see `startEditing`.
+  const headerAction = editing ? (
+    <>
+      <Button variant="tertiary" onClick={cancelEditing} disabled={saving}>
+        <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        Cancelar
+      </Button>
+      <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
+        {saving ? (
+          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        )}
+        {saving ? "Guardando…" : "Guardar"}
+      </Button>
+    </>
+  ) : (
+    <>
+      {perfil !== null && <Button onClick={startEditing}>Editar datos</Button>}
+      {props.kind === "student" && (
+        <Link href="/student" className={buttonClasses("secondary")}>
+          Ver portal completo
+          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        </Link>
+      )}
+    </>
+  );
 
   return (
     <ProfileShell actions={headerAction} subtitle={roleCopy.lede}>
@@ -1111,7 +1175,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             onFotoChange={(e) => void handleFotoChange(e)}
           />
 
-          {selfMembership && <MembershipCard membership={selfMembership} />}
+          {selfMembership && (
+            <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
+          )}
 
           {/*
             Lo que cierra el hueco que este archivo venía documentando: "a
@@ -1141,7 +1207,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             <DetailRow label="Nombres">{fullName}</DetailRow>
             <DetailRow label="Correo de cuenta">{correoDisplay}</DetailRow>
             <DetailRow label="Teléfono">
-              {props.kind === "staff" && editing ? (
+              {editing ? (
                 <div>
                   <input
                     id="perfil-telefono"
@@ -1170,7 +1236,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             <DetailRow label="Rol">{roleLabel}</DetailRow>
             {props.kind === "student" && (
               <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
-                Esta información no se puede editar desde aquí. Escriba al club para corregirla.
+                Solo el teléfono se puede editar desde aquí. Para corregir otro dato, escriba al
+                club.
               </p>
             )}
             {saveError && (
@@ -1507,6 +1574,36 @@ function ProfileContent(): React.ReactElement | null {
     };
   }, [isStudentRole]);
 
+  // The one fact the portal payload cannot carry: the end of PAID coverage.
+  // `buildMembershipView` never fills `MembershipSummary.fechaFin`, so the
+  // real date is the furthest `fechaFin` among APPROVED payments — the same
+  // `resolveCoverageEnd` reading `/student/payments` prints, from the same
+  // endpoint, fetched with the same ownership criterion. Supplementary in
+  // exactly the way the call above is: a failure drops the "Vigente hasta"
+  // row instead of replacing the account with an error.
+  const [studentPagos, setStudentPagos] = useState<PagoPersona[]>([]);
+
+  useEffect(() => {
+    if (!isStudentRole || !personaId) return;
+    let cancelled = false;
+    fetchPagosDePersona(personaId)
+      .then((pagos) => {
+        if (!cancelled) setStudentPagos(pagos);
+      })
+      .catch(() => {
+        // Supplementary only — see comment above.
+        if (!cancelled) setStudentPagos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isStudentRole, personaId]);
+
+  // Cheap, but memoised the way `/student/payments` does it: the list is
+  // re-derived on every keystroke of the teléfono field above, and the answer
+  // cannot change while the fetched array does not.
+  const coverageEnd = useMemo(() => resolveCoverageEnd(studentPagos), [studentPagos]);
+
   if (role === null) return null;
 
   // `ProfileLayout` renders its OWN `AppShell` — the page action has to reach
@@ -1520,6 +1617,7 @@ function ProfileContent(): React.ReactElement | null {
           role={role}
           data={studentState.data}
           perfil={studentPerfil}
+          coverageEnd={coverageEnd}
           sessionEmail={session?.user.email ?? ""}
           sessionName={session?.user.name ?? ""}
           onPerfilUpdated={setStudentPerfil}

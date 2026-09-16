@@ -30,15 +30,18 @@
  * ## The window, and why it is stated on screen
  *
  * `buildRecentSessions` (src/lib/server/student-adapter.ts) slices the backend
- * history to its five most recent records before it reaches this client.
- * `GET /asistencias/persona/{id}` is itself paginated now (TRA-6), but the
- * BFF route already requests a page well above this window, so the cap
- * remains a frontend decision — and several real students already have 13
- * records the portal never shows. Raising `RECENT_SESSIONS_LIMIT` is all this
- * screen needs to grow.
+ * history to `RECENT_SESSIONS_LIMIT` records — 30, since that module's cap was
+ * raised from 5 — which is the number `PORTAL_SESSION_WINDOW` below and the
+ * footnote at the foot of this screen both state. `GET
+ * /asistencias/persona/{id}` is itself paginated (TRA-6), but the BFF route
+ * already requests a page well above this window (`HISTORIAL_PAGE_LIMIT`, 200
+ * in src/app/api/student/route.ts), so page 1 always contains it and the cap
+ * remains a frontend decision.
  *
- * Until it is raised, the page states its own scope in the footnote rather
- * than presenting five rows as if they were the whole record.
+ * Three numbers, one fact: the adapter's slice, the page's constant and the
+ * sentence the student reads. The footnote exists so a capped list is not
+ * read as the whole record, and `__tests__/attendance-window.test.ts` fails if
+ * those three ever stop agreeing.
  */
 
 "use client";
@@ -70,15 +73,16 @@ import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 
 /**
- * Mirrors `RECENT_SESSIONS_LIMIT` in src/lib/server/student-adapter.ts.
+ * Mirrors `RECENT_SESSIONS_LIMIT` in src/lib/server/student-adapter.ts (30).
  *
  * Duplicated rather than imported because that module is server-only. It is
- * used for copy, never for slicing — the list renders whatever arrives, so if
- * the server cap changes and this constant is forgotten the page still shows
- * every record it was given.
+ * used for copy, never for slicing — the list renders whatever arrives, so
+ * this page never hides a record it was handed.
+ *
+ * The number is printed to the student in the footnote below, so a drift
+ * between the two modules would put a false number on screen. They are
+ * compared by `__tests__/attendance-window.test.ts`.
  */
-/** Must match `RECENT_SESSIONS_LIMIT` in lib/server/student-adapter.ts — the
- *  footnote below states this number to the student, so a drift would lie. */
 const PORTAL_SESSION_WINDOW = 30;
 
 // ---------------------------------------------------------------------------
