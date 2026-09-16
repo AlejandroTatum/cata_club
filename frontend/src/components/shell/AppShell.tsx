@@ -60,6 +60,7 @@ import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
 import { openHelpChat, useHelpChatOpen } from "@/components/chatbot/help-chat-store";
+import { LAUNCHER_CONTENT_CLEARANCE_PX } from "@/components/chatbot/HelpChatDock";
 import { PageHeader } from "@/components/ui";
 
 /**
@@ -1020,10 +1021,32 @@ export default function AppShell({
             `pt-3`, was `pt-6`: with the divider removed the title no longer
             opens a second slab, so it only needs to clear the utility row —
             12px under a control that already carries 8px of its own bottom
-            margin. */}
+            margin.
+
+            `--dock-clearance` adds a second reservation, stacked on top of
+            the tab-bar one: `HelpChatDock`'s floating launcher only steers
+            clear of FURNITURE (fixed/sticky bars) — see its own header
+            comment — so it never moves for ordinary scrolling content, and a
+            viewport-fixed launcher over a long list means the last rows can
+            never scroll out from under it (A2). This wrapper is the
+            scrolling surface for every route this shell renders, and the
+            launcher mounts once in the root layout for every one of them, so
+            it always carries the reservation. The number itself lives next
+            to the launcher's own size/inset constants in
+            `LAUNCHER_CONTENT_CLEARANCE_PX`, not retyped here, and it is a CSS
+            variable rather than a Tailwind arbitrary class so that number
+            stays the one source of truth instead of a literal string that
+            could drift from it. `lg:pb-8` still wins from `lg` up, where the
+            launcher steps down for this shell's own rail and there is
+            nothing left to clear. */}
         <div
+          style={
+            { "--dock-clearance": `${LAUNCHER_CONTENT_CLEARANCE_PX}px` } as React.CSSProperties
+          }
           className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
-            showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
+            showMobileTabs
+              ? "pb-[calc(78px+var(--dock-clearance))] lg:pb-8"
+              : "pb-[calc(2rem+var(--dock-clearance))] lg:pb-8"
           }`}
         >
           <PageHeader title={title} subtitle={subtitle} actions={actions} />
