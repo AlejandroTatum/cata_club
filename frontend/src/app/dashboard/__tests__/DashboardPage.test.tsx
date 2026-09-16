@@ -106,6 +106,19 @@ function pendingPayment(id: string, daysAgo: number): PaymentValidationRequest {
   };
 }
 
+/** A payment already resolved (validated or rejected) `daysAgo` days ago. */
+function resolvedPayment(
+  id: string,
+  status: "validado" | "rechazado",
+  daysAgo = 0,
+): PaymentValidationRequest {
+  return {
+    ...pendingPayment(id, daysAgo + 1),
+    validationStatus: status,
+    validatedAt: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
+  };
+}
+
 function todayRecord(id: string): AttendanceRecord {
   // The club's today, not the runner's: `buildFourWeekAttendance` buckets its
   // windows in club time, so a date built from local components lands outside
@@ -375,6 +388,67 @@ describe("DashboardPage — actividad reciente", () => {
     // and its own `minmax(0,340px)` track, one of the six spellings #36 found
     // of the same split.
     expect(screen.getByTestId("dashboard-lower").className).toBe(PAGE_RAIL);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Activity feed — event type markers (A5)
+// ---------------------------------------------------------------------------
+
+describe("DashboardPage — actividad reciente marks each event type", () => {
+  it("marks a validated payment ok and names it for assistive tech", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([resolvedPayment("a", "validado")]);
+
+    render(<DashboardPage />);
+
+    const marker = await screen.findByTestId("activity-marker-payment-validated");
+    expect(marker.className).toContain("text-state-ok");
+    expect(screen.getByText(/^Pago validado/)).toBeInTheDocument();
+  });
+
+  it("marks a rejected payment bad — the one type meant to stand out while scanning", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([resolvedPayment("a", "rechazado")]);
+
+    render(<DashboardPage />);
+
+    const marker = await screen.findByTestId("activity-marker-payment-rejected");
+    expect(marker.className).toContain("text-state-bad");
+    expect(screen.getByText(/^Pago rechazado/)).toBeInTheDocument();
+  });
+
+  it("marks an attendance session neutral", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1")]);
+
+    render(<DashboardPage />);
+
+    const marker = await screen.findByTestId("activity-marker-attendance-session");
+    expect(marker.className).toContain("text-state-neutral");
+    expect(screen.getByText(/^Asistencia:/)).toBeInTheDocument();
+  });
+
+  it("marks an uploaded payment neutral — it has not been resolved yet", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
+
+    render(<DashboardPage />);
+
+    const marker = await screen.findByTestId("activity-marker-payment-uploaded");
+    expect(marker.className).toContain("text-state-neutral");
+    expect(screen.getByText(/^Comprobante subido/)).toBeInTheDocument();
+  });
+
+  it("keeps the feed's newest-first order unchanged", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([
+      resolvedPayment("old", "validado", 5),
+      resolvedPayment("new", "rechazado", 0),
+    ]);
+
+    render(<DashboardPage />);
+
+    const feed = await screen.findByTestId("activity-feed");
+    const rows = await within(feed).findAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByTestId("activity-marker-payment-rejected")).toBeInTheDocument();
+    expect(within(rows[1]).getByTestId("activity-marker-payment-validated")).toBeInTheDocument();
   });
 });
 
