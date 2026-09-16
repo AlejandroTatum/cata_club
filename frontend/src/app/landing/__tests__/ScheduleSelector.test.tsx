@@ -161,4 +161,21 @@ describe("ScheduleSelector", (): void => {
       expect(ball).toHaveAttribute("aria-hidden", "true");
     });
   });
+
+  /**
+   * Issue #1256: the hero addresses a parent of a 6-17 year old, so the
+   * selector must not default to whichever category the API happened to
+   * list first — here an adult category placed deliberately at index 0.
+   */
+  it("opens on the youngest category's tab even when the API lists an adult category first", (): void => {
+    const schedules = [
+      category("Adultos", [weekSlot("19:00 – 20:00", WEEKDAYS)], "Mayores de 18 años"),
+      category("Formativo", [weekSlot("15:00 – 16:00", WEEKDAYS)], "5 a 10 años"),
+    ];
+    renderCard(schedules);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[0]).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("Formativo");
+  });
 });

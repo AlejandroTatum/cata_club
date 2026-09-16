@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 
 import { describe, expect, it } from "vitest";
-import { mapPublicSchedules, type PublicSchedulePayload } from "@/app/landing/schedule-data";
+import { defaultScheduleIndex, mapPublicSchedules, type PublicSchedulePayload } from "@/app/landing/schedule-data";
+import { category, weekSlot } from "./schedule-fixtures";
 
 describe("mapPublicSchedules", (): void => {
   it("maps admin-created categories and uppercase Spanish days into landing slots", (): void => {
@@ -82,5 +83,50 @@ describe("mapPublicSchedules", (): void => {
       { category: "Roto", blocks: [{ days: ["UNKNOWN"], startTime: "x", endTime: "y" }] },
     ])).toEqual([]);
     expect(mapPublicSchedules(null)).toEqual([]);
+  });
+});
+
+/**
+ * The landing's hero addresses a parent of a 6-17 year old (issue #1256), so
+ * the schedule selector should not default to whatever category the API
+ * happened to list first. `audience` is an orientation label the club
+ * writes ("5 a 10 años", "Selección"), never a validated age range, so this
+ * only reads its leading number — it never sorts the catalog or judges a
+ * category as "wrong" for a student.
+ */
+describe("defaultScheduleIndex", (): void => {
+  it("picks the category whose audience starts with the lowest number", (): void => {
+    const schedules = [
+      category("Adultos", [weekSlot("19:00 – 20:00")], "Mayores de 18 años"),
+      category("Formativo", [weekSlot("15:00 – 16:00")], "5 a 10 años"),
+      category("Infantil", [weekSlot("16:00 – 17:00")], "11 a 14 años"),
+    ];
+    expect(defaultScheduleIndex(schedules)).toBe(1);
+  });
+
+  it("resolves a tie between two lowest numbers to the first of them", (): void => {
+    const schedules = [
+      category("Selección", [weekSlot("18:00 – 20:00")], "Desde 15 años"),
+      category("Formativo A", [weekSlot("15:00 – 16:00")], "6 a 10 años"),
+      category("Formativo B", [weekSlot("16:00 – 17:00")], "6 a 9 años"),
+    ];
+    expect(defaultScheduleIndex(schedules)).toBe(1);
+  });
+
+  it("falls back to index 0 when no category has a parsable audience", (): void => {
+    const schedules = [
+      category("Adultos", [weekSlot("19:00 – 20:00")], "Mayores de edad"),
+      category("Competitivo", [weekSlot("18:00 – 20:00")]),
+    ];
+    expect(defaultScheduleIndex(schedules)).toBe(0);
+  });
+
+  it("skips categories with a missing or unparsable audience and picks among the rest", (): void => {
+    const schedules = [
+      category("Adultos", [weekSlot("19:00 – 20:00")], "Mayores de 18 años"),
+      category("Competitivo", [weekSlot("18:00 – 20:00")]),
+      category("Formativo", [weekSlot("15:00 – 16:00")], "5 a 10 años"),
+    ];
+    expect(defaultScheduleIndex(schedules)).toBe(2);
   });
 });
