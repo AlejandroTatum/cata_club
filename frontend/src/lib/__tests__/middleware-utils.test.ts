@@ -8,7 +8,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isProtectedPath, hasPlausibleAccessToken, hasPendingActivation } from "../middleware-utils";
+import { NextRequest } from "next/server";
+import { isProtectedPath, hasPlausibleAccessToken, hasPendingActivation, generateNonce, buildContentSecurityPolicy } from "../middleware-utils";
 
 // ---------------------------------------------------------------------------
 // isProtectedPath
@@ -100,5 +101,66 @@ describe("hasPlausibleAccessToken", () => {
 
   it("does not verify signature or expiry — a garbage-but-3-segment string still passes (documented compromise)", () => {
     expect(hasPlausibleAccessToken("not.a.realtoken")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// middleware.ts — CSP emission (issue #1069, phase 3)
+//
+// The wrapper is exercised here with real NextRequest/NextResponse objects
+// (next/server runs fine on Node's Web APIs); the CSP construction and nonce
+// generation live in middleware-utils.ts above, so this only pins the wrapper's
+// contract: every response carries the policy, each request gets a fresh nonce,
+// and the auth redirects still behave exactly as before.
+// ---------------------------------------------------------------------------
+
+import { middleware } from "@/middleware";
+
+function makeRequest(path: string, cookie?: string) {
+  const headers = new Headers();
+  if (cookie) headers.set("cookie", cookie);
+  return new NextRequest(new URL(`https://cata.test${path}`), { headers });
+}
+
+describe("middleware CSP", () => {
+  it("generates a different nonce per request", () => {
+    const first = generateNonce();
+    const second = generateNonce();
+    expect(first).not.toEqual(second);
+    expect(first).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+  });
+
+  it("builds a strict policy carrying the nonce, strict-dynamic and the local report endpoint", () => {
+    const csp = buildContentSecurityPolicy("ABC=");
+    expect(csp).toContain("'nonce-ABC='");
+    expect(csp).toContain("'strict-dynamic'");
+    expect(csp).toContain("report-uri /api/csp-report");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  it("sets Content-Security-Policy on plain next() responses for public paths", () => {
+    const response = middleware(makeRequest("/"));
+    expect(response.headers.get("Content-Security-Policy")).toContain("strict-dynamic");
+    expect(response.headers.get("Content-Security-Policy")).toMatch(/'nonce-[^']+'/);
+  });
+
+  it("uses a fresh nonce on every response", () => {
+    const first = middleware(makeRequest("/")).headers.get("Content-Security-Policy") ?? "";
+    const second = middleware(makeRequest("/")).headers.get("Content-Security-Policy") ?? "";
+    expect(first).not.toEqual(second);
+  });
+
+  it("keeps the auth redirect to /login and still attaches the CSP to it", () => {
+    const response = middleware(makeRequest("/dashboard"));
+    expect(response.headers.get("location")).toBe("https://cata.test/login");
+    expect(response.headers.get("Content-Security-Policy")).toContain("strict-dynamic");
+  });
+
+  it("keeps the pending-activation redirect and still attaches the CSP to it", () => {
+    const payload = btoa(JSON.stringify({ activacion_completa: false }));
+    const response = middleware(makeRequest("/dashboard", `access_token=header.${payload}.sig`));
+    expect(response.headers.get("location")).toBe("https://cata.test/login/activacion");
+    expect(response.headers.get("Content-Security-Policy")).toMatch(/'nonce-[^']+'/);
   });
 });
