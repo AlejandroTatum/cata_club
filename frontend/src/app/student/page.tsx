@@ -315,12 +315,19 @@ function CarnetRegisterRow({
 
 function Carnet({
   profile,
+  coverageEnd,
   horariosState,
   className,
   canManagePhoto,
   onPhotoUploaded,
 }: {
   profile: StudentProfileSummary;
+  /**
+   * The furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`),
+   * or `null`. The same date `CuotaCard` and `/student/payments` print — see
+   * the register below for what the credential does with it.
+   */
+  coverageEnd: string | null;
   /** The same assignments the training panel reads — see `franja` below. */
   horariosState: HorariosState;
   className?: string;
@@ -375,7 +382,8 @@ function Carnet({
 
   /**
    * The register, in reading order: what the club sells this family, when they
-   * train, and since when they have belonged.
+   * train, since when they have belonged, and until when the club is paid for
+   * them.
    *
    * "Plan" and not "Categoría", and the difference is not a wording
    * preference. `membership.categoria` holds the PLAN's name — "Mensual
@@ -388,6 +396,28 @@ function Carnet({
    * "Socio desde" rather than the prototype's "MIEMBRO Nº · DESDE": the backend
    * has no member-number concept, and printing the surrogate persona id as one
    * would invent an identity-document field. The activation date IS real.
+   *
+   * ## "Válido hasta" — vigencia, not the verdict
+   *
+   * The coverage end sits beside "Socio desde" because the two are the same
+   * fact read at its two ends: when this person belongs to the club, and until
+   * when the club has been paid for them. It is the date `resolveCoverageEnd`
+   * gives `CuotaCard` and `/student/payments`, from the same approved payments
+   * — one reading, printed once per screen.
+   *
+   * It is NOT the payment verdict coming back to the credential. The owner
+   * removed that ("no tiene ningún pago aprobado … muévala a la sección de
+   * pagos") and `CuotaCard` still owns every word about whether a family owes
+   * anything. A VALIDITY DATE is an identity-document field: "Válido hasta
+   * 31/07/2026" is the kind of line a credential carries. A verdict is not.
+   *
+   * Absent means the ROW is not drawn, never a labelled dash: with nothing
+   * approved there is no date to assert, and a placeholder on an identity
+   * document reads as a missing field rather than as a card that never
+   * claimed one. That is also why no `pagosState` is threaded in here — a
+   * lookup that is still loading and one that failed both read as "no date",
+   * which claims nothing, and the panel beside this card is where a failed
+   * payments lookup is reported.
    */
   const register: CarnetRegisterSpec[] = [];
   if (profile.membership?.categoria) {
@@ -404,6 +434,13 @@ function Carnet({
     register.push({
       label: "Socio desde",
       value: formatDate(profile.membership.fechaActivacion),
+      isFigure: true,
+    });
+  }
+  if (coverageEnd) {
+    register.push({
+      label: "Válido hasta",
+      value: formatDate(coverageEnd),
       isFigure: true,
     });
   }
@@ -1343,6 +1380,7 @@ function ActivePortalView({
           <div className="flex flex-col gap-5">
             <Carnet
               profile={selectedProfile}
+              coverageEnd={coverageEnd}
               horariosState={horariosState}
               canManagePhoto={canManagePhoto}
               onPhotoUploaded={() => {

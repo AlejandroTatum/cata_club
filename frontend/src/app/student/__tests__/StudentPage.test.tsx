@@ -472,7 +472,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     expect(within(carnet).queryByText(/renueva/i)).not.toBeInTheDocument();
   });
 
-  it("moves the coverage date off the carnet and onto the Cuota card, worded as the maquette draws it", async () => {
+  it("keeps the payment verdict off the carnet and leaves the Cuota card owning its own wording", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
 
     render(<StudentPage />);
@@ -480,7 +480,9 @@ describe("StudentPage — the club membership card (carnet)", () => {
     const carnet = await screen.findByTestId("student-carnet");
     const cuota = await screen.findByTestId("student-cuota-card");
     // "Cubierta hasta", not the old carnet fact's "Cobertura hasta" — the
-    // Cuota card's own row label matches the chosen maquette's wording.
+    // Cuota card's own row label matches the chosen maquette's wording. The
+    // credential states vigencia as "Válido hasta" (see the carnet-vigencia
+    // tests below); the payment VERDICT never returns to it.
     await waitFor(() => {
       expect(within(cuota).getByText("Cubierta hasta")).toBeInTheDocument();
     });
@@ -497,6 +499,86 @@ describe("StudentPage — the club membership card (carnet)", () => {
     await waitFor(() => {
       expect(within(cuota).queryByText("Cubierta hasta")).not.toBeInTheDocument();
     });
+  });
+
+  /**
+   * F4b — the credential's vigencia.
+   *
+   * "Socio desde" answers when the person belongs; "Válido hasta" answers
+   * until when the club has been paid for them. Both are the same fact read at
+   * its two ends, and the second is the date `resolveCoverageEnd` gives the
+   * Cuota card and `/student/payments` — not a new reading of the membership
+   * row, whose `fechaFin` no adapter populates.
+   */
+  it("states the real coverage end on the carnet, beside 'Socio desde'", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4,
+          estado: "ACTIVA",
+          personaId: 9,
+          montoAplicado: "25.00",
+          categoria: "Mensual",
+          modalidad: "MENSUAL",
+          fechaActivacion: "2026-03-18",
+        },
+      },
+    });
+    mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
+
+    render(<StudentPage />);
+
+    const carnet = await screen.findByTestId("student-carnet");
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
+    });
+
+    // The value is the APPROVED payment's `fechaFin` (31/07/2026), read off
+    // the row's right edge like every other register value.
+    const row = within(facts).getByText("Válido hasta").parentElement!;
+    expect(row.lastElementChild?.textContent).toBe("31/07/2026");
+    expect(within(facts).getByText("Socio desde")).toBeInTheDocument();
+    // And it is on the credential — the object that prints at 54 × 85.6 mm.
+    expect(carnet).toContainElement(facts);
+  });
+
+  it("omits the coverage end when no payment has been approved", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4,
+          estado: "ACTIVA",
+          personaId: 9,
+          montoAplicado: "25.00",
+          categoria: "Mensual",
+          modalidad: "MENSUAL",
+          fechaActivacion: "2026-03-18",
+        },
+      },
+    });
+    // A rejected payment carries a `fechaFin` too, and a pending one likewise:
+    // neither has been approved by the club, so neither may become "Válido
+    // hasta".
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      PAGO_RECHAZADO,
+      { ...PAGO_APROBADO, id: 3, estadoPago: "PENDIENTE_VALIDACION" },
+    ]);
+
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Socio desde")).toBeInTheDocument();
+    });
+    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
+    // No date from the refused rows leaked onto the credential.
+    expect(within(facts).queryByText("30/06/2026")).not.toBeInTheDocument();
+    expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
   });
 
   it("reads the register as label-left, value-right rows in a deterministic order", async () => {
@@ -528,8 +610,10 @@ describe("StudentPage — the club membership card (carnet)", () => {
       },
     });
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
-    // "Franja" is one of the three rows, and it only exists when the club has
-    // assigned a schedule to derive it from.
+    // "Franja" is one of the four rows, and it only exists when the club has
+    // assigned a schedule to derive it from. "Válido hasta" is the fourth and
+    // only appears once an APPROVED payment gives it a date — see the
+    // dedicated carnet-vigencia tests below.
     mockFetchHorariosPorAlumno.mockResolvedValue([asignacion("LUNES", "15:00:00", "16:00:00", 1)]);
 
     render(<StudentPage />);
@@ -540,11 +624,12 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
 
     const rows = [...facts.children];
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([
       "Plan",
       "Franja",
       "Socio desde",
+      "Válido hasta",
     ]);
 
     // The register reading, and the thing most likely to be silently reverted:
