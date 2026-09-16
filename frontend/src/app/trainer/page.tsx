@@ -11,10 +11,23 @@
  *   1. a full-width coal band — `SessionCard`, which already spoke that
  *      vocabulary (`rounded-card bg-coal`, a `font-display text-display`
  *      figure) and was merely boxed into half a screen by a
- *      `split:grid-cols-2` pair with the donut;
+ *      `split:grid-cols-2` pair with a donut, since removed;
  *   2. the pulse row on `STAT_GRID`, four tiles in one grammar;
  *   3. `PAGE_RAIL` — `RecentSessionsList` ("Últimas listas") fluid beside the
- *      340px "Distribución de asistencias" card.
+ *      340px `SessionsWithoutList` ("Sesiones sin lista") card.
+ *
+ * ## "Sesiones sin lista" replaced "Distribución de asistencias" (usability
+ * audit, 2026-09-16)
+ *
+ * The donut told the trainer how a month's records split by state — a fact
+ * about the past that this screen never let anyone act on. It was also the
+ * third slice of the exact same month query this screen already loads
+ * (`monthRecords`), so it cost nothing to fetch and asked nothing back. The
+ * rail now answers the question a trainer standing courtside actually has —
+ * which of this month's sessions still needs a list — with a direct link into
+ * the wizard for each one. See `SessionsWithoutList.tsx` for the derivation
+ * (shared with the history screen's own "Sin lista" estimate) and its own
+ * caveats.
  *
  * What did NOT come across is the hero's empty hands. `/dashboard` moved its
  * action to the header because it was the third place in the product where a
@@ -56,7 +69,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import Link from "next/link";
-import { CalendarCheck, CalendarOff } from "lucide-react";
+import { CalendarOff } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -82,7 +95,7 @@ import {
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
-import { todayDiaSemana } from "@/lib/club-date";
+import { clubIsoDate, clubTimeHHMM, todayDiaSemana } from "@/lib/club-date";
 import {
   buildEnrolledCountsByHorario,
   buildMonthAttendanceRate,
@@ -96,11 +109,8 @@ import {
 } from "./trainer-day-utils";
 import SessionCard from "./SessionCard";
 import RecentSessionsList from "./RecentSessionsList";
-// Reused, not rebuilt (decisión §8: "el gráfico de torta ya existe ahí;
-// reusalo, no construyas uno nuevo"). It's a plain presentational component
-// (props: AttendanceDayStats) with no route of its own, so importing it from
-// another screen's folder costs nothing beyond the import line itself.
-import AttendanceStatusChart from "@/app/dashboard/AttendanceStatusChart";
+import SessionsWithoutList from "./SessionsWithoutList";
+import { findMissingSessions } from "@/app/trainer/attendance/history/history-utils";
 
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
@@ -196,6 +206,25 @@ export default function TrainerPage(): React.ReactElement {
     () => groupRecordsBySession(monthRecords).length,
     [monthRecords],
   );
+
+  /**
+   * "Sesiones sin lista" — this month's weekly schedule minus the sessions
+   * that already have a list, newest first. Same cross the history screen
+   * counts (`findMissingSessions`, `history-utils.ts`), over the same
+   * `monthRecords` this screen already fetches — no second call, and the same
+   * ESTIMATE caveat that module documents.
+   */
+  const missingSessions = useMemo(() => {
+    const { fechaInicio, fechaFin } = monthToDateRange();
+    return findMissingSessions({
+      sessions: monthRecords.map((r) => ({ fecha: r.fecha, horarioId: r.horarioId })),
+      schedules,
+      desde: fechaInicio,
+      hasta: fechaFin,
+      hoy: clubIsoDate(),
+      horaActual: clubTimeHHMM(),
+    });
+  }, [monthRecords, schedules]);
 
   /**
    * Enrolled counts for every session shown on the card today — the hero
@@ -357,11 +386,12 @@ export default function TrainerPage(): React.ReactElement {
             </div>
 
             {/*
-              LAYER 3 — the rail. Neither the recent lists nor the donut needs
-              the full width, and `PAGE_RAIL` is the token `/dashboard` spends
-              on exactly this pair: a fluid feed beside a fixed 340px card.
+              LAYER 3 — the rail. Neither the recent lists nor "Sesiones sin
+              lista" needs the full width, and `PAGE_RAIL` is the token
+              `/dashboard` spends on exactly this pair: a fluid feed beside a
+              fixed 340px card.
 
-              The absence alert stays inside the donut card. It is a fact ABOUT
+              The absence alert stays inside this card. It is a fact ABOUT
               attendance and it belongs to the block that draws attendance —
               moving it up to the band would have made it the second thing in
               a hero whose own rule is one number and the sentence that reads it.
@@ -380,24 +410,7 @@ export default function TrainerPage(): React.ReactElement {
                   </p>
                 )}
 
-                <div>
-                  {/* The card title step, in the club's display face — the
-                      role DESIGN.md gives Graduate and the one this screen
-                      had never asked for. */}
-                  <h2 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-                    Distribución de asistencias
-                  </h2>
-                  {attendanceStats.totalStudents > 0 ? (
-                    <AttendanceStatusChart stats={attendanceStats} />
-                  ) : (
-                    <EmptyState
-                      surface="inset"
-                      icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                      title="Sin asistencias registradas"
-                      description="El gráfico se dibuja con la primera lista del período."
-                    />
-                  )}
-                </div>
+                <SessionsWithoutList missing={missingSessions} />
               </section>
             </div>
           </>

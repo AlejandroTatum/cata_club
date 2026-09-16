@@ -16,8 +16,11 @@ from app.dominio.enums import (
     EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, EfectoCoberturaCorreccion,
 )
 from app.dominio.etiquetas import estado_de_pago_en_castellano
-from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes
+from app.dominio.excepciones import (
+    EntidadNoEncontrada, OperacionInvalida, PermisosInsuficientes, ServicioNoDisponible,
+)
 from app.dominio.nombre_propio import nombre_completo
+from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.membresia_repositorio import (
     MembresiaRepositorio, TipoMembresiaRepositorio, HistorialEstadoMembresiaRepositorio,
@@ -2095,6 +2098,7 @@ class PagoServicio:
                 tipo=TipoNotificacion.PAGO_APROBADO,
                 mensaje=f"Su pago de ${pago.monto} fue aprobado. Su membresía está activa.",
             )
+            self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_APROBADO)
             # Último paso, ya con la aprobación commiteada: si el broker está
             # caído, el método loguea y NO propaga (ver su docstring).
             self._disparar_generacion_comprobante_pdf(pago_id)
@@ -2109,6 +2113,7 @@ class PagoServicio:
                 tipo=TipoNotificacion.PAGO_RECHAZADO,
                 mensaje=f"Su pago fue rechazado{motivo}.",
             )
+            self._enviar_correo_de_validacion_pago(pago, TipoNotificacion.PAGO_RECHAZADO)
         # Issue #826/#451 (ver el comentario de `PersonaServicio.
         # crear_representado`): este método corre dentro de
         # `run_in_threadpool` y el router arma la respuesta (`pago_a_
@@ -2271,6 +2276,60 @@ class PagoServicio:
             mensaje=mensaje,
             id_para_log=f"pago {pago.id}",
         )
+
+    def _enviar_correo_de_validacion_pago(self, pago: Pago, tipo: TipoNotificacion) -> None:
+        """Correo al titular por la aprobación o el rechazo de su pago.
+
+        Best-effort y NUNCA levanta: cuando esto corre, la validación ya está
+        commiteada (mismo criterio que `_crear_notificacion`) y un correo
+        fallido no puede convertir en 5xx una operación que en los hechos sí
+        se procesó. Se llama desde el mismo punto donde nace el aviso
+        in-app, para que la campana y el correo no se separen.
+
+        El destinatario es la cuenta de la propia persona
+        (`persona.usuario.correo`), la misma resolución que ya usan
+        `alertas_tareas` y `verificacion_correo_tareas`. Una persona sin
+        cuenta -- típicamente un menor representado -- se queda sin correo y
+        eso se loguea: nunca se inventa una dirección.
+
+        Ni el log ni el detalle de la excepción escriben el correo completo
+        (issue #1066): el mensaje de `ServicioNoDisponible` trae el
+        destinatario en su texto, así que solo se registra el tipo."""
+        persona = self.repo_persona.obtener_por_id(pago.persona_id)
+        if persona is None or persona.usuario is None:
+            logger.warning(
+                "Correo de %s omitido: persona_id=%s no tiene cuenta con correo",
+                tipo.value, pago.persona_id,
+            )
+            return
+        try:
+            servicio = ServicioNotificaciones()
+            if tipo == TipoNotificacion.PAGO_APROBADO:
+                servicio.enviar_pago_aprobado(
+                    correo=persona.usuario.correo,
+                    nombre=persona.nombres,
+                    plan=pago.membresia.tipo_membresia.categoria,
+                    fecha_inicio=pago.fecha_inicio,
+                    fecha_fin=pago.fecha_fin,
+                    # La cobertura vigente es la más lejana de la membresía,
+                    # no la de este pago: aprobar un pago viejo después de
+                    # uno nuevo no debe acortar lo que el correo declara
+                    # (misma ancla que "vigente hasta" en el portal).
+                    vigente_hasta=(
+                        self._fecha_fin_maxima_combinada(pago.membresia_id) or pago.fecha_fin
+                    ),
+                )
+            else:
+                servicio.enviar_pago_rechazado(
+                    correo=persona.usuario.correo,
+                    nombre=persona.nombres,
+                    motivo_rechazo=pago.motivo_rechazo,
+                )
+        except (RuntimeError, ServicioNoDisponible) as exc:
+            logger.warning(
+                "Correo de %s no enviado a persona_id=%s: %s",
+                tipo.value, pago.persona_id, type(exc).__name__,
+            )
 
     def _crear_notificacion(
         self, persona_id: int, entidad_relacionada_id: int,

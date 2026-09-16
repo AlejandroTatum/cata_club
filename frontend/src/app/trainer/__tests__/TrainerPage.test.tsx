@@ -135,9 +135,20 @@ const RECENT_SESSIONS: RecentAttendanceSession[] = [
   },
 ];
 
-/** Every anchor in the document whose href addresses a specific session. */
+/**
+ * Every anchor OUTSIDE the rail whose href addresses a specific session.
+ *
+ * The rule this guards is about the HERO band: no state without today's
+ * session may leave one of its `horario=` links behind. "Sesiones sin lista"
+ * deliberately carries its own `horario=` links, into a DIFFERENT day's
+ * roster each time — that is the whole feature, not a leak, so the rail is
+ * excluded here rather than asserted empty.
+ */
 function horarioLinks(): HTMLAnchorElement[] {
-  return Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href*='horario=']"));
+  const rail = document.querySelector("[data-testid='trainer-lower']");
+  return Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href*='horario=']")).filter(
+    (link) => !rail || !rail.contains(link),
+  );
 }
 
 function alumno(horarioId: number): AlumnoHorario {
@@ -268,12 +279,16 @@ describe("TrainerPage — Mi día", () => {
       "href",
       "/trainer/attendance",
     );
-    // No second copy of the primary action inside the page's own content —
-    // the sidebar carries its own "Pasar lista" nav row, which is
-    // navigation, not this screen's CTA.
-    expect(
-      within(screen.getByRole("main")).getAllByRole("link", { name: /Pasar lista/ }),
-    ).toHaveLength(1);
+    // No second copy of the PRIMARY action outside the rail — the sidebar
+    // carries its own "Pasar lista" nav row (navigation, not this screen's
+    // CTA), and "Sesiones sin lista" carries its own "Pasar lista" rows on
+    // purpose, one per missing session, which is a different action entirely.
+    const main = within(screen.getByRole("main"));
+    const rail = screen.getByTestId("trainer-lower");
+    const outsideRail = main
+      .getAllByRole("link", { name: /Pasar lista/ })
+      .filter((link) => !rail.contains(link));
+    expect(outsideRail).toHaveLength(1);
   });
 
   it("'live': the start hour replaces the countdown as the big number, and 'En curso' is written text", async () => {
@@ -311,7 +326,7 @@ describe("TrainerPage — Mi día", () => {
     ]);
     render(<TrainerPage />);
 
-    await screen.findByText("Distribución de asistencias");
+    await screen.findByText("Sesiones sin lista");
     expect(screen.queryByText(/Pasar lista de las/)).not.toBeInTheDocument();
     // `SessionCard` still renders NOTHING for `state === null` — the guard the
     // whole component is built around is untouched.
@@ -391,37 +406,80 @@ describe("TrainerPage — Mi día", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Distribución de asistencias (donut, reused from /dashboard).
+  // Sesiones sin lista — replaces the donut (usability audit 2026-09-16).
+  //
+  // TODAY_SCHEDULES puts schedules 1/2/3 on every Monday and schedule 4 on
+  // every Tuesday; MONTH_RECORDS only ever files schedule 1. Within the
+  // month-to-date window (2026-07-01..20) that leaves schedules 2 and 3
+  // without a list on the 6th and 13th, and schedule 4 without one on the
+  // 7th and 14th — six sessions, newest first, capped at five.
   // -------------------------------------------------------------------------
 
-  it("shows the attendance distribution chart, with a labeled center number", async () => {
+  it("no longer renders the attendance distribution donut", async () => {
     render(<TrainerPage />);
 
     await screen.findByText("Lunes 15:00 — 16:00");
-    expect(screen.getByText("Distribución de asistencias")).toBeInTheDocument();
+    expect(screen.queryByText("Distribución de asistencias")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: /Distribución de asistencias/ }),
+      screen.queryByRole("img", { name: /Distribución de asistencias/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists the month's sessions that never got a list, newest first and capped at five, each linking into the wizard", async () => {
+    render(<TrainerPage />);
+
+    expect(await screen.findByText("Sesiones sin lista")).toBeInTheDocument();
+
+    // Scoped to the rail: the sidebar carries its own bare "Pasar lista" nav
+    // row, sharing this exact accessible name but pointing at no session.
+    const rail = within(screen.getByTestId("trainer-lower"));
+    const links = rail.getAllByRole("link", { name: "Pasar lista" });
+    // The 6th's schedule 2 (the oldest of the six) falls off the cap.
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/trainer/attendance?horario=4&fecha=2026-07-14&paso=lista",
+      "/trainer/attendance?horario=3&fecha=2026-07-13&paso=lista",
+      "/trainer/attendance?horario=2&fecha=2026-07-13&paso=lista",
+      "/trainer/attendance?horario=4&fecha=2026-07-07&paso=lista",
+      "/trainer/attendance?horario=3&fecha=2026-07-06&paso=lista",
+    ]);
+    // The full count (six) reaches the footer even though only five rows show.
+    expect(screen.getByText("6")).toBeInTheDocument();
+    expect(screen.getByText(/sesiones sin lista este mes/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Estimación: se compara contra el horario semanal/),
     ).toBeInTheDocument();
-    // The donut's center number needs a label — "7" alone says nothing.
-    //
-    // The label is now written as the WORD "Registros" and shouted by CSS,
-    // where it used to be typed in literal capitals inside the SVG. Same rule
-    // the rest of the product follows for a micro-label, and it keeps the
-    // accessible name a word rather than an acronym-shaped string. The
-    // assertion still fails if the label disappears, which is what it guards.
-    //
-    // Scoped to the donut, because the legend table beneath it has a
-    // "Registros" column header — the two used to differ only because the
-    // centre label was typed in literal capitals, which is not a distinction
-    // worth keeping a shouted string for.
-    const donut = screen.getByRole("img", { name: /Distribución de asistencias/ });
-    expect(within(donut).getByText("Registros")).toBeInTheDocument();
+  });
+
+  it("shows a positive empty state when every scheduled session already has a list", async () => {
+    const FRIDAY_ONLY = [{ id: 9, diaSemana: "vie" as const, horaInicio: "17:00", horaFin: "18:30" }];
+    mockFetchTrainingSchedules.mockResolvedValue(FRIDAY_ONLY);
+    mockFetchAttendanceRecords.mockResolvedValue(
+      ["2026-07-03", "2026-07-10", "2026-07-17"].map((fecha, i) => ({
+        id: `v-${i}`,
+        fecha,
+        horario: "Viernes 17:00 — 18:30",
+        horarioId: 9,
+        personaId: 1,
+        estudiante: "Sofia Vera",
+        estado: "present" as const,
+      })),
+    );
+
+    render(<TrainerPage />);
+
+    expect(
+      await screen.findByText("Todas las sesiones del mes tienen lista"),
+    ).toBeInTheDocument();
+    // Scoped to the rail: the sidebar's own bare "Pasar lista" nav row shares
+    // this exact accessible name and is unrelated to the empty state.
+    const rail = within(screen.getByTestId("trainer-lower"));
+    expect(rail.queryByRole("link", { name: "Pasar lista" })).not.toBeInTheDocument();
   });
 
   it("names the student piling up absences, without a button to act on it", async () => {
     render(<TrainerPage />);
 
-    await screen.findByText("Distribución de asistencias");
+    await screen.findByText("Sesiones sin lista");
     expect(screen.getByText("Luis Lopez")).toBeInTheDocument();
     expect(screen.getByText("3 ausencias")).toBeInTheDocument();
   });
@@ -433,7 +491,7 @@ describe("TrainerPage — Mi día", () => {
     ]);
     render(<TrainerPage />);
 
-    await screen.findByText("Distribución de asistencias");
+    await screen.findByText("Sesiones sin lista");
     expect(screen.queryByText(/ausencias/)).not.toBeInTheDocument();
   });
 
@@ -444,11 +502,14 @@ describe("TrainerPage — Mi día", () => {
   it("lists the club's recent sessions as dense rows with a proportional-bar aria-label", async () => {
     render(<TrainerPage />);
 
-    expect(await screen.findByText("Últimas listas")).toBeInTheDocument();
-    expect(screen.getByText("Lunes 16:00 — 17:00")).toBeInTheDocument();
-    expect(screen.getByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
+    // Scoped to "Últimas listas": "Sesiones sin lista" can legitimately share
+    // an hour range fixture ("Lunes 16:00 — 17:00") for a different date.
+    const heading = await screen.findByText("Últimas listas");
+    const section = within(heading.closest("section") as HTMLElement);
+    expect(section.getByText("Lunes 16:00 — 17:00")).toBeInTheDocument();
+    expect(section.getByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
     expect(
-      screen.getByRole("img", {
+      section.getByRole("img", {
         name: "6 presentes, 0 tardanzas, 1 justificado y 1 ausente sobre 8 registros",
       }),
     ).toBeInTheDocument();
@@ -487,8 +548,13 @@ describe("TrainerPage — Mi día", () => {
   it("sends the history to its own view instead of embedding a correction table", async () => {
     render(<TrainerPage />);
 
-    const link = await screen.findByRole("link", { name: "Ver historial" });
-    expect(link).toHaveAttribute("href", "/trainer/attendance/history");
+    // Two now: "Últimas listas"' own header link, and "Sesiones sin lista"'s
+    // footer link — both name the same destination, once each.
+    const links = await screen.findAllByRole("link", { name: "Ver historial" });
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", "/trainer/attendance/history");
+    }
     expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Filtrar por horario")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Página siguiente" })).not.toBeInTheDocument();
@@ -510,7 +576,7 @@ describe("TrainerPage — Mi día", () => {
 
   it("does not render an 'Avisar al club' button — no endpoint notifies the club (owner: not an MVP feature)", async () => {
     render(<TrainerPage />);
-    await screen.findByText("Distribución de asistencias");
+    await screen.findByText("Sesiones sin lista");
 
     expect(screen.queryByRole("button", { name: /Avisar al club/ })).not.toBeInTheDocument();
     expect(
@@ -531,7 +597,7 @@ describe("TrainerPage — Mi día", () => {
       { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
     ]);
     const { container: restDay } = render(<TrainerPage />);
-    await screen.findAllByText("Distribución de asistencias");
+    await screen.findAllByText("Sesiones sin lista");
     expect(restDay.querySelector(".split\\:grid-cols-2")).toBeNull();
   });
 
@@ -664,13 +730,13 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
   });
 
-  it("puts the recent lists beside the donut in the rail, as the panel does", async () => {
+  it("puts the recent lists beside sesiones sin lista in the rail, as the panel does", async () => {
     render(<TrainerPage />);
     await screen.findByText("Lunes 15:00 — 16:00");
 
     const lower = screen.getByTestId("trainer-lower");
     expect(lower.className).toBe(PAGE_RAIL);
-    expect(within(lower).getByText("Distribución de asistencias")).toBeInTheDocument();
+    expect(within(lower).getByText("Sesiones sin lista")).toBeInTheDocument();
   });
 });
 

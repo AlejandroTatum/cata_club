@@ -59,6 +59,16 @@ describe("Stepper — states", () => {
     expect(pending.className).not.toMatch(/\bbg-paper\b/);
   });
 
+  it("carries the pending disc in ink-3-strong, not ink-3 (#1275)", () => {
+    // `text-ink-3` on `bg-state-neutral-bg` measures 4.0:1 — under AA. The
+    // sibling label two lines up already takes `text-ink-3-strong` for the
+    // same reason; the disc was the one piece left behind.
+    render(<Stepper steps={STEPS} current={1} label="Pasos" />);
+    const disc = pillFor("Estudiante").querySelector("span") as HTMLElement;
+    expect(disc).toHaveClass("text-ink-3-strong");
+    expect(Array.from(disc.classList)).not.toContain("text-ink-3");
+  });
+
   it("shows the step number on pending steps and a check on completed ones", () => {
     render(<Stepper steps={STEPS} current={2} label="Pasos" />);
     expect(pillFor("Estudiante").querySelector("span")?.textContent).toBe("2");
