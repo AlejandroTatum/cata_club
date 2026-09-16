@@ -141,6 +141,21 @@ def _cloudinary_credenciales_de_prueba(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _limite_correos_diario_amplio(monkeypatch):
+    """El límite diario de envíos (100/día, plan gratuito de Resend, ver
+    `notificaciones_servicio._reservar_cupo_de_envio_diario`) es un
+    guardarraíl de producción. La suite envía muchos correos a lo largo de un
+    mismo día contra la MISMA base de test, así que sin este techo alto los
+    tests que envían correo empezarían a omitirlo al pasar el cupo y
+    fallarían por una razón ajena a lo que prueban.
+
+    `tests/test_limite_correos_diario.py` baja el valor explícitamente con su
+    propio `monkeypatch`, que se aplica después de este y por lo tanto gana."""
+    import app.soporte_transversal.configuracion as configuracion_mod
+    monkeypatch.setattr(configuracion_mod.settings, "limite_correos_diario", 10**6)
+
+
+@pytest.fixture(autouse=True)
 def _reiniciar_circuitos_breaker():
     """Resetea el estado de los circuit breakers en memoria entre tests
     (degradacion-controlada, slices 2 y 3): el estado vive en una única

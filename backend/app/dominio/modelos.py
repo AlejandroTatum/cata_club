@@ -2458,3 +2458,36 @@ class SolicitudSupresionDatos(Base):
     # y cualquier residual honesto (ej. voucher legado de URL pública que
     # Cloudinary no puede destruir por public_id).
     detalle_ejecucion: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Contador diario de envíos SMTP
+# ---------------------------------------------------------------------------
+class ContadorCorreoDiario(Base):
+    """Cupos de envío SMTP reservados por día (guardarraíl del plan gratuito).
+
+    El plan gratuito de Resend permite 100 correos/día. Las tres tablas de
+    outbox (`recuperacion_outbox`, `verificacion_correo_outbox`,
+    `enrollment_notificacion_outbox`) registran la entrega de SU PROPIA fila,
+    no cada correo: los avisos de pago, vencimiento y mora no pasan por
+    ninguna de ellas, y un contador en memoria no lo comparten la API y el
+    worker Celery. Por eso hace falta una tabla propia; es el único estado
+    compartido y process-safe que puede frenar el envío en TODO el sistema.
+
+    Una fila por día UTC. `enviados` cuenta CUPOS RESERVADOS antes de hablar
+    con SMTP, no envíos exitosos: un fallo de transporte consumo igual su
+    cupo. Es conservador a propósito -- el techo del proveedor nunca se
+    supera, que es lo único que el guardarraíl tiene que garantizar.
+
+    Sin `id` ni FKs: la fecha es la clave natural (y la fila que el
+    `INSERT ... ON CONFLICT` atómico necesita) y el contador no identifica a
+    nadie, es infraestructura pura. Ver
+    `notificaciones_servicio._reservar_cupo_de_envio_diario`.
+    """
+
+    __tablename__ = "contador_correo_diario"
+
+    fecha: Mapped[date] = mapped_column(Date, primary_key=True)
+    enviados: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
