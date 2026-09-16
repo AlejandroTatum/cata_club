@@ -21,7 +21,12 @@ from app.dominio.excepciones import (
     DestinatarioRechazadoPermanentemente,
     ServicioNoDisponible,
 )
-from app.infraestructura.asuntos_correo import ASUNTO_RECUPERACION
+from app.infraestructura.asuntos_correo import (
+    ASUNTO_BIENVENIDA_INSCRIPCION,
+    ASUNTO_PAGO_APROBADO,
+    ASUNTO_PAGO_RECHAZADO,
+    ASUNTO_RECUPERACION,
+)
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
@@ -372,7 +377,7 @@ class ServicioNotificaciones:
         lejana de la membresía, no solo la de este pago): aprobar un pago
         viejo después de uno nuevo no debe acortar lo que el correo declara.
         """
-        asunto = "Cata Club | Pago aprobado"
+        asunto = ASUNTO_PAGO_APROBADO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         inicio_txt = fecha_inicio.strftime("%d/%m/%Y")
         fin_txt = fecha_fin.strftime("%d/%m/%Y")
@@ -418,7 +423,7 @@ class ServicioNotificaciones:
         en la parte HTML: un motivo con `<` o `&` no puede romper (ni
         inyectar en) el cuerpo del mensaje.
         """
-        asunto = "Cata Club | Pago rechazado"
+        asunto = ASUNTO_PAGO_RECHAZADO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         motivo = (motivo_rechazo or "").strip()
         parrafo_motivo = (
@@ -469,7 +474,7 @@ class ServicioNotificaciones:
         (issue #1196). Sin repetir el enlace de verificación ni pedir nada:
         es un saludo, no una gestión.
         """
-        asunto = "Cata Club | Bienvenida"
+        asunto = ASUNTO_BIENVENIDA_INSCRIPCION
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         texto = (
             f"{saludo}\n\n"

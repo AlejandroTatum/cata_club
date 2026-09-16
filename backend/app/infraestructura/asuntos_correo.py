@@ -13,3 +13,13 @@ constante es la única fuente; nada más la copia.
 """
 
 ASUNTO_RECUPERACION = "Cata Club | Recuperación de contraseña"
+
+# Ciclo de validación de pagos y alta del alumno (PR 1 de mejoras de la
+# experiencia del alumno). Estaban inline en `notificaciones_servicio.py`;
+# no se mueven por gusto sino para que este módulo siga siendo la ÚNICA
+# fuente de asuntos: el mismo PR que cambie el texto de un correo cambia su
+# asunto, y con el literal duplicado alcanzaba con tocar un solo lugar de
+# los dos (ver la nota de arriba, issue #1010).
+ASUNTO_PAGO_APROBADO = "Cata Club | Pago aprobado"
+ASUNTO_PAGO_RECHAZADO = "Cata Club | Pago rechazado"
+ASUNTO_BIENVENIDA_INSCRIPCION = "Cata Club | Bienvenida"
