@@ -6,27 +6,34 @@ configuran por variables de entorno (ver Settings). Si no hay SMTP_HOST
 configurado, el servicio falla de forma explícita para que el operador sepa
 que falta configuración, en lugar de fingir un envío.
 
-El módulo es puro Python stdlib; no añade dependencias externas.
+El envío real sale por SMTP (stdlib), pero el guardarraíl del cupo diario
+usa la base: el contador tiene que ser compartido y atómico entre la API y
+el worker Celery, y eso un proceso no lo puede sostener solo. Ver
+`_reservar_cupo_de_envio_diario`.
 """
 import logging
 import smtplib
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape as escapar_html
 from typing import Optional
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from app.dominio.excepciones import (
     DestinatarioRechazadoPermanentemente,
     ServicioNoDisponible,
 )
+from app.dominio.modelos import ContadorCorreoDiario
 from app.infraestructura.asuntos_correo import (
     ASUNTO_BIENVENIDA_INSCRIPCION,
     ASUNTO_PAGO_APROBADO,
     ASUNTO_PAGO_RECHAZADO,
     ASUNTO_RECUPERACION,
 )
+from app.infraestructura.db import SessionLocal
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
@@ -153,6 +160,60 @@ _circuito_smtp = CircuitoBreaker(
 )
 
 
+def _reservar_cupo_de_envio_diario() -> bool:
+    """Reserva un cupo del límite diario de envíos. `False` = cupo agotado.
+
+    Process-safe: el conteo vive en `contador_correo_diario` y la reserva es
+    un `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` que Postgres evaluó
+    como UNA operación atómica. No hay forma de que la API y el worker
+    Celery reserven a la vez el mismo cupo ni de que cuenten de menos con un
+    `SELECT` previo: la consulta no existe.
+
+    El cupo se reserva ANTES de hablar con SMTP, así que un envío que después
+    falla, o un proceso que muere justo después, ya consumió su cupo. Es
+    conservador a propósito: el techo del proveedor -- lo único que este
+    guardarraíl tiene que garantizar -- nunca se supera.
+
+    Se lleva por día UTC (`datetime.now(timezone.utc).date()`), el mismo
+    reloj que el resto del backend.
+
+    Fail-open: si la base no responde, o la tabla todavía no existe, se
+    permite el envío y se deja un warning. El límite es control de costo del
+    proveedor, no una precondición de corrección; frenar TODOS los correos
+    por un problema de base sería un daño mayor que pasarse del cupo.
+
+    `limite_correos_diario <= 0` desactiva el límite (escape operativo).
+    """
+    limite = settings.limite_correos_diario
+    if limite <= 0:
+        return True
+    try:
+        with SessionLocal() as db:
+            hoy = datetime.now(timezone.utc).date()
+            sentencia = (
+                pg_insert(ContadorCorreoDiario)
+                .values(fecha=hoy, enviados=1)
+                .on_conflict_do_update(
+                    index_elements=[ContadorCorreoDiario.fecha],
+                    set_={"enviados": ContadorCorreoDiario.enviados + 1},
+                )
+                .returning(ContadorCorreoDiario.enviados)
+            )
+            reservados = db.execute(sentencia).scalar_one()
+            db.commit()
+    except Exception as exc:
+        # Fail-open deliberado; ver el docstring. Se registra solo el tipo de
+        # la excepción: el mensaje de SQLAlchemy puede traer la URL de la
+        # base con credenciales.
+        logger.warning(
+            "No se pudo verificar el límite diario de correos; se envía igual "
+            "(%s)",
+            type(exc).__name__,
+        )
+        return True
+    return reservados <= limite
+
+
 class ServicioNotificaciones:
     """Adaptador SMTP para el envío de correos transaccionales."""
 
@@ -179,6 +240,13 @@ class ServicioNotificaciones:
         (`_circuito_smtp`, degradacion-controlada slice 3): si está ABIERTO,
         esta función NUNCA llama a `smtplib` -- levanta `ServicioNoDisponible`
         de inmediato (mismo contrato que `cloudinary_cliente.py::_subir`).
+
+        Después del circuito y antes de `smtplib`, se reserva un cupo del
+        límite diario (`_reservar_cupo_de_envio_diario`, plan gratuito de
+        Resend). Si ya no hay cupo, el envío se omite y se loguea un warning:
+        esta función NO levanta por el cupo, porque el llamador puede estar
+        cerrando una operación ya commiteada. Es el único chokepoint de todo
+        el envío -- API y Celery pasan por acá.
 
         Clasificación de fallos (Decisión D del diseño): un fallo de
         TRANSPORTE (conexión, HELO, autenticación, timeout de socket, u
@@ -210,6 +278,21 @@ class ServicioNotificaciones:
             raise ServicioNoDisponible(
                 f"SMTP no disponible (circuito abierto): destinatario={destinatario}"
             )
+
+        # Cupo diario del proveedor (plan gratuito de Resend, 100/día).
+        # Último control ANTES de abrir la conexión y DESPUÉS del circuito:
+        # un circuito abierto no gasta cupo. Si se agotó, el envío se omite
+        # con un warning y la función retorna normal -- quien la envuelve
+        # (validación de pago, entrega de outbox) ya está commiteado y no
+        # puede fallar por esto.
+        if not _reservar_cupo_de_envio_diario():
+            logger.warning(
+                "Límite diario de correos alcanzado (limite_correos_diario=%s): "
+                "envío omitido a %s con asunto '%s'",
+                settings.limite_correos_diario,
+                _enmascarar_correo(destinatario), asunto,
+            )
+            return
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = asunto
