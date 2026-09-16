@@ -23,6 +23,7 @@ import type { PerfilPropio } from "@/types/domain";
 import type { MembershipSummary, PagoPersona, StudentProfileSummary } from "@/services/api";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { buildUstedRegisterRegex } from "@/lib/__tests__/usted-register-lock";
+import { formatDate } from "@/lib/format-utils";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -397,10 +398,13 @@ describe("ProfilePage — student/representante summary view", () => {
     // column, same as the staff branch).
     expect((await screen.findAllByText("Sofía Alumna")).length).toBe(2);
     // Membership state is ONE badge on the compact identity panel's quick
-    // block — issue #204's own "estado" fact, not a separate labelled row.
+    // block. It reads coverage now, not `estado` alone: an ACTIVA row with no
+    // approved payment behind it has nothing paid for, so the badge says that
+    // instead of "Membresía activa" over a coverage date the club cannot
+    // produce.
     const hero = screen.getByTestId("profile-hero");
-    expect(screen.getAllByText("Activa").length).toBe(1);
-    expect(within(hero).getByText("Activa")).toBeInTheDocument();
+    expect(screen.getAllByText("Sin pagos aprobados").length).toBe(1);
+    expect(within(hero).getByText("Sin pagos aprobados")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -514,9 +518,10 @@ describe("ProfilePage — student/representante summary view", () => {
 
     expect((await screen.findAllByText("Rosa Representante")).length).toBe(2);
     expect(screen.getByText("Juan Hijo")).toBeInTheDocument();
-    // "Activa" for self is one badge on the identity card; the fallback note
-    // appears once, on Juan's row.
-    expect(screen.getAllByText("Activa").length).toBe(1);
+    // The coverage-aware badge for self is one badge on the identity card
+    // (no approved payments on file here); the fallback note appears once, on
+    // Juan's row.
+    expect(screen.getAllByText("Sin pagos aprobados").length).toBe(1);
     expect(screen.getByText("No disponible — consulte con administración")).toBeInTheDocument();
   });
 
@@ -2120,6 +2125,22 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     };
   }
 
+  /**
+   * A `YYYY-MM-DD` calendar date `days` away from today, negative for the past.
+   *
+   * The badge's coverage reading is relative to the real clock
+   * (`readCoverageStanding` compares against `new Date()`), so a test that
+   * wants a lapsed or a live date cannot hardcode one — it would flip with the
+   * calendar. This keeps the fixtures relative and the assertions absolute.
+   */
+  function isoDaysFromToday(days: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${month}-${day}`;
+  }
+
   it("states the plan and the joining date the portal payload already carried", async () => {
     await renderStudent();
 
@@ -2193,6 +2214,41 @@ describe("ProfilePage — the club on the screen (faro: perfil y login)", () => 
     expect(within(membership).getByText("Mensual Infantil")).toBeInTheDocument();
     expect(within(membership).queryByText(/Vigente hasta/)).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Issue #815's class, on this screen.
+   *
+   * The identity badge used to read `Membresia.estado` alone, and only the
+   * daily 02:35 batch flips ACTIVA→VENCIDA: between local midnight and that
+   * batch, an ACTIVA row whose coverage had already run out showed "Activa"
+   * directly above this card's own "Vigente hasta" date in the past. Badge and
+   * card now read the same `describeMembershipState`/`resolveCoverageEnd` pair,
+   * so they cannot disagree.
+   */
+  it("never shows an active badge over a coverage date that has already passed", async () => {
+    const lapsedEnd = isoDaysFromToday(-30);
+    const hero = await renderStudent({}, [makePago({ fechaFin: lapsedEnd })]);
+
+    expect(within(hero).getByText("Cobertura vencida")).toBeInTheDocument();
+    expect(within(hero).queryByText("Membresía activa")).not.toBeInTheDocument();
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText("Vigente hasta")).toBeInTheDocument();
+    // The very date the badge above is calling lapsed — same reading, no
+    // second interpretation.
+    expect(within(membership).getByText(formatDate(lapsedEnd))).toBeInTheDocument();
+  });
+
+  it("keeps the active badge when approved coverage is still in force", async () => {
+    const liveEnd = isoDaysFromToday(30);
+    const hero = await renderStudent({}, [makePago({ fechaFin: liveEnd })]);
+
+    expect(within(hero).getByText("Membresía activa")).toBeInTheDocument();
+    expect(within(hero).queryByText("Cobertura vencida")).not.toBeInTheDocument();
+
+    const membership = await screen.findByTestId("profile-membership");
+    expect(within(membership).getByText(formatDate(liveEnd))).toBeInTheDocument();
   });
 
   /**

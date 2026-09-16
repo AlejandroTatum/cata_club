@@ -149,7 +149,11 @@ import type {
   PagoPersona,
 } from "@/services/api";
 import type { PerfilPropio, UserRole } from "@/types/domain";
-import { personInitials, resolveCoverageEnd } from "@/app/student/student-utils";
+import {
+  describeMembershipState,
+  personInitials,
+  resolveCoverageEnd,
+} from "@/app/student/student-utils";
 import SessionsCard from "./SessionsCard";
 import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
@@ -1031,7 +1035,46 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
    */
   const assignedRoles = props.perfil?.roles ?? [];
   const sessionBackendRole = backendRoleForUserRole(props.role);
-  const membership = props.kind === "student" && self ? describeMembership(self.membership) : null;
+  /**
+   * The end of PAID coverage — the furthest `fechaFin` among this persona's
+   * APPROVED payments, resolved by `ProfileContent` through
+   * `resolveCoverageEnd`. `MembershipSummary.fechaFin` is declared on the
+   * client type and populated by no adapter, so the membership row cannot
+   * carry it; this is the same reading, from the same endpoint, that
+   * `/student/payments` prints and that this page's own `MembershipCard`
+   * draws below.
+   *
+   * Declared here, above the identity badge, because the badge reads it too:
+   * one date, one reading, for the two places on this screen that state the
+   * membership's standing.
+   */
+  const coverageEnd = props.kind === "student" ? props.coverageEnd : null;
+
+  /**
+   * The identity panel's status badge — the SAME coverage-aware reading
+   * `/student/payments` prints (`describeMembershipState`), never `estado`
+   * alone (issue #815's class).
+   *
+   * `Membresia.estado` is not a live fact: only the daily 02:35 batch flips
+   * ACTIVA→VENCIDA, so an `ACTIVA` row whose last approved payment already ran
+   * out says "Activa" from local midnight until that batch runs. On this screen
+   * that put an "Activa" badge directly above the membership card's own
+   * "Vigente hasta" date in the past — two readings of one state, on one
+   * screen. Reading coverage here makes the badge and that card agree by
+   * construction.
+   *
+   * The membership row goes in whole so gratuity keeps outranking the date
+   * (`esGratuidadFamiliar`), exactly as it does on the payments card, and
+   * `today` is left at its default for the same reason the payments screen
+   * does: one clock per screen.
+   *
+   * `null` when there is no membership row at all: the honest "no disponible"
+   * note in "Información de tu rol" states that once, never as an absent badge.
+   */
+  const membership =
+    props.kind === "student" && self?.membership
+      ? describeMembershipState(self.membership.estado, coverageEnd, undefined, self.membership)
+      : null;
   const initials = personInitials(
     fullName.split(/\s+/)[0] ?? "",
     fullName.split(/\s+/).slice(1).join(" "),
@@ -1069,12 +1112,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // `coverageEnd` above.
   const selfMembership = self?.membership ?? null;
   const recentSessions = self?.recentSessions ?? [];
-  // `MembershipSummary.fechaFin` is declared on the client type and populated
-  // by no adapter, so the card cannot read coverage off the membership; it
-  // reads the same `resolveCoverageEnd` date `/student/payments` prints. `self`
-  // exists only on the student branch, so the `null` here is unreachable
-  // rather than a second reading of the field.
-  const coverageEnd = props.kind === "student" ? props.coverageEnd : null;
 
   // The quick-recognition badge in the identity panel — only when there IS a
   // real membership status to report. When `self` exists but has no
