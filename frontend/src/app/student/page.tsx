@@ -58,6 +58,7 @@ import {
 import { CalendarDays, ShieldCheck, User, UserPlus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
+import { subirFotoDeArchivo } from "@/lib/photo-upload";
 import { MIN_TARGET_CLASS } from "@/lib/target-size";
 
 // ---------------------------------------------------------------------------
@@ -350,11 +351,22 @@ function Carnet({
     setFotoError(null);
     setUploadingFoto(true);
     try {
-      await subirFotoPersona(profile.personaId, archivo);
+      // The upload and its failure handling are shared with `/profile`
+      // (`lib/photo-upload.ts`). This surface does NOT run that module's
+      // optional pre-check: sending the file and letting the backend refuse
+      // it is the behavior this carnet has always had, and a refactor is not
+      // the place to reword the sentence a guardian reads.
+      const resultado = await subirFotoDeArchivo(
+        archivo,
+        (foto) => subirFotoPersona(profile.personaId, foto),
+        "No se pudo actualizar la foto.",
+      );
+      if (resultado.status === "failed") {
+        setFotoError(resultado.message);
+        return;
+      }
       setFotoFallback(false);
       onPhotoUploaded();
-    } catch (error: unknown) {
-      setFotoError(toUserMessage(error, "No se pudo actualizar la foto."));
     } finally {
       setUploadingFoto(false);
     }

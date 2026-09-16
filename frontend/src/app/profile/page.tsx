@@ -170,6 +170,7 @@ import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
 import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
 import { PHONE_FORMAT_HINT } from "@/lib/identity-validation";
+import { revisarFoto, subirFotoDeArchivo } from "@/lib/photo-upload";
 import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
 
 // ---------------------------------------------------------------------------
@@ -264,12 +265,6 @@ const ROLE_COPY: Record<
     roleText: () => "Esta cuenta no tiene un rol reconocido asignado.",
   },
 };
-
-// Mirrors the backend's own allow-list (`TIPOS_MIME_PERMITIDOS_FOTO_PERFIL` /
-// `TAMANO_MAXIMO_FOTO_PERFIL_BYTES` in auth_servicio.py) so an invalid file
-// is rejected immediately, without a round trip to the server.
-const TIPOS_FOTO_PERFIL_PERMITIDOS = new Set(["image/jpeg", "image/png"]);
-const TAMANO_MAXIMO_FOTO_PERFIL_BYTES = 5 * 1024 * 1024;
 
 type StaffLoadState =
   | { status: "loading" }
@@ -884,19 +879,26 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     e.target.value = ""; // reset so re-selecting the same file re-triggers onChange
     if (!archivo) return;
 
-    if (!TIPOS_FOTO_PERFIL_PERMITIDOS.has(archivo.type)) {
-      setFotoError("Formato no válido. Solo se permiten imágenes JPG o PNG.");
-      return;
-    }
-    if (archivo.size > TAMANO_MAXIMO_FOTO_PERFIL_BYTES) {
-      setFotoError("La imagen supera el tamaño máximo permitido (5 MB).");
+    // The allow-list and both refusal sentences live in `lib/photo-upload.ts`,
+    // shared with the other photo surface — see that module for why this
+    // pre-check stays opt-in there.
+    const rechazo = revisarFoto(archivo);
+    if (rechazo) {
+      setFotoError(rechazo);
       return;
     }
 
+    const mensajeError = "No se pudo actualizar la foto de perfil.";
     setUploadingFoto(true);
     setFotoError(null);
     try {
-      const updated = await subirFotoPerfil(archivo);
+      const resultado = await subirFotoDeArchivo(archivo, subirFotoPerfil, mensajeError);
+      if (resultado.status === "failed") {
+        setFotoError(resultado.message);
+        showError(resultado.message);
+        return;
+      }
+      const updated = resultado.value;
       if (props.kind === "staff") {
         props.onSaved(updated);
       } else {
@@ -911,7 +913,10 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
       await refreshSession();
       showSuccess("Foto de perfil actualizada correctamente.");
     } catch (error: unknown) {
-      const message = toErrorMessage(error, "No se pudo actualizar la foto de perfil.");
+      // Only the success side effects can reach here now: the upload itself
+      // is normalized by `subirFotoDeArchivo`. Kept so a rejected
+      // `refreshSession` is still reported instead of escaping unhandled.
+      const message = toErrorMessage(error, mensajeError);
       setFotoError(message);
       showError(message);
     } finally {
