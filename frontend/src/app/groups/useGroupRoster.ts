@@ -157,6 +157,29 @@ export function useGroupRoster({
   );
 
   /**
+   * Reverses one `unassign`, offered as the "Deshacer" action riding along
+   * its success toast (below). Re-anchors on the same row `unassign` used —
+   * the backend re-enrolls the student into every día of the categoría, same
+   * as a fresh `assign` would.
+   */
+  const undoUnassign = useCallback(
+    async (rows: readonly HorarioGroupRow[], personaId: number): Promise<void> => {
+      if (rows.length === 0) return;
+      try {
+        await asignarAlumnoAHorario({ persona_id: personaId, horario_id: rows[0].id });
+        showNotification("success", "Se deshizo la desasignación.");
+        showSuccess("Se deshizo la desasignación.");
+      } catch (err) {
+        const message = toUserMessage(err, "No se pudo deshacer la desasignación.");
+        showNotification("error", message);
+        showError(message);
+      }
+      await load(rows);
+    },
+    [load, showError, showNotification, showSuccess],
+  );
+
+  /**
    * Mirror of `assign`: the backend unassigns the student from every horario
    * row of the categoría in one atomic transaction, so one call anchored on any
    * row of the group is enough.
@@ -166,8 +189,15 @@ export function useGroupRoster({
       if (rows.length === 0) return;
       try {
         await desasignarAlumnoDeHorario(personaId, rows[0].id);
-        showNotification("success", "Alumno desasignado del horario.");
-        showSuccess("Alumno desasignado del horario.");
+        const message = "Alumno desasignado del horario.";
+        showNotification("success", message);
+        // The undo lives on the TOAST, not the page's own banner — `showNotification`
+        // has no concept of an action button, and the toast is the surface the
+        // usability review already pointed at for this ("no existe deshacer en
+        // ninguna parte", `ToastContext`'s own `ToastAction` doc comment).
+        showSuccess(message, {
+          action: { label: "Deshacer", onAction: () => void undoUnassign(rows, personaId) },
+        });
       } catch (err) {
         const message = toUserMessage(err, "Error al desasignar el alumno del horario.");
         showNotification("error", message);
@@ -175,7 +205,7 @@ export function useGroupRoster({
       }
       await load(rows);
     },
-    [load, showError, showNotification, showSuccess],
+    [load, showError, showNotification, showSuccess, undoUnassign],
   );
 
   return {

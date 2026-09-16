@@ -1494,6 +1494,29 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });
 
+  it("offers Deshacer on the unassign toast, which re-assigns the same student to the same horario", async () => {
+    render(
+      <ToastProvider>
+        <GroupsPage />
+        <ToastContainer />
+      </ToastProvider>,
+    );
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
+    await waitFor(() => expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1));
+
+    const undoButton = await screen.findByRole("button", { name: "Deshacer" });
+    fireEvent.click(undoButton);
+
+    await waitFor(() => {
+      expect(mockAsignarAlumnoAHorario).toHaveBeenCalledWith({ persona_id: 20, horario_id: 601 });
+    });
+  });
+
   it("keeps the card badge and the panel count in sync after an unassign, instead of the badge going stale", async () => {
     const anaAt601 = { id: 1, personaId: 20, personaNombreCompleto: "Ana Pérez", edad: 12, horarioId: 601, horarioDia: "LUNES", horarioHoraInicio: "15:00", horarioHoraFin: "16:00", fechaAsignacion: "2026-01-01" };
     const anaAt602 = { ...anaAt601, id: 2, horarioId: 602, horarioDia: "MIERCOLES" };
