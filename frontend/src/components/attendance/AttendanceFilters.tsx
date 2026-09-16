@@ -37,7 +37,11 @@ import {
   FilterPill,
   type FilterPanelLayout,
 } from "@/components/ui";
-import { formatDay, type TrainingSchedule } from "@/app/attendance/attendance-utils";
+import {
+  formatDay,
+  groupSchedulesByCategory,
+  type TrainingSchedule,
+} from "@/app/attendance/attendance-utils";
 import type { DateRangePreset } from "@/lib/club-date";
 import type { PersonaBusqueda } from "@/types/domain";
 import {
@@ -207,10 +211,19 @@ export default function AttendanceFilters({
             className={FIELD_CONTROL}
           >
             <option value="">Todos los horarios</option>
-            {schedules.map((schedule) => (
-              <option key={schedule.id} value={schedule.id}>
-                {formatDay(schedule.diaSemana)} {schedule.horaInicio} — {schedule.horaFin}
-              </option>
+            {/* Issue A1: a flat list of ~26 sessions made the trainer scan
+                every option to find one class. One `<optgroup>` per
+                categoría — the grouping the picker already reads by, see
+                `ScheduleDayGroup` — turns that scan into "find the
+                category, then the day". */}
+            {groupSchedulesByCategory(schedules).map((group) => (
+              <optgroup key={group.category} label={group.category}>
+                {group.schedules.map((schedule) => (
+                  <option key={schedule.id} value={schedule.id}>
+                    {formatDay(schedule.diaSemana)} {schedule.horaInicio} — {schedule.horaFin}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
