@@ -2466,13 +2466,14 @@ describe("MembersPage — four tiles, four shapes (D7)", () => {
   /**
    * The tile carrying a given label.
    *
-   * Looked up through `h-stat` — the 116px height token that IS a stat tile —
-   * rather than through `getByText`, because two of these labels also name a
-   * table column ("Estudiantes") and a plain text query cannot tell the tile
-   * from the column header.
+   * Looked up through `min-h-stat` — the 116px floor token that IS a stat
+   * tile (#1278: it was a fixed `h-stat` before a degraded hint's overflow
+   * turned it into a floor) — rather than through `getByText`, because two of
+   * these labels also name a table column ("Estudiantes") and a plain text
+   * query cannot tell the tile from the column header.
    */
   function tileOf(label: string): HTMLElement {
-    const tiles = Array.from(document.querySelectorAll<HTMLElement>(".h-stat"));
+    const tiles = Array.from(document.querySelectorAll<HTMLElement>(".min-h-stat"));
     const tile = tiles.find((candidate) => candidate.firstElementChild?.textContent === label);
     expect(tile, `no stat tile labelled "${label}"`).toBeDefined();
     return tile as HTMLElement;
