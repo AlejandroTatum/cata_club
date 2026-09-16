@@ -1405,17 +1405,36 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(screen.queryByText(/asignado correctamente/i)).not.toBeInTheDocument();
   });
 
-  it("desasignating a student calls desasignarAlumnoDeHorario ONCE, anchored on the first row of the group (backend unassigns the whole categoria atomically)", async () => {
-    render(<ToastProvider><GroupsPage /></ToastProvider>);
-    await waitForHorarios();
-
+  /** Opens the roster panel and returns Ana Pérez's row `<li>`. */
+  async function openFormativoRosterAndFindAna(): Promise<HTMLElement> {
     const [multiDiaCard] = cards();
     fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
     await screen.findByRole("heading", { name: "Alumnos de Formativo" });
     await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
+    return (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
+  }
 
-    const anaRow = (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
-    fireEvent.click(within(anaRow).getByTitle("Desasignar alumno"));
+  it("clicking Desasignar does NOT call the API — it opens a confirmation naming the student and the categoría", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Ana Pérez");
+    expect(dialog).toHaveTextContent("Formativo");
+  });
+
+  it("confirming the dialog calls desasignarAlumnoDeHorario ONCE, anchored on the first row of the group (backend unassigns the whole categoria atomically)", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
 
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledWith(20, 601);
@@ -1424,18 +1443,47 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     expect(await screen.findByText("Alumno desasignado del horario.")).toBeInTheDocument();
   });
 
+  it("cancelling via the Cancelar button calls nothing and returns focus to the trigger", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+    const trigger = within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("cancelling via Escape calls nothing and returns focus to the trigger", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
+    const trigger = within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog");
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(mockDesasignarAlumnoDeHorario).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("shows a real error (not a false success) on a server failure while desasignating", async () => {
     mockDesasignarAlumnoDeHorario.mockRejectedValue(new ApiClientError("Error de red al desasignar el alumno.", 500));
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
+    const anaRow = await openFormativoRosterAndFindAna();
 
-    const [multiDiaCard] = cards();
-    fireEvent.click(within(multiDiaCard).getByRole("button", { name: /ver alumnos/i }));
-    await screen.findByRole("heading", { name: "Alumnos de Formativo" });
-    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledWith(602));
-
-    const anaRow = (await screen.findByText("Ana Pérez")).closest("li") as HTMLElement;
-    fireEvent.click(within(anaRow).getByTitle("Desasignar alumno"));
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
 
     await waitFor(() => {
       expect(mockDesasignarAlumnoDeHorario).toHaveBeenCalledTimes(1);

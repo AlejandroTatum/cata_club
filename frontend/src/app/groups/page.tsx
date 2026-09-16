@@ -508,6 +508,23 @@ export default function GroupsPage(): React.ReactElement {
 
   const roster = useGroupRoster({ allStudents, showNotification });
 
+  /** The student a "Desasignar" click is waiting on the `ConfirmDialog` for. */
+  const [pendingUnassign, setPendingUnassign] = useState<{
+    card: CategoriaCard;
+    alumno: AlumnoHorario;
+  } | null>(null);
+
+  function handleConfirmUnassign(): void {
+    if (!pendingUnassign) return;
+    const { card, alumno } = pendingUnassign;
+    setPendingUnassign(null);
+    void roster.unassign(card.rows, alumno.personaId);
+  }
+
+  function handleCancelUnassign(): void {
+    setPendingUnassign(null);
+  }
+
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setLoadError(null);
@@ -1211,14 +1228,24 @@ export default function GroupsPage(): React.ReactElement {
                     name={a.personaNombreCompleto}
                     meta={<DataBox>{a.edad} años</DataBox>}
                     actions={
-                      <button
-                        type="button"
-                        onClick={() => void roster.unassign(rows, a.personaId)}
-                        className="rounded-ctl border border-line-2 p-1 text-ink-3 transition-colors hover:bg-state-bad-bg hover:text-state-bad"
-                        title="Desasignar alumno"
+                      // `primary` (red), not a raw hover-only button: the
+                      // control used to read as destructive only on
+                      // `:hover`, which a pointer resting elsewhere (or any
+                      // touch device) never sees. Red is otherwise reserved
+                      // for the primary CTA and destructive actions
+                      // (`ui/Button`'s own doc comment) — this earns it.
+                      // `aria-label` overrides the visible "Desasignar" so
+                      // the accessible name still names WHICH student, the
+                      // way a screen-reader user moving row-to-row needs.
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setPendingUnassign({ card, alumno: a })}
+                        aria-label={`Desasignar a ${a.personaNombreCompleto}`}
                       >
-                        <UserMinus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                      </button>
+                        <UserMinus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                        Desasignar
+                      </Button>
                     }
                   />
                 ))}
@@ -1471,6 +1498,22 @@ export default function GroupsPage(): React.ReactElement {
           }
           onConfirm={() => void handleConfirmPendingDeletions()}
           onCancel={handleCancelPendingDeletions}
+        />
+
+        <ConfirmDialog
+          open={pendingUnassign !== null}
+          variant="danger"
+          title="Desasignar alumno"
+          message={
+            pendingUnassign
+              ? `¿Desasignar a ${pendingUnassign.alumno.personaNombreCompleto} de ${categoriaLabel(
+                  pendingUnassign.card.categoria,
+                )}? Se lo quitará de todos los días de la categoría.`
+              : ""
+          }
+          confirmLabel="Desasignar"
+          onConfirm={handleConfirmUnassign}
+          onCancel={handleCancelUnassign}
         />
       </AppShell>
     </ProtectedRoute>
