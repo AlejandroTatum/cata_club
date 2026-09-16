@@ -125,8 +125,8 @@
 .landing-hero-accent { color: var(--landing-highlight); }
 .landing-hero-copy > p { max-width: 34ch; color: var(--landing-on-action); font-size: 20px; line-height: 1.55; }
 .landing-hero-actions { display: flex; gap: 16px; }
-.landing-hero .landing-button { background: var(--landing-highlight); color: var(--landing-on-highlight); }
-.landing-hero .landing-button:hover { background: var(--landing-brand-fuchsia); color: var(--landing-on-highlight); }
+.landing-hero .landing-button:not(.landing-button-outline) { background: var(--landing-highlight); color: var(--landing-on-highlight); }
+.landing-hero .landing-button:not(.landing-button-outline):hover { background: var(--landing-brand-fuchsia); color: var(--landing-on-highlight); }
 .landing-button-outline { border: 2px solid var(--landing-on-action); background: transparent; color: var(--landing-on-action); box-shadow: none; }
 .landing-hero .landing-button-outline:hover { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
 .landing-hero-note { display: flex; align-items: center; gap: 14px; color: var(--landing-on-action); font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
