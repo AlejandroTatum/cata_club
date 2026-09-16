@@ -147,6 +147,21 @@ function sessionForRole(role: "admin" | "trainer" | "representante" | "estudiant
   };
 }
 
+/**
+ * The same payload shape `/auth/me` returns for a student account. It is the
+ * only place teléfono, fecha de creación and foto come from on that branch
+ * (see `ProfileContent`), which is why the student teléfono edit seeds from it.
+ */
+const PERFIL_ESTUDIANTE: PerfilPropio = {
+  correo: "sofia.alumna@cataclub.com",
+  personaId: 1,
+  nombres: "Sofía",
+  apellidos: "Alumna",
+  roles: ["ALUMNO"],
+  telefono: "099111222",
+  fechaCreacion: "2025-05-01T10:00:00",
+};
+
 const PERFIL_ADMIN: PerfilPropio = {
   correo: "ana.admin@cataclub.com",
   personaId: 1,
@@ -891,6 +906,93 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
     expect(screen.getByText("099111222")).toBeInTheDocument();
     expect(screen.queryByText("099999000")).not.toBeInTheDocument();
   });
+
+  /**
+   * The same self-service endpoint staff use, on the student branch.
+   *
+   * `PATCH /auth/me` resolves the person from the JWT `sub` and checks no role
+   * at all (`auth_router.actualizar_perfil_propio` → `AuthServicio.
+   * actualizar_perfil_propio`, whose only gate is `usuario.activo`), so an
+   * estudiante can edit their own teléfono. `startEditing` refused to run for
+   * anything but `kind === "staff"`, so the screen showed a teléfono the
+   * account holder could not correct from the one screen that owns it.
+   */
+  it("lets an estudiante edit their own teléfono through the same self-service PATCH as staff", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: {
+        personaId: "1",
+        nombres: "Sofía",
+        apellidos: "Alumna",
+        fechaNacimiento: "2012-05-10",
+        recentSessions: [],
+      },
+      representados: [],
+      membershipPlans: [],
+    });
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ESTUDIANTE);
+    mockActualizarMiPerfil.mockResolvedValueOnce({
+      ...PERFIL_ESTUDIANTE,
+      telefono: "099999000",
+    });
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findAllByText("Sofía Alumna");
+
+    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
+
+    // Seeded from `/auth/me`'s teléfono — an edit that opened on an empty
+    // field would make the reader re-type a number the page is holding.
+    const telefonoInput = screen.getByLabelText<HTMLInputElement>(/teléfono/i);
+    expect(telefonoInput.value).toBe("099111222");
+
+    fireEvent.change(telefonoInput, { target: { value: "099999000" } });
+    fireEvent.click(screen.getByRole("button", { name: /^guardar/i }));
+
+    await waitFor(() => {
+      expect(mockActualizarMiPerfil).toHaveBeenCalledWith({ telefono: "099999000" });
+    });
+    expect(await screen.findByText("099999000")).toBeInTheDocument();
+    // The header's way out of the screen survives the edit trigger.
+    expect(screen.getByRole("link", { name: /ver portal completo/i })).toBeInTheDocument();
+  });
+
+  /**
+   * Triangulation: the student branch's teléfono lives in the SUPPLEMENTARY
+   * `/auth/me` call, which is allowed to fail without taking the page down
+   * (the row then shows "—"). With no profile there is no number to seed and
+   * no place for the response to land, so the trigger is not offered at all —
+   * a button that opens a blank field and PATCHes it is worse than its absence.
+   */
+  it("offers no edit trigger on the student branch while that profile never arrived", async () => {
+    mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      self: {
+        personaId: "1",
+        nombres: "Sofía",
+        apellidos: "Alumna",
+        fechaNacimiento: "2012-05-10",
+        recentSessions: [],
+      },
+      representados: [],
+      membershipPlans: [],
+    });
+    mockFetchMiPerfil.mockRejectedValueOnce(new Error("No se pudo cargar su perfil."));
+
+    render(
+      <ToastProvider>
+        <ProfilePage />
+      </ToastProvider>,
+    );
+    await screen.findAllByText("Sofía Alumna");
+
+    expect(screen.queryByRole("button", { name: /editar datos/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ver portal completo/i })).toBeInTheDocument();
+  });
 });
 
 /**
@@ -956,7 +1058,7 @@ describe("ProfilePage — teléfono masking parity (#667)", () => {
     expect(await screen.findByText(/alcanzó el máximo/i)).toBeInTheDocument();
   });
 
-  it("does not offer an edit trigger for the student/representante branch", async () => {
+  it("keeps the student branch's correo read-only and says which datum IS editable", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("estudiante"));
     mockFetchStudentPortal.mockResolvedValueOnce({
       self: {
@@ -970,6 +1072,7 @@ describe("ProfilePage — teléfono masking parity (#667)", () => {
       membershipPlans: [],
       memberships: [],
     });
+    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ESTUDIANTE);
 
     render(
       <ToastProvider>
@@ -978,9 +1081,13 @@ describe("ProfilePage — teléfono masking parity (#667)", () => {
     );
 
     await screen.findAllByText("Sofía Alumna");
-    expect(screen.queryByRole("button", { name: /editar datos/i })).not.toBeInTheDocument();
+    // El correo sigue siendo la `sub` del JWT: ni un input de correo, ni un
+    // `PATCH /auth/me` que lo transporte (el DTO ni siquiera acepta el campo).
+    expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
     const infoColumn = screen.getByTestId("profile-column-info");
-    expect(within(infoColumn).getByText(/esta información no se puede editar/i)).toBeInTheDocument();
+    // The footer used to say NOTHING could be edited here. With teléfono
+    // editable that sentence is false, and it has to name the exception.
+    expect(within(infoColumn).getByText(/solo el teléfono se puede editar/i)).toBeInTheDocument();
   });
 });
 

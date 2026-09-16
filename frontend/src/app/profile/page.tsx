@@ -42,6 +42,14 @@
  *   the identity fields the portal payload does not carry (teléfono, fecha
  *   de creación, foto).
  *
+ *   Teléfono is edited inline on this branch too: `PATCH /auth/me` is
+ *   self-service for EVERY authenticated role — it resolves the person from
+ *   the JWT `sub` and checks no role at all (see `auth_router.
+ *   actualizar_perfil_propio`) — so the writer here is the same
+ *   `actualizarMiPerfil()` call the staff branch makes, seeded from the same
+ *   `/auth/me` payload. Correo stays read-only on both branches: it is the
+ *   JWT `sub`, and the DTO does not even accept the field.
+ *
  *   The faro pass added no call. What it added is the rest of the payload
  *   that call was already returning: `membership.categoria`, `.modalidad`,
  *   `.fechaActivacion`, `.fechaFin` and `recentSessions` were all arriving
@@ -791,10 +799,9 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   const { showSuccess, showError } = useToast();
   const { logout, refreshSession } = useAuth();
 
-  // ---- Staff-only inline edit state. Always declared (hooks can't be
-  // conditional) — simply unused on the student branch. ----
+  // ---- Inline teléfono edit. Both branches use it — see `handleSave`. ----
   const [editing, setEditing] = useState(false);
-  const [telefono, setTelefono] = useState(props.kind === "staff" ? props.perfil.telefono : "");
+  const [telefono, setTelefono] = useState(props.perfil?.telefono ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   /**
@@ -870,37 +877,39 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   }
 
   function startEditing(): void {
-    if (props.kind !== "staff") return;
-    setTelefono(props.perfil.telefono);
+    // `perfil` is `null` only while the student branch's supplementary
+    // `/auth/me` call is still in flight or failed; the trigger is not drawn
+    // then (see `headerAction`), so this is unreachable with nothing to seed.
+    setTelefono(perfil?.telefono ?? "");
     setSaveError(null);
     setEditing(true);
     telefonoMasking.reset();
   }
 
   function cancelEditing(): void {
-    if (props.kind !== "staff") return;
-    setTelefono(props.perfil.telefono);
+    setTelefono(perfil?.telefono ?? "");
     setSaveError(null);
     setEditing(false);
     telefonoMasking.reset();
   }
 
   async function handleSave(): Promise<void> {
-    if (props.kind !== "staff") return;
-    const current = props.perfil;
     setSaving(true);
     setSaveError(null);
     try {
       // Correo is never sent here — it's the JWT `sub` claim, and self-service
       // editing was removed by design (see auth_servicio.py).
       const updated = await actualizarMiPerfil({ telefono: telefono.trim() });
-      props.onSaved(updated);
+      // Each branch owns its own state: staff replaces its `staffState`
+      // profile, the student branch its supplementary one.
+      if (props.kind === "staff") props.onSaved(updated);
+      else props.onPerfilUpdated(updated);
       setEditing(false);
       showSuccess("Perfil actualizado correctamente.");
     } catch (error: unknown) {
       // Revert — a rejected edit must never be left displayed as if it were
       // persisted (no silent data loss, per spec).
-      setTelefono(current.telefono);
+      setTelefono(perfil?.telefono ?? "");
       setEditing(false);
       const message = toErrorMessage(error, "No se pudo guardar los cambios.");
       setSaveError(message);
@@ -1039,30 +1048,38 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   // The page action lives in `PageHeader`'s own row (`.rowline` in the
   // prototype), passed up through `AppShell`.
-  const headerAction =
-    props.kind === "student" ? (
-      <Link href="/student" className={buttonClasses("secondary")}>
-        Ver portal completo
-        <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-      </Link>
-    ) : editing ? (
-      <>
-        <Button variant="tertiary" onClick={cancelEditing} disabled={saving}>
-          <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Cancelar
-        </Button>
-        <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
-          {saving ? (
-            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          )}
-          {saving ? "Guardando…" : "Guardar"}
-        </Button>
-      </>
-    ) : (
-      <Button onClick={startEditing}>Editar datos</Button>
-    );
+  //
+  // One edit affordance for both branches. The student branch keeps its "Ver
+  // portal completo" link beside it: editing a teléfono is not the way out of
+  // this screen, and retiring the link to make room would trade a navigation
+  // for an edit nobody asked to lose. The trigger is withheld only when there
+  // is no `perfil` to seed from — see `startEditing`.
+  const headerAction = editing ? (
+    <>
+      <Button variant="tertiary" onClick={cancelEditing} disabled={saving}>
+        <X size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        Cancelar
+      </Button>
+      <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
+        {saving ? (
+          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <Save size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        )}
+        {saving ? "Guardando…" : "Guardar"}
+      </Button>
+    </>
+  ) : (
+    <>
+      {perfil !== null && <Button onClick={startEditing}>Editar datos</Button>}
+      {props.kind === "student" && (
+        <Link href="/student" className={buttonClasses("secondary")}>
+          Ver portal completo
+          <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        </Link>
+      )}
+    </>
+  );
 
   return (
     <ProfileShell actions={headerAction} subtitle={roleCopy.lede}>
@@ -1141,7 +1158,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             <DetailRow label="Nombres">{fullName}</DetailRow>
             <DetailRow label="Correo de cuenta">{correoDisplay}</DetailRow>
             <DetailRow label="Teléfono">
-              {props.kind === "staff" && editing ? (
+              {editing ? (
                 <div>
                   <input
                     id="perfil-telefono"
@@ -1170,7 +1187,8 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             <DetailRow label="Rol">{roleLabel}</DetailRow>
             {props.kind === "student" && (
               <p className="border-t border-line bg-sunken px-5 py-3 text-xs text-ink-3-strong">
-                Esta información no se puede editar desde aquí. Escriba al club para corregirla.
+                Solo el teléfono se puede editar desde aquí. Para corregir otro dato, escriba al
+                club.
               </p>
             )}
             {saveError && (
