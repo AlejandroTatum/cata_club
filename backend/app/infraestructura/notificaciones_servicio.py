@@ -458,3 +458,38 @@ class ServicioNotificaciones:
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_RECHAZADO] correo=%s", _enmascarar_correo(correo))
+
+    def enviar_bienvenida_inscripcion(self, correo: str, nombre: Optional[str] = None) -> None:
+        """Da la bienvenida al alumno recién inscripto (PR 1, mejoras de la
+        experiencia del alumno).
+
+        Corto y con los próximos pasos reales: el primer pago se hace en
+        persona en el club, el club lo registra, y recién entonces se activa
+        la membresía -- la misma historia que la verificación de correo
+        (issue #1196). Sin repetir el enlace de verificación ni pedir nada:
+        es un saludo, no una gestión.
+        """
+        asunto = "Cata Club | Bienvenida"
+        saludo = f"Hola {nombre}," if nombre else "Hola,"
+        texto = (
+            f"{saludo}\n\n"
+            f"Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.\n\n"
+            f"Próximos pasos:\n\n"
+            f"1. El primer pago se hace en persona, en administración del club.\n"
+            f"2. El club registra ese pago y activa su membresía.\n\n"
+            f"Cuando la membresía esté activa, va a poder verla en su cuenta.\n\n"
+            f"Saludos,\nEquipo Cata Club"
+        )
+        html = (
+            "<html><body>"
+            f"<p>{saludo}</p>"
+            "<p>Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.</p>"
+            "<p>Próximos pasos:</p>"
+            "<p>1. El primer pago se hace en persona, en administración del club."
+            "<br>2. El club registra ese pago y activa su membresía.</p>"
+            "<p>Cuando la membresía esté activa, va a poder verla en su cuenta.</p>"
+            "<p>Saludos,<br>Equipo Cata Club</p>"
+            "</body></html>"
+        )
+        self.enviar_correo(correo, asunto, texto, html)
+        logger.info("[BIENVENIDA_INSCRIPCION] correo=%s", _enmascarar_correo(correo))
