@@ -1546,11 +1546,83 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
 
     await screen.findByTestId("membership-status");
     expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(screen.getByRole("button", { name: "Cómo se registra un pago" }));
 
     expect(screen.getByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
     expect(screen.getByText(/hasta 5 MB/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The complement of D11c, and the one case where the disclosure's default
+   * is wrong: `expired` and `never-paid` are the only two states whose whole
+   * point is "registre un pago", so the steps are the reader's next step and
+   * not an explanation of the screen. `ending-soon` still has coverage in
+   * force and `covered` has nothing to do; for those the collapsed default
+   * stands, and so it does for the minor-blocked and gratuitous variants,
+   * which describe situations rather than a procedure to follow.
+   */
+  it("starts OPEN when coverage has lapsed — the steps are the reader's next move", async () => {
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ fechaInicio: PAGO_START_PAST, fechaFin: COVERAGE_END_PAST })]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(await screen.findByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("starts OPEN for a student with no approved payment at all (triangulation)", async () => {
+    mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(await screen.findByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
+  });
+
+  it("leaves the procedure collapsed while coverage is still in force — ending soon", async () => {
+    // 2026-07-18 is three days past the frozen clock and inside
+    // `COVERAGE_ENDING_SOON_DAYS`: urgent, but still covered, so the reader is
+    // renewing early rather than catching up.
+    mockFetchPagosDePersona
+      .mockReset()
+      .mockResolvedValue([makePago({ fechaFin: "2026-07-18" })]);
+
+    render(<StudentPaymentsPage />);
+
+    await screen.findByTestId("membership-status");
+    expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  /**
+   * The half of the initial state that decides it must not be guessed: before
+   * the history resolves every profile reads as "never paid", and a panel
+   * seeded from that would stay open for a family that is up to date. A failed
+   * lookup is the same trap with no retry to hide behind, so the procedure is
+   * still shown — the form it explains does not depend on the history — but
+   * still collapsed.
+   */
+  it("does not open the procedure from a failed or unresolved history (triangulation)", async () => {
+    mockFetchPagosDePersona.mockReset().mockRejectedValue(new Error("No se pudo cargar los pagos."));
+
+    render(<StudentPaymentsPage />);
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/Son tres pasos y terminan en el club/i)).toBeNull();
   });
 
   it("discloses the club-registers-it variant for a minor on their own account", async () => {
@@ -1564,6 +1636,9 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
     render(<StudentPaymentsPage />);
 
     await screen.findByTestId("membership-status");
+    // A blocked minor is not an unpaid one: nothing about this state is a
+    // procedure to carry out, so the panel stays folded.
+    expect(screen.queryByRole("region", { name: "Cómo se paga esta membresía" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cómo se paga esta membresía" }));
 
     // Scoped to the disclosed region: issue #460 added a second, unrelated
