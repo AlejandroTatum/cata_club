@@ -32,6 +32,18 @@ interface UseGroupRosterArgs {
   allStudents: StudentRef[];
   /** The page's in-panel banner — distinct from the global toast, which is also raised. */
   showNotification: (type: "success" | "error", message: string) => void;
+  /**
+   * Called whenever `load` refreshes the roster, with the per-día persona-id
+   * lists in the same order as the `rows` it was given.
+   *
+   * Exists so the caller can keep any OTHER count derived from the same rows
+   * (the card's own "N inscritos" badge, sourced from a separate bulk fetch
+   * fired once on mount) in sync with what this hook just re-fetched, instead
+   * of drifting until the next full page reload. `load` already fetches this
+   * per-row data for the roster union below — this reuses it rather than
+   * costing a second request.
+   */
+  onRosterLoaded?: (rows: readonly HorarioGroupRow[], personaIdsByRow: readonly number[][]) => void;
 }
 
 export interface GroupRoster {
@@ -51,7 +63,11 @@ export interface GroupRoster {
   unassign: (rows: readonly HorarioGroupRow[], personaId: number) => Promise<void>;
 }
 
-export function useGroupRoster({ allStudents, showNotification }: UseGroupRosterArgs): GroupRoster {
+export function useGroupRoster({
+  allStudents,
+  showNotification,
+  onRosterLoaded,
+}: UseGroupRosterArgs): GroupRoster {
   const { showSuccess, showError, showWarning } = useToast();
   const [alumnos, setAlumnos] = useState<AlumnoHorario[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,13 +98,17 @@ export function useGroupRoster({ allStudents, showNotification }: UseGroupRoster
           }
         }
         setAlumnos(Array.from(porPersona.values()));
+        onRosterLoaded?.(
+          rows,
+          listasPorDia.map((lista) => lista.map((alumno) => alumno.personaId)),
+        );
       } catch {
         showNotification("error", "Error al cargar los alumnos del horario.");
       } finally {
         setLoading(false);
       }
     },
-    [showNotification],
+    [onRosterLoaded, showNotification],
   );
 
   /**

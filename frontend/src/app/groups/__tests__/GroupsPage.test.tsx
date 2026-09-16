@@ -1493,9 +1493,50 @@ describe("GroupsPage — grupo-level roster: union across días, assign/unassign
     ).toBeInTheDocument();
     expect(screen.queryByText("Alumno desasignado del horario.")).not.toBeInTheDocument();
   });
+
+  it("keeps the card badge and the panel count in sync after an unassign, instead of the badge going stale", async () => {
+    const anaAt601 = { id: 1, personaId: 20, personaNombreCompleto: "Ana Pérez", edad: 12, horarioId: 601, horarioDia: "LUNES", horarioHoraInicio: "15:00", horarioHoraFin: "16:00", fechaAsignacion: "2026-01-01" };
+    const anaAt602 = { ...anaAt601, id: 2, horarioId: 602, horarioDia: "MIERCOLES" };
+    const brunoAt602 = { id: 3, personaId: 21, personaNombreCompleto: "Bruno Díaz", edad: 15, horarioId: 602, horarioDia: "MIERCOLES", horarioHoraInicio: "15:00", horarioHoraFin: "16:00", fechaAsignacion: "2026-01-01" };
+    // The bulk roster call (card badge) reports the same two students as the
+    // per-row roster (panel) BEFORE the unassign — both sources agree at the
+    // start, which is what makes a later disagreement provably the unassign's
+    // doing rather than a pre-existing mismatch between the two endpoints.
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([
+      { personaId: 20, horarioId: 601 }, { personaId: 21, horarioId: 601 },
+      { personaId: 20, horarioId: 602 }, { personaId: 21, horarioId: 602 },
+    ]);
+    let anaStillAssigned = true;
+    mockFetchAlumnosPorHorario.mockImplementation((horarioId: number) => {
+      if (horarioId === 601) return Promise.resolve(anaStillAssigned ? [anaAt601] : []);
+      if (horarioId === 602) return Promise.resolve(anaStillAssigned ? [anaAt602, brunoAt602] : [brunoAt602]);
+      return Promise.resolve([]);
+    });
+    mockDesasignarAlumnoDeHorario.mockImplementation(() => {
+      anaStillAssigned = false;
+      return Promise.resolve(undefined);
+    });
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+    expect(await screen.findByText("2 inscritos")).toBeInTheDocument();
+    const anaRow = await openFormativoRosterAndFindAna();
+    await screen.findByText("Alumnos asignados (2)");
+
+    fireEvent.click(within(anaRow).getByRole("button", { name: "Desasignar a Ana Pérez" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desasignar" }));
+
+    await screen.findByText("Alumnos asignados (1)");
+    // The regression this guards: the card badge used to keep whatever the
+    // ONE bulk fetch on mount returned, so it stayed at "2 inscritos" forever
+    // — disagreeing with the panel it sits right next to.
+    expect(await screen.findByText("1 inscrito")).toBeInTheDocument();
+    expect(screen.queryByText("2 inscritos")).not.toBeInTheDocument();
+  });
 });
 
-describe("GroupsPage — deleting removes the categoría entera atomically (docs/archive/fixes/24-abm-categorias.md)", () => {
+describe("GroupsPage — deleting removes la categoría entera atomically (docs/archive/fixes/24-abm-categorias.md)", () => {
   /** The delete action lives inside the edit panel (`15-horario-editar.html`),
    *  not on the card, because it removes every weekday of the categoría. */
   async function openDeleteFromEditPanel(): Promise<void> {

@@ -506,7 +506,26 @@ export default function GroupsPage(): React.ReactElement {
     setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  const roster = useGroupRoster({ allStudents, showNotification });
+  /**
+   * Keeps the card's "N inscritos" badge (`personasPorHorario`) truthful for
+   * whatever rows the roster panel just (re)loaded — assign/unassign both
+   * call `roster.load` on completion, so this is what stops the badge from
+   * going stale the moment either one runs, without a second network request.
+   */
+  const handleRosterLoaded = useCallback(
+    (rows: readonly HorarioGroupRow[], personaIdsByRow: readonly number[][]): void => {
+      setPersonasPorHorario((prev) => {
+        const next = { ...prev };
+        rows.forEach((row, index) => {
+          next[row.id] = personaIdsByRow[index];
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const roster = useGroupRoster({ allStudents, showNotification, onRosterLoaded: handleRosterLoaded });
 
   /** The student a "Desasignar" click is waiting on the `ConfirmDialog` for. */
   const [pendingUnassign, setPendingUnassign] = useState<{
