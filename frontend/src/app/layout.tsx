@@ -7,6 +7,15 @@ import ToastContainer from "@/components/ToastContainer";
 import HelpChatDock from "@/components/chatbot/HelpChatDock";
 import "./globals.css";
 
+// The strict Content-Security-Policy (issue #1069, phase 3) is generated
+// per request with a fresh nonce in src/middleware.ts. Next.js only stamps
+// that nonce onto its injected scripts for DYNAMICALLY rendered documents —
+// prerendered HTML is served from the build cache untouched (observed:
+// every route was static and 0 of 25 scripts carried the nonce). This forces
+// every document through dynamic rendering so the nonce plumbing works; the
+// pages are thin client-fetching shells, so the rendering cost is minimal.
+export const dynamic = "force-dynamic";
+
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Cata Club Admin";
 
 interface RootLayoutProps {

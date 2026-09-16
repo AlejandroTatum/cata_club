@@ -15,6 +15,44 @@
  */
 
 /**
+ * Generates a fresh base64 nonce per request using Web Crypto, safe for the
+ * Edge runtime (no `node:crypto`). 16 random bytes → 128 bits of entropy.
+ */
+export function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/**
+ * Builds the strict Content-Security-Policy (issue #1069, phase 3).
+ *
+ * `script-src` carries `'nonce-…' 'strict-dynamic'`, which is what lets Next's
+ * injected RSC/bootstrap scripts run while everything else is blocked.
+ * `'unsafe-inline'` and `'self'` are deliberate LEGACY-BROWSER fallbacks only:
+ * browsers that understand nonces/strict-dynamic ignore both (CSP3 drops
+ * `'unsafe-inline'` when a nonce is present), while old browsers that ignore
+ * nonces fall back to them instead of a fully broken page.
+ */
+export function buildContentSecurityPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline'`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' https://res.cloudinary.com https://*.tile.openstreetmap.org",
+    "frame-src https://api.cloudinary.com",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "report-uri /api/csp-report",
+  ].join("; ");
+}
+
+/**
  * Path prefixes that require *some* plausible session before the request is
  * even allowed to reach the page. Keep in sync with every `ProtectedRoute`
  * usage under src/app/**.
