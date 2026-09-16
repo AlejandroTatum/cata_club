@@ -20,6 +20,7 @@ import type { EstadoAsistencia } from "@/types/domain";
 import type { PaymentValidationRequest } from "@/services/api";
 import { formatCurrency } from "@/lib/format-utils";
 import { calendarIsoDate, clubToday } from "@/lib/club-date";
+import type { BadgeTone } from "@/components/ui/Badge";
 
 export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = {
   present: "#008300",
@@ -351,4 +352,53 @@ export function buildActivityFeed(
   return events
     .sort((a, b) => (toSortableTime(b.at) ?? 0) - (toSortableTime(a.at) ?? 0))
     .slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Activity marker (A5 — "Actividad reciente" mixes event types with no visual
+// differentiation)
+// ---------------------------------------------------------------------------
+
+/** What a caller renders to mark an activity row's `kind`. */
+export interface ActivityMarker {
+  tone: BadgeTone;
+  label: string;
+}
+
+/**
+ * The state tone for each `ActivityKind` — same three-tone vocabulary
+ * `/payments` already uses for its own estados (`describePagoEstado`). Only a
+ * resolved, rejected payment is `bad`: it is the one event that asks someone
+ * to look again. A payment still uploading and an attendance session both
+ * inform rather than alert, so they share `neutral` — the same
+ * ante-la-duda-no-se-muestra default this codebase applies elsewhere, here
+ * meaning "no reason yet to stand out".
+ */
+const ACTIVITY_KIND_TONE: Record<ActivityKind, BadgeTone> = {
+  "payment-validated": "ok",
+  "payment-rejected": "bad",
+  "payment-uploaded": "neutral",
+  "attendance-session": "neutral",
+};
+
+/** The accessible label read alongside the colour-only marker. */
+const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
+  "payment-validated": "Pago validado",
+  "payment-rejected": "Pago rechazado",
+  "payment-uploaded": "Comprobante subido",
+  "attendance-session": "Asistencia",
+};
+
+/**
+ * Resolve the tone + accessible label for one `ActivityEvent.kind`.
+ *
+ * Falls back to neutral for a `kind` this build does not recognize — never
+ * throws, same defensive contract as `getAttendanceBadgeTone` — so a feed
+ * entry the backend grows later still renders instead of crashing the card.
+ */
+export function getActivityMarker(kind: ActivityKind): ActivityMarker {
+  return {
+    tone: ACTIVITY_KIND_TONE[kind] ?? "neutral",
+    label: ACTIVITY_KIND_LABEL[kind] ?? "Actividad",
+  };
 }
