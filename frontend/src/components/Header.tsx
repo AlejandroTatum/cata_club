@@ -367,8 +367,17 @@ export default function Header({ hideOnLanding = false }: HeaderProps): React.Re
   // decodificar_token`), so the poll must wait for the same gate decision
   // `isActivationComplete` already owns — never a role check, a REPRESENTANTE
   // with completed activation keeps polling like anyone else.
+  //
+  // Issue #A6: `hidesTopHeader(pathname)` below makes this component render
+  // null on every app-shell route, but that check used to run AFTER this
+  // hook call — so on `/groups` (and every other AppShell route) this hidden
+  // Header fired the same request `AppShell`'s own `NotificationBell` was
+  // already firing, and the feed loaded twice per page load. The condition
+  // has to name the same routes the render check does, not just "signed in".
   const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
-    useNotificaciones(isAuthenticated && !!session && isActivationComplete(session));
+    useNotificaciones(
+      isAuthenticated && !!session && isActivationComplete(session) && !hidesTopHeader(pathname),
+    );
 
   const closeMenu = useCallback((): void => setMenuOpen(false), []);
 
