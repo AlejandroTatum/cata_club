@@ -364,6 +364,7 @@ class ServicioNotificaciones:
         fecha_inicio: date,
         fecha_fin: date,
         vigente_hasta: date,
+        nombre_alumno: Optional[str] = None,
     ) -> None:
         """Avisa al titular que su pago quedó aprobado (PR 1, mejoras de la
         experiencia del alumno).
@@ -376,17 +377,45 @@ class ServicioNotificaciones:
         `vigente_hasta` llega resuelto por el llamador (la cobertura más
         lejana de la membresía, no solo la de este pago): aprobar un pago
         viejo después de uno nuevo no debe acortar lo que el correo declara.
+
+        `nombre_alumno` es opcional y solo lo pasa el llamador cuando el
+        destinatario NO es el alumno (un representado sin cuenta: el aviso
+        viaja a la cuenta de su representante). En ese caso el cuerpo nombra
+        al alumno y ajusta la concordancia -- "el pago ... de Ana", "la
+        membresía de Ana" -- para que el representante sepa de quién es el
+        pago; el saludo sigue siendo para quien recibe. Sin él, el texto es
+        el mismo de siempre.
         """
         asunto = ASUNTO_PAGO_APROBADO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         inicio_txt = fecha_inicio.strftime("%d/%m/%Y")
         fin_txt = fecha_fin.strftime("%d/%m/%Y")
         vigencia_txt = vigente_hasta.strftime("%d/%m/%Y")
-        parrafo_periodo = (
-            f"Su pago del plan {plan} fue aprobado. El período cubierto va del "
-            f"{inicio_txt} al {fin_txt}."
-        )
-        parrafo_vigencia = f"Su membresía queda vigente hasta el {vigencia_txt}."
+        alumno = (nombre_alumno or "").strip()
+        if alumno:
+            parrafo_periodo = (
+                f"El pago del plan {plan} de {alumno} fue aprobado. El período "
+                f"cubierto va del {inicio_txt} al {fin_txt}."
+            )
+            parrafo_vigencia = (
+                f"La membresía de {alumno} queda vigente hasta el {vigencia_txt}."
+            )
+            parrafo_periodo_html = (
+                f"El pago del plan {plan} de {escapar_html(alumno)} fue aprobado. "
+                f"El período cubierto va del {inicio_txt} al {fin_txt}."
+            )
+            parrafo_vigencia_html = (
+                f"La membresía de {escapar_html(alumno)} queda vigente hasta el "
+                f"{vigencia_txt}."
+            )
+        else:
+            parrafo_periodo = (
+                f"Su pago del plan {plan} fue aprobado. El período cubierto va del "
+                f"{inicio_txt} al {fin_txt}."
+            )
+            parrafo_vigencia = f"Su membresía queda vigente hasta el {vigencia_txt}."
+            parrafo_periodo_html = parrafo_periodo
+            parrafo_vigencia_html = parrafo_vigencia
         texto = (
             f"{saludo}\n\n"
             f"{parrafo_periodo}\n\n"
@@ -397,8 +426,8 @@ class ServicioNotificaciones:
         html = (
             "<html><body>"
             f"<p>{saludo}</p>"
-            f"<p>{parrafo_periodo}</p>"
-            f"<p>{parrafo_vigencia}</p>"
+            f"<p>{parrafo_periodo_html}</p>"
+            f"<p>{parrafo_vigencia_html}</p>"
             "<p>Gracias por seguir siendo parte de Cata Club.</p>"
             "<p>Saludos,<br>Equipo Cata Club</p>"
             "</body></html>"
@@ -407,7 +436,11 @@ class ServicioNotificaciones:
         logger.info("[PAGO_APROBADO] correo=%s", _enmascarar_correo(correo))
 
     def enviar_pago_rechazado(
-        self, correo: str, nombre: Optional[str], motivo_rechazo: Optional[str] = None,
+        self,
+        correo: str,
+        nombre: Optional[str],
+        motivo_rechazo: Optional[str] = None,
+        nombre_alumno: Optional[str] = None,
     ) -> None:
         """Avisa al titular que el club no pudo aprobar su pago (PR 1,
         mejoras de la experiencia del alumno).
@@ -422,14 +455,21 @@ class ServicioNotificaciones:
         `motivo_rechazo` es texto libre de administración y viaja escapado
         en la parte HTML: un motivo con `<` o `&` no puede romper (ni
         inyectar en) el cuerpo del mensaje.
+
+        `nombre_alumno` es opcional y solo lo pasa el llamador cuando el
+        destinatario NO es el alumno (un representado sin cuenta: el aviso
+        viaja a su representante). El cuerpo pasa de "su pago" a "el pago
+        de Ana" para que el representante sepa de quién es el pago.
         """
         asunto = ASUNTO_PAGO_RECHAZADO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
         motivo = (motivo_rechazo or "").strip()
+        alumno = (nombre_alumno or "").strip()
+        sujeto = f"el pago de {alumno}" if alumno else "su pago"
         parrafo_motivo = (
-            f"El club no pudo aprobar su pago. Motivo: {motivo}."
+            f"El club no pudo aprobar {sujeto}. Motivo: {motivo}."
             if motivo
-            else "El club no pudo aprobar su pago."
+            else f"El club no pudo aprobar {sujeto}."
         )
         enlace = f"{self._frontend_url}/student/payments"
         pasos = (
