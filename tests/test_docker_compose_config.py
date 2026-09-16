@@ -957,29 +957,34 @@ def test_el_caddyfile_declara_los_headers_de_seguridad_del_unico_borde_publico()
     )
 
 
-def test_el_caddyfile_declara_la_csp_en_modo_report_only():
-    """Fase 1 de la CSP (issue #1069): `Content-Security-Policy-Report-Only`,
-    no la cabecera que bloquea. Una política escrita a ciegas rompe Next.js
-    (scripts inline sin nonce que el App Router inyecta -- verificado
-    compilando la app) y no hay reportes reales todavía, así que esta fase
-    solo observa: junta violaciones sin tumbar nada, mientras el modo
-    estricto queda pendiente de esos reportes.
+def test_el_caddyfile_no_declara_ninguna_csp_y_el_middleware_la_emite_estricta():
+    """Fase 3 de la CSP (issue #1069): la política estricta pasa a ser
+    generada POR REQUEST en el middleware de Next, con un nonce nuevo por
+    pedido (`frontend/src/middleware.ts`). Un nonce no puede ser estático en
+    el borde, así que el Caddyfile NO puede declarar ninguna CSP: dos
+    cabeceras enforcing se intersectan y una estática rompería la nonceada.
 
-    El destino de los reportes (`report-uri`) tiene que apuntar al endpoint
-    propio de la app (`/api/csp-report`), no a un proveedor externo -- ver
-    `frontend/src/app/api/csp-report/route.ts`."""
-    contenido = (RAIZ / "Caddyfile").read_text()
-    assert "Content-Security-Policy-Report-Only" in contenido, (
-        "el Caddyfile no declara Content-Security-Policy-Report-Only"
+    La app sí tiene que emitir la cabecera estricta: `Content-Security-Policy`
+    (la que bloquea), con `strict-dynamic`, un nonce y reportes hacia el
+    endpoint propio de la app (`/api/csp-report`)."""
+    caddyfile = (RAIZ / "Caddyfile").read_text()
+    assert "Content-Security-Policy" not in caddyfile, (
+        "el Caddyfile declara una Content-Security-Policy; la dueña de la CSP "
+        "es ahora el middleware de Next -- dos CSP enforcing se intersectan "
+        "y una estática rompería el nonce (issue #1069, fase 3)"
     )
-    assert "Content-Security-Policy \"" not in contenido, (
-        "el Caddyfile declara una Content-Security-Policy que SÍ bloquea; "
-        "esta fase es solo report-only"
+
+    middleware = (RAIZ / "frontend/src/middleware.ts").read_text()
+    utils = (RAIZ / "frontend/src/lib/middleware-utils.ts").read_text()
+    # La construcción de la política vive en `middleware-utils.ts` (extraída
+    # para poder testearla sin mockear Next); juntos tienen que declarar todo.
+    assert "Content-Security-Policy" in middleware, (
+        "el middleware de Next no emite la Content-Security-Policy estricta"
     )
-    assert "report-uri /api/csp-report" in contenido, (
-        "la Content-Security-Policy-Report-Only del Caddyfile no manda sus "
-        "reportes a /api/csp-report"
-    )
+    for fragmento in ("strict-dynamic", "nonce-", "report-uri /api/csp-report"):
+        assert fragmento in middleware + utils, (
+            f"la CSP del middleware no declara `{fragmento}`"
+        )
 
 
 def test_el_caddyfile_declara_access_log():
