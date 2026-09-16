@@ -1980,11 +1980,11 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
  * D11c — "la ayuda no vive suelta".
  *
  * The switcher used to carry a permanent sentence explaining how the selection
- * behaves across the three family screens. It is a "cómo funciona", not a
+ * behaves across the four family screens. It is a "cómo funciona", not a
  * "qué es", so it belongs behind "Ver ayuda" like every other procedure note
  * in the product (`/discounts`, `/members`, `/student/enroll`). It rode along
- * on all three socio screens at once, which is three copies of the same
- * floating paragraph.
+ * on all four socio screens at once, which is four copies of the same floating
+ * paragraph.
  */
 describe("StudentPage — the switcher's procedure note is disclosed, not permanent", () => {
   const GUARDIAN_PORTAL: StudentPortalSummary = {
@@ -2004,13 +2004,21 @@ describe("StudentPage — the switcher's procedure note is disclosed, not perman
     render(<StudentPage />);
 
     await screen.findByLabelText("Estudiante");
-    expect(screen.queryByText(/Se mantiene en Mi cuenta, Pagos y Asistencias/i)).toBeNull();
+    expect(screen.queryByText(/Se mantiene en Mi cuenta/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Cómo funciona esta elección" }));
 
-    expect(
-      screen.getByText(/Se mantiene en Mi cuenta, Pagos y Asistencias/i),
-    ).toBeInTheDocument();
+    // Every screen the picker is mounted on, named in one sentence: the note
+    // is the promise that the choice survives the SIDEBAR's own links, and
+    // those links are `/student`, `/student/payments`, `/student/attendance`
+    // and `/student/medical-record`. Leaving any of them out was the same
+    // omission the sentence exists to prevent — reading "Pagos" and wondering
+    // about the screen she came from. Scoped to the panel: "Mi cuenta" is
+    // also the sidebar's row and this page's own title.
+    const panel = screen.getByRole("region", { name: "Cómo funciona esta elección" });
+    expect(panel).toHaveTextContent(
+      /Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica/i,
+    );
   });
 });
 
