@@ -1,12 +1,11 @@
 /**
- * POST /api/csp-report — destino de los reportes de la CSP en modo
- * report-only (issue #1069, fase 1).
- *
- * El Caddyfile declara `Content-Security-Policy-Report-Only` con
- * `report-uri /api/csp-report`, así que el navegador de CUALQUIER visitante
- * (autenticado o no) manda acá el JSON de cada violación observada. Esta
- * ruta no valida ni bloquea nada -- solo registra el reporte, para construir
- * el modo estricto sobre evidencia real y no a ciegas.
+ * POST /api/csp-report — destino de los reportes de la CSP del sitio
+ * (issue #1069). Desde la fase 3 recibe las violaciones de la política EN
+ * MODO ENFORCING (lo que el navegador efectivamente bloqueó), generada por
+ * request con nonce en `frontend/src/middleware.ts`; antes (fase 1) recibía
+ * solo las observaciones del modo report-only. El navegador de CUALQUIER
+ * visitante (autenticado o no) manda acá el JSON de cada violación. Esta
+ * ruta no valida ni bloquea nada -- solo registra el reporte.
  *
  * Deliberadamente sin backend ni auth: es el mismo espíritu que
  * `/api/health` (dependency-free), pero acá porque el emisor es el
