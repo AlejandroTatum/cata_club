@@ -708,6 +708,23 @@ describe("/student — the cuota verdict's figure line", () => {
   });
 });
 
+describe("Stepper — the pending step's disc (#1275)", () => {
+  // The disc pairs its fill with the pill's own label two lines above it
+  // (`text-ink-3-strong` on `bg-sunken`), and the disc's fill is a different
+  // tint — `state-neutral-bg` (#EFEFF2), one step lighter than `sunken`.
+  it("confirms ink-3 fails on the disc's own fill", () => {
+    const ratio = contrastRatio(ink["3"], state["neutral-bg"]);
+    expect(ratio, `ink-3 on state-neutral-bg measures ${ratio.toFixed(2)}:1`)
+      .toBeLessThan(AA_NORMAL_TEXT);
+  });
+
+  it("meets AA with ink-3-strong on the same fill", () => {
+    const ratio = contrastRatio(ink["3-strong"], state["neutral-bg"]);
+    expect(ratio, `ink-3-strong on state-neutral-bg measures ${ratio.toFixed(2)}:1, under ${AA_NORMAL_TEXT}:1`)
+      .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The palette on the screens — every surface fill must be a NAMED colour
 // ---------------------------------------------------------------------------

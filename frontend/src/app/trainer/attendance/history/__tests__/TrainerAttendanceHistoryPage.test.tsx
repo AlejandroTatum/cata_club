@@ -20,6 +20,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import TrainerAttendanceHistoryPage from "@/app/trainer/attendance/history/page";
 import type { AttendanceRecord, TrainingSchedule } from "@/app/attendance/attendance-utils";
 import { createAuthenticatedAuth } from "@/components/__tests__/test-utils";
+import { buttonClasses } from "@/components/ui";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -354,6 +355,26 @@ describe("TrainerAttendanceHistoryPage", () => {
     expect(
       within(screen.getByRole("main")).getByRole("link", { name: "Pasar lista" }),
     ).toHaveAttribute("href", "/trainer/attendance");
+  });
+
+  /**
+   * Issue #1273: the header already carries a "Pasar lista" primary CTA
+   * (`primary-action.test.ts`), and the empty state used to draw a second one
+   * with the identical `buttonClasses("primary")` recipe — two red buttons for
+   * the one verb this screen offers. The empty state keeps its own "Pasar
+   * lista" (it is still the honest way out of an empty period), demoted to
+   * `secondary` so exactly one red CTA reaches the page.
+   */
+  it("demotes the empty state's 'Pasar lista' to secondary — only one primary CTA reaches the page", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findByText("No hay listas en este período");
+
+    const primaryLinks = screen
+      .getAllByRole("link", { name: "Pasar lista" })
+      .filter((link) => link.className === buttonClasses("primary"));
+    expect(primaryLinks).toHaveLength(1);
   });
 
   it("recovers from a failed load with a retry", async () => {
