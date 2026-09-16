@@ -120,8 +120,9 @@ export interface AttendanceRecap {
  *
  * The scope is deliberately "las últimas N sesiones registradas", NOT "este
  * mes": `buildRecentSessions` in src/lib/server/student-adapter.ts caps the
- * payload at the five most recent records, so a month-scoped figure cannot be
- * computed here without inventing the denominator.
+ * payload at `RECENT_SESSIONS_LIMIT` (30) most recent records, so a
+ * month-scoped figure cannot be computed here without inventing the
+ * denominator.
  *
  * `late` counts as attended — the student came. `justified` does not: it is an
  * excused absence, and counting it would overstate the figure a parent reads.

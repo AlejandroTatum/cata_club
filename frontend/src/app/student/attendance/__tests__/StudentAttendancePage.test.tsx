@@ -236,7 +236,7 @@ describe("StudentAttendancePage — the record", () => {
     expect(screen.queryByText("2026-07-23")).not.toBeInTheDocument();
   });
 
-  it("states the window it is showing, so five rows are not read as the whole record", async () => {
+  it("states the window it is showing, so the capped list is not read as the whole record", async () => {
     render(<StudentAttendancePage />);
 
     expect(
