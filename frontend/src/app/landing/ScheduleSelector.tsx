@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
-import type { LandingSchedule } from "./schedule-data";
+import { defaultScheduleIndex, type LandingSchedule } from "./schedule-data";
 import { landingConfig, toWhatsAppLink } from "./landing-config";
 
 /**
@@ -81,7 +81,7 @@ function DigitRun({ text, animate }: { text: string; animate: boolean }): React.
 }
 
 export default function ScheduleSelector({ schedules }: ScheduleSelectorProps): React.ReactElement {
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState((): number => defaultScheduleIndex(schedules));
   const animate = !useReducedMotion();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listRef = useRef<HTMLDivElement | null>(null);
