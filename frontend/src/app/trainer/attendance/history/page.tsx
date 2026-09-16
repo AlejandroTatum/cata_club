@@ -300,7 +300,11 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
                     : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."
                 }
                 action={
-                  <Link href="/trainer/attendance" className={buttonClasses("primary")}>
+                  // Issue #1273: the header already carries the page's one
+                  // primary CTA (`primary-action.test.ts` pins it there).
+                  // This is still the honest way out of an empty period, just
+                  // not a second red button for the same verb.
+                  <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
                     Pasar lista
                   </Link>
                 }
