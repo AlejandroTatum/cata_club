@@ -71,35 +71,64 @@ SEGUNDOS_DE_LA_LLAMADA_LENTA = 1.0
 # criterio y mismo número que `test_auth_login_no_bloqueante.py`.
 TECHO_DE_SALUD_SEGUNDOS = 0.2
 
+# La aserción mira el MÍNIMO de 3 repeticiones del escenario completo (issues
+# #1266/#1270): en un runner de CI compartido una sola muestra de `GET
+# /health` puede quedar retenida por ruido ajeno al event loop (el runner, no
+# el proceso, se queda sin CPU un instante) y tumbar el test contra un
+# arreglo sano -- confirmado localmente corriendo la suite de backend
+# completa (2663 tests, un solo proceso, mismo orden que CI) sin una sola
+# falla, y de nuevo bajo contención de CPU forzada. Un bloqueo REAL del event
+# loop, en cambio, está presente en TODAS las repeticiones -- cada medición
+# arranca recién cuando el doble lento levanta `en_vuelo`, temprano en el ~1s
+# de bloqueo -- así que su mínimo se queda en ~1s y el guardia sigue
+# fallando. El techo de 200ms no se toca.
+REPETICIONES_DE_SALUD = 3
 
-def _medir_salud_durante(client, disparar, en_vuelo: threading.Event) -> tuple[float, dict]:
+
+def _medir_salud_durante(
+    client, disparar, en_vuelo: threading.Event,
+) -> tuple[float, dict, list[float]]:
     """Corre `disparar` en un hilo y cronometra `GET /health` mientras tanto.
 
     `en_vuelo` lo levanta el doble lento JUSTO ANTES de dormir, así que cuando
     esta función mide ya es un hecho -- no una estimación de tiempos, como el
     `sleep(0.1)` del test de login -- que la llamada bloqueante está en curso.
+
+    Repite el escenario `REPETICIONES_DE_SALUD` veces -- `disparar(iteracion)`
+    recibe el número de repetición para que cada una pueda evitar chocar con
+    la anterior (p. ej. una cédula distinta) -- y devuelve la duración
+    MÍNIMA junto con la última respuesta y las duraciones de todas las
+    repeticiones, para que el mensaje de la aserción muestre las tres.
     """
-    resultado: dict = {}
+    duraciones: list[float] = []
+    respuesta_final: dict = {}
 
-    def _correr():
+    for _ in range(REPETICIONES_DE_SALUD):
+        en_vuelo.clear()
+        resultado: dict = {}
+
+        def _correr(disparar=disparar, resultado=resultado):
+            try:
+                resultado["respuesta"] = disparar(len(duraciones))
+            except BaseException as exc:  # pragma: no cover - solo diagnostica
+                resultado["error"] = exc
+
+        hilo = threading.Thread(target=_correr)
+        hilo.start()
         try:
-            resultado["respuesta"] = disparar()
-        except BaseException as exc:  # pragma: no cover - solo diagnostica
-            resultado["error"] = exc
+            assert en_vuelo.wait(timeout=10), "la llamada lenta nunca arrancó"
+            inicio = time.monotonic()
+            respuesta_salud = client.get("/health")
+            duracion = time.monotonic() - inicio
+        finally:
+            hilo.join(timeout=30)
 
-    hilo = threading.Thread(target=_correr)
-    hilo.start()
-    try:
-        assert en_vuelo.wait(timeout=10), "la llamada lenta nunca arrancó"
-        inicio = time.monotonic()
-        respuesta_salud = client.get("/health")
-        duracion = time.monotonic() - inicio
-    finally:
-        hilo.join(timeout=30)
+        assert "error" not in resultado, resultado.get("error")
+        assert respuesta_salud.status_code == 200
+        duraciones.append(duracion)
+        respuesta_final = resultado
 
-    assert "error" not in resultado, resultado.get("error")
-    assert respuesta_salud.status_code == 200
-    return duracion, resultado["respuesta"]
+    return min(duraciones), respuesta_final["respuesta"], duraciones
 
 
 def test_subida_lenta_de_logo_no_bloquea_el_event_loop(client, monkeypatch):
@@ -118,9 +147,12 @@ def test_subida_lenta_de_logo_no_bloquea_el_event_loop(client, monkeypatch):
         "app.servicios_negocio.sponsor_servicio.subir_logo_sponsor", _subida_lenta,
     )
 
-    duracion, respuesta = _medir_salud_durante(
+    duracion, respuesta, duraciones = _medir_salud_durante(
         client,
-        lambda: client.post(
+        # Cada repetición sube un logo nuevo (issue #1266/#1270): el
+        # `public_id` sale de un `uuid4()` en `SponsorServicio.crear`, así que
+        # ningún choque de unicidad frena la 2da/3ra repetición.
+        lambda _iteracion: client.post(
             RUTA_SPONSORS,
             data={"nombre": "Municipio"},
             files={"archivo": ("logo.jpg", JPEG_VALIDO, "image/jpeg")},
@@ -130,9 +162,9 @@ def test_subida_lenta_de_logo_no_bloquea_el_event_loop(client, monkeypatch):
 
     assert respuesta.status_code == 201
     assert duracion < TECHO_DE_SALUD_SEGUNDOS, (
-        f"GET /health tardó {duracion:.3f}s mientras una subida de logo de "
-        f"{SEGUNDOS_DE_LA_LLAMADA_LENTA:.0f}s estaba en curso -- el event loop "
-        "parece bloqueado"
+        f"GET /health tardó {duracion:.3f}s (mínimo de {duraciones}) mientras "
+        f"una subida de logo de {SEGUNDOS_DE_LA_LLAMADA_LENTA:.0f}s estaba en "
+        "curso -- el event loop parece bloqueado"
     )
 
 
@@ -158,43 +190,51 @@ def test_hasheo_lento_de_la_autoinscripcion_publica_no_bloquea_el_event_loop(
 
     monkeypatch.setattr(gestor_auth.pwd_context, "hash", _hash_lento)
 
-    cuerpo = {
-        "alumno": {
-            "nombres": "Ana",
-            "apellidos": "Torres",
-            # Cédula ecuatoriana con dígito verificador correcto: el DTO la
-            # valida antes de que el flujo llegue al hasheo, así que un número
-            # inventado dejaría a este test verde sin haber medido nada.
-            "cedula": cedula_valida(826),
-            "fecha_nacimiento": "1990-05-20",
-            "telefono": "0991234567",
-        },
-        "credenciales_alumno": {
-            # `example.com` y no `cataclub.test`: pydantic rechaza los TLD
-            # reservados en `EmailStr`, y ese 422 mataría el request antes del
-            # hasheo que este test necesita poner en vuelo.
-            "correo": "ana-no-bloqueante@example.com", "contrasenia": "password8",
-        },
-        "ficha_medica": {
-            "tipo_sangre": "O_POSITIVO",
-            "enfermedades": [],
-            "contacto_emergencia": "María Torres",
-            "telefono_emergencia": "0991112233",
-        },
-        "acepta_consentimientos": True,
-    }
+    def _cuerpo(iteracion: int) -> dict:
+        # Identidad distinta POR REPETICIÓN (issue #1266/#1270): el escenario
+        # corre `REPETICIONES_DE_SALUD` veces, y repetir cédula/correo/
+        # teléfono haría que la 2da autoinscripción muera en un 409/422 antes
+        # de llegar al hasheo, dejando `en_vuelo` sin levantar.
+        return {
+            "alumno": {
+                "nombres": "Ana",
+                "apellidos": "Torres",
+                # Cédula ecuatoriana con dígito verificador correcto: el DTO
+                # la valida antes de que el flujo llegue al hasheo, así que
+                # un número inventado dejaría a este test verde sin haber
+                # medido nada.
+                "cedula": cedula_valida(826 + iteracion),
+                "fecha_nacimiento": "1990-05-20",
+                "telefono": f"099123456{iteracion}",
+            },
+            "credenciales_alumno": {
+                # `example.com` y no `cataclub.test`: pydantic rechaza los
+                # TLD reservados en `EmailStr`, y ese 422 mataría el request
+                # antes del hasheo que este test necesita poner en vuelo.
+                "correo": f"ana-no-bloqueante-{iteracion}@example.com",
+                "contrasenia": "password8",
+            },
+            "ficha_medica": {
+                "tipo_sangre": "O_POSITIVO",
+                "enfermedades": [],
+                "contacto_emergencia": "María Torres",
+                "telefono_emergencia": "0991112233",
+            },
+            "acepta_consentimientos": True,
+        }
 
-    duracion, respuesta = _medir_salud_durante(
+    duracion, respuesta, duraciones = _medir_salud_durante(
         client,
-        lambda: client.post(RUTA_ENROLLMENT, json=cuerpo),
+        lambda iteracion: client.post(RUTA_ENROLLMENT, json=_cuerpo(iteracion)),
         en_vuelo,
     )
 
     assert respuesta.status_code == 201, respuesta.text
     assert duracion < TECHO_DE_SALUD_SEGUNDOS, (
-        f"GET /health tardó {duracion:.3f}s mientras el bcrypt de una "
-        "autoinscripción pública corría -- el event loop parece bloqueado, y "
-        "este endpoint no exige ni una cuenta para provocarlo"
+        f"GET /health tardó {duracion:.3f}s (mínimo de {duraciones}) mientras "
+        "el bcrypt de una autoinscripción pública corría -- el event loop "
+        "parece bloqueado, y este endpoint no exige ni una cuenta para "
+        "provocarlo"
     )
 
 
