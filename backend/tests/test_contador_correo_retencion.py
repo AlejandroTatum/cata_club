@@ -11,6 +11,13 @@ pasada su ventana solo queda basura operativa. Lo que estos tests fijan:
 Misma inyección de sesión que `test_limite_correos_diario.py`: la sesión del
 test entra por el `SessionLocal` del módulo, así que los `commit()` de la
 tarea liberan un SAVEPOINT y el teardown del `db_session` descarta todo.
+
+Aislamiento: la tabla es COMPARTIDA por toda la suite y otros archivos que
+corren antes (p. ej. `test_alertas_*`, que commitea filas reales vía el
+`SessionLocal` de producción del servicio de tope) dejan la fila de hoy
+asentada. Cada test arranca limpiando la tabla por la sesión inyectada, de
+modo que las igualdades exactas se miden sobre una tabla que el test posee
+(el teardown del SAVEPOINT restituye lo borrado al resto de la suite).
 Datos ficticios.
 """
 from contextlib import contextmanager
@@ -38,6 +45,11 @@ def contador_inyectado(db_session, monkeypatch):
         yield db_session
 
     monkeypatch.setattr(tareas, "SessionLocal", _factory)
+    # La tabla es compartida: suites previas dejan filas commiteadas (p. ej. la
+    # fila de hoy del reserve del tope). El test toma posesión desde vacío y
+    # el rollback del savepoint del `db_session` restituye el estado al resto.
+    db_session.query(ContadorCorreoDiario).delete(synchronize_session=False)
+    db_session.commit()
     return db_session
 
 
