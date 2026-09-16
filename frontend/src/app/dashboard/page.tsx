@@ -40,6 +40,7 @@ import {
   ActivityList,
   ActivityListHeader,
   buttonClasses,
+  cn,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -48,6 +49,7 @@ import {
   StatCard,
   StatSpark,
   StatTrack,
+  type BadgeTone,
 } from "@/components/ui";
 import {
   fetchDashboardStats,
@@ -66,6 +68,7 @@ import {
   buildActivityFeed,
   buildFourWeekAttendance,
   countPaymentsWaitingOverAWeek,
+  getActivityMarker,
 } from "./dashboard-utils";
 import AttendanceStatusChart from "./AttendanceStatusChart";
 
@@ -76,6 +79,19 @@ import AttendanceStatusChart from "./AttendanceStatusChart";
  * outgrows its neighbour is back to dominating the page.
  */
 const ACTIVITY_LIMIT = 5;
+
+/**
+ * The marker's dot color, one per `Badge` tone. Same idiom
+ * `/student/payments` uses for its own status dot (`STATUS_DOT_TEXT`): plain
+ * `text-state-*` rather than the pill's `-bg` pair, since this dot sits alone
+ * next to a name rather than inside a `Badge`.
+ */
+const ACTIVITY_MARKER_DOT_TONE: Record<BadgeTone, string> = {
+  neutral: "text-state-neutral",
+  ok: "text-state-ok",
+  warn: "text-state-warn",
+  bad: "text-state-bad",
+};
 
 export default function DashboardPage(): React.ReactElement {
   const { session, isLoading: authLoading } = useAuth();
@@ -352,15 +368,38 @@ export default function DashboardPage(): React.ReactElement {
             />
             {activity.length > 0 ? (
               <ActivityList>
-                {activity.map((event) => (
-                  <ActivityItem
-                    key={event.id}
-                    initials={event.initials}
-                    subject={event.subject}
-                    detail={event.detail}
-                    at={formatHumanDate(event.at)}
-                  />
-                ))}
+                {activity.map((event) => {
+                  const marker = getActivityMarker(event.kind);
+                  return (
+                    <ActivityItem
+                      key={event.id}
+                      initials={event.initials}
+                      subject={
+                        <>
+                          {/* Issue A5: a rejected payment used to be told apart
+                              from a validated one only by initials, which a
+                              scan does not read. A persistent dot ahead of the
+                              name marks every row by its `kind`, colour-only —
+                              the `sr-only` label right after it is what makes
+                              the mark itself accessible, not just the sentence
+                              that already follows it. */}
+                          <span
+                            aria-hidden="true"
+                            data-testid={`activity-marker-${event.kind}`}
+                            className={cn(
+                              "mr-1.5 inline-block h-1.5 w-1.5 flex-none rounded-full bg-current align-middle",
+                              ACTIVITY_MARKER_DOT_TONE[marker.tone],
+                            )}
+                          />
+                          <span className="sr-only">{marker.label}: </span>
+                          {event.subject}
+                        </>
+                      }
+                      detail={event.detail}
+                      at={formatHumanDate(event.at)}
+                    />
+                  );
+                })}
               </ActivityList>
             ) : (
               /* `inset`: the card and its header are already open above. What
