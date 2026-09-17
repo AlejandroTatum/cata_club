@@ -14,8 +14,12 @@ endpoint de descarga de la API, que SÍ vence del lado del servidor
 Ver `cloudinary_cliente._url_descarga_api`.
 
 Las filas escritas ANTES del fix siguen apuntando al recurso
-`image/authenticated` sin extensión, así que su URL de entrega nueva (que pide
-`raw` y con extensión) daría 404: este script las convierte.
+`image/authenticated` sin extensión: la entrega las reconoce y las sigue
+sirviendo por la CDN firmada (regla de transición de
+`cloudinary_cliente.resolver_url_entrega`), o sea que no hay ventana de 404 ni
+depende del orden entre desplegar y migrar. Lo que NO cierran mientras tanto es
+el hallazgo del issue #1072: ese link de CDN no vence. Este script las pasa al
+recurso `raw` con extensión, cuya entrega sí vence.
 
 Por qué "bajar y re-subir" y no solo firmar distinto: Cloudinary no permite
 cambiar `resource_type` ni `type` de un recurso ya subido. El script firma una
@@ -74,6 +78,7 @@ from app.infraestructura.cloudinary_cliente import (  # noqa: E402
     componer_valor_foto_perfil,
     generar_url_firmada,
     public_id_con_extension,
+    tiene_extension_de_imagen,
 )
 from app.soporte_transversal.configuracion import settings  # noqa: E402
 from app.soporte_transversal.firma_archivos import es_firma_valida  # noqa: E402
@@ -86,7 +91,6 @@ from app.soporte_transversal.resiliencia import (  # noqa: E402
 logger = logging.getLogger("cataclub.migrar_imagenes_a_raw")
 
 MIMES_IMAGEN = ("image/jpeg", "image/png")
-EXTENSIONES_IMAGEN = (".jpg", ".jpeg", ".png")
 _SEPARADOR_VERSION_FOTO_PERFIL = "|"
 
 # Un objetivo del lote: ("voucher"|"foto", fila ORM, public_id viejo).
@@ -100,12 +104,6 @@ def _es_url_publica(valor: str | None) -> bool:
     (normalizado por `urlparse`) decide, no un prefijo de string.
     """
     return urlparse(valor or "").scheme in ("http", "https")
-
-
-def _tiene_extension_de_imagen(public_id: str) -> bool:
-    """`True` si el `public_id` ya lleva extensión de imagen -- o sea, si el
-    recurso ya es el `raw` con extensión que deja esta migración."""
-    return public_id.lower().endswith(EXTENSIONES_IMAGEN)
 
 
 def _separar_version(valor: str) -> str:
@@ -173,7 +171,7 @@ def _recolectar_pendientes(db_session) -> tuple[list[Objetivo], dict]:
         if (pago.voucher_formato or "").lower() not in MIMES_IMAGEN:
             resumen["no_aplica"] += 1
             continue
-        if _tiene_extension_de_imagen(valor):
+        if tiene_extension_de_imagen(valor):
             resumen["ya_migradas"] += 1
             continue
         pendientes.append(("voucher", pago, valor))
@@ -192,7 +190,7 @@ def _recolectar_pendientes(db_session) -> tuple[list[Objetivo], dict]:
             resumen["url_publicas_heredadas"] += 1
             continue
         public_id = _separar_version(valor)
-        if _tiene_extension_de_imagen(public_id):
+        if tiene_extension_de_imagen(public_id):
             resumen["ya_migradas"] += 1
             continue
         pendientes.append(("foto", persona, public_id))

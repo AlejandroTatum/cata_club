@@ -836,6 +836,62 @@ def test_resolver_url_entrega_de_una_fila_previa_al_fix_no_antepone_carpeta():
     assert resultado == url_heredada
 
 
+# --- 12a-bis. Transición del issue #1072: filas previas al fix -------------
+# La regla vive en `resolver_url_entrega` (es una decisión sobre lo PERSISTIDO,
+# no sobre cómo firmar) y existe para que desplegar el código y correr la
+# migración puedan ocurrir en CUALQUIER orden sin que un archivo ya subido deje
+# de entregarse. Residual acotado a esas filas: el link de la CDN no vence
+# hasta que la migración las convierta.
+
+def test_imagen_previa_al_fix_se_sirve_por_la_cdn_sin_extension():
+    resultado = cc.resolver_url_entrega(
+        "voucher-pago-00000007-legacy",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert resultado is not None
+    assert resultado.startswith("https://res.cloudinary.com/")
+    assert "/image/authenticated/" in resultado
+    assert f"{settings.cloudinary_carpeta_vouchers}/voucher-pago-00000007-legacy" in resultado
+
+
+def test_imagen_posterior_al_fix_se_sirve_por_el_endpoint_de_descarga():
+    resultado = cc.resolver_url_entrega(
+        "voucher-pago-00000007-legacy.jpg",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert resultado is not None
+    assert "res.cloudinary.com" not in resultado
+    assert _parametros(resultado)["public_id"].endswith(".jpg")
+
+
+def test_el_pdf_no_cae_en_la_transicion_aunque_no_tenga_extension():
+    """El `public_id` de un PDF tampoco lleva extensión (la agrega la entrega
+    vía `formato`), así que el discriminador NO puede ser "no tiene extensión":
+    el PDF tiene que seguir saliendo por el endpoint que vence."""
+    resultado = cc.resolver_url_entrega(
+        "comprobante-00000006",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_comprobantes,
+        formato="pdf",
+    )
+
+    assert resultado is not None
+    assert "res.cloudinary.com" not in resultado
+    assert resultado.startswith("https://api.cloudinary.com/v1_1/")
+
+
+def test_tiene_extension_de_imagen_reconoce_las_dos_formas():
+    assert cc.tiene_extension_de_imagen("perfil_31.jpg") is True
+    assert cc.tiene_extension_de_imagen("perfil_31.JPG") is True
+    assert cc.tiene_extension_de_imagen("perfil_31.png") is True
+    assert cc.tiene_extension_de_imagen("perfil_31") is False
+    assert cc.tiene_extension_de_imagen("comprobante-00000006") is False
+
+
 # --- 12b. Entrega de PDF: NUNCA por la CDN ---------------------------------
 # La cuenta deniega la entrega de todo PDF por `res.cloudinary.com`: la URL
 # firmada respondía `401` con `x-cld-error: deny or ACL failure` y
@@ -1167,14 +1223,15 @@ def test_resolver_url_foto_perfil_de_dos_lecturas_cambia_la_url(monkeypatch):
 
 def test_resolver_url_foto_perfil_de_un_public_id_persistido_antes_del_fix_sigue_resolviendo():
     """Filas persistidas ENTRE el issue #553 y el #1072 guardaron solo el
-    `public_id` SIN extensión (`perfil_7`), bajo `image/authenticated`. Siguen
-    resolviendo a una URL firmada (no se rompe la serialización de un GET);
-    esas filas son exactamente las que convierte
-    `scripts/migrar_imagenes_a_raw.py` -- hasta que corra, el recurso pedido
-    como `raw` no existe y la entrega da 404."""
+    `public_id` SIN extensión (`perfil_7`), bajo `image/authenticated`. La
+    entrega tiene que seguir sirviéndolas (por la CDN firmada, como ayer) en
+    vez de pedirle al endpoint de descarga un recurso `raw` que todavía no
+    existe: eso daría 404 en cuanto sube el código nuevo. Esas filas son las
+    que convierte `scripts/migrar_imagenes_a_raw.py`, en cualquier orden
+    respecto del despliegue."""
     resultado = cc.resolver_url_foto_perfil("perfil_7")
 
     assert resultado is not None
-    assert _parametros(resultado)["public_id"] == (
-        f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7"
-    )
+    assert resultado.startswith("https://res.cloudinary.com/")
+    assert "/image/authenticated/" in resultado
+    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7" in resultado

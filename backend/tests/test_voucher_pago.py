@@ -164,6 +164,37 @@ def test_subir_voucher_pdf_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
     assert "voucher-pago-" in parametros["public_id"][0]
 
 
+def test_voucher_imagen_previo_al_fix_se_sigue_entregando(client, db_session):
+    """Transición del issue #1072 (el test que fija el orden de despliegue):
+    una fila escrita ANTES del fix persiste un `public_id` SIN extensión bajo
+    `image/authenticated`. Si la entrega pidiera `raw` a ciegas, esa fila
+    pasaría a 404 en cuanto sube el código nuevo, o sea que desplegar antes de
+    migrar rompería vouchers ya subidos. Se sigue sirviendo por la CDN firmada
+    (como ayer) hasta que corra `scripts/migrar_imagenes_a_raw.py`, en
+    cualquier orden."""
+    from app.dominio.modelos import Pago
+
+    persona = _crear_persona(client, cedula=cedula_valida(419))
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    fila = db_session.get(Pago, pago["id"])
+    fila.voucher_url = f"voucher-pago-{pago['id']:08d}-v1-legacy"
+    fila.voucher_formato = "image/jpeg"
+    db_session.commit()
+
+    _autenticar_como_duenio(client, persona["id"])
+    resp = client.get(f"/api/v1/membresias/pagos/{pago['id']}")
+
+    assert resp.status_code == 200, resp.text
+    url = resp.json()["voucherUrl"]
+    assert url is not None
+    assert url.startswith("https://res.cloudinary.com/")
+    assert "/image/authenticated/" in url
+    assert "/raw/download" not in url
+
+
 def test_subir_voucher_tras_fallo_de_cloudinary_permite_reintentar(client, db_session):
     """El flujo que el fix no puede romper: si la subida a Cloudinary falla
     (503), el pago queda SIN voucher (la fila nunca llega a `pago.voucher_url

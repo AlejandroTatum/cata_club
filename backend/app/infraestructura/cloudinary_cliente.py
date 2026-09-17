@@ -128,6 +128,25 @@ def public_id_con_extension(nombre_publico: str, content_type: str) -> str:
     return f"{nombre_publico}{sufijo}"
 
 
+# Sufijos que deja `public_id_con_extension`. Se usan también para reconocer
+# una fila PREVIA al issue #1072 (el asset viejo se subió como
+# `image/authenticated` y su `public_id` no lleva extensión).
+_EXTENSIONES_DE_IMAGEN = (".jpg", ".jpeg", ".png")
+
+
+def tiene_extension_de_imagen(public_id: str) -> bool:
+    """`True` si `public_id` ya lleva la extensión con la que se sube un
+    recurso `raw` de imagen (issue #1072).
+
+    Distingue las DOS formas que hoy conviven en la base: el asset nuevo
+    (`perfil_31.jpg`, `raw/authenticated`, entregable por el endpoint que
+    vence) del viejo (`perfil_31`, `image/authenticated`, entregable por la
+    CDN firmada). Lo usan `resolver_url_entrega` para la transición y
+    `scripts/migrar_imagenes_a_raw.py` para decidir qué filas le faltan.
+    """
+    return public_id.lower().endswith(_EXTENSIONES_DE_IMAGEN)
+
+
 def _configurar_cliente() -> None:
     """Inicializa el cliente de Cloudinary con las credenciales del entorno.
     Idempotente: re-aplicar la config sobreescribe pero no corrompe el state."""
@@ -822,6 +841,11 @@ def resolver_url_entrega(
     cambia: una fila heredada es una URL y se devuelve tal cual, con cualquier
     `resource_type`.
 
+    Transición (issue #1072): un `public_id` de imagen que TODAVÍA no lleva
+    extensión es una fila previa a ese fix -- se firma contra la CDN
+    (`image/authenticated`), igual que antes, en vez del endpoint de descarga
+    que devolvería `404`. Ver el comentario del bloque de transición.
+
     Filas anteriores al fix guardaron el `secure_url` completo de un recurso
     `type="upload"` (público, enumerable -- exactamente el hallazgo que este
     módulo corrige). No hay forma de repararlas sin volver a subir el
@@ -848,8 +872,25 @@ def resolver_url_entrega(
         # en vez de reventar la serialización -- el SDK lanzaría
         # `ValueError: Must supply api_secret` y tumba el login (`/auth/me`).
         return None
+    # Transición del issue #1072, acá y no en `generar_url_firmada` porque es
+    # una regla sobre lo PERSISTIDO, no sobre cómo firmar: un `public_id` de
+    # imagen sin extensión es una fila PREVIA al fix -- el asset existe como
+    # `image/authenticated` y el endpoint de descarga (que ahora se pide con
+    # `raw`) no lo resuelve (`404 Resource not found`). Se la sigue sirviendo
+    # por la CDN firmada, que es exactamente como se servía ayer, hasta que
+    # `scripts/migrar_imagenes_a_raw.py` la convierta. Sin esto, cualquiera de
+    # los dos órdenes de despliegue quebraría los archivos ya subidos: las
+    # filas viejas dan 404 en cuanto sube el código nuevo.
+    #
+    # Residual, acotado a esas filas y por eso vale la pena: el link de la CDN
+    # no vence (es el hallazgo que este fix cierra) -- se cierra del todo recién
+    # cuando la migración corre. `formato` no vacío (el PDF) y los `public_id`
+    # con extensión no entran acá.
+    ruta = resource_type
+    if resource_type == "raw" and not formato and not tiene_extension_de_imagen(valor_almacenado):
+        ruta = "image"
     return generar_url_firmada(
-        valor_almacenado, resource_type=resource_type, folder=folder, formato=formato,
+        valor_almacenado, resource_type=ruta, folder=folder, formato=formato,
         version=version,
     )
 
@@ -912,9 +953,10 @@ def resolver_url_foto_perfil(valor_almacenado: Optional[str]) -> Optional[str]:
     (ver `_url_descarga_api`). Una fila subida antes de este fix todavía
     tiene el `public_id` SIN extensión bajo `image/authenticated`: esas filas
     las migra `scripts/migrar_imagenes_a_raw.py` (dry-run por defecto) y
-    hasta que eso corra su URL de entrega da 404. Las filas con URL pública
-    completa (previas al issue #553) tampoco las toca esto: se devuelven tal
-    cual.
+    mientras tanto se siguen sirviendo por la CDN firmada -- la regla de
+    transición de `resolver_url_entrega`, para que el orden entre desplegar y
+    migrar no rompa ninguna foto. Las filas con URL pública completa (previas
+    al issue #553) tampoco las toca esto: se devuelven tal cual.
 
     Issue #662: el valor persistido puede además llevar el `version` de
     Cloudinary compuesto (`componer_valor_foto_perfil`). Se descompone para

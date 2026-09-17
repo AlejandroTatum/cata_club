@@ -267,6 +267,28 @@ def test_reemplazar_foto_de_persona_produce_una_url_distinta_a_la_anterior(
     )
 
 
+def test_get_persona_foto_previa_al_fix_se_sigue_entregando(client, db_session):
+    """Transición del issue #1072: una foto subida antes del fix persiste el
+    `public_id` SIN extensión (`perfil_{id}`) bajo `image/authenticated`. Se
+    sigue sirviendo por la CDN firmada -- la entrega no puede pedirle al
+    endpoint de descarga un recurso `raw` que todavía no existe (404) -- hasta
+    que corra `scripts/migrar_imagenes_a_raw.py`, en cualquier orden respecto
+    del despliegue."""
+    admin = _crear_persona(db_session, cedula_valida(216), "Admin")
+    objetivo = _crear_persona(db_session, cedula_valida(217), "Olga")
+    objetivo.foto_url = f"perfil_{objetivo.id}"
+    db_session.commit()
+    _restaurar_override_token(admin.id, ["ADMINISTRADOR"])
+
+    resp = client.get(f"/api/v1/personas/{objetivo.id}")
+
+    assert resp.status_code == 200, resp.text
+    url = resp.json()["fotoUrl"]
+    assert url.startswith("https://res.cloudinary.com/")
+    assert "/image/authenticated/" in url
+    assert f"cataclub/fotos_perfil/perfil_{objetivo.id}" in url
+
+
 def test_falta_archivo_da_422(client, db_session):
     persona = _crear_persona(db_session, cedula_valida(208), "Ana")
     _restaurar_override_token(persona.id, ["ALUMNO"])
