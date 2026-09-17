@@ -22,7 +22,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.dominio.enums import Categoria, DiaSemana, TipoRol
+from app.dominio.enums import Categoria, DiaSemana, EstadoMembresia, EstadoPago, TipoRol
 from app.dominio.modelos import (
     AlumnoHorario,
     Base,
@@ -215,6 +215,48 @@ def test_main_persiste_un_alumno_adulto_sin_representante_con_membresia():
             select(TipoMembresia).where(TipoMembresia.id == membresia.tipo_membresia_id)
         ).scalar_one()
         assert tipo.categoria == adulto["membresia_categoria"]
+
+
+def test_toda_membresia_activa_del_seed_tiene_un_pago_aprobado():
+    """Issue #1293: el dominio solo llega a `ACTIVA` por un pago aprobado
+    (`membresia_pago_servicio.py`). Los alumnos autogestionados (bloque 6)
+    no creaban ese `Pago` -- el badge de `/profile` los mostraba "Activa" en
+    el listado del admin y "Sin pagos aprobados" en su propio perfil."""
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_en_memoria(modulo)
+
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        activas = list(
+            verificacion.execute(
+                select(Membresia).where(Membresia.estado == EstadoMembresia.ACTIVA)
+            ).scalars().all()
+        )
+        assert activas, "el seed no dejó ninguna membresía ACTIVA para verificar"
+
+        sin_pago_aprobado = []
+        for membresia in activas:
+            pagos_aprobados = verificacion.execute(
+                select(Pago).where(
+                    Pago.membresia_id == membresia.id,
+                    Pago.estado_pago == EstadoPago.APROBADO,
+                )
+            ).scalars().all()
+            if not pagos_aprobados:
+                persona = verificacion.execute(
+                    select(Persona).where(Persona.id == membresia.persona_id)
+                ).scalar_one()
+                usuario = verificacion.execute(
+                    select(Usuario).where(Usuario.persona_id == persona.id)
+                ).scalar_one_or_none()
+                correo = usuario.correo if usuario else f"persona_id={persona.id}"
+                sin_pago_aprobado.append(correo)
+
+        assert not sin_pago_aprobado, (
+            "membresías ACTIVA sin ningún pago APROBADO: "
+            f"{sorted(sin_pago_aprobado)}"
+        )
 
 
 def test_el_primer_representante_declara_varios_hijos_y_el_resto_uno():
