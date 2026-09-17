@@ -76,6 +76,7 @@ sys.path.insert(0, str(_RAIZ_BACKEND))
 from app.dominio.modelos import Pago, Persona  # noqa: E402
 from app.infraestructura.cloudinary_cliente import (  # noqa: E402
     componer_valor_foto_perfil,
+    es_pdf,
     generar_url_firmada,
     public_id_con_extension,
     tiene_extension_de_imagen,
@@ -95,6 +96,15 @@ _SEPARADOR_VERSION_FOTO_PERFIL = "|"
 
 # Un objetivo del lote: ("voucher"|"foto", fila ORM, public_id viejo).
 Objetivo = tuple[str, object, str]
+
+
+class _NoEsImagen(Exception):
+    """El asset bajado NO es una imagen (`content-type` distinto de
+    JPEG/PNG). No es un fallo del script ni un asset corrupto: es una fila
+    fuera del alcance de esta migración -- típicamente un PDF guardado en una
+    columna de voucher con formato NULL o atípico. Se cuenta en `no_aplica`,
+    nunca se re-sube como imagen (envolver un PDF en un `raw` nuevo con
+    extensión `.jpg` sería mentirle al proveedor y al navegador)."""
 
 
 def _es_url_publica(valor: str | None) -> bool:
@@ -166,14 +176,20 @@ def _recolectar_pendientes(db_session) -> tuple[list[Objetivo], dict]:
             # script), fuera del alcance de esta migración.
             resumen["url_publicas_heredadas"] += 1
             continue
-        # El PDF no cambia con este fix: ya se sube como `raw` y su entrega ya
-        # vence. Solo las imágenes son objetivo.
-        if (pago.voucher_formato or "").lower() not in MIMES_IMAGEN:
-            resumen["no_aplica"] += 1
-            continue
         if tiene_extension_de_imagen(valor):
+            # Ya es el recurso `raw` con extensión que deja esta migración.
             resumen["ya_migradas"] += 1
             continue
+        if es_pdf(pago.voucher_formato):
+            # El PDF no cambia con este fix: ya se sube como `raw` y su
+            # entrega ya vence. Se descarta por el FORMATO persistido, que es
+            # la única marca de PDF: su `public_id` tampoco lleva extensión.
+            resumen["no_aplica"] += 1
+            continue
+        # Candidato. Si `voucher_formato` viene NULL o atípico NO se adivina
+        # acá: el formato real se resuelve al ejecutar, con el `content-type`
+        # que devuelve el proveedor; si no es una imagen, la fila se reporta
+        # `no_aplica` sin tocar nada.
         pendientes.append(("voucher", pago, valor))
 
     personas = (
@@ -217,7 +233,11 @@ def _descargar_imagen(carpeta: str, public_id: str) -> tuple[str, bytes]:
     contenido = respuesta.content
     content_type = _content_type_normalizado(respuesta.headers.get("content-type"))
     if content_type not in MIMES_IMAGEN:
-        raise ValueError(f"Tipo de contenido inesperado en el asset: {content_type}")
+        # El formato REAL del asset, resuelto por el proveedor, manda sobre la
+        # columna `voucher_formato` (que puede venir NULL o atípica en filas
+        # viejas). Si no es una imagen soportada, la fila queda fuera de
+        # alcance en vez de adivinarse por el MIME persistido.
+        raise _NoEsImagen(f"El asset no es una imagen soportada: {content_type}")
     if not es_firma_valida(contenido, content_type):
         # Misma validación que la subida (decisión de diseño 2.3): el
         # content-type del proveedor es tan declarativo como el del cliente.
@@ -265,6 +285,12 @@ def migrar_imagenes(db_session, ejecutar: bool = False) -> dict:
         # 1 y 2. Bajar los bytes del asset viejo y validarlos.
         try:
             content_type, contenido = _descargar_imagen(carpeta, public_id)
+        except _NoEsImagen as exc:
+            logger.info(
+                "%s fuera de alcance (%s); no se toca.", descripcion, exc,
+            )
+            resumen["no_aplica"] += 1
+            continue
         except Exception as exc:
             logger.warning(
                 "No se pudo bajar el %s (public_id=%s); se conserva el valor "

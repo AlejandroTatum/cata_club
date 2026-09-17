@@ -51,6 +51,10 @@ class _RespuestaFalsa:
 
 
 def _crear_pago_con_voucher(db_session, cedula, *, voucher_url, voucher_formato="image/jpeg"):
+    # `voucher_formato=None` siembra la fila con formato AUSENTE: el script no
+    # puede resolver el formato por la columna y tiene que usar el
+    # `content-type` que devuelve el proveedor.
+
     persona = crear_persona_orm(db_session, cedula)
     tipo = crear_tipo_membresia_orm(db_session)
     membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
@@ -212,6 +216,107 @@ def test_fila_ya_migrada_no_se_vuelve_a_tocar(db_session):
     assert resumen["pendientes"] == 0
 
 
+# --- Formato persistido ausente o atípico (issue #1072) --------------------
+# La columna `Pago.voucher_formato` puede venir NULL o con un valor que no es
+# un MIME de imagen en filas viejas. Antes el script las descartaba como
+# `no_aplica` y se quedaban para siempre en el camino que no vence.
+
+def test_voucher_con_formato_null_se_migra_por_el_content_type_del_asset(db_session):
+    pago = _crear_pago_con_voucher(
+        db_session, cedula_valida(316), voucher_url="voucher-pago-11", voucher_formato=None,
+    )
+
+    p_upload, p_destroy, p_get = _parchear_sdk()
+    with p_upload as mock_upload, p_destroy, p_get as mock_get:
+        mock_get.return_value = _RespuestaFalsa(_PNG, "image/png")
+        mock_upload.return_value = {"secure_url": "https://cdn.test/nueva", "version": 3}
+
+        resumen = migrar_imagenes(db_session, ejecutar=True)
+
+    _, kwargs = mock_upload.call_args
+    assert kwargs["public_id"] == "voucher-pago-11.png"
+    assert kwargs["resource_type"] == "raw"
+    db_session.refresh(pago)
+    assert pago.voucher_url == "voucher-pago-11.png"
+    assert resumen["migradas"] == 1
+    assert resumen["no_aplica"] == 0
+
+
+def test_voucher_con_formato_atipico_se_migra_por_el_content_type_del_asset(db_session):
+    pago = _crear_pago_con_voucher(
+        db_session, cedula_valida(317), voucher_url="voucher-pago-12",
+        # `Pago.voucher_formato` es VARCHAR(20): "atípico" acá es una etiqueta
+        # corta que no es un MIME de imagen (un `application/octet-stream`
+        # completo no entraría en la columna).
+        voucher_formato="octet-stream",
+    )
+
+    p_upload, p_destroy, p_get = _parchear_sdk()
+    with p_upload as mock_upload, p_destroy, p_get as mock_get:
+        mock_get.return_value = _RespuestaFalsa(_JPEG, "image/jpeg")
+        mock_upload.return_value = {"secure_url": "https://cdn.test/nueva", "version": 3}
+
+        resumen = migrar_imagenes(db_session, ejecutar=True)
+
+    assert mock_upload.call_args.kwargs["public_id"] == "voucher-pago-12.jpg"
+    db_session.refresh(pago)
+    assert pago.voucher_url == "voucher-pago-12.jpg"
+    assert resumen["migradas"] == 1
+
+
+def test_voucher_con_formato_null_pero_asset_pdf_no_se_migra_ni_se_adivina(db_session):
+    """Un PDF guardado en una columna de voucher con formato NULL: el
+    `content-type` real lo delata y la fila queda OUT OF SCOPE -- nunca se
+    re-sube como imagen (envolver un PDF en un `raw` con extensión `.jpg`
+    sería mentirle al proveedor y al navegador)."""
+    pago = _crear_pago_con_voucher(
+        db_session, cedula_valida(318), voucher_url="voucher-pago-13", voucher_formato=None,
+    )
+
+    p_upload, p_destroy, p_get = _parchear_sdk()
+    with p_upload as mock_upload, p_destroy as mock_destroy, p_get as mock_get:
+        mock_get.return_value = _RespuestaFalsa(b"%PDF-1.4\n" + b"\x00" * 10, "application/pdf")
+
+        resumen = migrar_imagenes(db_session, ejecutar=True)
+
+    mock_upload.assert_not_called()
+    mock_destroy.assert_not_called()
+    db_session.refresh(pago)
+    assert pago.voucher_url == "voucher-pago-13"
+    assert resumen["no_aplica"] == 1
+    assert resumen["fallidas"] == 0
+    assert resumen["migradas"] == 0
+
+
+def test_fila_con_formato_null_ya_migrada_no_se_reprocesa(db_session):
+    """Idempotencia sobre la forma que antes se salteaba: una vez migrada, la
+    fila lleva extensión y la segunda corrida no vuelve a bajar ni subir nada."""
+    pago = _crear_pago_con_voucher(
+        db_session, cedula_valida(319), voucher_url="voucher-pago-14", voucher_formato=None,
+    )
+
+    p_upload, p_destroy, p_get = _parchear_sdk()
+    with p_upload as mock_upload, p_destroy, p_get as mock_get:
+        mock_get.return_value = _RespuestaFalsa(_JPEG, "image/jpeg")
+        mock_upload.return_value = {"secure_url": "https://cdn.test/nueva", "version": 4}
+
+        primera = migrar_imagenes(db_session, ejecutar=True)
+
+    assert primera["migradas"] == 1
+    db_session.refresh(pago)
+    assert pago.voucher_url == "voucher-pago-14.jpg"
+
+    p_upload, p_destroy, p_get = _parchear_sdk()
+    with p_upload as mock_upload, p_destroy as mock_destroy, p_get as mock_get:
+        segunda = migrar_imagenes(db_session, ejecutar=True)
+
+    mock_upload.assert_not_called()
+    mock_destroy.assert_not_called()
+    mock_get.assert_not_called()
+    assert segunda["ya_migradas"] == 1
+    assert segunda["pendientes"] == 0
+
+
 def test_voucher_pdf_no_es_objetivo_de_esta_migracion(db_session):
     """El PDF ya se sube como `raw/authenticated` y su entrega ya vence: no
     hay nada que convertir, y re-subirlo sería un riesgo sin beneficio."""
@@ -271,19 +376,24 @@ def test_asset_que_no_es_una_imagen_valida_falla_sin_re_subir(db_session):
     assert resumen["migradas"] == 0
 
 
-def test_content_type_inesperado_falla_sin_re_subir(db_session):
+def test_content_type_inesperado_queda_fuera_de_alcance_sin_re_subir(db_session):
+    """Fila marcada `image/jpeg` cuyo asset real NO es una imagen: se reporta
+    `no_aplica` (fuera de alcance), no `fallida`, y no se toca -- re-subirla
+    como imagen sería adivinar."""
     pago = _crear_pago_con_voucher(db_session, cedula_valida(311), voucher_url="voucher-pago-6")
 
     p_upload, p_destroy, p_get = _parchear_sdk()
-    with p_upload as mock_upload, p_destroy, p_get as mock_get:
+    with p_upload as mock_upload, p_destroy as mock_destroy, p_get as mock_get:
         mock_get.return_value = _RespuestaFalsa(b"%PDF-1.4\n", "application/pdf")
 
         resumen = migrar_imagenes(db_session, ejecutar=True)
 
     mock_upload.assert_not_called()
+    mock_destroy.assert_not_called()
     db_session.refresh(pago)
     assert pago.voucher_url == "voucher-pago-6"
-    assert resumen["fallidas"] == 1
+    assert resumen["no_aplica"] == 1
+    assert resumen["fallidas"] == 0
 
 
 # --- Tolerancia a fallos -----------------------------------------------------
