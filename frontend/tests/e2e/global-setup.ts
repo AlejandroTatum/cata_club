@@ -27,6 +27,14 @@
  * 4-worker concurrency it lost the race on the very first run, reproducing
  * the exact #1300 hang for the exact URL the original trace named. This
  * awaited copy cannot lose that race — nothing else is running yet.
+ *
+ * `HERO_WARMUP_DISABLED=1` skips this step. It exists only to reproduce the
+ * #1300/#1303 hang against an otherwise-normal target — after enough prior
+ * requests warm the image route's own JIT/OS-cache state (which this
+ * suite's own warm-up does, by design), the abort race in
+ * `hero-image-optimizer-abort.spec.ts` becomes too narrow to hit reliably.
+ * Never set in a normal run: every other spec that reads a hero photo still
+ * needs this warm-up to avoid the exact hang it exists to prevent.
  */
 
 import { E2E_BASE_URL, E2E_SERVER_IS_MANAGED } from "./e2e-target";
@@ -83,6 +91,8 @@ export default async function globalSetup(): Promise<void> {
         `never produces (no "authenticated" field). ${hint()}`,
     );
   }
+
+  if (process.env.HERO_WARMUP_DISABLED === "1") return;
 
   await warmHeroImageCache(E2E_BASE_URL);
 }

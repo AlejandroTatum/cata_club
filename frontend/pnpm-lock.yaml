@@ -16,6 +16,11 @@ overrides:
   undici: '>=7.29.0 <8.0.0'
   vite: '>=6.4.3 <7.0.0'
 
+patchedDependencies:
+  next@15.5.25:
+    hash: 912d66c4dd6c83c4a12defb65ef715e056de5ddd53c58e9b880efb27d1db476d
+    path: patches/next@15.5.25.patch
+
 importers:
 
   .:
@@ -37,7 +42,7 @@ importers:
         version: 0.577.0(react@18.3.1)
       next:
         specifier: ^15.5.25
-        version: 15.5.25(@playwright/test@1.63.0)(@types/node@20.19.43)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 15.5.25(patch_hash=912d66c4dd6c83c4a12defb65ef715e056de5ddd53c58e9b880efb27d1db476d)(@playwright/test@1.63.0)(@types/node@20.19.43)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -5272,7 +5277,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@15.5.25(@playwright/test@1.63.0)(@types/node@20.19.43)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@15.5.25(patch_hash=912d66c4dd6c83c4a12defb65ef715e056de5ddd53c58e9b880efb27d1db476d)(@playwright/test@1.63.0)(@types/node@20.19.43)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 15.5.25
       '@swc/helpers': 0.5.15

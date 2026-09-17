@@ -60,6 +60,9 @@
       "glob": ">=10.5.0",
       "undici": ">=7.29.0 <8.0.0",
       "vite": ">=6.4.3 <7.0.0"
+    },
+    "patchedDependencies": {
+      "next@15.5.25": "patches/next@15.5.25.patch"
     }
   }
 }

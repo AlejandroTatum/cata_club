@@ -61,9 +61,18 @@ let warmed = false;
  * crash the process if the warm-up itself fails for any reason (offline
  * build, a locked cache directory) — a missed warm-up only returns this
  * file's bug, not a new one.
+ *
+ * `HERO_WARMUP_DISABLED=1` skips this step. See the matching guard and its
+ * doc comment in `tests/e2e/global-setup.ts` — never set outside that one
+ * reproduction, this warm-up is what keeps every other hero image safe.
  */
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== "nodejs" || warmed) return;
+  if (
+    process.env.NEXT_RUNTIME !== "nodejs" ||
+    warmed ||
+    process.env.HERO_WARMUP_DISABLED === "1"
+  )
+    return;
   warmed = true;
   const port = process.env.PORT ?? "3000";
   const host = process.env.HOSTNAME ?? "127.0.0.1";

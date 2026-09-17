@@ -1,0 +1,40 @@
+diff --git a/dist/server/image-optimizer.js b/dist/server/image-optimizer.js
+index 75b9c44f5fa2dbe0664444108528d1577c966f55..9baeca9dcb06ef8c6c8fecc6935de172160abae7 100644
+--- a/dist/server/image-optimizer.js
++++ b/dist/server/image-optimizer.js
+@@ -952,12 +952,29 @@ async function fetchExternalImage(href, maximumResponseBody) {
+ }
+ async function fetchInternalImage(href, _req, _res, maximumResponseBody, handleRequest) {
+     try {
+-        const mocked = (0, _mockrequest.createRequestResponseMocks)({
+-            url: href,
+-            method: _req.method || 'GET',
+-            socket: _req.socket,
+-            maximumResponseBody
+-        });
++        // Backport of vercel/next.js#98168 (commit dcbfff778): the mocked
++        // response no longer takes the requester's real socket. `send`
++        // watches `res.socket` through `on-finished` and tore the static
++        // file stream down the moment that socket died (a Playwright test
++        // navigating away, or any visitor closing the tab), without ever
++        // ending the mocked response — so `mocked.res.hasStreamed` never
++        // settled and the shared `ResponseCache`/`Batcher` promise for that
++        // cache key hung forever, for every later requester too. The
++        // request side still needs the socket (host/encrypted negotiation);
++        // only the response side drops it. Fixed upstream in
++        // 16.4.0-canary.27+ — drop this patch once installed `next` moves
++        // to that version or later.
++        const mocked = {
++            req: new _mockrequest.MockedRequest({
++                url: href,
++                method: _req.method || 'GET',
++                headers: {},
++                socket: _req.socket
++            }),
++            res: new _mockrequest.MockedResponse({
++                maximumResponseBody
++            })
++        };
+         await handleRequest(mocked.req, mocked.res, _url.default.parse(href, true));
+         await mocked.res.hasStreamed;
+         if (!mocked.res.statusCode) {
