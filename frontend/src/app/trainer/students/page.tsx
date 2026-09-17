@@ -270,7 +270,12 @@ export default function TrainerStudentsPage(): React.ReactElement {
                      * La nómina es la MISMA tabla compartida que `/members`,
                      * `/discounts` y el historial de asistencias: tarjetas
                      * debajo de `sm`, tabla con `<thead>` de `sm` para arriba
-                     * (issue #1156). El `<ul>` hecho a mano se jubila.
+                     * (issue #1156). El `<ul>` hecho a mano se jubila. Una
+                     * sola columna de acciones al final (issue #1291): con
+                     * dos columnas `type="action"` el layout automático de la
+                     * tabla repartía el ancho sobrante entre las tres
+                     * columnas, y cada botón flotaba en el borde derecho de
+                     * una celda mucho más ancha que él.
                      */}
                     <ResponsiveListTable
                       items={visibles}
@@ -281,8 +286,14 @@ export default function TrainerStudentsPage(): React.ReactElement {
                         <TableRow>
                           {/* El número de renglón se retiró: ya no numera. */}
                           <TableHeaderCell>Estudiante</TableHeaderCell>
-                          <TableHeaderCell type="action">Ficha médica</TableHeaderCell>
-                          <TableHeaderCell type="action">Horario</TableHeaderCell>
+                          {/* Sigue en el árbol de accesibilidad porque un
+                              `<th>` sin nombre es una columna que un lector
+                              de pantalla anuncia en blanco; un encabezado
+                              visible "Acciones" no le dice nada a un lector
+                              vidente que los botones de abajo no digan ya. */}
+                          <TableHeaderCell type="action">
+                            <span className="sr-only">Acciones</span>
+                          </TableHeaderCell>
                         </TableRow>
                       }
                       renderCard={(alumno) => (
@@ -336,20 +347,20 @@ export default function TrainerStudentsPage(): React.ReactElement {
                             </span>
                           </TableCell>
                           <TableCell type="action">
-                            <BotonFichaMedica
-                              alumno={alumno}
-                              onAbrir={() =>
-                                setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })
-                              }
-                            />
-                          </TableCell>
-                          <TableCell type="action">
-                            <BotonHorario
-                              alumno={alumno}
-                              onAbrir={() =>
-                                setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })
-                              }
-                            />
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              <BotonFichaMedica
+                                alumno={alumno}
+                                onAbrir={() =>
+                                  setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })
+                                }
+                              />
+                              <BotonHorario
+                                alumno={alumno}
+                                onAbrir={() =>
+                                  setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })
+                                }
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}
