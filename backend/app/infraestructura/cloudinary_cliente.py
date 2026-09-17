@@ -432,7 +432,7 @@ def subir_voucher_pago(
     )
 
 
-def eliminar_voucher_pago(nombre_publico: str, content_type: str) -> None:
+def eliminar_voucher_pago(nombre_publico: str, content_type: Optional[str]) -> None:
     """Best-effort deletion of a committed replacement's former voucher.
 
     El `resource_type` sale de `resource_type_de_destruccion(nombre_publico,
@@ -443,7 +443,12 @@ def eliminar_voucher_pago(nombre_publico: str, content_type: str) -> None:
     comprobante bancario viejo, con datos del socio, vivo en el proveedor.
 
     `content_type` es el formato persistido (`Pago.voucher_formato`, MIME
-    completo) y viaja además a la descripción del log.
+    completo) y viaja además a la descripción del log. Puede venir NULL o
+    atípico (filas viejas que nunca pasaron por el `content_type`
+    validado): eso NO se asume PDF -- `es_pdf` devuelve `False` y la forma
+    del `public_id` decide, que es la única marca que esas filas sí tienen.
+    Asumir PDF mandaría a `raw` un asset `image/authenticated` y el borrado
+    sería un no-op silencioso.
     """
     eliminar_logo_sponsor(
         nombre_publico,

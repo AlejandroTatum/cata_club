@@ -11,6 +11,8 @@ Cubre:
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
 
@@ -251,6 +253,125 @@ def test_reemplazo_borra_el_voucher_previo_con_el_resource_type_de_su_forma(
         assert clave in borrados, (public_id_previo, list(borrados))
         assert borrados[clave]["resource_type"] == resource_type_esperado
         assert borrados[clave]["type"] == "authenticated"
+
+
+@pytest.mark.parametrize(
+    "formato_previo",
+    [None, "", "octet-stream"],
+    ids=["formato-null", "formato-vacio", "formato-atipico"],
+)
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
+    return_value=_FAKE_URL_JPG,
+)
+def test_reemplazo_borra_el_voucher_previo_con_formato_null_o_atipico(
+    _mock_subir, formato_previo, client, db_session
+):
+    """Issue #1072 (transición): una fila vieja puede tener `voucher_formato`
+    NULL o atípico -- la columna es VARCHAR(20) y hay filas que nunca pasaron
+    por el `content_type` validado. Ese hueco NO es información, pero el
+    `public_id` SIN extensión SÍ lo es: el asset vive como
+    `image/authenticated`. El guard anterior exigía un MIME de la allowlist y
+    salteaba el borrado, así que el comprobante bancario viejo (dato del
+    socio) quedaba vivo en el proveedor sin fallar y sin avisar. El
+    `resource_type` sale de `resource_type_de_destruccion` (forma del
+    `public_id` + conocimiento de PDF), nunca del guard.
+    """
+    from app.dominio.modelos import Pago
+    from app.soporte_transversal.configuracion import settings
+
+    persona = _crear_persona(client, cedula=cedula_valida(421))
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    public_id_previo = "voucher-pago-previo-v1-sin-formato"
+    fila = db_session.get(Pago, pago["id"])
+    fila.voucher_url = public_id_previo
+    fila.voucher_formato = formato_previo
+    db_session.commit()
+
+    _autenticar_como_duenio(client, persona["id"])
+    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    with _parchear_destroy() as mock_destroy:
+        resp = client.post(
+            f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+            files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+        )
+
+    assert resp.status_code == 201, resp.text
+    clave = f"{settings.cloudinary_carpeta_vouchers}/{public_id_previo}"
+    borrados = {
+        llamada.args[0]: llamada.kwargs for llamada in mock_destroy.call_args_list
+    }
+    assert clave in borrados, list(borrados)
+    assert borrados[clave]["resource_type"] == "image"
+    assert borrados[clave]["type"] == "authenticated"
+
+
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
+    return_value=_FAKE_URL_JPG,
+)
+def test_reemplazo_no_destruye_un_voucher_legado_por_url_publica(
+    _mock_subir, client, db_session
+):
+    """El otro borde del guard, que el hardening NO relaja: una `secure_url`
+    completa (recurso `type="upload"` público, previo al issue #553) no es un
+    `public_id` y no se puede destruir por nombre. Se sigue salteando tal
+    cual, con formato NULL incluido -- lo único que cambió es el filtro por
+    `voucher_formato`, no la regla sobre URLs heredadas.
+    """
+    from app.dominio.modelos import Pago
+
+    persona = _crear_persona(client, cedula=cedula_valida(422))
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    fila = db_session.get(Pago, pago["id"])
+    fila.voucher_url = "https://res.cloudinary.com/test/image/upload/voucher-legado.jpg"
+    fila.voucher_formato = None
+    db_session.commit()
+
+    _autenticar_como_duenio(client, persona["id"])
+    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    with _parchear_destroy() as mock_destroy:
+        resp = client.post(
+            f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+            files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+        )
+
+    assert resp.status_code == 201, resp.text
+    assert mock_destroy.call_args_list == []
+
+
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
+    return_value=_FAKE_URL_JPG,
+)
+def test_reemplazo_sin_voucher_previo_no_destruye_nada(
+    _mock_subir, client, db_session
+):
+    """Guard normal de 'no hay voucher anterior': primer voucher de un pago
+    recién creado. El hardening no lo toca; sin `voucher_anterior` no hay
+    nada que borrar ni que reportar.
+    """
+    persona = _crear_persona(client, cedula=cedula_valida(423))
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    _autenticar_como_duenio(client, persona["id"])
+    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    with _parchear_destroy() as mock_destroy:
+        resp = client.post(
+            f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+            files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+        )
+
+    assert resp.status_code == 201, resp.text
+    assert mock_destroy.call_args_list == []
 
 
 def test_subir_voucher_tras_fallo_de_cloudinary_permite_reintentar(client, db_session):

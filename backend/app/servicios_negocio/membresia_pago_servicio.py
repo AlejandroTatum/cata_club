@@ -2686,9 +2686,18 @@ class PagoServicio:
         self.db.expunge(pago)
         borrar_anterior = False
         try:
+            # El guard NO filtra por `formato_anterior` (issue #1072): la
+            # columna `voucher_formato` puede venir NULL o atípica (VARCHAR(20)
+            # y filas que nunca pasaron por el `content_type` validado), y
+            # exigir un MIME de la allowlist salteaba el borrado en silencio
+            # -- el comprobante bancario viejo, dato del socio, quedaba vivo
+            # en el proveedor sin fallar y sin avisar. Lo que decide QUÉ se
+            # borra y CÓMO es `resource_type_de_destruccion` (forma del
+            # `public_id` + formato PDF); acá solo se descartan los casos en
+            # los que no hay `public_id` que destruir: una URL pública
+            # heredada (issue #553) y el candidato recién persistido.
             if (
                 voucher_anterior
-                and formato_anterior in TIPOS_MIME_PERMITIDOS_VOUCHER
                 and not voucher_anterior.startswith("http")
                 and voucher_anterior != public_id
             ):
@@ -2703,8 +2712,12 @@ class PagoServicio:
             self._limpiar_voucher_huerfano(voucher_anterior, formato_anterior)
         return pago
 
-    def _limpiar_voucher_huerfano(self, public_id: str, content_type: str) -> None:
-        """Best effort only: cleanup failures must not discard payment evidence."""
+    def _limpiar_voucher_huerfano(self, public_id: str, content_type: Optional[str]) -> None:
+        """Best effort only: cleanup failures must not discard payment evidence.
+
+        `content_type` puede ser NULL/atípico: viaja tal cual a
+        `eliminar_voucher_pago`, que resuelve el `resource_type` por la forma
+        del `public_id` (issue #1072)."""
         from app.infraestructura.cloudinary_cliente import eliminar_voucher_pago
 
         try:
