@@ -148,6 +148,10 @@ def _recolectar_pendientes(db_session) -> tuple[list[Objetivo], dict]:
         "pendientes": 0,
         "migradas": 0,
         "ya_migradas": 0,
+        # Vouchers en PDF: ya están en el estado objetivo (`raw/authenticated`)
+        # y no necesitan nada. Se cuentan aparte de `ya_migradas` para que una
+        # corrida en dry-run no sugiera que hubo imágenes convertidas antes.
+        "no_aplica": 0,
         "fallidas": 0,
         "residuos_antiguos": 0,
         "url_publicas_heredadas": 0,
@@ -167,7 +171,7 @@ def _recolectar_pendientes(db_session) -> tuple[list[Objetivo], dict]:
         # El PDF no cambia con este fix: ya se sube como `raw` y su entrega ya
         # vence. Solo las imágenes son objetivo.
         if (pago.voucher_formato or "").lower() not in MIMES_IMAGEN:
-            resumen["ya_migradas"] += 1
+            resumen["no_aplica"] += 1
             continue
         if _tiene_extension_de_imagen(valor):
             resumen["ya_migradas"] += 1
@@ -369,7 +373,7 @@ def main() -> None:
     modo = "EJECUTADO" if args.ejecutar else "DRY-RUN (sin cambios)"
     print(f"[imagenes-raw] {modo}: pendientes={resumen['pendientes']} "
           f"migradas={resumen['migradas']} ya_migradas={resumen['ya_migradas']} "
-          f"fallidas={resumen['fallidas']} "
+          f"no_aplica={resumen['no_aplica']} fallidas={resumen['fallidas']} "
           f"residuos_antiguos={resumen['residuos_antiguos']} "
           f"url_publicas_heredadas={resumen['url_publicas_heredadas']}")
 

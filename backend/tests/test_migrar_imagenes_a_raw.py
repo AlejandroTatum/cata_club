@@ -225,7 +225,10 @@ def test_voucher_pdf_no_es_objetivo_de_esta_migracion(db_session):
 
     mock_upload.assert_not_called()
     assert resumen["pendientes"] == 0
-    assert resumen["ya_migradas"] == 1
+    # `no_aplica`, no `ya_migradas`: el PDF ya está en el estado objetivo y
+    # contarlo como migrado sugeriría una conversión que nunca ocurrió.
+    assert resumen["no_aplica"] == 1
+    assert resumen["ya_migradas"] == 0
 
 
 def test_fila_con_url_publica_heredada_se_reporta_y_no_se_toca(db_session):
