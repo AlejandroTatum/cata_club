@@ -401,7 +401,7 @@ describe("el buscador filtra la nómina que ya está en memoria", () => {
 });
 
 describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
-  it("en escritorio es una tabla con los tres encabezados del padrón", async () => {
+  it("en escritorio es una tabla con Estudiante y una única columna de acciones (issue #1291)", async () => {
     render(<TrainerStudentsPage />);
 
     const tabla = await screen.findByTestId("students-desktop-table");
@@ -411,7 +411,29 @@ describe("la nómina es la tabla compartida del producto (issue #1156)", () => {
 
     // La columna de índice se retira entera (el pedido del usuario): ya no
     // hay nada que numerar, así que no queda encabezado que la represente.
-    expect(encabezados).toEqual(["Estudiante", "Ficha médica", "Horario"]);
+    // Ficha médica y Horario se fusionaron en una única columna de acciones
+    // sr-only (issue #1291): el layout automático ya no reparte el ancho
+    // sobrante entre tres columnas.
+    expect(encabezados).toEqual(["Estudiante", "Acciones"]);
+  });
+
+  it("los dos botones de un renglón viven en la misma celda de acciones (issue #1291)", async () => {
+    render(<TrainerStudentsPage />);
+
+    const tabla = await screen.findByTestId("students-desktop-table");
+    const encabezados = within(tabla).getAllByRole("columnheader");
+    expect(encabezados).toHaveLength(2);
+    expect(encabezados[1]).toHaveAccessibleName("Acciones");
+
+    const melany = await screen.findByTestId("student-row-7");
+    const ficha = within(melany).getByRole("button", { name: "Ficha médica de Melany Quimis" });
+    const horario = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
+
+    // Antes del fix cada botón vivía en su propia columna `type="action"`; el
+    // layout automático repartía el ancho sobrante entre tres columnas y los
+    // dos botones terminaban lejos entre sí. Con una sola columna de
+    // acciones, ambos caen en la misma celda.
+    expect(ficha.closest("td")).toBe(horario.closest("td"));
   });
 
   it("el botón Horario usa el Button compartido, como el de ficha médica (issue #1156)", async () => {
