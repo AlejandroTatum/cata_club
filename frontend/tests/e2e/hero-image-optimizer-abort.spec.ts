@@ -31,13 +31,18 @@
  * ANY prior traffic, regardless of which key that traffic touched.
  *
  * Concretely, against an unpatched `next`, `node .next/standalone/server.js`,
- * `w=828`, `q=91`, a 2 ms abort:
- *   - Zero prior requests to the server: never hung (5/5 clean trials).
- *   - After the suite's full ~27-request hero warm-up: never hung, even
- *     though `q=91` itself was never touched by that warm-up (multiple
- *     trials, including through the actual shared e2e server).
- *   - After exactly ONE small, unrelated priming request (e.g. `GET
- *     /api/auth/session`) on an otherwise-cold server: hung reliably.
+ * `w=828`, `q=91`, a 2 ms abort, EVERY trial below already included the one
+ * readiness `GET /` `bootIsolatedServer` issues before any test can run
+ * (see `waitUntilReady`) — "no prior requests" below means no request
+ * BEYOND that readiness probe:
+ *   - No prior request beyond the readiness probe: never hung (5/5 clean
+ *     trials).
+ *   - After the suite's full ~27-request hero warm-up (which itself follows
+ *     the same readiness probe): never hung, even though `q=91` itself was
+ *     never touched by that warm-up (multiple trials, including through
+ *     the actual shared e2e server).
+ *   - After the readiness probe plus exactly ONE further small, unrelated
+ *     priming request (e.g. `GET /api/auth/session`): hung reliably.
  *
  * So a spec that shares the suite's own fully-warmed server — the
  * configuration every real CI run and every real `pnpm exec playwright
@@ -46,11 +51,13 @@
  * give this ONE test its own isolated, cold copy of the exact standalone
  * build the suite already produced (see `bootIsolatedServer` below):
  * `HERO_WARMUP_DISABLED` set (so the copy's own `instrumentation.ts`
- * warm-up does not add competing traffic), a single priming request (the
- * one condition measured to reproduce the race reliably), then the
- * abort-then-identical-request sequence this file locks against. That
- * makes the test deterministic and independent of the shared server's
- * warm state, without touching the warm-up other specs still rely on.
+ * warm-up does not add competing traffic), the readiness probe
+ * `bootIsolatedServer` needs anyway, one further priming request (the
+ * condition measured above to reproduce the race reliably), then the
+ * abort-then-identical-request sequence this file locks against — the
+ * exact sequence the RED trial below reproduced 4/4 times. That makes the
+ * test deterministic and independent of the shared server's warm state,
+ * without touching the warm-up other specs still rely on.
  *
  * The request MUST send the same `Accept` header a real Chromium `<img>`
  * fetch sends: `/_next/image` folds the negotiated output format into its
@@ -68,6 +75,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { createServer } from "node:net";
 import { test, expect } from "@playwright/test";
+import { HERO_WARMUP_DISABLE_TOKEN } from "../../src/lib/hero-warmup-disable-token";
 
 /**
  * The photo and width issue #1300's own trace named, at `q=91` — one
@@ -91,18 +99,10 @@ const RESOLVE_WITHIN_MS = 5_000;
  * How long the first request is left open before it is torn down. Swept
  * 0–30 ms against the isolated server described in the file doc comment;
  * 2 ms (the original manually-measured value) reproduced the hang
- * reliably once the server had answered the one priming request below —
- * see `bootIsolatedServer`.
+ * reliably once the server had answered the readiness probe and the one
+ * priming request below — see `bootIsolatedServer`.
  */
 const ABORT_AFTER_MS = 2;
-
-/**
- * The exact opaque token `src/instrumentation.ts` requires (not just any
- * truthy value) before it skips its own fire-and-forget warm-up. Only this
- * spec sets it, only on the child server it spawns below — see that file's
- * doc comment.
- */
-const HERO_WARMUP_DISABLE_TOKEN = "only-for-hero-image-optimizer-abort-spec";
 
 /** A small, unrelated request that answers instantly and touches no image
  *  route — measured to be the difference between a server that reproduces
@@ -112,6 +112,16 @@ const PRIMING_PATH = "/api/auth/session";
 /** How long to wait for the isolated child server to start accepting
  *  connections before giving up. */
 const SERVER_READY_TIMEOUT_MS = 30_000;
+
+/** How long `stop()` waits for a graceful `SIGTERM` exit before escalating
+ *  to `SIGKILL` — generous for a loopback Node process with nothing else
+ *  to flush, but bounded so a stuck child never hangs the test run. */
+const GRACEFUL_STOP_TIMEOUT_MS = 3_000;
+
+/** Caps how much of the isolated child's stderr this spec retains for
+ *  failure diagnostics — enough to show a real crash, not enough to leak
+ *  an unbounded log if the child is unexpectedly chatty. */
+const STDERR_TAIL_LIMIT = 4_000;
 
 function get(baseUrl: string, path: string, options: { abortAfterMs?: number } = {}): Promise<{ settled: boolean; status?: number }> {
   const url = new URL(path, baseUrl);
@@ -127,7 +137,10 @@ function get(baseUrl: string, path: string, options: { abortAfterMs?: number } =
   });
 }
 
-/** Polls `GET /` until it answers (any status) or the timeout elapses. */
+/** Polls `GET /` until it answers (any status) or the timeout elapses. This
+ *  IS a real request the isolated server serves — see the file doc comment
+ *  for why "no prior requests" in the RED/GREEN evidence always means "none
+ *  beyond this one". */
 async function waitUntilReady(baseUrl: string): Promise<void> {
   const deadline = Date.now() + SERVER_READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -173,11 +186,11 @@ async function findFreePort(): Promise<number> {
  * deletes `.next/cache` from the COPY ONLY: hardlinks make a `rm -rf` on
  * one copy's directory entries never touch the other copy's, so this is
  * safe even if the SHARED server (used by every other spec) has already
- * warmed its own cache by the time this runs. The result is a server that
- * has never served a single request when it starts listening — the exact
- * condition this file's doc comment measured as necessary to reproduce
- * the #1300 race, and the one condition the shared, pre-warmed e2e server
- * can never offer.
+ * warmed its own cache by the time this runs. By the time this function
+ * resolves, the server has served exactly one request — the readiness
+ * probe (`waitUntilReady`) — which is the "no prior requests beyond the
+ * readiness probe" condition the file doc comment measured, and the one
+ * condition the shared, pre-warmed e2e server can never offer.
  */
 async function bootIsolatedServer(): Promise<{ baseUrl: string; stop: () => Promise<void> }> {
   const standaloneDir = resolvePath(process.cwd(), ".next/standalone");
@@ -210,19 +223,50 @@ async function bootIsolatedServer(): Promise<{ baseUrl: string; stop: () => Prom
       HOSTNAME: "127.0.0.1",
       HERO_WARMUP_DISABLED: HERO_WARMUP_DISABLE_TOKEN,
     },
-    stdio: "pipe",
+    // stdout is unused noise; stderr is captured below (bounded) so a boot
+    // or readiness failure can show the child's own error instead of just
+    // "never answered". Neither stream is left unread — an unread "pipe"
+    // can fill its OS buffer and block the child's own writes.
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+
+  let stderrTail = "";
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT);
+  });
+
+  // Without a listener, an 'error' event (e.g. `node` missing from PATH)
+  // would throw and crash the whole Playwright worker instead of failing
+  // just this test with a readable message.
+  let spawnError: Error | undefined;
+  child.on("error", (error: Error) => {
+    spawnError = error;
+  });
+
+  // Created once, right after spawn, so it is already listening no matter
+  // when `stop()` is actually called — never re-registered later, which
+  // would risk attaching a fresh `once('exit', ...)` AFTER the event had
+  // already fired and been missed.
+  const exited = new Promise<void>((resolveExit) => {
+    child.once("exit", () => resolveExit());
   });
 
   const stop = async (): Promise<void> => {
-    const exited = new Promise<void>((resolveExit) => {
-      child.once("exit", () => resolveExit());
-    });
-    child.kill();
-    // Give the child a real chance to release the port and finish any
-    // in-flight file write before its directory is removed; a SIGTERM is
-    // not synchronous, and a stuck removal here should never fail the
-    // test that already ran.
-    await Promise.race([exited, new Promise((r) => setTimeout(r, 3_000))]);
+    child.kill("SIGTERM");
+    const exitedGracefully = await Promise.race([
+      exited.then(() => true as const),
+      new Promise<false>((r) => setTimeout(() => r(false), GRACEFUL_STOP_TIMEOUT_MS)),
+    ]);
+    if (!exitedGracefully) {
+      // SIGTERM did not land in time — escalate. `exited` is the same
+      // promise as above: if the process exits between the timeout above
+      // and this line, it is already resolved and this awaits instantly.
+      child.kill("SIGKILL");
+      await exited;
+    }
+    // Only remove the scratch directory once the child is confirmed gone —
+    // removing it while the process might still be alive risks pulling
+    // the standalone build (and its cache) out from under a live server.
     await rm(workDir, { recursive: true, force: true });
   };
 
@@ -230,14 +274,23 @@ async function bootIsolatedServer(): Promise<{ baseUrl: string; stop: () => Prom
     await waitUntilReady(baseUrl);
   } catch (error) {
     await stop();
-    throw error;
+    const diagnostics = [
+      spawnError ? `spawn error: ${spawnError.message}` : undefined,
+      stderrTail ? `isolated server stderr:\n${stderrTail}` : undefined,
+    ]
+      .filter((line): line is string => line !== undefined)
+      .join("\n");
+    throw new Error(
+      `isolated server never became ready${diagnostics ? `\n${diagnostics}` : ""}`,
+      { cause: error },
+    );
   }
 
   return { baseUrl, stop };
 }
 
 test.describe("hero image optimizer survives an aborted first request (issue #1300)", () => {
-  let server: { baseUrl: string; stop: () => Promise<void> };
+  let server: { baseUrl: string; stop: () => Promise<void> } | undefined;
 
   test.beforeAll(async () => {
     server = await bootIsolatedServer();
@@ -248,17 +301,23 @@ test.describe("hero image optimizer survives an aborted first request (issue #13
   });
 
   test.afterAll(async () => {
-    await server.stop();
+    // Optional: `beforeAll` can fail before `server` is ever assigned
+    // (missing standalone dir, `cp` failure, readiness timeout) — in that
+    // case there is nothing to stop, and this must not mask that failure
+    // behind a `TypeError: Cannot read properties of undefined`.
+    await server?.stop();
   });
 
   test("a request identical to one that was just aborted still resolves", async () => {
+    const baseUrl = server!.baseUrl;
+
     // The abort itself: this request is intentionally torn down mid-flight,
     // the same way a browser tab does when a test navigates away from it.
-    const aborted = get(server.baseUrl, HERO_IMAGE_PATH, { abortAfterMs: ABORT_AFTER_MS });
+    const aborted = get(baseUrl, HERO_IMAGE_PATH, { abortAfterMs: ABORT_AFTER_MS });
 
     // The regression: another request for the IDENTICAL cache key, sent
     // right after. On the buggy server this is the one that hangs.
-    const second = get(server.baseUrl, HERO_IMAGE_PATH);
+    const second = get(baseUrl, HERO_IMAGE_PATH);
 
     await aborted;
 

@@ -26,6 +26,7 @@ Self-hosted `next start` must survive the FIRST requester of a cold `/_next/imag
 - [x] T1 — Patch `next` with `pnpm patch`: `MockedRequest({url, method, headers: {}, socket: _req.socket})` + `MockedResponse({maximumResponseBody})`; `pnpm install --frozen-lockfile` applies it; Dockerfile copies `patches/`; `.next/standalone` contains the patched file. Evidence: RED (warm-up disabled, no patch) → GREEN (warm-up disabled, patch) for `hero-image-optimizer-abort.spec.ts`.
 - [x] T2 — Make `hero-image-optimizer-abort.spec.ts` independent of the warm-up (no reliance on global-setup warm state), run `make pre-pr LANE=frontend`, open PR `Closes #1303` with auto-merge squash.
 - [x] T3 — Correction (native review WARNING, PR #1304): the `q=91` decoupling from T2 was NOT sufficient — under the config CI actually runs (shared server, full warm-up ENABLED), the spec passed vacuously on both patched and unpatched `next`. Made the spec boot its own isolated, cold copy of the standalone build instead of sharing the suite's server; rewrote the doc comment to state only what was measured; tightened the `HERO_WARMUP_DISABLED` guard to an opaque token so a stray value can't disable it in a real deployment.
+- [x] T4 — Correction (native 4-lens review, non-blocking findings, PR #1305): hardened the isolated child's lifecycle (`stop()` escalates `SIGTERM`→`SIGKILL` before removing its scratch dir, an `error` listener on the `ChildProcess`, `stdio` no longer an unread pipe, `afterAll` guarded against a failed `beforeAll`), deduplicated the disable token into one shared `src/lib/hero-warmup-disable-token.ts` module, and corrected the doc comments' "never served a single request" claim (the readiness probe IS a request).
 
 ## Acceptance criteria
 1. Patch limited to the `fetchInternalImage` hunk, upstream commit cited in the patch header. ✅
@@ -105,11 +106,11 @@ configuration CI actually runs (`HERO_WARMUP_DISABLED` unset, shared server,
 full hero warm-up ENABLED), `hero-image-optimizer-abort.spec.ts` did not
 discriminate a patched `next` from an unpatched one — it passed vacuously
 either way. The spec's own doc comment claimed it "fails the same way with
-the warm-up left fully enabled", which the T2 evidence above already
-contradicted (`CI=true pnpm exec playwright test` passed 218/218 on the
-UNPATCHED-then-repatched sequence was never actually run under T2 — only
-patched — so the gap went unnoticed until the reviewer's own assessment and
-a fresh unpatched trial confirmed it).
+the warm-up left fully enabled"; that claim was never actually verified. T2
+only ran `CI=true pnpm exec playwright test` with the patch present
+(218/218 passed) — it never ran the same command against an unpatched
+`next`, so the vacuous-pass gap went unnoticed until the reviewer's own
+assessment prompted a fresh unpatched trial, which confirmed it.
 
 **Fix**: the spec now boots its OWN isolated, cold copy of the exact
 `.next/standalone` build the suite already produced — `cp -al` (hardlinks,
@@ -149,6 +150,66 @@ own isolated child) does not reliably carry a non-"production" `NODE_ENV`
 at runtime, so that guard would have blocked the spec's own reproduction
 too. The opaque-token guard achieves the same practical protection (no
 plausible accidental deployment value collides with it) without that risk.
+
+### T4 evidence — correction (native 4-lens review, non-blocking findings)
+
+**Findings** (PR #1305, approved with non-blocking findings — real
+robustness defects in a brand-new CI test, not disputed):
+1. `stop()` sent only `SIGTERM` and raced a 3 s timeout before removing the
+   scratch directory regardless of whether the child had actually exited —
+   a stuck child could have its working directory pulled out from under it
+   while still alive. No `error` listener on the `ChildProcess`, so a
+   spawn-level `error` event (e.g. `node` missing) would have thrown and
+   crashed the whole Playwright worker instead of failing just this test.
+2. `stdio: "pipe"` with nothing reading either stream risked the child
+   blocking on a full OS pipe buffer if it ever wrote enough output, and
+   gave no diagnostics on a boot/readiness failure.
+3. `afterAll` called `server.stop()` unconditionally; a `beforeAll` failure
+   (missing standalone dir, `cp` failure, readiness timeout) before
+   `server` was assigned would have thrown `TypeError: Cannot read
+   properties of undefined` instead of surfacing the real failure.
+4. The opaque disable token was two unlinked string literals
+   (`instrumentation.ts` and the spec) that happened to match today and
+   could silently drift apart on a future edit to either side.
+5. `bootIsolatedServer`'s doc comment claimed the isolated server "has
+   never served a single request" when it starts listening — false:
+   `waitUntilReady` issues a real `GET /` as part of booting it, so the
+   server has served exactly one request (the readiness probe) by the
+   time the function returns. The RED/GREEN evidence's "no prior
+   requests" framing meant "none beyond that probe", not literally zero.
+
+**Fix**: `stop()` now awaits a single canonical `exited` promise created
+once right after spawn (never a fresh `once('exit', ...)` registered
+later, which risks missing an event that already fired); on a timed-out
+graceful stop it escalates to `SIGKILL` and awaits that same promise again
+before removing the scratch directory. An `error` listener captures a
+spawn failure into a variable surfaced in the boot-failure message.
+`stdio` is now `["ignore", "ignore", "pipe"]` — stdout is unread noise,
+stderr is drained into a bounded (4000-char) tail buffer appended to any
+boot/readiness error. `afterAll` uses `server?.stop()`; `server`'s type
+is now `... | undefined`. `HERO_WARMUP_DISABLE_TOKEN` is exported once
+from `frontend/src/lib/hero-warmup-disable-token.ts` (new file, follows
+`global-setup.ts`'s existing pattern of importing from `src/lib/*` by
+relative path from `tests/e2e/`) and imported by both
+`src/instrumentation.ts` (via the `@/lib/*` alias) and the spec. Both
+files' doc comments rewritten to describe the readiness probe accurately;
+the request SEQUENCE itself is unchanged — it is the evidenced
+reproduction, not the bug.
+
+**Explicitly out of scope** (per the correction request, recorded here
+rather than fixed):
+- macOS portability of `cp -al`'s hardlink flags — the dev machine is Arch
+  Linux and CI is `ubuntu-latest`; both are GNU coreutils. Not addressed.
+- A negative unit test asserting the token guard rejects a non-matching
+  value (e.g. `"1"`) — not added; the existing RED/GREEN e2e evidence
+  already covers the guard's actual behavior end to end.
+
+**Verification** (plain command, no manual env vars beyond `CI=true`,
+patch present throughout):
+- `CI=true pnpm exec playwright test tests/e2e/hero-image-optimizer-abort.spec.ts` ×3 → see writer's final report for each run's result.
+- `CI=true pnpm exec playwright test` (full suite) ×1 → see writer's final report.
+- `pnpm type-check`, `pnpm lint` → see writer's final report.
+- `make pre-pr LANE=frontend` ×1 → see writer's final report.
 
 ## Next step
 Done — see final report for PR URL and delivery state.

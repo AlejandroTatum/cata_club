@@ -1,4 +1,5 @@
 import { warmHeroImageCache } from "@/lib/hero-image-cache-warmup";
+import { HERO_WARMUP_DISABLE_TOKEN } from "@/lib/hero-warmup-disable-token";
 
 /** Guards against a duplicate run — Next.js dev's Fast Refresh can reload
  *  this module without restarting the process, and this warm-up should only
@@ -63,15 +64,14 @@ let warmed = false;
  * file's bug, not a new one.
  *
  * `HERO_WARMUP_DISABLED` skips this step, but only when it holds the exact
- * opaque token below — not just any truthy value. `hero-image-optimizer-abort.spec.ts`
+ * opaque `HERO_WARMUP_DISABLE_TOKEN` (`@/lib/hero-warmup-disable-token`) —
+ * not just any truthy value. `hero-image-optimizer-abort.spec.ts`
  * (issue #1303) sets it verbatim on the isolated child server it spawns for
  * its own reproduction; nothing else in this codebase reads or sets it. A
  * stray `HERO_WARMUP_DISABLED=1` (or `=true`) copy-pasted into a real
  * deployment's environment does not match this token, so it cannot
  * silently disable the one thing keeping every other hero image safe.
  */
-const HERO_WARMUP_DISABLE_TOKEN = "only-for-hero-image-optimizer-abort-spec";
-
 export async function register(): Promise<void> {
   if (
     process.env.NEXT_RUNTIME !== "nodejs" ||
