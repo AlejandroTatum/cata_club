@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-location";
@@ -116,6 +116,7 @@ describe("LandingPage", (): void => {
   afterEach((): void => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("draws exactly one main landmark, opening at the skip link's target", (): void => {
@@ -589,6 +590,11 @@ describe("LandingPage", (): void => {
       expect(within(hero).queryByRole("tablist")).not.toBeInTheDocument();
       expect(within(hero).queryByRole("tab")).not.toBeInTheDocument();
 
+      // Slides are released as a visitor reaches them (issue #1281, see
+      // HeroCarousel), so the set is complete only once the ladder's last
+      // rung fires — a press on "next" is that rung.
+      fireEvent.click(next);
+
       const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
       expect(slides).toHaveLength(HERO_PHOTOS.length);
       HERO_PHOTOS.forEach((photo, index): void => {
@@ -619,14 +625,26 @@ describe("LandingPage", (): void => {
     });
 
     it("only exposes the active slide to assistive tech", (): void => {
+      vi.useFakeTimers();
       render(<LandingPage />);
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
-      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
+      const slides = (): HTMLElement[] => Array.from(hero.querySelectorAll(".landing-hero-slide"));
 
-      expect(slides[0]).not.toHaveAttribute("aria-hidden");
-      expect(slides[1]).toHaveAttribute("aria-hidden", "true");
-      expect(slides[2]).toHaveAttribute("aria-hidden", "true");
+      // jsdom has no `requestIdleCallback`, so the carousel's own fallback is
+      // the idle rung: advancing it releases the second slide without moving
+      // the active one.
+      act((): void => { vi.advanceTimersByTime(2_000); });
+      expect(slides()[0]).not.toHaveAttribute("aria-hidden");
+      expect(slides()[1]).toHaveAttribute("aria-hidden", "true");
+
+      fireEvent.click(within(hero).getByRole("button", { name: "Foto siguiente" }));
+
+      const released = slides();
+      expect(released).toHaveLength(HERO_PHOTOS.length);
+      expect(released[0]).toHaveAttribute("aria-hidden", "true");
+      expect(released[1]).not.toHaveAttribute("aria-hidden");
+      expect(released[2]).toHaveAttribute("aria-hidden", "true");
     });
 
     it("advances to the next slide on click, without GSAP", (): void => {
@@ -634,10 +652,12 @@ describe("LandingPage", (): void => {
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
       const next = within(hero).getByRole("button", { name: "Foto siguiente" });
-      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
 
       fireEvent.click(next);
 
+      // Re-queried after the click on purpose: the press is also the carousel's
+      // last release rung, so the slides it mounts are new nodes (issue #1281).
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
       expect(slides[1]).toHaveAttribute("data-active", "true");
       expect(slides[1]).not.toHaveAttribute("aria-hidden");
       expect(slides[0]).toHaveAttribute("data-active", "false");
@@ -650,13 +670,13 @@ describe("LandingPage", (): void => {
       const hero = document.querySelector(".landing-hero") as HTMLElement;
       const prev = within(hero).getByRole("button", { name: "Foto anterior" });
       const next = within(hero).getByRole("button", { name: "Foto siguiente" });
-      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
+      const slides = (): HTMLElement[] => Array.from(hero.querySelectorAll(".landing-hero-slide"));
 
       fireEvent.click(prev);
-      expect(slides[HERO_PHOTOS.length - 1]).toHaveAttribute("data-active", "true");
+      expect(slides()[HERO_PHOTOS.length - 1]).toHaveAttribute("data-active", "true");
 
       fireEvent.click(next);
-      expect(slides[0]).toHaveAttribute("data-active", "true");
+      expect(slides()[0]).toHaveAttribute("data-active", "true");
     });
 
     it("activates from the keyboard: focusing and pressing a navigation button moves the slide", (): void => {
@@ -664,12 +684,12 @@ describe("LandingPage", (): void => {
 
       const hero = document.querySelector(".landing-hero") as HTMLElement;
       const next = within(hero).getByRole("button", { name: "Foto siguiente" });
-      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
 
       next.focus();
       expect(next).toHaveFocus();
       fireEvent.click(next);
 
+      const slides = Array.from(hero.querySelectorAll(".landing-hero-slide"));
       expect(slides[1]).toHaveAttribute("data-active", "true");
     });
 

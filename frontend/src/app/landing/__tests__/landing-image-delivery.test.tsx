@@ -86,6 +86,17 @@ describe("hero carousel releases every slide to the network (issue #705)", (): v
   const slides = (): HTMLImageElement[] =>
     Array.from(document.querySelectorAll<HTMLImageElement>("img[data-slide]"));
 
+  /**
+   * Slides that are in the document but still waiting on the browser.
+   *
+   * Issue #1281 is the state this list describes: Chromium declined to fetch
+   * an invisible `lazy` slide, and promoting the attribute to `eager` created
+   * its request without ever dispatching it. A hero slide must never be in
+   * that state at all.
+   */
+  const deferredSlides = (): HTMLImageElement[] =>
+    Array.from(document.querySelectorAll<HTMLImageElement>('img[data-slide][loading="lazy"]'));
+
   it("never leaves the first slide lazy", (): void => {
     render(<HeroCarousel />);
 
@@ -93,7 +104,13 @@ describe("hero carousel releases every slide to the network (issue #705)", (): v
     expect(slides()[0].getAttribute("loading")).not.toBe("lazy");
   });
 
-  it("releases the next slide once the page goes idle", (): void => {
+  it("mounts nothing past the first slide until the release ladder moves", (): void => {
+    render(<HeroCarousel />);
+
+    expect(slides()).toHaveLength(1);
+  });
+
+  it("mounts the next slide once the page goes idle, already eager", (): void => {
     const idle = vi.fn((callback: () => void): number => {
       callback();
       return 1;
@@ -104,6 +121,7 @@ describe("hero carousel releases every slide to the network (issue #705)", (): v
     render(<HeroCarousel />);
 
     expect(idle).toHaveBeenCalled();
+    expect(slides()).toHaveLength(2);
     expect(slides()[1]).toHaveAttribute("loading", "eager");
   });
 
@@ -111,20 +129,23 @@ describe("hero carousel releases every slide to the network (issue #705)", (): v
     vi.useFakeTimers();
     render(<HeroCarousel />);
 
-    expect(slides()[1]).toHaveAttribute("loading", "lazy");
+    expect(slides()).toHaveLength(1);
     act((): void => { vi.advanceTimersByTime(2_000); });
+    expect(slides()).toHaveLength(2);
     expect(slides()[1]).toHaveAttribute("loading", "eager");
   });
 
   it("releases every remaining slide on the first interaction with the navigation buttons", (): void => {
     render(<HeroCarousel />);
 
-    // Before any interaction the last slide is still held back, so a visitor
-    // who never touches the carousel does not pay for three hero photos.
-    expect(slides()[HERO_PHOTOS.length - 1]).toHaveAttribute("loading", "lazy");
+    // Before any interaction the last slide is not even in the document, so a
+    // visitor who never touches the carousel does not pay for three hero
+    // photos.
+    expect(slides()).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Foto siguiente" }));
 
+    expect(slides()).toHaveLength(HERO_PHOTOS.length);
     for (const slide of slides().slice(1)) {
       expect(slide).toHaveAttribute("loading", "eager");
     }
@@ -137,8 +158,50 @@ describe("hero carousel releases every slide to the network (issue #705)", (): v
     next.focus();
     fireEvent.click(next);
 
+    expect(slides()).toHaveLength(HERO_PHOTOS.length);
     for (const slide of slides().slice(1)) {
       expect(slide).toHaveAttribute("loading", "eager");
+    }
+  });
+
+  it("never mounts a slide the browser is still being asked to defer (issue #1281)", (): void => {
+    const idle = vi.fn((callback: () => void): number => {
+      callback();
+      return 1;
+    });
+    vi.stubGlobal("requestIdleCallback", idle);
+    window.requestIdleCallback = idle as unknown as typeof window.requestIdleCallback;
+
+    render(<HeroCarousel />);
+
+    // The regression lock for the flake: a released slide is mounted eager on
+    // its first paint, so there is never a `lazy` hero slide for the browser
+    // to hold in its deferred state and promote later.
+    expect(slides().length).toBeGreaterThan(0);
+    expect(deferredSlides()).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Foto siguiente" }));
+
+    expect(slides()).toHaveLength(HERO_PHOTOS.length);
+    expect(deferredSlides()).toEqual([]);
+  });
+
+  it("keeps every released slide at low priority, never in the LCP image's lane", (): void => {
+    const idle = vi.fn((callback: () => void): number => {
+      callback();
+      return 1;
+    });
+    vi.stubGlobal("requestIdleCallback", idle);
+    window.requestIdleCallback = idle as unknown as typeof window.requestIdleCallback;
+
+    render(<HeroCarousel />);
+    fireEvent.click(screen.getByRole("button", { name: "Foto siguiente" }));
+
+    // Slide 0 keeps `priority`'s own attributes; every slide released behind
+    // it asks the network at low priority.
+    expect(slides()[0]).not.toHaveAttribute("fetchpriority");
+    for (const slide of slides().slice(1)) {
+      expect(slide).toHaveAttribute("fetchpriority", "low");
     }
   });
 });

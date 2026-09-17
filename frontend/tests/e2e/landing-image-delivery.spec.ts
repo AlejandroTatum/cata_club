@@ -15,6 +15,15 @@
  *    as unviewable, so pressing tab 02 revealed an empty frame while the
  *    photo downloaded.
  *
+ * 3. Issue #1281 — the hero carousel's second slide intermittently never
+ *    arrived: on failing runs the slide-1 request was CREATED and never
+ *    DISPATCHED (the only one of 51 network entries with `status: -1`, no
+ *    timings, no `serverIPAddress`), appearing exactly when
+ *    `requestIdleCallback` promoted that invisible slide from `loading="lazy"`
+ *    to `"eager"`. Slides are now mounted eager by the release ladder instead
+ *    of being promoted in place, so there is never a deferred hero slide to
+ *    promote; the last assertion below locks that in the real browser.
+ *
  * The unit lock in `src/app/landing/__tests__/landing-image-delivery.test.tsx`
  * covers the props. This one covers what those props actually cause a browser
  * to fetch, which is the part no jsdom test can see. Both were confirmed red
@@ -131,5 +140,11 @@ test.describe("landing image delivery", () => {
     await expect.poll(() => slideLoaded(2), { timeout: 15_000 }).toBe(true);
     await nextButton.click();
     expect(await slideLoaded(2)).toBe(true);
+
+    // The mechanism behind issue #1281: a hero slide the browser is still
+    // being asked to defer. Every slide in the document must already be
+    // fetching, with no `lazy` one for Chromium to hold in its deferred state
+    // and promote later.
+    await expect(page.locator('img[data-slide][loading="lazy"]')).toHaveCount(0);
   });
 });
