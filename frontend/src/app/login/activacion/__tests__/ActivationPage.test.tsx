@@ -159,30 +159,21 @@ function mockRefreshTo(nextSession: ActivationSession): Mock<() => Promise<Sessi
 }
 
 describe("ActivationPage — the email screen", () => {
-  it("shows the check-again action and the pending-enrolment sentence when both facts are pending", async () => {
+  it("shows the resend action and the check-again action, regardless of the enrolment fact (#1295)", async () => {
     renderPending(pendingSession());
 
-    expect(await screen.findByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
-    expect(lastSubtitle()).toContain(
-      "Después queda un paso: acérquese al club o escríbanos por WhatsApp para " +
-        "registrar la inscripción y el primer pago; el club lo valida y ahí se " +
-        "activa la membresía.",
-    );
+    expect(
+      await screen.findByRole("button", { name: /reenviar correo de verificación/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
     // No trace of the checklist/summary/inline-form screen this replaces.
     expect(screen.queryByLabelText(/código o enlace de verificación/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Inscripción presencial completada")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Abrir verificación de correo" })).not.toBeInTheDocument();
     // "Consultar estado nuevamente" is the enrolment screen's own primary
-    // action — the email screen has its own single primary, "Ya verifiqué
-    // mi correo", and must not show both at once.
+    // action — the email screen has its own single primary, "Reenviar
+    // correo de verificación", and must not show both at once.
     expect(screen.queryByRole("button", { name: "Consultar estado nuevamente" })).not.toBeInTheDocument();
-  });
-
-  it("omits the pending-enrolment sentence when only the email is pending", async () => {
-    renderPending(pendingSession({ altaPresencialCompletada: true }));
-
-    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
-    expect(lastSubtitle()).not.toContain("Después queda un paso");
   });
 
   it("names the account's own address so the person knows which inbox to check", async () => {
@@ -192,11 +183,55 @@ describe("ActivationPage — the email screen", () => {
     expect(lastSubtitle()).toContain("Le enviamos un enlace a estudiante@cataclub.com.");
   });
 
-  it("keeps the resend action available as a secondary control", async () => {
+  /**
+   * Issue #1295: the subtitle used to mix two different moments in one
+   * five-line paragraph — "open the link" (now) and "then queue at the club
+   * or WhatsApp for the first payment" (later, once verified) — with no
+   * mention of how long the email itself can take. The in-person step now
+   * lives only on the enrolment screen (`enrolmentScreenMessage`, already
+   * covered by the #1196 describe block below); this one locks that the
+   * email screen names the delay instead, regardless of whether the
+   * in-person enrolment is also still pending.
+   */
+  it("names the delay and spam folder, never the in-person step that follows, regardless of the enrolment fact (#1295)", async () => {
+    renderPending(pendingSession({ altaPresencialCompletada: false }));
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    const subtitle = lastSubtitle();
+    expect(subtitle).toContain("2 minutos");
+    expect(subtitle).toContain("correo no deseado");
+    expect(subtitle).not.toMatch(/whatsapp/i);
+    expect(subtitle).not.toMatch(/primer pago/i);
+  });
+
+  it("keeps the resend action available as the one primary control, styled primary (#1295)", async () => {
     renderPending();
 
-    expect(await screen.findByRole("button", { name: /reenviar correo de verificación/i })).toBeInTheDocument();
+    const resendButton = await screen.findByRole("button", { name: /reenviar correo de verificación/i });
+    expect(resendButton).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ya verifiqué mi correo" })).toBeInTheDocument();
+
+    // "bg-cata-red" is the token `buttonClasses("primary")` adds and no
+    // other variant shares as a standalone class — see `Button.tsx`'s
+    // `VARIANT` map. Exactly one button on this screen should carry it.
+    const primaryButtons = screen
+      .getAllByRole("button")
+      .filter((button) => button.className.split(/\s+/).includes("bg-cata-red"));
+    expect(primaryButtons).toEqual([resendButton]);
+  });
+
+  // Issue #1295: the card used to carry its own "Necesito ayuda" link right
+  // above "Cerrar sesión", a few pixels from the shell's own "¿Necesita
+  // ayuda para entrar?" launcher (`AuthShell.tsx`) — two paths to the same
+  // place. `AuthShell` is mocked to its children in this suite, so the
+  // launcher itself is not part of this render; this locks that the card no
+  // longer duplicates it.
+  it("no longer duplicates the shell's help launcher with an in-card link", async () => {
+    renderPending(pendingSession());
+
+    await screen.findByRole("button", { name: "Ya verifiqué mi correo" });
+    expect(screen.queryByRole("link", { name: /necesito ayuda/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
   });
 
   it("moves to the enrolment screen once checking status reports the email verified, with only the enrolment pending", async () => {

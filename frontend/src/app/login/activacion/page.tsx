@@ -9,35 +9,32 @@ import { cambiarCorreoNoVerificado, reenviarVerificacionCorreo } from "@/service
 import { getDefaultRoute } from "@/lib/auth-utils";
 import { isActivationComplete, type ActivationSession } from "@/lib/activation-reasons";
 import { toUserMessage } from "@/lib/error-message";
-import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES, AUTH_LINK_CLASSES } from "@/components/auth/AuthShell";
+import AuthShell, {
+  AUTH_INPUT_CLASSES,
+  AUTH_LABEL_CLASSES,
+  AUTH_LINK_CLASSES,
+  EMAIL_DELAY_SPAM_NOTICE,
+} from "@/components/auth/AuthShell";
 import { Button, buttonClasses } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 
 /**
- * The subtitle for the email-verification screen (#1191).
+ * The subtitle for the email-verification screen (#1191, revised by #1295).
  *
  * Names the account's own address so the person can confirm they are looking
  * for the right inbox — the verification email carries a LINK, not a code,
  * so opening it (from any device) is the one thing that resolves this
- * screen. The third sentence only appears when the in-person enrolment is
- * ALSO still pending — naming the next step up front avoids the surprise of
- * landing back on this same route for a different reason right after
- * finishing this one.
+ * screen. One idea only (#1295): what was sent and how long it can take,
+ * through the same delay + spam-folder sentence `forgot-password` uses, so a
+ * visitor checking at the 20-second mark reads it as "still on the way", not
+ * "it failed". The in-person step (club/WhatsApp, first payment) no longer
+ * appears here — that is what comes AFTER this screen, and already lives on
+ * the enrolment screen's own `enrolmentScreenMessage` below.
  */
-function emailScreenSubtitle(activation: ActivationSession, altaCompletada: boolean): string {
+function emailScreenSubtitle(activation: ActivationSession): string {
   const email = activation.user.email;
-  const parts = [
-    email ? `Le enviamos un enlace a ${email}.` : "Le enviamos un enlace a su correo.",
-    "Ábralo para verificar su cuenta; puede hacerlo desde este u otro dispositivo.",
-  ];
-  if (!altaCompletada) {
-    parts.push(
-      "Después queda un paso: acérquese al club o escríbanos por WhatsApp para " +
-        "registrar la inscripción y el primer pago; el club lo valida y ahí se " +
-        "activa la membresía.",
-    );
-  }
-  return parts.join(" ");
+  const greeting = email ? `Le enviamos un enlace a ${email}.` : "Le enviamos un enlace a su correo.";
+  return `${greeting} ${EMAIL_DELAY_SPAM_NOTICE}`;
 }
 
 /**
@@ -260,29 +257,42 @@ function ActivationPageContent(): React.ReactElement {
     return (
       <AuthShell
         title="Verifique su correo"
-        subtitle={emailScreenSubtitle(activation, altaCompletada)}
+        subtitle={emailScreenSubtitle(activation)}
         eyebrow="Acceso al club"
         hideBack
       >
         <div className="flex flex-col gap-4">
-          <Button type="button" variant="primary" onClick={checkStatus} disabled={resending} className="w-full">
-            Ya verifiqué mi correo
-          </Button>
-          {stillUnverified && (
-            <p role="status" className="text-sm leading-relaxed text-ink-2">
-              Todavía no encontramos la verificación. Abra el enlace del correo y vuelva a intentar.
-            </p>
-          )}
-          {resendMessage && <p role="status" className="text-sm leading-relaxed text-state-ok">{resendMessage}</p>}
-          {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
-
-          <p className="text-center text-2xs text-ink-3-strong">¿No recibió el enlace?</p>
+          {/*
+           * ONE primary action (#1295): "Reenviar correo de verificación".
+           * "Ya verifiqué mi correo" used to sit here as a second primary —
+           * the status is already checked once on mount (#1195), so the
+           * manual re-check moves below as a quiet text action instead of
+           * competing for the same visual weight.
+           */}
           <form className="flex flex-col gap-2.5" onSubmit={resendVerification}>
-            <Button type="submit" variant="secondary" disabled={resending} className="w-full">
+            <Button type="submit" variant="primary" disabled={resending} className="w-full">
               <Mail size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
               {resending ? "Enviando…" : "Reenviar correo de verificación"}
             </Button>
           </form>
+          {resendMessage && <p role="status" className="text-sm leading-relaxed text-state-ok">{resendMessage}</p>}
+          {resendError && <p role="alert" className="text-sm leading-relaxed text-state-bad">{resendError}</p>}
+
+          <div className="flex flex-col items-center gap-2 text-center">
+            <button
+              type="button"
+              onClick={checkStatus}
+              disabled={resending}
+              className={buttonClasses("tertiary", "sm")}
+            >
+              Ya verifiqué mi correo
+            </button>
+            {stillUnverified && (
+              <p role="status" className="text-sm leading-relaxed text-ink-2">
+                Todavía no encontramos la verificación. Abra el enlace del correo y vuelva a intentar.
+              </p>
+            )}
+          </div>
 
           {!emailCorrectionOpen && (
             <button
@@ -334,8 +344,14 @@ function ActivationPageContent(): React.ReactElement {
             </form>
           )}
 
+          {/*
+           * Issue #1295: the shell already renders "¿Necesita ayuda para
+           * entrar?" (`AuthShell.tsx`) below the card — this in-card
+           * "Necesito ayuda" duplicated that same path a few pixels away.
+           * "Cerrar sesión" is the one action here the shell has no
+           * equivalent for, so it is the only thing left in this row.
+           */}
           <div className="flex flex-col items-center gap-2 text-center text-sm">
-            <Link href="/ayuda" className={AUTH_LINK_CLASSES}>Necesito ayuda</Link>
             <button type="button" onClick={() => void logout()} className={buttonClasses("tertiary", "sm")}>
               Cerrar sesión
             </button>

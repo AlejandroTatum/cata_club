@@ -19,7 +19,7 @@
 import { type FormEvent, useRef, useState } from "react";
 import { Mail, CheckCircle2 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES } from "@/components/auth/AuthShell";
+import AuthShell, { AUTH_INPUT_CLASSES, AUTH_LABEL_CLASSES, EMAIL_DELAY_SPAM_NOTICE } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui";
 import { solicitarRecuperacion, ApiClientError } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
@@ -106,15 +106,19 @@ export default function ForgotPasswordPage(): React.ReactElement {
           </span>
           <p className="text-sm leading-relaxed text-ink-2">
             Si <strong className="font-semibold text-ink">{correo.trim()}</strong> está
-            registrado, recibirá un enlace para restablecer su contraseña en unos minutos.
+            registrado, recibirá un enlace para restablecer su contraseña.
           </p>
-          {/* Issue #316 hallazgo #64: the confirmation named neither of the
-              two things an abuelo needs once "en unos minutos" has passed —
-              where else to look, and how to tell "me equivoqué al tipear" apart
-              from "todavía no llegó". */}
-          <p className="text-xs leading-relaxed text-ink-3">
-            Si no lo ve en unos minutos, revise la carpeta de correo no deseado.
-          </p>
+          {/*
+           * Issue #316 hallazgo #64: the confirmation named neither of the
+           * two things an abuelo needs once the wait has passed — where else
+           * to look, and how to tell "me equivoqué al tipear" apart from
+           * "todavía no llegó". Issue #1295: the delay + spam-folder sentence
+           * itself now comes from the same constant `/login/activacion`'s
+           * email screen uses — both sit behind the same outbox/Resend
+           * queue, so "unos 2 minutos" replaces the vaguer "en unos minutos"
+           * this used to guess at on its own.
+           */}
+          <p className="text-xs leading-relaxed text-ink-3">{EMAIL_DELAY_SPAM_NOTICE}</p>
           <Button variant="tertiary" size="sm" onClick={handleRetry} className="mt-1">
             Enviar otro enlace
           </Button>

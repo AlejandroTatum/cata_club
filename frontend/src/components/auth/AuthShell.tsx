@@ -123,6 +123,18 @@ export const AUTH_INPUT_CLASSES =
 export const AUTH_LABEL_CLASSES = "mb-1.5 block text-xs font-semibold text-ink";
 
 /**
+ * The delay + spam-folder sentence shared by every auth screen that sends a
+ * transactional email (#1295). `/login/activacion`'s email screen and
+ * `/forgot-password`'s confirmation used to spell this out separately, each
+ * with its own guess at how long the send actually takes — both sit behind
+ * the same outbox, dispatched by the same Celery beat job and delivered
+ * through the same Resend account, so it is one fact, not two copys.
+ * "Unos 2 minutos" is measured off that queue, not a placeholder.
+ */
+export const EMAIL_DELAY_SPAM_NOTICE =
+  "Puede tardar unos 2 minutos en llegar; si no lo ve, revise la carpeta de correo no deseado.";
+
+/**
  * The ONE link skin the four auth screens share.
  *
  * It lived in `login/page.tsx` as a file-local constant, which is why
