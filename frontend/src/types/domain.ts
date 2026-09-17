@@ -439,7 +439,14 @@ export type TipoNotificacion =
   // bonificada coverage never charged anything, so the notice can't read
   // "your payment of $X was approved" (that would describe money that never
   // moved). See `PagoServicio.aplicar_beneficio_bonificado`.
-  | "COBERTURA_BONIFICADA_OTORGADA";
+  | "COBERTURA_BONIFICADA_OTORGADA"
+  // PR D (student-experience debt): operational notice to the admins when the
+  // daily SMTP cap (Resend free plan) is exhausted and sends are being
+  // skipped. Own type on purpose — the one-notification-per-admin-per-day
+  // dedup keys on the type, so sharing RESUMEN_MORA_ADMIN would make the two
+  // daily summaries overwrite each other. See
+  // `notificaciones_servicio._avisar_cupo_agotado`.
+  | "RESUMEN_CUPO_CORREO_ADMIN";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —

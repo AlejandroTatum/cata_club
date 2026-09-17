@@ -14,19 +14,25 @@ el worker Celery, y eso un proceso no lo puede sostener solo. Ver
 import logging
 import smtplib
 from collections.abc import Mapping
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape as escapar_html
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.dominio.enums import TipoNotificacion, TipoRol
 from app.dominio.excepciones import (
     DestinatarioRechazadoPermanentemente,
     ServicioNoDisponible,
 )
-from app.dominio.modelos import ContadorCorreoDiario
+from app.dominio.modelos import (
+    ContadorCorreoDiario,
+    Notificacion,
+    Rol,
+    Usuario,
+)
 from app.infraestructura.asuntos_correo import (
     ASUNTO_BIENVENIDA_INSCRIPCION,
     ASUNTO_PAGO_APROBADO,
@@ -41,6 +47,7 @@ from app.soporte_transversal.resiliencia import (
     CIRCUITO_SMTP_UMBRAL_FALLOS,
     TIMEOUT_SMTP_SEGUNDOS,
 )
+from app.soporte_transversal.tiempo import hoy_club, inicio_del_dia_club
 
 logger = logging.getLogger("cataclub.notificaciones")
 
@@ -160,8 +167,21 @@ _circuito_smtp = CircuitoBreaker(
 )
 
 
-def _reservar_cupo_de_envio_diario() -> bool:
-    """Reserva un cupo del límite diario de envíos. `False` = cupo agotado.
+class _ReservaCupo(NamedTuple):
+    """Resultado de reservar un cupo del límite diario de envíos.
+
+    `permitido=False` es "cupo agotado": el envío se omite. En ese caso
+    `omitidos_hoy` trae el acumulado de envíos omitidos del día, que es lo que
+    el aviso operativo a los administradores reporta. Con `permitido=True`
+    vale 0.
+    """
+
+    permitido: bool
+    omitidos_hoy: int
+
+
+def _reservar_cupo_de_envio_diario() -> _ReservaCupo:
+    """Reserva un cupo del límite diario de envíos.
 
     Process-safe: el conteo vive en `contador_correo_diario` y la reserva es
     un `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` que Postgres evaluó
@@ -173,6 +193,13 @@ def _reservar_cupo_de_envio_diario() -> bool:
     falla, o un proceso que muere justo después, ya consumió su cupo. Es
     conservador a propósito: el techo del proveedor -- lo único que este
     guardarraíl tiene que garantizar -- nunca se supera.
+
+    Ese mismo "reservar antes de decidir" es lo que hace medible la omisión
+    SIN agregar una columna: `enviados` también cuenta los intentos
+    denegados, así que el exceso sobre el límite ES el acumulado de omitidos
+    del día (`omitidos_hoy`). Si el operador cambia el límite a mitad del día
+    el número queda aproximado; alcanza, porque es un aviso operativo y no
+    una métrica de facturación.
 
     Se lleva por día UTC (`datetime.now(timezone.utc).date()`), el mismo
     reloj que el resto del backend.
@@ -186,7 +213,7 @@ def _reservar_cupo_de_envio_diario() -> bool:
     """
     limite = settings.limite_correos_diario
     if limite <= 0:
-        return True
+        return _ReservaCupo(True, 0)
     try:
         with SessionLocal() as db:
             hoy = datetime.now(timezone.utc).date()
@@ -210,8 +237,98 @@ def _reservar_cupo_de_envio_diario() -> bool:
             "(%s)",
             type(exc).__name__,
         )
-        return True
-    return reservados <= limite
+        return _ReservaCupo(True, 0)
+    return _ReservaCupo(
+        permitido=reservados <= limite,
+        omitidos_hoy=max(0, reservados - limite),
+    )
+
+
+def _mensaje_cupo_agotado(omitidos: int) -> str:
+    """Texto del aviso: el hecho, el techo vigente y cuántos quedaron afuera.
+
+    Sin alarmismo y sin prometer nada que este código no haga: lo que el club
+    deja de recibir es CORREO; el registro in-app de cada aviso sigue
+    ocurriendo (ese no pasa por SMTP).
+    """
+    return (
+        f"Se alcanzó el tope diario de correos ({settings.limite_correos_diario}) "
+        f"y {omitidos} envío(s) quedaron sin salir hoy. "
+        f"Las notificaciones dentro de la aplicación no se ven afectadas."
+    )
+
+
+def _sincronizar_aviso_cupo_admin(omitidos: int) -> None:
+    """Deja UN aviso por administrador ACTIVO para el día del club.
+
+    Upsert, no `INSERT` a ciegas: el primer envío omitido del día crea la fila
+    y los siguientes REFRESCAN su mensaje, porque el objetivo es un resumen y
+    `omitidos` sigue creciendo mientras el cupo siga agotado. La fila sigue
+    siendo una sola por administrador por día -- la misma dedup que
+    `alertas_tareas` aplica a `RESUMEN_MORA_ADMIN`, y con la misma ventana: el
+    día del CLUB (`hoy_club()`), no el día UTC del contador. El contador y el
+    aviso miden cosas distintas a propósito (uno es cupo del proveedor, el
+    otro es lectura humana), y el tipo propio
+    (`TipoNotificacion.RESUMEN_CUPO_CORREO_ADMIN`) es lo que evita que esta
+    dedup pise la del resumen de mora.
+    """
+    inicio_dia = inicio_del_dia_club(hoy_club())
+    fin_dia = inicio_dia + timedelta(days=1)
+    mensaje = _mensaje_cupo_agotado(omitidos)
+    with SessionLocal() as db:
+        admins = (
+            db.query(Usuario)
+            .join(Usuario.roles)
+            .filter(Rol.tipo_rol == TipoRol.ADMINISTRADOR, Usuario.activo.is_(True))
+            .all()
+        )
+        if not admins:
+            # Un club sin administradores activos no tiene a quién avisarle;
+            # el warning del envío omitido sigue quedando en el log.
+            return
+        personas_admin = {admin.persona_id for admin in admins}
+        ya_avisados = {
+            fila.persona_id: fila
+            for fila in db.query(Notificacion).filter(
+                Notificacion.tipo == TipoNotificacion.RESUMEN_CUPO_CORREO_ADMIN,
+                Notificacion.persona_id.in_(personas_admin),
+                Notificacion.fecha_creacion >= inicio_dia,
+                Notificacion.fecha_creacion < fin_dia,
+            ).all()
+        }
+        for persona_id in personas_admin:
+            existente = ya_avisados.get(persona_id)
+            if existente is None:
+                db.add(Notificacion(
+                    tipo=TipoNotificacion.RESUMEN_CUPO_CORREO_ADMIN,
+                    mensaje=mensaje,
+                    persona_id=persona_id,
+                ))
+            else:
+                existente.mensaje = mensaje
+        db.commit()
+
+
+def _avisar_cupo_agotado(omitidos: int) -> None:
+    """Best-effort: avisar del cupo agotado jamás puede propagarse.
+
+    Cuando esto corre, el envío YA se omitió y quien llamó a `enviar_correo`
+    -- la validación de un pago, la entrega de una cola de salida -- puede
+    estar cerrando una operación ya commiteada. Perder el aviso operativo es
+    un daño menor y queda visible en el log; romper esa operación es el daño
+    grave, y es justo lo que el contrato de `enviar_correo` evita para el
+    cupo. El aviso hereda ese mismo contrato.
+    """
+    try:
+        _sincronizar_aviso_cupo_admin(omitidos)
+    except Exception as exc:
+        # Solo el tipo de la excepción: el mensaje de SQLAlchemy puede traer
+        # la URL de la base con credenciales.
+        logger.warning(
+            "No se pudo avisar a los administradores que el tope diario de "
+            "correos se agotó (%s)",
+            type(exc).__name__,
+        )
 
 
 class ServicioNotificaciones:
@@ -243,7 +360,8 @@ class ServicioNotificaciones:
 
         Después del circuito y antes de `smtplib`, se reserva un cupo del
         límite diario (`_reservar_cupo_de_envio_diario`, plan gratuito de
-        Resend). Si ya no hay cupo, el envío se omite y se loguea un warning:
+        Resend). Si ya no hay cupo, el envío se omite, se loguea un warning y
+        se avisa a los administradores (`_avisar_cupo_agotado`, best-effort):
         esta función NO levanta por el cupo, porque el llamador puede estar
         cerrando una operación ya commiteada. Es el único chokepoint de todo
         el envío -- API y Celery pasan por acá.
@@ -284,14 +402,17 @@ class ServicioNotificaciones:
         # un circuito abierto no gasta cupo. Si se agotó, el envío se omite
         # con un warning y la función retorna normal -- quien la envuelve
         # (validación de pago, entrega de outbox) ya está commiteado y no
-        # puede fallar por esto.
-        if not _reservar_cupo_de_envio_diario():
+        # puede fallar por esto. El aviso a los administradores es
+        # best-effort por la misma razón: ver `_avisar_cupo_agotado`.
+        reserva = _reservar_cupo_de_envio_diario()
+        if not reserva.permitido:
             logger.warning(
                 "Límite diario de correos alcanzado (limite_correos_diario=%s): "
                 "envío omitido a %s con asunto '%s'",
                 settings.limite_correos_diario,
                 _enmascarar_correo(destinatario), asunto,
             )
+            _avisar_cupo_agotado(reserva.omitidos_hoy)
             return
 
         msg = MIMEMultipart("alternative")
