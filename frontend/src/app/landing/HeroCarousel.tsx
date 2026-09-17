@@ -28,6 +28,22 @@ export interface HeroSlideChangeDetail {
  * first is `priority`, the second is released once the page goes idle, and
  * the rest follow the first interaction with the carousel — by then the
  * visitor is demonstrably browsing photos.
+ *
+ * A release MOUNTS a slide; it does not keep it in the DOM as
+ * `loading="lazy"` and promote the attribute later. That promotion is what
+ * issue #1281 caught: on a loaded CI runner, flipping an invisible slide from
+ * `lazy` to `eager` created its `/_next/image` request and then never
+ * dispatched it — the only one of 51 network entries with `status: -1`, no
+ * timings and no `serverIPAddress`, appearing exactly at the
+ * `requestIdleCallback` release, while the sibling released later through the
+ * same path came back 200 in ~30 ms and the optimizer stayed healthy. A lazy
+ * image Chromium has already declined as "not viewable" is in the deferred
+ * state its lazy-loader tracks for that element, and changing the attribute
+ * did not reliably take it out again. An element mounted eager from its first
+ * paint never enters that state: it asks for its bytes the way the `priority`
+ * slide does, which has never flaked. The cost profile is unchanged — one
+ * photo at parse, two after idle, three on interaction — and a slide is still
+ * never revealed before the browser has been asked for it (issue #705).
  */
 const PRIORITY_SLIDE_REACH = 1;
 const IDLE_SLIDE_REACH = 2;
@@ -141,7 +157,13 @@ export default function HeroCarousel(): React.ReactElement {
       <div className="landing-hero-frame" data-media-reveal ref={frameRef}>
         <div className="landing-hero-screen">
           <span className="landing-hero-frameball" data-frame-ball aria-hidden="true" />
-          {HERO_PHOTOS.map((photo, index): React.ReactElement => (
+          {/* Only the released slides exist, and each one is already
+              `eager` on its first paint — see the release comment above
+              (issue #1281). `index === 0` keeps `priority`'s own loading
+              attributes untouched; every other slide fetches at low
+              priority so the released photo never competes with the hero's
+              LCP image for the bytes of a visitor's first paint. */}
+          {HERO_PHOTOS.slice(0, slideReach).map((photo, index): React.ReactElement => (
             <Image
               key={photo.src}
               className="landing-hero-slide"
@@ -149,7 +171,8 @@ export default function HeroCarousel(): React.ReactElement {
               alt={photo.alt}
               fill
               priority={index === 0}
-              loading={index === 0 ? undefined : index < slideReach ? "eager" : "lazy"}
+              loading={index === 0 ? undefined : "eager"}
+              fetchPriority={index === 0 ? undefined : "low"}
               quality={90}
               /* The carousel spans from `.landing-hero-carousel`'s 44% desktop
                  inset to the viewport's right edge — roughly 56% of it,
