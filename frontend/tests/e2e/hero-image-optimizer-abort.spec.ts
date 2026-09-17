@@ -36,10 +36,18 @@
  * (`hero-competition.jpg`, `w=828`, `q=90` — the candidate this app's
  * `sizes` prop produces at the landing spec's 1280×800 viewport) survives
  * an abort-then-identical-request sequence within a bound far under the
- * flake's 15 s ceiling. Without `instrumentation.ts` (or with a cold image
- * cache), this hangs — reverting it, or deleting
- * `.next/standalone/.next/cache/images` right before this spec runs,
- * reproduces the failure this locks against.
+ * flake's 15 s ceiling. Without the warm-up (or with a cold image cache),
+ * this hangs — deleting `.next/standalone/.next/cache/images` right before
+ * this spec runs reproduces the failure this locks against.
+ *
+ * The request MUST send the same `Accept` header a real Chromium `<img>`
+ * fetch sends: `/_next/image` folds the negotiated output format into its
+ * cache key (`ImageOptimizerCache.getCacheKey` in
+ * `next/dist/server/image-optimizer.js`), so a request with no `Accept`
+ * header lands on a different key (served as JPEG) than the one a browser
+ * actually reads (served as WebP) — this is exactly the gap that let the
+ * #1300 hang survive an earlier version of the warm-up fix: it was warming
+ * the JPEG key while every real request asked for the WebP one.
  */
 import http from "node:http";
 import { test, expect } from "@playwright/test";
@@ -47,6 +55,10 @@ import { E2E_BASE_URL } from "./e2e-target";
 
 /** The exact request the #1300 trace named as never answering. */
 const HERO_IMAGE_PATH = "/_next/image?url=%2Flanding%2Fhero-competition.jpg&w=828&q=90";
+
+/** Same `Accept` header a real Chromium `<img>` request sends — see the
+ *  file doc comment for why this changes the cache key entirely. */
+const CHROMIUM_IMAGE_ACCEPT = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
 
 /** Far under the original 15 s ceiling: a healthy cache-hit answers in tens
  *  of milliseconds, so this only needs enough room for CI's own load. */
@@ -59,7 +71,7 @@ const ABORT_AFTER_MS = 2;
 function get(path: string, options: { abortAfterMs?: number } = {}): Promise<{ settled: boolean; status?: number }> {
   const url = new URL(path, E2E_BASE_URL);
   return new Promise((resolve) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, { headers: { accept: CHROMIUM_IMAGE_ACCEPT } }, (res) => {
       res.resume();
       res.on("end", () => resolve({ settled: true, status: res.statusCode }));
     });
