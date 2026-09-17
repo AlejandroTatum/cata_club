@@ -30,6 +30,7 @@
  * by reverting each fix in turn.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { HERO_PHOTOS } from "../../src/app/landing/landing-hero-photos";
 
 /** The measurement viewport every byte count in this file refers to. */
 const VIEWPORT = { width: 1280, height: 800 };
@@ -115,6 +116,21 @@ test.describe("landing image delivery", () => {
 
   test("the hero never reveals a slide the browser has not fetched (issue #705)", async ({ page }) => {
     await page.setViewportSize(VIEWPORT);
+
+    // Registered BEFORE navigation: the idle release that mounts slide 1 can
+    // fire as early as the next tick after load, and a listener attached
+    // after `goto` could miss a response that already happened by then.
+    // Matching on the actual `/_next/image` request for the second hero
+    // photo ties this to the real release signal (issue #1300's own trace
+    // measured this exact request never answering) instead of a wall-clock
+    // budget that has no relationship to when the browser was actually
+    // asked for the bytes.
+    const slide1Response = page.waitForResponse(
+      (response) =>
+        response.url().includes("/_next/image") && response.url().includes(encodeURIComponent(HERO_PHOTOS[1].src)),
+      { timeout: 15_000 },
+    );
+
     await page.goto("/");
 
     const slideLoaded = (index: number): Promise<boolean> =>
@@ -126,9 +142,13 @@ test.describe("landing image delivery", () => {
     const nextButton = page.getByRole("button", { name: "Foto siguiente" });
     await expect(nextButton).toBeVisible();
 
-    // The first slide is `priority`, and the second is released once the page
-    // goes idle — so by the time anyone can press "next", it is already there.
+    // The first slide is `priority`, already requested at parse.
     await expect.poll(() => slideLoaded(0), { timeout: 15_000 }).toBe(true);
+
+    // The second is released once the page goes idle — wait for its actual
+    // network response, then confirm the browser finished decoding it.
+    const response = await slide1Response;
+    expect(response.ok()).toBe(true);
     await expect.poll(() => slideLoaded(1), { timeout: 15_000 }).toBe(true);
 
     // The reveal itself: no waiting between the press and the assertion. On
