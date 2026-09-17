@@ -147,6 +147,56 @@ def tiene_extension_de_imagen(public_id: str) -> bool:
     return public_id.lower().endswith(_EXTENSIONES_DE_IMAGEN)
 
 
+# Sufijos que identifican un PDF en la columna de formato persistida
+# (`Pago.voucher_formato` guarda el MIME completo; `ComprobantePago.
+# formato_archivo` guarda `"pdf"`). Es el único discriminador válido para los
+# recursos `raw`: su `public_id` nunca lleva extensión (la agrega la entrega).
+_FORMATOS_PDF = ("application/pdf", "pdf")
+
+
+def es_pdf(formato: Optional[str]) -> bool:
+    """`True` si el formato persistido describe un PDF.
+
+    Los dos valores reales: `Pago.voucher_formato` guarda el MIME completo
+    (`application/pdf`) y `ComprobantePago.formato_archivo` guarda `"pdf"`.
+    Cualquier otra cosa (incluido vacío/NULL) NO se asume PDF: asumirlo
+    mandaría a `raw` un asset `image/authenticated`, y ese borrado equivocado
+    no falla -- Cloudinary responde `not found` y el archivo queda vivo.
+    """
+    return (formato or "").strip().lower() in _FORMATOS_PDF
+
+
+def resource_type_de_destruccion(
+    valor_almacenado: str, content_type: Optional[str] = None
+) -> str:
+    """`resource_type` con el que hay que DESTRUIR el recurso descrito por lo
+    persistido (`Pago.voucher_url`, `Persona.foto_url`, `ComprobantePago.
+    archivo_url`). Único lugar donde vive esta discriminación: la usan
+    `eliminar_voucher_pago` (y por lo tanto el reemplazo) y
+    `SupresionDatosServicio`, que antes la duplicaban -- y que al hacerlo
+    borraban como `raw` un asset que en realidad era `image/authenticated`.
+
+    Cloudinary NO falla al destruir un `public_id` inexistente: responde
+    `not found` sin excepción. O sea que un `resource_type` equivocado no
+    rompe nada visible -- simplemente deja el archivo (foto de una persona,
+    voucher bancario) VIVO en el proveedor después de una baja o de una
+    supresión de datos. Por eso la regla tiene que salir de la forma
+    persistida y no de una suposición:
+
+      - PDF (`content_type` con formato pdf) -> `raw`: nunca lleva extensión
+        en el `public_id`, la agrega la entrega. Sigue igual que siempre.
+      - imagen CON extensión en el `public_id` (`perfil_31.jpg`,
+        `voucher-pago-...jpg`) -> `raw`: es el recurso post-#1072.
+      - imagen SIN extensión (`perfil_31`, `voucher-pago-...-v1-<uuid>`) ->
+        `image`: es una fila PREVIA al #1072, y su asset vive como
+        `image/authenticated`. La migración las convierte, pero hasta que eso
+        corra el borrado tiene que apuntar donde el archivo realmente está.
+    """
+    if es_pdf(content_type):
+        return "raw"
+    return "raw" if tiene_extension_de_imagen(valor_almacenado) else "image"
+
+
 def _configurar_cliente() -> None:
     """Inicializa el cliente de Cloudinary con las credenciales del entorno.
     Idempotente: re-aplicar la config sobreescribe pero no corrompe el state."""
@@ -385,18 +435,20 @@ def subir_voucher_pago(
 def eliminar_voucher_pago(nombre_publico: str, content_type: str) -> None:
     """Best-effort deletion of a committed replacement's former voucher.
 
-    `resource_type="raw"` para TODOS los vouchers (issue #1072): desde ese
-    fix tanto el PDF como la imagen se suben como `raw` autenticado, así que
-    distinguir por MIME ya no seleccionaba nada real.
+    El `resource_type` sale de `resource_type_de_destruccion(nombre_publico,
+    content_type)`: un voucher reemplazado puede ser un PDF (`raw`), una
+    imagen ya migrada (`raw`) o una imagen PREVIA al issue #1072
+    (`image/authenticated`). Mandar todo a `raw` no rompía nada visible
+    -- Cloudinary responde `not found` sin excepción -- pero dejaba el
+    comprobante bancario viejo, con datos del socio, vivo en el proveedor.
 
-    `content_type` se conserva en la firma (lo pasan los servicios y los
-    tests) y viaja a la descripción del log, para poder distinguir en un
-    vistazo si el voucher que no se pudo borrar era PDF o imagen.
+    `content_type` es el formato persistido (`Pago.voucher_formato`, MIME
+    completo) y viaja además a la descripción del log.
     """
     eliminar_logo_sponsor(
         nombre_publico,
         carpeta=settings.cloudinary_carpeta_vouchers,
-        resource_type="raw",
+        resource_type=resource_type_de_destruccion(nombre_publico, content_type),
         tipo="authenticated",
         descripcion=f"voucher ({content_type})",
     )

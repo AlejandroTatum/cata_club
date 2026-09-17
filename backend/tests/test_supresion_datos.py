@@ -29,12 +29,18 @@ from app.servicios_negocio.supresion_datos_servicio import (
 
 # --- Fábricas -----------------------------------------------------------------
 def _crear_persona(db_session, cedula="1710034065", nombres="Ana", apellidos="Vega",
-                   con_foto=False, fecha_nacimiento=date(1990, 1, 1)) -> Persona:
+                   con_foto=False, fecha_nacimiento=date(1990, 1, 1),
+                   foto_url=None) -> Persona:
+    # `con_foto=True` siembra la forma PREVIA al issue #1072 (public_id sin
+    # extensión, asset `image/authenticated`); `foto_url=` permite sembrar la
+    # forma migrada (`perfil_ana.jpg`), que es la que se destruye como `raw`.
+    if foto_url is None and con_foto:
+        foto_url = "perfil_ana|7"
     persona = Persona(
         nombres=nombres, apellidos=apellidos, cedula=cedula,
         fecha_nacimiento=fecha_nacimiento, telefono="0990000000",
         telefono_contacto="022000000",
-        foto_url="perfil_ana|7" if con_foto else None,
+        foto_url=foto_url,
     )
     db_session.add(persona)
     db_session.commit()
@@ -73,7 +79,8 @@ def _crear_sesion(db_session, usuario: Usuario) -> Sesion:
 
 
 def _crear_historial(db_session, persona: Persona, estado_pago=EstadoPago.APROBADO,
-                     con_voucher=False, voucher_formato="application/pdf") -> dict:
+                     con_voucher=False, voucher_formato="application/pdf",
+                     voucher_url="voucher_ana_1") -> dict:
     """Siembra exactamente el historial que la supresión debe CONSERVAR (más
     los adjuntos Cloudinary que debe destruir)."""
     horario = HorarioEntrenamiento(
@@ -100,7 +107,7 @@ def _crear_historial(db_session, persona: Persona, estado_pago=EstadoPago.APROBA
         monto=Decimal("30.00"), estado_pago=estado_pago, tipo_pago=TipoPago.EFECTIVO,
         fecha_inicio=date(2029, 3, 1), fecha_fin=date(2029, 3, 31),
         persona_id=persona.id, membresia_id=membresia.id,
-        voucher_url="voucher_ana_1" if con_voucher else None,
+        voucher_url=voucher_url if con_voucher else None,
         # El MIME completo es lo que persiste el servicio de pagos; el valor
         # corto ("pdf") hacía pasar el test con una comparación que en
         # producción nunca daba verdadero (ver el caso de la imagen abajo).
@@ -383,9 +390,11 @@ def test_destruye_foto_voucher_y_comprobante_en_cloudinary(db_session, cloudinar
     servicio.ejecutar(solicitud.id, admin_persona_id=1)
 
     objetivos = {c[0]: c for c in cloudinary_falso.llamadas}
-    # Issue #1072: la foto de perfil también es un recurso `raw` (con la
-    # extensión dentro del `public_id`), no un `image`.
-    assert objetivos["perfil_ana"][1:3] == ("cataclub/fotos_perfil", "raw")
+    # Issue #1072: la foto sembrada por `con_foto=True` es la forma PREVIA a
+    # la migración (public_id sin extensión), así que su asset sigue siendo
+    # `image/authenticated`. Destruirla como `raw` no falla -- Cloudinary
+    # responde `not found` -- y la foto quedaba viva tras la supresión.
+    assert objetivos["perfil_ana"][1:3] == ("cataclub/fotos_perfil", "image")
     assert objetivos["voucher_ana_1"][1:3] == ("cataclub/vouchers", "raw")
     assert objetivos["comprobante_ana_1"][1:3] == ("cataclub/comprobantes", "raw")
     # Todos los recursos privados del club son type="authenticated".
@@ -393,12 +402,36 @@ def test_destruye_foto_voucher_y_comprobante_en_cloudinary(db_session, cloudinar
     assert len(cloudinary_falso.llamadas) == 3
 
 
-def test_voucher_en_imagen_tambien_se_destruye_como_raw(db_session, cloudinary_falso):
-    """Issue #1072: el voucher JPEG/PNG se sube como `raw` igual que el PDF,
-    así que se destruye con ese `resource_type`. Antes se elegía por formato
-    comparando contra `"pdf"` cuando la columna guarda el MIME completo
-    (`"application/pdf"`): el PDF caía en la rama `image` y el destroy era un
-    no-op silencioso que dejaba el recurso huérfano."""
+def test_destruye_imagenes_ya_migradas_con_raw(db_session, cloudinary_falso):
+    """Contracara de la transición (issue #1072): una vez que la migración
+    corrió, foto y voucher-imagen llevan la extensión en el `public_id` y su
+    asset es `raw/authenticated` -- destruirlos como `image` dejaría el mismo
+    residuo silencioso, del otro lado.
+    """
+    _crear_admin(db_session)
+    persona = _crear_persona(db_session, con_foto=False, foto_url="perfil_ana.jpg|9")
+    _crear_historial(
+        db_session, persona, con_voucher=True,
+        voucher_url="voucher_ana_1.jpg", voucher_formato="image/jpeg",
+    )
+    db_session.commit()
+    servicio = SupresionDatosServicio(db_session)
+    solicitud = _solicitud_aprobada_y_vencida(db_session, servicio, persona)
+
+    servicio.ejecutar(solicitud.id, admin_persona_id=1)
+
+    objetivos = {c[0]: c for c in cloudinary_falso.llamadas}
+    assert objetivos["perfil_ana.jpg"][1:3] == ("cataclub/fotos_perfil", "raw")
+    assert objetivos["voucher_ana_1.jpg"][1:3] == ("cataclub/vouchers", "raw")
+
+
+def test_voucher_imagen_previo_a_la_migracion_se_destruye_como_image(db_session, cloudinary_falso):
+    """Fila de voucher escrita ANTES del issue #1072: `public_id` sin
+    extensión bajo `image/authenticated`. El borrado tiene que apuntar ahí, o
+    el comprobante bancario (dato del socio) queda vivo en el proveedor. Antes
+    se comparaba el formato contra `"pdf"` mientras la columna guarda el MIME
+    completo (`"application/pdf"`), así que el PDF caía en la rama `image`:
+    mismo tipo de no-op silencioso, un formato al lado."""
     _crear_admin(db_session)
     persona = _crear_persona(db_session, con_foto=False)
     _crear_historial(db_session, persona, con_voucher=True, voucher_formato="image/jpeg")
@@ -409,7 +442,7 @@ def test_voucher_en_imagen_tambien_se_destruye_como_raw(db_session, cloudinary_f
     servicio.ejecutar(solicitud.id, admin_persona_id=1)
 
     objetivos = {c[0]: c for c in cloudinary_falso.llamadas}
-    assert objetivos["voucher_ana_1"][1:3] == ("cataclub/vouchers", "raw")
+    assert objetivos["voucher_ana_1"][1:3] == ("cataclub/vouchers", "image")
     assert objetivos["voucher_ana_1"][3] == "authenticated"
 
 

@@ -147,19 +147,64 @@ def test_voucher_usa_upload_inmutable_sin_overwrite():
     assert kwargs["overwrite"] is False
 
 
-def test_eliminar_voucher_usa_raw_authenticated_para_pdf_e_imagen():
-    """Issue #1072: TODO voucher autenticado es `raw` -- el PDF desde
-    siempre y la imagen desde ese fix. Antes la imagen se destruía como
-    `image`; dejarlo así habría dejado huérfano cada voucher JPEG/PNG."""
-    with _parchear_destroy() as mock_destroy:
-        cc.eliminar_voucher_pago("voucher-jpg.jpg", "image/jpeg")
-        cc.eliminar_voucher_pago("voucher-pdf", "application/pdf")
+def test_eliminar_voucher_usa_el_resource_type_de_la_forma_persistida():
+    """Issue #1072: el `resource_type` del borrado sale de la FORMA del
+    `public_id` (+ el formato PDF), no de una suposición.
 
-    primera, segunda = mock_destroy.call_args_list
-    assert primera.kwargs["resource_type"] == "raw"
-    assert segunda.kwargs["resource_type"] == "raw"
-    assert primera.kwargs["type"] == segunda.kwargs["type"] == "authenticated"
-    assert primera.kwargs["timeout"].total == segunda.kwargs["timeout"].total == 8.0
+    Cloudinary NO falla al destruir un `public_id` inexistente: responde
+    `not found` sin excepción. Mandar todo a `raw` no rompía ningún test ni
+    ningún request -- dejaba el comprobante bancario viejo (dato del socio)
+    vivo en el proveedor."""
+    with _parchear_destroy() as mock_destroy:
+        cc.eliminar_voucher_pago("voucher-pdf", "application/pdf")          # PDF
+        cc.eliminar_voucher_pago("voucher-jpg.jpg", "image/jpeg")           # imagen migrada
+        cc.eliminar_voucher_pago("voucher-png", "image/png")                # imagen previa
+        cc.eliminar_voucher_pago("voucher-legacy", "application/pdf")       # PDF con public_id viejo
+
+    pdf, migrada, previa, pdf_legacy = mock_destroy.call_args_list
+    assert pdf.kwargs["resource_type"] == "raw"
+    assert migrada.kwargs["resource_type"] == "raw"
+    assert previa.kwargs["resource_type"] == "image"
+    assert pdf_legacy.kwargs["resource_type"] == "raw"
+    assert all(
+        llamada.kwargs["type"] == "authenticated"
+        for llamada in (pdf, migrada, previa, pdf_legacy)
+    )
+    assert pdf.kwargs["timeout"].total == 8.0
+
+
+# --- 3b. Discriminación de `resource_type` para borrar (issue #1072) --------
+# Un `resource_type` equivocado es un borrado que NO borra y NO avisa. La
+# regla vive en `resource_type_de_destruccion` para que el reemplazo de
+# voucher y la supresión de datos no puedan divergir.
+
+def test_resource_type_de_destruccion_por_forma_persistida():
+    assert cc.resource_type_de_destruccion("perfil_31.jpg") == "raw"
+    assert cc.resource_type_de_destruccion("perfil_31.JPEG") == "raw"
+    assert cc.resource_type_de_destruccion("voucher-pago-1-v1-ab.png") == "raw"
+    assert cc.resource_type_de_destruccion("perfil_31") == "image"
+    assert cc.resource_type_de_destruccion("perfil_31|7") == "image"
+    assert cc.resource_type_de_destruccion("voucher-pago-1-v1-ab") == "image"
+
+
+def test_resource_type_de_destruccion_respeta_el_pdf_sobre_la_forma():
+    """El `public_id` de un PDF tampoco lleva extensión: si el PDF no ganara
+    la pulseada, se destruiría como `image` y quedaría huérfano."""
+    assert cc.resource_type_de_destruccion("comprobante-00000006", "application/pdf") == "raw"
+    assert cc.resource_type_de_destruccion("comprobante-00000006", "pdf") == "raw"
+    # Un `voucher_formato` ausente o atípico NO se asume PDF (asumirlo mandaría
+    # a `raw` un asset `image/authenticated`).
+    assert cc.resource_type_de_destruccion("voucher-legacy", None) == "image"
+    assert cc.resource_type_de_destruccion("voucher-legacy", "") == "image"
+    assert cc.resource_type_de_destruccion("voucher-legacy", "octet-stream") == "image"
+
+
+def test_es_pdf_solo_reconoce_las_dos_formas_persistidas():
+    assert cc.es_pdf("application/pdf") is True
+    assert cc.es_pdf("PDF") is True
+    assert cc.es_pdf("image/jpeg") is False
+    assert cc.es_pdf(None) is False
+    assert cc.es_pdf("") is False
 
 
 # --- 3c. Subida de las imágenes privadas como `raw` (issue #1072) ----------

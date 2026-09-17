@@ -195,6 +195,64 @@ def test_voucher_imagen_previo_al_fix_se_sigue_entregando(client, db_session):
     assert "/raw/download" not in url
 
 
+# --- Borrado del voucher reemplazado (issue #1072) -------------------------
+# El reemplazo limpia el voucher anterior con `eliminar_voucher_pago`. Con un
+# `resource_type` equivocado ese borrado no falla -- Cloudinary responde
+# `not found` -- así que el comprobante bancario viejo queda vivo en el
+# proveedor. Estos dos tests fijan la discriminación por forma persistida en
+# el camino REAL (servicio -> SDK), no en el helper aislado.
+
+def _parchear_destroy():
+    return patch("app.infraestructura.cloudinary_cliente.cloudinary.uploader.destroy")
+
+
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_voucher_pago",
+    return_value=_FAKE_URL_JPG,
+)
+def test_reemplazo_borra_el_voucher_previo_con_el_resource_type_de_su_forma(
+    _mock_subir, client, db_session
+):
+    from app.dominio.modelos import Pago
+    from app.soporte_transversal.configuracion import settings
+
+    persona = _crear_persona(client, cedula=cedula_valida(420))
+    tipo = _crear_tipo_membresia(client)
+    membresia = _crear_membresia(client, persona["id"], tipo["id"])
+    pago = _crear_pago(client, persona["id"], membresia["id"])
+
+    # El pago ya tenía un voucher de cada forma persistida.
+    formas = [
+        ("voucher-pago-previo-v1-legacy", "image/jpeg", "image"),
+        ("voucher-pago-previo-v1-legacy.jpg", "image/jpeg", "raw"),
+        ("voucher-pago-previo-v1-legacy-pdf", "application/pdf", "raw"),
+    ]
+
+    for public_id_previo, formato_previo, resource_type_esperado in formas:
+        fila = db_session.get(Pago, pago["id"])
+        fila.voucher_url = public_id_previo
+        fila.voucher_formato = formato_previo
+        db_session.commit()
+
+        _autenticar_como_duenio(client, persona["id"])
+        contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+        with _parchear_destroy() as mock_destroy:
+            resp = client.post(
+                f"/api/v1/membresias/pagos/{pago['id']}/voucher",
+                files={"archivo": ("voucher.jpg", contenido, "image/jpeg")},
+            )
+
+        assert resp.status_code == 201, resp.text
+        borrados = {
+            llamada.args[0]: llamada.kwargs
+            for llamada in mock_destroy.call_args_list
+        }
+        clave = f"{settings.cloudinary_carpeta_vouchers}/{public_id_previo}"
+        assert clave in borrados, (public_id_previo, list(borrados))
+        assert borrados[clave]["resource_type"] == resource_type_esperado
+        assert borrados[clave]["type"] == "authenticated"
+
+
 def test_subir_voucher_tras_fallo_de_cloudinary_permite_reintentar(client, db_session):
     """El flujo que el fix no puede romper: si la subida a Cloudinary falla
     (503), el pago queda SIN voucher (la fila nunca llega a `pago.voucher_url
