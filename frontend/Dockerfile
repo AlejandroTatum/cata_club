@@ -3,7 +3,11 @@ RUN corepack enable
 
 FROM base AS deps
 WORKDIR /app
+# `patches/` must land before `pnpm install`: pnpm applies
+# `pnpm.patchedDependencies` (package.json) during install, and a missing
+# patch file fails the install outright rather than skipping it silently.
 COPY package.json pnpm-lock.yaml ./
+COPY patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
