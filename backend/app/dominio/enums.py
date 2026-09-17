@@ -164,3 +164,13 @@ class TipoNotificacion(str, enum.Enum):
     # "Su pago de $X fue aprobado" (eso describiría un movimiento de dinero
     # que no ocurrió). Ver `PagoServicio.aplicar_beneficio_bonificado`.
     COBERTURA_BONIFICADA_OTORGADA = "COBERTURA_BONIFICADA_OTORGADA"
+    # PR D (deuda de experiencia del alumno): aviso OPERATIVO a los
+    # administradores de que el guardarraíl diario de correos (plan gratuito
+    # de Resend) se agotó y hubo envíos omitidos. Es lo contrario de los
+    # tipos de familia: no describe el estado de una membresía ni de un pago,
+    # describe la salud del canal de correo del club. Tiene tipo propio -- y
+    # no reusa RESUMEN_MORA_ADMIN -- porque ese tipo nombra una cosa distinta
+    # (la mora del día) y la dedup del resumen por admin/día se apoya en el
+    # tipo: mezclarlos haría que el resumen de mora y el de cupo se pisaran la
+    # fila del día. Ver `notificaciones_servicio._avisar_cupo_agotado`.
+    RESUMEN_CUPO_CORREO_ADMIN = "RESUMEN_CUPO_CORREO_ADMIN"
