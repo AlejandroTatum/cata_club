@@ -174,3 +174,11 @@ class TipoNotificacion(str, enum.Enum):
     # tipo: mezclarlos haría que el resumen de mora y el de cupo se pisaran la
     # fila del día. Ver `notificaciones_servicio._avisar_cupo_agotado`.
     RESUMEN_CUPO_CORREO_ADMIN = "RESUMEN_CUPO_CORREO_ADMIN"
+    # PR F de la deuda de experiencia del alumno (G5): recordatorio IN-APP de
+    # la sesión de mañana, sin correo. Tipo propio por la misma razón que
+    # separa MIEMBRESIA_MORA_DIA_1 de MIEMBRESIA_MORA_DIA_8: la dedup por
+    # `(tipo, persona_id, entidad_relacionada_id)` es lo único que impide que
+    # un reintento de Beat duplique el aviso, y compartir tipo con otro aviso
+    # haría que los dos se pisaran la fila. Ver
+    # `app/infraestructura/tareas/recordatorio_sesion_tareas.py`.
+    RECORDATORIO_SESION = "RECORDATORIO_SESION"
