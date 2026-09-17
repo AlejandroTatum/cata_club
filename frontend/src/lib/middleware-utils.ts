@@ -41,7 +41,11 @@ export function buildContentSecurityPolicy(nonce: string): string {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline'`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' https://res.cloudinary.com https://*.tile.openstreetmap.org",
+    // api.cloudinary.com serves the private vouchers and profile photos
+    // (issue #1072): the expiring download endpoint is what the backend
+    // returns for them, and they render inside <img>. Keep it alongside
+    // frame-src, which already loads PDFs from the same host.
+    "img-src 'self' https://res.cloudinary.com https://api.cloudinary.com https://*.tile.openstreetmap.org",
     "frame-src https://api.cloudinary.com",
     "connect-src 'self'",
     "font-src 'self'",
