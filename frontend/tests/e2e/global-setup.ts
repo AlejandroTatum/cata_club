@@ -14,9 +14,23 @@
  * its contract is a 200 with a JSON body — a contract the route-handler unit
  * tests already pin, so this check cannot drift away from the app on its own.
  * A static file server, a different product, or a stopped process all fail it.
+ *
+ * ## Hero image cache warm-up (issue #1300)
+ *
+ * Once the target is confirmed, this ALSO awaits `warmHeroImageCache` to
+ * completion before returning. Playwright guarantees no worker starts, and
+ * therefore no test can navigate anywhere, until `globalSetup` resolves — so
+ * running the warm-up here, awaited, is what makes it deterministic rather
+ * than a race against real test traffic. `src/instrumentation.ts` runs the
+ * same warm-up fire-and-forget at server boot as defense-in-depth for real
+ * deployments, but that copy alone is not enough for this suite: on CI's own
+ * 4-worker concurrency it lost the race on the very first run, reproducing
+ * the exact #1300 hang for the exact URL the original trace named. This
+ * awaited copy cannot lose that race — nothing else is running yet.
  */
 
 import { E2E_BASE_URL, E2E_SERVER_IS_MANAGED } from "./e2e-target";
+import { warmHeroImageCache } from "../../src/lib/hero-image-cache-warmup";
 
 /** How long to wait for the probe before calling the target absent. */
 const PROBE_TIMEOUT_MS = 15_000;
@@ -69,4 +83,6 @@ export default async function globalSetup(): Promise<void> {
         `never produces (no "authenticated" field). ${hint()}`,
     );
   }
+
+  await warmHeroImageCache(E2E_BASE_URL);
 }

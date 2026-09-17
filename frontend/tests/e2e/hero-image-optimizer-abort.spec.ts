@@ -21,10 +21,14 @@
  * Confirmed directly against a `node .next/standalone/server.js` build: an
  * HTTP request aborted ~2 ms after being sent, immediately followed by an
  * identical, un-aborted request, left the second request unanswered past a
- * 10 s bound in a cold `.next/cache/images`. `instrumentation.ts` closes it
- * by making the SERVER itself the first requester of every hero photo, over
- * its own loopback connection — nothing can navigate away from that one —
- * before any browser gets the chance.
+ * 10 s bound in a cold `.next/cache/images`. The fix makes the SERVER itself
+ * the first requester of every hero photo, over its own loopback connection
+ * — nothing can navigate away from that one — before any browser gets the
+ * chance: `global-setup.ts` awaits it to completion before Playwright starts
+ * a single worker (the deterministic half — nothing races it, because
+ * nothing else is running yet), and `src/instrumentation.ts` repeats it
+ * fire-and-forget at server boot as defense-in-depth for real deployments,
+ * which have no such gate.
  *
  * ## What this test proves
  *
