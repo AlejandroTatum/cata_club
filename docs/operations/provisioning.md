@@ -104,12 +104,16 @@ pre-deploy y el cron diario mantienen la alarma exigente.
 
 ## Segundo operador SSH y endurecimiento del host
 
-> **Estado: runbook, no registro.** Nada de lo que sigue fue ejecutado contra
-> el host: no hay endurecimiento realizado ni verificación que citar, y este
-> documento no declara cierre del trabajo. Los datos reales (usuario, IP,
-> fingerprints) viven en el repo privado de operaciones (`cata_club-docs`);
-> acá solo hay placeholders. Cada etapa lista su verificación y su vuelta
-> atrás: entre etapas, el host queda en el estado anterior.
+> **Estado: registro de ejecución parcial — 2026-09-17 (#1065).** Ejecutado
+> contra el host de staging: Etapa 0 (línea base, solo lectura), Etapa 4
+> (fail2ban instalado y verificado con smoke adaptado) y Etapa 5 en su
+> Alternativa A (sudo con contraseña; `NOPASSWD` removido). Etapas 1–3
+> (segunda clave de operador) quedan **pendientes** hasta que exista un
+> segundo operador real: #1065 permanece abierto por ese criterio. Los datos
+> reales (usuario, IP, fingerprints) viven en el repo privado de operaciones
+> (`cata_club-docs`); acá solo hay placeholders. Cada etapa lista su
+> verificación y su vuelta atrás: entre etapas, el host queda en el estado
+> anterior.
 
 La regla que ordena todo el runbook: **nunca cerrar la sesión que funciona**.
 Toda la operación se hace con la sesión conocida y verificada abierta en una
@@ -287,6 +291,21 @@ debió considerarse instalado. Si el propio smoke baneó al cliente de prueba:
 `sudo fail2ban-client set sshd unbanip <ip-de-prueba>` (o `sudo fail2ban-client
 unban --all`) — la sesión conocida no se toca.
 
+**Smoke en un host sin password auth (ejecutado 2026-09-17).** Con
+`passwordauthentication no` la sonda de contraseña errada es imposible, y
+una clave errónea sobre un usuario **válido** solo deja `Connection closed
+by authenticating user`, que el filtro ignora en `mode = normal` (la cuenta
+recién en `aggressive`): eso no es un jail ciego, es la sonda equivocada.
+La sonda correcta acá son intentos con usuario inexistente, que loguean
+`Invalid user ... from <ip>` y sí cuentan. Ejecutado: 3 intentos
+(`ssh -o PreferredAuthentications=none <usuario-inexistente>@<host>`)
+subieron `Total failed` de 2 a 5 sin banear la IP del operador (< maxretry),
+el ruido de fondo siguió subiendo solo (2→8 en minutos) y el `journalmatch`
+`_SYSTEMD_UNIT=sshd.service` matchea vía alias aunque Ubuntu loguee bajo
+`ssh.service`. El pipeline de acción se probó sin arriesgar la IP del
+operador: ban manual de `192.0.2.10` (RFC 5737) presente en el set nftables
+`addr-set-sshd` del kernel y unban limpio.
+
 **Socket activation: mecanismo no verificado, sin remedio automático.** Si la
 Etapa 0 mostró `ssh.socket` habilitado, este runbook **no afirma** que esa
 modalidad deje al backend `systemd` del jail sin leer nada en esta versión
@@ -332,11 +351,17 @@ es una decisión que se registra en `cata_club-docs`. Sobre una instalación
 **preexistente** jamás: `apt-get remove --purge fail2ban` destruiría
 configuración que este runbook no creó.
 
-### Etapa 5 — Política de sudo: decisión pendiente del operador
+### Etapa 5 — Política de sudo: resuelta como Alternativa A (2026-09-17)
 
-> **AWAITING OPERATOR CHOICE.** Ninguno de los dos caminos fue elegido ni
-> ejecutado. La decisión es del operador/dueño y queda registrada en
-> `cata_club-docs`; este runbook no la inventa ni la ejecuta.
+> **RESUELTA Y EJECUTADA (#1065, 2026-09-17): Alternativa A.** El dueño
+> eligió sudo con contraseña. La contraseña de la cuenta de deploy la setea
+> el dueño **pegándola desde su gestor** (nunca tipeando a ciegas: ver el
+> registro de ejecución), el archivo `/etc/sudoers.d/deploy` se respalda y su
+> única línea se reemplaza por un comentario con motivo e issue; `visudo -c`
+debe dar OK antes de cerrar la sesión y `sudo -n true` debe fallar. El día
+> a día de `scripts/` no usa sudo (grupo `docker` más rutas propias), así que
+> A no agrega fricción a la automatización. La Alternativa B queda abajo
+> como referencia para si aparece operación privilegiada desatendida.
 
 **Alternativa A — sudo con contraseña** (default Ubuntu). Sumar al segundo
 operador al grupo `sudo` (`sudo adduser <usuario-2> sudo`): cada acción
@@ -377,9 +402,38 @@ endurece el host — disimula el problema.
 Ante cualquier resultado inesperado — la sesión nueva no entra, `visudo -c`
 falla, el jail queda ciego en el smoke — se conserva la sesión conocida, se
 revierte la etapa con su vuelta atrás documentada y se escala el caso en
-`cata_club-docs` con el relevamiento ya efectuado. Ninguna etapa de este
-runbook fue ejecutada: no hay endurecimiento de host realizado ni cierre que
-declarar.
+`cata_club-docs` con el relevamiento ya efectuado. Registro del 2026-09-17:
+Etapas 0, 4 y 5A ejecutadas y verificadas; Etapas 1–3 (segunda clave)
+pendientes de un segundo operador real, y #1065 permanece abierto por ese
+criterio.
+
+### Registro de ejecución (2026-09-17, #1065)
+
+- **Etapa 0**: línea base registrada arriba. `(ALL) NOPASSWD: ALL` vía
+  `/etc/sudoers.d/deploy`; contraseña de `deploy` bloqueada (`L`);
+  `ssh.socket` habilitado con `ssh.service` activo; fail2ban ausente;
+  2268 intentos fallidos de SSH en 24 h.
+- **Etapa 4**: fail2ban 1.0.2 instalado, drop-in `sshd-journal.local` con
+  guard anti-pisar y `fail2ban-client -t` OK, `enable`+`restart`, smoke
+  adaptado contado en vivo (+3 sondas invalid-user, ruido de fondo 2→8) y
+  acción probada con ban/unban manual de `192.0.2.10` (RFC 5737) visible
+  en el set nftables `addr-set-sshd`. `ssh.socket` nunca se tocó: el smoke
+  pasó y ningún remedio hizo falta.
+- **Etapa 5A**: contraseña de `deploy` seteada por el dueño; backup del
+  sudoers en `/root/deploy.sudoers.bak-20260917` y línea `NOPASSWD`
+  reemplazada por comentario. `visudo -c` OK en todos los archivos,
+  permisos `root root 440`, `sudo -n true` falla y `sudo -k id` devuelve
+  `uid=0(root)` desde una sesión nueva.
+- **Incidente y recuperación**: la primera contraseña seteada no coincidía
+  con el gestor (tipeo a ciegas en prompts interactivos) y, con `NOPASSWD`
+  ya removido, no había sudo in-band para re-setearla. Recuperación
+  one-shot autorizada por el dueño vía `docker` (el grupo `docker` es
+  root-equivalente): `docker run --rm -i -v /:/host alpine:3 chroot /host
+  /usr/sbin/chpasswd` con la contraseña pegada a ciegas desde el gestor.
+  Uso puntual y registrado; la equivalencia docker↔root sigue vigente
+  mientras la cuenta de deploy esté en el grupo `docker`, y el
+  endurecimiento de sudo no la elimina. Lección: las contraseñas se setean
+  pegando desde el gestor, nunca tipeando a ciegas.
 
 ## Primer administrador (una sola vez, tras el primer deploy)
 
