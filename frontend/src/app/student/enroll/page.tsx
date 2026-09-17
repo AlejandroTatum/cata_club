@@ -73,12 +73,12 @@ import {
   EDAD_MAYORIA_EDAD,
   isPlausibleHumanAge,
   studentBirthDateBounds,
+  toStoredPhone,
 } from "@/lib/identity-validation";
 import type { NumericFieldMode } from "@/lib/numeric-input";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
   buildEnrollmentRequest,
-  canonicalStudentPhone,
   clearEnrollDraft,
   describeStepBlocker,
   ENROLLMENT_TYPES,
@@ -453,7 +453,8 @@ function EnrollWizard(): React.ReactElement {
   function fillDemoData(type: EnrollmentType): void {
     const base: Partial<EnrollFormData> = {
       contactoEmergencia: "Carlos Martinez",
-      telefonoEmergencia: "0998765432",
+      // Issue #1296: the local digits without the trunk 0, same shape as `telefono`.
+      telefonoEmergencia: "998765432",
       tipoSangre: BLOOD_TYPES.O_POSITIVO,
     };
 
@@ -677,12 +678,11 @@ function EnrollWizard(): React.ReactElement {
         </p>
 
         {isSelf ? (
-          // #1028 (review): this flow's phone is local-only —
-          // `09XXXXXXXX`, no `593`/`+593` entry, no silent normalization.
+          // Issue #1296 — the phone field is now the same shared `PhoneField`
+          // every other site uses: fixed +593, local digits, no leading 0.
           <PersonIdentityFields
             idPrefix="enroll"
             disabled={submitting}
-            phoneFormat="local"
             nombres={formData.nombres}
             apellidos={formData.apellidos}
             fechaNacimiento={formData.fechaNacimiento}
@@ -1136,7 +1136,7 @@ function EnrollWizard(): React.ReactElement {
               representative's own cédula and phone appear below instead. */}
           {isChild
             ? null
-            : summaryRow("Teléfono", formData.telefono ? canonicalStudentPhone(formData.telefono) : "—", "personal")}
+            : summaryRow("Teléfono", formData.telefono ? toStoredPhone(formData.telefono) : "—", "personal")}
           {isChild
             ? summaryRow(
                 "Representante",

@@ -1009,7 +1009,11 @@ describe("EnrollPage — step 2 takes only the 9 digits after +593 (#1028 review
     expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
   });
 
-  it("rejects a leading-0 entry by name and keeps 'Siguiente' disabled", () => {
+  // Issue #1296: this field's onChange now cleans a duplicated-prefix or
+  // leading-0 entry to the same nine digits — the same cleanup a
+  // pasted/autofilled value gets — instead of leaving it as typed for the
+  // step's own rule to reject by name.
+  it("cleans a leading-0 entry instead of rejecting it", () => {
     goToStudentStepLocal();
     fillEnrollStudentStep();
 
@@ -1017,30 +1021,25 @@ describe("EnrollPage — step 2 takes only the 9 digits after +593 (#1028 review
     fireEvent.change(phone, { target: { value: "0991234567" } });
     fireEvent.blur(phone);
 
-    // No silent normalization: the 0-leading entry stays as typed.
-    expect(phone).toHaveValue("0991234567");
-    expect(
-      screen.getByText("No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593."),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    expect(phone).toHaveValue("991234567");
+    expect(screen.queryByText(/no incluya el 0 inicial/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
   });
 
-  it("rejects the 593 and +593 forms as repeated country codes", () => {
+  it("cleans the 593 and +593 forms to the same nine digits instead of rejecting them", () => {
     goToStudentStepLocal();
     fillEnrollStudentStep();
 
     const phone = screen.getByLabelText(/^Teléfono/);
     fireEvent.change(phone, { target: { value: "+593991234567" } });
     fireEvent.blur(phone);
-    expect(phone).toHaveValue("593991234567");
-    expect(
-      screen.getByText("No repita el 593: ya está en el campo. Escriba solo los 9 dígitos de su celular."),
-    ).toBeInTheDocument();
+    expect(phone).toHaveValue("991234567");
+    expect(screen.queryByText(/no repita el 593/i)).not.toBeInTheDocument();
 
     fireEvent.change(phone, { target: { value: "593991234567" } });
     fireEvent.blur(phone);
-    expect(screen.getByText(/no repita el 593/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    expect(phone).toHaveValue("991234567");
+    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
   });
 
   it("submits the canonical local 09XXXXXXXX form the backend contract expects", async () => {

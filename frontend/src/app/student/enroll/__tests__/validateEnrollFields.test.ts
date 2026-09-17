@@ -38,8 +38,9 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     tipoSangre: BLOOD_TYPES.O_POSITIVO,
     contactoEmergencia: "María Pérez",
     // Issue #860: has to differ from `telefono` above — see the same note in
-    // validateEnrollStep.test.ts's `validForm`.
-    telefonoEmergencia: "0987654321",
+    // validateEnrollStep.test.ts's `validForm`. Issue #1296: both are now the
+    // local digits without the trunk 0.
+    telefonoEmergencia: "987654321",
     ...overrides,
   };
 }
@@ -117,11 +118,13 @@ describe("validateEnrollFields", () => {
   it("accepts a phone typed with spaces but rejects a short one", () => {
     expect(validateEnrollFields("personal", validForm({ telefono: "991 234 567" })).telefono)
       .toBeUndefined();
-    // #1028 (review round 3): this step's phone is the nine digits after
-    // +593 — a short entry names the format instead of `phoneRule`'s wider
-    // celular-or-landline sentence.
+    // Issue #1296: this step's phone shares `phoneFieldRule` with every
+    // other phone field — a short entry gets the same celular-or-fijo
+    // sentence `phoneRule` gives everywhere else.
     expect(validateEnrollFields("personal", validForm({ telefono: "9912" })).telefono)
-      .toBe("Escriba los 9 dígitos de su celular después del +593 (por ejemplo, 991234567).");
+      .toBe(
+        "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
+      );
   });
 
   /** Issue #1197: an empty student phone never blocks the child path's
@@ -224,12 +227,16 @@ describe("validateEnrollFields", () => {
    * the field the visitor is actually looking at.
    */
   describe("telefonoEmergencia must differ from telefono (#860)", () => {
-    it.each([
-      ["the exact same number", "0991234567", "0991234567"],
-      ["the +593 form of the same number", "0991234567", "+593991234567"],
-      ["the 593 form of the same number (no plus sign)", "0991234567", "593991234567"],
-    ])("rejects %s, keyed to telefonoEmergencia", (_description, telefono, telefonoEmergencia) => {
-      const errors = validateEnrollFields("health", validForm({ telefono, telefonoEmergencia }));
+    // Issue #1296: both fields now hold the SAME digits-only shape (no trunk
+    // 0) — a value that would need canonicalizing (`+593…`/`593…`/`0…`) is
+    // already cleaned to those digits by `PhoneField` itself before it ever
+    // reaches state (see `wizard-fields.test.tsx`), so the exact-duplicate
+    // case is the one this validation layer still needs to catch.
+    it("rejects the exact same number, keyed to telefonoEmergencia", () => {
+      const errors = validateEnrollFields(
+        "health",
+        validForm({ telefono: "991234567", telefonoEmergencia: "991234567" }),
+      );
       expect(errors.telefonoEmergencia).toBe(
         "El teléfono de emergencia debe ser diferente del teléfono del estudiante.",
       );
@@ -238,17 +245,17 @@ describe("validateEnrollFields", () => {
     it("accepts a different valid emergency phone", () => {
       const errors = validateEnrollFields(
         "health",
-        validForm({ telefono: "0991234567", telefonoEmergencia: "0987654321" }),
+        validForm({ telefono: "991234567", telefonoEmergencia: "987654321" }),
       );
       expect(errors.telefonoEmergencia).toBeUndefined();
     });
 
     it("still reports a malformed number first, even when it happens to differ from telefono", () => {
-      // `phoneRule` is chained BEFORE this rule: a malformed value never
+      // `phoneFieldRule` is chained BEFORE this rule: a malformed value never
       // reaches the equality check.
       const errors = validateEnrollFields(
         "health",
-        validForm({ telefono: "0991234567", telefonoEmergencia: "123" }),
+        validForm({ telefono: "991234567", telefonoEmergencia: "123" }),
       );
       expect(errors.telefonoEmergencia).toMatch(/celular.*fijo/);
     });

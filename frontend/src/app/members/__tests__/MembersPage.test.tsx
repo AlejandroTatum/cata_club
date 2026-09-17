@@ -611,13 +611,16 @@ describe("MembersPage — Editar member modal", () => {
 
     const nombresInput = within(dialog).getByLabelText("Nombres") as HTMLInputElement;
     const apellidosInput = within(dialog).getByLabelText("Apellidos") as HTMLInputElement;
-    const telefonoInput = within(dialog).getByLabelText("Teléfono") as HTMLInputElement;
+    // Issue #1296: the shared `PhoneField` appends "(opcional)" inside the
+    // label (this admin phone stays optional, #1207) — match by prefix.
+    const telefonoInput = within(dialog).getByLabelText(/^Teléfono/) as HTMLInputElement;
     expect(nombresInput.value).toBe("María");
     expect(apellidosInput.value).toBe("González");
-    expect(telefonoInput.value).toBe("0999999999");
+    // Issue #1296: the field shows the local digits without the trunk 0.
+    expect(telefonoInput.value).toBe("999999999");
 
     fireEvent.change(nombresInput, { target: { value: "María José" } });
-    fireEvent.change(telefonoInput, { target: { value: "0988888888" } });
+    fireEvent.change(telefonoInput, { target: { value: "988888888" } });
     fireEvent.click(within(dialog).getByRole("button", { name: /guardar nombre, apellido y teléfono/i }));
 
     await waitFor(() => {

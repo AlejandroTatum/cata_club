@@ -15,7 +15,8 @@ import type { TipoSangre } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
-  phoneRule,
+  phoneFieldRule,
+  toStoredPhone,
   personNameRule,
   normalizePersonName,
   studentBirthDateRule,
@@ -216,7 +217,10 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
   apellidos: (d) => personNameRule(d.apellidos, "Los apellidos"),
   fechaNacimiento: (d) => studentBirthDateRule(d.fechaNacimiento),
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
-  telefono: (d) => phoneRule(d.telefono, "El teléfono"),
+  // Issue #1296: the field's own digits (no trunk 0) — the shared
+  // `phoneFieldRule` restores the local form first, same rule every other
+  // phone field on the app validates against.
+  telefono: (d) => phoneFieldRule(d.telefono, "El teléfono"),
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
 };
 
@@ -353,7 +357,8 @@ export function buildRepresentadoPayload(data: AddDependentFormData): Representa
     apellidos: normalizePersonName(data.apellidos),
     cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento,
-    telefono: data.telefono.trim(),
+    // Issue #1296: the field holds the local digits with no trunk 0 — restore it for the wire contract (#228).
+    telefono: toStoredPhone(data.telefono),
     fichaMedica: {
       tipoSangre: data.tipoSangre as TipoSangre,
       enfermedades: parseEnfermedades(data.enfermedades),

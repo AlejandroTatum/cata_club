@@ -12,11 +12,9 @@
 import { describe, it, expect } from "vitest";
 import {
   buildEnrollmentRequest,
-  canonicalStudentPhone,
   describeStepBlocker,
   ENROLL_FIELD_TOKEN,
   ENROLLMENT_TYPES,
-  enrollStudentPhoneRule,
   fieldsForStep,
   initialFormData,
   validateEnrollFields,
@@ -71,75 +69,66 @@ describe("describeStepBlocker", (): void => {
 });
 
 // ---------------------------------------------------------------------------
-// #1028, review round 3 — the public self-service enrollment's phone shows
-// 🇪🇨 + a fixed `+593`, and the editable value is ONLY the nine mobile digits
-// that follow. The shared `phoneRule` (which every other phone field keeps)
-// still takes `593`/`+593` forms and landlines, and the masking layer still
-// normalizes an autofilled international value — so this scoped rule exists
-// precisely to reject BOTH mistake shapes in this flow, each with a message
-// that names it, while `canonicalStudentPhone` restores the local `09…` form
-// for the wire contract.
+// Issue #1028, unified across every phone field by #1296 — the public
+// self-service enrollment's phone shows 🇪🇨 + a fixed `+593`, and the
+// editable value is ONLY the local digits that follow. It now shares
+// `phoneFieldRule` (`@/lib/identity-validation`) with every other phone
+// field: a `593`/`+593`/leading-0 shape is CLEANED to the same digits by the
+// field itself (`PhoneField`, see `wizard-fields.test.tsx`), never rejected
+// here, and the wider mobile-or-landline rule applies — the mobile-only
+// restriction this flow used to carry is retired.
 // ---------------------------------------------------------------------------
-describe("enrollStudentPhoneRule — step 2 takes only the 9 digits after +593", (): void => {
-  it("accepts the nine mobile digits, with or without typing separators", (): void => {
-    expect(enrollStudentPhoneRule("991234567")).toBeNull();
-    expect(enrollStudentPhoneRule("987654321")).toBeNull();
-    expect(enrollStudentPhoneRule("991 234 567")).toBeNull();
+describe("telefono — step 2 validates the local digits after +593 (#1296)", (): void => {
+  it("accepts nine mobile digits or eight fijo digits, with or without typing separators", (): void => {
+    expect(
+      validateEnrollFields("personal", {
+        ...initialFormData,
+        nombres: "Juan",
+        apellidos: "Pérez",
+        fechaNacimiento: "2000-01-15",
+        cedula: "1798765432",
+        telefono: "991234567",
+        correo: "juan@example.com",
+        contrasenia: "password8",
+        contraseniaConfirmacion: "password8",
+      }).telefono,
+    ).toBeUndefined();
   });
 
   it("requires a value", (): void => {
-    expect(enrollStudentPhoneRule("")).toBe("El teléfono es obligatorio.");
-    expect(enrollStudentPhoneRule("   ")).toBe("El teléfono es obligatorio.");
-  });
-
-  it("rejects a leading 0 by name — the trunk digit is not the visitor's job", (): void => {
-    expect(enrollStudentPhoneRule("0991234567")).toBe(
-      "No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593.",
-    );
-  });
-
-  it.each([
-    ["the 593 form without the plus", "593991234567"],
-    ["the +593 form", "+593991234567"],
-  ])("rejects %s as a repeated country code", (_description, value): void => {
-    expect(enrollStudentPhoneRule(value)).toBe(
-      "No repita el 593: ya está en el campo. Escriba solo los 9 dígitos de su celular.",
-    );
-  });
-
-  it.each([
-    ["a too-short entry", "99123456"],
-    ["a too-long entry", "9912345678"],
-    ["a landline-shaped entry", "2234567"],
-  ])("rejects %s with the format message", (_description, value): void => {
-    expect(enrollStudentPhoneRule(value)).toBe(
-      "Escriba los 9 dígitos de su celular después del +593 (por ejemplo, 991234567).",
-    );
-  });
-
-  it("canonicalizes the 9-digit entry to the local 09XXXXXXXX wire form", (): void => {
-    expect(canonicalStudentPhone("991234567")).toBe("0991234567");
-    expect(canonicalStudentPhone("991 234 567")).toBe("0991234567");
-    // Anything else passes through untouched — validation blocks it first.
-    expect(canonicalStudentPhone("0991234567")).toBe("0991234567");
-  });
-
-  it("is the rule the wizard's personal step applies to telefono", (): void => {
     const errors = validateEnrollFields("personal", {
       ...initialFormData,
       nombres: "Juan",
       apellidos: "Pérez",
       fechaNacimiento: "2000-01-15",
       cedula: "1798765432",
-      telefono: "0991234567",
+      telefono: "",
+      correo: "juan@example.com",
+      contrasenia: "password8",
+      contraseniaConfirmacion: "password8",
+    });
+    expect(errors.telefono).toBe("El teléfono es obligatorio.");
+  });
+
+  it("rejects a length that fits neither a celular nor a fijo, quoting the shared phoneRule message", (): void => {
+    const errors = validateEnrollFields("personal", {
+      ...initialFormData,
+      nombres: "Juan",
+      apellidos: "Pérez",
+      fechaNacimiento: "2000-01-15",
+      cedula: "1798765432",
+      telefono: "9912",
       correo: "juan@example.com",
       contrasenia: "password8",
       contraseniaConfirmacion: "password8",
     });
     expect(errors.telefono).toBe(
-      "No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593.",
+      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
-    const valid = validateEnrollFields("personal", {
+  });
+
+  it("canonicalizes to the local 0XXXXXXXX wire form in the built enrollment request", (): void => {
+    const request = buildEnrollmentRequest({
       ...initialFormData,
       nombres: "Juan",
       apellidos: "Pérez",
@@ -148,9 +137,11 @@ describe("enrollStudentPhoneRule — step 2 takes only the 9 digits after +593",
       telefono: "991234567",
       correo: "juan@example.com",
       contrasenia: "password8",
-      contraseniaConfirmacion: "password8",
+      tipoSangre: "O_POSITIVO",
+      contactoEmergencia: "María",
+      telefonoEmergencia: "987654321",
     });
-    expect(valid.telefono).toBeUndefined();
+    expect(request.alumno.telefono).toBe("0991234567");
   });
 });
 
@@ -206,7 +197,7 @@ describe("health step — emergency contact only exists on the self (adult) path
       correo: "ana@example.com", contrasenia: "password8",
       tipoSangre: "O_POSITIVO",
       contactoEmergencia: "María Torres",
-      telefonoEmergencia: "0987654321",
+      telefonoEmergencia: "987654321",
     };
     const request = buildEnrollmentRequest(data, true);
     expect(request.fichaMedica.contactoEmergencia).toBe("María Torres");

@@ -157,24 +157,21 @@ export const PHONE_FORMAT_HINT =
   "Celular: 09XXXXXXXX (también acepta +593… o 593…). Fijo: 0, código de área y 7 dígitos.";
 
 /**
- * The hint for phone fields that carry the visual `+593` prefix
- * (`EcuadorPhonePrefix` in `wizard-fields.tsx`, issue #1028). The field itself
- * already shows the country — 🇪🇨 and the code — so this line only names the
- * country for assistive technology and says which LOCAL digits to type; it
- * deliberately does not repeat the accepted formats the way
- * `PHONE_FORMAT_HINT` does. Same numbering plan, one instruction shorter.
+ * The hint for every phone field that carries the visual `+593` prefix
+ * (`PhoneField`/`EcuadorPhonePrefix` in `wizard-fields.tsx`, issue #1028 —
+ * unified across every site by issue #1296). The field itself already shows
+ * the country — 🇪🇨 and the code — so this line only says which LOCAL digits
+ * to type, with the example the placeholder shows; it deliberately does not
+ * repeat the accepted formats the way `PHONE_FORMAT_HINT` does. Same
+ * numbering plan, one instruction shorter.
+ *
+ * Replaces the two hints this field used to split between (#1296): the
+ * `phoneFormat="local"` public-enrollment copy and the default wizard copy,
+ * which taught the SAME digits differently depending on which flow rendered
+ * them.
  */
 export const PHONE_LOCAL_HINT =
-  "Escriba su número local de Ecuador: el celular empieza en 09; los fijos, en 0.";
-
-/**
- * The hint for the public self-service enrollment's own phone (#1028, review
- * round 3): the field shows 🇪🇨 and the fixed `+593`, so the visitor's job is
- * ONLY the nine mobile digits that follow — no leading `0`, no repeated
- * `593`. The hint says exactly that, with the example the placeholder shows.
- */
-export const PHONE_ENROLL_LOCAL_HINT =
-  "Escriba los 9 dígitos de su celular, sin el 0 inicial: por ejemplo, 991234567."
+  "Escriba los 9 dígitos de su celular o los 8 de su fijo, sin el 0 inicial: por ejemplo, 991234567.";
 
 export function phoneError(value: string): PhoneErrorReason | null {
   // Normalize BEFORE the separator strip below: an international mobile
@@ -203,6 +200,53 @@ export function phoneRule(value: string, subject: string): string | null {
     return `${subject} solo puede contener dígitos y separadores (espacio, guion, paréntesis).`;
   }
   return `${subject} debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).`;
+}
+
+/**
+ * The single canonicalization pair every `+593`-prefixed phone field shares
+ * (issue #1296): the field itself shows the fixed `🇪🇨 +593`, so the visitor's
+ * job — and what the field's `value`/`onChange` carry — is only the LOCAL
+ * digits that follow, with the trunk `0` never typed. The wire contract (and
+ * every other phone field that still shows the full local number) keeps the
+ * `0XXXXXXXXX` shape the backend has always stored (#228); these two
+ * functions are the one place that crosses between the two.
+ */
+
+/** `toPhoneFieldDigits`/`toStoredPhone` share the same typing separators `phoneError` already strips. */
+function stripPhoneFieldNoise(value: string): string {
+  let digits = value.replace(PHONE_SEPARATOR_PATTERN, "").replace(/^\+/, "");
+  if (digits.startsWith("593")) digits = digits.slice(3);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  return digits.replace(/\D/g, "");
+}
+
+/**
+ * `stored` (the local `0XXXXXXXXX`/`09XXXXXXXXX` form, or `null` for a
+ * dependent with no phone of their own) → the digits a `+593`-prefixed field
+ * shows. Also cleans a pasted/autofilled international or duplicated-prefix
+ * value — `"+593 99 123 4567"`, `"593991234567"`, `"0991234567"` all reduce
+ * to the same `"991234567"` — so loading a stored value and cleaning a paste
+ * are the same operation.
+ */
+export function toPhoneFieldDigits(stored: string | null): string {
+  if (!stored) return "";
+  return stripPhoneFieldNoise(stored);
+}
+
+/** The field's digits → the local `0XXXXXXXXX` form the backend has always stored (#228). Empty stays empty. */
+export function toStoredPhone(digits: string): string {
+  const clean = digits.replace(/\D/g, "");
+  return clean ? `0${clean}` : "";
+}
+
+/**
+ * `phoneRule`, but for a `+593`-prefixed field's own digits (no trunk `0`):
+ * restores the local form first, so the message and the mobile-or-landline
+ * rule stay the ONE `phoneRule` every phone field shares — no second,
+ * possibly-drifting copy scoped to the digits-only shape.
+ */
+export function phoneFieldRule(digits: string, subject: string): string | null {
+  return phoneRule(toStoredPhone(digits), subject);
 }
 
 /**
