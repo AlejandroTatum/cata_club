@@ -98,18 +98,34 @@ def test_subir_voucher_jpg_a_pago_pendiente_devuelve_201(_mock_cloudinary, clien
     # ve el cliente NO es la `secure_url` que devolvió el SDK al subir (esa
     # URL corresponde a un recurso `type="authenticated"`, no sirve sin
     # firmar) -- es una URL de entrega firmada, generada recién al responder.
+    #
+    # Issue #1072: y sale por el endpoint de descarga de la API, no por la
+    # CDN, porque es el único camino cuyo vencimiento lo chequea Cloudinary
+    # del lado del servidor. `authenticated` viaja como parámetro y la
+    # extensión (que el recurso `raw` lleva DENTRO del `public_id`) también.
     assert body["voucherUrl"] != _FAKE_URL_JPG
-    assert "/authenticated/" in body["voucherUrl"]
-    assert "voucher-pago-" in body["voucherUrl"]
+    assert "res.cloudinary.com" not in body["voucherUrl"]
+    parametros = parse_qs(urlparse(body["voucherUrl"]).query)
+    assert parametros["type"] == ["authenticated"]
+    assert parametros["expires_at"]
+    # El `public_id` del endpoint lleva la CARPETA y la extensión (el nombre
+    # real del recurso `raw`), no solo el id pelado.
+    from app.soporte_transversal.configuracion import settings
+    assert parametros["public_id"][0].startswith(
+        f"{settings.cloudinary_carpeta_vouchers}/voucher-pago-{pago['id']:08d}-v1-"
+    )
+    assert parametros["public_id"][0].endswith(".jpg")
     assert body["voucherFormato"] == "image/jpeg"
     assert body["voucherFechaCarga"] is not None
 
     # Verificación directa en Postgres (no solo la respuesta HTTP): la
-    # columna `voucher_url` guarda el `public_id`, NUNCA la `secure_url`
-    # pública que devolvió (acá, simuló) el SDK.
+    # columna `voucher_url` guarda el `public_id` -- con la extensión, porque
+    # es el nombre real del recurso `raw` (issue #1072) -- NUNCA la
+    # `secure_url` pública que devolvió (acá, simuló) el SDK.
     from app.dominio.modelos import Pago
     fila = db_session.get(Pago, pago["id"])
     assert fila.voucher_url.startswith(f"voucher-pago-{pago['id']:08d}-v1-")
+    assert fila.voucher_url.endswith(".jpg")
     assert fila.voucher_url != _FAKE_URL_JPG
     assert not fila.voucher_url.startswith("http")
 

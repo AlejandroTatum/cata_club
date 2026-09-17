@@ -262,7 +262,9 @@ class SupresionDatosServicio:
         residuos: List[str] = []
 
         # Foto de perfil. `foto_url` guarda `public_id` (quizá compuesto con
-        # `|version`); una URL http(s) completa es una fila legada.
+        # `|version`); una URL http(s) completa es una fila legada. Issue
+        # #1072: la foto se sube como `raw` (con la extensión en el
+        # `public_id`), así que es ese el tipo con el que hay que destruirla.
         if persona.foto_url:
             public_id, _version = _descomponer_valor_foto_perfil(persona.foto_url)
             if self._es_url_legada(public_id):
@@ -272,7 +274,7 @@ class SupresionDatosServicio:
                     (
                         public_id,
                         settings.cloudinary_carpeta_fotos_perfil,
-                        "image",
+                        "raw",
                         "authenticated",
                         "foto de perfil",
                     )
@@ -290,12 +292,19 @@ class SupresionDatosServicio:
                 if self._es_url_legada(pago.voucher_url):
                     residuos.append(f"voucher legado del pago {pago.id}")
                 else:
-                    es_pdf = (pago.voucher_formato or "").lower() == "pdf"
+                    # Issue #1072: TODO voucher autenticado es `raw` (el PDF
+                    # desde siempre; la imagen JPEG/PNG desde ese fix, con la
+                    # extensión en el `public_id`), así que la distinción por
+                    # formato ya no elige nada real. Antes comparaba contra
+                    # `"pdf"` mientras la columna guarda el MIME completo
+                    # (`"application/pdf"`): el voucher en PDF se destruía
+                    # como `image` -- borrado silenciosamente nulo, recurso
+                    # huérfano.
                     objetivos.append(
                         (
                             pago.voucher_url,
                             settings.cloudinary_carpeta_vouchers,
-                            "raw" if es_pdf else "image",
+                            "raw",
                             "authenticated",
                             f"voucher del pago {pago.id}",
                         )

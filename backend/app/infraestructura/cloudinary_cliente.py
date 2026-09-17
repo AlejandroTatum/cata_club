@@ -5,11 +5,23 @@ Encapsula el SDK `cloudinary` y `cloudinary.uploader` para que el resto del
 código dependa de una interfaz propia (no del SDK directo). Esto facilita tests
 (reemplazable por un double) y protege al dominio de detalles de vendor.
 
-Recurso PDF en Cloudinary:
-    Cloudinary trata los PDF como `resource_type="raw"` (los `image` son para
-    formatos raster/vector procesables). Por eso el upload usa raw. La ENTREGA
-    de un PDF, en cambio, no puede salir por la CDN de esta cuenta: ver
-    `_url_descarga_api` y el porqué medido que documenta.
+Recursos privados en Cloudinary:
+    El comprobante PDF, el voucher (PDF o imagen) y la foto de perfil se suben
+    SIEMPRE como `type="authenticated"` -- nunca públicos. Cloudinary trata
+    los PDF como `resource_type="raw"` (los `image` son para formatos
+    raster/vector procesables), y desde el issue #1072 las IMÁGENES privadas
+    (voucher JPEG/PNG y foto de perfil) también van como `raw`, con la
+    extensión DENTRO del `public_id` (`perfil_31.jpg`).
+
+    El motivo no es el upload sino la ENTREGA: este tipo de recurso sale por
+    el endpoint de descarga de la API (`_url_descarga_api`), que sí vence del
+    lado del servidor, y no por la CDN de `res.cloudinary.com`. Ver
+    `_url_descarga_api` para el porqué medido (la cuenta no resuelve imágenes
+    `authenticated` en `/image/download`, y la CDN firmada sin
+    `cloudinary_auth_token_key` no vence nunca). El PDF mantiene su
+    `format="pdf"` al subir; las imágenes llevan la extensión en el
+    `public_id` (`public_id_con_extension`) para que la entrega no necesite
+    metadata de formato.
 """
 from __future__ import annotations
 
@@ -76,6 +88,44 @@ _circuito_cloudinary = CircuitoBreaker(
     umbral_fallos=CIRCUITO_CLOUDINARY_UMBRAL_FALLOS,
     cooldown_segundos=CIRCUITO_CLOUDINARY_COOLDOWN_SEGUNDOS,
 )
+
+
+# --- Extensión de las imágenes dentro del `public_id` (issue #1072) ---------
+# Un recurso `raw` guarda la extensión DENTRO del `public_id` -- es la única
+# metadata de formato que tiene, porque `raw` no lleva `format` propio (a
+# diferencia de `image`). La extensión sale del tipo MIME ya validado por los
+# servicios (allowlist + firma binaria), nunca del nombre de archivo que
+# declara el cliente.
+_EXTENSION_POR_TIPO_MIME_IMAGEN = {"image/jpeg": "jpg", "image/png": "png"}
+
+
+def extension_de_imagen(content_type: Optional[str]) -> Optional[str]:
+    """Extensión (sin punto) de un MIME de imagen soportado por la app
+    (`image/jpeg` -> `jpg`), o `None` si el MIME no está en la allowlist."""
+    return _EXTENSION_POR_TIPO_MIME_IMAGEN.get((content_type or "").strip().lower())
+
+
+def public_id_con_extension(nombre_publico: str, content_type: str) -> str:
+    """`nombre_publico` con la extensión que corresponde a `content_type`.
+
+    Es el `public_id` REAL de un recurso `raw` (issue #1072): el que se sube
+    y el que hay que persistir para poder firmar su entrega después. Es
+    idempotente a propósito -- servicio y capa de subida la aplican los dos,
+    y divergir daría una firma válida para un recurso que Cloudinary nunca
+    tuvo bajo ese nombre exacto (misma clase de trampa que el `folder` del
+    issue #480: 404 con firma correcta, sin ningún error del lado del
+    backend).
+
+    `ValueError` si el MIME no está en la allowlist: los servicios validan
+    ANTES de llamar acá (misma convención que `subir_voucher_pago`).
+    """
+    extension = extension_de_imagen(content_type)
+    if extension is None:
+        raise ValueError(f"Tipo MIME no soportado para imagen: {content_type}")
+    sufijo = f".{extension}"
+    if nombre_publico.lower().endswith(sufijo):
+        return nombre_publico
+    return f"{nombre_publico}{sufijo}"
 
 
 def _configurar_cliente() -> None:
@@ -247,10 +297,14 @@ def subir_voucher_pago(
     (no el PDF oficial generado por el sistema al aprobar un pago — ese usa
     `subir_pdf_membresia`).
 
-    Mapeo por tipo MIME:
-      - application/pdf -> resource_type="raw", format="pdf"
-      - image/jpeg | image/png -> resource_type="image" (se respeta el formato
-        original del cliente; Cloudinary lo detecta, no se fuerza `format`).
+    Mapeo por tipo MIME (issue #1072):
+      - application/pdf -> resource_type="raw", format="pdf" (la extensión la
+        agrega la entrega, ver `_url_descarga_api`).
+      - image/jpeg | image/png -> resource_type="raw" con la extensión DENTRO
+        del `public_id` (`voucher-pago-...jpg`): la entrega de la imagen
+        también sale por el endpoint de descarga, con vencimiento real del
+        lado del servidor, así que el recurso necesita llevar la extensión en
+        su nombre (`public_id_con_extension`).
 
     Carpeta destino: `settings.cloudinary_carpeta_vouchers` (separada de la
     carpeta de comprobantes PDF oficiales), para no mezclar conceptos.
@@ -265,8 +319,10 @@ def subir_voucher_pago(
     Returns:
         URL que devuelve el SDK al subir. NO es una URL de entrega válida
         (ver el docstring de `subir_pdf_membresia`, mismo criterio): el
-        caller debe persistir `nombre_publico` y pedir la URL de entrega a
-        `generar_url_firmada` en cada lectura autorizada.
+        caller debe persistir el `public_id` REAL -- para las imágenes,
+        `public_id_con_extension(nombre_publico, content_type)`, no
+        `nombre_publico` -- y pedir la URL de entrega a `generar_url_firmada`
+        en cada lectura autorizada.
     """
     _configurar_cliente()
 
@@ -284,13 +340,16 @@ def subir_voucher_pago(
             "format": "pdf",
         }
     elif content_type in ("image/jpeg", "image/png"):
-        # resource_type="image": Cloudinary gestiona el formato y permite
-        # thumbnails/transformaciones; no se fuerza `format` para respetar el
-        # formato original (jpg/png) que trae el archivo del cliente.
+        # resource_type="raw" (issue #1072): la imagen privada se entrega por
+        # el endpoint de descarga, que NO resuelve `image/authenticated` y sí
+        # vence; eso obliga a que la extensión viaje en el `public_id`
+        # (ver `_url_descarga_api`). No se pasa `format`: en `raw` la
+        # extensión ES el formato, y mandarla en los dos lados duplicaría la
+        # misma intención.
         upload_kwargs = {
-            "resource_type": "image",
+            "resource_type": "raw",
             "type": "authenticated",
-            "public_id": nombre_publico,
+            "public_id": public_id_con_extension(nombre_publico, content_type),
             "folder": settings.cloudinary_carpeta_vouchers,
             "overwrite": False,
             "invalidate": True,
@@ -305,13 +364,22 @@ def subir_voucher_pago(
 
 
 def eliminar_voucher_pago(nombre_publico: str, content_type: str) -> None:
-    """Best-effort deletion of a committed replacement's former voucher."""
+    """Best-effort deletion of a committed replacement's former voucher.
+
+    `resource_type="raw"` para TODOS los vouchers (issue #1072): desde ese
+    fix tanto el PDF como la imagen se suben como `raw` autenticado, así que
+    distinguir por MIME ya no seleccionaba nada real.
+
+    `content_type` se conserva en la firma (lo pasan los servicios y los
+    tests) y viaja a la descripción del log, para poder distinguir en un
+    vistazo si el voucher que no se pudo borrar era PDF o imagen.
+    """
     eliminar_logo_sponsor(
         nombre_publico,
         carpeta=settings.cloudinary_carpeta_vouchers,
-        resource_type="raw" if content_type == "application/pdf" else "image",
+        resource_type="raw",
         tipo="authenticated",
-        descripcion="voucher",
+        descripcion=f"voucher ({content_type})",
     )
 
 
@@ -326,8 +394,11 @@ def subir_foto_perfil(
     perfil propia). Mismo criterio de validación/subida que
     `subir_voucher_pago`, restringido a imágenes.
 
-    Mapeo por tipo MIME: solo image/jpeg | image/png -> resource_type="image"
-    (no se fuerza `format`, se respeta el original del cliente).
+    Mapeo por tipo MIME: solo image/jpeg | image/png -> resource_type="raw"
+    con la extensión DENTRO del `public_id` (`perfil_31.jpg`), mismo criterio
+    y mismo motivo que el voucher en imagen (issue #1072): la entrega va por
+    el endpoint de descarga, que vence, y no resuelve imágenes
+    `image/authenticated` (ver `_url_descarga_api`).
 
     Carpeta destino: `settings.cloudinary_carpeta_fotos_perfil` (separada de
     comprobantes/vouchers, para no mezclar conceptos).
@@ -343,14 +414,20 @@ def subir_foto_perfil(
     Returns:
         El `version` (entero) que Cloudinary asigna a ESTA subida -- no la
         URL del SDK (nunca fue una URL de entrega válida, ver el docstring
-        de `subir_pdf_membresia`). Issue #662: como `public_id` es
-        determinístico y `overwrite=True`, dos subidas para la misma persona
-        firman EXACTAMENTE la misma URL de entrega si no se distingue por
-        `version` -- el navegador sigue sirviendo la imagen cacheada de la
-        carga anterior aunque el reemplazo en Cloudinary haya funcionado. El
-        caller debe persistir `componer_valor_foto_perfil(nombre_publico,
-        version)` (no `nombre_publico` solo) y resolver la URL de entrega con
-        `resolver_url_foto_perfil` en cada lectura autorizada.
+        de `subir_pdf_membresia`). El caller debe persistir
+        `componer_valor_foto_perfil(public_id_con_extension(nombre_publico,
+        content_type), version)` -- no `nombre_publico` solo: el `public_id`
+        real de un recurso `raw` lleva la extensión -- y resolver la URL de
+        entrega con `resolver_url_foto_perfil` en cada lectura autorizada.
+
+        Issue #662: como `public_id` es determinístico y `overwrite=True`, la
+        URL de entrega no puede quedar byte-idéntica entre dos subidas para
+        la misma persona o el navegador sigue sirviendo la imagen cacheada de
+        la carga anterior. Desde el issue #1072 eso lo garantiza el endpoint
+        de descarga solo (firma un `timestamp`/`expires_at` nuevo en cada
+        llamada, con resolución de un segundo); `version` se sigue
+        persistiendo compuesto por continuidad con las filas ya escritas, no
+        porque la entrega lo use.
     """
     _configurar_cliente()
 
@@ -361,9 +438,9 @@ def subir_foto_perfil(
         raise ValueError(f"Tipo MIME no soportado para foto de perfil: {content_type}")
 
     upload_kwargs = {
-        "resource_type": "image",
+        "resource_type": "raw",
         "type": "authenticated",
-        "public_id": nombre_publico,
+        "public_id": public_id_con_extension(nombre_publico, content_type),
         "folder": settings.cloudinary_carpeta_fotos_perfil,
         "overwrite": True,
         "invalidate": True,
@@ -534,51 +611,73 @@ def eliminar_recurso_privado(
     )
 
 
-# --- Entrega de PDF: endpoint de descarga de la API, no la CDN -------------
+# --- Recursos privados: endpoint de descarga de la API, no la CDN ---------
 def _url_descarga_api(id_completo: str, formato: Optional[str]) -> str:
     """
-    URL de entrega para un PDF `type="authenticated"`, firmada contra el
-    endpoint de descarga de la API (`api.cloudinary.com/v1_1/<cloud>/raw/
+    URL de entrega para un recurso `type="authenticated"` con
+    `resource_type="raw"` -- el comprobante/voucher PDF y, desde el issue
+    #1072, también el voucher JPEG/PNG y la foto de perfil -- firmada contra
+    el endpoint de descarga de la API (`api.cloudinary.com/v1_1/<cloud>/raw/
     download`) en vez de la CDN (`res.cloudinary.com`).
 
-    Por qué NO la CDN: esta cuenta deniega la entrega de CUALQUIER PDF por
-    CDN. Una URL firmada de `raw/authenticated` responde `401` con
-    `x-cld-error: deny or ACL failure` y `content-length: 0` -- y responden
-    exactamente lo mismo un `raw/upload` PÚBLICO y un `image/authenticated`
-    con `.pdf`, mientras que una imagen (PNG/JPEG) firmada por esta MISMA
-    función responde `200` con sus bytes. O sea: no es la firma, ni la ACL
-    del recurso, ni la carpeta (issue #480) -- es la entrega de PDF por CDN,
-    apagada a nivel de cuenta (Console > Settings > Security), que este
-    código no puede encender. Por eso el fix elige un camino que funciona con
-    la cuenta como está hoy, en vez de esperar un cambio de consola.
+    Por qué NO la CDN, en dos partes:
+
+      - PDF: esta cuenta deniega la entrega de CUALQUIER PDF por CDN. Una URL
+        firmada de `raw/authenticated` responde `401` con `x-cld-error: deny
+        or ACL failure` y `content-length: 0` -- y responden exactamente lo
+        mismo un `raw/upload` PÚBLICO y un `image/authenticated` con `.pdf`,
+        mientras que una imagen (PNG/JPEG) firmada por esta MISMA función
+        responde `200` con sus bytes. O sea: no es la firma, ni la ACL del
+        recurso, ni la carpeta (issue #480) -- es la entrega de PDF por CDN,
+        apagada a nivel de cuenta (Console > Settings > Security), que este
+        código no puede encender.
+      - Imágenes privadas (issue #1072): la CDN firmada sí las servía, pero
+        SIN vencimiento real -- `cloudinary_auth_token_key` es una función
+        de cuenta que no se puede activar desde acá, y sin ella el link
+        firmado vale para siempre si se filtra. Acá el vencimiento lo chequea
+        Cloudinary del lado del servidor.
 
     El endpoint de descarga sirve el MISMO recurso `type="authenticated"` sin
-    pasar por esa restricción: `200`, `content-type: application/pdf` y los
-    bytes reales. No manda `Content-Disposition` (se sigue previsualizando
-    inline en el `<iframe>` de la pantalla de pagos, igual que antes) ni
-    `X-Frame-Options`, y responde `Access-Control-Allow-Origin: *`.
+    pasar por esas restricciones. Para un PDF: `200`, `content-type:
+    application/pdf` y los bytes reales; para una imagen subida como `raw` con
+    su extensión en el `public_id` (issue #1072): `200`, `content-type:
+    image/jpeg`/`image/png` y los bytes reales -- verificado en vivo contra la
+    cuenta, así que sirve tal cual en un `<img src>` (de ahí que la CSP
+    necesite `https://api.cloudinary.com` en `img-src`). No manda
+    `Content-Disposition` (el PDF se sigue previsualizando inline en el
+    `<iframe>` de la pantalla de pagos, igual que antes) ni `X-Frame-Options`,
+    y responde `Access-Control-Allow-Origin: *`.
+
+    La contracara medida: `/image/download` NO resuelve un recurso
+    `image/authenticated` (`404 Resource not found` con `type=authenticated`,
+    `200` con `type=upload`). Por eso las imágenes privadas se suben como
+    `raw` y no como `image`: el tipo de entrega que vence elige el tipo de
+    recurso, no al revés.
 
     Dos diferencias con `cloudinary_url`, las dos a favor:
 
       - el vencimiento (`expires_at`) lo CHEQUEA Cloudinary del lado del
-        servidor (`401 Stale request`), así que el PDF vence a los
+        servidor (`401 Stale request`), así que el recurso vence a los
         `CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS` SIN depender de
-        `cloudinary_auth_token_key` -- la función de cuenta que
-        `generar_url_firmada` documenta como no activable desde acá. El
-        residual "link firmado que no vence nunca" queda cerrado para PDF.
-      - `timestamp`/`expires_at` cambian en cada llamada, así que dos
-        lecturas del mismo `public_id` nunca firman la URL byte-idéntica: un
-        voucher corregido (`overwrite=True` en `subir_voucher_pago`) no puede
-        quedar servido desde el cache del navegador.
+        `cloudinary_auth_token_key`. El residual "link firmado que no vence
+        nunca" queda cerrado para todo recurso privado.
+      - `timestamp`/`expires_at` se recalculan en cada llamada, así que la
+        URL no queda fija: un voucher corregido (`overwrite=True` en
+        `subir_voucher_pago`) o una foto reemplazada terminan sirviéndose
+        frescos (esto es lo que el issue #662 perseguía con `version`).
+        Límite real, medido: `timestamp` es un ENTERO de segundos, así que dos
+        firmas dentro del MISMO segundo salen byte-idénticas. El cache del
+        navegador queda acotado a ese segundo, no a los 900 s de vigencia (que
+        es cuánto vale el link, no cuánto lo cachea el browser).
 
-    `formato`: el `public_id` de un recurso `raw` INCLUYE la extensión --
-    Cloudinary lo indexa como `{folder}/{public_id}.pdf` porque
-    `subir_pdf_membresia`/`subir_voucher_pago` suben con `format="pdf"`.
-    Pedirlo sin la extensión devuelve `404 Resource not found` (misma clase
-    de trampa que el `folder` del issue #480: firma válida, recurso que
-    Cloudinary nunca tuvo bajo ese nombre exacto). La extensión va en el
-    `public_id` y el parámetro `format` va vacío; mandarla en los dos lados
-    también resuelve, pero duplica la misma intención en la firma.
+    `formato`: el `public_id` de un recurso `raw` INCLUYE la extensión.
+    Para el PDF la extensión la agrega este código (Cloudinary lo indexa como
+    `{folder}/{public_id}.pdf` porque `subir_pdf_membresia`/
+    `subir_voucher_pago` suben con `format="pdf"`); para las imágenes ya viene
+    dentro del `public_id` (`perfil_31.jpg`, `public_id_con_extension`) y por
+    eso acá va vacío. Pedir el recurso sin su extensión devuelve `404
+    Resource not found` (misma clase de trampa que el `folder` del issue #480:
+    firma válida, recurso que Cloudinary nunca tuvo bajo ese nombre exacto).
 
     Igual que `cloudinary_url`, NO hace red: `private_download_url` firma
     localmente con las credenciales ya cargadas. La `api_key` viaja en el
@@ -607,18 +706,18 @@ def generar_url_firmada(
     version: Optional[int] = None,
 ) -> str:
     """
-    Genera una URL de entrega para un recurso `type="authenticated"`
+    Genera una URL de entrega para un recurso privado `type="authenticated"`
     (comprobante/voucher subido por `subir_voucher_pago`/`subir_pdf_membresia`
-    desde este fix en adelante).
+    y foto de perfil subida por `subir_foto_perfil`).
 
     `folder`: la MISMA carpeta (`settings.cloudinary_carpeta_vouchers` /
-    `..._comprobantes`) que se usó al subir. Cloudinary indexa un recurso
-    subido con `folder=` + `public_id=` como `{folder}/{public_id}` -- NO
-    como `public_id` solo -- así que sin esto se firma (correctamente) una
-    URL para un recurso que Cloudinary nunca tuvo bajo ese nombre exacto:
-    firma válida, 404 igual (bug real, issue #480 -- ningún test lo agarró
-    porque los tests firman localmente sin tocar la cuenta real, y ese
-    detalle de indexado es del vendor, no de este código).
+    `..._comprobantes` / `..._fotos_perfil`) que se usó al subir. Cloudinary
+    indexa un recurso subido con `folder=` + `public_id=` como
+    `{folder}/{public_id}` -- NO como `public_id` solo -- así que sin esto se
+    firma (correctamente) una URL para un recurso que Cloudinary nunca tuvo
+    bajo ese nombre exacto: firma válida, 404 igual (bug real, issue #480 --
+    ningún test lo agarró porque los tests firman localmente sin tocar la
+    cuenta real, y ese detalle de indexado es del vendor, no de este código).
 
     NO hace red: `cloudinary.utils.cloudinary_url` firma localmente con las
     credenciales ya cargadas por `_configurar_cliente()`, así que esto corre
@@ -630,43 +729,53 @@ def generar_url_firmada(
     vencida (o eternamente vigente, ver abajo) esperando en la BD en vez de
     reflejar el momento real en que alguien autorizado la pidió.
 
-    `resource_type="raw"` (el PDF: comprobante oficial y voucher en PDF) NO
-    sale por la CDN: se entrega por el endpoint de descarga de la API, ver
-    `_url_descarga_api` -- la cuenta deniega todo PDF servido por
-    `res.cloudinary.com`, con firma válida y todo. Todo lo que sigue en este
-    docstring describe la rama de imagen (voucher JPEG/PNG y foto de perfil),
-    que la CDN sí entrega.
+    `resource_type`: los DOS tipos que existen acá son `raw` y `image`, y la
+    elección decide por qué camino sale el recurso.
 
-    Vencimiento real (`duration`, vía `auth_token`) SOLO si
-    `settings.cloudinary_auth_token_key` está configurada -- token-based
-    authentication es una función que hay que habilitar en la cuenta de
-    Cloudinary (Console > Settings > Security), no algo que este código
-    pueda activar por su cuenta. Sin esa clave, la URL queda igual firmada
-    con `sign_url=True` (nadie sin el `api_secret` puede construir un link
-    que Cloudinary acepte) pero sin vencer -- cierra la enumeración pública,
-    no la reutilización indefinida de un link ya firmado que se filtre.
-    Ver docs/archive/fixes/16-voucher-no-enumerable.md para el residual documentado.
+      - `raw`: el comprobante oficial, el voucher (PDF desde siempre; JPEG/PNG
+        desde el issue #1072) y la foto de perfil. NO sale por la CDN: se
+        entrega por el endpoint de descarga de la API, ver
+        `_url_descarga_api`, con vencimiento real del lado del servidor. El
+        `public_id` ya incluye su extensión (`.pdf` agregada por el parámetro
+        `formato`, o `.jpg`/`.png` dentro del propio `public_id`).
+      - `image`: la CDN de `res.cloudinary.com` con `sign_url=True`. Desde el
+        issue #1072 NINGÚN camino de entrega de la app la elige para un
+        recurso privado (es justamente el link que no vence); sigue existiendo
+        porque es la firma genérica del módulo y es la que necesita un
+        recurso `image/authenticated` viejo que todavía no pasó por
+        `scripts/migrar_imagenes_a_raw.py` -- ahí la usa el script para
+        descargar los bytes del asset original. Vencimiento real
+        (`duration`, vía `auth_token`) SOLO si
+        `settings.cloudinary_auth_token_key` está configurada -- token-based
+        authentication es una función que hay que habilitar en la cuenta de
+        Cloudinary (Console > Settings > Security), no algo que este código
+        pueda activar por su cuenta. Sin esa clave, la URL queda igual firmada
+        con `sign_url=True` (nadie sin el `api_secret` puede construir un link
+        que Cloudinary acepte) pero sin vencer.
+        Ver docs/archive/fixes/16-voucher-no-enumerable.md para el residual
+        documentado.
 
-    `version` (issue #662): opcional. Cloudinary embebe `version` como
-    `/v{version}/` en la URL firmada -- pasarlo hace que la URL de entrega
-    CAMBIE cuando el recurso subyacente cambia (`overwrite=True` con el mismo
-    `public_id`, como en `subir_foto_perfil`), lo que a su vez invalida el
-    cache del NAVEGADOR (distinto de `invalidate=True`, que solo purga la CDN
-    de Cloudinary y nunca tocó el cache del cliente). Sin `version`, dos
-    subidas para el mismo `public_id` firman la URL byte-idéntica y el
-    navegador sigue sirviendo la imagen vieja. `None` (default) preserva el
-    comportamiento histórico para voucher/PDF, que no tienen este problema
-    documentado como fix pendiente.
+    `version` (issue #662): opcional, solo aplica a la rama `image`.
+    Cloudinary embebe `version` como `/v{version}/` en la URL firmada --
+    pasarlo hace que la URL de entrega CAMBIE cuando el recurso subyacente
+    cambia (`overwrite=True` con el mismo `public_id`, como en
+    `subir_foto_perfil`), lo que a su vez invalida el cache del NAVEGADOR
+    (distinto de `invalidate=True`, que solo purga la CDN de Cloudinary y
+    nunca tocó el cache del cliente). En la rama `raw` el parámetro se ignora
+    a propósito: el endpoint de descarga recalcula `timestamp`/`expires_at` en
+    cada llamada, así que la URL ya no queda fija entre segundos distintos
+    (issue #1072; es lo que #662 perseguía). Con resolución de un segundo, dos
+    firmas dentro del mismo segundo sí coinciden.
     """
     _configurar_cliente()
 
     id_completo = f"{folder}/{public_id}"
 
     if resource_type == "raw":
-        # `raw` es, en esta app, exactamente el camino del PDF (comprobante
-        # oficial y voucher subido en PDF); la CDN no lo entrega. Ver
-        # `_url_descarga_api`. `version` no aplica a este endpoint y los
-        # callers de PDF nunca lo pasan: la URL ya cambia en cada llamada.
+        # `raw` es el camino de TODO recurso privado de la app desde el issue
+        # #1072 (PDF e imágenes): la CDN no lo entrega / no lo vence. Ver
+        # `_url_descarga_api`. `version` no aplica a este endpoint: la URL ya
+        # cambia en cada llamada.
         return _url_descarga_api(id_completo, formato)
 
     opciones: dict = {
@@ -703,6 +812,15 @@ def resolver_url_entrega(
     `folder`: se reenvía tal cual a `generar_url_firmada` -- ver su docstring
     (issue #480). No aplica a las filas heredadas de abajo: esas ya son una
     URL completa y se devuelven sin tocar.
+
+    `resource_type`: desde el issue #1072 los caminos de entrega de la app
+    pasan `"raw"` para TODO recurso privado (PDF, voucher en imagen y foto de
+    perfil), porque es el único que entrega el recurso con vencimiento real
+    del lado del servidor. `"image"` sigue siendo válido (firma contra la CDN)
+    y lo usa `scripts/migrar_imagenes_a_raw.py` para bajar el asset
+    `image/authenticated` viejo; la clasificación por ESQUEMA de más abajo no
+    cambia: una fila heredada es una URL y se devuelve tal cual, con cualquier
+    `resource_type`.
 
     Filas anteriores al fix guardaron el `secure_url` completo de un recurso
     `type="upload"` (público, enumerable -- exactamente el hallazgo que este
@@ -743,6 +861,11 @@ def resolver_url_entrega(
 # (`{public_id}{_SEPARADOR_VERSION}{version}`). `|` es seguro como separador
 # porque `public_id` siempre lo genera este código (`perfil_{persona_id}`,
 # nunca entrada de usuario) y una URL heredada nunca lo contiene.
+#
+# Desde el issue #1072 el `version` ya no cambia la URL de entrega (el
+# endpoint de descarga firma un `expires_at` nuevo en cada llamada); se sigue
+# escribiendo y descomponiendo para no cambiar el shape persistido que ya
+# tienen las filas en producción.
 _SEPARADOR_VERSION_FOTO_PERFIL = "|"
 
 
@@ -776,24 +899,34 @@ def _descomponer_valor_foto_perfil(valor: str) -> tuple[str, Optional[int]]:
 def resolver_url_foto_perfil(valor_almacenado: Optional[str]) -> Optional[str]:
     """
     `resolver_url_entrega` aplicado a `Persona.foto_url` (issue #553,
-    Problema 2): fija `resource_type="image"` y la carpeta de fotos de
-    perfil para que TODOS los puntos que serializan una foto (auth +
-    personas) firmen contra el mismo recurso indexado
-    (`{carpeta}/{public_id}`, issue #480). Las filas heredadas (URL pública
-    completa) pasan sin tocar hasta que el operador corra
-    `scripts/migrar_fotos_perfil_autenticadas.py`.
+    Problema 2): fija `resource_type="raw"` y la carpeta de fotos de perfil
+    para que TODOS los puntos que serializan una foto (auth + personas)
+    firmen contra el mismo recurso indexado (`{carpeta}/{public_id}`, issue
+    #480). Las filas heredadas (URL pública completa) pasan sin tocar hasta
+    que el operador corra `scripts/migrar_fotos_perfil_autenticadas.py`.
+
+    `resource_type="raw"` (issue #1072): la foto se sube como `raw` con la
+    extensión dentro del `public_id` (`perfil_31.jpg`) porque el endpoint de
+    descarga es el único que vence de verdad del lado del servidor -- la CDN
+    firmada de `image/authenticated` servía la foto pero sin vencimiento
+    (ver `_url_descarga_api`). Una fila subida antes de este fix todavía
+    tiene el `public_id` SIN extensión bajo `image/authenticated`: esas filas
+    las migra `scripts/migrar_imagenes_a_raw.py` (dry-run por defecto) y
+    hasta que eso corra su URL de entrega da 404. Las filas con URL pública
+    completa (previas al issue #553) tampoco las toca esto: se devuelven tal
+    cual.
 
     Issue #662: el valor persistido puede además llevar el `version` de
-    Cloudinary compuesto (`componer_valor_foto_perfil`) -- se descompone acá
-    y se reenvía a `generar_url_firmada` para que la URL de entrega cambie en
-    cada reemplazo real, no solo en cada lectura.
+    Cloudinary compuesto (`componer_valor_foto_perfil`). Se descompone para
+    quedarse con el `public_id` (que es lo que hay que firmar) pero NO se
+    reenvía: la entrega de un `raw` ya se refresca con el `expires_at` que se
+    firma en cada lectura, así que el `version` dejó de tener efecto en la URL.
     """
     if not valor_almacenado:
         return None
-    public_id, version = _descomponer_valor_foto_perfil(valor_almacenado)
+    public_id, _version = _descomponer_valor_foto_perfil(valor_almacenado)
     return resolver_url_entrega(
         public_id,
-        resource_type="image",
+        resource_type="raw",
         folder=settings.cloudinary_carpeta_fotos_perfil,
-        version=version,
     )

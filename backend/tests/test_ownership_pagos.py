@@ -12,6 +12,7 @@ Criterio de respuesta: mismo convenio que `test_seguridad_acceso_recursos.py`
 mientras que el inexistente sigue respondiendo 404.
 """
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
@@ -213,6 +214,10 @@ def test_representante_si_sube_voucher_del_pago_de_su_representado(_mock_cloudin
     )
     assert resp.status_code == 201, resp.text
     # Mismo candado que test_voucher_pago.py: la URL de entrega se firma
-    # fresca, no es la `secure_url` cruda que devolvió (acá, simuló) el SDK.
+    # fresca, no es la `secure_url` cruda que devolvió (acá, simuló) el SDK, y
+    # desde el issue #1072 sale por el endpoint de descarga de la API (el
+    # único que vence del lado del servidor) con la extensión en el
+    # `public_id`.
     assert resp.json()["voucherUrl"] != _FAKE_URL_JPG
-    assert "/authenticated/" in resp.json()["voucherUrl"]
+    assert "res.cloudinary.com" not in resp.json()["voucherUrl"]
+    assert parse_qs(urlparse(resp.json()["voucherUrl"]).query)["type"] == ["authenticated"]

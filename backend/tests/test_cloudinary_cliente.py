@@ -147,16 +147,91 @@ def test_voucher_usa_upload_inmutable_sin_overwrite():
     assert kwargs["overwrite"] is False
 
 
-def test_eliminar_voucher_usa_tipo_y_recurso_correspondientes():
+def test_eliminar_voucher_usa_raw_authenticated_para_pdf_e_imagen():
+    """Issue #1072: TODO voucher autenticado es `raw` -- el PDF desde
+    siempre y la imagen desde ese fix. Antes la imagen se destruía como
+    `image`; dejarlo así habría dejado huérfano cada voucher JPEG/PNG."""
     with _parchear_destroy() as mock_destroy:
-        cc.eliminar_voucher_pago("voucher-jpg", "image/jpeg")
+        cc.eliminar_voucher_pago("voucher-jpg.jpg", "image/jpeg")
         cc.eliminar_voucher_pago("voucher-pdf", "application/pdf")
 
     primera, segunda = mock_destroy.call_args_list
-    assert primera.kwargs["resource_type"] == "image"
+    assert primera.kwargs["resource_type"] == "raw"
     assert segunda.kwargs["resource_type"] == "raw"
     assert primera.kwargs["type"] == segunda.kwargs["type"] == "authenticated"
     assert primera.kwargs["timeout"].total == segunda.kwargs["timeout"].total == 8.0
+
+
+# --- 3c. Subida de las imágenes privadas como `raw` (issue #1072) ----------
+# El motivo es la ENTREGA, no el upload: el endpoint de descarga de la API
+# (el único que vence de verdad, sin depender de `cloudinary_auth_token_key`)
+# no resuelve `image/authenticated` y sí resuelve `raw` con la extensión en el
+# `public_id`. Estos tests fijan la forma que hace falta para que eso funcione.
+
+@pytest.mark.parametrize(
+    "nombre, invocar, public_id_esperado",
+    [
+        ("subir_voucher_pago", _subir_voucher, "voucher-1.jpg"),
+        ("subir_foto_perfil", _subir_foto, "foto-1.png"),
+    ],
+)
+def test_imagen_privada_se_sube_como_raw_con_la_extension_en_el_public_id(
+    nombre, invocar, public_id_esperado
+):
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso", "version": 1}
+
+        invocar()
+
+        _, kwargs = mock_upload.call_args
+        assert kwargs["resource_type"] == "raw", (
+            f"{nombre} debe subir la imagen como `raw`: es el único recurso que "
+            "el endpoint de descarga entrega con vencimiento real"
+        )
+        assert kwargs["public_id"] == public_id_esperado
+        # En `raw` la extensión ES el formato: mandar los dos duplicaría la
+        # misma intención en la firma.
+        assert "format" not in kwargs
+
+
+def test_voucher_pdf_conserva_format_pdf_y_el_public_id_sin_extension():
+    """El camino del PDF NO cambia con el issue #1072: sigue subiéndose con
+    `format="pdf"` y el `public_id` sin extensión (la extensión la agrega la
+    entrega, ver `_url_descarga_api`). Cambiarlo rompería la firma de todas
+    las filas de comprobantes ya escritas."""
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+
+        _subir_voucher(content_type="application/pdf", nombre_publico="voucher-pdf")
+
+        _, kwargs = mock_upload.call_args
+        assert kwargs["resource_type"] == "raw"
+        assert kwargs["format"] == "pdf"
+        assert kwargs["public_id"] == "voucher-pdf"
+
+
+def test_public_id_con_extension_agrega_la_extension_del_mime():
+    assert cc.public_id_con_extension("perfil_31", "image/jpeg") == "perfil_31.jpg"
+    assert cc.public_id_con_extension("perfil_31", "image/png") == "perfil_31.png"
+
+
+def test_public_id_con_extension_es_idempotente():
+    """El servicio y la capa de subida la aplican los dos: si no fuera
+    idempotente, el valor persistido y el recurso subido divergirían y la URL
+    firmada daría 404 (misma clase de trampa que el issue #480)."""
+    assert cc.public_id_con_extension("perfil_31.jpg", "image/jpeg") == "perfil_31.jpg"
+    assert cc.public_id_con_extension("voucher-1.png", "image/png") == "voucher-1.png"
+
+
+def test_public_id_con_extension_rechaza_un_mime_no_soportado():
+    with pytest.raises(ValueError):
+        cc.public_id_con_extension("archivo", "application/pdf")
+
+
+def test_extension_de_imagen_no_distingue_mayusculas_ni_parametros():
+    assert cc.extension_de_imagen("IMAGE/PNG") == "png"
+    assert cc.extension_de_imagen("application/pdf") is None
+    assert cc.extension_de_imagen(None) is None
 
 
 def test_mime_no_soportado_sigue_siendo_value_error():
@@ -788,10 +863,11 @@ def test_url_firmada_de_pdf_no_sale_por_la_cdn():
 
 
 def test_url_firmada_de_imagen_sigue_saliendo_por_la_cdn():
-    """La contracara: la imagen (voucher JPEG/PNG y foto de perfil) SÍ se
-    entrega por CDN -- se comprobó que responde 200 con la misma firma. El fix
-    del PDF no debe arrastrarla al endpoint de descarga, que no transforma ni
-    cachea por `version` (issue #662)."""
+    """La rama `image` sigue firmando contra la CDN. Desde el issue #1072
+    NINGÚN camino de entrega de la app la elige para un recurso privado (es
+    justamente el link que no vence), pero existe y se usa: es la firma con la
+    que `scripts/migrar_imagenes_a_raw.py` baja los bytes del asset
+    `image/authenticated` viejo antes de re-subirlo como `raw`."""
     url = cc.generar_url_firmada(
         "voucher-pago-00000012",
         resource_type="image",
@@ -800,6 +876,78 @@ def test_url_firmada_de_imagen_sigue_saliendo_por_la_cdn():
 
     assert url.startswith("https://res.cloudinary.com/")
     assert "/image/authenticated/" in url
+
+
+# --- 12c. Entrega de las imágenes privadas: también por el endpoint ---------
+# Issue #1072: el voucher JPEG/PNG y la foto de perfil se entregan por el
+# MISMO endpoint de descarga que el PDF. No es preferencia estética: es el
+# único camino que vence del lado del servidor, y la cuenta no resuelve
+# imágenes `authenticated` en `/image/download` (404 medido).
+
+def test_url_firmada_de_imagen_privada_usa_el_endpoint_de_descarga():
+    """Candado del fix: la URL de entrega de un voucher en imagen NO puede
+    volver a `res.cloudinary.com` -- ahí la firma vale para siempre si se
+    filtra (la CDN no vence sin `cloudinary_auth_token_key`)."""
+    url = cc.generar_url_firmada(
+        "voucher-pago-00000012.jpg",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_vouchers,
+    )
+
+    assert "res.cloudinary.com" not in url
+    assert url.startswith("https://api.cloudinary.com/v1_1/")
+    assert "/raw/download?" in url
+    # La extensión viaja DENTRO del `public_id` (no hay parámetro `format`
+    # para las imágenes): pedir el recurso sin ella da `404 Resource not
+    # found`, con la firma perfecta.
+    parametros = _parametros(url)
+    assert parametros["public_id"] == (
+        f"{settings.cloudinary_carpeta_vouchers}/voucher-pago-00000012.jpg"
+    )
+    assert parametros["type"] == "authenticated"
+    assert "format" not in parametros
+
+
+def test_url_firmada_de_imagen_privada_vence_con_la_vigencia_de_resiliencia():
+    antes = int(time.time())
+
+    parametros = _parametros(cc.generar_url_firmada(
+        "perfil_7.jpg",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_fotos_perfil,
+    ))
+
+    despues = int(time.time())
+    vencimiento = int(parametros["expires_at"])
+    assert antes + CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS <= vencimiento
+    assert vencimiento <= despues + CLOUDINARY_URL_FIRMADA_VIGENCIA_SEGUNDOS
+
+
+def test_url_firmada_de_imagen_privada_no_expone_el_api_secret():
+    url = cc.generar_url_firmada(
+        "perfil_7.jpg",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_fotos_perfil,
+    )
+
+    assert settings.cloudinary_api_secret
+    assert settings.cloudinary_api_secret not in url
+    assert _parametros(url)["signature"]
+
+
+def test_url_firmada_de_imagen_privada_vence_aunque_no_haya_clave_de_token(monkeypatch):
+    """La diferencia con la CDN, y el punto entero del issue #1072: acá el
+    vencimiento NO depende de `cloudinary_auth_token_key` (una función de
+    cuenta que no se puede activar desde el código)."""
+    monkeypatch.setattr(settings, "cloudinary_auth_token_key", "")
+
+    parametros = _parametros(cc.generar_url_firmada(
+        "perfil_7.jpg",
+        resource_type="raw",
+        folder=settings.cloudinary_carpeta_fotos_perfil,
+    ))
+
+    assert "expires_at" in parametros
 
 
 def test_url_firmada_de_pdf_vence_con_la_vigencia_de_resiliencia():
@@ -914,11 +1062,17 @@ def test_resolver_url_entrega_de_un_pdf_usa_el_endpoint_de_descarga():
 # contra el mismo recurso indexado (`{carpeta}/{public_id}`, issue #480).
 
 def test_resolver_url_foto_perfil_de_un_public_id_lo_firma_con_su_carpeta():
-    resultado = cc.resolver_url_foto_perfil("perfil_7")
+    """Issue #1072: la foto se entrega por el endpoint de descarga, así que
+    `resource_type` es `raw` y la carpeta viaja dentro del `public_id` (por eso
+    se lee decodificada y no como substring de la URL cruda)."""
+    resultado = cc.resolver_url_foto_perfil("perfil_7.jpg")
 
-    assert resultado != "perfil_7"
-    assert "/authenticated/" in resultado
-    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7" in resultado
+    assert resultado != "perfil_7.jpg"
+    assert "res.cloudinary.com" not in resultado
+    assert resultado.startswith("https://api.cloudinary.com/v1_1/")
+    assert _parametros(resultado)["public_id"] == (
+        f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7.jpg"
+    )
 
 
 def test_resolver_url_foto_perfil_de_una_fila_previa_al_fix_no_se_toca():
@@ -941,14 +1095,16 @@ def test_resolver_url_foto_perfil_sin_credenciales_de_firma_devuelve_none(monkey
     `ValueError: Must supply api_secret`. Debe degradar a None, no romper."""
     monkeypatch.setattr(settings, "cloudinary_api_secret", "")
 
-    assert cc.resolver_url_foto_perfil("perfil_7") is None
+    assert cc.resolver_url_foto_perfil("perfil_7.jpg") is None
 
 
-# --- 14. Issue #662: cache-busting de la foto de perfil por `version` -------
-# `public_id` es determinístico (`perfil_{persona_id}`) y el upload usa
-# `overwrite=True`: sin distinguir por `version`, dos subidas para la misma
-# persona firman la URL de entrega byte-idéntica y el navegador sigue
-# sirviendo la imagen cacheada de la carga anterior tras un reemplazo real.
+# --- 14. Issue #662: cache-busting de la foto de perfil ---------------------
+# El `public_id` es determinístico (`perfil_{persona_id}`) y el upload usa
+# `overwrite=True`: sin ALGO que cambie entre dos lecturas, la URL de entrega
+# quedaría byte-idéntica tras un reemplazo real y el navegador seguiría
+# sirviendo la imagen cacheada. Desde el issue #1072 ese ALGO es el propio
+# endpoint de descarga (`timestamp`/`expires_at` nuevos en cada firma), no el
+# `version` embebido -- ver el test de las dos lecturas más abajo.
 
 def test_subir_foto_perfil_devuelve_el_version_del_vendor_no_la_url():
     with _parchear_upload() as mock_upload:
@@ -968,44 +1124,57 @@ def test_subir_foto_perfil_sin_version_del_vendor_se_traduce_a_servicio_no_dispo
 
 
 def test_componer_valor_foto_perfil_combina_public_id_y_version():
-    assert cc.componer_valor_foto_perfil("perfil_7", 1690000042) == "perfil_7|1690000042"
+    assert cc.componer_valor_foto_perfil("perfil_7.jpg", 1690000042) == "perfil_7.jpg|1690000042"
 
 
-def test_resolver_url_foto_perfil_de_un_valor_compuesto_incluye_el_version_en_la_url():
-    valor = cc.componer_valor_foto_perfil("perfil_7", 1690000042)
+def test_resolver_url_foto_perfil_de_un_valor_compuesto_ignora_el_version():
+    """El `version` se sigue descomponiendo (para quedarse con el `public_id`,
+    que es lo que hay que firmar) pero ya NO entra en la URL: el endpoint de
+    descarga no lo acepta. Ver el test de abajo para el cache-busting."""
+    valor = cc.componer_valor_foto_perfil("perfil_7.jpg", 1690000042)
 
     resultado = cc.resolver_url_foto_perfil(valor)
 
     assert resultado is not None
-    assert "/v1690000042/" in resultado
-    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7" in resultado
+    assert "/v1690000042/" not in resultado
+    assert _parametros(resultado)["public_id"] == (
+        f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7.jpg"
+    )
 
 
-def test_resolver_url_foto_perfil_de_dos_versiones_distintas_da_urls_distintas():
-    """El candado central del fix: dos subidas (dos `version` distintos) para
-    el mismo `public_id` deben resolver a URLs de entrega DISTINTAS."""
-    valor_v1 = cc.componer_valor_foto_perfil("perfil_7", 1690000001)
-    valor_v2 = cc.componer_valor_foto_perfil("perfil_7", 1690000002)
+def test_resolver_url_foto_perfil_de_dos_lecturas_cambia_la_url(monkeypatch):
+    """El candado del issue #662 en su forma post-#1072: dos lecturas del
+    MISMO valor tienen que dar URLs distintas, porque el `expires_at` se firma
+    de nuevo en cada llamada. El reloj se inyecta reemplazando `cc.time` --
+    parchear `time.time` global lo cambiaría también para el SDK, que lo usa
+    para su propio `timestamp`."""
+    class _Reloj:
+        def __init__(self, valor):
+            self.valor = valor
 
-    url_v1 = cc.resolver_url_foto_perfil(valor_v1)
-    url_v2 = cc.resolver_url_foto_perfil(valor_v2)
+        def time(self):
+            return self.valor
 
-    assert url_v1 != url_v2
+    reloj = _Reloj(1_700_000_000.0)
+    monkeypatch.setattr(cc, "time", reloj)
+    primera = cc.resolver_url_foto_perfil("perfil_7.jpg")
+    reloj.valor += 1.0
+    segunda = cc.resolver_url_foto_perfil("perfil_7.jpg")
+
+    assert primera != segunda
+    assert int(_parametros(segunda)["expires_at"]) - int(_parametros(primera)["expires_at"]) == 1
 
 
 def test_resolver_url_foto_perfil_de_un_public_id_persistido_antes_del_fix_sigue_resolviendo():
-    """Filas persistidas ENTRE issue #553 y issue #662 guardaron solo el
-    `public_id`, sin `version` (esta app no lo tenía disponible todavía). No
-    deben romperse: el SDK sigue firmando (con su propio default de
-    `version=1`, no un `version` real de Cloudinary) hasta la próxima subida
-    real, que sí compone el valor nuevo con el `version` real."""
-    resultado_v1 = cc.resolver_url_foto_perfil("perfil_7")
-    resultado_v2 = cc.resolver_url_foto_perfil("perfil_7")
+    """Filas persistidas ENTRE el issue #553 y el #1072 guardaron solo el
+    `public_id` SIN extensión (`perfil_7`), bajo `image/authenticated`. Siguen
+    resolviendo a una URL firmada (no se rompe la serialización de un GET);
+    esas filas son exactamente las que convierte
+    `scripts/migrar_imagenes_a_raw.py` -- hasta que corra, el recurso pedido
+    como `raw` no existe y la entrega da 404."""
+    resultado = cc.resolver_url_foto_perfil("perfil_7")
 
-    assert resultado_v1 is not None
-    assert "/v1/" in resultado_v1
-    # Sin `version` explícito, el SDK usa el mismo default en cada llamada:
-    # dos lecturas de la MISMA fila legacy siguen dando la MISMA URL -- ese
-    # es justamente el residual documentado (no cache-busting), no algo que
-    # este fix prometa resolver para filas que no persisten `version`.
-    assert resultado_v1 == resultado_v2
+    assert resultado is not None
+    assert _parametros(resultado)["public_id"] == (
+        f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_7"
+    )

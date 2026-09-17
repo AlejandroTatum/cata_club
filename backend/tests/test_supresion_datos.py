@@ -73,7 +73,7 @@ def _crear_sesion(db_session, usuario: Usuario) -> Sesion:
 
 
 def _crear_historial(db_session, persona: Persona, estado_pago=EstadoPago.APROBADO,
-                     con_voucher=False) -> dict:
+                     con_voucher=False, voucher_formato="application/pdf") -> dict:
     """Siembra exactamente el historial que la supresión debe CONSERVAR (más
     los adjuntos Cloudinary que debe destruir)."""
     horario = HorarioEntrenamiento(
@@ -101,7 +101,10 @@ def _crear_historial(db_session, persona: Persona, estado_pago=EstadoPago.APROBA
         fecha_inicio=date(2029, 3, 1), fecha_fin=date(2029, 3, 31),
         persona_id=persona.id, membresia_id=membresia.id,
         voucher_url="voucher_ana_1" if con_voucher else None,
-        voucher_formato="pdf" if con_voucher else None,
+        # El MIME completo es lo que persiste el servicio de pagos; el valor
+        # corto ("pdf") hacía pasar el test con una comparación que en
+        # producción nunca daba verdadero (ver el caso de la imagen abajo).
+        voucher_formato=voucher_formato if con_voucher else None,
     )
     db_session.add(pago)
     db_session.flush()
@@ -380,12 +383,34 @@ def test_destruye_foto_voucher_y_comprobante_en_cloudinary(db_session, cloudinar
     servicio.ejecutar(solicitud.id, admin_persona_id=1)
 
     objetivos = {c[0]: c for c in cloudinary_falso.llamadas}
-    assert objetivos["perfil_ana"][1:3] == ("cataclub/fotos_perfil", "image")
+    # Issue #1072: la foto de perfil también es un recurso `raw` (con la
+    # extensión dentro del `public_id`), no un `image`.
+    assert objetivos["perfil_ana"][1:3] == ("cataclub/fotos_perfil", "raw")
     assert objetivos["voucher_ana_1"][1:3] == ("cataclub/vouchers", "raw")
     assert objetivos["comprobante_ana_1"][1:3] == ("cataclub/comprobantes", "raw")
     # Todos los recursos privados del club son type="authenticated".
     assert all(c[3] == "authenticated" for c in cloudinary_falso.llamadas)
     assert len(cloudinary_falso.llamadas) == 3
+
+
+def test_voucher_en_imagen_tambien_se_destruye_como_raw(db_session, cloudinary_falso):
+    """Issue #1072: el voucher JPEG/PNG se sube como `raw` igual que el PDF,
+    así que se destruye con ese `resource_type`. Antes se elegía por formato
+    comparando contra `"pdf"` cuando la columna guarda el MIME completo
+    (`"application/pdf"`): el PDF caía en la rama `image` y el destroy era un
+    no-op silencioso que dejaba el recurso huérfano."""
+    _crear_admin(db_session)
+    persona = _crear_persona(db_session, con_foto=False)
+    _crear_historial(db_session, persona, con_voucher=True, voucher_formato="image/jpeg")
+    db_session.commit()
+    servicio = SupresionDatosServicio(db_session)
+    solicitud = _solicitud_aprobada_y_vencida(db_session, servicio, persona)
+
+    servicio.ejecutar(solicitud.id, admin_persona_id=1)
+
+    objetivos = {c[0]: c for c in cloudinary_falso.llamadas}
+    assert objetivos["voucher_ana_1"][1:3] == ("cataclub/vouchers", "raw")
+    assert objetivos["voucher_ana_1"][3] == "authenticated"
 
 
 def test_fallo_de_cloudinary_aborta_sin_tocar_la_base(db_session):

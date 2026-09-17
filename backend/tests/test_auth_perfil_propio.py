@@ -21,6 +21,7 @@ Cubre:
 from datetime import date
 from unittest.mock import patch
 
+import app.infraestructura.cloudinary_cliente as cc
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import Usuario, Rol
 from app.dominio.enums import TipoRol
@@ -205,20 +206,49 @@ def test_patch_perfil_incluye_fecha_creacion(client, db_session):
 # HTTP lleva una URL de entrega FIRMADA (mismo patrón que el voucher de
 # pago). La firma es local (sin red), con las credenciales falsas del
 # autouse `_cloudinary_credenciales_de_prueba` de conftest.py.
+class _RelojFalso:
+    """Reloj inyectable: parchear `time.time` global cambiaría también el
+    `timestamp` que calcula el SDK al firmar."""
+
+    def __init__(self, valor: float):
+        self.valor = valor
+
+    def time(self) -> float:
+        return self.valor
+
+
 _FAKE_FOTO_URL_JPG = "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg"
 _FAKE_FOTO_URL_PNG = "https://res.cloudinary.com/test/image/upload/perfil-fake.png"
 _FAKE_VERSION_JPG = 1700000001  # issue #662: subir_foto_perfil devuelve `version`, no URL
 _FAKE_VERSION_PNG = 1700000002
 
 
-def _assert_url_firmada_de_perfil(url: str, persona_id: int, version: int | None = None) -> None:
+def _assert_url_firmada_de_perfil(
+    url: str, persona_id: int, extension: str = "jpg", version: int | None = None
+) -> None:
+    """Issue #1072: la foto se entrega por el endpoint de descarga de la API
+    (`api.cloudinary.com/.../raw/download`), no por la CDN, así que el
+    `public_id` (con la carpeta y la extensión) se lee DECODIFICADO del query
+    string y se exige `expires_at` -- el vencimiento que motiva el cambio.
+
+    `version` (issue #662): ya NO viaja en la URL; se exige que no esté para
+    que nadie lo reintroduzca creyendo que es lo que invalida la cache.
+    """
+    from urllib.parse import parse_qs, urlparse
+
     from app.soporte_transversal.configuracion import settings
 
     assert url is not None
-    assert "/authenticated/" in url
-    assert f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{persona_id}" in url
+    assert "res.cloudinary.com" not in url
+    assert url.startswith("https://api.cloudinary.com/v1_1/")
+    parametros = parse_qs(urlparse(url).query)
+    assert parametros["type"] == ["authenticated"]
+    assert parametros["public_id"][0] == (
+        f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{persona_id}.{extension}"
+    )
+    assert parametros["expires_at"]
     if version is not None:
-        assert f"/v{version}/" in url
+        assert f"/v{version}/" not in url
 
 
 @patch(
@@ -239,9 +269,10 @@ def test_subir_foto_perfil_jpg_persiste_public_id_y_firma_en_get(_mock_cloudinar
     assert resp.status_code == 200, resp.text
     _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], persona.id, version=_FAKE_VERSION_JPG)
 
-    # La fila persiste `public_id|version`, no la URL del SDK ni la firmada.
+    # La fila persiste `public_id.ext|version` (issue #1072), no la URL del SDK
+    # ni la firmada.
     db_session.refresh(persona)
-    assert persona.foto_url == f"perfil_{persona.id}|{_FAKE_VERSION_JPG}"
+    assert persona.foto_url == f"perfil_{persona.id}.jpg|{_FAKE_VERSION_JPG}"
 
     resp_get = client.get("/api/v1/auth/me")
     assert resp_get.status_code == 200, resp_get.text
@@ -264,9 +295,11 @@ def test_subir_foto_perfil_png_actualiza_foto_url(_mock_cloudinary, client, db_s
         files={"archivo": ("foto.png", contenido, "image/png")},
     )
     assert resp.status_code == 200, resp.text
-    _assert_url_firmada_de_perfil(resp.json()["fotoUrl"], persona.id, version=_FAKE_VERSION_PNG)
+    _assert_url_firmada_de_perfil(
+        resp.json()["fotoUrl"], persona.id, extension="png", version=_FAKE_VERSION_PNG
+    )
     db_session.refresh(persona)
-    assert persona.foto_url == f"perfil_{persona.id}|{_FAKE_VERSION_PNG}"
+    assert persona.foto_url == f"perfil_{persona.id}.png|{_FAKE_VERSION_PNG}"
 
 
 def test_auth_me_foto_heredada_url_publica_se_devuelve_sin_tocar(client, db_session):
@@ -287,21 +320,32 @@ def test_auth_me_foto_heredada_url_publica_se_devuelve_sin_tocar(client, db_sess
 
 
 # --- Issue #662: reemplazar una foto existente debe cambiar la URL --------
-# El `public_id` es determinístico (`perfil_{persona_id}`) y el upload usa
+# El `public_id` es determinístico (`perfil_{persona_id}.jpg`) y el upload usa
 # `overwrite=True` -- sin ALGO que cambie entre subidas, la URL de entrega
 # firmada es byte-idéntica antes y después del reemplazo, y el navegador
 # sigue sirviendo la imagen cacheada de la carga anterior aunque Cloudinary
-# ya tenga el archivo nuevo. Este test reemplaza la foto dos veces y exige
-# que la URL de entrega de la segunda subida sea DISTINTA de la primera.
+# ya tenga el archivo nuevo.
+#
+# Issue #1072: ese ALGO ya no es el `version` compuesto (el endpoint de
+# descarga no lo acepta) sino el `timestamp`/`expires_at` que se firma en cada
+# lectura. Ojo con la resolución: `timestamp` es un ENTERO de segundos, así que
+# dos firmas dentro del MISMO segundo son byte-idénticas. El reloj se inyecta
+# para probar lo que el mecanismo realmente garantiza: pasando un segundo, la
+# URL cambia (no queda fijada para siempre, que era el residual del #662).
 @patch(
     "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
     side_effect=[1700000001, 1700000002],
 )
-def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(_mock_cloudinary, client, db_session):
+def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(
+    _mock_cloudinary, client, db_session, monkeypatch
+):
     persona = _crear_persona(db_session, cedula=cedula_valida(174), nombres="Marisol", telefono="0991112230")
     rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
     _crear_usuario_para_persona(db_session, persona, correo="marisol@cataclub.com", roles=[rol_admin])
     _restaurar_override_token(correo="marisol@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    reloj = _RelojFalso(1_700_000_000.0)
+    monkeypatch.setattr(cc, "time", reloj)
 
     contenido_1 = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100  # JPEG-ish, foto original
     resp_1 = client.post(
@@ -312,6 +356,7 @@ def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(_mock_clo
     url_foto_original = resp_1.json()["fotoUrl"]
     _assert_url_firmada_de_perfil(url_foto_original, persona.id)
 
+    reloj.valor += 1.0  # el reemplazo ocurre en otro segundo
     contenido_2 = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x11" * 100  # JPEG-ish, reemplazo
     resp_2 = client.post(
         "/api/v1/auth/me/foto",
@@ -324,7 +369,8 @@ def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(_mock_clo
     assert url_foto_reemplazada != url_foto_original, (
         "reemplazar la foto de perfil debe producir una URL de entrega "
         "distinta a la anterior -- si no, el navegador sigue sirviendo la "
-        "imagen cacheada de la carga previa (issue #662)"
+        "imagen cacheada de la carga previa (issue #662). La diferencia la "
+        "aporta el `expires_at` firmado en cada lectura (issue #1072)."
     )
 
     # También debe persistir tras un `GET /auth/me` posterior (hard refresh).

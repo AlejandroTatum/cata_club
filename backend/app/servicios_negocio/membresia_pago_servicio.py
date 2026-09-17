@@ -1840,10 +1840,15 @@ class PagoServicio:
 
         if not pago.voucher_url:
             return None
+        # Issue #1072: el voucher en imagen se sube como `raw` (con la
+        # extensión en el `public_id`), igual que el PDF -- los dos necesitan
+        # el endpoint de descarga porque es el único que vence del lado del
+        # servidor. `formato` solo se usa para el PDF, cuya extensión NO está
+        # en el `public_id`.
         es_pdf = pago.voucher_formato == "application/pdf"
         return resolver_url_entrega(
             pago.voucher_url,
-            resource_type="raw" if es_pdf else "image",
+            resource_type="raw",
             folder=settings.cloudinary_carpeta_vouchers,
             formato="pdf" if es_pdf else None,
         )
@@ -2606,10 +2611,23 @@ class PagoServicio:
         # mano en la transacción de un llamador -- si este método alguna vez
         # necesita componerse con una escritura previa, la salida es esa, no
         # correr de lugar el `rollback()`.
-        public_id = f"voucher-pago-{pago_id:08d}-v1-{uuid4().hex}"
-        self.db.rollback()
+        from app.infraestructura.cloudinary_cliente import (
+            public_id_con_extension,
+            subir_voucher_pago,
+        )
 
-        from app.infraestructura.cloudinary_cliente import subir_voucher_pago
+        # Issue #1072: el `public_id` REAL de un voucher en IMAGEN lleva la
+        # extensión (`...jpg`/`...png`) porque se sube como `raw` y la entrega
+        # va por el endpoint de descarga (ver `public_id_con_extension` y
+        # `_url_descarga_api` en `cloudinary_cliente.py`). Es ESTE valor el
+        # que hay que persistir: el que se sube y el que se firma después
+        # tienen que ser el mismo (issue #480). El PDF no la lleva: su
+        # extensión la agrega `subir_pdf_membresia`/`_url_descarga_api` vía
+        # `format="pdf"`.
+        public_id = f"voucher-pago-{pago_id:08d}-v1-{uuid4().hex}"
+        if content_type != "application/pdf":
+            public_id = public_id_con_extension(public_id, content_type)
+        self.db.rollback()
 
         subir_voucher_pago(
             contenido=contenido,
