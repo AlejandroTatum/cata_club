@@ -281,6 +281,24 @@ def _fecha_nacimiento_hace(edad_anios: int) -> date:
         return hoy.replace(year=hoy.year - edad_anios, day=28)
 
 
+def _pago_aprobado_del_mes(persona_id: int, membresia_id: int, monto, ahora) -> Pago:
+    """El `Pago` `APROBADO` que sostiene una `Membresia` `ACTIVA` (issue
+    #1293): el dominio solo llega a `ACTIVA` a través de un pago aprobado
+    (`membresia_pago_servicio.py`), nunca por decreto del seed. Compartido
+    por el bloque de hijos y el de alumnos autogestionados para no duplicar
+    el mismo literal de 10 líneas."""
+    return Pago(
+        monto=monto,
+        estado_pago=EstadoPago.APROBADO,
+        tipo_pago=TipoPago.TRANSFERENCIA,
+        fecha_validacion=ahora,
+        fecha_inicio=date.today().replace(day=1),
+        fecha_fin=date.today().replace(day=28),
+        persona_id=persona_id,
+        membresia_id=membresia_id,
+    )
+
+
 def main() -> None:
     db = SessionLocal()
     try:
@@ -536,16 +554,7 @@ def main() -> None:
                     db.add(membresia)
                     db.flush()
 
-                    db.add(Pago(
-                        monto=tm.precio,
-                        estado_pago=EstadoPago.APROBADO,
-                        tipo_pago=TipoPago.TRANSFERENCIA,
-                        fecha_validacion=now,
-                        fecha_inicio=date.today().replace(day=1),
-                        fecha_fin=date.today().replace(day=28),
-                        persona_id=hijo_persona.id,
-                        membresia_id=membresia.id,
-                    ))
+                    db.add(_pago_aprobado_del_mes(hijo_persona.id, membresia.id, tm.precio, now))
 
                 hijos_creados += 1
 
@@ -598,6 +607,12 @@ def main() -> None:
                 # tiene alumnos asignados" en la primera. El bloque de hijos
                 # ya hacía este flush; este no.
                 db.flush()
+
+                # Issue #1293: sin este `Pago`, la membresía quedaba `ACTIVA`
+                # sin cobertura real — el dominio solo llega a `ACTIVA` por un
+                # pago aprobado, nunca por decreto del seed (mismo patrón que
+                # el bloque de hijos, arriba).
+                db.add(_pago_aprobado_del_mes(alu_persona.id, membresia.id, tm.precio, now))
 
             print(f"[seed] Alumno creado: {alu['nombres']} {alu['apellidos']} ({alu['correo']})")
 
