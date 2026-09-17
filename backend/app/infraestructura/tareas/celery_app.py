@@ -25,6 +25,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.enrollment_notificacion_tareas",
         "app.infraestructura.tareas.vencimientos_tareas",
         "app.infraestructura.tareas.contador_correo_tareas",
+        "app.infraestructura.tareas.recordatorio_sesion_tareas",
     ],
 )
 
@@ -125,5 +126,17 @@ celery_app.conf.beat_schedule = {
     "limpiar-contador-correo-diario": {
         "task": "app.infraestructura.tareas.contador_correo_tareas.limpiar_contador_correo_diario",
         "schedule": _parsear_hora_crontab("03:00"),
+    },
+    # 21:30 del club, no una hora de madrugada: el recordatorio avisa de la
+    # sesión de MAÑANA, así que tiene que salir la tarde/noche ANTERIOR. Las
+    # franjas del club van de 15:00 a 21:15, así que 21:30 es el primer
+    # minuto en que la última franja (ADULTOS, 20:00-21:15) ya terminó y
+    # nadie recibe el aviso en medio de su propio entrenamiento; la franja
+    # más temprana de mañana arranca a las 15:00, casi 17 h después. No
+    # compite con ninguna otra tarea del beat, que se concentra entre las
+    # 02:30 y las 03:00.
+    "recordar-sesion-de-manana-diaria": {
+        "task": "app.infraestructura.tareas.recordatorio_sesion_tareas.recordar_sesion_de_manana",
+        "schedule": _parsear_hora_crontab("21:30"),
     },
 }

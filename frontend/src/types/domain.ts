@@ -446,7 +446,13 @@ export type TipoNotificacion =
   // dedup keys on the type, so sharing RESUMEN_MORA_ADMIN would make the two
   // daily summaries overwrite each other. See
   // `notificaciones_servicio._avisar_cupo_agotado`.
-  | "RESUMEN_CUPO_CORREO_ADMIN";
+  | "RESUMEN_CUPO_CORREO_ADMIN"
+  // PR F (student-experience debt): in-app reminder of tomorrow's training
+  // session. Bell-only on purpose — the round's product constraint is that no
+  // email budget is spent on reminders — so this type exists for the bell and
+  // nothing else. See
+  // `backend/app/infraestructura/tareas/recordatorio_sesion_tareas.py`.
+  | "RECORDATORIO_SESION";
 
 /**
  * An in-app notification (`GET /ranking/notificaciones/mias`) —
