@@ -20,8 +20,10 @@ import { useState } from "react";
 import { CheckCircle2, Loader2, Mail, Save } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { buttonClasses } from "@/components/ui";
+import { PhoneField } from "@/components/wizard-fields";
 import { actualizarPersona } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
+import { phoneRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import type { MemberAccount } from "./members-utils";
 
 interface AccountInfoSectionProps {
@@ -34,14 +36,27 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
   const [apellidos, setApellidos] = useState(account.apellidos);
   // Issue #1207: `account.telefono` is typed `string`, but a represented
   // minor without a phone of their own can still arrive here as `null` at
-  // runtime — `?? ""` defends this component on its own, on top of (not
-  // instead of) the `null` → `""` coercion `members-adapter.ts` now does.
-  const [telefono, setTelefono] = useState(account.telefono ?? "");
+  // runtime — `?? ""` (via `toPhoneFieldDigits`) defends this component on
+  // its own, on top of (not instead of) the `null` → `""` coercion
+  // `members-adapter.ts` now does. Issue #1296: the same `PhoneField` every
+  // other phone field on the app shares — the stored `0XXXXXXXXX` shows as
+  // its local digits, with no trunk 0.
+  const [telefono, setTelefono] = useState(toPhoneFieldDigits(account.telefono ?? null));
+  const [telefonoError, setTelefonoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   async function handleSave(): Promise<void> {
+    // Issue #1207's phoneless represented minor stays representable from
+    // this counter: the field is optional, so only a NON-empty value is
+    // checked against the shared rule — unlike every other adopting site,
+    // where the phone is required.
+    const digits = telefono.trim();
+    const phoneError = digits ? phoneRule(toStoredPhone(digits), "El teléfono") : null;
+    setTelefonoError(phoneError);
+    if (phoneError) return;
+
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -49,7 +64,7 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
       await actualizarPersona(personaId, {
         nombres: nombres.trim(),
         apellidos: apellidos.trim(),
-        telefono: telefono.trim(),
+        telefono: toStoredPhone(telefono),
       });
       setSaved(true);
     } catch (err: unknown) {
@@ -86,18 +101,22 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
             />
           </dd>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="shrink-0 text-ink-3" id={`telefono-label-${account.id}`}>Teléfono</dt>
-          <dd className="min-w-0 flex-1">
-            <input
-              type="text"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              aria-labelledby={`telefono-label-${account.id}`}
-              className="input-field w-full py-1 text-right text-sm"
-            />
-          </dd>
-        </div>
+      </dl>
+      {/* Issue #1296: the same `PhoneField` every other phone field on the
+          app shares (fixed +593, local digits, no trunk 0) — the only site
+          of the five that had neither `type="tel"`, a mask, nor `phoneRule`
+          wired in at all. Breaks out of the compact `dl`/`dt`/`dd` rows the
+          other two fields keep: the field's own label/prefix/hint block
+          would otherwise fight that layout for the same row. */}
+      <PhoneField
+        idPrefix="telefono"
+        field={account.id}
+        label="Teléfono"
+        value={telefono}
+        onChange={setTelefono}
+        error={telefonoError ?? undefined}
+      />
+      <dl className="space-y-field text-sm">
         {/* Email deliberately read-only, no editable input: no admin endpoint
             mutates it (email lives on Usuario, not on the Persona that
             PATCH /personas/{id} edits). */}

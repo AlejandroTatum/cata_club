@@ -26,7 +26,7 @@ import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchStudentPortal, crearRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
-import { calculatePersonAge } from "@/lib/identity-validation";
+import { calculatePersonAge, toStoredPhone } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { WizardTextarea, WizardInput, PersonIdentityFields, WizardNavigation, example } from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
@@ -503,7 +503,7 @@ function AddDependentContent(): React.ReactElement {
             "child",
           )}
           {summaryRow("Cédula", formData.cedula || "—", "child", { duplicateCandidate: true })}
-          {summaryRow("Teléfono", formData.telefono || "—", "child")}
+          {summaryRow("Teléfono", formData.telefono ? toStoredPhone(formData.telefono) : "—", "child")}
           {summaryRow(
             "Institución",
             instituciones.find((inst) => String(inst.id) === formData.institucionId)?.nombre

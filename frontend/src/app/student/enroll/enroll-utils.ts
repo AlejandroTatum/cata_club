@@ -15,6 +15,8 @@ import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
   phoneRule,
+  phoneFieldRule,
+  toStoredPhone,
   emergencyPhoneDiffersRule,
   personNameRule,
   normalizePersonName,
@@ -264,11 +266,11 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
     fechaNacimiento: data.fechaNacimiento,
     // Issue #1197: a represented minor has no phone of their own — the key
     // is omitted entirely on the CHILD path (never sent as "", which the
-    // backend's TelefonoValidado explicitly rejects as blank). #1028
-    // (round 3): on the SELF path the visitor typed the 9 digits after the
-    // +593; the contract the backend expects is the local 09XXXXXXXX form.
+    // backend's TelefonoValidado explicitly rejects as blank). Issue #1296:
+    // on the SELF path the visitor typed the local digits after the fixed
+    // +593; the contract the backend expects is the local 0XXXXXXXX form.
     ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
-      ? { telefono: canonicalStudentPhone(data.telefono) }
+      ? { telefono: toStoredPhone(data.telefono) }
       : {}),
   } as EnrollmentStudent;
   const fichaMedica = {
@@ -280,7 +282,7 @@ export function buildEnrollmentRequest(data: EnrollFormData, aceptaConsentimient
     ...(data.enrollmentType === ENROLLMENT_TYPES.SELF
       ? {
           contactoEmergencia: data.contactoEmergencia.trim(),
-          telefonoEmergencia: data.telefonoEmergencia.trim(),
+          telefonoEmergencia: toStoredPhone(data.telefonoEmergencia),
         }
       : {}),
     ...(data.observaciones.trim() ? { observaciones: data.observaciones.trim() } : {}),
@@ -385,55 +387,6 @@ function passwordConfirmRule(confirm: string, password: string): string | null {
   return confirm === password ? null : "Las contraseñas no coinciden.";
 }
 
-/**
- * The public self-service enrollment's own phone rule (#1028, review round 3):
- * the field shows 🇪🇨 and a fixed `+593`, and the editable value is ONLY the
- * nine mobile digits that follow — `991234567`. A leading `0`, a repeated
- * `593`, and any other length are rejected with a message that names the
- * mistake, never normalized behind the visitor's back.
- *
- * `phoneRule` (the shared rule every OTHER phone field keeps) still accepts
- * `593…`/`+593…` and landlines, and the masking layer silently normalizes an
- * autofilled international value before the digit cap. Both are retired in
- * THIS flow on purpose: with the country code fixed beside the input, a value
- * starting with `0` or `593` is a duplication mistake the visitor needs to
- * see, not one the interface should quietly repair. Typing separators are
- * tolerated (`991 234 567` is that same number); the digits, once separated
- * out, must be exactly `9` plus eight more.
- *
- * The representative's, the emergency contact's and every admin/profile phone
- * keep `phoneRule`'s wider contract: this restriction is scoped to the public
- * student enrollment, exactly the flow the review asked for.
- */
-export function enrollStudentPhoneRule(value: string): string | null {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 0) return "El teléfono es obligatorio.";
-  if (digits.startsWith("0")) {
-    return "No incluya el 0 inicial: escriba solo los 9 dígitos que siguen al +593.";
-  }
-  if (digits.startsWith("593")) {
-    return "No repita el 593: ya está en el campo. Escriba solo los 9 dígitos de su celular.";
-  }
-  return /^9\d{8}$/.test(digits)
-    ? null
-    : "Escriba los 9 dígitos de su celular después del +593 (por ejemplo, 991234567).";
-}
-
-/**
- * The canonical shape the enrollment contract sends to the backend: the local
- * `09XXXXXXXX` form the API has always received (#855 made that the canonical
- * wire format). The visitor types the 9 digits after the `+593`; this restores
- * the trunk `0` for the payload, so display semantics and wire semantics each
- * stay in their own layer. Values that are not a valid 9-digit entry pass
- * through untouched: validation blocks them long before a request is built,
- * and the emergency-contact cross-check (#860) relies on comparing these same
- * canonical forms.
- */
-export function canonicalStudentPhone(value: string): string {
-  const digits = value.replace(/\D/g, "");
-  return /^9\d{8}$/.test(digits) ? `0${digits}` : digits;
-}
-
 const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string | null>> = {
   nombres: (d) => personNameRule(d.nombres, "Los nombres"),
   apellidos: (d) => personNameRule(d.apellidos, "Los apellidos"),
@@ -455,7 +408,11 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
     return null;
   },
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
-  telefono: (d) => enrollStudentPhoneRule(d.telefono),
+  // Issue #1296: the same `PhoneField`/`phoneFieldRule` pair every other
+  // phone field on the app now shares — the visitor types the local digits
+  // after the fixed +593, and this rule validates the local (mobile-or-
+  // landline) form those digits canonicalize to.
+  telefono: (d) => phoneFieldRule(d.telefono, "El teléfono"),
   correo: (d) => (isEmail(d.correo) ? null : "El correo electrónico no es válido."),
   contrasenia: (d) => passwordRule(d.contrasenia, "La contraseña"),
   contraseniaConfirmacion: (d) => passwordConfirmRule(d.contraseniaConfirmacion, d.contrasenia),
@@ -486,14 +443,14 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   tipoSangre: (d) => (isBloodType(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
   contactoEmergencia: (d) =>
     personNameRule(d.contactoEmergencia, "El nombre del contacto de emergencia", { plural: false }),
-  // Issue #860: chained after `phoneRule` so a malformed number is reported
-  // first — the cross-check only makes sense once the value is itself a
-  // valid Ecuadorian phone. The student's entry is canonicalized first so a
-  // 9-digit `991234567` and an emergency `0991234567` are still recognised
-  // as the SAME number (the comparison runs on normalized forms).
+  // Issue #860: chained after `phoneFieldRule` so a malformed number is
+  // reported first — the cross-check only makes sense once the value is
+  // itself a valid Ecuadorian phone. Both sides are canonicalized to the
+  // local `0XXXXXXXX` form before comparing (issue #1296: both fields now
+  // hold the same digits-only shape, so the comparison needs both restored).
   telefonoEmergencia: (d) =>
-    phoneRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
-    emergencyPhoneDiffersRule(d.telefonoEmergencia, canonicalStudentPhone(d.telefono)),
+    phoneFieldRule(d.telefonoEmergencia, "El teléfono de emergencia") ??
+    emergencyPhoneDiffersRule(toStoredPhone(d.telefonoEmergencia), toStoredPhone(d.telefono)),
 };
 
 // Issue #1197: a represented minor has no phone of their own — the

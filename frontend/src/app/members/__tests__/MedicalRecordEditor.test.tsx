@@ -124,8 +124,9 @@ describe("MedicalRecordEditor blood type", () => {
     fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
       target: { value: "AB_NEGATIVO" },
     });
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
-      target: { value: "0991112233" },
+    // Issue #1296: the field takes the local digits, no trunk 0.
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
+      target: { value: "991112233" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -170,7 +171,7 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
   it("refuses to save with a whitespace-only emergency phone", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), { target: { value: "   " } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), { target: { value: "   " } });
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -181,7 +182,7 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
   it("refuses to save a malformed emergency phone, quoting the shared rule", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), { target: { value: "123" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), { target: { value: "123" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -193,18 +194,25 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
     expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
   });
 
-  it("refuses a phone carrying letters, with the shared rule's own wording", async () => {
+  // Issue #1296: `PhoneField` cleans the value on every change — a letter
+  // never reaches state at all, so `phoneRule`'s "invalid-chars" branch can
+  // no longer fire from this field. What is left of a mixed entry is judged
+  // on its digit count instead, the same format message any short/long entry
+  // gets.
+  it("strips letters from a typed/pasted phone instead of rejecting them", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Teléfono de emergencia/), {
       target: { value: "099abc1234" },
     });
+
+    expect(screen.getByLabelText<HTMLInputElement>(/^Teléfono de emergencia/).value).toBe("991234");
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(
       await screen.findByText(
-        "El teléfono de emergencia solo puede contener dígitos y separadores (espacio, guion, paréntesis).",
+        "El teléfono de emergencia debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
       ),
     ).toBeInTheDocument();
     expect(mockActualizarFichaMedica).not.toHaveBeenCalled();
@@ -213,8 +221,9 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
   it("accepts a landline, not only a mobile", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
-      target: { value: "042345678" },
+    // Issue #1296: the fijo's 8 digits, no trunk 0.
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
+      target: { value: "42345678" },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -227,16 +236,17 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
     );
   });
 
-  // Issue #855: an autofilled +593 mobile is normalized to the local form
-  // BEFORE it lands in state, so what `actualizarFichaMedica` saves is
-  // already `09XXXXXXXX` — no extra step needed at save time.
-  it("normalizes an autofilled +593 emergency phone and saves the local value", async () => {
+  // Issue #1296: a pasted/autofilled international mobile is cleaned to the
+  // local digits (no trunk 0) the moment it lands, same as every other
+  // shape (`593…`, `0…`) — what `actualizarFichaMedica` saves is restored to
+  // `0XXXXXXXX` at save time (`toStoredPhone`).
+  it("cleans a pasted/autofilled +593 emergency phone and saves the local value", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
       target: { value: "+593991234567" },
     });
-    expect(screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia").value).toBe("0991234567");
+    expect(screen.getByLabelText<HTMLInputElement>(/^Teléfono de emergencia/).value).toBe("991234567");
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -253,17 +263,15 @@ describe("MedicalRecordEditor emergency phone (#643)", () => {
  * Issue #667's emergency-contact parity gap: `MedicalRecordEditor`'s
  * teléfono de emergencia field used to be a plain `<input type="text">` with
  * no `inputMode`, no keystroke/paste filtering, and no digit cap — unlike
- * the exact same field on the enrollment wizards (`WizardInput` with
- * `numericMode="phone"`). It now shares `use-numeric-field-masking.ts` with
- * `WizardInput`, so the behavior is not a second, possibly-drifting copy.
- *
- * `phoneRule`'s own character-class rejection (asserted above, "refuses a
- * phone carrying letters") still has to fire from the validation layer, not
- * from a field that already erased the evidence — the masking here rejects
- * a typed/pasted letter at the point of entry, but the `onChange` backstop
- * (a value set in one shot, as `fireEvent.change` does) never strips one.
+ * the exact same field on the enrollment wizards. Issue #1296 replaces that
+ * fix (a shared `numericMode="phone"` mask, kept the WIDER local-with-0
+ * shape) with the same `PhoneField` every other phone field on the app now
+ * shares: cleaning runs on every `onChange` — not only a pasted chunk, and
+ * not a separate keydown-level block — because the field's whole contract is
+ * "the local digits, no trunk 0", the same cleanup a pasted/autofilled value
+ * already needed.
  */
-describe("MedicalRecordEditor emergency contact masking parity (#667)", () => {
+describe("MedicalRecordEditor emergency contact — shared PhoneField (#667, #1296)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockActualizarFichaMedica.mockResolvedValue({});
@@ -276,36 +284,27 @@ describe("MedicalRecordEditor emergency contact masking parity (#667)", () => {
     });
   }
 
-  it("carries the same inputMode='tel' the wizards' teléfono field has", async () => {
+  it("carries the same inputMode='tel' every other phone field has", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    expect(screen.getByLabelText("Teléfono de emergencia")).toHaveAttribute("inputMode", "tel");
+    expect(screen.getByLabelText(/^Teléfono de emergencia/)).toHaveAttribute("inputMode", "tel");
   });
 
-  it("blocks a typed letter on the emergency phone (keydown)", async () => {
+  it("cleans letters and typing separators to digits on every change, not only a pasted chunk", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    const input = screen.getByLabelText("Teléfono de emergencia");
-    const notCancelled = fireEvent.keyDown(input, { key: "a" });
-    expect(notCancelled).toBe(false);
+    const input = screen.getByLabelText<HTMLInputElement>(/^Teléfono de emergencia/);
+    fireEvent.change(input, { target: { value: "099abc-123-4567" } });
+    expect(input.value).toBe("991234567");
   });
 
-  it("strips letters from a pasted emergency phone value, keeping the separators", async () => {
+  it("caps at nine digits, silently, instead of the old ten-digit warning", async () => {
     render(<MedicalRecordEditor personaId={7} />);
     await fillBloodType();
-    const input = screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia");
-    fireEvent.paste(input, { clipboardData: { getData: () => "099abc-123-4567" } });
-    expect(input.value).toBe("099-123-4567");
-  });
-
-  it("warns instead of silently truncating an 11th digit typed at the cap", async () => {
-    render(<MedicalRecordEditor personaId={7} />);
-    await fillBloodType();
-    const input = screen.getByLabelText("Teléfono de emergencia");
-    fireEvent.change(input, { target: { value: "1234567890" } }); // 10 digits: already at the cap
-    const notCancelled = fireEvent.keyDown(input, { key: "1" });
-    expect(notCancelled).toBe(false);
-    expect(screen.getByText(/alcanzó el máximo/i)).toBeInTheDocument();
+    const input = screen.getByLabelText<HTMLInputElement>(/^Teléfono de emergencia/);
+    fireEvent.change(input, { target: { value: "1234567890123" } });
+    expect(input.value).toBe("123456789");
+    expect(screen.queryByText(/alcanzó el máximo/i)).not.toBeInTheDocument();
   });
 
   it("caps contacto de emergencia at the same 150 characters the wizard's field uses", async () => {
@@ -376,8 +375,8 @@ describe("MedicalRecordEditor legacy records (#643)", () => {
     render(<MedicalRecordEditor personaId={7} />);
     fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
     fireEvent.change(screen.getByLabelText("Tipo de sangre"), { target: { value: "B_POSITIVO" } });
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
-      target: { value: "0991112233" },
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
+      target: { value: "991112233" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -406,7 +405,10 @@ describe("MedicalRecordEditor required markers (#643)", () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     expect(await screen.findByLabelText("Tipo de sangre")).toHaveAttribute("aria-required", "true");
-    expect(screen.getByLabelText("Teléfono de emergencia")).toHaveAttribute("aria-required", "true");
+    // Issue #1296: `PhoneField`/`WizardInput` mark it via the native
+    // `required` attribute rather than an explicit `aria-required` — both
+    // are what `toBeRequired()` checks.
+    expect(screen.getByLabelText(/^Teléfono de emergencia/)).toBeRequired();
   });
 
   it("marks nothing else as required", async () => {
@@ -424,8 +426,8 @@ describe("MedicalRecordEditor required markers (#643)", () => {
     fireEvent.change(await screen.findByLabelText("Tipo de sangre"), {
       target: { value: "O_NEGATIVO" },
     });
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), {
-      target: { value: "0991112233" },
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), {
+      target: { value: "991112233" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -556,7 +558,7 @@ describe("MedicalRecordEditor clearing a field (FIC-5)", () => {
     render(<MedicalRecordEditor personaId={7} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
-    fireEvent.change(screen.getByLabelText("Teléfono de emergencia"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono de emergencia/), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(await screen.findByText("El teléfono de emergencia es obligatorio.")).toBeInTheDocument();
@@ -712,7 +714,8 @@ describe("MedicalRecordEditor — ficha guardada en reposo", () => {
       screen.getByLabelText<HTMLInputElement>("Enfermedades (separadas por coma)").value,
     ).toBe("Asma");
     expect(screen.getByLabelText<HTMLInputElement>("Contacto de emergencia").value).toBe("Ana Torres");
-    expect(screen.getByLabelText<HTMLInputElement>("Teléfono de emergencia").value).toBe("0991112233");
+    // Issue #1296: the field shows the local digits without the trunk 0.
+    expect(screen.getByLabelText<HTMLInputElement>(/^Teléfono de emergencia/).value).toBe("991112233");
 
     expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Guardar" })).toBeInTheDocument();

@@ -32,8 +32,9 @@ function validForm(overrides: Partial<EnrollFormData> = {}): EnrollFormData {
     contactoEmergencia: "María Pérez",
     // Issue #860: has to be a different valid mobile than `telefono` above —
     // an equal number is now rejected, and this is the "everything valid"
-    // base fixture most tests in this file build on.
-    telefonoEmergencia: "0987654321",
+    // base fixture most tests in this file build on. Issue #1296: the local
+    // digits without the trunk 0, same shape as `telefono`.
+    telefonoEmergencia: "987654321",
     ...overrides,
   };
 }

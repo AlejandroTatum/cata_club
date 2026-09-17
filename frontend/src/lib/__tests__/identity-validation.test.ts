@@ -28,7 +28,9 @@ import {
   isCommonPassword,
   passwordRule,
   PHONE_LOCAL_HINT,
-  PHONE_ENROLL_LOCAL_HINT,
+  toPhoneFieldDigits,
+  toStoredPhone,
+  phoneFieldRule,
 } from "@/lib/identity-validation";
 
 // The backend test suite freezes "today" at 2029-01-01 (`FECHA_CONGELADA_HOY`
@@ -716,26 +718,82 @@ describe("contraseña", () => {
   });
 });
 
-describe("PHONE_LOCAL_HINT (#1028)", (): void => {
-  it("names Ecuador and says which local digits to type, leaving the code to the field's prefix", (): void => {
+describe("PHONE_LOCAL_HINT (#1028, unified across every site by #1296)", (): void => {
+  it("teaches the local digits after the field's fixed +593, with the example, no leading 0", (): void => {
     expect(PHONE_LOCAL_HINT).toBe(
-      "Escriba su número local de Ecuador: el celular empieza en 09; los fijos, en 0.",
+      "Escriba los 9 dígitos de su celular o los 8 de su fijo, sin el 0 inicial: por ejemplo, 991234567.",
     );
-    // The +593 teaching moved INTO the field (`EcuadorPhonePrefix`); the hint
-    // would only repeat it.
+    // The +593 teaching lives INSIDE the field (`EcuadorPhonePrefix`); the
+    // hint would only repeat it.
     expect(PHONE_LOCAL_HINT).not.toContain("593");
-    // And it stays the same numbering plan the formats hint has always taught.
-    expect(PHONE_LOCAL_HINT).toContain("09");
-    expect(PHONE_LOCAL_HINT).toContain("0");
+    expect(PHONE_LOCAL_HINT).toContain("991234567");
+    expect(PHONE_LOCAL_HINT).toContain("sin el 0");
   });
 });
 
-describe("PHONE_ENROLL_LOCAL_HINT (#1028 review)", (): void => {
-  it("teaches the nine digits after +593 in the usted register, with the example", (): void => {
-    expect(PHONE_ENROLL_LOCAL_HINT).toBe(
-      "Escriba los 9 dígitos de su celular, sin el 0 inicial: por ejemplo, 991234567.",
+// ---------------------------------------------------------------------------
+// Issue #1296 — the one canonicalization pair every `+593`-prefixed phone
+// field shares: `toPhoneFieldDigits` cleans a stored/pasted/autofilled value
+// down to the local digits (no trunk 0); `toStoredPhone` restores the wire
+// shape (#228). `phoneFieldRule` is `phoneRule` applied to that digits-only
+// shape — the one validator, not a second copy.
+// ---------------------------------------------------------------------------
+describe("toPhoneFieldDigits", (): void => {
+  it("strips the trunk 0 from a stored local number", (): void => {
+    expect(toPhoneFieldDigits("0991234567")).toBe("991234567");
+    // A fijo: 0 + 8 digits.
+    expect(toPhoneFieldDigits("042345678")).toBe("42345678");
+  });
+
+  it("cleans a pasted/autofilled international or duplicated-prefix value to the same digits", (): void => {
+    expect(toPhoneFieldDigits("+593 99 123 4567")).toBe("991234567");
+    expect(toPhoneFieldDigits("593991234567")).toBe("991234567");
+    expect(toPhoneFieldDigits("0991234567")).toBe("991234567");
+  });
+
+  it("tolerates typing separators", (): void => {
+    expect(toPhoneFieldDigits("099-123-4567")).toBe("991234567");
+    expect(toPhoneFieldDigits("099 123 4567")).toBe("991234567");
+  });
+
+  it("returns empty for null or an empty stored value — a dependent with no phone of their own", (): void => {
+    expect(toPhoneFieldDigits(null)).toBe("");
+    expect(toPhoneFieldDigits("")).toBe("");
+  });
+});
+
+describe("toStoredPhone", (): void => {
+  it("restores the trunk 0 for the wire contract (#228)", (): void => {
+    expect(toStoredPhone("991234567")).toBe("0991234567");
+    expect(toStoredPhone("42345678")).toBe("042345678");
+  });
+
+  it("strips any stray separator before restoring the 0", (): void => {
+    expect(toStoredPhone("991 234 567")).toBe("0991234567");
+  });
+
+  it("stays empty for an empty field", (): void => {
+    expect(toStoredPhone("")).toBe("");
+  });
+
+  it("round-trips with toPhoneFieldDigits", (): void => {
+    expect(toStoredPhone(toPhoneFieldDigits("0991234567"))).toBe("0991234567");
+  });
+});
+
+describe("phoneFieldRule", (): void => {
+  it("accepts a valid celular or fijo, digits-only", (): void => {
+    expect(phoneFieldRule("991234567", "El teléfono")).toBeNull();
+    expect(phoneFieldRule("42345678", "El teléfono")).toBeNull();
+  });
+
+  it("requires a value, the same message phoneRule gives", (): void => {
+    expect(phoneFieldRule("", "El teléfono")).toBe("El teléfono es obligatorio.");
+  });
+
+  it("rejects a length that fits neither shape, quoting the shared phoneRule message", (): void => {
+    expect(phoneFieldRule("1234", "El teléfono")).toBe(
+      "El teléfono debe ser un celular (09 y 8 dígitos más) o un fijo (0, código de área y 7 dígitos, 9 en total).",
     );
-    expect(PHONE_ENROLL_LOCAL_HINT).toContain("991234567");
-    expect(PHONE_ENROLL_LOCAL_HINT).toContain("sin el 0");
   });
 });
