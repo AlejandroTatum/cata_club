@@ -26,7 +26,7 @@ import {
   studentBirthDateBounds,
   PHONE_FORMAT_HINT,
   PHONE_LOCAL_HINT,
-  PHONE_ENROLL_LOCAL_HINT,
+  toPhoneFieldDigits,
 } from "@/lib/identity-validation";
 import { Button } from "@/components/ui";
 import { DuplicateIdentityHelp, type DuplicateIdentityAudience } from "@/components/DuplicateIdentityHelp";
@@ -153,6 +153,14 @@ interface WizardInputProps {
    * — the cap is real, unlike issue #225's, it is never silent.
    */
   numericMode?: NumericFieldMode;
+  /**
+   * Keeps the label in the accessibility tree (still the field's one
+   * accessible name) but visually hidden (`sr-only`) — for a caller whose OWN
+   * layout already names the field, e.g. `AccountInfoSection`'s `<dt>` row
+   * label or `profile/page.tsx`'s `DetailRow` (issue #1296's `PhoneField`
+   * inside either would otherwise print "Teléfono" twice).
+   */
+  hideLabel?: boolean;
 }
 
 /**
@@ -207,7 +215,10 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
 
   return (
     <div className="mb-4">
-      <label htmlFor={fieldId} className="mb-field block text-sm font-semibold text-ink">
+      <label
+        htmlFor={fieldId}
+        className={opts.hideLabel ? "sr-only" : "mb-field block text-sm font-semibold text-ink"}
+      >
         {opts.label}
         <RequiredMarker required={opts.required} />
       </label>
@@ -574,18 +585,6 @@ interface PersonIdentityFieldsProps {
   onFieldBlur?: (field: keyof PersonIdentityErrors) => void;
   /** Extra content appended after the "Edad calculada" preview — e.g. `/student/enroll`'s minor-without-representative warning, which `/student/add-dependent` doesn't need. */
   renderAgeWarning?: (age: number) => ReactNode;
-  /**
-   * `"local"` (public self-service enrollment, #1028 review round 3): the
-   * field shows 🇪🇨 and the fixed `+593`, and the editable value is ONLY the
-   * nine mobile digits that follow (`991234567`) — a leading `0` or a
-   * repeated `593` is neither normalized nor accepted; the step's own rule
-   * rejects it with a message that names the mistake, and the payload is
-   * re-canonicalized to the local `09XXXXXXXX` form by
-   * `canonicalStudentPhone`. Omitted (default): the shared behavior — digits
-   * + separators, #855 normalization, the wider rule — which is what the
-   * dependent flow keeps.
-   */
-  phoneFormat?: "local";
 }
 
 /** How many digits an Ecuadorian cédula carries. Mirrors the backend's own rule. */
@@ -633,6 +632,65 @@ function digitCount(value: string): number {
   return value.replace(/\D/g, "").length;
 }
 
+export interface PhoneFieldProps {
+  idPrefix: string;
+  /** Defaults to `"telefono"` — pass a distinct token when a screen carries more than one phone field (e.g. `telefono-emergencia`). */
+  field?: string;
+  label: string;
+  disabled?: boolean;
+  /** The 9 (celular) or 8 (fijo) local digits, WITHOUT the leading `0` — see `toPhoneFieldDigits`/`toStoredPhone` in `identity-validation.ts`. */
+  value: string;
+  onChange: (digits: string) => void;
+  error?: string;
+  onBlur?: () => void;
+  required?: boolean;
+  /** See `WizardInputProps.hideLabel` — a caller whose own layout already names the field (`AccountInfoSection`'s `<dt>`, `profile/page.tsx`'s `DetailRow`). */
+  hideLabel?: boolean;
+}
+
+/** The most digits `PhoneField` keeps — a celular's 9 (mobile trunk digit + 8 more); a fijo's 8 fit inside that same cap. */
+const PHONE_FIELD_MAX_DIGITS = 9;
+
+/**
+ * Issue #1296 — the ONE phone field every screen that collects an Ecuadorian
+ * phone now shares: the fixed `🇪🇨 +593` prefix, the local digits with no
+ * trunk `0`, one hint, and the same paste/autofill cleanup
+ * (`toPhoneFieldDigits`) on every keystroke — not only a pasted chunk, so a
+ * duplicated `593` or a habitually-typed leading `0` never has to be
+ * rejected-and-corrected by the visitor; it is cleaned the moment it lands,
+ * exactly like a whole pasted/autofilled value already was.
+ *
+ * Built on `WizardInput` rather than a second markup: the prefix, error and
+ * hint styling are already there, `hideLabel` is the only thing a
+ * non-wizard caller (`MedicalRecordEditor`, `profile/page.tsx`,
+ * `AccountInfoSection`) needs on top.
+ */
+export function PhoneField(props: PhoneFieldProps): ReactElement {
+  function handleChange(raw: string): void {
+    props.onChange(toPhoneFieldDigits(raw).slice(0, PHONE_FIELD_MAX_DIGITS));
+  }
+  return (
+    <WizardInput
+      idPrefix={props.idPrefix}
+      field={props.field ?? "telefono"}
+      disabled={props.disabled ?? false}
+      label={props.label}
+      value={props.value}
+      onChange={handleChange}
+      onBlur={props.onBlur}
+      required={props.required}
+      hideLabel={props.hideLabel}
+      placeholder={example("991234567")}
+      prefix={<EcuadorPhonePrefix />}
+      pattern="[0-9]+"
+      inputMode="tel"
+      autoComplete="tel"
+      error={props.error}
+      hint={PHONE_LOCAL_HINT}
+    />
+  );
+}
+
 /** Nombres/apellidos/fecha de nacimiento/cédula/teléfono + a live "Edad calculada" preview — shared by both wizards, which collect the same person-identity shape for their respective subject (student or dependent). */
 export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactElement {
   const { idPrefix, disabled } = props;
@@ -647,18 +705,6 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
   // that rule only fires on blur, and this preview updates on every keystroke.
   const agePlausible = ageValid && isPlausibleHumanAge(age);
   const cedulaTyped = digitCount(props.cedula);
-  // `local` (public enrollment): digits only, capped at 10, and NEVER
-  // rewritten — a `593`-prefixed entry stays a `593`-prefixed entry so the
-  // step's own rule can reject it visibly (`enrollStudentPhoneRule`). This
-  // handler replaces the shared masking for this field, which is the layer
-  // that would have silently normalized the `593…` form (#855's behavior,
-  // retired for this flow on purpose).
-  const handleLocalPhoneChange = (raw: string): void => {
-    // Digits only — and deliberately NO cap and NO rewrite: a `593…` or
-    // `0…` entry must stay exactly as typed so the step rule can reject it
-    // with the message that names the mistake.
-    props.onTelefonoChange(raw.replace(/\D/g, ""));
-  };
   const birthDateBounds = studentBirthDateBounds();
   return (
     <>
@@ -698,25 +744,16 @@ export function PersonIdentityFields(props: PersonIdentityFieldsProps): ReactEle
           }
         />
       </div>
-      {/* #1028 (round 3) — the phone splits by flow. `local` (public
-          enrollment): the field shows 🇪🇨 and the fixed `+593`, and the visitor
-          types ONLY the nine mobile digits that follow — no leading 0, no
-          repeated 593. `numericMode` is deliberately DROPPED because it is the
-          layer that silently normalized an autofilled `+593…` (#855); this
-          flow's onChange only strips non-digits, so a duplicated entry stays
-          as typed for the step rule to reject with its named message. The
-          payload is re-canonicalized to the local `09XXXXXXXX` form at
-          `buildEnrollmentRequest` (`canonicalStudentPhone`). Default
-          (dependent flow): unchanged — masking, normalization, wider rule. */}
-      <WizardInput
+      {/* Issue #1296 — every flow that renders `PersonIdentityFields` shares
+          the same `PhoneField`: the visitor types the local digits after the
+          fixed `+593`, no leading 0, no repeated 593 — a pasted/autofilled
+          value in either shape cleans to the same digits. The payload is
+          re-canonicalized to the local `0XXXXXXXX` form by the caller
+          (`toStoredPhone`), same as every other adopting site. */}
+      <PhoneField
         idPrefix={idPrefix} field="telefono" disabled={disabled} label="Teléfono" value={props.telefono}
-        onChange={props.phoneFormat === "local" ? handleLocalPhoneChange : props.onTelefonoChange}
-        placeholder={example("991234567")} required
-        prefix={<EcuadorPhonePrefix />}
-        pattern="[0-9]+" inputMode="tel" numericMode={props.phoneFormat === "local" ? undefined : "phone"}
+        onChange={props.onTelefonoChange} required
         error={errors.telefono} onBlur={() => props.onFieldBlur?.("telefono")}
-        hint={props.phoneFormat === "local" ? PHONE_ENROLL_LOCAL_HINT : PHONE_LOCAL_HINT}
-        autoComplete="tel"
       />
       {/* `sunken`, not `canvas`. The surface ladder is canvas → sunken → paper,
           so `canvas` is the field the PAGE stands on; spending it on a recessed
@@ -772,13 +809,10 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           error={props.contactoError} onBlur={props.onContactoBlur}
           pattern="[A-Za-z\u00C0-\u024F\s]+" maxLength={150} minLength={3}
         />
-        <WizardInput
+        <PhoneField
           idPrefix={idPrefix} field="telefono-emergencia" disabled={disabled} label="Teléfono de emergencia" value={props.telefono}
-          onChange={props.onTelefonoChange} placeholder={example("0991234567")} required
-          icon={<Phone size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          pattern="[0-9]+" inputMode="tel" numericMode="phone"
+          onChange={props.onTelefonoChange} required
           error={props.telefonoError} onBlur={props.onTelefonoBlur}
-          hint={PHONE_HINT}
         />
       </div>
     </>

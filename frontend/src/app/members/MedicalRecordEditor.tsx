@@ -8,9 +8,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { Badge, Button, DataBox, ErrorState, LoadingState } from "@/components/ui";
 import type { FichaMedicaEditable, TipoSangre } from "@/types/domain";
 import { toUserMessage, isNotFound } from "@/lib/error-message";
-import { phoneRule, PHONE_FORMAT_HINT } from "@/lib/identity-validation";
-import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
-import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
+import { phoneFieldRule, toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
+import { PhoneField } from "@/components/wizard-fields";
 
 /**
  * The blood types this editor OFFERS (issue #643).
@@ -87,7 +86,10 @@ function camposDe(ficha: FichaMedicaEditable): {
     enfermedades: ficha.enfermedades.map((e) => e.nombreEnfermedad).join(", "),
     alergias: ficha.alergias ?? "",
     contactoEmergencia: ficha.contactoEmergencia ?? "",
-    telefonoEmergencia: ficha.telefonoEmergencia ?? "",
+    // Issue #1296: the field now shows the local digits without the trunk 0 —
+    // `toPhoneFieldDigits` is also what cleans a stored value that happens to
+    // carry an international/duplicated-prefix shape.
+    telefonoEmergencia: toPhoneFieldDigits(ficha.telefonoEmergencia),
   };
 }
 
@@ -156,15 +158,11 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
   const [enfermedadesInput, setEnfermedadesInput] = useState("");
   const [alergias, setAlergias] = useState("");
   const [contactoEmergencia, setContactoEmergencia] = useState("");
+  // Issue #1296: the same `PhoneField` every other phone field on the app
+  // shares (fixed +593, local digits, no trunk 0) — retired the field's own
+  // `useNumericFieldMasking("phone", …)` copy (#667's parity fix), which
+  // masked to the WIDER local-with-0 shape this field no longer shows.
   const [telefonoEmergencia, setTelefonoEmergencia] = useState("");
-  /**
-   * Issue #667: the same keystroke/paste filtering and digit cap the
-   * enrollment wizards' teléfono field already has (`WizardInput` with
-   * `numericMode="phone"`) — this field is the emergency-contact parity gap
-   * the issue's audit missed. Shared via `use-numeric-field-masking.ts`
-   * rather than a second, hand-rolled copy of the same handlers.
-   */
-  const telefonoEmergenciaMasking = useNumericFieldMasking("phone", setTelefonoEmergencia);
   /**
    * Field-level rejections, shown only after a save was attempted.
    *
@@ -255,15 +253,16 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
   /**
    * The two rules a persisted medical record must satisfy (#643).
    *
-   * The phone is checked with `phoneRule` from `@/lib/identity-validation` —
-   * the project's one phone validator, the same one the enrollment wizards
-   * call. A second copy written here would be a second definition of "valid
+   * The phone is checked with `phoneFieldRule` from `@/lib/identity-validation`
+   * — the project's one phone validator, the same one the enrollment wizards
+   * call, applied to this field's own digits-without-0 shape (issue #1296).
+   * A second copy written here would be a second definition of "valid
    * Ecuadorian phone", and the two would drift.
    */
   function validar(): { tipoSangre?: string; telefonoEmergencia?: string } {
     const errores: { tipoSangre?: string; telefonoEmergencia?: string } = {};
     if (!tipoSangre) errores.tipoSangre = "El tipo de sangre es obligatorio.";
-    const telefonoError = phoneRule(telefonoEmergencia, "El teléfono de emergencia");
+    const telefonoError = phoneFieldRule(telefonoEmergencia, "El teléfono de emergencia");
     if (telefonoError) errores.telefonoEmergencia = telefonoError;
     return errores;
   }
@@ -307,7 +306,7 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
         // It never reaches `null` here — the guard above returns first.
         alergias: alergias.trim() || null,
         contactoEmergencia: contactoEmergencia.trim() || null,
-        telefonoEmergencia: telefonoEmergencia.trim(),
+        telefonoEmergencia: toStoredPhone(telefonoEmergencia),
       });
       setSaveSuccess(true);
       setReloadToken((n) => n + 1);
@@ -541,54 +540,19 @@ export default function MedicalRecordEditor({ personaId, studentName }: MedicalR
             className="input-field w-full"
           />
         </div>
-        <div>
-          <div className="mb-1 flex items-center gap-1">
-            <label htmlFor={`telefono-${personaId}`} className="block text-xs font-semibold text-ink-2">
-              Teléfono de emergencia
-            </label>
-            <span className="text-xs font-semibold text-state-bad" aria-hidden="true">*</span>
-          </div>
-          <input
-            id={`telefono-${personaId}`}
-            type="text"
-            inputMode="tel"
-            value={telefonoEmergencia}
-            onChange={(e) => telefonoEmergenciaMasking.onChange(e.target.value)}
-            onKeyDown={telefonoEmergenciaMasking.onKeyDown}
-            onPaste={telefonoEmergenciaMasking.onPaste}
-            aria-required="true"
-            aria-invalid={fieldErrors.telefonoEmergencia ? true : undefined}
-            aria-describedby={
-              fieldErrors.telefonoEmergencia
-                ? `telefono-error-${personaId}`
-                : telefonoEmergenciaMasking.limitReached
-                  ? `telefono-limit-${personaId}`
-                  : `telefono-hint-${personaId}`
-            }
-            className={`input-field w-full ${fieldErrors.telefonoEmergencia ? "border-state-bad" : ""}`}
-          />
-          {fieldErrors.telefonoEmergencia ? (
-            <p
-              id={`telefono-error-${personaId}`}
-              className="mt-1 text-xs font-semibold text-state-bad"
-              role="alert"
-            >
-              {fieldErrors.telefonoEmergencia}
-            </p>
-          ) : telefonoEmergenciaMasking.limitReached ? (
-            <p
-              id={`telefono-limit-${personaId}`}
-              aria-live="polite"
-              className="mt-1 text-xs font-semibold text-state-warn"
-            >
-              {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
-            </p>
-          ) : (
-            <p id={`telefono-hint-${personaId}`} className="mt-1 text-2xs tracking-flat text-ink-3">
-              {PHONE_FORMAT_HINT}
-            </p>
-          )}
-        </div>
+        {/* Issue #1296: the same `PhoneField` every other phone field on the
+            app shares (fixed +593, local digits, no trunk 0) — this editor's
+            own hand-rolled markup (label/input/error/hint) is retired in
+            favor of it. */}
+        <PhoneField
+          idPrefix="telefono"
+          field={String(personaId)}
+          label="Teléfono de emergencia"
+          value={telefonoEmergencia}
+          onChange={setTelefonoEmergencia}
+          required
+          error={fieldErrors.telefonoEmergencia}
+        />
       </div>
 
       {/* El botón de guardar se fue al encabezado pegado; acá quedan sólo los

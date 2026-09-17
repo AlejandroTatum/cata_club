@@ -34,7 +34,8 @@ function validForm(overrides: Partial<AddDependentFormData> = {}): AddDependentF
     apellidos: "Pérez",
     fechaNacimiento: "2015-06-15",
     cedula: "1798765432",
-    telefono: "0991234567",
+    // Issue #1296: the field holds the local digits without the trunk 0.
+    telefono: "991234567",
     tipoSangre: "O_POSITIVO",
     enfermedades: "",
     alergias: "",
@@ -241,7 +242,7 @@ describe("buildRepresentadoPayload", () => {
 
   it("trims whitespace from text fields", () => {
     const payload = buildRepresentadoPayload(
-      validForm({ nombres: "  Ana  ", apellidos: "  Ruiz  ", cedula: " 1712345678 ", telefono: " 0991234567 " }),
+      validForm({ nombres: "  Ana  ", apellidos: "  Ruiz  ", cedula: " 1712345678 ", telefono: " 991234567 " }),
     );
     expect(payload.nombres).toBe("Ana");
     expect(payload.apellidos).toBe("Ruiz");

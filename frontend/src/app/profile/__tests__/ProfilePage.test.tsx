@@ -959,8 +959,9 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
 
     // Seeded from `/auth/me`'s teléfono — an edit that opened on an empty
     // field would make the reader re-type a number the page is holding.
+    // Issue #1296: the field shows the local digits without the trunk 0.
     const telefonoInput = screen.getByLabelText<HTMLInputElement>(/teléfono/i);
-    expect(telefonoInput.value).toBe("099111222");
+    expect(telefonoInput.value).toBe("99111222");
 
     fireEvent.change(telefonoInput, { target: { value: "099999000" } });
     fireEvent.click(screen.getByRole("button", { name: /^guardar/i }));
@@ -1009,29 +1010,14 @@ describe("ProfilePage — inline teléfono edit (correo is read-only)", () => {
 
 /**
  * Issue #667's phone-field parity gap: `/profile`'s staff teléfono field had
- * `type="tel" inputMode="tel"` but no mask — unlike the exact same field on
- * the enrollment wizards (`WizardInput` with `numericMode="phone"`) and now
- * `MedicalRecordEditor`'s teléfono de emergencia. Shares
- * `use-numeric-field-masking.ts` rather than a third, hand-rolled copy.
+ * `type="tel" inputMode="tel"` but no mask. Issue #1296 replaces that fix (a
+ * shared `numericMode="phone"` mask, kept the WIDER local-with-0 shape) with
+ * the same `PhoneField` every other phone field on the app now shares:
+ * cleaning runs on every `onChange` — not only a pasted chunk, and not a
+ * separate keydown-level block.
  */
-describe("ProfilePage — teléfono masking parity (#667)", () => {
-  it("blocks a typed letter on the teléfono field (keydown)", async () => {
-    mockUseAuth.mockReturnValue(sessionForRole("admin"));
-    mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
-
-    render(
-      <ToastProvider>
-        <ProfilePage />
-      </ToastProvider>,
-    );
-    await waitForStaffProfile();
-    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
-
-    const input = screen.getByLabelText(/teléfono/i);
-    expect(fireEvent.keyDown(input, { key: "a" })).toBe(false);
-  });
-
-  it("strips letters from a pasted teléfono value, keeping separators", async () => {
+describe("ProfilePage — teléfono shared PhoneField (#667, #1296)", () => {
+  it("cleans letters and typing separators to digits on every change, not only a pasted chunk", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
 
@@ -1044,13 +1030,12 @@ describe("ProfilePage — teléfono masking parity (#667)", () => {
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
     const input = screen.getByLabelText<HTMLInputElement>(/teléfono/i);
-    input.setSelectionRange(0, input.value.length);
-    fireEvent.paste(input, { clipboardData: { getData: () => "099abc-123-4567" } });
+    fireEvent.change(input, { target: { value: "099abc-123-4567" } });
 
-    expect(input.value).toBe("099-123-4567");
+    expect(input.value).toBe("991234567");
   });
 
-  it("warns instead of silently truncating an 11th digit typed at the cap", async () => {
+  it("caps at nine digits, silently, instead of the old ten-digit warning", async () => {
     mockUseAuth.mockReturnValue(sessionForRole("admin"));
     mockFetchMiPerfil.mockResolvedValueOnce(PERFIL_ADMIN);
 
@@ -1062,12 +1047,11 @@ describe("ProfilePage — teléfono masking parity (#667)", () => {
     await waitForStaffProfile();
     fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
 
-    const input = screen.getByLabelText(/teléfono/i);
-    fireEvent.change(input, { target: { value: "1234567890" } }); // 10 digits: already at the cap
-    const notCancelled = fireEvent.keyDown(input, { key: "1" });
+    const input = screen.getByLabelText<HTMLInputElement>(/teléfono/i);
+    fireEvent.change(input, { target: { value: "1234567890" } });
 
-    expect(notCancelled).toBe(false);
-    expect(await screen.findByText(/alcanzó el máximo/i)).toBeInTheDocument();
+    expect(input.value).toBe("123456789");
+    expect(screen.queryByText(/alcanzó el máximo/i)).not.toBeInTheDocument();
   });
 
   it("keeps the student branch's correo read-only and says which datum IS editable", async () => {

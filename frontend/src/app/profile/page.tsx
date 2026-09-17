@@ -168,10 +168,9 @@ import { Loader2, Save, X, Camera, ArrowRight, Lock, Monitor, LogOut } from "luc
 import { ICON } from "@/lib/icon-size";
 import { formatDate } from "@/lib/format-utils";
 import { toUserMessage } from "@/lib/error-message";
-import { NUMERIC_FIELD_LIMIT_MESSAGE } from "@/lib/numeric-input";
-import { PHONE_FORMAT_HINT } from "@/lib/identity-validation";
+import { toPhoneFieldDigits, toStoredPhone } from "@/lib/identity-validation";
 import { revisarFoto, subirFotoDeArchivo } from "@/lib/photo-upload";
-import { useNumericFieldMasking } from "@/lib/use-numeric-field-masking";
+import { PhoneField } from "@/components/wizard-fields";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -839,17 +838,13 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
 
   // ---- Inline teléfono edit. Both branches use it — see `handleSave`. ----
   const [editing, setEditing] = useState(false);
-  const [telefono, setTelefono] = useState(props.perfil?.telefono ?? "");
+  // Issue #1296: the same `PhoneField` every other phone field on the app
+  // shares (fixed +593, local digits, no trunk 0) — the stored value arrives
+  // as `0XXXXXXXX`, so it is shown here as the digits `toPhoneFieldDigits`
+  // strips the trunk 0 from.
+  const [telefono, setTelefono] = useState(toPhoneFieldDigits(props.perfil?.telefono ?? null));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  /**
-   * Issue #667: the same keystroke/paste filtering and digit cap the
-   * enrollment wizards' teléfono field already has (`WizardInput` with
-   * `numericMode="phone"`) and `MedicalRecordEditor`'s teléfono de
-   * emergencia now has — this field carried `type="tel" inputMode="tel"`
-   * but no mask, the phone-field parity gap the issue's audit missed.
-   */
-  const telefonoMasking = useNumericFieldMasking("phone", setTelefono);
 
   const [requestingPassword, setRequestingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -928,17 +923,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     // `perfil` is `null` only while the student branch's supplementary
     // `/auth/me` call is still in flight or failed; the trigger is not drawn
     // then (see `headerAction`), so this is unreachable with nothing to seed.
-    setTelefono(perfil?.telefono ?? "");
+    setTelefono(toPhoneFieldDigits(perfil?.telefono ?? null));
     setSaveError(null);
     setEditing(true);
-    telefonoMasking.reset();
   }
 
   function cancelEditing(): void {
-    setTelefono(perfil?.telefono ?? "");
+    setTelefono(toPhoneFieldDigits(perfil?.telefono ?? null));
     setSaveError(null);
     setEditing(false);
-    telefonoMasking.reset();
   }
 
   async function handleSave(): Promise<void> {
@@ -947,7 +940,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     try {
       // Correo is never sent here — it's the JWT `sub` claim, and self-service
       // editing was removed by design (see auth_servicio.py).
-      const updated = await actualizarMiPerfil({ telefono: telefono.trim() });
+      const updated = await actualizarMiPerfil({ telefono: toStoredPhone(telefono) });
       // Each branch owns its own state: staff replaces its `staffState`
       // profile, the student branch its supplementary one.
       if (props.kind === "staff") props.onSaved(updated);
@@ -957,7 +950,7 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
     } catch (error: unknown) {
       // Revert — a rejected edit must never be left displayed as if it were
       // persisted (no silent data loss, per spec).
-      setTelefono(perfil?.telefono ?? "");
+      setTelefono(toPhoneFieldDigits(perfil?.telefono ?? null));
       setEditing(false);
       const message = toErrorMessage(error, "No se pudo guardar los cambios.");
       setSaveError(message);
@@ -1250,27 +1243,18 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             <DetailRow label="Correo de cuenta">{correoDisplay}</DetailRow>
             <DetailRow label="Teléfono">
               {editing ? (
-                <div>
-                  <input
-                    id="perfil-telefono"
-                    type="tel"
-                    inputMode="tel"
-                    aria-label="Teléfono"
-                    value={telefono}
-                    onChange={(e) => telefonoMasking.onChange(e.target.value)}
-                    onKeyDown={telefonoMasking.onKeyDown}
-                    onPaste={telefonoMasking.onPaste}
-                    disabled={saving}
-                    className="input-field max-w-xs"
-                  />
-                  {telefonoMasking.limitReached ? (
-                    <p aria-live="polite" className="mt-1 text-xs font-semibold text-state-warn">
-                      {NUMERIC_FIELD_LIMIT_MESSAGE.phone}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs text-ink-3">{PHONE_FORMAT_HINT}</p>
-                  )}
-                </div>
+                // Issue #1296: the same `PhoneField` every other phone field
+                // on the app shares. `hideLabel` keeps "Teléfono" as the
+                // field's one accessible name without repeating it visually —
+                // `DetailRow` already prints it as this row's own label.
+                <PhoneField
+                  idPrefix="perfil"
+                  label="Teléfono"
+                  hideLabel
+                  value={telefono}
+                  onChange={setTelefono}
+                  disabled={saving}
+                />
               ) : (
                 <DataBox>{telefonoDisplay || "—"}</DataBox>
               )}
