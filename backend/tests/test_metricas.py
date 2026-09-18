@@ -14,12 +14,9 @@ gauge es opt-in, ver `main.py`). Si algún día un nombre documentado deja de
 aparecer en un scrape real, lo que cambia es la doc, nunca esta aserción.
 
 Registrar el colector NO debe tocar la BD
-(`test_registrar_el_colector_no_abre_ninguna_sesion_de_bd`): el `REGISTRY`
-default de `prometheus_client` se crea con `auto_describe=True`, así que sin
-un `describe()` propio el simple `REGISTRY.register(colector_outbox)` de
-`main.py` corría el scrape completo al IMPORTAR el módulo -- ver el
-docstring de `ColectorOutbox.describe()` en `metricas.py` para el porqué es
-grave (un Postgres todavía no listo cuelga el import, no solo lo demora).
+(`test_registrar_el_colector_no_abre_ninguna_sesion_de_bd`); el porqué vive
+en el docstring de `ColectorOutbox.describe()` (`metricas.py`), único dueño
+de esa explicación.
 
 Los gauges propios de outbox (`ColectorOutbox`,
 `app/infraestructura/metricas.py`) se prueban en tres niveles a propósito,
@@ -50,8 +47,8 @@ vacía -- por dos caminos distintos:
   lanza directo (falla de conexión) y otra con una consulta real contra
   Postgres que excede el `statement_timeout` del scrape
   (`test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0`) --
-  esta última no mockea nada, deja que Postgres cancele la consulta de
-  verdad con `pg_sleep`.
+  acá la consulta lenta SÍ se stubbea (`pg_sleep(3)`), pero el timeout no:
+  quien cancela es Postgres real, con `QueryCanceled`.
 """
 import re
 from datetime import datetime, timedelta, timezone
@@ -112,29 +109,19 @@ def test_metrics_no_aparece_en_el_esquema_openapi():
 
 # --- Registrar el colector no debe tocar la BD (defecto de import) ---------
 def test_registrar_el_colector_no_abre_ninguna_sesion_de_bd():
-    """Defecto de import descubierto en revisión nativa (issue #1309): el
-    `REGISTRY` default de `prometheus_client` se crea con
-    `auto_describe=True` (`prometheus_client/registry.py::REGISTRY`). Sin un
-    método `describe()` propio, `CollectorRegistry.register()` usa
-    `collect()` como su propia función de descripción -- lo LLAMA ahí mismo,
-    durante el registro, para saber qué nombres de serie declara.
+    """Registrar el colector no debe abrir ninguna sesión de BD (issue #1309).
 
-    `REGISTRY.register(colector_outbox)` corre a nivel de módulo en
-    `main.py`, así que sin `describe()` el simple IMPORT de `main` abría una
-    sesión de BD y corría las tres consultas del scrape antes de que uvicorn
-    sirviera un solo request -- con Postgres todavía sin aceptar conexiones
-    (orden de arranque de Compose, un restart de la base), el import se
-    colgaba esperando el connect TCP, algo que `TIMEOUT_SCRAPE_SENTENCIA_MS`
-    no cubre (ese timeout es un `SET LOCAL statement_timeout`, y nunca llega
-    a correr ninguna sentencia si la conexión ni siquiera se estableció).
+    El mecanismo -- por qué `register()` sin un `describe()` propio llamaría a
+    `collect()` -- está una sola vez en el docstring de
+    `ColectorOutbox.describe()` (`metricas.py`); acá solo se prueba el síntoma.
 
-    Se prueba contra un `CollectorRegistry` PROPIO -- no el `REGISTRY`
-    global de `prometheus_client`, que ya tiene registrado el colector real
-    desde que se importó `main` -- para poder observar el registro de un
-    colector NUEVO sin interferir con el resto de la suite. La factory
-    inyectada lanza si se la llama; `collect()` ya captura cualquier
-    excepción de `sesion_factory()` (ver `ColectorOutbox.collect`), así que
-    esto no revienta el test -- solo deja evidencia de si se llamó."""
+    Se prueba contra un `CollectorRegistry` PROPIO -- no el `REGISTRY` global
+    de `prometheus_client`, que ya tiene registrado el colector real desde que
+    se importó `main` -- para poder observar el registro de un colector NUEVO
+    sin interferir con el resto de la suite. La factory inyectada anota la
+    llamada y lanza; `collect()` ya captura cualquier excepción de
+    `sesion_factory()` (ver `ColectorOutbox.collect`), así que esto no revienta
+    el test -- solo deja evidencia de si se llamó."""
     llamadas = []
 
     def _factory_que_registra_la_llamada():
@@ -221,26 +208,85 @@ def test_gauge_de_pendientes_cuenta_solo_las_filas_pendientes_por_tabla(db_sessi
 
     cantidad_enrollment, edad_enrollment = metricas["enrollment_notificacion_outbox"]
     assert cantidad_enrollment == 1  # solo la fila PENDIENTE, no la ENVIADO
-    assert edad_enrollment > 0  # created_at quedó una hora atrás
+    # `created_at` quedó EXACTAMENTE una hora atrás, así que la edad ronda los
+    # 3600 s; la banda de ±100 s deja lugar al tiempo de ejecución del test y, a
+    # la vez, atrapa un error de zona horaria de varias horas o un valor en
+    # milisegundos (que daría ~3.6e6), cosas que un `> 0` dejaba pasar.
+    assert 3500 <= edad_enrollment <= 3700
 
     cantidad_recuperacion, edad_recuperacion = metricas["recuperacion_outbox"]
     assert cantidad_recuperacion == 1
-    assert edad_recuperacion >= 0
+    # Esta fila se sembró sin `created_at` explícito: usa el default del modelo
+    # (`_ahora_utc`, aware y del lado del cliente), así que su edad es ~0.
+    assert 0 <= edad_recuperacion <= 120
 
     cantidad_verificacion, edad_verificacion = metricas["verificacion_correo_outbox"]
     assert cantidad_verificacion == 0
     assert edad_verificacion == 0.0  # sin filas pendientes: edad 0, no None ni negativa
 
 
+class _SesionFalsa:
+    """Sesión mínima SIN base de datos: `.execute(...)` devuelve siempre una
+    fila `(1, created_at)` fija. `calcular_pendientes_por_tabla` corre UNA
+    consulta por tabla, así que una sola respuesta sirve para las tres."""
+
+    def __init__(self, mas_antigua):
+        self._mas_antigua = mas_antigua
+
+    def execute(self, _sentencia):
+        class _Resultado:
+            def __init__(self, valor):
+                self._valor = valor
+
+            def one(_self):
+                return (1, self._mas_antigua)
+
+        return _Resultado(self._mas_antigua)
+
+
+def test_la_edad_interpreta_un_created_at_naive_como_utc():
+    """Rama de fallback de `calcular_pendientes_por_tabla` (metricas.py): si
+    `created_at` llega SIN tzinfo -- una columna `timestamp` sin `timezone`, o
+    un driver que devuelve naive -- la función lo reinterpreta como UTC antes
+    de restar. Sin ese `replace` la resta aware-vs-naive explota con
+    `TypeError`. No toca la base: la sesión es un doble que responde una fila
+    `(1, created_at)` por tabla."""
+    naive_hace_una_hora = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+
+    metricas = calcular_pendientes_por_tabla(_SesionFalsa(naive_hace_una_hora))
+
+    for _tabla, (_cantidad, edad) in metricas.items():
+        assert 3500 <= edad <= 3700
+
+
+def test_la_edad_clampea_a_cero_un_created_at_naive_en_el_futuro():
+    """El otro borde del mismo fallback: un `created_at` en el futuro (un
+    reloj de cliente adelantado) no debe producir una edad negativa --
+    `max(0.0, ...)` la clampea a `0.0`."""
+    naive_en_el_futuro = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
+
+    metricas = calcular_pendientes_por_tabla(_SesionFalsa(naive_en_el_futuro))
+
+    for _tabla, (_cantidad, edad) in metricas.items():
+        assert edad == 0.0
+
+
 class _SesionSinCierre:
-    """Envoltorio que delega TODO en la sesión real pero ignora `close()`.
+    """Envoltorio que delega TODO en el objeto real pero ignora `close()`.
 
     `ColectorOutbox.collect()` cierra la sesión que abre (issue #1309, ver
-    `metricas.py`); acá esa sesión es la MISMA `db_session` que el resto del
-    test usa para sembrar y para el teardown de la fixture -- cerrarla de
-    verdad adentro de `collect()` dejaría el teardown de `conftest.py`
-    (`sesion.close(); transaccion.rollback(); conexion.close()`) operando
-    sobre una sesión ya cerrada."""
+    `metricas.py`), y se lo inyecta como `sesion_factory` con dos objetos
+    distintos:
+
+    - En los tests HTTP, la MISMA `db_session` que el test usa para sembrar y
+      para el teardown de la fixture -- cerrarla de verdad adentro de
+      `collect()` dejaría el teardown de `conftest.py`
+      (`sesion.close(); transaccion.rollback(); conexion.close()`) operando
+      sobre una sesión ya cerrada.
+    - En `test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion`,
+      una `Connection` cruda de `motor_test`: `__getattr__` delega `execute` y
+      `commit` en ella, y el `close()` no-op evita que el `finally` de
+      `collect()` devuelva la conexión a un pool a mitad del test."""
 
     def __init__(self, sesion):
         self._sesion = sesion
@@ -271,6 +317,9 @@ def test_metrics_via_http_refleja_las_filas_sembradas_y_scrape_ok(db_session, mo
     base_enrollment = base["enrollment_notificacion_outbox"][0]
     base_recuperacion = base["recuperacion_outbox"][0]
     base_verificacion = base["verificacion_correo_outbox"][0]
+    base_edad_enrollment = base["enrollment_notificacion_outbox"][1]
+    base_edad_recuperacion = base["recuperacion_outbox"][1]
+    base_edad_verificacion = base["verificacion_correo_outbox"][1]
 
     _sembrar_un_pendiente_y_un_no_pendiente(db_session, semilla=10)
 
@@ -294,6 +343,30 @@ def test_metrics_via_http_refleja_las_filas_sembradas_y_scrape_ok(db_session, mo
         cuerpo, "cata_outbox_pendientes", "verificacion_correo_outbox"
     ) == base_verificacion  # no se sembró nada acá: sin cambio
 
+    # La serie de EDAD también sale por HTTP. La fila sembrada en enrollment
+    # tiene una hora exacta, así que si llega a ser la más antigua la edad salta
+    # a ~3600 s; si ya había una más vieja, `base_edad_enrollment` manda. El
+    # `max` cubre las dos; la ventana de segundos acota que el valor no sea
+    # milisegundos ni horas corridas (el hallazgo que dejaba pasar `> 0`).
+    edad_enrollment = _valor_gauge_por_tabla(
+        cuerpo, "cata_outbox_pendiente_mas_antiguo_segundos", "enrollment_notificacion_outbox"
+    )
+    esperado_enrollment = max(base_edad_enrollment, 3600)
+    assert esperado_enrollment - 10 <= edad_enrollment <= esperado_enrollment + 120
+
+    # Recuperación y verificación solo pueden sembrarse filas MÁS NUEVAS que la
+    # más antigua preexistente (o ninguna), y una edad nunca retrocede EN ESTE
+    # intervalo: el valor después del scrape queda pegado a la línea de base.
+    edad_recuperacion = _valor_gauge_por_tabla(
+        cuerpo, "cata_outbox_pendiente_mas_antiguo_segundos", "recuperacion_outbox"
+    )
+    assert base_edad_recuperacion - 10 <= edad_recuperacion <= base_edad_recuperacion + 120
+
+    edad_verificacion = _valor_gauge_por_tabla(
+        cuerpo, "cata_outbox_pendiente_mas_antiguo_segundos", "verificacion_correo_outbox"
+    )
+    assert base_edad_verificacion - 10 <= edad_verificacion <= base_edad_verificacion + 120
+
 
 # --- Resiliencia: una falla de BD no tumba /metrics -------------------------
 def test_scrape_ok_es_0_si_falla_la_consulta_pero_las_series_http_siguen(monkeypatch):
@@ -316,11 +389,13 @@ def test_scrape_ok_es_0_si_falla_la_consulta_pero_las_series_http_siguen(monkeyp
 
 
 def test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0(monkeypatch):
-    """Contra Postgres REAL, sin mockear nada: un `pg_sleep` más largo que
-    `TIMEOUT_SCRAPE_SENTENCIA_MS` deja que Postgres cancele la consulta con
-    `QueryCanceled` -- el mismo camino de `except Exception` que una falla de
-    conexión, pero disparado por el techo de tiempo, no por una factory que
-    lanza. `/metrics` sigue respondiendo 200."""
+    """El mecanismo de timeout es REAL -- Postgres cancela la consulta -- aunque
+    la consulta en sí esté stubeada: se monkeypatchea `calcular_pendientes_por_
+    tabla` por un `pg_sleep(3)` más largo que `TIMEOUT_SCRAPE_SENTENCIA_MS`, y es
+    Postgres quien la mata con `QueryCanceled` -- el mismo camino de
+    `except Exception` que una falla de conexión, pero disparado por el techo de
+    tiempo, no por una factory que lanza. `/metrics` sigue respondiendo 200 con
+    `cata_outbox_scrape_ok 0`."""
     def _consulta_que_excede_el_timeout(db):
         db.execute(text("SELECT pg_sleep(3)"))
         return {}
@@ -335,22 +410,49 @@ def test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0(monkeypatc
     assert re.search(r"^cata_outbox_scrape_ok\s+0\.0$", respuesta.text, re.MULTILINE)
 
 
-def test_scrape_aplica_un_statement_timeout_acotado_a_su_sesion(db_session, monkeypatch):
-    """Unitaria y barata: confirma que el `SET LOCAL` corrió, sin depender
-    de esperar un timeout real. Reusa `_SesionSinCierre` para inspeccionar,
-    con la MISMA sesión/transacción, el `statement_timeout` que
-    `ColectorOutbox.collect()` dejó activo.
+def test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion(motor_test, monkeypatch):
+    """Prueba el ALCANCE transaccional del `SET LOCAL` del scrape, no solo que
+    el valor se haya fijado. Una regresión a `SET` a secas dejaría
+    `statement_timeout=2000` pegado a la conexión y lo filtraría a la próxima
+    request de negocio que la recibiera del pool.
 
-    Se lee `pg_settings.setting` y no `SHOW statement_timeout`: `SHOW`
-    normaliza a la unidad humana más grande (`2000` ms sale como `'2s'`),
-    mientras que `pg_settings` devuelve el valor crudo en milisegundos tal
-    como se fijó -- comparar contra eso es lo que no se rompe si cambia
-    cómo Postgres decide formatear la salida de `SHOW`."""
-    monkeypatch.setattr(main.colector_outbox, "sesion_factory", lambda: _SesionSinCierre(db_session))
+    El discriminador es COMMIT, no `ROLLBACK TO SAVEPOINT`: verificado
+    empíricamente contra este mismo Postgres, un rollback a savepoint revierte
+    TANTO `SET LOCAL` como `SET`, así que un `rollback()` dentro del fixture de
+    savepoint NO distingue los dos casos. Un commit real, en cambio, descarta
+    `SET LOCAL` pero NO `SET`; con la regresión a `SET` la lectura post-commit
+    sigue en 2000 y este test se pone rojo. Por eso usa una conexión DEDICADA
+    de `motor_test` (NullPool) y no `db_session`: acá solo corren SELECTs y el
+    `SET`, así que un commit real es seguro, y `_SesionSinCierre` evita que el
+    `close()` del colector devuelva la conexión a un pool.
 
-    list(main.colector_outbox.collect())  # agota el generador: corre el scrape completo
+    Se lee `pg_settings.setting` y no `SHOW statement_timeout`: `SHOW` normaliza
+    a la unidad humana más grande (`2000` ms sale como `'2s'`), mientras que
+    `pg_settings` devuelve el valor crudo en milisegundos tal como se fijó --
+    comparar contra eso es lo que no se rompe si cambia cómo Postgres decide
+    formatear la salida de `SHOW`."""
+    conexion = motor_test.connect()
+    try:
+        default_previo = conexion.execute(
+            text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
+        ).scalar()
 
-    valor = db_session.execute(
-        text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
-    ).scalar()
-    assert valor == str(metricas_mod.TIMEOUT_SCRAPE_SENTENCIA_MS)
+        monkeypatch.setattr(
+            main.colector_outbox, "sesion_factory", lambda: _SesionSinCierre(conexion)
+        )
+
+        list(main.colector_outbox.collect())  # agota el generador: corre el scrape completo
+
+        en_transaccion = conexion.execute(
+            text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
+        ).scalar()
+        assert en_transaccion == str(metricas_mod.TIMEOUT_SCRAPE_SENTENCIA_MS)
+
+        conexion.commit()  # termina la transacción real: acá muere un SET LOCAL
+
+        post_commit = conexion.execute(
+            text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
+        ).scalar()
+        assert post_commit == default_previo
+    finally:
+        conexion.close()
