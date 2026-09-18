@@ -9,6 +9,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from prometheus_client import REGISTRY
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import TimeoutError as TimeoutDePool
@@ -16,6 +18,7 @@ from sqlalchemy.pool import NullPool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.infraestructura.db import TIMEOUT_POOL_SEGUNDOS
+from app.infraestructura.metricas import colector_outbox
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.soporte_transversal.circuito_breaker import resumen_circuitos
 from app.soporte_transversal.configuracion import settings, urls_documentacion
@@ -57,6 +60,27 @@ app = FastAPI(
     version=settings.app_version,
     **urls_documentacion(settings.ambiente),
 )
+
+# --- Métricas internas (issue #1309): instrumentar temprano ------------------
+# `Instrumentator().instrument(app)` agrega SU PROPIO middleware de latencia
+# por ruta (`http_request_duration_seconds`) y conteo por status
+# (`http_requests_total`). El gauge de in-flight (`http_requests_inprogress`)
+# es OPT-IN en esta librería -- sin `should_instrument_requests_inprogress`
+# no se agrega ninguna serie de ese nombre, verificado imprimiendo un scrape
+# real -- así que se pide explícito acá. `inprogress_labels=False` (default)
+# lo deja como una sola serie sin partir por método/handler: alcanza para
+# saber si hay requests en vuelo, no para diagnosticar cuál ruta las tiene.
+#
+# Se llama ACÁ, antes que CORS, Correlación y Cabeceras (más abajo):
+# `add_middleware` de Starlette antepone cada registro nuevo a la pila (el
+# ÚLTIMO en registrarse queda MÁS AFUERA, ver el comentario grande sobre el
+# orden final, más abajo), así que instrumentar antes que las otras tres lo
+# deja como el MÁS INTERNO de los cuatro, pegado al router -- mide el tiempo
+# real de cada handler, sin la cabecera fija de CORS/Correlación/Cabeceras
+# encima. `.expose(...)`, que registra el endpoint GET /metrics en sí, se
+# llama más abajo junto al resto de las rutas de salud (`_instrumentator`
+# guarda la instancia para eso).
+_instrumentator = Instrumentator(should_instrument_requests_inprogress=True).instrument(app)
 
 # --- Respuesta de error consistente para frontend + backend -----------------
 # El frontend (Next.js) espera `message`; el backend original usa `detail`.
@@ -371,6 +395,44 @@ app.include_router(dashboard_router.router, prefix="/api/v1")
 app.include_router(chatbot_router.router, prefix="/api/v1")
 app.include_router(sponsors_router.router, prefix="/api/v1")
 app.include_router(supresion_datos_router.router, prefix="/api/v1")
+
+
+# --- Métricas internas (issue #1309): exponer el endpoint --------------------
+# `GET /metrics`, en la RAÍZ (no bajo /api/v1) y `include_in_schema=False`:
+# no es un recurso de negocio, es la superficie que un scraper consume. Igual
+# que /health y /health/ready, el borde público no lo enruta (Caddyfile solo
+# expone /health/ready -- ver el candado en tests/test_docker_compose_config.py
+# y el comentario grande sobre `_CabecerasDeSeguridadMiddleware`, arriba); solo
+# se alcanza desde la red interna de Compose.
+#
+# `.expose(...)` registra el endpoint que sirve las métricas en formato de
+# exposición Prometheus (el middleware que las mide, `_instrumentator`, ya se
+# instaló arriba, junto a la creación de `app`). El handler que arma la
+# librería es SÍNCRONO (`def`, no `async def`), así que FastAPI ya lo corre en
+# su threadpool -- no hace falta (ni se puede, es código de un tercero)
+# envolverlo a mano en `run_in_threadpool`. Y al no vivir en
+# `app/presentacion/routers/`, tampoco lo mira el candado de
+# `test_bloqueo_del_event_loop.py`, pensado solo para handlers propios.
+#
+# `colector_outbox` (app/infraestructura/metricas.py) se registra en el
+# REGISTRY default de prometheus_client -- el mismo que usa `.expose()` sin un
+# `registry=` explícito -- así que sus tres series (`cata_outbox_pendientes`,
+# `cata_outbox_pendiente_mas_antiguo_segundos`, `cata_outbox_scrape_ok`) salen
+# por el mismo `/metrics` junto a las HTTP. Registrar ACÁ y no a nivel de
+# módulo en `metricas.py` evita que el simple IMPORT de ese módulo (por
+# ejemplo desde un test) registre nada por sí solo.
+#
+# Eso NO alcanza para evitar un efecto de import sobre la BD: el `REGISTRY`
+# default se crea con `auto_describe=True`
+# (`prometheus_client/registry.py::REGISTRY`), así que `register()` LLAMA a
+# `collect()` en el momento del registro cuando el colector no define
+# `describe()` -- sin ese método, esta misma línea abriría una sesión y
+# correría las tres consultas del scrape al importar `main`, antes de que
+# uvicorn sirviera un solo request (issue #1309, defecto encontrado en
+# revisión nativa). Lo que hace que `register()` sea side-effect-free es
+# `ColectorOutbox.describe()`, no dónde se llama a `register()`.
+_instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
+REGISTRY.register(colector_outbox)
 
 
 @app.get("/", tags=["Salud"])

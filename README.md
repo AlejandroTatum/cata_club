@@ -317,6 +317,9 @@ contiene el runbook ejecutable para redeploy manual de staging; y
 [`docs/operations/monitoring.md`](docs/operations/monitoring.md) documenta los
 dos monitores externos (readiness HTTPS y heartbeat del backup y de Celery, en
 UptimeRobot) y deja explícito que la réplica off-host sigue pendiente.
+[`docs/operations/metricas.md`](docs/operations/metricas.md) documenta
+`GET /metrics` (issue #1309): latencia/conteo HTTP y profundidad de las colas
+outbox, interno a la red de Compose, sin scraper instalado todavía.
 
 ## Documentación
 

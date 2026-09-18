@@ -142,6 +142,13 @@ RUTAS_PUBLICAS = {
     ("POST", "/auth/verificar-correo/reenviar"),
     ("POST", "/chatbot/consultar"),
     ("POST", "/enrollment/"),
+    ("GET", "/metrics"),  # issue #1309: sin auth por el mismo motivo que /health --
+                          # un scraper interno no trae token. No expone dato de
+                          # persona alguno (latencia por ruta, conteo por status y
+                          # profundidad de las colas outbox); la protección real es
+                          # de RED, no de credencial: el borde público nunca lo
+                          # enruta (Caddyfile) y el BFF de Next no lo reenvía, ver
+                          # `tests/test_docker_compose_config.py`.
 }
 
 

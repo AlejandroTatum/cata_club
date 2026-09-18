@@ -65,6 +65,22 @@ La URL lleva el token en el path, así que es un secreto: no va al crontab (que
 lee de un archivo de root y no la imprime en ningún camino, ni siquiera al
 fallar.
 
+### 3. Métricas internas (issue #1309, sin consumidor todavía)
+
+Los dos monitores de arriba dicen "vivo/muerto"; no dicen "lento", "devolviendo
+5xx" ni "la cola de correo pendiente crece". `GET /metrics` cubre esa parte:
+latencia y conteo por ruta/status vía `prometheus-fastapi-instrumentator`, más
+gauges propios sobre las tres colas outbox (filas `PENDIENTE` y edad de la más
+antigua por tabla). Formato, nombres de serie y cómo scrapearlo desde la red
+interna de Compose están en [`metricas.md`](metricas.md).
+
+Alcance intencional de este issue: el endpoint existe y es alcanzable solo
+puerta adentro de Compose (mismo criterio que las dos sondas de arriba, ver
+`test_metrics_no_es_alcanzable_desde_el_borde_publico` en
+`tests/test_docker_compose_config.py`). Prometheus/Grafana u otro consumidor
+que lo scrapee de verdad queda fuera de alcance: se decide después de que la
+serie exista.
+
 ## Logs de contenedores
 
 `docker-compose.prod.yml` declara `logging.driver: journald` en los ocho
