@@ -572,15 +572,24 @@ class PersonaServicio:
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,
+            limpiar_foto_perfil_huerfana,
+            public_id_con_extension,
             subir_foto_perfil,
         )
 
-        public_id = f"perfil_{persona.id}"
         # Issue #553 (Problema 2): se persiste el `public_id`, nunca la URL que
         # devuelve el SDK (`type="authenticated"`); la URL firmada se resuelve al
         # serializar la respuesta (`PersonaResponseDTO`, mismo patrón voucher).
+        # Issue #1072: el `public_id` REAL de un recurso `raw` lleva la
+        # extensión (`perfil_31.jpg`); se aplica acá el MISMO valor que sube
+        # `subir_foto_perfil`, para que el que se firma al leer coincida
+        # (issue #480).
         # Issue #662: se compone además el `version` de ESTA subida -- mismo
         # criterio que `AuthServicio.actualizar_foto_perfil`, ver su comentario.
+        public_id = public_id_con_extension(f"perfil_{persona.id}", content_type)
+        # R3-001 (#1072): mismo criterio que `AuthServicio.actualizar_foto_
+        # perfil` -- se captura el valor ANTERIOR a persistir la subida.
+        foto_anterior = persona.foto_url
         version = subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
@@ -591,6 +600,7 @@ class PersonaServicio:
             persona, {"foto_url": componer_valor_foto_perfil(public_id, version)},
         )
         self.db.commit()
+        limpiar_foto_perfil_huerfana(foto_anterior, public_id)
         # Issue #826 (ver el comentario de `crear_representado`): este método
         # corre dentro de `run_in_threadpool` y su valor de retorno se
         # serializa DESPUÉS, ya en el event loop -- si sale expirado, ese

@@ -1840,10 +1840,15 @@ class PagoServicio:
 
         if not pago.voucher_url:
             return None
+        # Issue #1072: el voucher en imagen se sube como `raw` (con la
+        # extensión en el `public_id`), igual que el PDF -- los dos necesitan
+        # el endpoint de descarga porque es el único que vence del lado del
+        # servidor. `formato` solo se usa para el PDF, cuya extensión NO está
+        # en el `public_id`.
         es_pdf = pago.voucher_formato == "application/pdf"
         return resolver_url_entrega(
             pago.voucher_url,
-            resource_type="raw" if es_pdf else "image",
+            resource_type="raw",
             folder=settings.cloudinary_carpeta_vouchers,
             formato="pdf" if es_pdf else None,
         )
@@ -2606,10 +2611,23 @@ class PagoServicio:
         # mano en la transacción de un llamador -- si este método alguna vez
         # necesita componerse con una escritura previa, la salida es esa, no
         # correr de lugar el `rollback()`.
-        public_id = f"voucher-pago-{pago_id:08d}-v1-{uuid4().hex}"
-        self.db.rollback()
+        from app.infraestructura.cloudinary_cliente import (
+            public_id_con_extension,
+            subir_voucher_pago,
+        )
 
-        from app.infraestructura.cloudinary_cliente import subir_voucher_pago
+        # Issue #1072: el `public_id` REAL de un voucher en IMAGEN lleva la
+        # extensión (`...jpg`/`...png`) porque se sube como `raw` y la entrega
+        # va por el endpoint de descarga (ver `public_id_con_extension` y
+        # `_url_descarga_api` en `cloudinary_cliente.py`). Es ESTE valor el
+        # que hay que persistir: el que se sube y el que se firma después
+        # tienen que ser el mismo (issue #480). El PDF no la lleva: su
+        # extensión la agrega `subir_pdf_membresia`/`_url_descarga_api` vía
+        # `format="pdf"`.
+        public_id = f"voucher-pago-{pago_id:08d}-v1-{uuid4().hex}"
+        if content_type != "application/pdf":
+            public_id = public_id_con_extension(public_id, content_type)
+        self.db.rollback()
 
         subir_voucher_pago(
             contenido=contenido,
@@ -2668,9 +2686,18 @@ class PagoServicio:
         self.db.expunge(pago)
         borrar_anterior = False
         try:
+            # El guard NO filtra por `formato_anterior` (issue #1072): la
+            # columna `voucher_formato` puede venir NULL o atípica (VARCHAR(20)
+            # y filas que nunca pasaron por el `content_type` validado), y
+            # exigir un MIME de la allowlist salteaba el borrado en silencio
+            # -- el comprobante bancario viejo, dato del socio, quedaba vivo
+            # en el proveedor sin fallar y sin avisar. Lo que decide QUÉ se
+            # borra y CÓMO es `resource_type_de_destruccion` (forma del
+            # `public_id` + formato PDF); acá solo se descartan los casos en
+            # los que no hay `public_id` que destruir: una URL pública
+            # heredada (issue #553) y el candidato recién persistido.
             if (
                 voucher_anterior
-                and formato_anterior in TIPOS_MIME_PERMITIDOS_VOUCHER
                 and not voucher_anterior.startswith("http")
                 and voucher_anterior != public_id
             ):
@@ -2685,8 +2712,12 @@ class PagoServicio:
             self._limpiar_voucher_huerfano(voucher_anterior, formato_anterior)
         return pago
 
-    def _limpiar_voucher_huerfano(self, public_id: str, content_type: str) -> None:
-        """Best effort only: cleanup failures must not discard payment evidence."""
+    def _limpiar_voucher_huerfano(self, public_id: str, content_type: Optional[str]) -> None:
+        """Best effort only: cleanup failures must not discard payment evidence.
+
+        `content_type` puede ser NULL/atípico: viaja tal cual a
+        `eliminar_voucher_pago`, que resuelve el `resource_type` por la forma
+        del `public_id` (issue #1072)."""
         from app.infraestructura.cloudinary_cliente import eliminar_voucher_pago
 
         try:

@@ -62,6 +62,7 @@ from app.dominio.modelos import (
 from app.infraestructura.cloudinary_cliente import (
     _descomponer_valor_foto_perfil,
     eliminar_recurso_privado,
+    resource_type_de_destruccion,
 )
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
 from app.infraestructura.repositorios.supresion_datos_repositorio import (
@@ -262,7 +263,12 @@ class SupresionDatosServicio:
         residuos: List[str] = []
 
         # Foto de perfil. `foto_url` guarda `public_id` (quizá compuesto con
-        # `|version`); una URL http(s) completa es una fila legada.
+        # `|version`); una URL http(s) completa es una fila legada. El
+        # `resource_type` sale de la FORMA persistida (issue #1072): con
+        # extensión es el `raw` nuevo; sin extensión es el
+        # `image/authenticated` anterior a la migración. Elegirlo mal no
+        # falla -- Cloudinary responde `not found` sin excepción -- y la foto
+        # de una persona, menor incluido, quedaría viva tras la supresión.
         if persona.foto_url:
             public_id, _version = _descomponer_valor_foto_perfil(persona.foto_url)
             if self._es_url_legada(public_id):
@@ -272,7 +278,7 @@ class SupresionDatosServicio:
                     (
                         public_id,
                         settings.cloudinary_carpeta_fotos_perfil,
-                        "image",
+                        resource_type_de_destruccion(public_id),
                         "authenticated",
                         "foto de perfil",
                     )
@@ -290,12 +296,22 @@ class SupresionDatosServicio:
                 if self._es_url_legada(pago.voucher_url):
                     residuos.append(f"voucher legado del pago {pago.id}")
                 else:
-                    es_pdf = (pago.voucher_formato or "").lower() == "pdf"
+                    # Issue #1072: el `resource_type` sale de la forma
+                    # persistida + el formato. PDF -> `raw` (nunca lleva
+                    # extensión), imagen nueva (`.jpg`/`.png`) -> `raw`,
+                    # imagen PREVIA a la migración (sin extensión) ->
+                    # `image/authenticated`, que es donde el archivo está de
+                    # verdad. Antes se elegía comparando el formato contra
+                    # `"pdf"` mientras la columna guarda el MIME completo
+                    # (`"application/pdf"`): el voucher en PDF se destruía
+                    # como `image`, un borrado nulo y silencioso.
                     objetivos.append(
                         (
                             pago.voucher_url,
                             settings.cloudinary_carpeta_vouchers,
-                            "raw" if es_pdf else "image",
+                            resource_type_de_destruccion(
+                                pago.voucher_url, pago.voucher_formato
+                            ),
                             "authenticated",
                             f"voucher del pago {pago.id}",
                         )
@@ -313,6 +329,11 @@ class SupresionDatosServicio:
                 if self._es_url_legada(comprobante.archivo_url):
                     residuos.append(f"comprobante legado del pago {pago.id}")
                 else:
+                    # `raw` explícito: el comprobante oficial es SIEMPRE un PDF
+                    # generado por el sistema (`comprobante_tareas.py`,
+                    # `formato_archivo="pdf"`), y su `public_id` tampoco lleva
+                    # extensión -- o sea que aplicarle el discriminador por
+                    # forma lo mandaría a `image`, un no-op silencioso.
                     objetivos.append(
                         (
                             comprobante.archivo_url,

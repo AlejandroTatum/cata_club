@@ -139,6 +139,20 @@ describe("middleware CSP", () => {
     expect(csp).toContain("frame-ancestors 'none'");
   });
 
+  // Issue #1072: private vouchers and profile photos are delivered by the
+  // expiring Cloudinary download endpoint (api.cloudinary.com), which the
+  // backend returns for them and the UI renders inside <img>. Without this
+  // host in img-src the browser blocks the image and the UI silently breaks.
+  it("allows api.cloudinary.com in img-src for the expiring private-image endpoint", () => {
+    const csp = buildContentSecurityPolicy("ABC=");
+    const imgSrc = csp.split("; ").find((directive) => directive.startsWith("img-src "));
+    expect(imgSrc).toBeDefined();
+    expect(imgSrc).toContain("https://api.cloudinary.com");
+    // The public CDN assets (e.g. sponsor logos) and the map tiles keep working.
+    expect(imgSrc).toContain("https://res.cloudinary.com");
+    expect(imgSrc).toContain("https://*.tile.openstreetmap.org");
+  });
+
   it("sets Content-Security-Policy on plain next() responses for public paths", () => {
     const response = middleware(makeRequest("/"));
     expect(response.headers.get("Content-Security-Policy")).toContain("strict-dynamic");

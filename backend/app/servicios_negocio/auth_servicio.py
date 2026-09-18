@@ -483,18 +483,28 @@ class AuthServicio:
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,
+            limpiar_foto_perfil_huerfana,
+            public_id_con_extension,
             subir_foto_perfil,
         )
 
-        public_id = f"perfil_{usuario.persona_id}"
         # Issue #553 (Problema 2): la URL que devuelve el SDK al subir NO es una
         # URL de entrega válida (`type="authenticated"`). Se persiste el
         # `public_id` y la URL firmada se resuelve al serializar la respuesta
         # (`ActualizarFotoPerfilResponseDTO`, mismo patrón que el voucher).
+        # Issue #1072: el `public_id` REAL de un recurso `raw` lleva la
+        # extensión (`perfil_31.jpg`), así que se aplica acá -- con el MISMO
+        # valor que sube `subir_foto_perfil` -- antes de persistirlo, para que
+        # el que se firma al leer coincida (issue #480).
         # Issue #662: `public_id` es determinístico y el upload sobrescribe en
-        # el mismo lugar -- sin el `version` de ESTA subida compuesto en el
-        # valor persistido, la URL de entrega firmada queda byte-idéntica
-        # tras reemplazar la foto y el navegador sigue sirviendo la cacheada.
+        # el mismo lugar, así que se compone el `version` de ESTA subida en el
+        # valor persistido (continuidad del shape ya escrito en producción; la
+        # entrega de un `raw` ya cambia sola en cada firma).
+        public_id = public_id_con_extension(f"perfil_{usuario.persona_id}", content_type)
+        # R3-001 (#1072): se captura el valor ANTERIOR a persistir la subida,
+        # porque `public_id` ahora depende del formato (jpg vs png) y
+        # `overwrite=True` deja de garantizar un solo asset vivo.
+        foto_anterior = usuario.persona.foto_url
         version = subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
@@ -508,6 +518,8 @@ class AuthServicio:
         )
         self.db.commit()
         self.db.refresh(usuario)
+
+        limpiar_foto_perfil_huerfana(foto_anterior, public_id)
 
         return {
             "correo": usuario.correo,
