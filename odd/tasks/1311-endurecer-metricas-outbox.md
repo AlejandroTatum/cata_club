@@ -38,7 +38,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 - [x] T3 (W4+W5): honest docstrings + single canonical `describe()` rationale with references.
 - [x] T4 (W3): `connect_timeout` at engine level + behavioral hanging-socket test (+ doc sentence).
 - [x] T5: verification — focused files, then `make pre-pr LANE=backend`; work-unit commits per task.
-- [ ] T6: native review on the commits, push, PR `Closes #1311` with squash auto-merge, post-merge main green, housekeeping.
+- [x] T6: native review on the commits, push, PR `Closes #1311` with squash auto-merge, post-merge main green, housekeeping.
 
 ## Acceptance criteria
 
@@ -111,3 +111,16 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 - Gate de CI **no reproducido localmente**: `migraciones-desde-cero` contra
   su PostgreSQL service aislado (el propio lane lo declara). El lane local
   es check predictivo, no paridad total de CI.
+
+### T6 — Review nativo (RDD)
+
+- Lineage `review-8673249be2f1562e`, tier **medium**, lente
+  `review-reliability`, 7 archivos / 495 líneas, base-diff contra
+  `origin/main` committed-only. Forecast: 1 corrida de modelo.
+- Cierre terminal: **approved** en el último evento admitido;
+  acknowledgement ejecutado y authority quemada
+  (`gentle-ai.review-acknowledged/v1`).
+- Hallazgos **advisory no bloqueantes** (trabajo futuro, no de este
+  candidato; mismo criterio que este issue aplicó sobre #1310):
+  `R3-CONNECT-TEST-CAN-HANG` (WARNING, `tests/test_db.py:65-69`) y
+  `R3-ENGINE-CONNECT-ARGS-DRIVER-COUPLED` (SUGGESTION, `db.py:54`).
