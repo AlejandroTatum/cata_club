@@ -32,6 +32,7 @@ dependencies = [
     "slowapi>=0.1.9",
     # --- Chatbot de FAQ (MiMo vía gateway OpenAI-compatible OpenCode Zen) ---
     "openai>=1.50.0",
+    "prometheus-fastapi-instrumentator>=8.1.0",
 ]
 
 [dependency-groups]

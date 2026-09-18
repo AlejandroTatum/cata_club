@@ -749,14 +749,25 @@ def test_orden_de_la_pila_de_middleware_es_el_declarado():
     que el ÚLTIMO en registrarse queda más afuera. Esta igualdad de lista
     COMPLETA (no una comprobación de presencia ni de índice aislado) protege
     la invariante de que `_CabecerasDeSeguridadMiddleware` sigue siendo el más
-    externo, con `_CorrelacionDeRequestMiddleware` en el medio y
-    `CORSMiddleware` más adentro, pegado al router: cualquier reordenamiento
-    accidental, o la inserción de un middleware nuevo en cualquier punto de la
-    pila, hace fallar este test aunque el resto de la suite siga en verde."""
+    externo, con `_CorrelacionDeRequestMiddleware` en el medio, `CORSMiddleware`
+    más adentro, y el middleware del instrumentator de métricas (issue #1309)
+    como el MÁS INTERNO, pegado al router: cualquier reordenamiento accidental,
+    o la inserción de un middleware nuevo en cualquier punto de la pila, hace
+    fallar este test aunque el resto de la suite siga en verde.
+
+    El instrumentator se instala ANTES que las otras tres a propósito (ver
+    `main.py`, junto a la creación de `app`): así queda el más interno y mide
+    el tiempo real de cada handler, sin la cabecera fija de
+    CORS/Correlación/Cabeceras encima."""
+    from prometheus_fastapi_instrumentator.middleware import (
+        PrometheusInstrumentatorMiddleware,
+    )
+
     assert [m.cls for m in app.user_middleware] == [
         main._CabecerasDeSeguridadMiddleware,
         main._CorrelacionDeRequestMiddleware,
         CORSMiddleware,
+        PrometheusInstrumentatorMiddleware,
     ]
 
 

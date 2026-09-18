@@ -1098,6 +1098,30 @@ def test_el_caddyfile_declara_una_sola_sonda_de_readiness_y_ninguna_bajo_api():
     )
 
 
+def test_metrics_no_es_alcanzable_desde_el_borde_publico():
+    """`GET /metrics` (issue #1309) es interno a la red de Compose, no una
+    sonda para el borde público: expone conteo por status y latencia por
+    ruta, información operativa que un visitante anónimo no necesita ver.
+
+    Dos guardias independientes, igual que la sonda de readiness de arriba:
+    el Caddyfile no debe declarar NINGÚN matcher `/metrics` (ni exacto ni
+    con comodín) hacia el backend, y el BFF de Next no debe reenviarlo --
+    ningún `frontend/src/app/api/metrics/route.ts` puede existir."""
+    contenido = (RAIZ / "Caddyfile").read_text()
+
+    matchers = [m.group("matcher") for m in _MATCHERS_HANDLE.finditer(contenido)]
+    assert not any("metrics" in matcher for matcher in matchers), (
+        "el Caddyfile declara un matcher que menciona /metrics -- el backend "
+        f"solo puede recibir /health/ready del borde público; matchers: {matchers!r}"
+    )
+
+    ruta_bff = RAIZ / "frontend" / "src" / "app" / "api" / "metrics"
+    assert not ruta_bff.exists(), (
+        "existe frontend/src/app/api/metrics: el BFF de Next no debe reenviar "
+        "/metrics, esa ruta es interna a la red de Compose"
+    )
+
+
 # APIs de navegador que la app NO usa y que este borde público tiene que
 # negar. Verificado leyendo frontend/src, no copiado de una plantilla:
 # `navigator.*` no aparece ni una vez fuera de los tests, el mapa de la
