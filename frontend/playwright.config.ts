@@ -39,9 +39,17 @@ export default defineConfig({
      a 156 tests y el paso E2E tardaba ~22 min corriendo de a un test. Con
      `fullyParallel: false` el paralelismo es POR ARCHIVO — los tests dentro de
      un spec siguen secuenciales, así que no hay estado compartido que romper.
+     Esos 4 vCPU los comparten los workers con UN servidor Next standalone.
+     Las expiraciones de `page.goto` en navegación pública que el push no tocó
+     (issue #1290: dos idénticas en pushes a `main` sin relación entre sí) son
+     CONSISTENTES con esa contención, no una prueba de ella; por eso workers: 2
+     reserva capacidad del runner para el servidor compartido, y el presupuesto
+     de 30 s queda intacto: extenderlo no acelera nada.
+     `tests/test_playwright_config.py` congela este techo.
+
      Local se mantiene 1 worker: los desarrolladores suelen tener otras cosas
      corriendo, y la suite local arranca el build ella misma. */
-  workers: process.env.CI ? 4 : 1,
+  workers: process.env.CI ? 2 : 1,
   reporter: [["html", { outputFolder: "playwright-report" }]],
 
   /* Runs before any browser is launched: a wrong or absent target stops the
