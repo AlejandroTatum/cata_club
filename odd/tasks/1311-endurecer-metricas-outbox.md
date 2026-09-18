@@ -34,7 +34,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 ## Tasks
 
 - [x] T1 (W1): bounded age assertions + HTTP read of the age series + naive-fallback unit test.
-- [ ] T2 (W2): transaction-scope proof via dedicated connection + commit discriminator.
+- [x] T2 (W2): transaction-scope proof via dedicated connection + commit discriminator.
 - [ ] T3 (W4+W5): honest docstrings + single canonical `describe()` rationale with references.
 - [ ] T4 (W3): `connect_timeout` at engine level + behavioral hanging-socket test (+ doc sentence).
 - [ ] T5: verification — focused files, then `make pre-pr LANE=backend`; work-unit commits per task.
@@ -57,3 +57,20 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
   (`app/infraestructura/metricas.py:73`). Revertido.
 - **GREEN** — `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_metricas.py -q` → 12 passed (eran 10; +2 nuevos: el de naive-UTC y el del clamp a 0).
 - Cambios: acotado `3500 <= edad_enrollment <= 3700` y `0 <= edad_recuperacion <= 120` en la prueba pura; la prueba HTTP ahora captura `base_edad_<tabla>` y lee `cata_outbox_pendiente_mas_antiguo_segundos` con la ventana `max(base_edad, 3600) ± slack`; dos tests unitarios nuevos con una sesión doble que devuelve `(1, created_at)` por tabla.
+
+### T2 (W2)
+
+- **RED** — mutación temporal: `SET LOCAL statement_timeout` → `SET
+  statement_timeout` en `ColectorOutbox.collect()`. El test renombrado
+  `test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion` falla en
+  la lectura post-commit: `AssertionError: assert '2000' == '0'` (el `SET`
+  sobrevive al commit). Revertido. Esto valida empíricamente que COMMIT es el
+  discriminador y que un savepoint-rollback no lo sería.
+- **GREEN** — misma corrida focal: 12 passed.
+- Desviación documentada del literal del issue: el sondeo del parent mostró que
+  `ROLLBACK TO SAVEPOINT` revierte TANTO `SET LOCAL` como `SET`, así que la
+  prueba usa una conexión dedicada de `motor_test` y COMMIT; queda escrito en el
+  docstring del test y va al cuerpo del PR.
+- Cambios: test renombrado a `test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion`,
+  `_SesionSinCierre` generalizado (envuelve sesión de savepoint o `Connection`
+  cruda), comentario del `SET LOCAL` en `metricas.py` con puntero al test.

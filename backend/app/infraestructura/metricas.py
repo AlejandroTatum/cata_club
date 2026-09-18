@@ -144,7 +144,10 @@ class ColectorOutbox(Collector):
             # `SET LOCAL` -- no `SET` a secas -- así el techo dura solo la
             # transacción de este scrape: al cerrar la sesión (`finally`,
             # abajo) el rollback implícito lo descarta, y la conexión vuelve
-            # al pool sin arrastrar el límite a quien la reciba después.
+            # al pool sin arrastrar el límite a quien la reciba después. El
+            # alcance transaccional lo prueba
+            # `test_metricas.py::test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion`
+            # (con `SET`, el límite sobrevive al commit de la conexión).
             db.execute(text(f"SET LOCAL statement_timeout = {TIMEOUT_SCRAPE_SENTENCIA_MS}"))
             for nombre_tabla, (cantidad, edad_segundos) in calcular_pendientes_por_tabla(db).items():
                 gauge_pendientes.add_metric([nombre_tabla], cantidad)

@@ -285,14 +285,21 @@ def test_la_edad_clampea_a_cero_un_created_at_naive_en_el_futuro():
 
 
 class _SesionSinCierre:
-    """Envoltorio que delega TODO en la sesión real pero ignora `close()`.
+    """Envoltorio que delega TODO en el objeto real pero ignora `close()`.
 
     `ColectorOutbox.collect()` cierra la sesión que abre (issue #1309, ver
-    `metricas.py`); acá esa sesión es la MISMA `db_session` que el resto del
-    test usa para sembrar y para el teardown de la fixture -- cerrarla de
-    verdad adentro de `collect()` dejaría el teardown de `conftest.py`
-    (`sesion.close(); transaccion.rollback(); conexion.close()`) operando
-    sobre una sesión ya cerrada."""
+    `metricas.py`), y se lo inyecta como `sesion_factory` con dos objetos
+    distintos:
+
+    - En los tests HTTP, la MISMA `db_session` que el test usa para sembrar y
+      para el teardown de la fixture -- cerrarla de verdad adentro de
+      `collect()` dejaría el teardown de `conftest.py`
+      (`sesion.close(); transaccion.rollback(); conexion.close()`) operando
+      sobre una sesión ya cerrada.
+    - En `test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion`,
+      una `Connection` cruda de `motor_test`: `__getattr__` delega `execute` y
+      `commit` en ella, y el `close()` no-op evita que el `finally` de
+      `collect()` devuelva la conexión a un pool a mitad del test."""
 
     def __init__(self, sesion):
         self._sesion = sesion
@@ -414,22 +421,49 @@ def test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0(monkeypatc
     assert re.search(r"^cata_outbox_scrape_ok\s+0\.0$", respuesta.text, re.MULTILINE)
 
 
-def test_scrape_aplica_un_statement_timeout_acotado_a_su_sesion(db_session, monkeypatch):
-    """Unitaria y barata: confirma que el `SET LOCAL` corrió, sin depender
-    de esperar un timeout real. Reusa `_SesionSinCierre` para inspeccionar,
-    con la MISMA sesión/transacción, el `statement_timeout` que
-    `ColectorOutbox.collect()` dejó activo.
+def test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion(motor_test, monkeypatch):
+    """Prueba el ALCANCE transaccional del `SET LOCAL` del scrape, no solo que
+    el valor se haya fijado. Una regresión a `SET` a secas dejaría
+    `statement_timeout=2000` pegado a la conexión y lo filtraría a la próxima
+    request de negocio que la recibiera del pool.
 
-    Se lee `pg_settings.setting` y no `SHOW statement_timeout`: `SHOW`
-    normaliza a la unidad humana más grande (`2000` ms sale como `'2s'`),
-    mientras que `pg_settings` devuelve el valor crudo en milisegundos tal
-    como se fijó -- comparar contra eso es lo que no se rompe si cambia
-    cómo Postgres decide formatear la salida de `SHOW`."""
-    monkeypatch.setattr(main.colector_outbox, "sesion_factory", lambda: _SesionSinCierre(db_session))
+    El discriminador es COMMIT, no `ROLLBACK TO SAVEPOINT`: verificado
+    empíricamente contra este mismo Postgres, un rollback a savepoint revierte
+    TANTO `SET LOCAL` como `SET`, así que un `rollback()` dentro del fixture de
+    savepoint NO distingue los dos casos. Un commit real, en cambio, descarta
+    `SET LOCAL` pero NO `SET`; con la regresión a `SET` la lectura post-commit
+    sigue en 2000 y este test se pone rojo. Por eso usa una conexión DEDICADA
+    de `motor_test` (NullPool) y no `db_session`: acá solo corren SELECTs y el
+    `SET`, así que un commit real es seguro, y `_SesionSinCierre` evita que el
+    `close()` del colector devuelva la conexión a un pool.
 
-    list(main.colector_outbox.collect())  # agota el generador: corre el scrape completo
+    Se lee `pg_settings.setting` y no `SHOW statement_timeout`: `SHOW` normaliza
+    a la unidad humana más grande (`2000` ms sale como `'2s'`), mientras que
+    `pg_settings` devuelve el valor crudo en milisegundos tal como se fijó --
+    comparar contra eso es lo que no se rompe si cambia cómo Postgres decide
+    formatear la salida de `SHOW`."""
+    conexion = motor_test.connect()
+    try:
+        default_previo = conexion.execute(
+            text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
+        ).scalar()
 
-    valor = db_session.execute(
-        text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
-    ).scalar()
-    assert valor == str(metricas_mod.TIMEOUT_SCRAPE_SENTENCIA_MS)
+        monkeypatch.setattr(
+            main.colector_outbox, "sesion_factory", lambda: _SesionSinCierre(conexion)
+        )
+
+        list(main.colector_outbox.collect())  # agota el generador: corre el scrape completo
+
+        en_transaccion = conexion.execute(
+            text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
+        ).scalar()
+        assert en_transaccion == str(metricas_mod.TIMEOUT_SCRAPE_SENTENCIA_MS)
+
+        conexion.commit()  # termina la transacción real: acá muere un SET LOCAL
+
+        post_commit = conexion.execute(
+            text("SELECT setting FROM pg_settings WHERE name = 'statement_timeout'")
+        ).scalar()
+        assert post_commit == default_previo
+    finally:
+        conexion.close()
