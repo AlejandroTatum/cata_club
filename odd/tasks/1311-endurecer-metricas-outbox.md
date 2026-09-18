@@ -36,7 +36,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 - [x] T1 (W1): bounded age assertions + HTTP read of the age series + naive-fallback unit test.
 - [x] T2 (W2): transaction-scope proof via dedicated connection + commit discriminator.
 - [x] T3 (W4+W5): honest docstrings + single canonical `describe()` rationale with references.
-- [ ] T4 (W3): `connect_timeout` at engine level + behavioral hanging-socket test (+ doc sentence).
+- [x] T4 (W3): `connect_timeout` at engine level + behavioral hanging-socket test (+ doc sentence).
 - [ ] T5: verification — focused files, then `make pre-pr LANE=backend`; work-unit commits per task.
 - [ ] T6: native review on the commits, push, PR `Closes #1311` with squash auto-merge, post-merge main green, housekeeping.
 
@@ -81,3 +81,24 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 - **GREEN** — `uv run pytest tests/test_metricas.py -q` → 12 passed (y `tests/test_main.py` al cierre).
 - W4: docstring de `test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0` y la línea del docstring de módulo ahora dicen que la consulta lenta SÍ se stubbea (`pg_sleep(3)`) pero el timeout es real (Postgres cancela con `QueryCanceled`).
 - W5: la historia de `describe()` queda una sola vez en `metricas.py::ColectorOutbox.describe()`; `main.py` bajó a 4 líneas con puntero, y el docstring del test de registro y el párrafo del módulo conservan solo lo específico (registry propio, factory que anota y lanza, por qué la excepción no rompe `collect()`).
+
+### T4 (W3)
+
+- **RED** — script de una línea envuelto en `timeout 8` (sin tocar pytest):
+  `create_engine(url)` plano contra un socket local que acepta TCP y nunca
+  responde. El proceso fue **matado por `timeout`** (`exit_code=124`), es decir
+  el connect quedó colgado más allá de los 8 s -- la prueba de que `pool_timeout`
+  solo no acota el handshake. No se comiteó ninguna mutación.
+- **GREEN** — `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_metricas.py tests/test_db.py -q` → 14 passed (12 + 2 nuevos de `test_db.py`).
+- Cambios: `db.py` suma `TIMEOUT_CONEXION_SEGUNDOS = 5` con rationale y la
+  fábrica `crear_engine(database_url, timeout_conexion=...)` (mismos kwargs que
+  antes + `connect_args`); nuevo `tests/test_db.py` con el doble de socket
+  colgado y el guard de alineación `TIMEOUT_CONEXION_SEGUNDOS ==
+  TIMEOUT_POOL_SEGUNDOS`; una frase nueva en `docs/operations/metricas.md`.
+
+### Verificación final (T5 parcial)
+
+- `cd backend && uv run ruff check .` → `All checks passed!`
+- `uv run pytest tests/test_metricas.py tests/test_db.py -q` → 14 passed.
+- `uv run pytest tests/test_main.py -q` (se tocó `main.py`) → 40 passed.
+- No se corrió la suite backend completa ni `make pre-pr LANE=backend`: queda a cargo del parent.

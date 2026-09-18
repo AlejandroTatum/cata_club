@@ -93,6 +93,12 @@ sirviendo con normalidad (ver `backend/tests/test_metricas.py`).
    que un Postgres colgado no retenga indefinidamente una conexión del pool
    ni el hilo del threadpool que atiende `/metrics`.
 
+La conexión en sí también está acotada: el engine fija `connect_timeout`
+(`TIMEOUT_CONEXION_SEGUNDOS`, `backend/app/infraestructura/db.py`), así que un
+Postgres que acepta el TCP pero nunca responde tampoco puede retener el hilo
+del scrape indefinidamente -- el `SET LOCAL` corre después del connect y no
+cubre ese caso.
+
 Un Postgres alcanzable pero lento da el mismo `0` que uno caído: no asumir
 "la base está abajo" solo por ese valor. Cruzar contra `/health/ready` para
 distinguir -- si también falla, es más probable una caída real; si responde
