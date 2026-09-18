@@ -221,15 +221,67 @@ def test_gauge_de_pendientes_cuenta_solo_las_filas_pendientes_por_tabla(db_sessi
 
     cantidad_enrollment, edad_enrollment = metricas["enrollment_notificacion_outbox"]
     assert cantidad_enrollment == 1  # solo la fila PENDIENTE, no la ENVIADO
-    assert edad_enrollment > 0  # created_at quedó una hora atrás
+    # `created_at` quedó EXACTAMENTE una hora atrás, así que la edad ronda los
+    # 3600 s; la banda de ±100 s deja lugar al tiempo de ejecución del test y, a
+    # la vez, atrapa un error de zona horaria de varias horas o un valor en
+    # milisegundos (que daría ~3.6e6), cosas que un `> 0` dejaba pasar.
+    assert 3500 <= edad_enrollment <= 3700
 
     cantidad_recuperacion, edad_recuperacion = metricas["recuperacion_outbox"]
     assert cantidad_recuperacion == 1
-    assert edad_recuperacion >= 0
+    # Esta fila se sembró sin `created_at` explícito: usa el default del modelo
+    # (`_ahora_utc`, aware y del lado del cliente), así que su edad es ~0.
+    assert 0 <= edad_recuperacion <= 120
 
     cantidad_verificacion, edad_verificacion = metricas["verificacion_correo_outbox"]
     assert cantidad_verificacion == 0
     assert edad_verificacion == 0.0  # sin filas pendientes: edad 0, no None ni negativa
+
+
+class _SesionFalsa:
+    """Sesión mínima SIN base de datos: `.execute(...)` devuelve siempre una
+    fila `(1, created_at)` fija. `calcular_pendientes_por_tabla` corre UNA
+    consulta por tabla, así que una sola respuesta sirve para las tres."""
+
+    def __init__(self, mas_antigua):
+        self._mas_antigua = mas_antigua
+
+    def execute(self, _sentencia):
+        class _Resultado:
+            def __init__(self, valor):
+                self._valor = valor
+
+            def one(_self):
+                return (1, self._mas_antigua)
+
+        return _Resultado(self._mas_antigua)
+
+
+def test_la_edad_interpreta_un_created_at_naive_como_utc():
+    """Rama de fallback de `calcular_pendientes_por_tabla` (metricas.py): si
+    `created_at` llega SIN tzinfo -- una columna `timestamp` sin `timezone`, o
+    un driver que devuelve naive -- la función lo reinterpreta como UTC antes
+    de restar. Sin ese `replace` la resta aware-vs-naive explota con
+    `TypeError`. No toca la base: la sesión es un doble que responde una fila
+    `(1, created_at)` por tabla."""
+    naive_hace_una_hora = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+
+    metricas = calcular_pendientes_por_tabla(_SesionFalsa(naive_hace_una_hora))
+
+    for _tabla, (_cantidad, edad) in metricas.items():
+        assert 3500 <= edad <= 3700
+
+
+def test_la_edad_clampea_a_cero_un_created_at_naive_en_el_futuro():
+    """El otro borde del mismo fallback: un `created_at` en el futuro (un
+    reloj de cliente adelantado) no debe producir una edad negativa --
+    `max(0.0, ...)` la clampea a `0.0`."""
+    naive_en_el_futuro = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
+
+    metricas = calcular_pendientes_por_tabla(_SesionFalsa(naive_en_el_futuro))
+
+    for _tabla, (_cantidad, edad) in metricas.items():
+        assert edad == 0.0
 
 
 class _SesionSinCierre:
@@ -271,6 +323,9 @@ def test_metrics_via_http_refleja_las_filas_sembradas_y_scrape_ok(db_session, mo
     base_enrollment = base["enrollment_notificacion_outbox"][0]
     base_recuperacion = base["recuperacion_outbox"][0]
     base_verificacion = base["verificacion_correo_outbox"][0]
+    base_edad_enrollment = base["enrollment_notificacion_outbox"][1]
+    base_edad_recuperacion = base["recuperacion_outbox"][1]
+    base_edad_verificacion = base["verificacion_correo_outbox"][1]
 
     _sembrar_un_pendiente_y_un_no_pendiente(db_session, semilla=10)
 
@@ -293,6 +348,30 @@ def test_metrics_via_http_refleja_las_filas_sembradas_y_scrape_ok(db_session, mo
     assert _valor_gauge_por_tabla(
         cuerpo, "cata_outbox_pendientes", "verificacion_correo_outbox"
     ) == base_verificacion  # no se sembró nada acá: sin cambio
+
+    # La serie de EDAD también sale por HTTP. La fila sembrada en enrollment
+    # tiene una hora exacta, así que si llega a ser la más antigua la edad salta
+    # a ~3600 s; si ya había una más vieja, `base_edad_enrollment` manda. El
+    # `max` cubre las dos; la ventana de segundos acota que el valor no sea
+    # milisegundos ni horas corridas (el hallazgo que dejaba pasar `> 0`).
+    edad_enrollment = _valor_gauge_por_tabla(
+        cuerpo, "cata_outbox_pendiente_mas_antiguo_segundos", "enrollment_notificacion_outbox"
+    )
+    esperado_enrollment = max(base_edad_enrollment, 3600)
+    assert esperado_enrollment - 10 <= edad_enrollment <= esperado_enrollment + 120
+
+    # Recuperación y verificación solo pueden sembrarse filas MÁS NUEVAS que la
+    # más antigua preexistente (o ninguna), y una edad nunca retrocede EN ESTE
+    # intervalo: el valor después del scrape queda pegado a la línea de base.
+    edad_recuperacion = _valor_gauge_por_tabla(
+        cuerpo, "cata_outbox_pendiente_mas_antiguo_segundos", "recuperacion_outbox"
+    )
+    assert base_edad_recuperacion - 10 <= edad_recuperacion <= base_edad_recuperacion + 120
+
+    edad_verificacion = _valor_gauge_por_tabla(
+        cuerpo, "cata_outbox_pendiente_mas_antiguo_segundos", "verificacion_correo_outbox"
+    )
+    assert base_edad_verificacion - 10 <= edad_verificacion <= base_edad_verificacion + 120
 
 
 # --- Resiliencia: una falla de BD no tumba /metrics -------------------------
