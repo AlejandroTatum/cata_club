@@ -37,8 +37,8 @@ Out of scope: Prometheus/Grafana on the host, OpenTelemetry/traces, alert rules,
 - [x] T2. GREEN: add `prometheus-fastapi-instrumentator` via `uv add`; instrument the app in `backend/main.py`; outbox collector in `backend/app/infraestructura/metricas.py` (or equivalent under `infraestructura/`).
 - [x] T3. REFACTOR + docs: operator note in `docs/operations/metricas.md`; README pointer if `docs/operations` is indexed there.
 - [x] T4. Verification: focused tests, then `make pre-pr LANE=backend` (sandbox off), record results here; one work-unit commit.
-- [ ] T5. Native review (RDD) on the commit, push, PR with `--squash --auto`, post-merge main green, housekeeping. **Not this writer's task — orchestrator/next agent.**
-- [ ] T6. `cata_club-docs`: A-1 row `Blocked` → `Needs evidence` (deployed to staging pending owner); becomes `Ready (staging)` once the owner deploys and scrapes. **Not this writer's task.**
+- [x] T5. Native review (RDD) on the commit, push, PR with `--squash --auto`, post-merge main green, housekeeping.
+- [x] T6. `cata_club-docs`: A-1 row `Blocked` → `Needs evidence`; becomes `Ready (staging)` once the owner deploys and scrapes.
 
 ## Acceptance criteria
 
@@ -224,7 +224,11 @@ Commit: (recorded after commit, see PR).
     - R2-005 (`docs/operations/metricas.md:63-64`)
     - R2-006 (`backend/app/infraestructura/metricas.py:75`)
 
+## Evidence (delivery)
+
+- T5 (orchestrator, 2026-09-18): three native review transactions, each `approved` and acknowledged (`review-232a44cdfd537d07` on eb4c29d, `review-7f9023bdf4917954` on 30c13a0, `review-12b0388f3b177e30` on 307d068). The first two produced amendments (documented series names and HTTP happy-path assertions; `describe()` so registration does not query the DB at import); the third's advisory findings went to #1311 instead of a fourth cycle. Pre-push hook green. PR #1310 stayed `BLOCKED` for an hour with all Actions checks green because the required SonarCloud suite sat `queued` with 0 runs; an identical-tree amend (`19b43c8`) plus `--force-with-lease` re-triggered it (same recipe as #969). Squash-merged as `6f2de3a` at 2026-09-18T18:06Z; post-merge main CI run 35378261304 `success`. Worktree and local branch removed.
+- T6 (orchestrator, 2026-09-18): `cata_club-docs` PR #15 squash-merged as `fa42179`: header verified against `6f2de3a`, matrix row "Monitoring: métricas y trazas internas" and finding A-1 moved `Blocked` → `Needs evidence`; the readiness matrix has no `Blocked` rows left.
+
 ## Next step
 
-T5/T6 — not this writer's scope (native review, push, PR, and the
-`cata_club-docs` A-1 row update are separate steps per the task brief).
+Owner: deploy `6f2de3a` to staging, scrape `http://backend:8000/metrics` from inside the Compose network, and pick a consumer; then the readiness row moves to `Ready (staging)`. Test follow-ups tracked in #1311.
