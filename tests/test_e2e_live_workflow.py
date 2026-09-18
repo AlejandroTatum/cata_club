@@ -13,7 +13,7 @@ invocación y `docker-compose.qa.yml:75-85` fija el SMTP a literales para que QA
 no pueda heredar el proveedor del operador. Un workflow que igual declare un
 secreto estaría pidiendo permiso que no necesita, y este test lo pone rojo.
 
-La otra es la de los artefactos. `frontend/playwright.config.ts:37,53` combina
+La otra es la de los artefactos. `frontend/playwright.config.ts:37,61` combina
 `retries: 1` bajo CI con `trace: "on-first-retry"`, así que CADA falla escribe
 un trazo en `test-results/` con los encabezados `Cookie`/`Set-Cookie` de la
 sesión. Se sube `playwright-report/` y nada más.
