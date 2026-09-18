@@ -35,7 +35,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 
 - [x] T1 (W1): bounded age assertions + HTTP read of the age series + naive-fallback unit test.
 - [x] T2 (W2): transaction-scope proof via dedicated connection + commit discriminator.
-- [ ] T3 (W4+W5): honest docstrings + single canonical `describe()` rationale with references.
+- [x] T3 (W4+W5): honest docstrings + single canonical `describe()` rationale with references.
 - [ ] T4 (W3): `connect_timeout` at engine level + behavioral hanging-socket test (+ doc sentence).
 - [ ] T5: verification — focused files, then `make pre-pr LANE=backend`; work-unit commits per task.
 - [ ] T6: native review on the commits, push, PR `Closes #1311` with squash auto-merge, post-merge main green, housekeeping.
@@ -74,3 +74,10 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 - Cambios: test renombrado a `test_scrape_fija_el_statement_timeout_y_no_escapa_de_su_transaccion`,
   `_SesionSinCierre` generalizado (envuelve sesión de savepoint o `Connection`
   cruda), comentario del `SET LOCAL` en `metricas.py` con puntero al test.
+
+### T3 (W4+W5)
+
+- **RED** — no aplica: son docstrings/comentarios. `GREEN` = la suite del archivo sigue verde y ningún comentario miente.
+- **GREEN** — `uv run pytest tests/test_metricas.py -q` → 12 passed (y `tests/test_main.py` al cierre).
+- W4: docstring de `test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0` y la línea del docstring de módulo ahora dicen que la consulta lenta SÍ se stubbea (`pg_sleep(3)`) pero el timeout es real (Postgres cancela con `QueryCanceled`).
+- W5: la historia de `describe()` queda una sola vez en `metricas.py::ColectorOutbox.describe()`; `main.py` bajó a 4 líneas con puntero, y el docstring del test de registro y el párrafo del módulo conservan solo lo específico (registry propio, factory que anota y lanza, por qué la excepción no rompe `collect()`).

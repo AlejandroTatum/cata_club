@@ -14,12 +14,9 @@ gauge es opt-in, ver `main.py`). Si algún día un nombre documentado deja de
 aparecer en un scrape real, lo que cambia es la doc, nunca esta aserción.
 
 Registrar el colector NO debe tocar la BD
-(`test_registrar_el_colector_no_abre_ninguna_sesion_de_bd`): el `REGISTRY`
-default de `prometheus_client` se crea con `auto_describe=True`, así que sin
-un `describe()` propio el simple `REGISTRY.register(colector_outbox)` de
-`main.py` corría el scrape completo al IMPORTAR el módulo -- ver el
-docstring de `ColectorOutbox.describe()` en `metricas.py` para el porqué es
-grave (un Postgres todavía no listo cuelga el import, no solo lo demora).
+(`test_registrar_el_colector_no_abre_ninguna_sesion_de_bd`); el porqué vive
+en el docstring de `ColectorOutbox.describe()` (`metricas.py`), único dueño
+de esa explicación.
 
 Los gauges propios de outbox (`ColectorOutbox`,
 `app/infraestructura/metricas.py`) se prueban en tres niveles a propósito,
@@ -50,8 +47,8 @@ vacía -- por dos caminos distintos:
   lanza directo (falla de conexión) y otra con una consulta real contra
   Postgres que excede el `statement_timeout` del scrape
   (`test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0`) --
-  esta última no mockea nada, deja que Postgres cancele la consulta de
-  verdad con `pg_sleep`.
+  acá la consulta lenta SÍ se stubbea (`pg_sleep(3)`), pero el timeout no:
+  quien cancela es Postgres real, con `QueryCanceled`.
 """
 import re
 from datetime import datetime, timedelta, timezone
@@ -112,29 +109,19 @@ def test_metrics_no_aparece_en_el_esquema_openapi():
 
 # --- Registrar el colector no debe tocar la BD (defecto de import) ---------
 def test_registrar_el_colector_no_abre_ninguna_sesion_de_bd():
-    """Defecto de import descubierto en revisión nativa (issue #1309): el
-    `REGISTRY` default de `prometheus_client` se crea con
-    `auto_describe=True` (`prometheus_client/registry.py::REGISTRY`). Sin un
-    método `describe()` propio, `CollectorRegistry.register()` usa
-    `collect()` como su propia función de descripción -- lo LLAMA ahí mismo,
-    durante el registro, para saber qué nombres de serie declara.
+    """Registrar el colector no debe abrir ninguna sesión de BD (issue #1309).
 
-    `REGISTRY.register(colector_outbox)` corre a nivel de módulo en
-    `main.py`, así que sin `describe()` el simple IMPORT de `main` abría una
-    sesión de BD y corría las tres consultas del scrape antes de que uvicorn
-    sirviera un solo request -- con Postgres todavía sin aceptar conexiones
-    (orden de arranque de Compose, un restart de la base), el import se
-    colgaba esperando el connect TCP, algo que `TIMEOUT_SCRAPE_SENTENCIA_MS`
-    no cubre (ese timeout es un `SET LOCAL statement_timeout`, y nunca llega
-    a correr ninguna sentencia si la conexión ni siquiera se estableció).
+    El mecanismo -- por qué `register()` sin un `describe()` propio llamaría a
+    `collect()` -- está una sola vez en el docstring de
+    `ColectorOutbox.describe()` (`metricas.py`); acá solo se prueba el síntoma.
 
-    Se prueba contra un `CollectorRegistry` PROPIO -- no el `REGISTRY`
-    global de `prometheus_client`, que ya tiene registrado el colector real
-    desde que se importó `main` -- para poder observar el registro de un
-    colector NUEVO sin interferir con el resto de la suite. La factory
-    inyectada lanza si se la llama; `collect()` ya captura cualquier
-    excepción de `sesion_factory()` (ver `ColectorOutbox.collect`), así que
-    esto no revienta el test -- solo deja evidencia de si se llamó."""
+    Se prueba contra un `CollectorRegistry` PROPIO -- no el `REGISTRY` global
+    de `prometheus_client`, que ya tiene registrado el colector real desde que
+    se importó `main` -- para poder observar el registro de un colector NUEVO
+    sin interferir con el resto de la suite. La factory inyectada anota la
+    llamada y lanza; `collect()` ya captura cualquier excepción de
+    `sesion_factory()` (ver `ColectorOutbox.collect`), así que esto no revienta
+    el test -- solo deja evidencia de si se llamó."""
     llamadas = []
 
     def _factory_que_registra_la_llamada():
@@ -402,11 +389,13 @@ def test_scrape_ok_es_0_si_falla_la_consulta_pero_las_series_http_siguen(monkeyp
 
 
 def test_scrape_con_una_consulta_que_excede_el_timeout_da_scrape_ok_0(monkeypatch):
-    """Contra Postgres REAL, sin mockear nada: un `pg_sleep` más largo que
-    `TIMEOUT_SCRAPE_SENTENCIA_MS` deja que Postgres cancele la consulta con
-    `QueryCanceled` -- el mismo camino de `except Exception` que una falla de
-    conexión, pero disparado por el techo de tiempo, no por una factory que
-    lanza. `/metrics` sigue respondiendo 200."""
+    """El mecanismo de timeout es REAL -- Postgres cancela la consulta -- aunque
+    la consulta en sí esté stubeada: se monkeypatchea `calcular_pendientes_por_
+    tabla` por un `pg_sleep(3)` más largo que `TIMEOUT_SCRAPE_SENTENCIA_MS`, y es
+    Postgres quien la mata con `QueryCanceled` -- el mismo camino de
+    `except Exception` que una falla de conexión, pero disparado por el techo de
+    tiempo, no por una factory que lanza. `/metrics` sigue respondiendo 200 con
+    `cata_outbox_scrape_ok 0`."""
     def _consulta_que_excede_el_timeout(db):
         db.execute(text("SELECT pg_sleep(3)"))
         return {}

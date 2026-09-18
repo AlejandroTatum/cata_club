@@ -422,15 +422,10 @@ app.include_router(supresion_datos_router.router, prefix="/api/v1")
 # módulo en `metricas.py` evita que el simple IMPORT de ese módulo (por
 # ejemplo desde un test) registre nada por sí solo.
 #
-# Eso NO alcanza para evitar un efecto de import sobre la BD: el `REGISTRY`
-# default se crea con `auto_describe=True`
-# (`prometheus_client/registry.py::REGISTRY`), así que `register()` LLAMA a
-# `collect()` en el momento del registro cuando el colector no define
-# `describe()` -- sin ese método, esta misma línea abriría una sesión y
-# correría las tres consultas del scrape al importar `main`, antes de que
-# uvicorn sirviera un solo request (issue #1309, defecto encontrado en
-# revisión nativa). Lo que hace que `register()` sea side-effect-free es
-# `ColectorOutbox.describe()`, no dónde se llama a `register()`.
+# `register()` es side-effect-free solo porque `ColectorOutbox.describe()`
+# existe: sin ese método el `REGISTRY` default (`auto_describe=True`) llama a
+# `collect()` al registrar y el IMPORT abriría una sesión (issue #1309). La
+# historia completa vive en `ColectorOutbox.describe()` (metricas.py).
 _instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
 REGISTRY.register(colector_outbox)
 
