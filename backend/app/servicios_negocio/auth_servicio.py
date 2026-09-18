@@ -483,6 +483,7 @@ class AuthServicio:
 
         from app.infraestructura.cloudinary_cliente import (
             componer_valor_foto_perfil,
+            limpiar_foto_perfil_huerfana,
             public_id_con_extension,
             subir_foto_perfil,
         )
@@ -500,6 +501,10 @@ class AuthServicio:
         # valor persistido (continuidad del shape ya escrito en producción; la
         # entrega de un `raw` ya cambia sola en cada firma).
         public_id = public_id_con_extension(f"perfil_{usuario.persona_id}", content_type)
+        # R3-001 (#1072): se captura el valor ANTERIOR a persistir la subida,
+        # porque `public_id` ahora depende del formato (jpg vs png) y
+        # `overwrite=True` deja de garantizar un solo asset vivo.
+        foto_anterior = usuario.persona.foto_url
         version = subir_foto_perfil(
             contenido=contenido,
             nombre_publico=public_id,
@@ -513,6 +518,8 @@ class AuthServicio:
         )
         self.db.commit()
         self.db.refresh(usuario)
+
+        limpiar_foto_perfil_huerfana(foto_anterior, public_id)
 
         return {
             "correo": usuario.correo,

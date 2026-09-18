@@ -379,6 +379,103 @@ def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(
     assert resp_get.json()["fotoUrl"] == url_foto_reemplazada
 
 
+# --- R3-001 (#1072): reemplazar la foto debe destruir la anterior ---------
+# El `public_id` ahora depende del formato subido, así que `overwrite=True`
+# ya no garantiza un solo asset vivo: reemplazar un jpg por un png (o una
+# fila previa a la migración, sin extensión) sube un recurso NUEVO y
+# abandona el viejo sin destruirlo. Mismo patrón de mock que
+# `test_voucher_pago.py::_parchear_destroy`: se parchea el SDK, no el
+# helper propio, para probar el camino real servicio -> Cloudinary.
+def _parchear_destroy():
+    return patch("app.infraestructura.cloudinary_cliente.cloudinary.uploader.destroy")
+
+
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
+    return_value=_FAKE_VERSION_PNG,
+)
+def test_reemplazar_foto_perfil_de_jpg_a_png_destruye_la_anterior(_mock_cloudinary, client, db_session):
+    persona = _crear_persona(db_session, cedula=cedula_valida(175), nombres="Nora", telefono="0991112231")
+    persona.foto_url = f"perfil_{persona.id}.jpg|{_FAKE_VERSION_JPG}"
+    db_session.commit()
+    rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
+    _crear_usuario_para_persona(db_session, persona, correo="nora@cataclub.com", roles=[rol_admin])
+    _restaurar_override_token(correo="nora@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    contenido = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100  # PNG-ish
+    with _parchear_destroy() as mock_destroy:
+        resp = client.post(
+            "/api/v1/auth/me/foto",
+            files={"archivo": ("foto.png", contenido, "image/png")},
+        )
+    assert resp.status_code == 200, resp.text
+
+    from app.soporte_transversal.configuracion import settings
+    clave = f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{persona.id}.jpg"
+    borrados = {llamada.args[0]: llamada.kwargs for llamada in mock_destroy.call_args_list}
+    assert clave in borrados, list(borrados)
+    assert borrados[clave]["resource_type"] == "raw"
+    assert borrados[clave]["type"] == "authenticated"
+
+
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
+    return_value=_FAKE_VERSION_JPG,
+)
+def test_reemplazar_foto_perfil_legada_pre_migracion_destruye_la_imagen_authenticated(
+    _mock_cloudinary, client, db_session
+):
+    """Fila previa a la migración (issue #1072): `public_id` sin extensión,
+    viva como `image/authenticated`. El reemplazo post-deploy tiene que
+    destruirla ahí -- como `raw` Cloudinary responde `not found` sin fallar
+    y sin avisar, y el asset queda vivo."""
+    persona = _crear_persona(db_session, cedula=cedula_valida(176), nombres="Teo", telefono="0991112232")
+    persona.foto_url = f"perfil_{persona.id}"
+    db_session.commit()
+    rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
+    _crear_usuario_para_persona(db_session, persona, correo="teo@cataclub.com", roles=[rol_admin])
+    _restaurar_override_token(correo="teo@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    with _parchear_destroy() as mock_destroy:
+        resp = client.post(
+            "/api/v1/auth/me/foto",
+            files={"archivo": ("foto.jpg", contenido, "image/jpeg")},
+        )
+    assert resp.status_code == 200, resp.text
+
+    from app.soporte_transversal.configuracion import settings
+    clave = f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{persona.id}"
+    borrados = {llamada.args[0]: llamada.kwargs for llamada in mock_destroy.call_args_list}
+    assert clave in borrados, list(borrados)
+    assert borrados[clave]["resource_type"] == "image"
+    assert borrados[clave]["type"] == "authenticated"
+
+
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
+    return_value=_FAKE_VERSION_JPG,
+)
+def test_reemplazar_foto_perfil_mismo_formato_no_destruye_nada(_mock_cloudinary, client, db_session):
+    """El overwrite normal (mismo formato, mismo `public_id`) sigue sin
+    destruir nada: Cloudinary ya sobrescribe el mismo recurso."""
+    persona = _crear_persona(db_session, cedula=cedula_valida(177), nombres="Uma", telefono="0991112233")
+    persona.foto_url = f"perfil_{persona.id}.jpg|{_FAKE_VERSION_PNG}"
+    db_session.commit()
+    rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")
+    _crear_usuario_para_persona(db_session, persona, correo="uma@cataclub.com", roles=[rol_admin])
+    _restaurar_override_token(correo="uma@cataclub.com", persona_id=persona.id, roles=["ADMINISTRADOR"])
+
+    contenido = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    with _parchear_destroy() as mock_destroy:
+        resp = client.post(
+            "/api/v1/auth/me/foto",
+            files={"archivo": ("foto.jpg", contenido, "image/jpeg")},
+        )
+    assert resp.status_code == 200, resp.text
+    assert mock_destroy.call_args_list == []
+
+
 def test_subir_foto_perfil_tipo_no_permitido_da_400(client, db_session):
     persona = _crear_persona(db_session, cedula=cedula_valida(169), nombres="Bruno", telefono="0991112225")
     rol_admin = Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")

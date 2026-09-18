@@ -267,6 +267,39 @@ def test_reemplazar_foto_de_persona_produce_una_url_distinta_a_la_anterior(
     )
 
 
+# --- R3-001 (#1072): reemplazar la foto debe destruir la anterior ---------
+# Mismo hallazgo que en el self-service (`test_auth_perfil_propio.py`): el
+# `public_id` depende del formato subido, así que `overwrite=True` ya no
+# garantiza un solo asset vivo por persona.
+@patch(
+    "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
+    return_value=_FAKE_VERSION,
+)
+def test_reemplazar_foto_de_persona_de_jpg_a_png_destruye_la_anterior(
+    _mock_cloudinary, client, db_session
+):
+    admin = _crear_persona(db_session, cedula_valida(218), "Admin")
+    objetivo = _crear_persona(db_session, cedula_valida(219), "Pilar")
+    objetivo.foto_url = f"perfil_{objetivo.id}.jpg|{_FAKE_VERSION}"
+    db_session.commit()
+    _restaurar_override_token(admin.id, ["ADMINISTRADOR"])
+
+    contenido = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100  # PNG-ish
+    with patch("app.infraestructura.cloudinary_cliente.cloudinary.uploader.destroy") as mock_destroy:
+        resp = client.post(
+            f"/api/v1/personas/{objetivo.id}/foto",
+            files={"archivo": ("foto.png", contenido, "image/png")},
+        )
+    assert resp.status_code == 200, resp.text
+
+    from app.soporte_transversal.configuracion import settings
+    clave = f"{settings.cloudinary_carpeta_fotos_perfil}/perfil_{objetivo.id}.jpg"
+    borrados = {llamada.args[0]: llamada.kwargs for llamada in mock_destroy.call_args_list}
+    assert clave in borrados, list(borrados)
+    assert borrados[clave]["resource_type"] == "raw"
+    assert borrados[clave]["type"] == "authenticated"
+
+
 def test_get_persona_foto_previa_al_fix_se_sigue_entregando(client, db_session):
     """Transición del issue #1072: una foto subida antes del fix persiste el
     `public_id` SIN extensión (`perfil_{id}`) bajo `image/authenticated`. Se

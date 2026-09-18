@@ -544,6 +544,48 @@ def subir_foto_perfil(
     return version
 
 
+def limpiar_foto_perfil_huerfana(valor_anterior: Optional[str], public_id_nuevo: str) -> None:
+    """Best-effort deletion of a profile photo orphaned by a replacement.
+
+    Issue #1072 (R3-001): el `public_id` de una foto de perfil ahora depende
+    del formato subido (`perfil_N.jpg` vs `perfil_N.png`), así que
+    `overwrite=True` ya NO garantiza un solo asset vivo -- reemplazar un jpg
+    por un png (o reemplazar una fila previa a la migración, sin extensión)
+    sube un recurso NUEVO y abandona el anterior sin destruirlo ni
+    reportarlo: la foto vieja de una persona, menor incluido, sobrevive al
+    reemplazo. `valor_anterior` es el `Persona.foto_url` de ANTES de
+    persistir la subida (compuesto `public_id|version` o legado sin
+    separador); se descarta si es una URL pública heredada (issue #553, sin
+    `public_id` que destruir) o si coincide con `public_id_nuevo` (mismo
+    formato, Cloudinary ya sobrescribió el mismo recurso). Mismo criterio de
+    `resource_type_de_destruccion` que `eliminar_voucher_pago`: con
+    extensión es el `raw` nuevo, sin extensión es el `image/authenticated`
+    previo a `scripts/migrar_imagenes_a_raw.py`.
+
+    Llaman acá `AuthServicio.actualizar_foto_perfil` y
+    `PersonaServicio.actualizar_foto` para no divergir entre el self-service
+    y la subida por un tercero autorizado.
+    """
+    if not valor_anterior:
+        return
+    public_id_anterior, _version = _descomponer_valor_foto_perfil(valor_anterior)
+    if public_id_anterior.startswith("http") or public_id_anterior == public_id_nuevo:
+        return
+    try:
+        eliminar_logo_sponsor(
+            public_id_anterior,
+            carpeta=settings.cloudinary_carpeta_fotos_perfil,
+            resource_type=resource_type_de_destruccion(public_id_anterior),
+            tipo="authenticated",
+            descripcion="foto de perfil",
+        )
+    except Exception:
+        logger.warning(
+            "No se pudo limpiar una foto de perfil huérfana (public_id=%s)",
+            public_id_anterior,
+        )
+
+
 def subir_logo_sponsor(contenido: bytes, nombre_publico: str, content_type: str) -> str:
     """Sube un logo deliberadamente público para su entrega en la landing."""
     _configurar_cliente()
