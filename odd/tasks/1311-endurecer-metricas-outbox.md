@@ -37,7 +37,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
 - [x] T2 (W2): transaction-scope proof via dedicated connection + commit discriminator.
 - [x] T3 (W4+W5): honest docstrings + single canonical `describe()` rationale with references.
 - [x] T4 (W3): `connect_timeout` at engine level + behavioral hanging-socket test (+ doc sentence).
-- [ ] T5: verification — focused files, then `make pre-pr LANE=backend`; work-unit commits per task.
+- [x] T5: verification — focused files, then `make pre-pr LANE=backend`; work-unit commits per task.
 - [ ] T6: native review on the commits, push, PR `Closes #1311` with squash auto-merge, post-merge main green, housekeeping.
 
 ## Acceptance criteria
@@ -96,9 +96,18 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
   colgado y el guard de alineación `TIMEOUT_CONEXION_SEGUNDOS ==
   TIMEOUT_POOL_SEGUNDOS`; una frase nueva en `docs/operations/metricas.md`.
 
-### Verificación final (T5 parcial)
+### T5 — Verificación del parent (`make pre-pr LANE=backend`)
 
-- `cd backend && uv run ruff check .` → `All checks passed!`
-- `uv run pytest tests/test_metricas.py tests/test_db.py -q` → 14 passed.
-- `uv run pytest tests/test_main.py -q` (se tocó `main.py`) → 40 passed.
-- No se corrió la suite backend completa ni `make pre-pr LANE=backend`: queda a cargo del parent.
+- Primer intento **bloqueado por ambiente** (no por el candidato): el
+  preflight del worktree publica 127.0.0.1:5436, ya ocupado por el
+  `cata_club-db-test-1` del checkout principal (regla single-tenant de
+  `AGENTS.md`). Resolución: `docker compose --profile test stop db-test` en
+  el checkout principal, limpieza del residuo `gentleman-1311-db-test-1`
+  (Created, nunca iniciado) + su red, y relanzamiento del lane.
+- Segundo intento **exit 0**: secrets/ruff/lint-imports/pip-audit PASS;
+  preflight PASS (`gentleman-1311-db-test-1` healthy); suite backend
+  `2792 passed, 3 skipped, 90 warnings` (11:07); root `633 passed, 1
+  skipped`. Skips y warnings preexistentes, nada de métricas.
+- Gate de CI **no reproducido localmente**: `migraciones-desde-cero` contra
+  su PostgreSQL service aislado (el propio lane lo declara). El lane local
+  es check predictivo, no paridad total de CI.
