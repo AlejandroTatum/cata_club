@@ -284,22 +284,49 @@ def test_mime_no_soportado_sigue_siendo_value_error():
         cc.subir_voucher_pago(b"x", "voucher-x", "application/zip", 1)
 
 
-# --- 3b. Idempotencia de `overwrite=False`: lock-in (degradacion-controlada,
-# slice 1, fase 1.6) -- `subir_pdf_membresia` ya trata un `existing: True`
-# del SDK como éxito porque solo lee `secure_url`, presente en ambos casos.
-# Esta prueba fija ese comportamiento para que un refactor futuro no lo
-# rompa en silencio.
-def test_pdf_existente_devuelve_misma_url_sin_error():
+# --- 3b. `existing: True` del SDK: éxito para el caller, WARNING visible
+# (issue #1327) --------------------------------------------------------------
+# Antes (degradacion-controlada, slice 1, fase 1.6) `subir_pdf_membresia`
+# trataba un `existing: True` como éxito silencioso porque solo leía
+# `secure_url`, presente en ambos casos. El issue #1327 mostró que eso
+# esconde una colisión de `public_id` entre dos vidas de la base (un
+# reprovisionamiento que recicla ids de pago sin vaciar Cloudinary). La
+# subida sigue sin fallar -- el `public_id` determinístico de un mismo pago
+# reintentando es el caso normal -- pero ahora deja un WARNING con el
+# `public_id` para poder auditar la colisión.
+def test_pdf_existente_devuelve_la_url_y_deja_warning_visible(monkeypatch, caplog):
+    monkeypatch.setattr(cc.logger, "disabled", False)
+
     with _parchear_upload() as mock_upload:
         mock_upload.return_value = {
             "secure_url": "https://cdn.test/comprobante-existente.pdf",
             "existing": True,
         }
 
-        url = _subir_pdf()
+        with caplog.at_level(logging.WARNING, logger="cataclub.cloudinary"):
+            url = _subir_pdf()
 
         assert url == "https://cdn.test/comprobante-existente.pdf"
         assert mock_upload.call_count == 1
+        niveles = [r.levelname for r in caplog.records]
+        assert "WARNING" in niveles
+        assert "pdf-1" in caplog.text  # public_id por defecto de `_subir_pdf`
+
+
+def test_pdf_nuevo_sin_existing_no_deja_warning(monkeypatch, caplog):
+    monkeypatch.setattr(cc.logger, "disabled", False)
+
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {
+            "secure_url": "https://cdn.test/comprobante-nuevo.pdf",
+            "existing": False,
+        }
+
+        with caplog.at_level(logging.WARNING, logger="cataclub.cloudinary"):
+            _subir_pdf()
+
+        niveles = [r.levelname for r in caplog.records]
+        assert "WARNING" not in niveles
 
 
 # --- 4. Guardia: ninguna función reintenta tras un fallo --------------------

@@ -40,6 +40,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -65,6 +66,58 @@ from tests.fabricas_pagos import (
 
 # Capturado en tiempo de colección: el método REAL, antes del stub autouse.
 _DISPARO_ORIGINAL = mps.PagoServicio._disparar_generacion_comprobante_pdf
+
+
+# --- 0. `public_id_comprobante`: único por aprobación (issue #1327) --------
+# `comprobante-{pago.id:08d}` a secas colisiona entre dos vidas de la misma
+# base (ids reciclados tras un reprovisionamiento): con `overwrite=False`,
+# Cloudinary conservaba el PDF de la vida vieja y el pago nuevo terminaba
+# sirviendo la identidad de otra persona. El sufijo agrega `fecha_validacion`
+# (que sí difiere entre vidas) sin perder el determinismo por pago que
+# necesita la carrera de `generar_comprobante_pdf_tarea` (:120-132).
+
+def test_public_id_comprobante_es_estable_para_el_mismo_pago():
+    pago = SimpleNamespace(
+        id=3,
+        fecha_validacion=datetime(2026, 8, 21, 3, 45, tzinfo=timezone.utc),
+        persona_id=42,
+    )
+    assert ct.public_id_comprobante(pago) == ct.public_id_comprobante(pago)
+
+
+def test_public_id_comprobante_distingue_dos_vidas_de_la_base():
+    """Mismo `pago.id` (reciclado por un reprovisionamiento), distinta
+    `fecha_validacion`: deben producir `public_id` distintos, o la segunda
+    vida hereda el comprobante de la primera (issue #1327)."""
+    vida_vieja = SimpleNamespace(
+        id=3,
+        fecha_validacion=datetime(2026, 8, 21, 3, 45, tzinfo=timezone.utc),
+        persona_id=42,
+    )
+    vida_nueva = SimpleNamespace(
+        id=3,
+        fecha_validacion=datetime(2026, 9, 18, 10, 0, tzinfo=timezone.utc),
+        persona_id=42,
+    )
+    assert ct.public_id_comprobante(vida_vieja) != ct.public_id_comprobante(vida_nueva)
+
+
+def test_public_id_comprobante_conserva_el_prefijo_legible_por_id():
+    pago = SimpleNamespace(
+        id=3,
+        fecha_validacion=datetime(2026, 8, 21, 3, 45, tzinfo=timezone.utc),
+        persona_id=42,
+    )
+    assert ct.public_id_comprobante(pago).startswith("comprobante-00000003-")
+
+
+def test_public_id_comprobante_sin_fecha_validacion_falla_ruidoso():
+    """`fecha_validacion` la fija `PagoServicio.validar_pago` ANTES de
+    disparar esta tarea -- si llega en `None` acá es un invariante roto en
+    otra parte del código, no algo para tapar reusando el id viejo."""
+    pago = SimpleNamespace(id=9, fecha_validacion=None, persona_id=1)
+    with pytest.raises(ValueError):
+        ct.public_id_comprobante(pago)
 
 
 # --- Helpers locales ---------------------------------------------------------
@@ -413,9 +466,10 @@ def test_reconciliacion_redespacha_solo_aprobados_viejos_sin_comprobante(
 def test_redespacho_es_idempotente_si_ya_hay_comprobante(db_session, monkeypatch):
     """Garantía que hace seguro re-despachar: si el pago ya tiene su
     ComprobantePago, la tarea de generación NO regenera ni vuelve a subir a
-    Cloudinary — reutiliza la URL histórica. (El public_id determinístico
-    `comprobante-{id:08d}` cubre además la carrera de dos workers: el segundo
-    upload sobrescribe el mismo objeto, nunca duplica.)"""
+    Cloudinary — reutiliza la URL histórica. (El public_id determinístico por
+    pago + `fecha_validacion` cubre además la carrera de dos workers: el
+    segundo upload sobrescribe el mismo objeto, nunca duplica -- issue
+    #1327.)"""
     viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
     pago = _sembrar_pago(db_session, cedula_valida(505), EstadoPago.APROBADO, viejo)
     url_historica = "https://res.cloudinary.com/demo/comprobante-historico.pdf"
@@ -452,8 +506,14 @@ def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkey
     viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
     pago = _sembrar_pago(db_session, cedula_valida(506), EstadoPago.APROBADO, viejo)
     url_nueva = "https://res.cloudinary.com/demo/comprobante-nuevo.pdf"
+    llamadas_subida: list[tuple[tuple, dict]] = []
+
+    def _subir_falso(*args, **kwargs):
+        llamadas_subida.append((args, kwargs))
+        return url_nueva
+
     monkeypatch.setattr(ct, "generar_comprobante_pago_pdf", lambda **kwargs: b"pdf-falso")
-    monkeypatch.setattr(ct, "subir_pdf_membresia", lambda *a, **k: url_nueva)
+    monkeypatch.setattr(ct, "subir_pdf_membresia", _subir_falso)
     _usar_sesion_del_test(monkeypatch, db_session)
 
     resultado = ct.generar_comprobante_pdf_tarea(pago.id)
@@ -463,7 +523,8 @@ def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkey
     # devuelve (acá, simula) el SDK -- ese valor solo sirve como identificador
     # para volver a firmar la URL de entrega en cada lectura autorizada (ver
     # `cloudinary_cliente.resolver_url_entrega`), nunca se guarda tal cual.
-    esperado = f"comprobante-{pago.id:08d}"
+    esperado = ct.public_id_comprobante(pago)
+    assert esperado.startswith(f"comprobante-{pago.id:08d}-")
     assert resultado["comprobante_url"] == esperado
     assert resultado["comprobante_url"] != url_nueva
     comprobante = (
@@ -473,6 +534,13 @@ def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkey
     )
     assert comprobante.archivo_url == esperado
     assert comprobante.archivo_url != url_nueva
+
+    # Issue #1327: la subida pasa `sobreescribir=True` explícito -- un
+    # reintento del MISMO pago (mismo public_id determinístico) debe pisar
+    # sus propios bytes en vez de quedar bloqueado por `overwrite=False`.
+    assert len(llamadas_subida) == 1
+    _, kwargs_subida = llamadas_subida[0]
+    assert kwargs_subida.get("sobreescribir") is True
 
 
 # --- 5. Carrera de inserción de comprobante (bug 3) -------------------------
@@ -505,6 +573,9 @@ def test_integrityerror_devuelve_url_del_ganador(motor_test):
     pago = crear_pago_orm(
         sesion, persona, membresia, EstadoPago.APROBADO,
         monto=Decimal("35.00"), tipo_pago=TipoPago.TRANSFERENCIA,
+        # `fecha_validacion` explícita: `public_id_comprobante` la exige
+        # (issue #1327), igual que la fija de verdad `validar_pago`.
+        fecha_validacion=datetime.now(timezone.utc),
     )
     sesion.commit()
     pago_id, membresia_id, tipo_id, persona_id = pago.id, membresia.id, tipo.id, persona.id
