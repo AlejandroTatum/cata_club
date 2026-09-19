@@ -348,21 +348,28 @@ qa-reset: ## Volver el entorno de QA a su estado recien sembrado (sin rebuild)
 # `process.env.E2E_CLOUDINARY_CONFIGURED` y se saltean con motivo explícito
 # cuando da `0`.
 #
-# Revisión nativa de #1352 (R4-001): "credencial ausente" y "el propio exec
-# falló" NO son el mismo caso. Antes, cualquier falla del `compose exec`
-# (proyecto mal levantado, `QA_COMPOSE`/`QA_ENV` equivocado, el daemon de
-# Docker con error, un backend reiniciándose) caía en el `|| echo 0` y se
-# leía exactamente como "Cloudinary no configurado" -- los tres specs de
-# voucher se salteaban en silencio, con un motivo que afirma justo lo
-# contrario de lo que pasó. Ahora la salida del `exec` (stdout+stderr) se
-# captura entera: si no es literalmente `0` ni `1`, el target falla fuerte
-# en vez de asumir "no configurado", y el valor calculado se imprime una vez
-# para que la causa del salteo (o su ausencia) quede visible en el log.
+# Revisión nativa de #1352 (R4-001, y su WARNING de seguimiento R2-001/R3):
+# "credencial ausente" y "el propio exec falló" NO son el mismo caso. Antes,
+# cualquier falla del `compose exec` (proyecto mal levantado, `QA_COMPOSE`/
+# `QA_ENV` equivocado, el daemon de Docker con error, un backend
+# reiniciándose) caía en el `|| echo 0` y se leía exactamente como
+# "Cloudinary no configurado" -- los tres specs de voucher se salteaban en
+# silencio, con un motivo que afirma justo lo contrario de lo que pasó. La
+# primera corrección capturaba stdout+stderr juntos (`2>&1`) para poder
+# comparar contra `0`/`1`, pero eso mismo hace que un WARN benigno de Compose
+# en stderr (que no falla el exec) rompa la comparación y aborte la suite
+# entera sin necesidad. Ahora solo se captura stdout; el estado de salida del
+# `exec` se chequea aparte (`||`), y el `case` sigue exigiendo `0`/`1`
+# literal en stdout -- así que ruido en stderr con exit 0 se acepta, y un
+# exec que de verdad falla sigue fallando fuerte en vez de leerse como "no
+# configurado". El valor calculado se imprime una vez para que la causa del
+# salteo (o su ausencia) quede visible en el log.
 qa-live: ## Correr los specs E2E que atraviesan el backend real de QA
-	@cloudinary=$$($(QA_ENV) $(QA_COMPOSE) exec -T backend sh -c '[ -n "$$CLOUDINARY_API_KEY" ] && echo 1 || echo 0' 2>&1); \
+	@cloudinary=$$($(QA_ENV) $(QA_COMPOSE) exec -T backend sh -c '[ -n "$$CLOUDINARY_API_KEY" ] && echo 1 || echo 0') || \
+		{ echo "qa-live: no se pudo determinar E2E_CLOUDINARY_CONFIGURED -- el exec al backend falló (código $$?)" >&2; exit 1; }; \
 	case "$$cloudinary" in \
 		0|1) ;; \
-		*) echo "qa-live: no se pudo determinar E2E_CLOUDINARY_CONFIGURED -- el exec al backend falló: $$cloudinary" >&2; exit 1 ;; \
+		*) echo "qa-live: no se pudo determinar E2E_CLOUDINARY_CONFIGURED -- salida inesperada del exec: $$cloudinary" >&2; exit 1 ;; \
 	esac; \
 	echo "qa-live: E2E_CLOUDINARY_CONFIGURED=$$cloudinary"; \
 	cd frontend && E2E_LIVE=1 E2E_CLOUDINARY_CONFIGURED=$$cloudinary PLAYWRIGHT_BASE_URL=http://localhost:3000 \
