@@ -8,10 +8,16 @@
  * caller's own persona via `representante_id`, plus its `FichaMedica`, via
  * `POST /personas/{persona_id}/representados` (see `crearRepresentado`).
  *
- * The representante's own persona id is sourced from the portal summary
- * (`data.self.personaId`, via `fetchStudentPortal`) — never decoded from the
- * JWT client-side. On success, navigates back to `/student`, which remounts
- * and refetches the portal data (no optimistic client-side list update).
+ * Issue #1318: reachable by EVERY self-managed adult, not just an existing
+ * representante — the identity the backend acts on (`POST
+ * /personas/me/representados`) comes from the caller's own access token,
+ * never from a client-supplied id, so this page never resolves or sends a
+ * `persona_id` of its own. When the caller isn't REPRESENTANTE yet, the
+ * backend grants it in the same request; the summary step says so before
+ * confirming. On success the session is re-hydrated (`refreshSession`, since
+ * the account's role may have just changed) before navigating back to
+ * `/student`, which remounts and refetches the portal data (no optimistic
+ * client-side list update).
  *
  * All labels and copy are in Spanish per app convention.
  */
@@ -25,7 +31,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { fetchStudentPortal, crearRepresentado, fetchInstituciones, type Institucion } from "@/services/api";
+import { crearRepresentadoPropio, fetchInstituciones, type Institucion } from "@/services/api";
 import { calculatePersonAge, toStoredPhone } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import { WizardTextarea, WizardInput, PersonIdentityFields, WizardNavigation, example } from "@/components/wizard-fields";
@@ -64,7 +70,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function AddDependentContent(): React.ReactElement {
-  const { session } = useAuth();
+  const { session, refreshSession } = useAuth();
   const router = useRouter();
   const { showSuccess } = useToast();
 
@@ -76,10 +82,12 @@ function AddDependentContent(): React.ReactElement {
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
 
-  const [representanteId, setRepresentanteId] = useState<number | null>(null);
-  const [loadingRepresentante, setLoadingRepresentante] = useState(true);
-  const [representanteLoadError, setRepresentanteLoadError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
+  // Issue #1318: read straight from the session's own backend-role list —
+  // no portal fetch needed just to know whether saving will also switch the
+  // caller's role. `session.roles` are the raw backend strings (`AuthSession`
+  // in `src/services/auth.ts`), not the derived `UserRole` this page is
+  // gated on.
+  const isRepresentative = session?.roles.includes("REPRESENTANTE") ?? false;
 
   /**
    * A URL may address any step the guardian could have walked to on their own,
@@ -111,36 +119,6 @@ function AddDependentContent(): React.ReactElement {
   function markTouched(field: AddDependentField): void {
     setTouched((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
   }
-
-  // Source the representante's own persona_id from the portal summary —
-  // never decoded from the JWT client-side (see module docstring).
-  useEffect(() => {
-    const userId = session?.user.id;
-    if (!userId) return;
-    let cancelled = false;
-    setLoadingRepresentante(true);
-    fetchStudentPortal(userId)
-      .then((data) => {
-        if (cancelled) return;
-        if (data.self) {
-          setRepresentanteId(Number(data.self.personaId));
-          setRepresentanteLoadError(null);
-        } else {
-          setRepresentanteLoadError("No se pudo identificar su perfil de representante.");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRepresentanteLoadError("No se pudo cargar su información. Intente nuevamente.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRepresentante(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.user.id, reloadToken]);
 
   useEffect(() => {
     fetchInstituciones().then(setInstituciones).catch(() => {});
@@ -193,17 +171,16 @@ function AddDependentContent(): React.ReactElement {
       setFormErrors(errors);
       return;
     }
-    if (representanteId === null) {
-      setFormErrors([
-        representanteLoadError ??
-          "No se pudo identificar su cuenta de representante. Intente nuevamente.",
-      ]);
-      return;
-    }
     setSubmitting(true);
     try {
-      await crearRepresentado(representanteId, buildRepresentadoPayload(formData));
+      await crearRepresentadoPropio(buildRepresentadoPayload(formData));
       showSuccess("Dependiente agregado correctamente.");
+      // Issue #1318: the account may have just become REPRESENTANTE — the
+      // cached session still reads the old role until re-hydrated. Awaited
+      // before navigating so `/student`'s own ProtectedRoute (and its
+      // profile picker) sees the fresh role on first render instead of
+      // bouncing on a stale one.
+      await refreshSession();
       // Navigation-remount: /student refetches the portal summary on mount,
       // so the new dependent appears without any optimistic client state.
       router.push("/student");
@@ -519,6 +496,16 @@ function AddDependentContent(): React.ReactElement {
           {summaryRow("Alergias", formData.alergias || "Ninguna reportada", "health")}
         </div>
 
+        {/* Issue #1318: only for a caller who isn't REPRESENTANTE yet — an
+            existing representante adding a second/third dependent skips the
+            role switch server-side, so nothing here would be true for them. */}
+        {!isRepresentative && (
+          <div className="rounded-ctl border border-line-2 bg-canvas p-3 text-xs text-ink-2">
+            Al guardar, su cuenta pasa a ser de representante. Sigue jugando
+            con su membresía actual y podrá gestionar a este perfil.
+          </div>
+        )}
+
         <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
           <input
             type="checkbox"
@@ -578,21 +565,6 @@ function AddDependentContent(): React.ReactElement {
           {ADD_DEPENDENT_STEP_LABELS[step]}
         </h2>
 
-        {representanteLoadError && (
-          <div className="alert-error mb-6 items-start" role="alert">
-            <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1">{representanteLoadError}</span>
-            <button
-              type="button"
-              onClick={() => setReloadToken((n) => n + 1)}
-              disabled={loadingRepresentante}
-              className="shrink-0 font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Reintentar
-            </button>
-          </div>
-        )}
-
         <form onSubmit={handleConfirm}>
           {/* Step content */}
           {step === "child" && renderChildStep()}
@@ -612,7 +584,7 @@ function AddDependentContent(): React.ReactElement {
             submitButton={
               <button
                 type="submit"
-                disabled={submitting || !summaryReviewed || loadingRepresentante}
+                disabled={submitting || !summaryReviewed}
                 className={buttonClasses("primary", "md", "disabled:cursor-not-allowed")}
               >
                 {submitting ? (
@@ -635,7 +607,10 @@ function AddDependentContent(): React.ReactElement {
 
 export default function AddDependentPage(): React.ReactElement {
   return (
-    <ProtectedRoute allowedRoles={["representante"]}>
+    // Issue #1318: reachable by an existing representante AND by a
+    // self-managed player ("estudiante") adding their first dependent — the
+    // backend grants REPRESENTANTE in the same request for the latter.
+    <ProtectedRoute allowedRoles={["representante", "estudiante"]}>
       {/* The wizard reads its step from the query string; `useSearchParams`
           needs a boundary to fall back to during prerender. */}
       <Suspense>

@@ -124,6 +124,11 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
     personas_router: {
         "listar_instituciones": "60/minute",
                 "crear_representado": "10/minute",
+        # Issue #1318: mismo tier de autoservicio autenticado que
+        # `crear_representado` -- también puede acuñar una identidad nueva
+        # (la del dependiente), solo que la del representante sale del
+        # token, nunca de la URL.
+        "crear_representado_propio": "10/minute",
         # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): mismo tier de
         # autoservicio autenticado que `crear_representado` -- vincula (no
         # crea) una identidad ya existente a la cuenta del representante. El
