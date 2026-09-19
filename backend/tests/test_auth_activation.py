@@ -283,3 +283,51 @@ def test_login_de_admin_emite_el_claim_activacion_completa(client_sin_token, db_
         respuesta.json()["access_token"], settings.jwt_secret_key, algorithms=[settings.jwt_algoritmo],
     )
     assert payload["activacion_completa"] is True
+
+
+# --- Issue #1316: PATCH /auth/correo es la única puerta de una cuenta ------
+# pendiente, y la compuerta la bloqueaba a ella misma. A diferencia de
+# `test_cambiar_correo_no_verificado.py`, que reemplaza `decodificar_token`
+# entero con `dependency_overrides` y nunca ejercita la compuerta, estos dos
+# tests pasan por el token REAL, igual que los carve-outs de #858/#790 de
+# arriba.
+
+def test_cuenta_pendiente_corrige_su_correo_a_traves_de_la_compuerta(client_sin_token, db_session):
+    usuario = _crear_usuario(
+        db_session, correo="mal-tipeado@cataclub.test", correo_verificado=False,
+    )
+    respuesta = client_sin_token.patch(
+        "/api/v1/auth/correo",
+        json={"correo": "corregido@example.com"},
+        headers={"Authorization": f"Bearer {_token(usuario)}"},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["correo"] == "corregido@example.com"
+
+
+def test_cuenta_pendiente_sigue_sin_entrar_a_un_modulo_del_club(client_sin_token, db_session):
+    """Control negativo: la excepción agregada para `/auth/correo` es
+    puntual, no una relajación general de la compuerta -- la misma cuenta
+    pendiente sigue recibiendo 403 en un módulo del club."""
+    usuario = _crear_usuario(
+        db_session, correo="pendiente-modulo@cataclub.test", correo_verificado=False,
+    )
+    respuesta = client_sin_token.get(
+        "/api/v1/membresias/mias",
+        headers={"Authorization": f"Bearer {_token(usuario)}"},
+    )
+    assert respuesta.status_code == 403
+
+
+def test_403_de_la_compuerta_lleva_mensaje_seguro(client_sin_token, db_session):
+    usuario = _crear_usuario(
+        db_session, correo="pendiente-mensaje@cataclub.test", correo_verificado=False,
+    )
+    respuesta = client_sin_token.get(
+        "/api/v1/membresias/mias",
+        headers={"Authorization": f"Bearer {_token(usuario)}"},
+    )
+    assert respuesta.status_code == 403
+    cuerpo = respuesta.json()
+    assert cuerpo["mensaje_seguro"] is True
+    assert cuerpo["message"] == "Su cuenta aún no está habilitada para acceder a este módulo."

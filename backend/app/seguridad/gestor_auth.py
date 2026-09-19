@@ -370,16 +370,26 @@ class GestorAutenticacion:
         # propios checks granulares de ownership/verificación -- la familia
         # que se autoinscribió no puede quedar varada sin ver a su propio
         # representado ni completar la vinculación tras verificar.
+        # Carve-out de corrección de correo (#1316): `/auth/correo` es
+        # autoservicio propio vía `sub`, al mismo nivel que
+        # `/auth/me/sesiones` -- no toca módulos del club ni recibe ids de
+        # path. Su único caller legítimo es, por diseño, una cuenta con
+        # `correo_verificado = False` (`AuthServicio.cambiar_correo_no_verificado`
+        # rechaza a las verificadas), así que sin esta excepción el gate la
+        # bloqueaba SIEMPRE: la única puerta para corregir un correo mal
+        # tipeado quedaba cerrada para quien la necesita.
         ruta = request.url.path.rstrip("/")
         es_superficie_limitada = (
             ruta.endswith("/auth/me")
             or ruta.endswith("/auth/logout")
             or ruta.endswith("/auth/me/sesiones")
             or ruta.endswith("/auth/sesiones/invalidar")
+            or ruta.endswith("/auth/correo")
             or ruta.startswith("/api/v1/personas")
         )
         if not es_superficie_limitada and not GestorAutenticacion.puede_acceder_modulos(db, usuario):
             raise PermisosInsuficientes(
                 "Su cuenta aún no está habilitada para acceder a este módulo.",
+                seguro_mostrar=True,
             )
         return payload
