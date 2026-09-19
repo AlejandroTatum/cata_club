@@ -3,7 +3,7 @@
 Issue: https://github.com/AlejandroTatum/cata_club/issues/1311
 Branch: `test/1311-acotar-metricas` (worktree `cata_club-worktrees/gentleman-1311`, cut from `origin/main` @ 35a92f0)
 Delivery strategy: single PR, squash auto-merge (forecast ~350 changed lines, tests+docs+small infra change)
-TDD: **on** (strict, session config). Runner: `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest <file>` (db-test on `localhost:5436`, single-tenant; never two backend suites at once).
+TDD: **on** (strict, session config). Runner: `cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest <file>` (db-test on `localhost:5436`, single-tenant; never two backend suites at once).
 RDD: on (global). Candidate = the work-unit commit, reviewed with `--base-ref origin/main --committed-only` before push.
 
 ## Objective
@@ -55,7 +55,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
   nuevo `test_la_edad_interpreta_un_created_at_naive_como_utc` falla con
   `TypeError: can't subtract offset-naive and offset-aware datetimes`
   (`app/infraestructura/metricas.py:73`). Revertido.
-- **GREEN** — `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_metricas.py -q` → 12 passed (eran 10; +2 nuevos: el de naive-UTC y el del clamp a 0).
+- **GREEN** — `cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest tests/test_metricas.py -q` → 12 passed (eran 10; +2 nuevos: el de naive-UTC y el del clamp a 0).
 - Cambios: acotado `3500 <= edad_enrollment <= 3700` y `0 <= edad_recuperacion <= 120` en la prueba pura; la prueba HTTP ahora captura `base_edad_<tabla>` y lee `cata_outbox_pendiente_mas_antiguo_segundos` con la ventana `max(base_edad, 3600) ± slack`; dos tests unitarios nuevos con una sesión doble que devuelve `(1, created_at)` por tabla.
 
 ### T2 (W2)
@@ -89,7 +89,7 @@ Close the five WARNING findings of the native review follow-up on the #1310 metr
   responde. El proceso fue **matado por `timeout`** (`exit_code=124`), es decir
   el connect quedó colgado más allá de los 8 s -- la prueba de que `pool_timeout`
   solo no acota el handshake. No se comiteó ninguna mutación.
-- **GREEN** — `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_metricas.py tests/test_db.py -q` → 14 passed (12 + 2 nuevos de `test_db.py`).
+- **GREEN** — `cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest tests/test_metricas.py tests/test_db.py -q` → 14 passed (12 + 2 nuevos de `test_db.py`).
 - Cambios: `db.py` suma `TIMEOUT_CONEXION_SEGUNDOS = 5` con rationale y la
   fábrica `crear_engine(database_url, timeout_conexion=...)` (mismos kwargs que
   antes + `connect_args`); nuevo `tests/test_db.py` con el doble de socket
