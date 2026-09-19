@@ -280,6 +280,39 @@ function EnrollWizard(): React.ReactElement {
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === effectiveSteps.length - 1;
 
+  /**
+   * #1332 (R3-001, review advisory de #1331): a completed `Stepper` pill or
+   * compact dot turns into a `<span>` the instant it becomes the active
+   * step, so the element that had focus is unmounted — the browser then
+   * drops focus to `<body>`, silently, for mouse and screen-reader users
+   * alike. This is the destination step's own `<h2>{STEP_LABELS[step]}</h2>`
+   * below — already the one heading that names every step correctly, the
+   * same one N01-N03 assert on in the Playwright suite — made a
+   * programmatic focus target (`tabIndex={-1}`: never in the Tab order,
+   * only reachable via `.focus()`).
+   *
+   * `stepHeadingRef` is the target; `focusStepHeadingOnNextRender` is a
+   * one-shot flag so ordinary forward/back navigation (`handleNext`,
+   * `handleBack`), which already lands focus sensibly via the button that
+   * was clicked, is left alone — only a Stepper-originated jump steals
+   * focus. The move happens in an effect keyed on `step`, not inline in the
+   * click handler, so it runs AFTER the heading's text has already
+   * re-rendered for the destination step.
+   */
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusStepHeadingOnNextRender = useRef(false);
+
+  useEffect(() => {
+    if (!focusStepHeadingOnNextRender.current) return;
+    focusStepHeadingOnNextRender.current = false;
+    stepHeadingRef.current?.focus();
+  }, [step]);
+
+  function handleStepperJump(index: number): void {
+    focusStepHeadingOnNextRender.current = true;
+    goToStep(effectiveSteps[index]);
+  }
+
   // Live validation: recomputed on every keystroke, but only SHOWN for a field
   // the visitor has already left, so a pristine form is never a wall of red.
   const fieldErrors = useMemo(() => validateEnrollFields(step, formData), [step, formData]);
@@ -1541,7 +1574,7 @@ function EnrollWizard(): React.ReactElement {
               current={currentIndex + 1}
               steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
               className="mt-page"
-              onStepClick={(index) => goToStep(effectiveSteps[index])}
+              onStepClick={handleStepperJump}
               showCount={!isFirst}
             />
           </div>
@@ -1639,7 +1672,11 @@ function EnrollWizard(): React.ReactElement {
                 alone. It takes the `title` step now: Graduate, 20px, uppercase,
                 flat tracking, and no weight class — the face has a single 400
                 cut. Same correction `PageHeader` and `StatCard` already had. */}
-            <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">
+            <h2
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="mb-page font-display text-lg uppercase tracking-flat text-ink"
+            >
               {STEP_LABELS[step]}
             </h2>
 

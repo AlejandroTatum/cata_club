@@ -184,6 +184,25 @@ describe("EnrollPage — the named stepper", () => {
     // Back on the student step, with what was already typed still there.
     expect(screen.getByLabelText(/^Nombres/)).toHaveValue("Sofia");
   });
+
+  // #1332 (R3-001, review advisory de #1331): clicking a completed pill
+  // turns it into a `<span>` — the element that had focus is gone — and
+  // focus used to fall all the way back to `<body>`, silently, for a
+  // sighted-mouse user and a screen-reader user alike.
+  it("moves focus to the destination step heading after a stepper jump", () => {
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    const stepper = screen.getByRole("list", { name: /pasos de la inscripción/i });
+    fireEvent.click(within(stepper).getByRole("button", { name: "Estudiante" }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: /datos del estudiante/i }),
+    );
+  });
 });
 
 // #312 / hallazgo #33 — same gap on the representative step (paso 3).
@@ -888,6 +907,24 @@ describe("EnrollPage — el conteo de pasos no cambia mientras se decide (#317 /
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(screen.getByText("Paso 2 de 5")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1332 (R3-003, review advisory de #1331) — `showCount` was only ever
+// asserted `false` on step 1 (`Stepper.test.tsx`'s own suite covers that
+// directly); nothing exercised the OTHER side of the same prop through
+// `EnrollPage` itself, once the wizard leaves step 1 and `showCount` flips
+// to `true` (`showCount={!isFirst}`).
+// ---------------------------------------------------------------------------
+describe("EnrollPage — el compacto nombra el paso con el total ya resuelto (#1332 R3-003)", () => {
+  it('dice "Paso 2 de 4 · Estudiante" al entrar al paso 2 como jugador', () => {
+    render(<EnrollPage />);
+
+    // Jugador (self) es la selección por defecto: 4 pasos, sin representante.
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(screen.getByText("Paso 2 de 4 · Estudiante")).toBeInTheDocument();
   });
 });
 
