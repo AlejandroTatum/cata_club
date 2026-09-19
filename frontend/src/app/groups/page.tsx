@@ -793,6 +793,7 @@ export default function GroupsPage(): React.ReactElement {
   async function submitCategoria(): Promise<void> {
     setFormSubmitting(true);
     setFormError(null);
+    setDuplicateCategoriaCodigo(null);
     const nombre = formData.nombre.trim();
     const dias = Array.from(selectedDias);
     // `edades` goes as typed, blanks included: this is a full editor, so
@@ -847,12 +848,18 @@ export default function GroupsPage(): React.ReactElement {
    */
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    // A new submit attempt always retires whatever error state the LAST one
+    // left behind (issue #1325): otherwise a stale duplicate-categoría banner
+    // — with its "Editar «X»" action — keeps showing next to field errors
+    // that describe a completely different problem, or after the client
+    // rejects the form before ever reaching the server again.
+    setFormError(null);
+    setDuplicateCategoriaCodigo(null);
     // Recomputed from scratch on every submit, so a mark never outlives what
     // it described: fixing the field and pressing "Guardar" again clears it.
     const errores = validarCategoria(formData, selectedDias.size);
     setFieldErrors(errores);
     if (Object.keys(errores).length > 0) return;
-    setFormError(null);
 
     if (editingGroup) {
       const diasAQuitar = editingGroup.rows.filter((row) => !selectedDias.has(row.diaSemana));

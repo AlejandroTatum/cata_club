@@ -2147,4 +2147,33 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     await screen.findByRole("heading", { name: "Editar categoría" });
     expect(screen.getByLabelText(/^Nombre/)).toHaveValue("Formativo");
   });
+
+  it("clears the stale duplicate-label banner once a later submit fails on a different error (issue #1325)", async () => {
+    mockCrearCategoria.mockRejectedValue(
+      new ApiClientError('Ya existe una categoría llamada "Formativo".', 400),
+    );
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Formativo" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await screen.findByRole("button", { name: "Editar «Formativo»" });
+
+    // A different problem now — no días selected — stops the submit before it
+    // ever reaches the server. The banner from the LAST attempt must not keep
+    // pointing at a categoría this attempt never named.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    await screen.findByText("Seleccione al menos un día.");
+    expect(
+      screen.queryByText('Ya existe una categoría llamada "Formativo".'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Editar «Formativo»" })).not.toBeInTheDocument();
+  });
 });
