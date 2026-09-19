@@ -398,15 +398,11 @@ describe("StudentPaymentsPage — arriving from the home band", () => {
 });
 
 describe("StudentPaymentsPage — the membership card", () => {
-  it("derives coverage from the furthest approved payment, not from the unpopulated membership.fechaFin", async () => {
+  it("reads coverage from MembershipSummary.cubiertoHasta, not from membership.fechaFin", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_AHEAD } },
     });
-    mockFetchPagosDePersona.mockResolvedValueOnce([
-      makePago({ id: 1, fechaFin: COVERAGE_END }),
-      makePago({ id: 2, fechaFin: COVERAGE_END_AHEAD }),
-    ]);
 
     render(<StudentPaymentsPage />);
 
