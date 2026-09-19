@@ -289,6 +289,23 @@ describe("StudentPage — contextual dependent CTA", () => {
     expect(link.closest("a")).toHaveAttribute("href", "/student/add-dependent");
   });
 
+  // Issue #1340 (review of #1318): `showAddDependentCta` used to read
+  // `representative || isPlayer` alone, which does not exclude a player who
+  // is STILL represented (own persona's `representanteId` set) — the
+  // backend rejects that alta with its own "already represented"
+  // precondition (`PersonaServicio.crear_representado_propio`), so the
+  // screen should not offer it either.
+  it("does not offer the add-dependent CTA to a self-managed player who is still represented", async () => {
+    mockFetchStudentPortal
+      .mockReset()
+      .mockResolvedValue({ ...PORTAL, self: { ...PORTAL.self!, representanteId: 5 } });
+
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByText("Agregar hijo o dependiente")).not.toBeInTheDocument();
+  });
+
   it("links to the authenticated add-dependent wizard once the account already represents a dependent", async () => {
     mockFetchStudentPortal
       .mockReset()

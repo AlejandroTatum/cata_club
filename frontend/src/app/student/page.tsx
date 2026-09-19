@@ -1221,15 +1221,15 @@ function ActivePortalView({
   // #1318: "Agregar hijo o dependiente" is no longer gated on `representative`
   // alone — a self-managed player (`isPlayer`, no dependents yet) can reach
   // it too, and `/student/add-dependent` grants REPRESENTANTE on save if the
-  // account doesn't have it yet (see that page's own notice). `showAddDependentCta`
-  // is written out as its own condition rather than folded into
-  // `hasAccountActions` directly: `derivePortalMode` (`student-utils.ts`)
-  // only ever sends `isPlayer || representative` into THIS view (the zero-
-  // signal account it gates on lands on `PendingEnrollmentView` instead), so
-  // the condition is always true here — but naming it keeps that invariant
-  // visible instead of a bare `true`, and the JOIN CTA below still needs its
-  // own boolean regardless.
-  const showAddDependentCta = representative || isPlayer;
+  // account doesn't have it yet (see that page's own notice).
+  //
+  // #1340: `representative || isPlayer` alone does not exclude a player who
+  // is STILL represented — the same self-service command rejects that alta
+  // with its own precondition (`PersonaServicio.crear_representado_propio`:
+  // `persona.representante_id is not None`), so this mirrors that exact
+  // check instead of letting the visitor find out from a failed submit.
+  const selfRepresented = data.self?.representanteId != null;
+  const showAddDependentCta = (representative || isPlayer) && !selfRepresented;
   const showJoinAsPlayerCta = !isPlayer;
   const hasAccountActions = showAddDependentCta || showJoinAsPlayerCta;
 
