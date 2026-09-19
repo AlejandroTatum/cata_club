@@ -128,6 +128,7 @@ import {
   DIA_LABELS,
   formatTime,
   toStripDias,
+  puedeEliminarCategoria,
   type CategoriaCard,
   type CategoriaSinHorarios,
   type PersonasPorHorario,
@@ -793,6 +794,7 @@ export default function GroupsPage(): React.ReactElement {
   async function submitCategoria(): Promise<void> {
     setFormSubmitting(true);
     setFormError(null);
+    setDuplicateCategoriaCodigo(null);
     const nombre = formData.nombre.trim();
     const dias = Array.from(selectedDias);
     // `edades` goes as typed, blanks included: this is a full editor, so
@@ -847,12 +849,18 @@ export default function GroupsPage(): React.ReactElement {
    */
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    // A new submit attempt always retires whatever error state the LAST one
+    // left behind (issue #1325): otherwise a stale duplicate-categoría banner
+    // — with its "Editar «X»" action — keeps showing next to field errors
+    // that describe a completely different problem, or after the client
+    // rejects the form before ever reaching the server again.
+    setFormError(null);
+    setDuplicateCategoriaCodigo(null);
     // Recomputed from scratch on every submit, so a mark never outlives what
     // it described: fixing the field and pressing "Guardar" again clears it.
     const errores = validarCategoria(formData, selectedDias.size);
     setFieldErrors(errores);
     if (Object.keys(errores).length > 0) return;
-    setFormError(null);
 
     if (editingGroup) {
       const diasAQuitar = editingGroup.rows.filter((row) => !selectedDias.has(row.diaSemana));
@@ -1155,7 +1163,7 @@ export default function GroupsPage(): React.ReactElement {
             nothing to delete from this form until its first save creates the
             horarios, so the control would only promise an action that cannot
             run. */}
-        {editingGroup !== null && editingGroup.rows.length > 0 && (
+        {puedeEliminarCategoria(editingGroup) && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">
               <p className="text-sm font-semibold text-state-bad">Eliminar esta categoría</p>

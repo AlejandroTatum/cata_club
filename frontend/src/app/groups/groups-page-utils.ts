@@ -329,7 +329,9 @@ export function buildCatalogoSinHorarios(
     });
   }
   return pendientes.sort(
-    (a, b) => a.horaInicio.localeCompare(b.horaInicio) || a.label.localeCompare(b.label),
+    (a, b) =>
+      a.horaInicio.localeCompare(b.horaInicio) ||
+      a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
   );
 }
 
@@ -392,4 +394,23 @@ export function countInscriptos(
     for (const personaId of roster) distinct.add(personaId);
   }
   return distinct.size;
+}
+
+// ---------------------------------------------------------------------------
+// Delete-categoría zone gating (issue #1325)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the edit form's "Eliminar esta categoría" zone has anything to
+ * delete.
+ *
+ * A catalog-only categoría being scheduled for the first time (#1315) opens
+ * the edit form with `rows: []` — there is no `horario_entrenamiento` row
+ * yet, so the control would only promise an action that cannot run until the
+ * first save creates one.
+ */
+export function puedeEliminarCategoria(
+  editingGroup: HorarioGroup | null,
+): editingGroup is HorarioGroup {
+  return editingGroup !== null && editingGroup.rows.length > 0;
 }
