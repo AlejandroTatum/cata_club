@@ -204,6 +204,7 @@ import { personaIdViaOwnLogin } from "./helpers/persona-lookup";
 import { rejectPendingPayments } from "./helpers/pending-payments";
 import { registerCashPayment } from "./helpers/register-cash-payment";
 import { findDiscountByName } from "./helpers/find-discount";
+import { runCleanupWithoutMasking } from "./helpers/finally-guard";
 
 /** Sembrados por `backend/scripts/seed_dev_base.py`. */
 const ADMIN_EMAIL = "admin@cataclub.com";
@@ -347,6 +348,18 @@ async function comoPedro<T>(browser: Browser, run: (alumnoPage: Page) => Promise
 }
 
 /**
+ * Mismo formato que `formatDate` (`src/lib/format-utils.ts`): `dd/mm/yyyy`
+ * leído en hora LOCAL, sin `toLocaleDateString`. Repetido acá en vez de
+ * importado — los specs de `tests/e2e` no resuelven el alias `@/` de la app
+ * (ningún otro spec de este directorio lo usa) — para comparar el `<h2>`
+ * contra el mismo `cubiertoHasta` que la pantalla ya formatea.
+ */
+function formatFechaDDMMYYYY(isoDate: string): string {
+  const [year, month, day] = isoDate.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
+/**
  * Lee `locator.textContent()` recién cuando el valor se ESTABILIZA (dos
  * lecturas consecutivas iguales) — ni "el elemento existe" ni "el elemento
  * es visible" prueban que el fetch detrás terminó. Issue #1081: capturar el
@@ -360,18 +373,6 @@ async function comoPedro<T>(browser: Browser, run: (alumnoPage: Page) => Promise
  * puede leerse en falso si todavía no llegó a montarse — comparar dos
  * lecturas sucesivas no depende de ninguna de las dos cosas.
  */
-/**
- * Mismo formato que `formatDate` (`src/lib/format-utils.ts`): `dd/mm/yyyy`
- * leído en hora LOCAL, sin `toLocaleDateString`. Repetido acá en vez de
- * importado — los specs de `tests/e2e` no resuelven el alias `@/` de la app
- * (ningún otro spec de este directorio lo usa) — para comparar el `<h2>`
- * contra el mismo `cubiertoHasta` que la pantalla ya formatea.
- */
-function formatFechaDDMMYYYY(isoDate: string): string {
-  const [year, month, day] = isoDate.slice(0, 10).split("-");
-  return `${day}/${month}/${year}`;
-}
-
 async function leerTextoEstable(locator: Locator, timeoutMs = 20_000): Promise<string> {
   let anterior: string | null = null;
   let huboLectura = false;
@@ -477,6 +478,7 @@ test("un beneficio del 100% aplica cobertura sin generar ningún pago, y la pant
     .get(`${E2E_BASE_URL}/api/membresias/pagos/persona/${pedroId}`)
     .then((r) => r.json())) as unknown[];
 
+  let primaryError: unknown;
   try {
     await comoPedro(browser, async (alumnoPage) => {
       // `toBeVisible()` en el <h2> NO dice que el fetch de pagos resolvió —
@@ -536,6 +538,9 @@ test("un beneficio del 100% aplica cobertura sin generar ningún pago, y la pant
         "La cobertura debería haber avanzado: aplicar un beneficio del 100% otorga un período nuevo",
       ).not.toBe(coberturaAntes);
     });
+  } catch (error: unknown) {
+    primaryError = error;
+    throw error;
   } finally {
     // Ver el encabezado del archivo: un beneficio del 100% le cambia a Pedro
     // el botón de pago entero — `payments.live.spec.ts` corre después y
@@ -554,11 +559,35 @@ test("un beneficio del 100% aplica cobertura sin generar ningún pago, y la pant
     // acá. Mismo patrón que `rejectPendingPayments` (login fresco antes de
     // la mutación de higiene) en vez de asumir que la cookie de `page` sigue
     // viva.
-    const relogin = await page.request.post("/api/auth/login", {
-      data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-    });
-    expect(relogin.ok(), `No se pudo reautenticar como admin para la limpieza: ${relogin.status()}`).toBe(true);
-    await retirarBeneficio(page, pedroId);
+    //
+    // Revisión nativa de #1352 (R2-003/R3-cleanup-expect-masks-primary-
+    // failure): un `finally` que lanza reemplaza la excepción que ya estaba
+    // en vuelo — si la aserción de arriba falló Y esta reautenticación
+    // también falla (mismo backend caído tumba a las dos), el reporte se
+    // quedaba con el 401 de acá y perdía el diff real. `runCleanupWithout
+    // Masking` reporta esa falla de limpieza aparte en vez de reemplazar
+    // `primaryError`, y solo la relanza cuando no había ningún error
+    // primario que proteger.
+    await runCleanupWithoutMasking(
+      primaryError,
+      async () => {
+        const relogin = await page.request.post("/api/auth/login", {
+          data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+        });
+        expect(relogin.ok(), `No se pudo reautenticar como admin para la limpieza: ${relogin.status()}`).toBe(
+          true,
+        );
+        await retirarBeneficio(page, pedroId);
+      },
+      (cleanupError: unknown) => {
+        const detalle = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+        // eslint-disable-next-line no-console -- única señal visible de que
+        // Pedro puede haber quedado con el beneficio sin retirar.
+        console.error(
+          `Limpieza del beneficio del 100% falló tras una aserción que ya había fallado: ${detalle}`,
+        );
+      },
+    );
   }
 
   const pagosDespues = (await request
