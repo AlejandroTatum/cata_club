@@ -1037,8 +1037,10 @@ describe("TrainerAttendancePage — named stepper", () => {
     expect(within(stepper).getByText("Horario")).toBeInTheDocument();
     expect(within(stepper).getByText("Pasar lista")).toBeInTheDocument();
     expect(within(stepper).getByText("Confirmar")).toBeInTheDocument();
-    // The old "Paso 1 de 3" progress bar is gone.
-    expect(screen.queryByText(/Paso 1 de 3/)).not.toBeInTheDocument();
+    // The old BARE "Paso 1 de 3" progress bar is gone — #1321's compact
+    // phone summary also says "Paso 1 de 3", but never without a name
+    // attached (" · Horario"), which is exactly what this guards against.
+    expect(screen.queryByText(/^Paso 1 de 3$/)).not.toBeInTheDocument();
   });
 
   it("carries the decision already made into step 1's name", async () => {
