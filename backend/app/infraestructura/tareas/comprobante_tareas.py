@@ -15,6 +15,7 @@ de ReportLab + Cloudinary corre en el worker.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -38,6 +39,51 @@ logger = logging.getLogger("cataclub.tareas.comprobante")
 # Más nuevo que esto se deja en paz: el disparo original puede seguir en vuelo
 # (la propia tarea reintenta con backoff hasta 5 veces).
 UMBRAL_RECONCILIACION_MINUTOS = 10
+
+# Cantidad de caracteres hexadecimales del sufijo de `public_id_comprobante`.
+# 12 caracteres (48 bits) alcanzan para que una colisión accidental entre dos
+# pagos distintos sea despreciable frente al resto de las fuentes de fallo
+# del pipeline (issue #1327); no hace falta el hash SHA-256 completo en un
+# `public_id` pensado para leerse.
+_LARGO_SUFIJO_PUBLIC_ID = 12
+
+
+def public_id_comprobante(pago: Pago) -> str:
+    """`public_id` de Cloudinary para el comprobante PDF de `pago` (issue
+    #1327).
+
+    Antes era `comprobante-{pago.id:08d}` a secas: determinístico solo por
+    `id` de pago. Eso colisiona entre dos "vidas" de la misma base -- un
+    reprovisionamiento (restore de backup, reset de esquema) que recicla los
+    mismos ids autoincrementales pero NO vacía la carpeta de Cloudinary del
+    entorno. Con `overwrite=False` (el default histórico de
+    `subir_pdf_membresia`), Cloudinary conservaba el recurso de la vida
+    vieja y el pago nuevo terminaba sirviendo el PDF -- y la identidad -- de
+    otra persona.
+
+    El sufijo agrega `fecha_validacion` (y `persona_id`, por si dos pagos se
+    aprobaran en el mismo instante) al hash: sigue siendo determinístico
+    para el MISMO pago -- necesario para que la carrera de inserción de
+    `generar_comprobante_pdf_tarea` (dos disparos concurrentes suben al
+    mismo `public_id`, ver más abajo) y un reintento de Celery sigan
+    apuntando al mismo recurso -- pero distingue dos vidas de la base porque
+    la fecha en la que se aprobó cada una difiere.
+
+    Se exige `fecha_validacion` no nulo: la fija `PagoServicio.validar_pago`
+    ANTES de disparar esta tarea. Si llegara en `None` acá sería un
+    invariante roto en otra parte del código -- fallar ruidoso es preferible
+    a tapar el hueco reusando el `public_id` viejo, que es exactamente el
+    bug que este issue corrige.
+    """
+    if pago.fecha_validacion is None:
+        raise ValueError(
+            f"Pago {pago.id} no tiene fecha_validacion; no se puede derivar "
+            "un public_id de comprobante determinístico y único por "
+            "aprobación (issue #1327)."
+        )
+    clave = f"{pago.id}:{pago.fecha_validacion.isoformat()}:{pago.persona_id}"
+    sufijo = hashlib.sha256(clave.encode("utf-8")).hexdigest()[:_LARGO_SUFIJO_PUBLIC_ID]
+    return f"comprobante-{pago.id:08d}-{sufijo}"
 
 
 @celery_app.task(
@@ -98,8 +144,16 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
             motivo_rechazo=pago.motivo_rechazo,
         )
 
-        public_id = f"comprobante-{pago.id:08d}"
-        subir_pdf_membresia(pdf_bytes, public_id)
+        public_id = public_id_comprobante(pago)
+        # `sobreescribir=True`: el `public_id` ya es único por aprobación
+        # (issue #1327), así que la única forma de reintentar contra el
+        # MISMO `public_id` es este mismo pago volviendo a subir sus propios
+        # bytes (reintento de Celery, o la carrera de dos disparos
+        # concurrentes que se resuelve más abajo por `IntegrityError`). Una
+        # colisión ajena queda igual de imposible en la práctica -- el hash
+        # incluye `fecha_validacion` -- y si ocurriera, `subir_pdf_membresia`
+        # deja un WARNING visible con el `existing=true` del SDK.
+        subir_pdf_membresia(pdf_bytes, public_id, sobreescribir=True)
 
         # Se persiste el public_id, NO la URL que devuelve el SDK: el PDF se
         # sube como `type="authenticated"` (hallazgo de privacidad "voucher
@@ -158,8 +212,12 @@ def reconciliar_comprobantes_faltantes(self) -> dict:
     mano que nunca pasaron por `validar_pago`.
 
     Es seguro re-despachar: `generar_comprobante_pdf_tarea` no regenera si el
-    comprobante ya existe, y el public_id determinístico en Cloudinary
-    sobrescribe en vez de duplicar (ver su docstring).
+    comprobante ya existe, y el `public_id` de `public_id_comprobante` es
+    determinístico por pago -- un redespacho del mismo pago sube al MISMO
+    `public_id` con `sobreescribir=True`, así que sobrescribe en vez de
+    duplicar (ver su docstring; antes de #1327 el `public_id` no era único
+    por aprobación y `overwrite` quedaba en `False`, así que esta misma
+    afirmación era falsa en la práctica).
     """
     limite = datetime.now(timezone.utc) - timedelta(minutes=UMBRAL_RECONCILIACION_MINUTOS)
 

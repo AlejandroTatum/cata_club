@@ -333,6 +333,13 @@ def subir_pdf_membresia(
         autorizada con `generar_url_firmada` (hallazgo de privacidad
         "voucher no enumerable": un `public_id` secuencial bajo `type=upload`
         era una URL pública, enumerable sin autenticación).
+
+        Issue #1327: si Cloudinary responde `existing: true` (el `public_id`
+        YA tenía un recurso antes de esta subida), queda un WARNING en el log
+        con el `public_id` -- la subida sigue sin fallar (el caso normal es
+        el propio pago reintentando su `public_id` determinístico), pero una
+        colisión con el recurso de OTRO pago queda visible para auditar en
+        vez de reemplazarse en silencio.
     """
     _configurar_cliente()
 
@@ -350,9 +357,19 @@ def subir_pdf_membresia(
         "format": "pdf",
     }
 
-    return _subir(
-        contenido_pdf, upload_kwargs, f"PDF de membresía (public_id={nombre_publico})"
+    resultado = _subir(
+        contenido_pdf, upload_kwargs, f"PDF de membresía (public_id={nombre_publico})",
+        devolver_resultado_completo=True,
     )
+
+    if resultado.get("existing"):
+        logger.warning(
+            "Cloudinary reporta `existing=true` al subir el PDF de membresía "
+            "(public_id=%s): el public_id ya tenía un recurso antes de esta "
+            "subida.", nombre_publico,
+        )
+
+    return resultado["secure_url"]
 
 
 def subir_voucher_pago(
