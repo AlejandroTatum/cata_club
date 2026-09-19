@@ -347,8 +347,24 @@ qa-reset: ## Volver el entorno de QA a su estado recien sembrado (sin rebuild)
 # se imprime el valor, solo si está presente. Esos specs lo leen vía
 # `process.env.E2E_CLOUDINARY_CONFIGURED` y se saltean con motivo explícito
 # cuando da `0`.
+#
+# Revisión nativa de #1352 (R4-001): "credencial ausente" y "el propio exec
+# falló" NO son el mismo caso. Antes, cualquier falla del `compose exec`
+# (proyecto mal levantado, `QA_COMPOSE`/`QA_ENV` equivocado, el daemon de
+# Docker con error, un backend reiniciándose) caía en el `|| echo 0` y se
+# leía exactamente como "Cloudinary no configurado" -- los tres specs de
+# voucher se salteaban en silencio, con un motivo que afirma justo lo
+# contrario de lo que pasó. Ahora la salida del `exec` (stdout+stderr) se
+# captura entera: si no es literalmente `0` ni `1`, el target falla fuerte
+# en vez de asumir "no configurado", y el valor calculado se imprime una vez
+# para que la causa del salteo (o su ausencia) quede visible en el log.
 qa-live: ## Correr los specs E2E que atraviesan el backend real de QA
-	@cloudinary=$$($(QA_ENV) $(QA_COMPOSE) exec -T backend sh -c '[ -n "$$CLOUDINARY_API_KEY" ] && echo 1 || echo 0' 2>/dev/null || echo 0); \
+	@cloudinary=$$($(QA_ENV) $(QA_COMPOSE) exec -T backend sh -c '[ -n "$$CLOUDINARY_API_KEY" ] && echo 1 || echo 0' 2>&1); \
+	case "$$cloudinary" in \
+		0|1) ;; \
+		*) echo "qa-live: no se pudo determinar E2E_CLOUDINARY_CONFIGURED -- el exec al backend falló: $$cloudinary" >&2; exit 1 ;; \
+	esac; \
+	echo "qa-live: E2E_CLOUDINARY_CONFIGURED=$$cloudinary"; \
 	cd frontend && E2E_LIVE=1 E2E_CLOUDINARY_CONFIGURED=$$cloudinary PLAYWRIGHT_BASE_URL=http://localhost:3000 \
 		pnpm exec playwright test --project=e2e-live
 
