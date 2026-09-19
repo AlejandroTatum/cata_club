@@ -32,9 +32,9 @@
  *   (issue #1328) — the backend's own combined anchor across an APPROVED
  *   `Pago` and a `CoberturaBonificada` (`PagoServicio._fecha_fin_maxima_
  *   combinada`), so a benefit applied through `ApplyBenefitForm` shows up
- *   here too. `resolveCoverageEnd` (APPROVED payments only) is kept as a
- *   fallback for when the backend omits that field, never the primary
- *   reading.
+ *   here too. `student-adapter.ts` normalizes an absent field to `null`, so
+ *   there is no real payload where it is `undefined` and no payments-derived
+ *   fallback to read instead.
  * - **An amount due.** There is no debt concept in the backend: a Membresia
  *   carries a `montoAplicado` (the plan's price), not a balance. The card
  *   reports the monthly price it can prove and lets the reader enter what they
@@ -94,7 +94,6 @@ import {
   describePaymentSituation,
   firstNameOf,
   isMinor,
-  resolveCoverageEnd,
 } from "../student-utils";
 import ManagedStudentPicker, {
   useManagedProfiles,
@@ -2007,14 +2006,10 @@ function PaymentsContent({
   );
   // Issue #1328: `MembershipSummary.cubiertoHasta` (the backend's own
   // combined anchor over an APPROVED `Pago` AND a `CoberturaBonificada`) is
-  // the primary reading, so a benefit applied through `ApplyBenefitForm`
-  // shows up here immediately. `resolveCoverageEnd` (APPROVED payments only)
-  // is kept as the fallback for an older backend that omits the field.
-  const coverageEnd = useMemo(() => {
-    const cubiertoHasta = selectedProfile?.membership?.cubiertoHasta;
-    if (cubiertoHasta !== undefined) return cubiertoHasta;
-    return resolveCoverageEnd(pagos);
-  }, [selectedProfile, pagos]);
+  // the only reading, so a benefit applied through `ApplyBenefitForm` shows
+  // up here immediately. `student-adapter.ts` normalizes an absent field to
+  // `null`, so there is no real payload where it is `undefined`.
+  const coverageEnd = selectedProfile?.membership?.cubiertoHasta ?? null;
   const counts = useMemo(() => countPagosByStatus(pagos), [pagos]);
   const filteredPagos = useMemo(
     () => sortPagosByDate(filterPagosByStatus(pagos, filter)),
