@@ -483,4 +483,26 @@ describe("puedeEliminarCategoria", () => {
   it("hides the delete zone when no group is being edited", () => {
     expect(puedeEliminarCategoria(null)).toBe(false);
   });
+
+  it("keeps a non-null group usable inside the negative branch (issue #1343)", () => {
+    // Type-level regression pin: a type predicate declaring
+    // `editingGroup is HorarioGroup` lies on this exact input (a real
+    // `HorarioGroup` with empty `rows`, which the predicate still reports as
+    // `false`). Because the argument's own static type already IS
+    // `HorarioGroup`, TypeScript narrows it to `never` inside
+    // `if (!puedeEliminarCategoria(catalogoUnicamente))`, so the `.rows`
+    // access below fails `pnpm type-check` ("Property 'rows' does not exist
+    // on type 'never'") while the predicate signature stands. A plain
+    // `boolean` return carries no such claim, so the access stays valid.
+    const catalogoUnicamente: HorarioGroup = {
+      key: "INFANTIL",
+      categoria: "INFANTIL",
+      horaInicio: "16:00",
+      horaFin: "17:00",
+      rows: [],
+    };
+    if (!puedeEliminarCategoria(catalogoUnicamente)) {
+      expect(catalogoUnicamente.rows).toHaveLength(0);
+    }
+  });
 });
