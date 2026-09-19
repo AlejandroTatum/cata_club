@@ -1,10 +1,16 @@
+import logging
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+from typing import get_args
+
+import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago
 from app.dominio.modelos import AsignacionDescuento, CoberturaBonificada, Descuento, Membresia, Pago, Persona
+from app.presentacion.routers import membresias_pagos_router as membresias_pagos_router_mod
 from app.seguridad.gestor_auth import GestorAutenticacion
+from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaResponseDTO
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_pago_orm, crear_persona_orm, crear_tipo_membresia_orm,
 )
@@ -961,6 +967,184 @@ def test_crear_membresia_incluye_la_clave_cubierto_hasta(client):
     assert resp.status_code == 201
     assert "cubiertoHasta" in resp.json()
     assert resp.json()["cubiertoHasta"] is None
+
+
+def _expone_membresia_response_dto(response_model) -> bool:
+    """Verdadero si `response_model` es `MembresiaResponseDTO` directo, una
+    lista de esa clase, o el campo `items` de un `PaginatedResponse[...]` --
+    las tres formas en que el router expone el DTO."""
+    if response_model is MembresiaResponseDTO:
+        return True
+    if MembresiaResponseDTO in get_args(response_model):
+        return True
+    items_field = getattr(response_model, "model_fields", {}).get("items")
+    if items_field is not None:
+        return MembresiaResponseDTO in get_args(items_field.annotation)
+    return False
+
+
+def _cubierto_hasta_presente_en(cuerpo) -> bool:
+    """Reduce las tres formas de respuesta (objeto, lista, paginada) a "toda
+    fila trae la clave `cubiertoHasta`"."""
+    if isinstance(cuerpo, dict) and "items" in cuerpo:
+        filas = cuerpo["items"]
+    elif isinstance(cuerpo, list):
+        filas = cuerpo
+    else:
+        filas = [cuerpo]
+    assert filas, "la ruta no devolvió ninguna fila para verificar"
+    return all("cubiertoHasta" in fila for fila in filas)
+
+
+def test_todo_endpoint_que_expone_membresia_response_dto_incluye_cubierto_hasta(client, db_session):
+    """Issue #1349 (R2-002): "todo endpoint que devuelve `MembresiaResponseDTO`
+    pasa por `_con_cubierto_hasta` o `_recien_creada_sin_cobertura`" vivía
+    solo en un comentario. Este test itera las rutas REALES del router
+    (nunca una lista copiada a mano) y las compara contra el registro de
+    llamadas de abajo -- si el router agrega o quita una ruta que expone el
+    DTO, el test falla pidiendo actualizar el registro, en vez de quedar
+    afuera en silencio."""
+    persona_para_mutar = crear_persona_orm(db_session, cedula_valida(940), nombres="Muta", apellidos="Ble")
+    tipo_original = crear_tipo_membresia_orm(db_session)
+    membresia_para_mutar = crear_membresia_orm(
+        db_session, persona_para_mutar, tipo_original, EstadoMembresia.ACTIVA,
+    )
+    persona_para_crear = crear_persona_orm(db_session, cedula_valida(941), nombres="Alta", apellidos="Nueva")
+    persona_portal = crear_persona_orm(db_session, cedula_valida(942), nombres="Portal", apellidos="Self")
+    db_session.commit()
+    tipo_nuevo = _crear_tipo_membresia(client)
+
+    def _llamar_propia():
+        from main import app as fastapi_app
+        anterior = fastapi_app.dependency_overrides.get(GestorAutenticacion.decodificar_token)
+        fastapi_app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+            "sub": "portal@cataclub.test", "persona_id": persona_portal.id, "roles": ["REPRESENTANTE"],
+        }
+        try:
+            return client.post(
+                "/api/v1/membresias/propia", json={"tipo_membresia_id": tipo_original.id},
+            )
+        finally:
+            if anterior is not None:
+                fastapi_app.dependency_overrides[GestorAutenticacion.decodificar_token] = anterior
+
+    llamadas_por_ruta = {
+        ("POST", "/membresias/"): lambda: client.post(
+            "/api/v1/membresias/",
+            json={
+                "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+                "persona_id": persona_para_crear.id, "tipo_membresia_id": tipo_original.id,
+            },
+        ),
+        ("POST", "/membresias/propia"): _llamar_propia,
+        ("GET", "/membresias/"): lambda: client.get("/api/v1/membresias/"),
+        ("GET", "/membresias/mias"): lambda: client.get(
+            f"/api/v1/membresias/mias?persona_id={persona_para_mutar.id}"
+        ),
+        ("GET", "/membresias/persona/{persona_id}"): lambda: client.get(
+            f"/api/v1/membresias/persona/{persona_para_mutar.id}"
+        ),
+        ("GET", "/membresias/{membresia_id}"): lambda: client.get(
+            f"/api/v1/membresias/{membresia_para_mutar.id}"
+        ),
+        ("POST", "/membresias/{membresia_id}/suspender"): lambda: client.post(
+            f"/api/v1/membresias/{membresia_para_mutar.id}/suspender", json={"motivo": "motivo"},
+        ),
+        ("POST", "/membresias/{membresia_id}/reactivar"): lambda: client.post(
+            f"/api/v1/membresias/{membresia_para_mutar.id}/reactivar", json={"motivo": "motivo"},
+        ),
+        ("POST", "/membresias/{membresia_id}/cambiar-plan"): lambda: client.post(
+            f"/api/v1/membresias/{membresia_para_mutar.id}/cambiar-plan",
+            json={"nuevo_tipo_membresia_id": tipo_nuevo["id"]},
+        ),
+    }
+
+    rutas_del_router = {
+        (metodo, route.path)
+        for route in membresias_pagos_router_mod.router.routes
+        for metodo in route.methods
+        if _expone_membresia_response_dto(getattr(route, "response_model", None))
+    }
+    assert rutas_del_router == set(llamadas_por_ruta), (
+        "el router agregó o quitó una ruta que expone MembresiaResponseDTO; "
+        "actualizar el registro de llamadas de este test"
+    )
+
+    for (metodo, ruta), llamar in llamadas_por_ruta.items():
+        respuesta = llamar()
+        assert respuesta.status_code < 300, f"{metodo} {ruta}: {respuesta.text}"
+        assert _cubierto_hasta_presente_en(respuesta.json()), f"{metodo} {ruta} no expone cubiertoHasta"
+
+
+# --- Issue #1349 (R4-002): la mutación de suspender/reactivar/cambiar-plan
+# YA ocurrió (cada servicio hace su propio commit) antes de intentar leer
+# `cubierto_hasta` de vuelta; si esa lectura falla, el admin ve un 500 por
+# una acción que sí surtió efecto. El id de la membresía queda en el log
+# para que sea diagnosticable -- estos tres tests parchean el helper de
+# lectura para que reviente y verifican que el log lo registra.
+def test_suspender_membresia_loguea_el_id_si_falla_el_enriquecimiento(
+    client, db_session, monkeypatch, caplog,
+):
+    persona = crear_persona_orm(db_session, cedula_valida(950))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    db_session.commit()
+
+    def _falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado de enriquecimiento")
+
+    monkeypatch.setattr(membresias_pagos_router_mod, "_con_cubierto_hasta", _falla)
+
+    with caplog.at_level(logging.ERROR, logger="cataclub.membresias_pagos"):
+        with pytest.raises(RuntimeError):
+            client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
+
+    assert str(membresia.id) in caplog.text
+
+
+def test_reactivar_membresia_loguea_el_id_si_falla_el_enriquecimiento(
+    client, db_session, monkeypatch, caplog,
+):
+    persona = crear_persona_orm(db_session, cedula_valida(951))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    db_session.commit()
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
+
+    def _falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado de enriquecimiento")
+
+    monkeypatch.setattr(membresias_pagos_router_mod, "_con_cubierto_hasta", _falla)
+
+    with caplog.at_level(logging.ERROR, logger="cataclub.membresias_pagos"):
+        with pytest.raises(RuntimeError):
+            client.post(f"/api/v1/membresias/{membresia.id}/reactivar", json={"motivo": "motivo"})
+
+    assert str(membresia.id) in caplog.text
+
+
+def test_cambiar_plan_membresia_loguea_el_id_si_falla_el_enriquecimiento(
+    client, db_session, monkeypatch, caplog,
+):
+    persona = crear_persona_orm(db_session, cedula_valida(952))
+    tipo_actual = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo_actual, EstadoMembresia.ACTIVA)
+    db_session.commit()
+    tipo_nuevo = _crear_tipo_membresia(client)
+
+    def _falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado de enriquecimiento")
+
+    monkeypatch.setattr(membresias_pagos_router_mod, "_con_cubierto_hasta", _falla)
+
+    with caplog.at_level(logging.ERROR, logger="cataclub.membresias_pagos"):
+        with pytest.raises(RuntimeError):
+            client.post(
+                f"/api/v1/membresias/{membresia.id}/cambiar-plan",
+                json={"nuevo_tipo_membresia_id": tipo_nuevo["id"]},
+            )
+
+    assert str(membresia.id) in caplog.text
 
 
 # --- E04-RF002: gratuidad del 4to miembro familiar ---------------------------

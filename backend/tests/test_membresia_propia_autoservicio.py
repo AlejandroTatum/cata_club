@@ -143,6 +143,28 @@ def test_endpoint_propia_sin_token_responde_401(client_sin_token):
     assert respuesta.status_code == 401
 
 
+def test_endpoint_propia_incluye_la_clave_cubierto_hasta(client, db_session):
+    """Issue #1349 (R3-001): el único endpoint recableado en #1337 sin test
+    del contrato -- el 201 debe traer `cubiertoHasta` en el cuerpo (`None`
+    por construcción, ver `membresias_pagos_router._recien_creada_sin_
+    cobertura`), y el flujo de rol del portal (REPRESENTANTE, nunca
+    ADMINISTRADOR) sigue intacto."""
+    representante = crear_persona_orm(db_session, cedula_valida(746), nombres="Nueva", apellidos="Cuenta")
+    tipo = crear_tipo_membresia_orm(db_session)
+    db_session.commit()
+
+    _autenticar_como(representante.id, ["REPRESENTANTE"])
+    respuesta = client.post(
+        "/api/v1/membresias/propia", json={"tipo_membresia_id": tipo.id},
+    )
+
+    assert respuesta.status_code == 201, respuesta.text
+    cuerpo = respuesta.json()
+    assert cuerpo["personaId"] == representante.id
+    assert "cubiertoHasta" in cuerpo
+    assert cuerpo["cubiertoHasta"] is None
+
+
 def test_endpoint_propia_rechaza_a_un_entrenador(client, db_session):
     """Independent-verification fix: `POST /membresias/propia` está
     restringido a los dos roles del portal (REPRESENTANTE, ALUMNO) -- un
