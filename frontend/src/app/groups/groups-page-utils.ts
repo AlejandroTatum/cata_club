@@ -8,6 +8,7 @@
 import { DIA_SEMANA_LABELS } from "@/app/attendance/attendance-utils";
 import type { HorarioGroup, HorarioGroupRow } from "@/lib/groups-utils";
 import type { AlumnoHorario, SolapeHorario } from "@/services/api";
+import type { CategoriaInfo } from "@/services/categorias";
 import type { DiaSemana } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -276,6 +277,95 @@ export function buildDiaTrack(
 ): string[] {
   const present = new Set([...permitidos, ...dias]);
   return DIA_ORDER.filter((dia) => present.has(dia));
+}
+
+// ---------------------------------------------------------------------------
+// Catalog-only categorías — fresh install (issue #1315)
+// ---------------------------------------------------------------------------
+
+/**
+ * A categoría the backend catalog knows about but that has no
+ * `horario_entrenamiento` rows yet.
+ *
+ * On a fresh install this is ALL of them: migration `a4e7c2f9b1d8` seeds the
+ * catalog and its `categoria_horario_dia` días and creates zero schedules (the
+ * catalog / schedules split, #1248). Before this shape existed the screen
+ * rendered its "no categorías configuradas" empty state over five real
+ * categorías, so the admin's only visible exit was a duplicate-label 400.
+ */
+export interface CategoriaSinHorarios {
+  /** Raw backend `categoria` código — the card's identity and React key. */
+  categoria: string;
+  label: string;
+  horaInicio: string;
+  horaFin: string;
+  /** Días permitidos from the catalog (`categoria_horario_dia`), backend format. */
+  dias: string[];
+  edades: string | null;
+}
+
+/**
+ * Catalog entries with no schedules yet, ordered by start time then label —
+ * the same order `buildCategoriaCards` gives the real cards.
+ *
+ * `categoriasConHorarios` is the set of `categoria` codes that already have at
+ * least one card, so a catalog entry never appears twice on the screen.
+ */
+export function buildCatalogoSinHorarios(
+  categorias: Partial<Record<string, CategoriaInfo>>,
+  categoriasConHorarios: readonly string[],
+): CategoriaSinHorarios[] {
+  const conHorarios = new Set(categoriasConHorarios);
+  const pendientes: CategoriaSinHorarios[] = [];
+  for (const [categoria, info] of Object.entries(categorias)) {
+    if (!info || conHorarios.has(categoria)) continue;
+    pendientes.push({
+      categoria,
+      label: info.label,
+      horaInicio: info.horaInicio,
+      horaFin: info.horaFin,
+      dias: info.dias,
+      edades: info.edades,
+    });
+  }
+  return pendientes.sort(
+    (a, b) => a.horaInicio.localeCompare(b.horaInicio) || a.label.localeCompare(b.label),
+  );
+}
+
+/**
+ * The name the backend quotes back in its duplicate-label refusal, or `null`
+ * for any other message.
+ *
+ * `AsistenciaServicio.crear_categoria` raises
+ * `Ya existe una categoría llamada "<nombre>"` as a 400. Quoting the name is
+ * what lets the caller reach the categoría that caused the refusal instead of
+ * showing a dead end; a message without a quoted name (a different 400) returns
+ * `null` so the caller keeps its generic error handling.
+ */
+export function findCategoriaDuplicada(message: string): string | null {
+  const match = /Ya existe una categoría llamada "([^"]+)"/.exec(message);
+  return match ? match[1] : null;
+}
+
+/**
+ * The catalog código whose label matches `label`, case-insensitively and
+ * trimmed.
+ *
+ * The backend compares labels exactly, but an admin typing the name again can
+ * differ from the stored label in case or surrounding space — and the point of
+ * the lookup is to reach the existing categoría, not to reproduce the server's
+ * comparison.
+ */
+export function findCodigoPorLabel(
+  categorias: Partial<Record<string, CategoriaInfo>>,
+  label: string,
+): string | null {
+  const objetivo = label.trim().toLocaleLowerCase("es");
+  for (const [codigo, info] of Object.entries(categorias)) {
+    if (info && info.label.trim().toLocaleLowerCase("es") === objetivo) return codigo;
+  }
+  return null;
 }
 
 /**
