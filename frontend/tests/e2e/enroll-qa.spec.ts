@@ -1191,12 +1191,25 @@ test.describe("N · Navegación del asistente", () => {
      * que esta prueba afirma sigue siendo cierto: ni el paso actual
      * ("Estudiante") ni ninguno posterior ("Salud", "Confirmar") es un
      * control, así que el indicador no es un atajo HACIA ADELANTE.
+     *
+     * #1332 (R2-002/R3-004, review advisory de #1331): `toHaveCount(0)` por
+     * nombre pasaba igual si la etiqueta cambiaba de texto o si el paso no
+     * se renderizaba — nunca afirmó que el paso completado SÍ fuera
+     * navegable. Se afirma primero, en positivo, que "Tipo" es un botón real
+     * y sigue visible; recién después, que los pasos futuros NO son
+     * controles aunque su texto sí esté en pantalla.
      */
     const stepper = page.getByRole("list", { name: /pasos de la inscripción/i });
     await expect(stepper).toBeVisible();
-    await expect(stepper.getByRole("button", { name: "Estudiante" })).toHaveCount(0);
-    await expect(stepper.getByRole("button", { name: "Salud" })).toHaveCount(0);
-    await expect(stepper.getByRole("button", { name: "Confirmar" })).toHaveCount(0);
+
+    const tipoButton = stepper.getByRole("button", { name: "Tipo" });
+    await expect(tipoButton).toHaveCount(1);
+    await expect(tipoButton).toBeVisible();
+
+    for (const label of ["Estudiante", "Salud", "Confirmar"]) {
+      await expect(stepper.getByText(label)).toBeVisible();
+      await expect(stepper.getByRole("button", { name: label })).toHaveCount(0);
+    }
     await expect(stepper.getByRole("link")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
     await shot(page, "N03", "sin-salto-de-pasos");
