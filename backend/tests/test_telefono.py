@@ -33,16 +33,36 @@ def test_fijo_que_no_empieza_en_0_es_invalido():
     assert es_telefono_valido("122345678") is False
 
 
+@pytest.mark.parametrize(
+    "telefono",
+    ["000000000", "010000000", "080000000"],
+)
+def test_fijo_con_codigo_de_area_fuera_de_2_7_es_invalido(telefono):
+    """Issue #1319: el segundo dígito del fijo es el código de provincia
+    (02..07); 00, 01 y 08 no son código de área de ningún fijo ecuatoriano."""
+    assert es_telefono_valido(telefono) is False
+
+
+@pytest.mark.parametrize(
+    "telefono",
+    ["022345678", "072345678"],
+)
+def test_fijo_con_codigo_de_area_valido_es_valido(telefono):
+    assert es_telefono_valido(telefono) is True
+
+
 def test_largo_distinto_de_nueve_o_diez_es_invalido():
     assert es_telefono_valido("09912345678") is False  # 11 dígitos
     assert es_telefono_valido("12345") is False
 
 
-def test_nueve_digitos_que_empiezan_en_09_es_fijo_valido_no_celular_corto():
-    # 9 dígitos + prefijo "0" ya alcanza la regla de fijo, aunque el segundo
-    # dígito también sea "9" -- el largo, no el prefijo, decide qué regla
-    # aplica.
-    assert es_telefono_valido("099123456") is True
+def test_nueve_digitos_que_empiezan_en_09_no_es_celular_corto_es_fijo_con_area_invalida():
+    # 9 dígitos + prefijo "0": el largo, no el prefijo, decide que la regla
+    # de fijo aplica -- esto NO colisiona con la regla de celular, que exige
+    # 10 dígitos. Pero issue #1319: el segundo dígito "9" no es un código de
+    # área ecuatoriano (2-7, ver `_CODIGOS_AREA_FIJO`), así que el fijo se
+    # rechaza igual, por una razón distinta al largo.
+    assert es_telefono_valido("099123456") is False
 
 
 def test_letras_se_rechazan_no_se_descartan():

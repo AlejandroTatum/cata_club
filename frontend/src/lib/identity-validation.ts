@@ -116,8 +116,8 @@ const PHONE_SEPARATOR_PATTERN = /[\s\-()]/g;
 /** Celular: `09` + 8 digits = 10 digits total. */
 const MOBILE_PATTERN = /^09\d{8}$/;
 
-/** Fijo: `0` + 1-digit area code + 7-digit subscriber number = 9 digits total. */
-const LANDLINE_PATTERN = /^0\d{8}$/;
+/** Fijo: `0` + 1-digit area code (`2`-`7`, issue #1319) + 7-digit subscriber number = 9 digits total. */
+const LANDLINE_PATTERN = /^0[2-7]\d{7}$/;
 
 /**
  * Ecuador's country code (`593`) plus the mobile trunk digit (`9`) plus the
