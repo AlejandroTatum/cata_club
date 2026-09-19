@@ -274,6 +274,75 @@ def test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion(
     )
 
 
+# ─── Las carpetas de Cloudinary se pueden fijar por ambiente ───────────────
+#
+# Local y staging comparten la misma cuenta de Cloudinary (mismo `cloud_name`
+# en las dos), así que hasta la reprovisión de staging del 2026-09-19 los dos
+# ambientes escribían en las mismas tres carpetas (ver
+# docs/operations/staging-redeploy.md, sección "Reprovisionar la base sin
+# vaciar Cloudinary"). Las carpetas compartidas `cataclub/*` no se purgan --
+# quedan como huérfanas documentadas y aceptadas -- pero staging pasa a usar
+# `cataclub-staging/*`, lo que exige que las tres variables sean
+# interpoladas y no literales fijos en el compose.
+
+_CARPETAS_CLOUDINARY_POR_DEFECTO = {
+    "CLOUDINARY_CARPETA_COMPROBANTES": "cataclub/comprobantes",
+    "CLOUDINARY_CARPETA_VOUCHERS": "cataclub/vouchers",
+    "CLOUDINARY_CARPETA_FOTOS_PERFIL": "cataclub/fotos_perfil",
+}
+
+
+def test_las_carpetas_de_cloudinary_defaultean_al_valor_compartido_sin_override():
+    """Sin las CLOUDINARY_CARPETA_* en el entorno, el render tiene que
+    seguir usando las carpetas compartidas que ya usan desarrollo local y el
+    resto del stack: interpolar la variable no puede romper a quien nunca la
+    fija."""
+    resultado = _ejecutar_config(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        omitir=tuple(_CARPETAS_CLOUDINARY_POR_DEFECTO),
+    )
+    assert resultado.returncode == 0, (
+        f"el render tiene que seguir funcionando sin las CLOUDINARY_CARPETA_* "
+        f"y falló:\n{resultado.stderr}"
+    )
+    config = json.loads(resultado.stdout)
+    for servicio in SERVICIOS_PYTHON_DE_PRODUCCION:
+        for variable, default in _CARPETAS_CLOUDINARY_POR_DEFECTO.items():
+            valor = str(config["services"][servicio]["environment"].get(variable, ""))
+            assert valor == default, (
+                f"'{servicio}.{variable}' resolvió a {valor!r} sin override: "
+                f"el default compartido tiene que seguir siendo {default!r}"
+            )
+
+
+def test_las_carpetas_de_cloudinary_se_pueden_sobrescribir_por_ambiente():
+    """Mismo patrón de centinela que
+    `test_las_variables_criticas_llegan_al_contenedor_en_el_render_de_produccion`,
+    pero con el valor real que usa la reprovisión de staging (ver
+    docs/operations/staging-redeploy.md): si alguna de las tres quedara
+    hardcodeada en el compose, este test es el único que lo detecta -- el
+    default de arriba seguiría en verde igual."""
+    overrides = {
+        "CLOUDINARY_CARPETA_COMPROBANTES": "cataclub-staging/comprobantes",
+        "CLOUDINARY_CARPETA_VOUCHERS": "cataclub-staging/vouchers",
+        "CLOUDINARY_CARPETA_FOTOS_PERFIL": "cataclub-staging/fotos_perfil",
+    }
+    config = _renderizar(
+        "docker-compose.yml",
+        "docker-compose.prod.yml",
+        entorno=overrides,
+    )
+    for servicio in SERVICIOS_PYTHON_DE_PRODUCCION:
+        for variable, esperado in overrides.items():
+            valor = str(config["services"][servicio]["environment"].get(variable, ""))
+            assert valor == esperado, (
+                f"'{servicio}.{variable}' resolvió a {valor!r}, sin el valor "
+                f"{esperado!r} que exportó el operador: la carpeta está "
+                f"hardcodeada en el compose y no se puede fijar por ambiente"
+            )
+
+
 # ─── Ningún secreto vive dentro del repositorio ────────────────────────────
 
 ARCHIVOS_COMPOSE = (
