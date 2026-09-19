@@ -34,8 +34,10 @@ class InstitucionResponseDTO(ResponseBase, InstitucionCreateDTO):
 
 # --- Persona ---
 class PersonaCreateDTO(BaseModel):
-    nombres: NombreValidado = Field(..., max_length=100)
-    apellidos: ApellidoValidado = Field(..., max_length=100)
+    # Issue #1323: sin `max_length` -- ver el comentario junto a
+    # `NombreValidado`/`ApellidoValidado` en `validadores.py`.
+    nombres: NombreValidado = Field(...)
+    apellidos: ApellidoValidado = Field(...)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     foto_url: Optional[str] = None
@@ -85,8 +87,10 @@ class RepresentadoCreateDTO(BaseModel):
     cruzada de teléfonos del #860 (`_telefono_emergencia_distinto_del_personal`,
     retirada por este issue) ya no aplica: no queda ningún teléfono de
     emergencia propio con el que comparar."""
-    nombres: NombreValidado = Field(..., max_length=100)
-    apellidos: ApellidoValidado = Field(..., max_length=100)
+    # Issue #1323: sin `max_length` -- ver el comentario junto a
+    # `NombreValidado`/`ApellidoValidado` en `validadores.py`.
+    nombres: NombreValidado = Field(...)
+    apellidos: ApellidoValidado = Field(...)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     # Issue #1207: este endpoint SIEMPRE crea un representado (invariante B
@@ -119,8 +123,10 @@ class VincularRepresentadoDTO(BaseModel):
 
 
 class PersonaUpdateDTO(BaseModel):
-    nombres: Optional[NombreValidado] = Field(default=None, max_length=100)
-    apellidos: Optional[ApellidoValidado] = Field(default=None, max_length=100)
+    # Issue #1323: sin `max_length` -- ver el comentario junto a
+    # `NombreValidado`/`ApellidoValidado` en `validadores.py`.
+    nombres: Optional[NombreValidado] = Field(default=None)
+    apellidos: Optional[ApellidoValidado] = Field(default=None)
     # Issue #1207: `TelefonoValidadoOpcional` en vez de `TelefonoValidado` --
     # un desk-edit reenvía el formulario completo, y para un menor
     # representado sin celular propio eso incluye `telefono: ""`. Este DTO
