@@ -854,6 +854,115 @@ def test_membresias_mias_cubierto_hasta_no_incurre_en_n_mas_uno(client, db_sessi
     )
 
 
+# --- Issue #1337 (R2-002): `cubierto_hasta` poblado en TODOS los endpoints
+# que devuelven `MembresiaResponseDTO`, no solo en `/mias` y `/persona/{id}`.
+# Antes de este slice, `None` en el resto de los endpoints significaba "no
+# calculado" -- un significado distinto de "sin cobertura" para el MISMO
+# campo. Mismo patrón que los tests de arriba: una `CoberturaBonificada` con
+# `fecha_fin` MÁS LEJANA que el pago aprobado, para probar que cada endpoint
+# lee la ancla combinada real (`PagoServicio.fecha_fin_maxima_combinada_bulk`)
+# y no solo lo que la columna `Pago.fecha_fin` sugiere.
+def _persona_con_cobertura_combinada(db_session, cedula):
+    """Persona + membresía ACTIVA + pago aprobado + `CoberturaBonificada`
+    posterior -- devuelve `(persona, membresia, tipo)`. `cubiertoHasta`
+    esperado: `2026-11-30` (la cobertura bonificada, no el pago)."""
+    persona = crear_persona_orm(db_session, cedula_valida(cedula))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    pago = crear_pago_orm(db_session, persona, membresia, EstadoPago.APROBADO)
+    pago.fecha_fin = date(2026, 9, 30)
+
+    descuento = Descuento(nombre=f"Becado #1337-{cedula}", porcentaje=Decimal("100.00"), activo=True)
+    db_session.add(descuento)
+    db_session.flush()
+    asignacion = AsignacionDescuento(
+        persona_id=persona.id, descuento_id=descuento.id, asignado_por_persona_id=persona.id,
+    )
+    db_session.add(asignacion)
+    db_session.flush()
+    db_session.add(CoberturaBonificada(
+        membresia_id=membresia.id, persona_id=persona.id,
+        asignacion_descuento_id=asignacion.id,
+        tarifa_mensual_aplicada=Decimal("35.00"), meses_comprados=1,
+        descuento_valor_aplicado=Decimal("35.00"),
+        descuento_porcentaje_aplicado=Decimal("100.00"),
+        fecha_inicio=date(2026, 10, 1), fecha_fin=date(2026, 11, 30),
+        otorgada_por_persona_id=persona.id,
+    ))
+    db_session.commit()
+    return persona, membresia, tipo
+
+
+def test_listar_membresias_admin_incluye_cubierto_hasta(client, db_session):
+    """La cola paginada del panel admin (issue #4) es donde el review de
+    #1328 encontró el hueco original: `None` ahí no distinguía "sin
+    cobertura" de "nadie lo calculó todavía"."""
+    _, membresia, _ = _persona_con_cobertura_combinada(db_session, 920)
+
+    resp = client.get("/api/v1/membresias/")
+    assert resp.status_code == 200
+    fila = next(m for m in resp.json()["items"] if m["id"] == membresia.id)
+    assert fila["cubiertoHasta"] == "2026-11-30"
+
+
+def test_obtener_membresia_incluye_cubierto_hasta(client, db_session):
+    _, membresia, _ = _persona_con_cobertura_combinada(db_session, 921)
+
+    resp = client.get(f"/api/v1/membresias/{membresia.id}")
+    assert resp.status_code == 200
+    assert resp.json()["cubiertoHasta"] == "2026-11-30"
+
+
+def test_suspender_membresia_incluye_cubierto_hasta(client, db_session):
+    _, membresia, _ = _persona_con_cobertura_combinada(db_session, 922)
+
+    resp = client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
+    assert resp.status_code == 200
+    assert resp.json()["cubiertoHasta"] == "2026-11-30"
+
+
+def test_reactivar_membresia_incluye_cubierto_hasta(client, db_session):
+    _, membresia, _ = _persona_con_cobertura_combinada(db_session, 923)
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
+
+    resp = client.post(f"/api/v1/membresias/{membresia.id}/reactivar", json={"motivo": "motivo"})
+    assert resp.status_code == 200
+    assert resp.json()["cubiertoHasta"] == "2026-11-30"
+
+
+def test_cambiar_plan_membresia_incluye_cubierto_hasta(client, db_session):
+    _, membresia, tipo_actual = _persona_con_cobertura_combinada(db_session, 924)
+    tipo_nuevo = _crear_tipo_membresia(client)
+    assert tipo_nuevo["id"] != tipo_actual.id
+
+    resp = client.post(
+        f"/api/v1/membresias/{membresia.id}/cambiar-plan",
+        json={"nuevo_tipo_membresia_id": tipo_nuevo["id"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["cubiertoHasta"] == "2026-11-30"
+
+
+def test_crear_membresia_incluye_la_clave_cubierto_hasta(client):
+    """Una membresía recién creada no tiene ningún `Pago` ni
+    `CoberturaBonificada` todavía -- `null` es correcto acá por
+    construcción, no por omisión -- pero la CLAVE debe estar presente,
+    igual que en el resto de los endpoints."""
+    persona = _crear_persona(client, cedula=cedula_valida(925))
+    tipo = _crear_tipo_membresia(client)
+
+    resp = client.post(
+        "/api/v1/membresias/",
+        json={
+            "monto_aplicado": "35.00", "fecha_activacion": "2026-07-01T00:00:00",
+            "persona_id": persona["id"], "tipo_membresia_id": tipo["id"],
+        },
+    )
+    assert resp.status_code == 201
+    assert "cubiertoHasta" in resp.json()
+    assert resp.json()["cubiertoHasta"] is None
+
+
 # --- E04-RF002: gratuidad del 4to miembro familiar ---------------------------
 def _crear_alumno_con_representante(client, cedula, representante_id):
     """Helper: crea un alumno cuya fecha_nacimiento da >18 años con FECHA_CONGELADA_HOY."""
