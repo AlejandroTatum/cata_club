@@ -171,9 +171,11 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
         # de pasar a `False` + tratar `existing=true` como colisión real. Con
         # `autoretry_for=(Exception,)`, un reintento tras "la subida terminó
         # pero el commit del `ComprobantePago` falló" vuelve a subir el MISMO
-        # `public_id` -- con `overwrite=False` esa subida moriría con un
-        # error duro del SDK y convertiría cada reintento legítimo en un
-        # fallo permanente para ese pago.
+        # `public_id` -- con `overwrite=False` esa subida no lanza: el SDK
+        # devuelve el recurso existente con `existing=true`. El error duro
+        # sería el de la opción (a) descartada, donde la APLICACIÓN trata
+        # `existing=true` como colisión real y convierte así cada reintento
+        # legítimo en un fallo permanente para ese pago.
         #
         # Este `overwrite=True` significa que, a diferencia de otros callers
         # de `subir_pdf_membresia`, ACÁ NO hay detección de colisión: el SDK

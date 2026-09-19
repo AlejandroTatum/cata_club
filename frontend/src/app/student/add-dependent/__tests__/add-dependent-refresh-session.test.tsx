@@ -18,13 +18,17 @@ import AddDependentPage from "@/app/student/add-dependent/page";
 import { crearRepresentadoPropio } from "@/services/api";
 import { useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
 import { ADD_DEPENDENT_PATH, installAddDependentHarness } from "./add-dependent-harness";
-import { addDependentFieldId } from "@/app/student/add-dependent/add-dependent-utils";
+import {
+  addDependentFieldId,
+  getAddDependentErrorMessage,
+} from "@/app/student/add-dependent/add-dependent-utils";
 import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
 
 const harness = vi.hoisted(() => () => import("./add-dependent-harness"));
 const refreshSessionMock = vi.hoisted(() => vi.fn());
 const pushMock = vi.hoisted(() => vi.fn());
 const showSuccessMock = vi.hoisted(() => vi.fn());
+const showErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/ProtectedRoute", async () => (await harness()).protectedRouteDouble());
 vi.mock("next/link", async () => (await harness()).nextLinkDouble());
@@ -50,7 +54,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showError: vi.fn(), showSuccess: showSuccessMock }),
+  useToast: () => ({ showError: showErrorMock, showSuccess: showSuccessMock }),
 }));
 
 vi.mock("@/services/api", () => ({
@@ -64,6 +68,7 @@ beforeEach(() => {
   refreshSessionMock.mockReset();
   pushMock.mockReset();
   showSuccessMock.mockReset();
+  showErrorMock.mockReset();
 });
 
 function fillChildStep(): void {
@@ -118,6 +123,12 @@ describe("a rejected refreshSession does not turn a successful alta into a repor
     await submit();
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/student"));
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // `role="alert"` alone only proves something with that role is absent —
+    // it says nothing unless it is tied to the actual create-error copy and
+    // to the toast double the create path would have used.
+    expect(showErrorMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(getAddDependentErrorMessage(new Error("session outage"))),
+    ).not.toBeInTheDocument();
   });
 });
