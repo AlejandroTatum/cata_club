@@ -277,6 +277,16 @@ nueva. Antes de reprovisionar un entorno, purga (o migra a un `folder`
 propio de esa vida) la carpeta de Cloudinary correspondiente, o documenta en
 esta sección por qué se decidió no hacerlo.
 
+Las tres carpetas se pueden fijar por ambiente con
+`CLOUDINARY_CARPETA_COMPROBANTES`, `CLOUDINARY_CARPETA_VOUCHERS` y
+`CLOUDINARY_CARPETA_FOTOS_PERFIL` en el `.env` del host (`docker-compose.yml`
+las interpola, con el default compartido `cataclub/*` si no se fijan). Local
+y staging comparten la misma cuenta de Cloudinary: desde la reprovisión del
+2026-09-19, staging usa `cataclub-staging/*` para dejar de escribir en las
+mismas rutas que desarrollo local. Las carpetas compartidas `cataclub/*` NO
+se purgaron en ese momento -- los recursos que staging ya había subido ahí
+quedan como huérfanos, documentados y aceptados, no un pendiente.
+
 ## Última verificación
 
 Actualiza esta sección en el mismo PR que sigue a cada redeploy. Quedó sin tocar
