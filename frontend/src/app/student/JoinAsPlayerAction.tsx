@@ -15,13 +15,19 @@
  * off to the EXISTING payment-registration door,
  * `/student/payments?registrar=1` — the same one `CuotaCard`'s own CTA
  * already opens for every other membership on this portal.
+ *
+ * Trigger format (issue #1317): this sits in the same flex row as
+ * "Agregar hijo o dependiente" (a `buttonClasses("secondary")` `<Link>`), so
+ * it passes that same class string and trailing `ArrowRight` to
+ * `TipoSelectorForm` instead of the default admin chip.
  */
 
 "use client";
 
 import { useRouter } from "next/navigation";
-import { UserPlus } from "lucide-react";
+import { ArrowRight, UserPlus } from "lucide-react";
 import TipoSelectorForm from "@/components/admin/TipoSelectorForm";
+import { buttonClasses } from "@/components/ui/Button";
 import { crearMembresiaPropia } from "@/services/api";
 import { useToast } from "@/contexts/ToastContext";
 import { withSelectedStudent } from "./ManagedStudentPicker";
@@ -42,6 +48,8 @@ export default function JoinAsPlayerAction({
     <TipoSelectorForm
       triggerLabel="Unirme como jugador"
       TriggerIcon={UserPlus}
+      triggerClassName={buttonClasses("secondary")}
+      TriggerTrailingIcon={ArrowRight}
       submitLabel="Inscribirme"
       SubmitIcon={UserPlus}
       selectPlaceholder="Seleccionar plan…"

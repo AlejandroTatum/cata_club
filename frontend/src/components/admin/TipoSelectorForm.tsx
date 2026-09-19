@@ -39,6 +39,23 @@ interface TipoSelectorFormProps {
    *  (both existing call sites did this before extraction). */
   onSubmitError?: (message: string) => void;
   /**
+   * Overrides the trigger's whole class string — the default is the admin
+   * chip (`bg-cata-red/15`, `mt-2.5`, both `CambiarPlanForm` and
+   * `CreateMembershipForm` keep it). `JoinAsPlayerAction` (issue #1317) sits
+   * in the SAME flex row as a `buttonClasses("secondary")` `<Link>` on the
+   * student portal, so its trigger needs to wear that exact class string
+   * instead of the chip — a caller-supplied string is used verbatim rather
+   * than merged, so it fully controls shape, colour and spacing.
+   */
+  triggerClassName?: string;
+  /**
+   * Rendered after the trigger label, same size as `TriggerIcon`. Omitted
+   * by both admin callers (the chip has no trailing icon); `JoinAsPlayerAction`
+   * passes `ArrowRight` — the same trailing icon its sibling secondary
+   * button already carries — so the two CTAs read as the same control.
+   */
+  TriggerTrailingIcon?: LucideIcon;
+  /**
    * Rendered INSTEAD of the trigger button once `onSubmit` succeeds, when
    * provided (`CreateMembershipForm`'s persistent "Membresía creada."
    * line — that form's own parent stops rendering it once the membership
@@ -59,6 +76,8 @@ export default function TipoSelectorForm({
   submitFailureMessage,
   onSubmit,
   onSubmitError,
+  triggerClassName,
+  TriggerTrailingIcon,
   renderSuccess,
 }: TipoSelectorFormProps): React.ReactElement {
   const [open, setOpen] = useState(false);
@@ -108,10 +127,14 @@ export default function TipoSelectorForm({
       <button
         type="button"
         onClick={() => void handleOpen()}
-        className={`mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25 ${MIN_TARGET_CLASS}`}
+        className={
+          triggerClassName ??
+          `mt-2.5 inline-flex items-center gap-1 rounded-lg bg-cata-red/15 px-2.5 py-1 text-xs font-semibold text-cata-red transition-colors hover:bg-cata-red/25 ${MIN_TARGET_CLASS}`
+        }
       >
         <TriggerIcon size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         {triggerLabel}
+        {TriggerTrailingIcon && <TriggerTrailingIcon size={ICON.sm} aria-hidden="true" />}
       </button>
     );
   }
