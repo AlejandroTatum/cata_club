@@ -164,6 +164,25 @@ async def listar_membresias(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
+# Issue #1328: adjunta `cubiertoHasta` (la ancla combinada Pago +
+# CoberturaBonificada, ver `PagoServicio.fecha_fin_maxima_combinada_bulk`) a
+# un listado de membresías YA resuelto por `MembresiaServicio` -- UNA consulta
+# agrupada por fuente para todo el listado, nunca una por membresía, mismo
+# criterio que `obtener_deuda_bulk` (issue #326). Compartido por `/mias` y
+# `/persona/{persona_id}`, los dos listados que el portal del alumno puede
+# alcanzar (a diferencia de `/deuda/bulk`, admin-only).
+def _con_cubierto_hasta(db: Session, membresias: list) -> List[MembresiaResponseDTO]:
+    cobertura_por_id = PagoServicio(db).fecha_fin_maxima_combinada_bulk(
+        [membresia.id for membresia in membresias]
+    )
+    return [
+        MembresiaResponseDTO.model_validate(membresia).model_copy(
+            update={"cubierto_hasta": cobertura_por_id.get(membresia.id)}
+        )
+        for membresia in membresias
+    ]
+
+
 @router.get(
     "/mias",
     response_model=List[MembresiaResponseDTO],
@@ -176,11 +195,12 @@ async def listar_mis_membresias(
 ):
     """Lists JWT-owner memberships, or an explicitly authorized dependent."""
     objetivo = persona_id if persona_id is not None else token_payload.get("persona_id")
-    return MembresiaServicio(db).listar_membresias_por_persona(
+    membresias = MembresiaServicio(db).listar_membresias_por_persona(
         persona_id_objetivo=objetivo,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+    return _con_cubierto_hasta(db, membresias)
 
 
 @router.get(
@@ -193,11 +213,12 @@ async def listar_membresias_por_persona(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    return MembresiaServicio(db).listar_membresias_por_persona(
+    membresias = MembresiaServicio(db).listar_membresias_por_persona(
         persona_id_objetivo=persona_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+    return _con_cubierto_hasta(db, membresias)
 
 
 # --- Pago ---

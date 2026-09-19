@@ -117,6 +117,16 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     # coherente" de "cero sin explicar" -- nada en la base obliga que ambos
     # coincidan).
     es_gratuidad_familiar: bool
+    # Issue #1328: la MISMA ancla combinada que `PagoServicio._fecha_fin_
+    # maxima_combinada` -- la `fecha_fin` más lejana entre un `Pago` APROBADO
+    # y una `CoberturaBonificada`, o `None` si la membresía no tiene ninguna
+    # cobertura todavía. No es una columna de `Membresia`: la resuelve el
+    # router (`PagoServicio.fecha_fin_maxima_combinada_bulk`) antes de armar
+    # este DTO, así que no llega vía `from_attributes` como el resto de los
+    # campos. Fuente única de "cubierto hasta" para el portal del alumno
+    # (`/student`, `/student/payments`, `CuotaCard`, `ApplyBenefitForm`), que
+    # antes recalculaba una versión incompleta mirando solo `Pago`.
+    cubierto_hasta: date | None = None
 
 
 class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
