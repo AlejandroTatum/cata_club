@@ -1184,21 +1184,17 @@ test.describe("N · Navegación del asistente", () => {
     await enterFromLogin(page);
     await goToPersonal(page, "Jugador");
     /*
-     * Con el paso incompleto, el indicador no debe ser un atajo al resumen.
-     *
-     * Y no lo es por construcción, no por una guarda: `Stepper` renderiza un
-     * `<ol>` de `<li>` sin un solo control, así que no hay nada que clickear.
-     * Eso es lo que se afirma.
-     *
-     * La versión anterior buscaba un pill "Confirmar" dentro de un
-     * `if (count())`. Ese pill NO existe —verificado contra la app real, el
-     * único "Confirmar" del flujo es el botón "Confirmar inscripción" del
-     * resumen—, así que el clic nunca ocurría y la aserción de abajo pasaba
-     * en vacío: quedarse en el mismo paso es obvio si no se clickeó nada.
+     * #1321: el indicador ahora ES navegable HACIA ATRÁS — "Tipo", el único
+     * paso ya completado en este punto, es un botón real que vuelve a él. Lo
+     * que esta prueba afirma sigue siendo cierto: ni el paso actual
+     * ("Estudiante") ni ninguno posterior ("Salud", "Confirmar") es un
+     * control, así que el indicador no es un atajo HACIA ADELANTE.
      */
     const stepper = page.getByRole("list", { name: /pasos de la inscripción/i });
     await expect(stepper).toBeVisible();
-    await expect(stepper.getByRole("button")).toHaveCount(0);
+    await expect(stepper.getByRole("button", { name: "Estudiante" })).toHaveCount(0);
+    await expect(stepper.getByRole("button", { name: "Salud" })).toHaveCount(0);
+    await expect(stepper.getByRole("button", { name: "Confirmar" })).toHaveCount(0);
     await expect(stepper.getByRole("link")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: /datos del estudiante/i })).toBeVisible();
     await shot(page, "N03", "sin-salto-de-pasos");

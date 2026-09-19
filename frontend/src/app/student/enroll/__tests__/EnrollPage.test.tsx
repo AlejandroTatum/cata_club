@@ -167,6 +167,22 @@ describe("EnrollPage — the named stepper", () => {
     const stepper = screen.getByRole("list", { name: /pasos de la inscripción/i });
     expect(within(stepper).getByText("Representante")).toBeInTheDocument();
   });
+
+  // #1321: a completed pill is now a real button that reopens its step.
+  it("moves back to a completed step when its stepper pill is clicked", () => {
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    // Standing on "Salud" now; "Estudiante" is the one completed step.
+    const stepper = screen.getByRole("list", { name: /pasos de la inscripción/i });
+    fireEvent.click(within(stepper).getByRole("button", { name: "Estudiante" }));
+
+    // Back on the student step, with what was already typed still there.
+    expect(screen.getByLabelText(/^Nombres/)).toHaveValue("Sofia");
+  });
 });
 
 // #312 / hallazgo #33 — same gap on the representative step (paso 3).
