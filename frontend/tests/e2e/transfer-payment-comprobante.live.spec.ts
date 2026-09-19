@@ -6,38 +6,47 @@
  *
  * ## Lo que la investigación encontró, con evidencia
  *
- * Antes de escribir un solo test se corrió `make qa-pdf-delivery-check`
- * (`backend/scripts/verificar_entrega_pdf.py`) contra el stack de QA real:
- *
- *     Entrega de PDF por Cloudinary (comprobante oficial y voucher en PDF)
- *       descarga del PDF de prueba: HTTP 200, 193 bytes
- *       la URL de entrega devolvió el PDF completo.
- *
- * Cloudinary SÍ está configurado en este entorno de QA. Y la generación del
- * comprobante al aprobar (`PagoServicio._disparar_generacion_comprobante_
- * pdf`, `membresia_pago_servicio.py`) no pasa por un outbox que dependa de
- * `celery-beat` -- llama a `generar_comprobante_pdf_tarea.delay(pago_id)`
- * DIRECTO contra Redis, y `cataclub-qa-celery-worker-1` está `Up ... (healthy)`
- * en este stack (`docker compose ps`, sin ningún servicio `celery-beat`).
- * Confirmado en vivo, no asumido: registrando un pago por transferencia con
- * comprobante y aprobándolo por API contra este mismo entorno,
+ * La primera versión de este archivo corrió `make qa-pdf-delivery-check`
+ * (`backend/scripts/verificar_entrega_pdf.py`) contra un stack de QA local
+ * con credenciales reales de Cloudinary en `.env` y confirmó en vivo que
  * `comprobanteOficialUrl` aparece en `GET /membresias/pagos/persona/:id`
- * segundos después de aprobar, y la URL de Cloudinary que trae responde
- * `HTTP 200` con bytes `%PDF-1.4` reales (124 250 bytes) al descargarla.
+ * segundos después de aprobar, con una URL que responde `HTTP 200` y bytes
+ * `%PDF-1.4` reales. Eso sigue siendo cierto para un desarrollador con sus
+ * propias credenciales -- pero NO para el cron programado: `.github/
+ * workflows/e2e-live.yml` declara `permissions: contents: read` y ningún
+ * `secrets:`/`secrets.` (candado propio en `tests/test_e2e_live_workflow.py`,
+ * clase `TestSuperficieDeSecretos`) a propósito, así que su stack de QA NUNCA
+ * tiene `CLOUDINARY_API_KEY` (issue #1341: los tres tests que suben un
+ * voucher fallaban a diario con "Must supply api_key", 503, en
+ * `POST /membresias/pagos/{id}/voucher`). En vez de mentir sobre el entorno
+ * o pedirle un secreto al workflow, estos tres tests se SALTEAN cuando
+ * `CLOUDINARY_CONFIGURED` da `false` -- ver su definición más abajo, que le
+ * pregunta al backend YA LEVANTADO (nunca imprime el valor) en vez de
+ * asumir. `make qa-live` calcula esa variable una sola vez por corrida.
+ *
+ * La generación del comprobante al aprobar (`PagoServicio.
+ * _disparar_generacion_comprobante_pdf`, `membresia_pago_servicio.py`) no
+ * pasa por un outbox que dependa de `celery-beat` -- llama a
+ * `generar_comprobante_pdf_tarea.delay(pago_id)` DIRECTO contra Redis, y
+ * `cataclub-qa-celery-worker-1` está `Up ... (healthy)` en este stack
+ * (`docker compose ps`, sin ningún servicio `celery-beat`). Eso no cambia
+ * con o sin Cloudinary: es el voucher/comprobante en sí lo que necesita el
+ * proveedor externo.
  *
  * Esto es DISTINTO del patrón de la tercera cola de notificaciones (ver
  * `EnrollmentNotificacionOutbox`, sin `celery-beat` en QA) y del correo de
- * recuperación (que si necesita `helpers/outbox-dispatch.ts`): acá no hace
+ * recuperación (que sí necesita `helpers/outbox-dispatch.ts`): acá no hace
  * falta ningún despacho manual porque no hay outbox de por medio. Por eso
- * este archivo SÍ puede cubrir en vivo lo que `payments.live.spec.ts`
- * asumía imposible -- incluyendo la generación real del PDF.
+ * este archivo puede cubrir en vivo lo que `payments.live.spec.ts` asumía
+ * imposible -- incluyendo la generación real del PDF -- cuando Cloudinary
+ * está configurado.
  *
  * Lo único que queda deliberadamente afuera es un modo de almacenamiento
  * LOCAL para el comprobante: no existe. `subir_voucher_pago`/
  * `subir_pdf_membresia` (`cloudinary_cliente.py`) son el único camino de
  * subida; sin credenciales de Cloudinary el backend no cae a disco, degrada
- * silenciosamente (`resolver_url_entrega` devuelve `None`). No es relevante
- * acá porque este entorno SÍ tiene las credenciales, verificado arriba.
+ * ruidosamente con un 503 (`ServicioNoDisponible`) -- de ahí el skip en vez
+ * de un fallback silencioso.
  *
  * ## Por qué Pedro, otra vez
  *
@@ -91,6 +100,20 @@ const STUDENT_EMAIL = "pedro@cataclub.com";
 const STUDENT_PASSWORD = "alumno123";
 const STUDENT_FULL_NAME = "Pedro Salgado";
 
+/**
+ * `true` solo cuando el backend YA LEVANTADO reporta `CLOUDINARY_API_KEY` no
+ * vacío -- `make qa-live` (`Makefile`) lo calcula una sola vez consultando
+ * al contenedor (nunca imprime el valor, mismo criterio que el resto del
+ * repo para medir un secreto sin leerlo) y lo exporta como
+ * `E2E_CLOUDINARY_CONFIGURED=1`/`0`. El cron programado nunca lo tiene
+ * (issue #1341, ver el encabezado del archivo); un entorno local con
+ * credenciales reales en `.env` sí.
+ */
+const CLOUDINARY_CONFIGURED = process.env.E2E_CLOUDINARY_CONFIGURED === "1";
+const SIN_CLOUDINARY_MOTIVO =
+  "Requiere Cloudinary configurado (CLOUDINARY_API_KEY) -- ausente en el cron " +
+  "sin secretos (issue #1341); corra con credenciales reales en .env para cubrirlo.";
+
 test.beforeEach(async ({ request }) => {
   // Mismo mecanismo que `payments.live.spec.ts`/`discount-payment-effect.
   // live.spec.ts`: el backend no deja un segundo pago PENDIENTE_VALIDACION
@@ -102,6 +125,7 @@ test.beforeEach(async ({ request }) => {
 test("un socio registra un pago por transferencia con comprobante y queda pendiente de validación, y ese estado persiste tras recargar", async ({
   page,
 }) => {
+  test.skip(!CLOUDINARY_CONFIGURED, SIN_CLOUDINARY_MOTIVO);
   await loginViaUi(page, STUDENT_EMAIL, STUDENT_PASSWORD, /\/student/);
 
   await page.goto("/student/payments");
@@ -152,6 +176,7 @@ async function prepararPagoEnColaDeAdmin(page: Page): Promise<{ pedroId: string;
 test("un admin aprueba un pago por transferencia con comprobante desde la cola, y Celery genera un PDF real en Cloudinary", async ({
   page,
 }) => {
+  test.skip(!CLOUDINARY_CONFIGURED, SIN_CLOUDINARY_MOTIVO);
   await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
   const { pedroId, pagoId } = await prepararPagoEnColaDeAdmin(page);
 
@@ -188,6 +213,7 @@ test("un admin aprueba un pago por transferencia con comprobante desde la cola, 
 test("un admin rechaza un pago pendiente por transferencia con motivo, y el estado y el motivo persisten", async ({
   page,
 }) => {
+  test.skip(!CLOUDINARY_CONFIGURED, SIN_CLOUDINARY_MOTIVO);
   await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD, /\/dashboard/);
   const { pedroId, pagoId } = await prepararPagoEnColaDeAdmin(page);
 
