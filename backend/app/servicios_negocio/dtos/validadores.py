@@ -112,16 +112,48 @@ def _validar_tipo_sangre(valor: TipoSangre) -> TipoSangre:
     return valor
 
 
+# Issue #1323: un tester en staging pegó una frase entera ("asdajhdajdh
+# asjhsdjashd sa") en «Nombres» y la regla la aceptó -- hasta acá el único
+# chequeo era "no vacío". Ningún tope puede decidir si una cadena "parece un
+# nombre" sin rechazar apellidos reales (#230 ya pagó ese costo), así que
+# esto no es una heurística de plausibilidad: son tres topes de composición
+# (palabras, letras por palabra, largo total) calibrados para dejar pasar
+# cualquier nombre compuesto real ("María de los Ángeles", "De la Cruz
+# Andrade") y frenar una frase pegada, un nombre duplicado o teclas
+# apretadas. Mismos tres mensajes, en el mismo orden, que
+# `personNameRule` en `identity-validation.ts` del frontend.
+_NOMBRE_PROPIO_MAX_PALABRAS = 5
+_NOMBRE_PROPIO_MAX_LETRAS_POR_PALABRA = 20
+_NOMBRE_PROPIO_MAX_CARACTERES = 60
+
+
+def _validar_tope_nombre_propio(valor: str, etiqueta: str) -> None:
+    palabras = valor.split(" ")
+    if len(palabras) > _NOMBRE_PROPIO_MAX_PALABRAS:
+        raise ValueError(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_PALABRAS} palabras.")
+    if any(len(palabra) > _NOMBRE_PROPIO_MAX_LETRAS_POR_PALABRA for palabra in palabras):
+        raise ValueError(
+            f"{etiqueta} no puede tener una palabra de más de "
+            f"{_NOMBRE_PROPIO_MAX_LETRAS_POR_PALABRA} letras."
+        )
+    if len(valor) > _NOMBRE_PROPIO_MAX_CARACTERES:
+        raise ValueError(f"{etiqueta} no puede tener más de {_NOMBRE_PROPIO_MAX_CARACTERES} caracteres.")
+
+
 def _validar_nombre(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El nombre es obligatorio.")
-    return normalizar_nombre_propio(valor)
+    normalizado = normalizar_nombre_propio(valor)
+    _validar_tope_nombre_propio(normalizado, "El nombre")
+    return normalizado
 
 
 def _validar_apellido(valor: str) -> str:
     if not valor.strip():
         raise ValueError("El apellido es obligatorio.")
-    return normalizar_nombre_propio(valor)
+    normalizado = normalizar_nombre_propio(valor)
+    _validar_tope_nombre_propio(normalizado, "El apellido")
+    return normalizado
 
 
 # Issue #875: `contacto_emergencia` (el NOMBRE de a quién llamar) es la
@@ -214,7 +246,11 @@ TipoSangreValidado = Annotated[TipoSangre, AfterValidator(_validar_tipo_sangre)]
 # ("String should have at least 1 character") es inglés de Pydantic y nunca
 # pasa el filtro `isUserFacingText` del frontend -- el mismo motivo por el que
 # cédula/teléfono ya usan un `AfterValidator` con mensaje en castellano en vez
-# de una constraint de `Field`.
+# de una constraint de `Field`. Issue #1323 aplica el mismo criterio al tope
+# de largo: los DTOs que usan estos dos alias ya NO llevan `max_length` en su
+# `Field` -- `_validar_tope_nombre_propio` de arriba es la única fuente del
+# tope de 60 caracteres, con el mismo mensaje en castellano que las otras dos
+# causas que ya comparte.
 NombreValidado = Annotated[str, AfterValidator(_validar_nombre)]
 ApellidoValidado = Annotated[str, AfterValidator(_validar_apellido)]
 ContactoEmergenciaValidado = Annotated[str, AfterValidator(_validar_contacto_emergencia)]

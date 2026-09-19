@@ -341,6 +341,20 @@ export function personNameError(value: string): PersonNameErrorReason | null {
 }
 
 /**
+ * (issue #1323) Un tester en staging pegó una frase entera
+ * ("asdajhdajdh asjhsdjashd sa") en «Nombres» y la regla la aceptó:
+ * `PERSON_NAME_PATTERN` solo mide composición, nunca plausibilidad, y #230
+ * ya pagó el costo de intentar medir esa última. Estos tres topes frenan
+ * pegar una frase, un nombre duplicado o teclas apretadas, sin rechazar
+ * ningún nombre compuesto real ("María de los Ángeles", "De la Cruz
+ * Andrade") — solo se aplican DESPUÉS de que `personNameError` ya dio la
+ * composición por válida (ver `personNameRule`).
+ */
+export const PERSON_NAME_MAX_WORDS = 5;
+export const PERSON_NAME_MAX_LETTERS_PER_WORD = 20;
+export const PERSON_NAME_MAX_LENGTH = 60;
+
+/**
  * `subject` is the noun phrase the message is built around, e.g.
  * `"Los apellidos"` (plural) or `"El nombre del contacto de emergencia"`
  * (singular — pass `{ plural: false }`).
@@ -356,14 +370,28 @@ export function personNameRule(
     return `${subject} ${plural ? "deben" : "debe"} tener al menos ${PERSON_NAME_MIN_LENGTH} caracteres.`;
   }
   const reason = personNameError(trimmed);
-  if (reason === null) return null;
   if (reason === "repeated-separator") {
     return `${subject} no ${plural ? "pueden" : "puede"} tener un espacio, guion, apóstrofe o punto medio repetido.`;
   }
   if (reason === "separator-at-edge") {
     return `${subject} no ${plural ? "pueden" : "puede"} empezar ni terminar con un espacio, guion, apóstrofe o punto medio.`;
   }
-  return `${subject} ${plural ? "tienen" : "tiene"} un carácter que no reconocemos en un nombre de persona.`;
+  if (reason === "invalid-char") {
+    return `${subject} ${plural ? "tienen" : "tiene"} un carácter que no reconocemos en un nombre de persona.`;
+  }
+  // Issue #1323: los tres topes de arriba, en el mismo orden en que
+  // `_validar_tope_nombre_propio` del backend los aplica.
+  const palabras = trimmed.split(" ");
+  if (palabras.length > PERSON_NAME_MAX_WORDS) {
+    return `${subject} no ${plural ? "pueden" : "puede"} tener más de ${PERSON_NAME_MAX_WORDS} palabras.`;
+  }
+  if (palabras.some((palabra) => palabra.length > PERSON_NAME_MAX_LETTERS_PER_WORD)) {
+    return `${subject} no ${plural ? "pueden" : "puede"} tener una palabra de más de ${PERSON_NAME_MAX_LETTERS_PER_WORD} letras.`;
+  }
+  if (trimmed.length > PERSON_NAME_MAX_LENGTH) {
+    return `${subject} no ${plural ? "pueden" : "puede"} tener más de ${PERSON_NAME_MAX_LENGTH} caracteres.`;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

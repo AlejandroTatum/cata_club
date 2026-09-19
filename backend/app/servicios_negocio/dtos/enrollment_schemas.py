@@ -27,8 +27,12 @@ from app.servicios_negocio.dtos.validadores import (
 
 class EnrollmentRepresentanteDTO(BaseModel):
     """Datos del representante legal (solo para inscripción de hijo/dependiente)."""
-    nombres: NombreValidado = Field(..., max_length=100)
-    apellidos: ApellidoValidado = Field(..., max_length=100)
+    # Issue #1323: sin `max_length` -- `NombreValidado`/`ApellidoValidado`
+    # (`validadores.py`) son la única fuente del tope de 60 caracteres, en
+    # castellano; un `Field(max_length=...)` lo rechazaría antes con el
+    # inglés genérico de Pydantic.
+    nombres: NombreValidado = Field(...)
+    apellidos: ApellidoValidado = Field(...)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: TelefonoValidado = Field(..., max_length=32)
@@ -51,8 +55,9 @@ class EnrollmentAlumnoDTO(BaseModel):
     _telefono_alumno_obligatorio_para_autoinscripcion_adulta` lo vuelve a
     exigir en el camino "self" (sin `representante`), donde sí es el dato
     de contacto del propio alumno."""
-    nombres: NombreValidado = Field(..., max_length=100)
-    apellidos: ApellidoValidado = Field(..., max_length=100)
+    # Issue #1323: ver el comentario en `EnrollmentRepresentanteDTO` arriba.
+    nombres: NombreValidado = Field(...)
+    apellidos: ApellidoValidado = Field(...)
     cedula: CedulaValidada = Field(..., max_length=32)
     fecha_nacimiento: date
     telefono: Optional[TelefonoValidado] = Field(default=None, max_length=32)

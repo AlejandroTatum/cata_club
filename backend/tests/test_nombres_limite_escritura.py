@@ -19,12 +19,15 @@ _PERSONA_KWARGS = dict(
 _CREDENCIALES = dict(correo="rep@test.com", contrasenia="clave12345")
 
 
-def _instanciar(dto_cls):
+def _instanciar(dto_cls, **overrides):
     """Cada DTO de creación pide credenciales/tipo_cuenta distinto; esto
-    solo arma el payload mínimo válido de cada uno."""
+    solo arma el payload mínimo válido de cada uno. `overrides` reemplaza
+    campos puntuales de `_PERSONA_KWARGS` (issue #1323: nombres/apellidos
+    con los topes bajo prueba)."""
+    kwargs = {**_PERSONA_KWARGS, **overrides}
     if dto_cls is EnrollmentRepresentanteDTO:
-        return dto_cls(**_PERSONA_KWARGS, **_CREDENCIALES)
-    return dto_cls(**_PERSONA_KWARGS)
+        return dto_cls(**kwargs, **_CREDENCIALES)
+    return dto_cls(**kwargs)
 
 
 @pytest.mark.parametrize("dto_cls", [
@@ -51,6 +54,56 @@ def test_dto_rechaza_nombre_en_blanco_con_mensaje_en_castellano(campo, esperado)
     with pytest.raises(ValidationError) as exc_info:
         PersonaCreateDTO(**{**_PERSONA_KWARGS, campo: "   "})
     assert any(esperado in e["msg"] for e in exc_info.value.errors())
+
+
+# --- Issue #1323: topes realistas (5 palabras, 20 letras/palabra, 60 total) --
+# Espejo exacto del frontend (`identity-validation.ts::personNameRule`): un
+# tester en staging pegó una frase entera en «Nombres» y la regla la aceptó
+# porque solo medía composición, nunca plausibilidad. Cada fixture de abajo
+# viola UNA sola causa, para que el mensaje se pueda atribuir sin ambigüedad.
+
+_PALABRA_DE_20_LETRAS = "A" + "a" * 19
+_PALABRA_DE_19_LETRAS = "A" + "a" * 18
+_PALABRA_DE_21_LETRAS = "A" + "a" * 20
+_NOMBRE_DE_SEIS_PALABRAS = "Ana Beatriz Carla Diana Elena Flor"
+# 20 + 1 + 20 + 1 + 19 = 61 caracteres; ningún token supera las 20 letras ni
+# hay más de 5 palabras -- aísla la causa "más de 60 caracteres".
+_NOMBRE_DE_SESENTA_Y_UN_CARACTERES = (
+    f"{_PALABRA_DE_20_LETRAS} {_PALABRA_DE_20_LETRAS} {_PALABRA_DE_19_LETRAS}"
+)
+
+
+@pytest.mark.parametrize("dto_cls", [
+    PersonaCreateDTO, RepresentadoCreateDTO, EnrollmentAlumnoDTO,
+    EnrollmentRepresentanteDTO,
+])
+@pytest.mark.parametrize("campo, valor, esperado", [
+    ("nombres", _NOMBRE_DE_SEIS_PALABRAS, "no puede tener más de 5 palabras."),
+    ("apellidos", _NOMBRE_DE_SEIS_PALABRAS, "no puede tener más de 5 palabras."),
+    ("nombres", _PALABRA_DE_21_LETRAS, "no puede tener una palabra de más de 20 letras."),
+    ("apellidos", _PALABRA_DE_21_LETRAS, "no puede tener una palabra de más de 20 letras."),
+    ("nombres", _NOMBRE_DE_SESENTA_Y_UN_CARACTERES, "no puede tener más de 60 caracteres."),
+    ("apellidos", _NOMBRE_DE_SESENTA_Y_UN_CARACTERES, "no puede tener más de 60 caracteres."),
+])
+def test_dto_rechaza_topes_de_nombre_y_apellido(dto_cls, campo, valor, esperado):
+    with pytest.raises(ValidationError) as exc_info:
+        _instanciar(dto_cls, **{campo: valor})
+    assert any(esperado in e["msg"] for e in exc_info.value.errors())
+
+
+@pytest.mark.parametrize("dto_cls", [
+    PersonaCreateDTO, RepresentadoCreateDTO, EnrollmentAlumnoDTO,
+    EnrollmentRepresentanteDTO,
+])
+@pytest.mark.parametrize("campo", ["nombres", "apellidos"])
+@pytest.mark.parametrize("valor", [
+    "María de los Ángeles",
+    "De la Cruz Andrade",
+    "Jean-Pierre O'Neil",
+])
+def test_dto_acepta_nombres_compuestos_reales_bajo_los_topes(dto_cls, campo, valor):
+    dto = _instanciar(dto_cls, **{campo: valor})
+    assert getattr(dto, campo)
 
 
 # --- contacto_emergencia: normalizado, None/vacío tolerados -----------------
