@@ -3,7 +3,7 @@
 Issue: https://github.com/AlejandroTatum/cata_club/issues/1335
 Branch: `chore/1335-comprobantes-review-followups` (worktree `cata_club-worktrees/gentleman-1335`, cut from `origin/main` @ eab88c1)
 Delivery strategy: single PR, squash auto-merge (forecast ~150 changed lines, comments + docstring + tests only, no production behavior change)
-TDD: **on** (strict, session config). Runner: `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest <file>` (db-test on `localhost:5436`, single-tenant; never two backend suites at once). This session's sandbox blocks the loopback DB port; every pytest invocation ran with the sandbox disabled for that one command.
+TDD: **on** (strict, session config). Runner: `cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest <file>` (db-test on `localhost:5436`, single-tenant; never two backend suites at once). This session's sandbox blocks the loopback DB port; every pytest invocation ran with the sandbox disabled for that one command.
 RDD: on (global). Candidate = the work-unit commit; the orchestrator runs native review after this report.
 
 ## Objective

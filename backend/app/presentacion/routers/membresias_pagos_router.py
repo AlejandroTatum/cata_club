@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -28,6 +30,8 @@ from app.servicios_negocio.membresia_pago_servicio import (
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
+
+logger = logging.getLogger("cataclub.membresias_pagos")
 
 _COLUMNAS_PAGOS_PDF = [
     "Estudiante", "Monto", "Tipo de Pago", "Vigencia Desde", "Vigencia Hasta",
@@ -112,17 +116,27 @@ async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtene
     return [TarifaPublicaDTO(categoria=t.categoria, precio=t.precio) for t in tipos]
 
 
+# Issue #1349 (R4-001): las dos altas (`crear_membresia`, `crear_membresia_
+# propia`) construyen `cubierto_hasta=None` directo, SIN volver a leer la
+# base -- a diferencia de `_con_cubierto_hasta` (ver su docstring), que sí
+# lee porque una membresía YA existente puede tener cobertura. Una membresía
+# recién creada nunca tiene todavía un `Pago` ni una `CoberturaBonificada`
+# propios, así que `None` es verdad por construcción, nunca por una consulta
+# que podría fallar. Antes, esa lectura post-alta convertía un error
+# transitorio de BD en un 500 sobre un POST que ya había completado -- y el
+# reintento del cliente creaba una segunda membresía.
+def _recien_creada_sin_cobertura(membresia) -> MembresiaResponseDTO:
+    return MembresiaResponseDTO.model_validate(membresia).model_copy(
+        update={"cubierto_hasta": None}
+    )
+
+
 # --- Membresia ---
 @router.post("/", response_model=MembresiaResponseDTO, status_code=201,
              dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
-async def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obtener_sesion)):
+def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obtener_sesion)):
     membresia = MembresiaServicio(db).crear_membresia(datos)
-    # Issue #1337: siempre pasa por `_con_cubierto_hasta` (ver su docstring
-    # más abajo), aunque una membresía recién creada nunca tenga todavía un
-    # `Pago` o una `CoberturaBonificada` propios -- `cubiertoHasta` da `None`
-    # por construcción, nunca por omisión, y la clave llega igual de poblada
-    # que en cualquier otro endpoint.
-    return _con_cubierto_hasta(db, [membresia])[0]
+    return _recien_creada_sin_cobertura(membresia)
 
 
 # Issue #1132: "Inscribirme como jugador" para un representante puro no
@@ -142,7 +156,7 @@ ROLES_PORTAL = ["REPRESENTANTE", "ALUMNO"]
 @router.post(
     "/propia", response_model=MembresiaResponseDTO, status_code=201,
 )
-async def crear_membresia_propia(
+def crear_membresia_propia(
     datos: MembresiaPropiaCreateDTO,
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorPermisos(ROLES_PORTAL)),
@@ -151,9 +165,7 @@ async def crear_membresia_propia(
         persona_id=token_payload.get("persona_id"),
         tipo_membresia_id=datos.tipo_membresia_id,
     )
-    # Ídem `crear_membresia`: sin cobertura propia todavía, pero la clave
-    # `cubiertoHasta` queda poblada como en el resto de los endpoints.
-    return _con_cubierto_hasta(db, [membresia])[0]
+    return _recien_creada_sin_cobertura(membresia)
 
 
 @router.get(
@@ -161,7 +173,7 @@ async def crear_membresia_propia(
     response_model=PaginatedResponse[MembresiaResponseDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
 )
-async def listar_membresias(
+def listar_membresias(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
@@ -174,16 +186,24 @@ async def listar_membresias(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-# Issue #1328 (ampliado en #1337): adjunta `cubiertoHasta` (la ancla combinada
-# Pago + CoberturaBonificada, ver `PagoServicio.fecha_fin_maxima_combinada_
-# bulk`) a una o más membresías YA resueltas por `MembresiaServicio`/
-# `PagoServicio` -- UNA consulta agrupada por fuente, nunca una por membresía,
-# mismo criterio que `obtener_deuda_bulk` (issue #326). Es el único lugar del
-# router que arma un `MembresiaResponseDTO`: TODO endpoint que expone el DTO
-# pasa por acá (una lista de un solo elemento cuando el endpoint devuelve una
-# sola membresía) para que `cubierto_hasta = None` tenga un único significado
-# en todo el contrato -- "sin cobertura", nunca "no se calculó" (issue #1337).
 def _con_cubierto_hasta(db: Session, membresias: list) -> List[MembresiaResponseDTO]:
+    """Adjunta `cubiertoHasta` (la ancla combinada Pago + CoberturaBonificada,
+    ver `PagoServicio.fecha_fin_maxima_combinada_bulk`) a una o más
+    membresías YA resueltas por `MembresiaServicio`/`PagoServicio` -- UNA
+    consulta agrupada por fuente, nunca una por membresía, mismo criterio que
+    `obtener_deuda_bulk` (issue #326).
+
+    Issue #1328 (ampliado en #1337): todo endpoint que expone
+    `MembresiaResponseDTO` y necesita LEER cobertura ya existente pasa por
+    acá (una lista de un solo elemento cuando el endpoint devuelve una sola
+    membresía), para que `cubierto_hasta = None` tenga un único significado
+    en todo el contrato -- "sin cobertura", nunca "no se calculó". Los dos
+    endpoints de ALTA (`crear_membresia`, `crear_membresia_propia`) son la
+    excepción: una membresía recién creada nunca tiene cobertura propia
+    todavía, así que construyen `cubierto_hasta=None` directo vía
+    `_recien_creada_sin_cobertura` (issue #1349, ver su docstring) sin correr
+    esta consulta.
+    """
     cobertura_por_id = PagoServicio(db).fecha_fin_maxima_combinada_bulk(
         [membresia.id for membresia in membresias]
     )
@@ -371,7 +391,7 @@ def obtener_estadisticas_membresias(db: Session = Depends(obtener_sesion)):
     response_model=MembresiaResponseDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def obtener_membresia(
+def obtener_membresia(
     membresia_id: int,
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
@@ -508,7 +528,18 @@ def suspender_membresia(
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
     )
-    return _con_cubierto_hasta(db, [membresia])[0]
+    try:
+        return _con_cubierto_hasta(db, [membresia])[0]
+    except Exception:
+        # Issue #1349 (R4-002): la suspensión YA ocurrió -- `suspender_
+        # membresia` hizo su propio commit arriba -- así que un fallo acá no
+        # debe ser un 500 mudo que esconda que la acción sí surtió efecto. El
+        # id queda en el log para diagnosticar; la respuesta sigue siendo un
+        # 500, porque no hay ningún DTO parcial honesto que devolver.
+        logger.exception(
+            "Fallo enriqueciendo cubierto_hasta tras suspender la membresía %s", membresia_id,
+        )
+        raise
 
 
 @router.post(
@@ -529,7 +560,14 @@ def reactivar_membresia(
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
     )
-    return _con_cubierto_hasta(db, [membresia])[0]
+    try:
+        return _con_cubierto_hasta(db, [membresia])[0]
+    except Exception:
+        # Ídem `suspender_membresia`: la reactivación ya ocurrió.
+        logger.exception(
+            "Fallo enriqueciendo cubierto_hasta tras reactivar la membresía %s", membresia_id,
+        )
+        raise
 
 
 # Cambio de plan de una membresía existente (issue #400, criterio 1):
@@ -551,7 +589,14 @@ def cambiar_plan_membresia(
     membresia = MembresiaServicio(db).cambiar_plan(
         membresia_id, datos, actor_persona_id=token_payload.get("persona_id"),
     )
-    return _con_cubierto_hasta(db, [membresia])[0]
+    try:
+        return _con_cubierto_hasta(db, [membresia])[0]
+    except Exception:
+        # Ídem `suspender_membresia`: el cambio de plan ya ocurrió.
+        logger.exception(
+            "Fallo enriqueciendo cubierto_hasta tras cambiar el plan de la membresía %s", membresia_id,
+        )
+        raise
 
 
 # Otorga cobertura bonificada (issue #400, slice 4d): a diferencia de

@@ -3,7 +3,7 @@
 Issue: https://github.com/AlejandroTatum/cata_club/issues/1337
 Branch: `chore/1337-coverage-review-followups` (worktree `cata_club-worktrees/gentleman-1337`, cortada de `origin/main` @ a0f9b8a; `origin/main` avanzó a ec0cb33 mientras corría este trabajo)
 Delivery strategy: single PR, squash auto-merge (forecast/real ~292+71 líneas, bajo el presupuesto de ~400)
-TDD: **on** (strict, config de sesión). Runners: frontend `cd frontend && pnpm vitest run <file>`; backend `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest <file> -q` (db-test en `localhost:5436`, single-tenant). El puerto 5436 quedó bloqueado por el sandbox de red del agente — cada corrida de pytest necesitó `dangerouslyDisableSandbox: true`; sin eso el conteo de RED/GREEN de abajo no se pudo tomar.
+TDD: **on** (strict, config de sesión). Runners: frontend `cd frontend && pnpm vitest run <file>`; backend `cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest <file> -q` (db-test en `localhost:5436`, single-tenant). El puerto 5436 quedó bloqueado por el sandbox de red del agente — cada corrida de pytest necesitó `dangerouslyDisableSandbox: true`; sin eso el conteo de RED/GREEN de abajo no se pudo tomar.
 RDD: `on` (global, leído con `gentle-ai review mode status`). Candidato de review = el/los commit(s) de esta rama; el review nativo, el push y el PR quedan a cargo del orquestador (instrucción explícita del brief: este writer no corre `gentle-ai review`, no pushea, no abre PR).
 
 ## Objetivo

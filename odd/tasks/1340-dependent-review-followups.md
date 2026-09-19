@@ -3,7 +3,7 @@
 Issue: https://github.com/AlejandroTatum/cata_club/issues/1340
 Branch: `chore/1340-dependent-review-followups` (worktree `cata_club-worktrees/gentleman-1340`, cut from `origin/main` @ 59c3a8b)
 Delivery strategy: single PR, squash auto-merge (forecast well under ~400 changed lines: two small frontend behavior fixes, one backend test hardening, one test-double cleanup, all scoped to the #1318 delivery)
-TDD: **on** (strict, session config). Runners: frontend `cd frontend && pnpm vitest run <file>`; backend `cd backend && TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest <file> -q` (db-test on `localhost:5436`, single-tenant, torn down after use).
+TDD: **on** (strict, session config). Runners: frontend `cd frontend && pnpm vitest run <file>`; backend `cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest <file> -q` (db-test on `localhost:5436`, single-tenant, torn down after use).
 RDD: status not queried by this writer (push/review/PR are the orchestrator's job per this task's brief) — left for the orchestrator to resolve via `gentle-ai review mode status`.
 
 ## Objective
@@ -65,7 +65,7 @@ Close the five advisory findings of the native four-lens review of the PR that c
 ### T3 (R3-003/R3-005)
 
 - No prod code change (see design decision above) — no RED/GREEN pair applies; written once and run.
-- **GREEN** — `TEST_DATABASE_URL=postgresql+psycopg://usuario:password@localhost:5436/cataclub_test uv run pytest tests/test_autoservicio_representante.py -q` → `10 passed, 1 warning`.
+- **GREEN** — `TEST_DATABASE_URL=$TEST_DATABASE_URL uv run pytest tests/test_autoservicio_representante.py -q` → `10 passed, 1 warning`.
 - Changed: `backend/tests/test_autoservicio_representante.py` — `test_menor_no_puede_autoservicio`, `test_representado_no_puede_autoservicio`, `test_staff_no_puede_autoservicio` now assert `str(error.value) ==` the exact `mensajes.py` constant instead of just the exception type; `test_endpoint_me_representados_via_http` now follows the 201 response with a real `GET /api/v1/auth/me` call using the reissued `accessToken` and asserts `200` + `roles == ["REPRESENTANTE"]`.
 
 ### T4 (R2, harness half)
