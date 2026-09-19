@@ -329,7 +329,9 @@ export function buildCatalogoSinHorarios(
     });
   }
   return pendientes.sort(
-    (a, b) => a.horaInicio.localeCompare(b.horaInicio) || a.label.localeCompare(b.label),
+    (a, b) =>
+      a.horaInicio.localeCompare(b.horaInicio) ||
+      a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
   );
 }
 
