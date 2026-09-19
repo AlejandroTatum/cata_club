@@ -70,7 +70,12 @@ Four advisory findings from the native review of PR #1346 (issue #1332, lineage
 
 - `pnpm vitest run src/app/student/enroll src/components/ui/__tests__/Stepper.test.tsx`
   → 283/283 passed (13 files).
-- `make pre-pr LANE=frontend` → see report below.
+- `make pre-pr LANE=frontend` → PASSED end to end: `pnpm audit --audit-level=high`
+  (1 pre-existing moderate finding, below the `high` threshold — unrelated to
+  this change), `pnpm type-check` clean, `pnpm lint` clean (1 pre-existing
+  `no-img-element` warning in `src/app/sponsors/page.tsx`, unrelated),
+  `pnpm run test:coverage` → 5183/5183 passed (303 files), `pnpm build`
+  compiled successfully, `pnpm exec playwright test` → 218/218 passed.
 
 ## Files changed
 
