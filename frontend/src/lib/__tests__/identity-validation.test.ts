@@ -146,6 +146,16 @@ describe("teléfono", () => {
       expect(phoneError("0812345678")).toBe("invalid-number");
     });
 
+    it.each([
+      ["rejects 000000000 — 00 is not an Ecuadorian area code (issue #1319)", "000000000", "invalid-number"],
+      ["rejects 010000000 — 01 is not an Ecuadorian area code", "010000000", "invalid-number"],
+      ["rejects 080000000 — 08 is not an Ecuadorian area code", "080000000", "invalid-number"],
+      ["accepts 022345678 — area code 02 is Quito", "022345678", null],
+      ["accepts 072345678 — area code 07 is Loja", "072345678", null],
+    ])("%s", (_description, input, expected) => {
+      expect(phoneError(input)).toBe(expected);
+    });
+
     it("tolerates the explicit allowed separators (space, hyphen, parentheses)", () => {
       expect(phoneError("099-123-4567")).toBeNull();
       expect(phoneError("099 123 4567")).toBeNull();

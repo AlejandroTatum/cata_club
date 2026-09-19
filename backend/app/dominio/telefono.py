@@ -9,9 +9,10 @@ regla de identidad, no una utilidad de formato, y una sola copia evita que
 
 Estructura (sin separadores -- ver `es_telefono_valido`):
   - Celular: 10 dígitos, empieza en `09`.
-  - Fijo: 9 dígitos, empieza en `0` (el segundo dígito es el código de
-    provincia, p. ej. `02` Quito, `04` Guayaquil -- no se valida ese código
-    puntual, solo el prefijo `0` y el largo).
+  - Fijo: 9 dígitos, empieza en `0` y el segundo dígito es el código de
+    provincia, `2`-`7` (p. ej. `02` Quito, `04` Guayaquil, `07` Loja) --
+    issue #1319: `00`, `01` y `08` no son código de área de ningún fijo
+    ecuatoriano y se rechazan.
 
 Issue #855: un navegador móvil autocompleta el celular en formato
 internacional (`+593991234567`, `593991234567`). `es_telefono_valido` sigue
@@ -28,6 +29,10 @@ _LARGO_CELULAR = 10
 _PREFIJO_CELULAR = "09"
 _LARGO_FIJO = 9
 _PREFIJO_FIJO = "0"
+# Segundo dígito del fijo: código de provincia `02`-`07` (issue #1319). `08` y
+# `01` no son de ningún fijo, y `00` tampoco -- el mismo rango que el frontend
+# valida en `LANDLINE_PATTERN` (`identity-validation.ts`).
+_CODIGOS_AREA_FIJO = "234567"
 
 # País (`593`) + troncal de celular (`9`) + 8 dígitos del abonado. El `+` es
 # opcional -- el navegador autocompleta con y sin él -- y la coincidencia
@@ -51,9 +56,10 @@ def normalizar_telefono(telefono: str) -> str:
 def es_telefono_valido(telefono: str) -> bool:
     """True si `telefono` son solo dígitos (ningún separador, espacio o
     letra) y calzan con un celular (10 dígitos, `09...`) o un fijo (9
-    dígitos, `0...`) ecuatoriano. No normaliza ni descarta caracteres --
-    quien llama decide qué hacer con un teléfono mal tipeado, este
-    helper solo dice si el que llegó es válido tal cual."""
+    dígitos, `0` + código de área `2`-`7` + 7 dígitos) ecuatoriano. No
+    normaliza ni descarta caracteres -- quien llama decide qué hacer con un
+    teléfono mal tipeado, este helper solo dice si el que llegó es válido
+    tal cual."""
     # `isascii()` antes de `isdigit()`: `str.isdigit()` sola acepta dígitos
     # no ASCII (arábigo-índicos `٠١٢`, devanagari, con volado...), y el
     # `[0-9]` del CHECK de la base NO los acepta. Sin este filtro, un
@@ -65,7 +71,7 @@ def es_telefono_valido(telefono: str) -> bool:
     if len(telefono) == _LARGO_CELULAR:
         return telefono.startswith(_PREFIJO_CELULAR)
     if len(telefono) == _LARGO_FIJO:
-        return telefono.startswith(_PREFIJO_FIJO)
+        return telefono.startswith(_PREFIJO_FIJO) and telefono[1] in _CODIGOS_AREA_FIJO
     return False
 
 
