@@ -10,6 +10,9 @@ import {
   emergencyPhoneDiffersRule,
   EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE,
   PERSON_NAME_PATTERN,
+  PERSON_NAME_MAX_WORDS,
+  PERSON_NAME_MAX_LETTERS_PER_WORD,
+  PERSON_NAME_MAX_LENGTH,
   personNameError,
   personNameRule,
   normalizePersonName,
@@ -443,6 +446,46 @@ describe("nombre de persona", () => {
       expect(personNameRule("juan_carlos", "Los apellidos")).toBe(
         "Los apellidos tienen un carácter que no reconocemos en un nombre de persona.",
       );
+    });
+  });
+
+  // Issue #1323: un tester pegó una frase entera en «Nombres» y la regla la
+  // aceptó — mide composición y largo, no plausibilidad. El tope frena
+  // pegar una frase, un nombre duplicado o teclas apretadas, sin rechazar
+  // ningún nombre compuesto real.
+  describe("personNameRule — topes realistas (issue #1323)", () => {
+    it("rejects more than 5 words, naming the words cause", () => {
+      expect(personNameRule("Ana Beatriz Carla Diana Elena Flor", "Los nombres")).toBe(
+        `Los nombres no pueden tener más de ${PERSON_NAME_MAX_WORDS} palabras.`,
+      );
+    });
+
+    it("rejects a word longer than 20 letters, naming the word-length cause", () => {
+      const palabraDe21Letras = "a".repeat(PERSON_NAME_MAX_LETTERS_PER_WORD + 1);
+      expect(personNameRule(palabraDe21Letras, "Los apellidos")).toBe(
+        `Los apellidos no pueden tener una palabra de más de ${PERSON_NAME_MAX_LETTERS_PER_WORD} letras.`,
+      );
+    });
+
+    it("rejects a total length over 60 characters, naming the total-length cause", () => {
+      const palabraDe20 = "a".repeat(PERSON_NAME_MAX_LETTERS_PER_WORD);
+      const nombreDe61Caracteres = `${palabraDe20} ${palabraDe20} ${"a".repeat(PERSON_NAME_MAX_LETTERS_PER_WORD - 1)}`;
+      expect(nombreDe61Caracteres).toHaveLength(PERSON_NAME_MAX_LENGTH + 1);
+      expect(personNameRule(nombreDe61Caracteres, "Los nombres")).toBe(
+        `Los nombres no pueden tener más de ${PERSON_NAME_MAX_LENGTH} caracteres.`,
+      );
+    });
+
+    it.each(["María de los Ángeles", "De la Cruz Andrade", "Jean-Pierre O'Neil"])(
+      "accepts the real compound name %s",
+      (value) => {
+        expect(personNameRule(value, "Los nombres")).toBeNull();
+      },
+    );
+
+    it("does not change existing short cases", () => {
+      expect(personNameRule("María", "El nombre del contacto de emergencia", { plural: false })).toBeNull();
+      expect(personNameRule("Pérez-Mora", "Los apellidos")).toBeNull();
     });
   });
 
