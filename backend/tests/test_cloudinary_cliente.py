@@ -329,6 +329,31 @@ def test_pdf_nuevo_sin_existing_no_deja_warning(monkeypatch, caplog):
         assert "WARNING" not in niveles
 
 
+# --- 3d. `overwrite` real hasta el SDK (issue #1335, R3-002) ---------------
+# `test_pago_comprobante_atomico.py:541` solo afirma el kwarg `sobreescribir`
+# contra un `subir_pdf_membresia` MOCKEADO -- nunca prueba que ese booleano
+# efectivamente llegue al `overwrite` del SDK real. Estos dos candados cierran
+# ese hueco: uno para el default histórico (`sobreescribir=False`) y otro
+# para el `sobreescribir=True` explícito que usa `generar_comprobante_pdf_
+# tarea` (issue #1327).
+def test_pdf_con_sobreescribir_true_pasa_overwrite_true_al_sdk():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+        _subir_pdf(sobreescribir=True)
+
+    _, kwargs = mock_upload.call_args
+    assert kwargs["overwrite"] is True
+
+
+def test_pdf_sin_sobreescribir_pasa_overwrite_false_al_sdk_por_default():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+        _subir_pdf()
+
+    _, kwargs = mock_upload.call_args
+    assert kwargs["overwrite"] is False
+
+
 # --- 4. Guardia: ninguna función reintenta tras un fallo --------------------
 # Invariante crítico del diseño: Celery ya reintenta `subir_pdf_membresia`
 # (autoretry_for + backoff + jitter, comprobante_tareas.py:42-45). Un

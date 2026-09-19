@@ -543,6 +543,52 @@ def test_genera_comprobante_sin_carrera_ni_comprobante_previo(db_session, monkey
     assert kwargs_subida.get("sobreescribir") is True
 
 
+def test_public_id_comprobante_persistido_no_se_recalcula_en_segunda_corrida(
+    db_session, monkeypatch,
+):
+    """Candado de la invariante documentada en `public_id_comprobante`
+    (issue #1335, R3-003): el `public_id` se calcula UNA SOLA VEZ, desde la
+    fila recién cargada, y queda persistido -- una segunda corrida de la
+    tarea para el MISMO pago (redespacho de reconciliación, o el reintento
+    de Celery que entra por la rama de `pago.comprobante` ya existente) NO
+    lo vuelve a calcular. Se espía `public_id_comprobante` en vez de solo
+    comparar el resultado: como el hash es determinístico, recalcularlo
+    daría el mismo valor -- la única forma de distinguir "reutilizado" de
+    "recalculado con el mismo resultado" es contar las llamadas."""
+    viejo = datetime.now(timezone.utc) - timedelta(minutes=30)
+    pago = _sembrar_pago(db_session, cedula_valida(507), EstadoPago.APROBADO, viejo)
+
+    real_public_id_comprobante = ct.public_id_comprobante
+    llamadas: list[Pago] = []
+
+    def _espia(pago_arg):
+        llamadas.append(pago_arg)
+        return real_public_id_comprobante(pago_arg)
+
+    monkeypatch.setattr(ct, "public_id_comprobante", _espia)
+    monkeypatch.setattr(ct, "generar_comprobante_pago_pdf", lambda **kwargs: b"pdf-falso")
+    monkeypatch.setattr(
+        ct, "subir_pdf_membresia",
+        lambda *a, **k: "https://cdn.test/no-deberia-usarse-en-la-segunda-corrida",
+    )
+    _usar_sesion_del_test(monkeypatch, db_session)
+
+    primero = ct.generar_comprobante_pdf_tarea(pago.id)
+    assert len(llamadas) == 1
+    esperado = primero["comprobante_url"]
+
+    segundo = ct.generar_comprobante_pdf_tarea(pago.id)
+
+    assert len(llamadas) == 1  # no se volvió a calcular en la segunda corrida
+    assert segundo["comprobante_url"] == esperado
+    comprobante = (
+        db_session.query(ComprobantePago)
+        .filter(ComprobantePago.pago_id == pago.id)
+        .one()
+    )
+    assert comprobante.archivo_url == esperado
+
+
 # --- 5. Carrera de inserción de comprobante (bug 3) -------------------------
 
 def test_integrityerror_devuelve_url_del_ganador(motor_test):

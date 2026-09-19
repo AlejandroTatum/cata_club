@@ -74,6 +74,20 @@ def public_id_comprobante(pago: Pago) -> str:
     invariante roto en otra parte del código -- fallar ruidoso es preferible
     a tapar el hueco reusando el `public_id` viejo, que es exactamente el
     bug que este issue corrige.
+
+    Invariante (issue #1335, R3-003): `fecha_validacion.isoformat()` entra
+    directo al hash sin normalizar tz ni microsegundos. Es seguro SOLO porque
+    esta función se llama UNA VEZ por pago, desde la fila recién cargada por
+    `generar_comprobante_pdf_tarea`, y el resultado queda persistido como
+    `ComprobantePago.archivo_url` -- nunca se vuelve a calcular. Un
+    redespacho de reconciliación o un reintento de Celery para el mismo pago
+    entra por la rama de `pago.comprobante` ya existente (early return, ver
+    `generar_comprobante_pdf_tarea`) y reutiliza el valor persistido, sin
+    llamar a esta función de nuevo. Si algún día se necesitara recalcular
+    este `public_id` desde otra representación de `fecha_validacion` (por
+    ejemplo, tras un roundtrip por un serializador que trunque
+    microsegundos), el resultado podría divergir del persistido -- hoy no
+    ocurre porque no existe ningún camino de recálculo.
     """
     if pago.fecha_validacion is None:
         raise ValueError(
@@ -148,11 +162,27 @@ def generar_comprobante_pdf_tarea(self, pago_id: int) -> dict:
         # `sobreescribir=True`: el `public_id` ya es único por aprobación
         # (issue #1327), así que la única forma de reintentar contra el
         # MISMO `public_id` es este mismo pago volviendo a subir sus propios
-        # bytes (reintento de Celery, o la carrera de dos disparos
-        # concurrentes que se resuelve más abajo por `IntegrityError`). Una
-        # colisión ajena queda igual de imposible en la práctica -- el hash
-        # incluye `fecha_validacion` -- y si ocurriera, `subir_pdf_membresia`
-        # deja un WARNING visible con el `existing=true` del SDK.
+        # bytes (reintento de Celery -- `autoretry_for` + `max_retries=5`
+        # arriba -- o el redespacho de `reconciliar_comprobantes_faltantes`,
+        # o la carrera de dos disparos concurrentes que se resuelve más abajo
+        # por `IntegrityError`).
+        #
+        # Decisión (issue #1335, R3-001): se mantiene `overwrite=True` en vez
+        # de pasar a `False` + tratar `existing=true` como colisión real. Con
+        # `autoretry_for=(Exception,)`, un reintento tras "la subida terminó
+        # pero el commit del `ComprobantePago` falló" vuelve a subir el MISMO
+        # `public_id` -- con `overwrite=False` esa subida moriría con un
+        # error duro del SDK y convertiría cada reintento legítimo en un
+        # fallo permanente para ese pago.
+        #
+        # Este `overwrite=True` significa que, a diferencia de otros callers
+        # de `subir_pdf_membresia`, ACÁ NO hay detección de colisión: el SDK
+        # solo informa `existing=true` -- y por lo tanto el WARNING que deja
+        # `subir_pdf_membresia` (ver su docstring en `cloudinary_cliente.py`)
+        # -- cuando `overwrite=False`. Una colisión ajena (dos "vidas" de la
+        # base con la misma `fecha_validacion` para el mismo `pago.id`)
+        # sobrescribiría en silencio. Se acepta ese residual porque el hash
+        # incluye `fecha_validacion`, que difiere entre vidas en la práctica.
         subir_pdf_membresia(pdf_bytes, public_id, sobreescribir=True)
 
         # Se persiste el public_id, NO la URL que devuelve el SDK: el PDF se
