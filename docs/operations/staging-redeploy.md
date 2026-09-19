@@ -287,18 +287,82 @@ mismas rutas que desarrollo local. Las carpetas compartidas `cataclub/*` NO
 se purgaron en ese momento -- los recursos que staging ya había subido ahí
 quedan como huérfanos, documentados y aceptados, no un pendiente.
 
+## Reprovisionar con base vacía
+
+Procedimiento seguido el 2026-09-19 para reemplazar los datos de la ronda de
+pruebas de septiembre (SHA `29a2437d`) por una base limpia en el mismo
+redeploy que avanzó staging al SHA aprobado. No repite el flujo manual ni la
+ejecución en el host de las secciones anteriores; asume que ya corriste esos
+pasos hasta tener `IMAGE_TAG` verificado y `MIGRATION_COMPATIBILITY` resuelto
+(ver [Flujo manual, siempre con SHA](#flujo-manual-siempre-con-sha) y
+[Ejecución en el host](#ejecución-en-el-host)). Si el rango no trae
+migraciones nuevas, exporta `MIGRATION_COMPATIBILITY=none` como en este caso.
+
+1. En el checkout remoto (`/opt/cata-club`), `git fetch` y `git checkout
+   <SHA-aprobado>`. `deploy.sh` nunca mueve el checkout por sí solo -- si el
+   checkout queda desalineado del `IMAGE_TAG`, el preflight lo detecta (ver
+   [Checkout o `.env` obsoletos](#checkout-o-env-obsoletos)), pero el paso en
+   sí es manual.
+2. Antes de tocar nada, guarda el primer admin para restaurarlo después:
+   campos de `persona`, el hash de `usuario.contrasenia` y
+   `correo_verificado`, en un archivo temporal con `umask 077` y sin
+   imprimirlo nunca por pantalla ni por logs.
+3. `docker compose down --remove-orphans` y luego
+   `docker volume rm cata-club_cataclub_db_data cata-club_cataclub_redis_data`.
+   No toques `caddy_data` ni `caddy_config`: ahí viven los certificados TLS y
+   `down` sin `-v` ya los deja intactos.
+4. Escribe `IMAGE_TAG=<SHA-aprobado>` en el `.env` del host. El preflight
+   exige `.env` = `IMAGE_TAG` exportado = `git rev-parse HEAD`, así que este
+   paso tiene que preceder a cualquier otro.
+5. **Marca de reaprovisionamiento**: con `db` y `redis` abajo, mueve el
+   puntero del ledger `/var/lib/cata-club/releases/current.env` a
+   `current.env.pre-reprovision-<timestamp-UTC>` antes de correr
+   `preflight-production.sh`. Es la única forma de que el preflight tome la
+   rama de primer aprovisionamiento: con el puntero en su lugar y la base
+   abajo, aborta porque «la base debería estar arriba»; con una base vacía
+   arriba y el puntero viejo, aborta leyendo `alembic_version`. El puntero
+   archivado queda como historial en el ledger; `record-release.sh` escribe
+   el nuevo al final del deploy.
+6. Corre `./scripts/deploy/deploy.sh` como en la ejecución normal del host.
+   Con base vacía tolera la ausencia de backup pre-deploy, corre las
+   migraciones desde cero y valida que runtime, `HEAD`, `IMAGE_TAG` y ledger
+   queden alineados («Validaciones OK»).
+7. Recrea el primer admin con `scripts/crear_primer_admin.py` vía
+   `docker compose exec -e BOOTSTRAP_ADMIN_*` y una contraseña descartable, y
+   después restaura la identidad real sin que nadie vea la contraseña:
+   `UPDATE usuario SET contrasenia=<hash guardado>, correo_verificado=<valor
+   guardado> WHERE id=1`. Si leíste los booleanos con `psql -A`, vienen como
+   `t`/`f`: convertilos antes de reinyectarlos en el `UPDATE`.
+8. Borra el archivo temporal del paso 2.
+
+Corrida como `ssh <usuario-staging>@<host-staging> 'bash -s' < script.sh`,
+este procedimiento se corta a la mitad: `docker compose exec -T` y `psql`
+dentro del script consumen el stdin del pipe, así que el resto del script
+después del primer `exec` nunca llega a ejecutarse. Copia el script al host
+y correlo ahí con `< /dev/null`.
+
 ## Última verificación
 
 Actualiza esta sección en el mismo PR que sigue a cada redeploy. Quedó sin tocar
 entre `76fe1eca` (2026-08-30) y `77db42c3` (2026-09-03), y el rango derivado de
 ella pasó a ser 131 commits y 8 migraciones cuando los reales eran 23 y 2.
 
-- SHA: `e25e8d44ca26952f30ba1df0a3139fa5f2c64daf`
-- Rango de migración: `780ef12115e6->d1016emailunico->f1023correobtrim`,
-  clasificado `backward-compatible`.
-- Evidencia: 7 servicios saludables, Alembic `f1023correobtrim` confirmado en el
-  contenedor y en `alembic_version`, índice único efectivo
-  (`ix_usuario_correo_lower` sobre `lower(btrim((correo)::text))`), precheck de
-  correos con 0 colisiones sobre 13 usuarios, restore-check en entorno desechable
-  OK contra `780ef12115e6`, health por el borde sirviendo el SHA desplegado,
-  landing HTTP 200 y `celery inspect ping` con 1 nodo. Fecha: 2026-09-06.
+- SHA: `46c6bfb593eba21c376cb910ca9c6720fc26bb83`
+- Rango de migración: ninguna pendiente; head en `p1146recses`
+  (`MIGRATION_COMPATIBILITY=none`). 23 commits desde el redeploy anterior
+  (`29a2437d`, que llevaba los datos de la ronda de pruebas de septiembre),
+  sin archivos nuevos bajo `backend/alembic/versions/` en ese rango.
+- Este redeploy fue además un reaprovisionamiento con base vacía: ver
+  [Reprovisionar con base vacía](#reprovisionar-con-base-vacía) para el
+  procedimiento completo (marca de reaprovisionamiento, snapshot/restauración
+  del primer admin por hash, y la trampa de correr el script por un pipe SSH).
+- Evidencia: 8 servicios saludables, Alembic `p1146recses` confirmado en el
+  contenedor y en `alembic_version`, `https://staging.cataclub.com/health/ready`
+  respondiendo `{"estado":"listo","postgres":"ok","redis":"ok"}` a través del
+  borde, `celery inspect ping` con 1 nodo, conteos en base (1 usuario, 1
+  persona, 0 pagos, 0 comprobantes) consistentes con la base vacía
+  reaprovisionada, carpetas de Cloudinary verificadas dentro del contenedor de
+  backend y el ledger con `46c6bfb….env` alineado. Nota conocida y no
+  bloqueante: `crear_primer_admin.py` imprime un traceback cosmético de
+  passlib/bcrypt (`__about__`) al hashear la contraseña descartable. Fecha:
+  2026-09-19.
