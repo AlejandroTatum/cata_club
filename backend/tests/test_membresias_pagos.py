@@ -1,9 +1,13 @@
 from datetime import date, datetime, time, timezone
+from decimal import Decimal
 
 from app.dominio.cedula import cedula_valida
-from app.dominio.enums import EstadoMembresia
-from app.dominio.modelos import Membresia, Pago, Persona
+from app.dominio.enums import EstadoMembresia, EstadoPago
+from app.dominio.modelos import AsignacionDescuento, CoberturaBonificada, Descuento, Membresia, Pago, Persona
 from app.seguridad.gestor_auth import GestorAutenticacion
+from tests.fabricas_pagos import (
+    crear_membresia_orm, crear_pago_orm, crear_persona_orm, crear_tipo_membresia_orm,
+)
 
 
 def _crear_persona(client, cedula="1710034065"):
@@ -767,6 +771,87 @@ def test_membresias_mias_aplica_matriz_de_propiedad_sin_exponer_al_extrano(clien
     owner_resp = client_sin_permisos.get("/api/v1/membresias/mias")
     assert owner_resp.status_code == 200
     assert owner_resp.json()[0]["personaId"] == alumno["id"]
+
+
+# --- Issue #1328: `cubiertoHasta` combina Pago aprobado y CoberturaBonificada --
+# Una sola fuente de verdad para "cubierto hasta" en el portal del alumno: la
+# misma ancla que `PagoServicio._fecha_fin_maxima_combinada` ya usa para
+# encadenar beneficios (`aplicar_beneficio_bonificado`), expuesta acá para que
+# el frontend deje de recalcularla mirando solo `Pago` (issue original: la
+# cobertura otorgada por un beneficio quedaba invisible en pantalla).
+def test_membresias_mias_cubierto_hasta_combina_pago_y_cobertura_bonificada(client, db_session):
+    persona = crear_persona_orm(db_session, cedula_valida(910))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    pago = crear_pago_orm(db_session, persona, membresia, EstadoPago.APROBADO)
+    pago.fecha_fin = date(2026, 11, 30)
+
+    descuento = Descuento(nombre="Becado #1328", porcentaje=Decimal("100.00"), activo=True)
+    db_session.add(descuento)
+    db_session.flush()
+    asignacion = AsignacionDescuento(
+        persona_id=persona.id, descuento_id=descuento.id, asignado_por_persona_id=persona.id,
+    )
+    db_session.add(asignacion)
+    db_session.flush()
+    db_session.add(CoberturaBonificada(
+        membresia_id=membresia.id, persona_id=persona.id,
+        asignacion_descuento_id=asignacion.id,
+        tarifa_mensual_aplicada=Decimal("35.00"), meses_comprados=1,
+        descuento_valor_aplicado=Decimal("35.00"),
+        descuento_porcentaje_aplicado=Decimal("100.00"),
+        fecha_inicio=date(2026, 12, 1), fecha_fin=date(2027, 1, 31),
+        otorgada_por_persona_id=persona.id,
+    ))
+    db_session.commit()
+
+    resp = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+    assert resp.status_code == 200
+    # La cobertura bonificada (2027-01-31) es más lejana que el pago
+    # aprobado (2026-11-30): la ancla combinada debe tomar la más lejana,
+    # nunca solo la de `Pago`.
+    assert resp.json()[0]["cubiertoHasta"] == "2027-01-31"
+
+
+def test_membresias_mias_cubierto_hasta_null_sin_ninguna_cobertura(client, db_session):
+    persona = crear_persona_orm(db_session, cedula_valida(911))
+    tipo = crear_tipo_membresia_orm(db_session)
+    crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
+    db_session.commit()
+
+    resp = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+    assert resp.status_code == 200
+    assert resp.json()[0]["cubiertoHasta"] is None
+
+
+def test_membresias_mias_cubierto_hasta_no_incurre_en_n_mas_uno(client, db_session, contar_selects):
+    """Tres membresías de la misma persona: la ancla combinada se resuelve
+    con las mismas dos consultas AGRUPADAS que `PagoServicio.obtener_deuda_
+    bulk` ya usa (issue #326) -- nunca una consulta por membresía."""
+    persona = crear_persona_orm(db_session, cedula_valida(912))
+    tipo = crear_tipo_membresia_orm(db_session)
+    fechas_fin_esperadas = {}
+    for indice in range(3):
+        membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.INACTIVA)
+        pago = crear_pago_orm(db_session, persona, membresia, EstadoPago.APROBADO)
+        pago.fecha_fin = date(2026, 9, 1 + indice)
+        fechas_fin_esperadas[membresia.id] = pago.fecha_fin
+    db_session.commit()
+    db_session.expire_all()  # fuerza recarga real desde la BD
+
+    with contar_selects() as sentencias:
+        resp = client.get(f"/api/v1/membresias/mias?persona_id={persona.id}")
+
+    assert resp.status_code == 200
+    cuerpo = resp.json()
+    assert len(cuerpo) == 3
+    for membresia_dto in cuerpo:
+        assert membresia_dto["cubiertoHasta"] == fechas_fin_esperadas[membresia_dto["id"]].isoformat()
+    selects = [s for s in sentencias if s.strip().upper().startswith("SELECT")]
+    assert len(selects) <= 4, (
+        f"Se esperaban a lo sumo 4 SELECTs (autorización + membresías + 2 "
+        f"anclas agrupadas), se ejecutaron {len(selects)}: {selects}"
+    )
 
 
 # --- E04-RF002: gratuidad del 4to miembro familiar ---------------------------

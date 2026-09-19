@@ -166,3 +166,30 @@ describe("buildMembershipView", () => {
     expect(view.esGratuidadFamiliar).toBe(false);
   });
 });
+
+// Issue #1328: `cubiertoHasta` (the backend's combined Pago + CoberturaBonificada
+// anchor) must survive the translation from `BackendMembresiaPropia` and
+// default to `null` when the backend omits it — same plumbing-only criterion
+// as `esGratuidadFamiliar` above.
+describe("buildMembershipView — cubiertoHasta", () => {
+  const mem: BackendMembresiaPropia = {
+    id: 4,
+    estado: "ACTIVA",
+    personaId: 9,
+    montoAplicado: "0.00",
+    tipoMembresiaId: 1,
+  };
+  const tiposById = new Map<number, BackendTipoMembresiaCatalogo>([
+    [1, { id: 1, categoria: "Mensual Adultos", precio: "35.00", modalidad: "MENSUAL" }],
+  ]);
+
+  it("passes cubiertoHasta through when the backend sends it", () => {
+    const view = buildMembershipView({ ...mem, cubiertoHasta: "2027-01-31" }, tiposById);
+    expect(view.cubiertoHasta).toBe("2027-01-31");
+  });
+
+  it("defaults cubiertoHasta to null when the backend omits it", () => {
+    const view = buildMembershipView(mem, tiposById);
+    expect(view.cubiertoHasta).toBeNull();
+  });
+});

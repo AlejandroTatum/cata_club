@@ -22,14 +22,19 @@
  *
  * ## Two facts this screen deliberately does NOT show
  *
- * - **"Vigente hasta" from the membership.** `MembershipSummary.fechaFin` is
+ * - **"Vigente hasta" from `MembershipSummary.fechaFin`.** That field is
  *   declared on the client type but `MembershipView` in
- *   src/lib/server/student-adapter.ts never populates it — the field is
+ *   src/lib/server/student-adapter.ts never populates it — it stays
  *   `undefined` for every real payload, and the old status bar's "Vigente
  *   hasta: {fechaFin}" therefore rendered nothing at all while its `isExpired`
- *   branch silently never fired. The real, computable coverage date is the
- *   furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`), which
- *   is what the card shows and what the renewal form starts from.
+ *   branch silently never fired. The coverage date the card shows and the
+ *   renewal/benefit forms start from is `MembershipSummary.cubiertoHasta`
+ *   (issue #1328) — the backend's own combined anchor across an APPROVED
+ *   `Pago` and a `CoberturaBonificada` (`PagoServicio._fecha_fin_maxima_
+ *   combinada`), so a benefit applied through `ApplyBenefitForm` shows up
+ *   here too. `resolveCoverageEnd` (APPROVED payments only) is kept as a
+ *   fallback for when the backend omits that field, never the primary
+ *   reading.
  * - **An amount due.** There is no debt concept in the backend: a Membresia
  *   carries a `montoAplicado` (the plan's price), not a balance. The card
  *   reports the monthly price it can prove and lets the reader enter what they
@@ -200,8 +205,8 @@ function MembershipCard({
   studentName: string | null;
   children?: React.ReactNode;
 }): React.ReactElement {
-  // Issue #815: `coverageEnd` — the furthest APPROVED `PagoPersona.fechaFin`,
-  // the very date the heading below prints — is passed in, so the badge and
+  // Issue #815: `coverageEnd` — `MembershipSummary.cubiertoHasta` (issue
+  // #1328), the very date the heading below prints — is passed in, so the badge and
   // that heading can no longer tell the reader two different things. Reading
   // `estado` alone let this badge say "Membresía activa" over a coverage date
   // that had already passed, every night until the 02:35 batch caught up.
@@ -2000,7 +2005,16 @@ function PaymentsContent({
     () => (pagosState.status === "ready" ? pagosState.pagos : NO_PAGOS),
     [pagosState],
   );
-  const coverageEnd = useMemo(() => resolveCoverageEnd(pagos), [pagos]);
+  // Issue #1328: `MembershipSummary.cubiertoHasta` (the backend's own
+  // combined anchor over an APPROVED `Pago` AND a `CoberturaBonificada`) is
+  // the primary reading, so a benefit applied through `ApplyBenefitForm`
+  // shows up here immediately. `resolveCoverageEnd` (APPROVED payments only)
+  // is kept as the fallback for an older backend that omits the field.
+  const coverageEnd = useMemo(() => {
+    const cubiertoHasta = selectedProfile?.membership?.cubiertoHasta;
+    if (cubiertoHasta !== undefined) return cubiertoHasta;
+    return resolveCoverageEnd(pagos);
+  }, [selectedProfile, pagos]);
   const counts = useMemo(() => countPagosByStatus(pagos), [pagos]);
   const filteredPagos = useMemo(
     () => sortPagosByDate(filterPagosByStatus(pagos, filter)),

@@ -475,9 +475,11 @@ function isGratuitousMembership(input: {
  * gratuitous membership gets what `estado` alone already said correctly for
  * this reader: "Membresía activa", and no claim about coverage at all.
  *
- * @param coverageEnd The furthest `fechaFin` among APPROVED payments
- *   (`resolveCoverageEnd`) — NOT `MembershipSummary.fechaFin`, which no
- *   adapter populates.
+ * @param coverageEnd The membership's covered-until date — `MembershipSummary.
+ *   cubiertoHasta` (issue #1328) where the caller has it, or the
+ *   `resolveCoverageEnd` fallback (furthest `fechaFin` among APPROVED
+ *   payments) otherwise. NOT `MembershipSummary.fechaFin`, which no adapter
+ *   populates.
  * @param membership The membership facts that outrank the date — today only
  *   `esGratuidadFamiliar`. Optional so a caller with no membership at hand
  *   still gets the `estado`-and-coverage reading it always got.

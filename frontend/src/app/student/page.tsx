@@ -324,9 +324,10 @@ function Carnet({
 }: {
   profile: StudentProfileSummary;
   /**
-   * The furthest `fechaFin` among APPROVED payments (`resolveCoverageEnd`),
-   * or `null`. The same date `CuotaCard` and `/student/payments` print — see
-   * the register below for what the credential does with it.
+   * `MembershipSummary.cubiertoHasta` (issue #1328), or the `resolveCoverageEnd`
+   * fallback when the backend omits it, or `null`. The same date `CuotaCard`
+   * and `/student/payments` print — see the register below for what the
+   * credential does with it.
    */
   coverageEnd: string | null;
   /** The same assignments the training panel reads — see `franja` below. */
@@ -413,9 +414,9 @@ function Carnet({
    *
    * The coverage end sits beside "Socio desde" because the two are the same
    * fact read at its two ends: when this person belongs to the club, and until
-   * when the club has been paid for them. It is the date `resolveCoverageEnd`
-   * gives `CuotaCard` and `/student/payments`, from the same approved payments
-   * — one reading, printed once per screen.
+   * when the club has been covered for them. It is the same `coverageEnd`
+   * `CuotaCard` and `/student/payments` print — `MembershipSummary.
+   * cubiertoHasta` (issue #1328), one reading, printed once per screen.
    *
    * It is NOT the payment verdict coming back to the credential. The owner
    * removed that ("no tiene ningún pago aprobado … muévala a la sección de
@@ -1094,8 +1095,9 @@ function ActivePortalView({
   const selectedPersonaId = selectedProfile?.personaId ?? "";
 
   // Payments are fetched here rather than inside `PagosSection` because the
-  // carnet also needs them: the only real "coverage until" date in the system
-  // is the furthest `fechaFin` among approved payments.
+  // carnet also needs them: `resolveCoverageEnd`'s reading (the furthest
+  // `fechaFin` among approved payments) is the fallback `coverageEnd` below
+  // falls back to when the backend's own combined anchor is absent.
   const [pagosState, setPagosState] = useState<PagosState>({ status: "loading" });
   const [pagosReloadToken, setPagosReloadToken] = useState(0);
 
@@ -1141,10 +1143,17 @@ function ActivePortalView({
     };
   }, [selectedPersonaId]);
 
-  const coverageEnd = useMemo(
-    () => (pagosState.status === "ready" ? resolveCoverageEnd(pagosState.pagos) : null),
-    [pagosState],
-  );
+  // Issue #1328: the backend's own combined anchor (`MembershipSummary.
+  // cubiertoHasta` — an APPROVED `Pago` AND a `CoberturaBonificada`, the
+  // furthest of the two) is the primary reading, so a benefit applied
+  // through `ApplyBenefitForm` shows up here immediately. `resolveCoverageEnd`
+  // (APPROVED payments only) is kept as the fallback for an older backend
+  // that omits the field, never the primary source.
+  const coverageEnd = useMemo(() => {
+    const cubiertoHasta = selectedProfile?.membership?.cubiertoHasta;
+    if (cubiertoHasta !== undefined) return cubiertoHasta;
+    return pagosState.status === "ready" ? resolveCoverageEnd(pagosState.pagos) : null;
+  }, [selectedProfile, pagosState]);
   const pendingPagos = useMemo(
     () =>
       pagosState.status === "ready"

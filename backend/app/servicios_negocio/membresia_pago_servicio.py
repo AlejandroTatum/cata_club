@@ -798,6 +798,29 @@ class PagoServicio:
             self.repo_cobertura_bonificada.fecha_fin_maxima(membresia_id),
         )
 
+    # Issue #1328: versión pública y en bloque de `_fecha_fin_maxima_
+    # combinada` -- el portal del alumno (`GET /membresias/mias`, admin-less)
+    # necesita esta misma ancla para el campo `cubiertoHasta` de
+    # `MembresiaResponseDTO`, y `MembresiaServicio` (quien arma esa
+    # respuesta) no tiene los repos de `Pago`/`CoberturaBonificada` -- nunca
+    # debería tenerlos, ver el comentario de `obtener_deuda`/`obtener_deuda_
+    # bulk` un poco más abajo sobre por qué esta superficie vive acá. Público
+    # (sin guion bajo) porque el router la llama directo, a diferencia de la
+    # versión de una sola membresía, que solo usan métodos internos de esta
+    # clase. UNA consulta agrupada por fuente (`fecha_fin_maxima_aprobada_
+    # bulk`/`fecha_fin_maxima_bulk`), nunca una por membresía -- mismo patrón
+    # que `obtener_deuda_bulk` (issue #326) ya usa para las mismas dos
+    # fuentes.
+    def fecha_fin_maxima_combinada_bulk(self, membresia_ids: list[int]) -> dict[int, date | None]:
+        if not membresia_ids:
+            return {}
+        fin_pagos = self.repo.fecha_fin_maxima_aprobada_bulk(membresia_ids)
+        fin_cobertura = self.repo_cobertura_bonificada.fecha_fin_maxima_bulk(membresia_ids)
+        return {
+            membresia_id: _maximo_fecha_opcional(fin_pagos.get(membresia_id), fin_cobertura.get(membresia_id))
+            for membresia_id in membresia_ids
+        }
+
     def _hay_cobertura_en_rango(
         self,
         membresia_id: int,

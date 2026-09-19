@@ -545,6 +545,50 @@ describe("StudentPage — the club membership card (carnet)", () => {
     expect(carnet).toContainElement(facts);
   });
 
+  /**
+   * Issue #1328: a benefit applied through `ApplyBenefitForm` writes a
+   * `CoberturaBonificada`, never a `Pago` — so `resolveCoverageEnd` (APPROVED
+   * payments only) cannot see it. `MembershipSummary.cubiertoHasta` is the
+   * backend's own combined anchor and must win over the fallback whenever
+   * it is present.
+   */
+  it("prefers MembershipSummary.cubiertoHasta over the approved-payments fallback", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4,
+          estado: "ACTIVA",
+          personaId: 9,
+          montoAplicado: "25.00",
+          categoria: "Mensual",
+          modalidad: "MENSUAL",
+          fechaActivacion: "2026-03-18",
+          cubiertoHasta: "2027-01-31",
+        },
+      },
+    });
+    // The furthest APPROVED payment (31/07/2026) is much earlier than the
+    // benefit-extended `cubiertoHasta` (31/01/2027) — proof the carnet and
+    // the Cuota card read the combined anchor, not the fallback.
+    mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
+
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
+    });
+    const row = within(facts).getByText("Válido hasta").parentElement!;
+    expect(row.lastElementChild?.textContent).toBe("31/01/2027");
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    await waitFor(() => {
+      expect(within(cuota).getByText("31/01/2027")).toBeInTheDocument();
+    });
+  });
+
   it("omits the coverage end when no payment has been approved", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
