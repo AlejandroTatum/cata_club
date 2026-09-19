@@ -74,7 +74,8 @@ Close the three advisory findings (R3-001, R3-002, R3-003) from the native revie
 ### T4 — Focused suite + `make pre-pr LANE=backend`
 
 - Focused: `TEST_DATABASE_URL=... uv run pytest tests/test_cloudinary_cliente.py tests/test_pago_comprobante_atomico.py -q` → `110 passed, 1 warning`.
-- `make pre-pr LANE=backend`: see command output quoted in the final report to the orchestrator.
+- `make pre-pr LANE=backend` → exit 0. The background-captured log only retained the tail of the run (long `-v` output truncated the earlier sections), so each step was re-run individually to get an explicit result: `ruff check .` → `All checks passed!`; `lint-imports` → `Contracts: 3 kept, 0 broken.` (127 files, 432 dependencies); `pip-audit` → `No known vulnerabilities found`; `TEST_DATABASE_URL=... uv run pytest tests/ -q` (full backend suite) → `2859 passed, 3 skipped, 90 warnings in 536.79s`; `uv run pytest ../tests/ -v` (root suite, from the retained tail of the original run) → `633 passed, 1 skipped`. `db-test` torn down afterward and confirmed removed (`docker ps -a` shows no `gentleman-1335-*` container).
+- Gate not reproduced locally (lane's own disclosure): CI job `migraciones-desde-cero` against its isolated empty PostgreSQL service.
 
 ### T5 — Native review (RDD)
 
