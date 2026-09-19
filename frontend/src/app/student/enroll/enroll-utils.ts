@@ -535,6 +535,25 @@ export function isStepComplete(step: WizardStep, data: EnrollFormData): boolean 
   return Object.keys(validateEnrollFields(step, data)).length === 0;
 }
 
+/**
+ * Whether a Stepper-originated jump should arm the one-shot focus flag
+ * (issue #1347, item 1 — review advisory de #1346, R2-001/R3-002/R4-001).
+ *
+ * `goToStep` (`wizard-history.ts`) already no-ops when `destination` equals
+ * `current` — no history entry is pushed and `step` never changes. Arming the
+ * flag anyway would leave it armed with nothing left to consume it, so the
+ * NEXT unrelated step change (an ordinary "Siguiente"/"Atrás") would steal
+ * focus to the heading in its place. Unreachable through today's `Stepper`
+ * (only a DONE step is ever clickable, and a done step is never the current
+ * one), but the guard belongs here, not on that accident.
+ */
+export function shouldFocusStepHeadingOnJump(
+  destination: WizardStep,
+  current: WizardStep,
+): boolean {
+  return destination !== current;
+}
+
 /** Field → the label the visitor actually reads on screen, for the blocked-button explanation. */
 const FIELD_LABELS: Partial<Record<EnrollField, string>> = {
   nombres: "Nombres",
