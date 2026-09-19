@@ -475,6 +475,16 @@ describe("StudentPage — the club membership card (carnet)", () => {
   });
 
   it("keeps the payment verdict off the carnet and leaves the Cuota card owning its own wording", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4, estado: "ACTIVA", personaId: 9, montoAplicado: "25.00",
+          categoria: "Mensual", modalidad: "MENSUAL", cubiertoHasta: "2026-07-31",
+        },
+      },
+    });
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
 
     render(<StudentPage />);
@@ -507,9 +517,9 @@ describe("StudentPage — the club membership card (carnet)", () => {
    * F4b — the credential's vigencia.
    *
    * "Socio desde" answers when the person belongs; "Válido hasta" answers
-   * until when the club has been paid for them. Both are the same fact read at
-   * its two ends, and the second is the date `resolveCoverageEnd` gives the
-   * Cuota card and `/student/payments` — not a new reading of the membership
+   * until when the club has been paid for them. Both are the same fact read
+   * at its two ends, and the second is `MembershipSummary.cubiertoHasta` —
+   * the backend's own combined anchor — not a new reading of the membership
    * row, whose `fechaFin` no adapter populates.
    */
   it("states the real coverage end on the carnet, beside 'Socio desde'", async () => {
@@ -525,6 +535,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
           categoria: "Mensual",
           modalidad: "MENSUAL",
           fechaActivacion: "2026-03-18",
+          cubiertoHasta: "2026-07-31",
         },
       },
     });
@@ -538,7 +549,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
       expect(within(facts).getByText("Válido hasta")).toBeInTheDocument();
     });
 
-    // The value is the APPROVED payment's `fechaFin` (31/07/2026), read off
+    // The value is `MembershipSummary.cubiertoHasta` (31/07/2026), read off
     // the row's right edge like every other register value.
     const row = within(facts).getByText("Válido hasta").parentElement!;
     expect(row.lastElementChild?.textContent).toBe("31/07/2026");
@@ -549,12 +560,11 @@ describe("StudentPage — the club membership card (carnet)", () => {
 
   /**
    * Issue #1328: a benefit applied through `ApplyBenefitForm` writes a
-   * `CoberturaBonificada`, never a `Pago` — so `resolveCoverageEnd` (APPROVED
-   * payments only) cannot see it. `MembershipSummary.cubiertoHasta` is the
-   * backend's own combined anchor and must win over the fallback whenever
-   * it is present.
+   * `CoberturaBonificada`, never a `Pago` — its date only ever reaches this
+   * screen through `MembershipSummary.cubiertoHasta`, the backend's own
+   * combined anchor over both sources.
    */
-  it("prefers MembershipSummary.cubiertoHasta over the approved-payments fallback", async () => {
+  it("reads the coverage end from MembershipSummary.cubiertoHasta even when it exceeds every approved payment", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({
       ...PORTAL,
       self: {
@@ -573,7 +583,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
     });
     // The furthest APPROVED payment (31/07/2026) is much earlier than the
     // benefit-extended `cubiertoHasta` (31/01/2027) — proof the carnet and
-    // the Cuota card read the combined anchor, not the fallback.
+    // the Cuota card read the combined anchor, never the payments array.
     mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
 
     render(<StudentPage />);
@@ -627,6 +637,47 @@ describe("StudentPage — the club membership card (carnet)", () => {
     expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
   });
 
+  /**
+   * Issue #1337 (R3-003): `MembershipSummary.cubiertoHasta: null` means the
+   * membership has no coverage on record, even when an APPROVED `Pago`
+   * exists — the field is the backend's own combined anchor over BOTH
+   * sources (issue #1328), so a `null` here is authoritative and must not be
+   * second-guessed by re-deriving a date from `pagos`.
+   */
+  it("omits the coverage end when MembershipSummary.cubiertoHasta is null, even with an approved payment", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: {
+          id: 4,
+          estado: "ACTIVA",
+          personaId: 9,
+          montoAplicado: "25.00",
+          categoria: "Mensual",
+          modalidad: "MENSUAL",
+          fechaActivacion: "2026-03-18",
+          cubiertoHasta: null,
+        },
+      },
+    });
+    mockFetchPagosDePersona.mockResolvedValueOnce([PAGO_APROBADO]);
+
+    render(<StudentPage />);
+
+    const facts = await screen.findByTestId("carnet-facts");
+    await waitFor(() => {
+      expect(within(facts).getByText("Socio desde")).toBeInTheDocument();
+    });
+    expect(within(facts).queryByText("Válido hasta")).not.toBeInTheDocument();
+    // The approved payment's own `fechaFin` never leaks onto the credential.
+    expect(within(facts).queryByText("31/07/2026")).not.toBeInTheDocument();
+
+    const cuota = screen.getByTestId("student-cuota-card");
+    expect(within(cuota).queryByText("Cubierta hasta")).not.toBeInTheDocument();
+    expect(within(cuota).queryByText("31/07/2026")).not.toBeInTheDocument();
+  });
+
   it("reads the register as label-left, value-right rows in a deterministic order", async () => {
     // THIS LOCK INVERTS ITS OWN INVERSION. "B · Marcador" read the facts as a
     // SCOREBOARD — value first, label under it — because the card was then a
@@ -652,6 +703,7 @@ describe("StudentPage — the club membership card (carnet)", () => {
           categoria: "Mensual",
           modalidad: "MENSUAL",
           fechaActivacion: "2026-03-18",
+          cubiertoHasta: "2026-07-31",
         },
       },
     });
@@ -1656,8 +1708,10 @@ describe("StudentPage — the Cuota card carries the whole payment reading", () 
     expect(carnet.compareDocumentPosition(cuota) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("reports coverage from the furthest approved payment, and says so plainly", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
+  it("reports coverage from MembershipSummary.cubiertoHasta, and says so plainly", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue(
+      portalWithMembership({ membership: { ...MEMBERSHIP, cubiertoHasta: "2026-07-31" } }),
+    );
     mockFetchPagosDePersona.mockResolvedValue([PAGO_APROBADO]);
 
     render(<StudentPage />);
@@ -1800,13 +1854,16 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
     modalidad: "MENSUAL" as const,
   };
 
-  function portalWithMembership() {
-    return { ...PORTAL, self: { ...PORTAL.self!, membership: MEMBERSHIP } };
+  function portalWithMembership(cubiertoHasta: string | null) {
+    return {
+      ...PORTAL,
+      self: { ...PORTAL.self!, membership: { ...MEMBERSHIP, cubiertoHasta } },
+    };
   }
 
   it("renders the full-weight strip and the full Cuota card when the cuota is overdue", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
-    // Approved, but its coverage already ran out.
+    // `cubiertoHasta` already ran out.
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership("2026-07-31"));
     mockFetchPagosDePersona.mockResolvedValue([PAGO_APROBADO]);
 
     render(<StudentPage />);
@@ -1837,7 +1894,7 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
   // The assertion reads the exact class TOKEN, because `text-ink-3-strong`
   // CONTAINS `text-ink-3`: a substring check would pass on the failing class.
   it("prints the overdue figure in the muted ink that clears AA on the tinted fill", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership("2026-07-31"));
     mockFetchPagosDePersona.mockResolvedValue([PAGO_APROBADO]);
 
     render(<StudentPage />);
@@ -1851,8 +1908,8 @@ describe("StudentPage — the Cuota card earns its space when the cuota is up to
   });
 
   it("states the al día verdict itself and stays compact when the cuota is up to date", async () => {
-    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership());
-    // Coverage stretches well past today plus the "ending soon" window.
+    // `cubiertoHasta` stretches well past today plus the "ending soon" window.
+    mockFetchStudentPortal.mockReset().mockResolvedValue(portalWithMembership("2026-12-31"));
     mockFetchPagosDePersona.mockResolvedValue([
       { ...PAGO_APROBADO, fechaInicio: "2026-08-01", fechaFin: "2026-12-31" },
     ]);
