@@ -134,7 +134,7 @@ def _recien_creada_sin_cobertura(membresia) -> MembresiaResponseDTO:
 # --- Membresia ---
 @router.post("/", response_model=MembresiaResponseDTO, status_code=201,
              dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
-async def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obtener_sesion)):
+def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obtener_sesion)):
     membresia = MembresiaServicio(db).crear_membresia(datos)
     return _recien_creada_sin_cobertura(membresia)
 
@@ -156,7 +156,7 @@ ROLES_PORTAL = ["REPRESENTANTE", "ALUMNO"]
 @router.post(
     "/propia", response_model=MembresiaResponseDTO, status_code=201,
 )
-async def crear_membresia_propia(
+def crear_membresia_propia(
     datos: MembresiaPropiaCreateDTO,
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorPermisos(ROLES_PORTAL)),
@@ -173,7 +173,7 @@ async def crear_membresia_propia(
     response_model=PaginatedResponse[MembresiaResponseDTO],
     dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
 )
-async def listar_membresias(
+def listar_membresias(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(obtener_sesion),
@@ -391,7 +391,7 @@ def obtener_estadisticas_membresias(db: Session = Depends(obtener_sesion)):
     response_model=MembresiaResponseDTO,
     dependencies=[Depends(GestorAutenticacion.decodificar_token)],
 )
-async def obtener_membresia(
+def obtener_membresia(
     membresia_id: int,
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
