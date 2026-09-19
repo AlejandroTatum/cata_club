@@ -222,6 +222,11 @@ const SELF: StudentProfileSummary = {
     // screen must not read it. Set to a conspicuous date so a regression that
     // starts reading it fails loudly here.
     fechaFin: "2099-12-31",
+    // The backend's combined anchor (issue #1328) — matches the default
+    // `makePago()` seed's own `fechaFin` so this fixture stays internally
+    // consistent; a test that mocks a different `pagos` history overrides
+    // this alongside it.
+    cubiertoHasta: COVERAGE_END,
   },
   representante: null,
   representanteId: null,
@@ -358,6 +363,10 @@ describe("StudentPaymentsPage — arriving from the home band", () => {
 
   it("waits for the payment history before opening, so the period starts where coverage ends", async () => {
     searchParams = new URLSearchParams("registrar=1");
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_AHEAD } },
+    });
     mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
 
     render(<StudentPaymentsPage />);
@@ -390,6 +399,10 @@ describe("StudentPaymentsPage — arriving from the home band", () => {
 
 describe("StudentPaymentsPage — the membership card", () => {
   it("derives coverage from the furthest approved payment, not from the unpopulated membership.fechaFin", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_AHEAD } },
+    });
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ id: 1, fechaFin: COVERAGE_END }),
       makePago({ id: 2, fechaFin: COVERAGE_END_AHEAD }),
@@ -405,6 +418,10 @@ describe("StudentPaymentsPage — the membership card", () => {
   });
 
   it("says no payment has been approved rather than showing an empty coverage line", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: null } },
+    });
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "PENDIENTE_VALIDACION" }),
     ]);
@@ -468,6 +485,10 @@ describe("StudentPaymentsPage — the membership card", () => {
   // between local midnight and that batch the same card announced "Membresía
   // activa" directly above "Pagado hasta el <fecha ya pasada>".
   it("never announces active coverage over a coverage date that already passed", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_PAST } },
+    });
     mockFetchPagosDePersona
       .mockReset()
       .mockResolvedValue([makePago({ fechaInicio: PAGO_START_PAST, fechaFin: COVERAGE_END_PAST })]);
@@ -489,6 +510,10 @@ describe("StudentPaymentsPage — the membership card", () => {
   // The other half of the same rule: reading coverage instead of `estado` must
   // not start under-reporting a family that genuinely IS covered.
   it("still reads a genuinely covered ACTIVA membership as active", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_AHEAD } },
+    });
     mockFetchPagosDePersona
       .mockReset()
       .mockResolvedValue([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
@@ -507,6 +532,10 @@ describe("StudentPaymentsPage — the membership card", () => {
   // all. Nothing expired for that reader, so the badge must not say anything
   // did — "vencida" would be a plain falsehood about a family that just joined.
   it("says no payment was approved rather than that coverage expired", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: null } },
+    });
     mockFetchPagosDePersona
       .mockReset()
       .mockResolvedValue([makePago({ estadoPago: "PENDIENTE_VALIDACION" })]);
@@ -1087,6 +1116,10 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
 
 describe("StudentPaymentsPage — registering a payment", () => {
   it("starts the new period where the paid one ends, so paying early loses no days", async () => {
+    mockFetchStudentPortal.mockResolvedValueOnce({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_AHEAD } },
+    });
     mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ fechaFin: COVERAGE_END_AHEAD })]);
 
     render(<StudentPaymentsPage />);
@@ -1623,6 +1656,10 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
    * which describe situations rather than a procedure to follow.
    */
   it("starts OPEN when coverage has lapsed — the steps are the reader's next move", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_PAST } },
+    });
     mockFetchPagosDePersona
       .mockReset()
       .mockResolvedValue([makePago({ fechaInicio: PAGO_START_PAST, fechaFin: COVERAGE_END_PAST })]);
@@ -1637,6 +1674,10 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
   });
 
   it("starts OPEN for a student with no approved payment at all (triangulation)", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: null } },
+    });
     mockFetchPagosDePersona.mockReset().mockResolvedValue([]);
 
     render(<StudentPaymentsPage />);

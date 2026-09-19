@@ -49,7 +49,6 @@ import {
   describePaymentSituation,
   findNextTrainingSessions,
   firstNameOf,
-  resolveCoverageEnd,
   summarizeRecentAttendance,
   contarEntrenamientosSemanales,
   daysUntil,
@@ -324,10 +323,10 @@ function Carnet({
 }: {
   profile: StudentProfileSummary;
   /**
-   * `MembershipSummary.cubiertoHasta` (issue #1328), or the `resolveCoverageEnd`
-   * fallback when the backend omits it, or `null`. The same date `CuotaCard`
-   * and `/student/payments` print — see the register below for what the
-   * credential does with it.
+   * `MembershipSummary.cubiertoHasta`, `null` when the backend has no
+   * coverage on record for this membership (issue #1328). The same date
+   * `CuotaCard` and `/student/payments` print — see the register below for
+   * what the credential does with it.
    */
   coverageEnd: string | null;
   /** The same assignments the training panel reads — see `franja` below. */
@@ -1094,10 +1093,9 @@ function ActivePortalView({
   const selfIsMinor = isMinor(data.self?.fechaNacimiento);
   const selectedPersonaId = selectedProfile?.personaId ?? "";
 
-  // Payments are fetched here rather than inside `PagosSection` because the
-  // carnet also needs them: `resolveCoverageEnd`'s reading (the furthest
-  // `fechaFin` among approved payments) is the fallback `coverageEnd` below
-  // falls back to when the backend's own combined anchor is absent.
+  // Payments are fetched here rather than inside `PagosSection` because
+  // `paymentSituation` below also needs `pendingPagos`, the count of
+  // payments still awaiting validation.
   const [pagosState, setPagosState] = useState<PagosState>({ status: "loading" });
   const [pagosReloadToken, setPagosReloadToken] = useState(0);
 
@@ -1145,15 +1143,12 @@ function ActivePortalView({
 
   // Issue #1328: the backend's own combined anchor (`MembershipSummary.
   // cubiertoHasta` — an APPROVED `Pago` AND a `CoberturaBonificada`, the
-  // furthest of the two) is the primary reading, so a benefit applied
-  // through `ApplyBenefitForm` shows up here immediately. `resolveCoverageEnd`
-  // (APPROVED payments only) is kept as the fallback for an older backend
-  // that omits the field, never the primary source.
-  const coverageEnd = useMemo(() => {
-    const cubiertoHasta = selectedProfile?.membership?.cubiertoHasta;
-    if (cubiertoHasta !== undefined) return cubiertoHasta;
-    return pagosState.status === "ready" ? resolveCoverageEnd(pagosState.pagos) : null;
-  }, [selectedProfile, pagosState]);
+  // furthest of the two) is the only reading — a benefit applied through
+  // `ApplyBenefitForm` shows up here immediately. `buildMembershipView`
+  // (`student-adapter.ts`) normalizes an absent field to `null`, so there is
+  // no real payload where it is `undefined`; `null` means no coverage yet,
+  // never "ask the payments instead".
+  const coverageEnd = selectedProfile?.membership?.cubiertoHasta ?? null;
   const pendingPagos = useMemo(
     () =>
       pagosState.status === "ready"

@@ -117,15 +117,23 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     # coherente" de "cero sin explicar" -- nada en la base obliga que ambos
     # coincidan).
     es_gratuidad_familiar: bool
-    # Issue #1328: la MISMA ancla combinada que `PagoServicio._fecha_fin_
-    # maxima_combinada` -- la `fecha_fin` más lejana entre un `Pago` APROBADO
-    # y una `CoberturaBonificada`, o `None` si la membresía no tiene ninguna
-    # cobertura todavía. No es una columna de `Membresia`: la resuelve el
-    # router (`PagoServicio.fecha_fin_maxima_combinada_bulk`) antes de armar
-    # este DTO, así que no llega vía `from_attributes` como el resto de los
-    # campos. Fuente única de "cubierto hasta" para el portal del alumno
-    # (`/student`, `/student/payments`, `CuotaCard`, `ApplyBenefitForm`), que
-    # antes recalculaba una versión incompleta mirando solo `Pago`.
+    # Issue #1328 (garantía ampliada a TODO el DTO en #1337): la MISMA ancla
+    # combinada que `PagoServicio._fecha_fin_maxima_combinada` -- la
+    # `fecha_fin` más lejana entre un `Pago` APROBADO y una
+    # `CoberturaBonificada`. No es una columna de `Membresia`: cada endpoint
+    # que devuelve este DTO la resuelve vía
+    # `membresias_pagos_router._con_cubierto_hasta` (una consulta agrupada
+    # por fuente, ver su docstring) antes de armar la respuesta, así que no
+    # llega vía `from_attributes` como el resto de los campos.
+    #
+    # `None` tiene UN solo significado en todo el contrato: esta membresía no
+    # tiene ninguna cobertura todavía -- nunca "nadie lo calculó". Antes de
+    # #1337 solo `/mias` y `/persona/{id}` lo poblaban, y `None` en el resto
+    # de los endpoints (la cola admin, `/{id}`, crear/suspender/reactivar/
+    # cambiar-plan) era ambiguo. Fuente única de "cubierto hasta" para el
+    # portal del alumno (`/student`, `/student/payments`, `CuotaCard`,
+    # `ApplyBenefitForm`), que antes recalculaba una versión incompleta
+    # mirando solo `Pago`.
     cubierto_hasta: date | None = None
 
 

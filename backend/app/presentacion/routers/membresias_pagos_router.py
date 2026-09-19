@@ -116,7 +116,13 @@ async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtene
 @router.post("/", response_model=MembresiaResponseDTO, status_code=201,
              dependencies=[Depends(GestorPermisos(ROL_ADMIN))])
 async def crear_membresia(datos: MembresiaCreateDTO, db: Session = Depends(obtener_sesion)):
-    return MembresiaServicio(db).crear_membresia(datos)
+    membresia = MembresiaServicio(db).crear_membresia(datos)
+    # Issue #1337: siempre pasa por `_con_cubierto_hasta` (ver su docstring
+    # más abajo), aunque una membresía recién creada nunca tenga todavía un
+    # `Pago` o una `CoberturaBonificada` propios -- `cubiertoHasta` da `None`
+    # por construcción, nunca por omisión, y la clave llega igual de poblada
+    # que en cualquier otro endpoint.
+    return _con_cubierto_hasta(db, [membresia])[0]
 
 
 # Issue #1132: "Inscribirme como jugador" para un representante puro no
@@ -141,10 +147,13 @@ async def crear_membresia_propia(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorPermisos(ROLES_PORTAL)),
 ):
-    return MembresiaServicio(db).crear_membresia_propia(
+    membresia = MembresiaServicio(db).crear_membresia_propia(
         persona_id=token_payload.get("persona_id"),
         tipo_membresia_id=datos.tipo_membresia_id,
     )
+    # Ídem `crear_membresia`: sin cobertura propia todavía, pero la clave
+    # `cubiertoHasta` queda poblada como en el resto de los endpoints.
+    return _con_cubierto_hasta(db, [membresia])[0]
 
 
 @router.get(
@@ -161,16 +170,19 @@ async def listar_membresias(
     N+1 en el dashboard (issue #4): en lugar de resolver cada membresía con
     una llamada individual, el dashboard puede obtenerlas todas de una vez."""
     items, total = MembresiaServicio(db).listar_membresias(skip=skip, limit=limit)
+    items = _con_cubierto_hasta(db, items)
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-# Issue #1328: adjunta `cubiertoHasta` (la ancla combinada Pago +
-# CoberturaBonificada, ver `PagoServicio.fecha_fin_maxima_combinada_bulk`) a
-# un listado de membresías YA resuelto por `MembresiaServicio` -- UNA consulta
-# agrupada por fuente para todo el listado, nunca una por membresía, mismo
-# criterio que `obtener_deuda_bulk` (issue #326). Compartido por `/mias` y
-# `/persona/{persona_id}`, los dos listados que el portal del alumno puede
-# alcanzar (a diferencia de `/deuda/bulk`, admin-only).
+# Issue #1328 (ampliado en #1337): adjunta `cubiertoHasta` (la ancla combinada
+# Pago + CoberturaBonificada, ver `PagoServicio.fecha_fin_maxima_combinada_
+# bulk`) a una o más membresías YA resueltas por `MembresiaServicio`/
+# `PagoServicio` -- UNA consulta agrupada por fuente, nunca una por membresía,
+# mismo criterio que `obtener_deuda_bulk` (issue #326). Es el único lugar del
+# router que arma un `MembresiaResponseDTO`: TODO endpoint que expone el DTO
+# pasa por acá (una lista de un solo elemento cuando el endpoint devuelve una
+# sola membresía) para que `cubierto_hasta = None` tenga un único significado
+# en todo el contrato -- "sin cobertura", nunca "no se calculó" (issue #1337).
 def _con_cubierto_hasta(db: Session, membresias: list) -> List[MembresiaResponseDTO]:
     cobertura_por_id = PagoServicio(db).fecha_fin_maxima_combinada_bulk(
         [membresia.id for membresia in membresias]
@@ -364,11 +376,12 @@ async def obtener_membresia(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
 ):
-    return MembresiaServicio(db).obtener_membresia(
+    membresia = MembresiaServicio(db).obtener_membresia(
         membresia_id,
         persona_id_solicitante=token_payload.get("persona_id"),
         roles_solicitante=token_payload.get("roles", []),
     )
+    return _con_cubierto_hasta(db, [membresia])[0]
 # --- Deuda y regularización (issue #284) ---------------------------------
 # Deuda = meses adeudados desde la última cobertura aprobada hasta hoy; la ve
 # SOLO un administrador (nunca el alumno/representante). La regularización es
@@ -489,12 +502,13 @@ def suspender_membresia(
     token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
 ):
     servicio = PagoServicio(db)
-    return servicio.suspender_membresia(
+    membresia = servicio.suspender_membresia(
         membresia_id,
         datos.motivo,
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
     )
+    return _con_cubierto_hasta(db, [membresia])[0]
 
 
 @router.post(
@@ -509,12 +523,13 @@ def reactivar_membresia(
     token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
 ):
     servicio = PagoServicio(db)
-    return servicio.reactivar_membresia(
+    membresia = servicio.reactivar_membresia(
         membresia_id,
         datos.motivo,
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
     )
+    return _con_cubierto_hasta(db, [membresia])[0]
 
 
 # Cambio de plan de una membresía existente (issue #400, criterio 1):
@@ -533,9 +548,10 @@ def cambiar_plan_membresia(
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorPermisos(ROL_ADMIN)),
 ):
-    return MembresiaServicio(db).cambiar_plan(
+    membresia = MembresiaServicio(db).cambiar_plan(
         membresia_id, datos, actor_persona_id=token_payload.get("persona_id"),
     )
+    return _con_cubierto_hasta(db, [membresia])[0]
 
 
 # Otorga cobertura bonificada (issue #400, slice 4d): a diferencia de
