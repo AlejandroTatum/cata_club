@@ -1,6 +1,9 @@
+import logging
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import get_args
+
+import pytest
 
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago
@@ -1071,6 +1074,77 @@ def test_todo_endpoint_que_expone_membresia_response_dto_incluye_cubierto_hasta(
         respuesta = llamar()
         assert respuesta.status_code < 300, f"{metodo} {ruta}: {respuesta.text}"
         assert _cubierto_hasta_presente_en(respuesta.json()), f"{metodo} {ruta} no expone cubiertoHasta"
+
+
+# --- Issue #1349 (R4-002): la mutación de suspender/reactivar/cambiar-plan
+# YA ocurrió (cada servicio hace su propio commit) antes de intentar leer
+# `cubierto_hasta` de vuelta; si esa lectura falla, el admin ve un 500 por
+# una acción que sí surtió efecto. El id de la membresía queda en el log
+# para que sea diagnosticable -- estos tres tests parchean el helper de
+# lectura para que reviente y verifican que el log lo registra.
+def test_suspender_membresia_loguea_el_id_si_falla_el_enriquecimiento(
+    client, db_session, monkeypatch, caplog,
+):
+    persona = crear_persona_orm(db_session, cedula_valida(950))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    db_session.commit()
+
+    def _falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado de enriquecimiento")
+
+    monkeypatch.setattr(membresias_pagos_router_mod, "_con_cubierto_hasta", _falla)
+
+    with caplog.at_level(logging.ERROR, logger="cataclub.membresias_pagos"):
+        with pytest.raises(RuntimeError):
+            client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
+
+    assert str(membresia.id) in caplog.text
+
+
+def test_reactivar_membresia_loguea_el_id_si_falla_el_enriquecimiento(
+    client, db_session, monkeypatch, caplog,
+):
+    persona = crear_persona_orm(db_session, cedula_valida(951))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    db_session.commit()
+    client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
+
+    def _falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado de enriquecimiento")
+
+    monkeypatch.setattr(membresias_pagos_router_mod, "_con_cubierto_hasta", _falla)
+
+    with caplog.at_level(logging.ERROR, logger="cataclub.membresias_pagos"):
+        with pytest.raises(RuntimeError):
+            client.post(f"/api/v1/membresias/{membresia.id}/reactivar", json={"motivo": "motivo"})
+
+    assert str(membresia.id) in caplog.text
+
+
+def test_cambiar_plan_membresia_loguea_el_id_si_falla_el_enriquecimiento(
+    client, db_session, monkeypatch, caplog,
+):
+    persona = crear_persona_orm(db_session, cedula_valida(952))
+    tipo_actual = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo_actual, EstadoMembresia.ACTIVA)
+    db_session.commit()
+    tipo_nuevo = _crear_tipo_membresia(client)
+
+    def _falla(*args, **kwargs):
+        raise RuntimeError("fallo simulado de enriquecimiento")
+
+    monkeypatch.setattr(membresias_pagos_router_mod, "_con_cubierto_hasta", _falla)
+
+    with caplog.at_level(logging.ERROR, logger="cataclub.membresias_pagos"):
+        with pytest.raises(RuntimeError):
+            client.post(
+                f"/api/v1/membresias/{membresia.id}/cambiar-plan",
+                json={"nuevo_tipo_membresia_id": tipo_nuevo["id"]},
+            )
+
+    assert str(membresia.id) in caplog.text
 
 
 # --- E04-RF002: gratuidad del 4to miembro familiar ---------------------------

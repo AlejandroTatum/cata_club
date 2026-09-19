@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -28,6 +30,8 @@ from app.servicios_negocio.membresia_pago_servicio import (
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
+
+logger = logging.getLogger("cataclub.membresias_pagos")
 
 _COLUMNAS_PAGOS_PDF = [
     "Estudiante", "Monto", "Tipo de Pago", "Vigencia Desde", "Vigencia Hasta",
@@ -524,7 +528,18 @@ def suspender_membresia(
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
     )
-    return _con_cubierto_hasta(db, [membresia])[0]
+    try:
+        return _con_cubierto_hasta(db, [membresia])[0]
+    except Exception:
+        # Issue #1349 (R4-002): la suspensión YA ocurrió -- `suspender_
+        # membresia` hizo su propio commit arriba -- así que un fallo acá no
+        # debe ser un 500 mudo que esconda que la acción sí surtió efecto. El
+        # id queda en el log para diagnosticar; la respuesta sigue siendo un
+        # 500, porque no hay ningún DTO parcial honesto que devolver.
+        logger.exception(
+            "Fallo enriqueciendo cubierto_hasta tras suspender la membresía %s", membresia_id,
+        )
+        raise
 
 
 @router.post(
@@ -545,7 +560,14 @@ def reactivar_membresia(
         actor_persona_id=token_payload.get("persona_id"),
         fecha_efectiva=datos.fecha_efectiva,
     )
-    return _con_cubierto_hasta(db, [membresia])[0]
+    try:
+        return _con_cubierto_hasta(db, [membresia])[0]
+    except Exception:
+        # Ídem `suspender_membresia`: la reactivación ya ocurrió.
+        logger.exception(
+            "Fallo enriqueciendo cubierto_hasta tras reactivar la membresía %s", membresia_id,
+        )
+        raise
 
 
 # Cambio de plan de una membresía existente (issue #400, criterio 1):
@@ -567,7 +589,14 @@ def cambiar_plan_membresia(
     membresia = MembresiaServicio(db).cambiar_plan(
         membresia_id, datos, actor_persona_id=token_payload.get("persona_id"),
     )
-    return _con_cubierto_hasta(db, [membresia])[0]
+    try:
+        return _con_cubierto_hasta(db, [membresia])[0]
+    except Exception:
+        # Ídem `suspender_membresia`: el cambio de plan ya ocurrió.
+        logger.exception(
+            "Fallo enriqueciendo cubierto_hasta tras cambiar el plan de la membresía %s", membresia_id,
+        )
+        raise
 
 
 # Otorga cobertura bonificada (issue #400, slice 4d): a diferencia de
