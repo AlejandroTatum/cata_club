@@ -256,6 +256,27 @@ probado dejó Beat operativo, dispatch correcto, cero duplicados y restore OK.
   una exposición aunque los nuevos sean `.dump.age`. Sigue el procedimiento de
   cifrado, restore y eliminación segura de [provisioning.md](provisioning.md).
 
+## Reprovisionar la base sin vaciar Cloudinary
+
+Reprovisionar la base de datos de un entorno (restore desde backup, reset a
+esquema vacío, etc.) sin vaciar también la carpeta de Cloudinary de ESE
+entorno (`cloudinary_carpeta_comprobantes` / `cloudinary_carpeta_vouchers`)
+deja archivos de la vida anterior de la base viviendo en el proveedor.
+
+Desde el fix del issue #1327, el `public_id` de un comprobante ya no
+depende solo del `id` de pago (`comprobante-{id:08d}`): incluye un sufijo
+derivado de `fecha_validacion`, así que dos vidas de la misma base (que
+reciclan los mismos ids autoincrementales) ya NO colisionan en el mismo
+recurso de Cloudinary. Un pago nuevo nunca va a heredar en silencio la
+identidad (nombre, cédula, teléfono) del PDF de un pago de otra vida.
+
+Eso no vuelve gratis a los archivos huérfanos: cada reprovisionamiento sin
+purga acumula en Cloudinary los recursos de la vida anterior, que siguen
+costando almacenamiento y nunca se vuelven a referenciar desde la base
+nueva. Antes de reprovisionar un entorno, purga (o migra a un `folder`
+propio de esa vida) la carpeta de Cloudinary correspondiente, o documenta en
+esta sección por qué se decidió no hacerlo.
+
 ## Última verificación
 
 Actualiza esta sección en el mismo PR que sigue a cada redeploy. Quedó sin tocar
