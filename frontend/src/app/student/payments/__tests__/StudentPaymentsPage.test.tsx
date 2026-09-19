@@ -151,6 +151,15 @@ const COVERAGE_END_AHEAD = "2026-08-31";
 /** Un mes desde `COVERAGE_END_AHEAD`; septiembre no tiene 31, y se recorta. */
 const RENEWAL_END_AHEAD = "2026-09-30";
 
+/**
+ * Issue #1328: `MembershipSummary.cubiertoHasta` combinado (Pago +
+ * CoberturaBonificada), muy por delante de `COVERAGE_END` — la prueba de que
+ * la pantalla lee este campo y no el `resolveCoverageEnd` de respaldo.
+ */
+const CUBIERTO_HASTA_AHEAD = "2026-10-31";
+/** Un mes desde `CUBIERTO_HASTA_AHEAD`; noviembre no tiene 31, y se recorta. */
+const CUBIERTO_HASTA_AHEAD_PLUS_1M = "2026-11-30";
+
 /** Fecha de nacimiento mayor de edad respecto del reloj congelado. */
 const ADULT_BIRTH_DATE = "2000-05-14";
 /** Fecha de nacimiento menor de edad respecto del reloj congelado. */
@@ -617,6 +626,30 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     expect(screen.getByText(/sin costo — el beneficio cubre el 100%/i)).toBeInTheDocument();
   });
 
+  /**
+   * Issue #1328: same criterion as the renewal form's own seeding test —
+   * `ApplyBenefitForm.seedForm` must read `MembershipSummary.cubiertoHasta`,
+   * not the `resolveCoverageEnd` fallback, or a SECOND benefit applied while
+   * the first is still active would silently overwrite instead of chain.
+   */
+  it("seeds the benefit period from MembershipSummary.cubiertoHasta, not the approved-payments fallback", async () => {
+    mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_TOTAL);
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: CUBIERTO_HASTA_AHEAD } },
+    });
+    // The approved payment's own `fechaFin` (`COVERAGE_END`) is far earlier —
+    // proof the seed reads the combined anchor, never the fallback.
+    mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ fechaFin: COVERAGE_END })]);
+
+    render(<StudentPaymentsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /aplicar mi beneficio/i }));
+
+    expect(
+      await screen.findByText(shownRange(CUBIERTO_HASTA_AHEAD, CUBIERTO_HASTA_AHEAD_PLUS_1M)),
+    ).toBeInTheDocument();
+  });
+
   it("applies the benefit only after the checkpoint, sending meses and no monto/tipoPago", async () => {
     mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_TOTAL);
     mockAplicarBeneficio.mockReset().mockResolvedValue({
@@ -1070,6 +1103,30 @@ describe("StudentPaymentsPage — registering a payment", () => {
       await screen.findByText(shownRange(COVERAGE_END_AHEAD, RENEWAL_END_AHEAD)),
     ).toBeInTheDocument();
     expect(screen.getByText(/1 mes a \$25,00 por mes/i)).toBeInTheDocument();
+  });
+
+  /**
+   * Issue #1328: a benefit applied earlier writes a `CoberturaBonificada`,
+   * never a `Pago` — `resolveCoverageEnd` (APPROVED payments only) cannot see
+   * it. `MembershipSummary.cubiertoHasta` is the backend's own combined
+   * anchor and must be what the renewal form starts from.
+   */
+  it("starts the new period from MembershipSummary.cubiertoHasta, not the approved-payments fallback", async () => {
+    mockFetchStudentPortal.mockReset().mockResolvedValue({
+      ...PORTAL,
+      self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: CUBIERTO_HASTA_AHEAD } },
+    });
+    // The approved payment's own `fechaFin` (`COVERAGE_END`) is far earlier —
+    // proof the seed reads the combined anchor, never the fallback.
+    mockFetchPagosDePersona.mockResolvedValueOnce([makePago({ fechaFin: COVERAGE_END })]);
+
+    render(<StudentPaymentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+
+    expect(
+      await screen.findByText(shownRange(CUBIERTO_HASTA_AHEAD, CUBIERTO_HASTA_AHEAD_PLUS_1M)),
+    ).toBeInTheDocument();
   });
 
   // Issue #400 (slice 06): the free-form monto input (and the "must be a

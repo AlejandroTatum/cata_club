@@ -1264,6 +1264,20 @@ export interface MembershipSummary {
    * normalizes it to `false` server-side before this ever reaches the client.
    */
   esGratuidadFamiliar?: boolean;
+  /**
+   * The combined "covered until" anchor (issue #1328) — the furthest
+   * `fechaFin` between an APPROVED payment and a bonified benefit
+   * (`MembresiaResponseDTO.cubierto_hasta`, `PagoServicio._fecha_fin_
+   * maxima_combinada`), or `null` when neither exists. This is the ONE
+   * source `/student`, `/student/payments`, `CuotaCard`, and
+   * `ApplyBenefitForm` read for a student's coverage date; `resolveCoverageEnd`
+   * (student-utils.ts, APPROVED `PagoPersona` only) is kept as a fallback for
+   * when this field is absent, never as the primary reading. Optional for
+   * the same reason as `esGratuidadFamiliar`: fixtures written before this
+   * field, and an older backend, still type-check; `buildMembershipView`
+   * normalizes it to `null` server-side.
+   */
+  cubiertoHasta?: string | null;
 }
 
 /** A real `TipoMembresia` catalog entry (`GET /membresias/tipos`) — replaces the old hardcoded `membershipPlans` array. */

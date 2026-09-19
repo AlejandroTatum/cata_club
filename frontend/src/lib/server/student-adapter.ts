@@ -101,6 +101,20 @@ export interface BackendMembresiaPropia {
    * normalizes it to `false`.
    */
   esGratuidadFamiliar?: boolean;
+  /**
+   * `MembresiaResponseDTO.cubierto_hasta` (issue #1328) — the SAME combined
+   * anchor `PagoServicio._fecha_fin_maxima_combinada` uses to chain a benefit
+   * over an already-covered period: the furthest `fechaFin` between an
+   * APPROVED `Pago` and a `CoberturaBonificada`, or `null` when neither
+   * exists yet. Before this field, the student portal derived "covered
+   * until" from `PagoPersona` alone (`resolveCoverageEnd`), so a benefit
+   * applied through `aplicar-beneficio` advanced the real DB coverage while
+   * every screen kept showing the last `Pago`. Optional for the same reason
+   * as `esGratuidadFamiliar` — an older backend or a hand-built fixture
+   * predating this field still type-checks; `buildMembershipView` normalizes
+   * it to `null`.
+   */
+  cubiertoHasta?: string | null;
 }
 
 /** Enriched membership view for a single persona — built server-side. */
@@ -114,6 +128,8 @@ export interface MembershipView {
   fechaActivacion: string | null;
   /** Normalized to `false` when the backend omits it — see `BackendMembresiaPropia.esGratuidadFamiliar`. */
   esGratuidadFamiliar: boolean;
+  /** Normalized to `null` when the backend omits it — see `BackendMembresiaPropia.cubiertoHasta`. */
+  cubiertoHasta: string | null;
 }
 
 export function buildMembershipView(
@@ -130,6 +146,7 @@ export function buildMembershipView(
     modalidad: tipo?.modalidad ?? null,
     fechaActivacion: mem.fechaActivacion ?? null,
     esGratuidadFamiliar: mem.esGratuidadFamiliar ?? false,
+    cubiertoHasta: mem.cubiertoHasta ?? null,
   };
 }
 
