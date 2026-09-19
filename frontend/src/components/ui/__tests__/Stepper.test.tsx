@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import Stepper from "@/components/ui/Stepper";
 import { committedHeight } from "./ui-test-utils";
 
@@ -150,6 +150,28 @@ describe("Stepper — navigable (#1321)", () => {
   });
 });
 
+// #1332 (R2-001): `position` / `done` / `active` / `clickable` used to be
+// computed twice, once per render — a fifth field added to one loop and not
+// the other would silently diverge the two. This locks the wide pill and the
+// compact dot to the SAME `data-state` for every step, so any future
+// divergence between the two derivations fails here.
+describe("Stepper — one state derivation feeds both renders (#1332 R2-001)", () => {
+  it("agrees on data-state between the wide pill and the compact dot for every step", () => {
+    const onStepClick = vi.fn();
+    render(<Stepper steps={STEPS} current={3} label="Pasos" onStepClick={onStepClick} />);
+
+    const wideList = screen.getByRole("list", { name: "Pasos" });
+    const compactRow = screen.getByTestId("stepper-compact");
+    const pillItems = within(wideList).getAllByRole("listitem");
+    const dots = compactRow.querySelectorAll("[data-state]");
+
+    STEPS.forEach((step, index) => {
+      const pillState = pillItems[index].querySelector("[data-state]")?.getAttribute("data-state");
+      expect(dots[index].getAttribute("data-state")).toBe(pillState);
+    });
+  });
+});
+
 // #1321 — below `sm:` the wrapped pill row is replaced by a one-line phase
 // summary plus a row of dots, so the five pills never split across lines.
 describe("Stepper — compact phone rendering (#1321)", () => {
@@ -185,5 +207,73 @@ describe("Stepper — compact phone rendering (#1321)", () => {
 
     expect(screen.getByText("Paso 1 · Tipo")).toBeInTheDocument();
     expect(screen.queryByText(/paso 1 de \d/i)).not.toBeInTheDocument();
+  });
+});
+
+// #1332 (R4-001, review advisory de #1331): la píldora compacta completada
+// era un `<button>` de 8px (`h-2 w-2`) con `gap-1.5`, en el único breakpoint
+// donde existe — táctil. `min-h-[24px]` (`MIN_TARGET_CLASS`,
+// `lib/target-size.ts`) es el piso del proyecto, pero ese control es
+// icon-only (ningún texto adentro), la misma excepción que el propio
+// `target-size.ts` documenta para el checkbox de `EnrollPage` — un cuadrado
+// `h-6 w-6` (24px), no `min-h` solo.
+describe("Stepper — compact dot touch target (#1332 R4-001)", () => {
+  it("gives a completed dot a 24px square hit area around its 8px visual dot", () => {
+    const onStepClick = vi.fn();
+    render(<Stepper steps={STEPS} current={3} label="Pasos" onStepClick={onStepClick} />);
+
+    const dot = screen.getByRole("button", { name: "Volver a Estudiante" });
+    expect(dot.className).toMatch(/\bh-6\b/);
+    expect(dot.className).toMatch(/\bw-6\b/);
+    expect(dot.className).not.toMatch(/\bh-2\b/);
+    expect(dot.className).not.toMatch(/\bw-2\b/);
+
+    // The 8px visual dot moves inside the 24px hit box, not lost.
+    const visualDot = dot.querySelector("span");
+    expect(visualDot).toHaveClass("h-2");
+    expect(visualDot).toHaveClass("w-2");
+    expect(visualDot).toHaveClass("bg-state-ok");
+  });
+
+  it("leaves the non-interactive dots at their original small size", () => {
+    render(<Stepper steps={STEPS} current={2} label="Pasos" />);
+
+    const dots = screen.getByTestId("stepper-compact").querySelectorAll("span[data-state]");
+    expect(dots.length).toBeGreaterThan(0);
+    for (const dot of Array.from(dots)) {
+      expect(dot.className).not.toMatch(/\bh-6\b/);
+    }
+  });
+});
+
+// #1332 (R3-002): ambos renders (píldoras anchas y puntos compactos) viven
+// siempre en el DOM — solo CSS oculta uno con `sm:`. Un paso completado da
+// dos botones con nombres accesibles distintos ("Estudiante" en la píldora,
+// "Volver a Estudiante" en el punto); las pruebas de esta suite siempre
+// afirman por nombre exacto o escopan explícitamente a un contenedor, nunca
+// cuentan botones sin escopar. Este test documenta el patrón en vez de
+// introducir un gate por `matchMedia`, que no aporta nada que el CSS ya no
+// resuelva en el navegador real.
+describe("Stepper — both renders coexist in the DOM (#1332 R3-002)", () => {
+  function wideList(): HTMLElement {
+    return screen.getByRole("list", { name: "Pasos" });
+  }
+
+  function compactRow(): HTMLElement {
+    return screen.getByTestId("stepper-compact");
+  }
+
+  it("gives a completed step two buttons with distinct accessible names, one per container", () => {
+    const onStepClick = vi.fn();
+    render(<Stepper steps={STEPS} current={3} label="Pasos" onStepClick={onStepClick} />);
+
+    // Tipo and Estudiante are done — two buttons in each container.
+    expect(within(wideList()).getAllByRole("button")).toHaveLength(2);
+    expect(within(compactRow()).getAllByRole("button")).toHaveLength(2);
+
+    expect(within(wideList()).getByRole("button", { name: "Estudiante" })).toBeInTheDocument();
+    expect(
+      within(compactRow()).getByRole("button", { name: "Volver a Estudiante" }),
+    ).toBeInTheDocument();
   });
 });
