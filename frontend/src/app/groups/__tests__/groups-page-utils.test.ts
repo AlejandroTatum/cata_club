@@ -18,6 +18,7 @@ import {
   buildCatalogoSinHorarios,
   findCategoriaDuplicada,
   findCodigoPorLabel,
+  puedeEliminarCategoria,
 } from "../groups-page-utils";
 import type { AlumnoHorario, SolapeHorario } from "@/services/api";
 import type { HorarioGroup } from "@/lib/groups-utils";
@@ -434,5 +435,39 @@ describe("findCodigoPorLabel", () => {
   it("returns null when no catalog label matches", () => {
     expect(findCodigoPorLabel(CATALOGO, "Preinfantil")).toBeNull();
     expect(findCodigoPorLabel({}, "Formativo")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// puedeEliminarCategoria — gates the delete-categoría zone (issue #1325)
+// ---------------------------------------------------------------------------
+
+describe("puedeEliminarCategoria", () => {
+  it("hides the delete zone for a catalog-only categoría with no día rows yet", () => {
+    // The v6 catalog-only edit form (#1315) has no `horario_entrenamiento`
+    // row to delete until its first save creates one.
+    const catalogoUnicamente: HorarioGroup = {
+      key: "INFANTIL",
+      categoria: "INFANTIL",
+      horaInicio: "16:00",
+      horaFin: "17:00",
+      rows: [],
+    };
+    expect(puedeEliminarCategoria(catalogoUnicamente)).toBe(false);
+  });
+
+  it("shows the delete zone once the categoría has at least one día row", () => {
+    const yaProgramada: HorarioGroup = {
+      key: "FORMATIVO",
+      categoria: "FORMATIVO",
+      horaInicio: "15:00",
+      horaFin: "16:00",
+      rows: [{ id: 1, diaSemana: "LUNES" }],
+    };
+    expect(puedeEliminarCategoria(yaProgramada)).toBe(true);
+  });
+
+  it("hides the delete zone when no group is being edited", () => {
+    expect(puedeEliminarCategoria(null)).toBe(false);
   });
 });

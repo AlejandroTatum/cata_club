@@ -128,6 +128,7 @@ import {
   DIA_LABELS,
   formatTime,
   toStripDias,
+  puedeEliminarCategoria,
   type CategoriaCard,
   type CategoriaSinHorarios,
   type PersonasPorHorario,
@@ -1162,7 +1163,7 @@ export default function GroupsPage(): React.ReactElement {
             nothing to delete from this form until its first save creates the
             horarios, so the control would only promise an action that cannot
             run. */}
-        {editingGroup !== null && editingGroup.rows.length > 0 && (
+        {puedeEliminarCategoria(editingGroup) && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">
               <p className="text-sm font-semibold text-state-bad">Eliminar esta categoría</p>
