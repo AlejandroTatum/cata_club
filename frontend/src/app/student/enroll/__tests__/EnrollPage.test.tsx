@@ -184,6 +184,25 @@ describe("EnrollPage — the named stepper", () => {
     // Back on the student step, with what was already typed still there.
     expect(screen.getByLabelText(/^Nombres/)).toHaveValue("Sofia");
   });
+
+  // #1332 (R3-001, review advisory de #1331): clicking a completed pill
+  // turns it into a `<span>` — the element that had focus is gone — and
+  // focus used to fall all the way back to `<body>`, silently, for a
+  // sighted-mouse user and a screen-reader user alike.
+  it("moves focus to the destination step heading after a stepper jump", () => {
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    const stepper = screen.getByRole("list", { name: /pasos de la inscripción/i });
+    fireEvent.click(within(stepper).getByRole("button", { name: "Estudiante" }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: /datos del estudiante/i }),
+    );
+  });
 });
 
 // #312 / hallazgo #33 — same gap on the representative step (paso 3).
