@@ -900,6 +900,40 @@ describe("GroupsPage — atomic categoría save (v6, docs/archive/fixes/24-abm-c
     expect(screen.getByRole("heading", { name: "Editar categoría" })).toBeInTheDocument();
     expect(mockFetchHorarios).toHaveBeenCalledTimes(1); // only the initial load — no resync on failure.
   });
+
+  it("clears a stale duplicate-label banner once submitCategoria's direct call (from the pending-deletions confirmation) fails on a different error (issue #1343)", async () => {
+    // First attempt fails on a duplicate-label 400 and leaves the banner up,
+    // with its "Editar «Formativo»" action.
+    mockActualizarCategoria
+      .mockRejectedValueOnce(new ApiClientError('Ya existe una categoría llamada "Formativo".', 400))
+      // Second attempt fails too, but on a DIFFERENT error — the stale
+      // banner from the first attempt must not linger next to it.
+      .mockRejectedValueOnce(new ApiClientError("La categoría ya tiene ese nombre.", 400));
+    mockFetchAlumnosPorHorario.mockResolvedValue([
+      { id: 1, personaId: 10, personaNombreCompleto: "Ana Pérez", horarioId: 303, horarioDia: "MIERCOLES", horarioHoraInicio: "18:00", horarioHoraFin: "20:00", fechaAsignacion: "2026-01-01" },
+    ]);
+    await openEditAndSubmit();
+
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+    await screen.findByRole("button", { name: "Editar «Formativo»" });
+
+    // Unticking Miércoles, which has an enrolled student, routes the next
+    // submit through the pending-deletions confirmation dialog instead of
+    // `handleSubmit`'s direct call at the bottom — confirming it calls
+    // `submitCategoria()` directly from `handleConfirmPendingDeletions`,
+    // the path issue #1343 flagged as uncovered.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Miércoles" }));
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /confirmar/i }));
+
+    expect(await screen.findByText("La categoría ya tiene ese nombre.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Editar «Formativo»" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Ya existe una categoría llamada "Formativo".'),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("GroupsPage — accordion single-expand mechanics (PR3a)", () => {
