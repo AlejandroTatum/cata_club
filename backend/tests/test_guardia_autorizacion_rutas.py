@@ -345,6 +345,11 @@ RUTAS_ROLES_REQUERIDOS = {
     # propio beneficiario nunca puede pedirlo (ver docstring del endpoint).
     ("POST", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/representados"): frozenset({"ADMINISTRADOR", "REPRESENTANTE"}),
+    # Issue #1318: autoservicio "jugador → representante" -- la identidad
+    # sale del token (`persona_id` del `sub`), nunca de la URL, así que este
+    # par de roles es el del PORTAL (mismo criterio que `POST
+    # /membresias/propia`), no el admin/representante de su hermana de arriba.
+    ("POST", "/personas/me/representados"): frozenset({"REPRESENTANTE", "ALUMNO"}),
     ("POST", "/personas/{persona_id}/roles"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/{persona_id}/independizar"): frozenset({"ADMINISTRADOR"}),
     # #1133/#1137: la reasignación de representación es un acto PRESENCIAL de

@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import { parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
+import { buildRepresentadoBackendBody, parseNumericIdOrBadRequest } from "@/lib/server/bff-helpers";
 import type { PersonaResponse } from "@/types/domain";
 import type { RepresentadoCreatePayload } from "@/services/api";
 
@@ -35,24 +35,7 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     return NextResponse.json({ message: "El cuerpo de la solicitud no es válido." }, { status: 400 });
   }
 
-  const backendBody: Record<string, unknown> = {
-    nombres: body.nombres,
-    apellidos: body.apellidos,
-    cedula: body.cedula,
-    fecha_nacimiento: body.fechaNacimiento,
-    telefono: body.telefono,
-  };
-  if (body.fichaMedica) {
-    // Issue #1138: sin contacto de emergencia propio -- ese contacto se
-    // deriva del representante, y el backend rechaza explícitamente
-    // (422) `contacto_emergencia`/`telefono_emergencia` en este camino.
-    backendBody.ficha_medica = {
-      tipo_sangre: body.fichaMedica.tipoSangre,
-      enfermedades: body.fichaMedica.enfermedades ?? [],
-      alergias: body.fichaMedica.alergias,
-    };
-  }
-  if (body.institucionId !== undefined) backendBody.institucion_id = body.institucionId;
+  const backendBody = buildRepresentadoBackendBody(body);
 
   const result = await backendFetchAuthed(request, `/personas/${personaId}/representados`, {
     method: "POST",
