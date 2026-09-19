@@ -26,6 +26,7 @@ import { enrollFieldId } from "@/app/student/enroll/enroll-utils";
 import { birthDatePartIds } from "@/components/wizard-fields";
 import { enrollStudent } from "@/services/api";
 import { MENSAJE_IDENTIDAD_DUPLICADA } from "@/lib/duplicate-identity";
+import { EDAD_MAYORIA_EDAD, EDAD_MAXIMA_ALUMNO } from "@/lib/identity-validation";
 
 // The wizard's step lives in the query string now. The double is backed by
 // jsdom's real history so these tests walk the same URL a browser would.
@@ -197,6 +198,31 @@ describe("EnrollPage — autocomplete on the representative step", () => {
     expect(screen.getByLabelText(/^Teléfono/)).toHaveAttribute("autoComplete", "tel");
     expect(screen.getByLabelText(/^Correo electrónico/)).toHaveAttribute("autoComplete", "email");
     expect(screen.getByLabelText(/^Contraseña/)).toHaveAttribute("autoComplete", "new-password");
+  });
+});
+
+// Issue #1320: the majority-age note used to render as a full warning card
+// (border, background, icon, bold header) even though nothing had gone
+// wrong yet — the same visual weight the wizard reserves for errors. It
+// renders as a plain field hint now, matching every other informational
+// note in the step.
+describe("EnrollPage — the majority-age note on the representative step (#1320)", () => {
+  it("renders the note as a plain field hint, not a warning card", () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    const note = screen.getByText(
+      `El representante debe ser mayor de edad (${EDAD_MAYORIA_EDAD} a ${EDAD_MAXIMA_ALUMNO} años). Al inscribir a un dependiente, confirma ser su responsable legal.`,
+    );
+    expect(note).toHaveClass("text-ink-3");
+    expect(note.closest(".bg-state-warn-bg")).toBeNull();
+    expect(screen.queryByText("Representante mayor de edad")).not.toBeInTheDocument();
   });
 });
 

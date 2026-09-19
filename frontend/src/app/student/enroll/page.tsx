@@ -921,17 +921,17 @@ function EnrollWizard(): React.ReactElement {
           autoComplete: "new-password",
         })}
 
-        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn">
-          <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Representante mayor de edad
-          </p>
-          <p className="mt-field">
-            El representante debe tener entre {EDAD_MAYORIA_EDAD} y {EDAD_MAXIMA_ALUMNO}{" "}
-            años. Al inscribir a un dependiente, usted confirma que es
-            legalmente responsable del menor.
-          </p>
-        </div>
+        {/* #1320: this is an informational note, not an error, so it carries
+            the same weight as every other field hint in the wizard
+            (FieldHintMessage in wizard-fields.tsx) instead of the warning
+            card. The warning card stays reserved for an actual out-of-range
+            date, which the birth-date field's own validator already reports
+            inline (see fechaNacimientoRepresentante in enroll-utils.ts). */}
+        <p className="mt-field text-xs text-ink-3">
+          El representante debe ser mayor de edad ({EDAD_MAYORIA_EDAD} a{" "}
+          {EDAD_MAXIMA_ALUMNO} años). Al inscribir a un dependiente, confirma
+          ser su responsable legal.
+        </p>
       </div>
     );
   }
