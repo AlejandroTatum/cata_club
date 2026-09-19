@@ -2,22 +2,25 @@
  * Add Dependent — authenticated self-service wizard.
  *
  * Short 3-step wizard (child data → medical record → summary/confirm) for a
- * logged-in representante to add a second/third dependent from the portal.
- * Unlike the public `/student/enroll` wizard, this never creates a `Usuario`
- * or assigns a role — it only creates a `Persona` (child) linked to the
- * caller's own persona via `representante_id`, plus its `FichaMedica`, via
- * `POST /personas/{persona_id}/representados` (see `crearRepresentado`).
+ * logged-in representante, or a self-managed adult player adding their FIRST
+ * dependent, to add a dependent from the portal. Unlike the public
+ * `/student/enroll` wizard, this never creates a `Usuario` or assigns a role
+ * to the dependent itself — it only creates a `Persona` (child) linked to
+ * the caller's own persona via `representante_id`, plus its `FichaMedica`,
+ * via `POST /personas/me/representados` (see `crearRepresentadoPropio`). The
+ * identity the backend acts on comes from the caller's own access token,
+ * never from a client-supplied id, so this page never resolves or sends a
+ * `persona_id` of its own.
  *
  * Issue #1318: reachable by EVERY self-managed adult, not just an existing
- * representante — the identity the backend acts on (`POST
- * /personas/me/representados`) comes from the caller's own access token,
- * never from a client-supplied id, so this page never resolves or sends a
- * `persona_id` of its own. When the caller isn't REPRESENTANTE yet, the
- * backend grants it in the same request; the summary step says so before
- * confirming. On success the session is re-hydrated (`refreshSession`, since
- * the account's role may have just changed) before navigating back to
- * `/student`, which remounts and refetches the portal data (no optimistic
- * client-side list update).
+ * representante. When the caller isn't REPRESENTANTE yet, the backend grants
+ * it in the same request; the summary step says so before confirming. On
+ * success the session is re-hydrated (`refreshSession`, since the account's
+ * role may have just changed) before navigating back to `/student`, which
+ * remounts and refetches the portal data (no optimistic client-side list
+ * update). Issue #1340: that rehydration has its own error handling,
+ * separate from the create call — a rejected `refreshSession` never turns a
+ * successful alta into a reported failure.
  *
  * All labels and copy are in Spanish per app convention.
  */
@@ -174,21 +177,34 @@ function AddDependentContent(): React.ReactElement {
     setSubmitting(true);
     try {
       await crearRepresentadoPropio(buildRepresentadoPayload(formData));
-      showSuccess("Dependiente agregado correctamente.");
+    } catch (error: unknown) {
+      setSubmitting(false);
+      const message = getAddDependentErrorMessage(error);
+      setFormErrors([message]);
+      return;
+    }
+    // Issue #1340: the alta already succeeded by this point — everything
+    // below is a side effect of that success, not a condition of it. A
+    // rejected `refreshSession` used to fall into the `catch` above and
+    // report a failure for something that had already worked.
+    showSuccess("Dependiente agregado correctamente.");
+    try {
       // Issue #1318: the account may have just become REPRESENTANTE — the
       // cached session still reads the old role until re-hydrated. Awaited
       // before navigating so `/student`'s own ProtectedRoute (and its
       // profile picker) sees the fresh role on first render instead of
       // bouncing on a stale one.
       await refreshSession();
-      // Navigation-remount: /student refetches the portal summary on mount,
-      // so the new dependent appears without any optimistic client state.
-      router.push("/student");
     } catch (error: unknown) {
-      setSubmitting(false);
-      const message = getAddDependentErrorMessage(error);
-      setFormErrors([message]);
+      // Soft failure: the dependent is already created and the visitor is
+      // already told so. Losing the rehydration only means `/student`'s
+      // first render may show the stale role for one extra refresh — not
+      // worth turning a completed alta into an error screen.
+      console.error("[add-dependent] refreshSession failed", error);
     }
+    // Navigation-remount: /student refetches the portal summary on mount,
+    // so the new dependent appears without any optimistic client state.
+    router.push("/student");
   }
 
   // ---- Render helpers ----
