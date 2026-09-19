@@ -21,7 +21,12 @@ import pytest
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoRol
 from app.dominio.excepciones import EntidadDuplicada, OperacionInvalida, PermisosInsuficientes
-from app.dominio.mensajes import MENSAJE_CORREO_SIN_VERIFICAR
+from app.dominio.mensajes import (
+    MENSAJE_AUTOSERVICIO_REPRESENTANTE_MENOR_EDAD,
+    MENSAJE_AUTOSERVICIO_REPRESENTANTE_ROL_STAFF,
+    MENSAJE_AUTOSERVICIO_REPRESENTANTE_YA_REPRESENTADO,
+    MENSAJE_CORREO_SIN_VERIFICAR,
+)
 from app.dominio.modelos import Persona, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.dtos.persona_schemas import RepresentadoCreateDTO
@@ -146,10 +151,11 @@ def test_representante_existente_no_cambia_de_rol(db_session):
 def test_menor_no_puede_autoservicio(db_session):
     menor = _cuenta(db_session, seed=904, tipo_rol=TipoRol.ALUMNO, fecha_nacimiento=date(2015, 1, 1))
 
-    with pytest.raises(OperacionInvalida):
+    with pytest.raises(OperacionInvalida) as error:
         PersonaServicio(db_session).crear_representado_propio(
             menor.persona_id, _datos_dependiente(905),
         )
+    assert str(error.value) == MENSAJE_AUTOSERVICIO_REPRESENTANTE_MENOR_EDAD
 
 
 # --- 4. Adulto ya representado: rechazado -----------------------------------
@@ -160,10 +166,11 @@ def test_representado_no_puede_autoservicio(db_session):
         db_session, seed=907, tipo_rol=TipoRol.ALUMNO, representante_id=tutor.persona_id,
     )
 
-    with pytest.raises(OperacionInvalida):
+    with pytest.raises(OperacionInvalida) as error:
         PersonaServicio(db_session).crear_representado_propio(
             representado_adulto.persona_id, _datos_dependiente(908),
         )
+    assert str(error.value) == MENSAJE_AUTOSERVICIO_REPRESENTANTE_YA_REPRESENTADO
 
 
 # --- 5. Correo sin verificar: 403 con el mensaje de #790 -------------------
@@ -186,10 +193,11 @@ def test_correo_sin_verificar_responde_403_con_el_mensaje_de_790(db_session):
 def test_staff_no_puede_autoservicio(db_session, rol_staff):
     staff = _cuenta(db_session, seed=911, tipo_rol=rol_staff)
 
-    with pytest.raises(OperacionInvalida):
+    with pytest.raises(OperacionInvalida) as error:
         PersonaServicio(db_session).crear_representado_propio(
             staff.persona_id, _datos_dependiente(912),
         )
+    assert str(error.value) == MENSAJE_AUTOSERVICIO_REPRESENTANTE_ROL_STAFF
 
     db_session.refresh(staff)
     assert {rol.tipo_rol for rol in staff.roles} == {rol_staff}  # sin tocar
@@ -235,6 +243,15 @@ def test_endpoint_me_representados_via_http(client_sin_token, db_session):
     cuerpo = respuesta.json()
     assert cuerpo["representado"]["representanteId"] == representante.persona_id
     assert "accessToken" in cuerpo and "refreshToken" in cuerpo
+
+    # #1340: no basta con decodificar el JWT -- el reemitido tiene que ser
+    # ACEPTADO por una llamada autenticada real, no solo llevar el claim.
+    respuesta_me = client_sin_token.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {cuerpo['accessToken']}"},
+    )
+    assert respuesta_me.status_code == 200, respuesta_me.text
+    assert respuesta_me.json()["roles"] == ["REPRESENTANTE"]
 
 
 def test_endpoint_me_representados_rechaza_a_un_entrenador(client_sin_token, db_session):
