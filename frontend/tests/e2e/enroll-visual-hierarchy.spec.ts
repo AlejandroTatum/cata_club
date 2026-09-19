@@ -85,6 +85,20 @@ for (const [viewportName, viewport] of Object.entries({ desktop: DESKTOP, mobile
     test("the current step pill resolves to coal", async ({ page }) => {
       await goToEnroll(page);
 
+      // #1321: below `sm:` the wrapped pill row (`display:none`, so it is
+      // not even in the accessibility tree there — `getByRole` would find
+      // nothing) is swapped for the compact summary; the coal fill moves to
+      // its current dot.
+      if (viewportName === "mobile") {
+        const compact = page.getByTestId("stepper-compact");
+        await expect(compact.getByText(/^paso 1 · tipo$/i)).toBeVisible();
+
+        const current = compact.locator('[data-state="current"]');
+        const fill = await current.evaluate((el) => getComputedStyle(el).backgroundColor);
+        expect(fill).toBe("rgb(19, 19, 22)");
+        return;
+      }
+
       const stepper = page.getByRole("list", { name: /pasos de la inscripción/i });
       const current = stepper.locator('[data-state="current"]');
       await expect(current).toHaveText(/tipo/i);

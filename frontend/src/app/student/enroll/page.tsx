@@ -1532,11 +1532,17 @@ function EnrollWizard(): React.ReactElement {
               }
             />
 
+            {/* #1321: `goToStep` already jumps to an arbitrary step from the
+                summary's "Corregir" buttons (below) without losing anything —
+                `formData` lives in this component, not per step — so a
+                completed pill needs no extra guard to reuse it. */}
             <Stepper
               label="Pasos de la inscripción"
               current={currentIndex + 1}
               steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
               className="mt-page"
+              onStepClick={(index) => goToStep(effectiveSteps[index])}
+              showCount={!isFirst}
             />
           </div>
 
