@@ -7,12 +7,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.dominio.modelos import Persona, FichaMedica, Enfermedades, Notificacion
-from app.dominio.enums import TipoNotificacion
+from app.dominio.enums import TipoNotificacion, TipoRol
 from app.dominio.nombre_propio import nombre_completo
 from app.dominio.excepciones import (
     EntidadNoEncontrada, EntidadDuplicada, OperacionInvalida, PermisosInsuficientes,
 )
 from app.dominio.mensajes import (
+    MENSAJE_AUTOSERVICIO_REPRESENTANTE_MENOR_EDAD,
+    MENSAJE_AUTOSERVICIO_REPRESENTANTE_ROL_STAFF,
+    MENSAJE_AUTOSERVICIO_REPRESENTANTE_YA_REPRESENTADO,
     MENSAJE_CORREO_SIN_VERIFICAR, MENSAJE_IDENTIDAD_DUPLICADA,
     MENSAJE_VINCULACION_NO_DISPONIBLE, MENSAJE_VINCULACION_SOLO_PRESENCIAL,
 )
@@ -271,6 +274,84 @@ class PersonaServicio:
             self.db.refresh(representado)
 
         return representado
+
+    # --- Issue #1318: autoservicio "jugador → representante" ----------------
+    # Decisión del dueño (2026-09-18): un adulto autogestionado (con o sin
+    # membresía propia) puede agregar su PRIMER dependiente sin pasar por
+    # administración. El molde es `crear_membresia_propia` (#1132): la
+    # identidad sale SIEMPRE del token (`persona_id`), nunca del path ni del
+    # body -- por eso el router despacha `POST /personas/me/representados`
+    # acá con el `persona_id` que ya resolvió del `sub`.
+    #
+    # Todo en UNA transacción (todo o nada, mismo criterio que
+    # `crear_representado`): las precondiciones corren primero y no escriben
+    # nada; el cambio de rol (si hace falta) solo FLUSHEA
+    # (`RolServicio.establecer_capacidad_representante`, #762/#1137, el
+    # mismo núcleo que ya usa el comando presencial de independencia); y
+    # `crear_representado` -- reusado tal cual, sin duplicar su lógica --
+    # pone el ÚNICO `commit()` al final. Si algo dentro de `crear_representado`
+    # falla (p.ej. cédula duplicada), ese método hace rollback él mismo y la
+    # excepción propaga: el cambio de rol flusheado nunca llega a persistir.
+    def crear_representado_propio(
+        self, persona_id: int, datos: RepresentadoCreateDTO,
+    ) -> tuple[Persona, dict]:
+        """Crea un dependiente para el LLAMADOR autenticado y, si hace
+        falta, lo convierte en REPRESENTANTE en la misma transacción.
+
+        Devuelve `(representado, tokens)`: `tokens` es el par reemitido por
+        `AuthServicio.reemitir_tokens_para` -- el `sub` no cambia (sigue
+        siendo el correo), pero los ROLES sí viajan embebidos en el JWT, así
+        que sin reemisión la sesión seguiría leyéndose a sí misma con el rol
+        viejo hasta su expiración natural."""
+        persona = self.repo.obtener_por_id(persona_id)
+        if persona is None:
+            raise EntidadNoEncontrada(f"Persona con id {persona_id} no encontrada")
+        usuario = self.repo_usuario.obtener_por_persona_id(persona_id)
+        if usuario is None:
+            raise OperacionInvalida(
+                "Esta cuenta todavía no creó su usuario y contraseña.",
+                detalle_tecnico=f"persona_id={persona_id} sin Usuario asociado",
+            )
+
+        edad = _calcular_edad(persona.fecha_nacimiento)
+        if edad < EDAD_MAYORIA_EDAD:
+            raise OperacionInvalida(
+                MENSAJE_AUTOSERVICIO_REPRESENTANTE_MENOR_EDAD,
+                detalle_tecnico=f"persona_id={persona_id} edad={edad}",
+            )
+        if persona.representante_id is not None:
+            raise OperacionInvalida(
+                MENSAJE_AUTOSERVICIO_REPRESENTANTE_YA_REPRESENTADO,
+                detalle_tecnico=(
+                    f"persona_id={persona_id} ya tiene "
+                    f"representante_id={persona.representante_id}"
+                ),
+            )
+        # Issue #790, reusado tal cual: la cuenta destino de la vinculación
+        # que este mismo comando está por crear es la del PROPIO llamador.
+        self._exigir_correo_verificado_del_representante(persona_id)
+        # ADMINISTRADOR/ENTRENADOR usan el panel de administración -- nunca
+        # este camino. Corre ANTES de tocar `RolServicio`: un ADMINISTRADOR
+        # tiene un único rol legal, y `establecer_capacidad_representante`
+        # lo hubiera reemplazado en silencio por REPRESENTANTE.
+        roles_staff = (TipoRol.ADMINISTRADOR, TipoRol.ENTRENADOR)
+        if any(rol.tipo_rol in roles_staff for rol in usuario.roles):
+            raise OperacionInvalida(
+                MENSAJE_AUTOSERVICIO_REPRESENTANTE_ROL_STAFF,
+                detalle_tecnico=(
+                    f"persona_id={persona_id} tiene rol de staff: "
+                    f"{sorted(rol.tipo_rol.value for rol in usuario.roles)}"
+                ),
+            )
+
+        if not any(rol.tipo_rol == TipoRol.REPRESENTANTE for rol in usuario.roles):
+            RolServicio(self.db).establecer_capacidad_representante(usuario)
+
+        representado = self.crear_representado(
+            representante_id=persona_id, datos=datos, actor_persona_id=persona_id,
+        )
+        tokens = AuthServicio(self.db).reemitir_tokens_para(usuario)
+        return representado, tokens
 
     # --- INS-2 retirada: parada segura de la vinculación de autoservicio -----
     # Issue #1133/#1137, decisión del dueño (2026-09-11, punto 3): la

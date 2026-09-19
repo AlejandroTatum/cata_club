@@ -138,6 +138,30 @@ MENSAJE_REPRESENTANTE_AUTORREFERENCIA = (
     "Una persona no puede ser su propio representante legal."
 )
 
+# --- Issue #1318: autoservicio "jugador → representante" --------------------
+# Un adulto autogestionado (con o sin membresía propia) puede agregar su
+# primer dependiente sin pasar por administración: `PersonaServicio.
+# crear_representado_propio` valida estos tres motivos ANTES de tocar ningún
+# rol. Los tres son específicos, no genéricos como
+# `MENSAJE_IDENTIDAD_DUPLICADA`: el llamador ya conoce su propia cuenta --no
+# hay ninguna cédula ajena que sondear-- así que nombrar el motivo real no
+# abre ningún oráculo.
+MENSAJE_AUTOSERVICIO_REPRESENTANTE_MENOR_EDAD = (
+    "Debe ser mayor de edad para agregar un dependiente y pasar a ser "
+    "representante."
+)
+
+MENSAJE_AUTOSERVICIO_REPRESENTANTE_YA_REPRESENTADO = (
+    "Su cuenta está representada por otra persona y no puede agregar "
+    "dependientes por su cuenta. Consulte a su representante o a "
+    "administración del club."
+)
+
+MENSAJE_AUTOSERVICIO_REPRESENTANTE_ROL_STAFF = (
+    "Las cuentas de administrador o entrenador no pueden agregar "
+    "dependientes por esta vía; use el panel de administración."
+)
+
 # Issue #790, misma disciplina anti-enumeración que la recuperación de
 # contraseña: el reenvío del enlace de verificación responde EXACTAMENTE esto
 # exista o no la cuenta, y esté o no ya verificada. Si difiriera en algún

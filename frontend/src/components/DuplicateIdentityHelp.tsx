@@ -9,7 +9,12 @@
  * The useful next step depends on who hit the wall, so the destinations are
  * chosen by `audience`:
  *  - `self-service` (public enrollment): the person is very likely enrolling
- *    a second time — send them to sign in or recover their password.
+ *    a second time — send them to sign in or recover their password. Issue
+ *    #1318: the hint now also names the honest next step once signed in —
+ *    "inscríbase como jugador o agregue un dependiente" — since a self-
+ *    managed adult can now do both from their own account (`/student` +
+ *    `POST /membresias/propia` / `POST /personas/me/representados`) instead
+ *    of hitting this same wall a second time.
  *  - `representative` (adding a dependent): the dependent already exists,
  *    possibly under another guardian. The self-service link-by-cédula INS-2
  *    once offered here (docs/product/decisiones-de-negocio-2026-08-11.md §1)
@@ -41,7 +46,7 @@ interface Guidance {
 
 const GUIDANCE: Record<DuplicateIdentityAudience, Guidance> = {
   "self-service": {
-    hint: "Si ya se inscribió antes, no necesita volver a hacerlo:",
+    hint: "Si ya tiene cuenta, no necesita volver a inscribirse: ingrese y, desde su cuenta, inscríbase como jugador o agregue un dependiente.",
     links: [
       { href: "/login", label: "Iniciar sesión" },
       { href: "/forgot-password", label: "Recuperar contraseña" },

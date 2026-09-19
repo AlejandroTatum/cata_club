@@ -2370,6 +2370,28 @@ export async function crearRepresentado(
   });
 }
 
+/** `POST /api/personas/me/representados`'s own response shape — never a token, see the route's doc comment. */
+export interface RepresentadoPropioResponse {
+  representado: PersonaResponse;
+}
+
+/**
+ * Issue #1318: self-service, for EVERY authenticated adult with no
+ * representative of their own — not just an existing REPRESENTANTE. Adds the
+ * caller's first dependent and, if the account isn't REPRESENTANTE yet,
+ * switches it to that role in the same request (the backend rotates the
+ * session cookies; nothing here decodes a token). See
+ * `POST /personas/me/representados`.
+ */
+export async function crearRepresentadoPropio(
+  payload: RepresentadoCreatePayload,
+): Promise<RepresentadoPropioResponse> {
+  return request<RepresentadoPropioResponse>(apiEndpoint("/personas/me/representados"), {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 /**
  * INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): representante-only
  * self-service, links a person ALREADY registered in the club (typically by

@@ -1,13 +1,18 @@
 /**
  * Shared scaffolding for the `/student/add-dependent` suites.
  *
- * Both files that render this wizard need the identical seven-mock preamble
+ * Both files that render this wizard need the identical six-mock preamble
  * before the page will mount at all: the route guard opened, the App Router
  * pointed at this path, `next/link` and `next/image` flattened to plain
- * elements, a signed-in representante in the auth context, a silent toast
- * bus, and the portal fetch that sources `representanteId`. Written out per
- * file that block is ~40 lines of pure boilerplate, and it was byte-identical
- * in both — the largest duplicated region this feature's test code has.
+ * elements, a signed-in account in the auth context, and a silent toast
+ * bus. Written out per file that block is ~35 lines of pure boilerplate, and
+ * it was byte-identical in both — the largest duplicated region this
+ * feature's test code has.
+ *
+ * Issue #1318: no portal fetch here anymore. The page used to source
+ * `representanteId` from `fetchStudentPortal` before it could submit; the
+ * self-service endpoint (`POST /personas/me/representados`) derives identity
+ * from the caller's own session, so the page never calls that fetch at all.
  *
  * Only SCAFFOLDING lives here — never assertions, and never a walkthrough
  * that encodes what a step is supposed to do. What each suite proves stays
@@ -32,7 +37,6 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { vi, beforeEach, afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { resetTestHistory, useTestSearchParams } from "@/lib/__tests__/next-navigation-double";
-import { fetchStudentPortal } from "@/services/api";
 
 /** The route both suites render, and the one the App Router double reports. */
 export const ADD_DEPENDENT_PATH = "/student/add-dependent";
@@ -79,18 +83,27 @@ export function nextImageDouble(): Record<string, unknown> {
   };
 }
 
-/** A signed-in REPRESENTANTE — the only role that reaches this wizard. */
-export function authContextDouble(): Record<string, unknown> {
+/**
+ * A signed-in account. Defaults to a REPRESENTANTE (the original — and
+ * still most common — visitor); issue #1318 widened this wizard to also
+ * accept a self-managed "estudiante" (an ALUMNO with no representative of
+ * their own yet), so a suite exercising that path passes its own
+ * `backendRoles`/`userRole`.
+ */
+export function authContextDouble(
+  backendRoles: string[] = ["REPRESENTANTE"],
+  userRole: "representante" | "estudiante" = "representante",
+): Record<string, unknown> {
   return {
     useAuth: () => ({
       session: {
-        user: { id: "9", name: "Mishell", email: "m@cataclub.com", role: "representante" },
-        roles: ["REPRESENTANTE"],
+        user: { id: "9", name: "Mishell", email: "m@cataclub.com", role: userRole },
+        roles: backendRoles,
       },
       isAuthenticated: true,
       isLoading: false,
       logout: vi.fn(),
-      refreshSession: vi.fn(),
+      refreshSession: vi.fn().mockResolvedValue({ kind: "authenticated" }),
     }),
   };
 }
@@ -101,29 +114,11 @@ export function toastContextDouble(): Record<string, unknown> {
 }
 
 /**
- * Seed the portal summary the page reads on mount, reset the address bar, and
- * unmount between cases. Call once at the top level of a suite.
- *
- * `personaId` is what becomes `representanteId`, and the submit button stays
- * disabled until this promise lands — a suite that skips it gets a wizard
- * that silently refuses to submit.
+ * Reset the address bar and unmount between cases. Call once at the top
+ * level of a suite.
  */
 export function installAddDependentHarness(): void {
   beforeEach(() => {
-    vi.mocked(fetchStudentPortal).mockResolvedValue({
-      self: {
-        personaId: "9",
-        nombres: "Mishell",
-        apellidos: "Rivadeneira",
-        fechaNacimiento: "1990-01-01",
-        recentSessions: [],
-        membership: null,
-        representante: null,
-        representanteId: null,
-      },
-      representados: [],
-      membershipPlans: [],
-    });
     resetTestHistory(ADD_DEPENDENT_PATH);
   });
 

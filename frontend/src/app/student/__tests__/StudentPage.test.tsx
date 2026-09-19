@@ -274,17 +274,19 @@ describe("StudentPage — the dependent selection survives navigation", () => {
 });
 
 describe("StudentPage — contextual dependent CTA", () => {
-  it("offers NO dependent CTA to a self-managed student with no dependents", async () => {
+  // Issue #1318: this is exactly the persona the decision names — a
+  // self-managed adult player (`roles: ["ALUMNO"]`, the file's default mock
+  // session) with no dependents yet. It used to see NO dependent CTA at all
+  // — the old one pointed at the PUBLIC wizard (a second account), and the
+  // authenticated wizard was gated to `representante` — so offering it was
+  // worse than nothing. `/student/add-dependent` now posts to `POST
+  // /personas/me/representados`, which grants REPRESENTANTE on save, so the
+  // CTA is finally honest for this account too.
+  it("offers the authenticated add-dependent CTA to a self-managed player with no dependents yet", async () => {
     render(<StudentPage />);
 
-    await screen.findByTestId("student-carnet");
-    // The old CTA pointed at the PUBLIC wizard, which creates a second
-    // account; /student/add-dependent is gated to `representante`, so this
-    // account has no honest destination at all.
-    expect(screen.queryByText(/hijo o dependiente/i)).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /inscribir a un hijo o dependiente/i }),
-    ).not.toBeInTheDocument();
+    const link = await screen.findByText("Agregar hijo o dependiente");
+    expect(link.closest("a")).toHaveAttribute("href", "/student/add-dependent");
   });
 
   it("links to the authenticated add-dependent wizard once the account already represents a dependent", async () => {

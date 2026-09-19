@@ -680,6 +680,20 @@ class AuthServicio:
         refresh_token = GestorAutenticacion.crear_token_refresco(refresh_claims, version_sesion=usuario.version_sesion)
         return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
+    # --- Issue #1318: reemisión para un cambio de rol de OTRO servicio ------
+    def reemitir_tokens_para(self, usuario: Usuario) -> dict:
+        """Envoltorio público de `_emitir_par_tokens`, para un caller de otra
+        capa de negocio (`PersonaServicio.crear_representado_propio`) que
+        acaba de mutar `usuario.roles` en la MISMA transacción y necesita
+        reemitir el par sin reimplementar `claims_estandar`.
+
+        Mismo motivo que `cambiar_correo_no_verificado`: los roles viajan
+        embebidos en el JWT, así que un token emitido antes de la mutación
+        sigue leyendo el rol viejo hasta su expiración natural -- sin
+        reemisión, quien acaba de pasar a ser REPRESENTANTE seguiría viendo
+        su sesión como ALUMNO hasta el próximo login."""
+        return self._emitir_par_tokens(usuario)
+
     # --- Listado de sesiones propias ----------------------------------------
     def listar_sesiones(self, correo: str, sesion_actual_id: int | None) -> list[SesionVista]:
         """Las sesiones del usuario autenticado, la más reciente primero.

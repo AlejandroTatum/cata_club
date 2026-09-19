@@ -57,8 +57,7 @@ vi.mock("@/contexts/AuthContext", async () => (await harness()).authContextDoubl
 vi.mock("@/contexts/ToastContext", async () => (await harness()).toastContextDouble());
 
 vi.mock("@/services/api", () => ({
-  fetchStudentPortal: vi.fn(),
-  crearRepresentado: vi.fn(),
+  crearRepresentadoPropio: vi.fn(),
   fetchInstituciones: vi.fn().mockResolvedValue([]),
 }));
 

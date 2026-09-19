@@ -11,7 +11,8 @@ from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_reporte_pdf
 from app.servicios_negocio.dtos.persona_schemas import (
     PersonaCreateDTO, PersonaResponseDTO, PersonaListItemDTO, PersonaUpdateDTO,
-    PersonaBusquedaDTO, RepresentadoCreateDTO, VincularRepresentadoDTO, IndependizarDTO,
+    PersonaBusquedaDTO, RepresentadoCreateDTO, RepresentadoPropioResponseDTO,
+    VincularRepresentadoDTO, IndependizarDTO,
     IndependenciaResponseDTO, ReasignarRepresentacionDTO, ReasignacionResponseDTO,
     EstadoPersonaDTO,
     AntecedentesClubCreateDTO, AntecedentesClubUpdateDTO, AntecedentesClubResponseDTO,
@@ -443,6 +444,46 @@ async def retirar_beneficio(
     servicio = BeneficioServicio(db)
     asignacion = servicio.retirar(persona_id, token_payload.get("persona_id"))
     return servicio.a_response_dto(asignacion)
+
+
+# --- Issue #1318: autoservicio "jugador → representante" --------------------
+# Molde de `POST /membresias/propia` (#1132): la identidad sale SIEMPRE del
+# token (`persona_id`), nunca de un path ni de un body -- por eso vive bajo
+# `/me`, no bajo `/{persona_id}`. Registrada ANTES de
+# `/{persona_id}/representados`, justo abajo: FastAPI/Starlette resuelve
+# rutas en orden de registro, y `{persona_id}` capta cualquier segmento --
+# si esta ruta fuera declarada después, `/me/representados` caería en esa
+# ruta genérica y el "me" fallaría la conversión a `int` con un 422 en vez
+# de llegar acá (mismo criterio que `GET /roles/bulk` antes que
+# `GET /{persona_id}/roles`, más abajo en este archivo).
+#
+# `GestorPermisos(["REPRESENTANTE", "ALUMNO"])` es el mismo par de roles del
+# portal que ya usa `ROLES_PORTAL` en `membresias_pagos_router.py`: un
+# ADMINISTRADOR/ENTRENADOR queda afuera del gate y ni siquiera llega al
+# servicio (que además los rechaza explícitamente -- doble candado, igual
+# criterio que el resto del router). Mismo tier de autoservicio autenticado
+# que `crear_representado` (10/min).
+@router.post(
+    "/me/representados", response_model=RepresentadoPropioResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(GestorPermisos(["REPRESENTANTE", "ALUMNO"]))],
+)
+@limiter.limit("10/minute")
+async def crear_representado_propio(
+    request: Request,
+    datos: RepresentadoCreateDTO,
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+    db: Session = Depends(obtener_sesion),
+):
+    representado, tokens = PersonaServicio(db).crear_representado_propio(
+        token_payload.get("persona_id"), datos,
+    )
+    return RepresentadoPropioResponseDTO(
+        representado=representado,
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
+        token_type=tokens["token_type"],
+    )
 
 
 # --- Autoservicio del portal: representante agrega un dependiente ----------

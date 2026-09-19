@@ -15,6 +15,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ACCESS_TOKEN_COOKIE, backendFetch, getBackendApiUrl, setAuthCookies } from "@/lib/server/auth";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import type { RepresentadoCreatePayload } from "@/services/api";
 
 /** Default backend timeout for proxied requests. */
 export const BACKEND_TIMEOUT_MS = 10_000;
@@ -395,6 +396,37 @@ export async function anonymousAuthPost(
   }
 
   return NextResponse.json(json, { status: 200 });
+}
+
+/**
+ * `RepresentadoCreatePayload` (camelCase, from the browser) → the snake_case
+ * body FastAPI's `RepresentadoCreateDTO` expects. Issue #1318: `POST
+ * /api/personas/[id]/representados` and `POST /api/personas/me/representados`
+ * are otherwise the same request shape aimed at two different backend
+ * routes (representative-for-another vs. self-service) — copying this
+ * mapping into the second route tripped the duplication gate against the
+ * first, so it is extracted once and both routes call it.
+ */
+export function buildRepresentadoBackendBody(body: RepresentadoCreatePayload): Record<string, unknown> {
+  const backendBody: Record<string, unknown> = {
+    nombres: body.nombres,
+    apellidos: body.apellidos,
+    cedula: body.cedula,
+    fecha_nacimiento: body.fechaNacimiento,
+    telefono: body.telefono,
+  };
+  if (body.fichaMedica) {
+    // Issue #1138: sin contacto de emergencia propio -- ese contacto se
+    // deriva del representante, y el backend rechaza explícitamente
+    // (422) `contacto_emergencia`/`telefono_emergencia` en este camino.
+    backendBody.ficha_medica = {
+      tipo_sangre: body.fichaMedica.tipoSangre,
+      enfermedades: body.fichaMedica.enfermedades ?? [],
+      alergias: body.fichaMedica.alergias,
+    };
+  }
+  if (body.institucionId !== undefined) backendBody.institucion_id = body.institucionId;
+  return backendBody;
 }
 
 interface PatchCatalogResourceOptions<Field extends string> {

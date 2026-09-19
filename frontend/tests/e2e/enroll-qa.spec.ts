@@ -926,9 +926,11 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
     // `isDuplicateIdentityError` reconoce el texto del backend y engancha la
     // ayuda de `audience="self-service"`: quien ya se inscribió no tiene que
     // volver a hacerlo, tiene que entrar. Un error que solo repite el problema
-    // es un callejón sin salida.
+    // es un callejón sin salida. Issue #1318: el texto ahora también nombra
+    // el paso honesto ya disponible desde la propia cuenta (jugador o
+    // dependiente), no solo "entrar".
     const alerta = stepAlert(page);
-    await expect(alerta).toContainText("Si ya se inscribió antes, no necesita volver a hacerlo");
+    await expect(alerta).toContainText("Si ya tiene cuenta, no necesita volver a inscribirse");
     await expect(alerta.getByRole("link", { name: /iniciar sesión/i })).toBeVisible();
     await expect(alerta.getByRole("link", { name: /recuperar contraseña/i })).toBeVisible();
     await shot(page, "S08", "duplicado-ofrece-salida");

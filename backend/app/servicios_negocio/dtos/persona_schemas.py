@@ -220,6 +220,21 @@ class PersonaResponseDTO(ResponseBase, BaseModel):
         return resolver_url_foto_perfil(valor)
 
 
+# --- Issue #1318: autoservicio "jugador → representante" --------------------
+class RepresentadoPropioResponseDTO(ResponseBase, BaseModel):
+    """Respuesta de `POST /personas/me/representados`.
+
+    A diferencia de `PersonaResponseDTO` (respuesta de `POST
+    /{persona_id}/representados`), esta SIEMPRE trae el par de tokens
+    reemitido -- mismo criterio que `CambiarCorreoNoVerificadoResponseDTO`:
+    los roles viajan en el JWT, y este comando puede haber cambiado el del
+    propio llamador."""
+    representado: PersonaResponseDTO
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
 class PersonaListItemDTO(PersonaResponseDTO):
     """`GET /personas/` (el roster admin), y SOLO ese endpoint -- issue #869,
     hallazgo en vivo PR #972. `cuenta_activa` vive acá y no en
