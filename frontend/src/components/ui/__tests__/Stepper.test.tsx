@@ -210,7 +210,7 @@ describe("Stepper — compact phone rendering (#1321)", () => {
   });
 });
 
-// #1332 (R4-001, review advisory de #1331): la píldora compacta completada
+// #1332 (R4-001, review advisory de #1331): el punto compacto completado
 // era un `<button>` de 8px (`h-2 w-2`) con `gap-1.5`, en el único breakpoint
 // donde existe — táctil. `min-h-[24px]` (`MIN_TARGET_CLASS`,
 // `lib/target-size.ts`) es el piso del proyecto, pero ese control es
