@@ -121,10 +121,12 @@ class MembresiaResponseDTO(ResponseBase, BaseModel):
     # combinada que `PagoServicio._fecha_fin_maxima_combinada` -- la
     # `fecha_fin` más lejana entre un `Pago` APROBADO y una
     # `CoberturaBonificada`. No es una columna de `Membresia`: cada endpoint
-    # que devuelve este DTO la resuelve vía
-    # `membresias_pagos_router._con_cubierto_hasta` (una consulta agrupada
-    # por fuente, ver su docstring) antes de armar la respuesta, así que no
-    # llega vía `from_attributes` como el resto de los campos.
+    # que devuelve este DTO la arma vía `membresias_pagos_router.
+    # _con_cubierto_hasta` (una consulta agrupada por fuente, ver su
+    # docstring) o, en los dos endpoints de alta, vía
+    # `_recien_creada_sin_cobertura` (issue #1349, ver su docstring, cero
+    # consultas), así que no llega vía `from_attributes` como el resto de
+    # los campos.
     #
     # `None` tiene UN solo significado en todo el contrato: esta membresía no
     # tiene ninguna cobertura todavía -- nunca "nadie lo calculó". Antes de
