@@ -16,10 +16,10 @@ import pytest
 from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, TipoRol
 from app.dominio.excepciones import OperacionInvalida
-from app.dominio.modelos import Persona, Rol, Usuario
+from app.dominio.modelos import CoberturaBonificada, Pago, Persona, Rol, Usuario
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.membresia_pago_servicio import (
-    MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA, MembresiaServicio,
+    MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA, MembresiaServicio, PagoServicio,
 )
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_persona_orm, crear_tipo_membresia_orm,
@@ -148,7 +148,14 @@ def test_endpoint_propia_incluye_la_clave_cubierto_hasta(client, db_session):
     del contrato -- el 201 debe traer `cubiertoHasta` en el cuerpo (`None`
     por construcción, ver `membresias_pagos_router._recien_creada_sin_
     cobertura`), y el flujo de rol del portal (REPRESENTANTE, nunca
-    ADMINISTRADOR) sigue intacto."""
+    ADMINISTRADOR) sigue intacto.
+
+    Issue #1349 (R3-003): también pin de la invariante "sin cobertura
+    todavía" contra la base -- cero filas de `Pago`/`CoberturaBonificada`
+    referencian la membresía recién creada, y `PagoServicio.
+    fecha_fin_maxima_combinada_bulk` (la misma lectura que usa
+    `_con_cubierto_hasta` para membresías YA existentes) da `None` para
+    esta."""
     representante = crear_persona_orm(db_session, cedula_valida(746), nombres="Nueva", apellidos="Cuenta")
     tipo = crear_tipo_membresia_orm(db_session)
     db_session.commit()
@@ -163,6 +170,16 @@ def test_endpoint_propia_incluye_la_clave_cubierto_hasta(client, db_session):
     assert cuerpo["personaId"] == representante.id
     assert "cubiertoHasta" in cuerpo
     assert cuerpo["cubiertoHasta"] is None
+
+    membresia_id = cuerpo["id"]
+    assert db_session.query(Pago).filter(Pago.membresia_id == membresia_id).count() == 0
+    assert (
+        db_session.query(CoberturaBonificada)
+        .filter(CoberturaBonificada.membresia_id == membresia_id)
+        .count() == 0
+    )
+    cobertura_leida = PagoServicio(db_session).fecha_fin_maxima_combinada_bulk([membresia_id])
+    assert cobertura_leida.get(membresia_id) is None
 
 
 def test_endpoint_propia_rechaza_a_un_entrenador(client, db_session):

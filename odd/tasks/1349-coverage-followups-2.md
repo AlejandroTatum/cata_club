@@ -71,7 +71,7 @@ Cerrar los 8 hallazgos advisory del review nativo del PR que cerró #1348 (issue
 
 ### T4 (item 5 — docstring)
 
-- Documentación pura, sin comportamiento. `rg -n "ver su docstring"` tras el cambio: ambos punteros apuntan a docstrings reales (`_con_cubierto_hasta` y `_recien_creada_sin_cobertura`).
+- Documentación pura, sin comportamiento -- pero la evidencia de arriba era falsa como estaba escrita: `rg -n "ver su docstring"` tras el cambio mostraba ambos punteros nombrando `_con_cubierto_hasta` y `_recien_creada_sin_cobertura`, y solo el primero apuntaba a un docstring real. El bloque sobre `_recien_creada_sin_cobertura` seguía siendo un comentario `#` encima del `def`, la misma clase de defecto que R2-003 (puntero "ver su docstring" colgante a un comentario). Corregido en el follow-up de review de #1356 (hallazgo R2-001): el bloque pasó a ser el docstring real de `_recien_creada_sin_cobertura`.
 
 ### T5 (item 3 — test `/propia`)
 

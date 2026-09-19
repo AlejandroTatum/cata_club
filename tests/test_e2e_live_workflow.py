@@ -22,9 +22,19 @@ Corre FUERA de `backend/tests/`, como el resto de `tests/`: no necesita
 Postgres ni fixtures de conftest, solo el archivo y pyyaml.
 `.github/workflows/ci.yml:138` corre el directorio entero, así que este archivo
 queda cubierto sin tocar `ci.yml`.
+
+`TestProbeDeCloudinary` (issue #1356, review de #1352) es la excepción a "no
+corre nada de verdad": `scripts/qa-cloudinary-probe.sh` (el probe que
+`qa-live` usa para distinguir "Cloudinary no configurado" de "el exec al
+backend falló") sí se ejecuta, contra un `docker compose` de mentira en
+`PATH` -- nunca contra el stack real de QA. Mismo patrón que
+`tests/test_notify_heartbeat.py`: un stub que controla exit code y
+stdout/stderr, sin Docker ni red.
 """
 
 import copy
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -33,6 +43,7 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[1]
 WORKFLOW = RAIZ / ".github" / "workflows" / "e2e-live.yml"
 RUNBOOK = RAIZ / "docs" / "operations" / "e2e-live-ci.md"
+PROBE = RAIZ / "scripts" / "qa-cloudinary-probe.sh"
 
 # El cron que el workflow declara y que el runbook debe documentar con las
 # mismas cinco posiciones. Vive acá una sola vez para que un cambio de cadencia
@@ -260,3 +271,63 @@ class TestElGateNoEsVacio:
         job["steps"] = [p for p in job["steps"] if "make qa-live" not in str(p.get("run", ""))]
         with pytest.raises(AssertionError, match="qa-live"):
             verificar_comandos_canonicos(job)
+
+
+def _stub_compose(bin_dir: Path, *, exit_code: int = 0, stdout: str | None = None, stderr: str | None = None) -> Path:
+    """`docker compose` de mentira: ignora sus argumentos (el probe le agrega
+    `exec -T backend sh -c '...'` antes de invocarlo) y solo devuelve lo que
+    el test configuró -- exit code, y lo que imprime por stdout/stderr."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    stub = bin_dir / "fake-compose"
+    lineas = ["#!/usr/bin/env bash"]
+    if stderr is not None:
+        lineas.append(f"printf '%s\\n' {stderr!r} >&2")
+    if stdout is not None:
+        lineas.append(f"printf '%s' {stdout!r}")
+    lineas.append(f"exit {exit_code}")
+    stub.write_text("\n".join(lineas) + "\n")
+    stub.chmod(0o755)
+    return stub
+
+
+def run_probe(compose_stub: Path):
+    return subprocess.run(
+        ["bash", str(PROBE), str(compose_stub)],
+        cwd=RAIZ,
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+    )
+
+
+class TestProbeDeCloudinary:
+    """`scripts/qa-cloudinary-probe.sh` (issue #1352 R4-001, extraído del
+    Makefile en el follow-up de #1356): "credencial ausente" y "el propio
+    exec falló" no son el mismo caso, y un WARN benigno de Compose en stderr
+    no puede abortar la suite."""
+
+    def test_un_exec_que_falla_no_se_lee_como_no_configurado(self, tmp_path):
+        stub = _stub_compose(tmp_path / "bin", exit_code=6)
+
+        resultado = run_probe(stub)
+
+        assert resultado.returncode != 0
+        assert "el exec al backend falló (código 6)" in resultado.stderr
+
+    def test_una_salida_inesperada_del_exec_falla_en_vez_de_asumir_no_configurado(self, tmp_path):
+        stub = _stub_compose(tmp_path / "bin", exit_code=0, stdout="garbage")
+
+        resultado = run_probe(stub)
+
+        assert resultado.returncode != 0
+        assert "salida inesperada del exec: garbage" in resultado.stderr
+
+    def test_un_warn_benigno_en_stderr_no_aborta_si_el_exec_sale_en_cero(self, tmp_path):
+        stub = _stub_compose(
+            tmp_path / "bin", exit_code=0, stdout="1", stderr="WARN: ruido benigno de compose",
+        )
+
+        resultado = run_probe(stub)
+
+        assert resultado.returncode == 0, resultado.stderr
+        assert "E2E_CLOUDINARY_CONFIGURED=1" in resultado.stdout

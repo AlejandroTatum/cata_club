@@ -11,6 +11,7 @@ from app.dominio.modelos import AsignacionDescuento, CoberturaBonificada, Descue
 from app.presentacion.routers import membresias_pagos_router as membresias_pagos_router_mod
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaResponseDTO
+from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import (
     crear_membresia_orm, crear_pago_orm, crear_persona_orm, crear_tipo_membresia_orm,
 )
@@ -949,11 +950,20 @@ def test_cambiar_plan_membresia_incluye_cubierto_hasta(client, db_session):
     assert resp.json()["cubiertoHasta"] == "2026-11-30"
 
 
-def test_crear_membresia_incluye_la_clave_cubierto_hasta(client):
+def test_crear_membresia_incluye_la_clave_cubierto_hasta(client, db_session):
     """Una membresía recién creada no tiene ningún `Pago` ni
     `CoberturaBonificada` todavía -- `null` es correcto acá por
     construcción, no por omisión -- pero la CLAVE debe estar presente,
-    igual que en el resto de los endpoints."""
+    igual que en el resto de los endpoints.
+
+    Issue #1349 (R3-003): la invariante "ninguna alta tiene cobertura
+    propia todavía" vivía solo en un comentario de `_recien_creada_sin_
+    cobertura`. Acá se prueba contra la base: cero filas de `Pago`/
+    `CoberturaBonificada` referencian la membresía recién creada, y el
+    mismo cálculo que usa `_con_cubierto_hasta` para una membresía YA
+    existente (`PagoServicio.fecha_fin_maxima_combinada_bulk`) da `None`
+    para esta -- el valor que el helper hardcodea coincide con lo que
+    daría la lectura real."""
     persona = _crear_persona(client, cedula=cedula_valida(925))
     tipo = _crear_tipo_membresia(client)
 
@@ -967,6 +977,16 @@ def test_crear_membresia_incluye_la_clave_cubierto_hasta(client):
     assert resp.status_code == 201
     assert "cubiertoHasta" in resp.json()
     assert resp.json()["cubiertoHasta"] is None
+
+    membresia_id = resp.json()["id"]
+    assert db_session.query(Pago).filter(Pago.membresia_id == membresia_id).count() == 0
+    assert (
+        db_session.query(CoberturaBonificada)
+        .filter(CoberturaBonificada.membresia_id == membresia_id)
+        .count() == 0
+    )
+    cobertura_leida = PagoServicio(db_session).fecha_fin_maxima_combinada_bulk([membresia_id])
+    assert cobertura_leida.get(membresia_id) is None
 
 
 def _expone_membresia_response_dto(response_model) -> bool:
@@ -996,6 +1016,52 @@ def _cubierto_hasta_presente_en(cuerpo) -> bool:
     return all("cubiertoHasta" in fila for fila in filas)
 
 
+def _llamar_propia(client, persona_id, tipo_membresia_id):
+    """Llama a `POST /membresias/propia` autenticado transitoriamente como
+    REPRESENTANTE del portal, y restaura el override de `decodificar_token`
+    exactamente como estaba antes -- SIN override si no había ninguno
+    (issue #1349, R3-001: restaurar solo `if anterior is not None` dejaba la
+    identidad del portal pegada cuando no había override previo, filtrándola
+    a la llamada admin-only siguiente que comparte la misma app de
+    FastAPI)."""
+    from main import app as fastapi_app
+
+    tenia_override = GestorAutenticacion.decodificar_token in fastapi_app.dependency_overrides
+    anterior = fastapi_app.dependency_overrides.get(GestorAutenticacion.decodificar_token)
+    fastapi_app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
+        "sub": "portal@cataclub.test", "persona_id": persona_id, "roles": ["REPRESENTANTE"],
+    }
+    try:
+        return client.post(
+            "/api/v1/membresias/propia", json={"tipo_membresia_id": tipo_membresia_id},
+        )
+    finally:
+        if tenia_override:
+            fastapi_app.dependency_overrides[GestorAutenticacion.decodificar_token] = anterior
+        else:
+            fastapi_app.dependency_overrides.pop(GestorAutenticacion.decodificar_token, None)
+
+
+def test_llamar_propia_no_filtra_la_identidad_del_portal_a_la_llamada_siguiente(
+    client_sin_token, db_session,
+):
+    """Issue #1349 (R3-001): antes, `_llamar_propia` solo restauraba el
+    override anterior de `decodificar_token` `if anterior is not None`. Con
+    `client_sin_token` (arranca SIN ningún override) eso significaba no
+    restaurar nada -- el override REPRESENTANTE quedaba pegado en la app
+    compartida, y la siguiente llamada admin-only heredaba esa identidad en
+    vez de fallar por falta de autenticación. RED sin el fix: la llamada de
+    abajo respondía 403 (autenticada como REPRESENTANTE) en lugar de 401."""
+    persona_portal = crear_persona_orm(db_session, cedula_valida(943), nombres="Portal", apellidos="Fuga")
+    tipo = crear_tipo_membresia_orm(db_session)
+    db_session.commit()
+
+    _llamar_propia(client_sin_token, persona_portal.id, tipo.id)
+
+    respuesta = client_sin_token.get("/api/v1/membresias/")
+    assert respuesta.status_code == 401
+
+
 def test_todo_endpoint_que_expone_membresia_response_dto_incluye_cubierto_hasta(client, db_session):
     """Issue #1349 (R2-002): "todo endpoint que devuelve `MembresiaResponseDTO`
     pasa por `_con_cubierto_hasta` o `_recien_creada_sin_cobertura`" vivía
@@ -1014,20 +1080,6 @@ def test_todo_endpoint_que_expone_membresia_response_dto_incluye_cubierto_hasta(
     db_session.commit()
     tipo_nuevo = _crear_tipo_membresia(client)
 
-    def _llamar_propia():
-        from main import app as fastapi_app
-        anterior = fastapi_app.dependency_overrides.get(GestorAutenticacion.decodificar_token)
-        fastapi_app.dependency_overrides[GestorAutenticacion.decodificar_token] = lambda: {
-            "sub": "portal@cataclub.test", "persona_id": persona_portal.id, "roles": ["REPRESENTANTE"],
-        }
-        try:
-            return client.post(
-                "/api/v1/membresias/propia", json={"tipo_membresia_id": tipo_original.id},
-            )
-        finally:
-            if anterior is not None:
-                fastapi_app.dependency_overrides[GestorAutenticacion.decodificar_token] = anterior
-
     llamadas_por_ruta = {
         ("POST", "/membresias/"): lambda: client.post(
             "/api/v1/membresias/",
@@ -1036,7 +1088,7 @@ def test_todo_endpoint_que_expone_membresia_response_dto_incluye_cubierto_hasta(
                 "persona_id": persona_para_crear.id, "tipo_membresia_id": tipo_original.id,
             },
         ),
-        ("POST", "/membresias/propia"): _llamar_propia,
+        ("POST", "/membresias/propia"): lambda: _llamar_propia(client, persona_portal.id, tipo_original.id),
         ("GET", "/membresias/"): lambda: client.get("/api/v1/membresias/"),
         ("GET", "/membresias/mias"): lambda: client.get(
             f"/api/v1/membresias/mias?persona_id={persona_para_mutar.id}"
@@ -1082,6 +1134,26 @@ def test_todo_endpoint_que_expone_membresia_response_dto_incluye_cubierto_hasta(
 # una acción que sí surtió efecto. El id de la membresía queda en el log
 # para que sea diagnosticable -- estos tres tests parchean el helper de
 # lectura para que reviente y verifican que el log lo registra.
+def _unico_registro_de_error(caplog, logger_name):
+    """Issue #1349 (R3-002): `str(membresia.id) in caplog.text` no fija NADA
+    -- con un id chico, cualquier línea capturada que contenga ese dígito
+    (un número de línea de traceback, el mensaje de otro logger) satisface
+    la comparación. Acá se filtra por logger y nivel, y se exige que
+    `exc_info` haya quedado adjunto al registro -- lo que sí prueba que vino
+    de `logger.exception` dentro del `except`, no de cualquier log ERROR
+    coincidente por casualidad."""
+    registros = [
+        registro for registro in caplog.records
+        if registro.name == logger_name and registro.levelno == logging.ERROR
+    ]
+    assert len(registros) == 1, (
+        f"se esperaba exactamente un ERROR de {logger_name}, hubo {len(registros)}"
+    )
+    registro = registros[0]
+    assert registro.exc_info is not None, "el ERROR no llevaba exc_info adjunto"
+    return registro
+
+
 def test_suspender_membresia_loguea_el_id_si_falla_el_enriquecimiento(
     client, db_session, monkeypatch, caplog,
 ):
@@ -1099,7 +1171,8 @@ def test_suspender_membresia_loguea_el_id_si_falla_el_enriquecimiento(
         with pytest.raises(RuntimeError):
             client.post(f"/api/v1/membresias/{membresia.id}/suspender", json={"motivo": "motivo"})
 
-    assert str(membresia.id) in caplog.text
+    registro = _unico_registro_de_error(caplog, "cataclub.membresias_pagos")
+    assert str(membresia.id) in registro.getMessage()
 
 
 def test_reactivar_membresia_loguea_el_id_si_falla_el_enriquecimiento(
@@ -1120,7 +1193,8 @@ def test_reactivar_membresia_loguea_el_id_si_falla_el_enriquecimiento(
         with pytest.raises(RuntimeError):
             client.post(f"/api/v1/membresias/{membresia.id}/reactivar", json={"motivo": "motivo"})
 
-    assert str(membresia.id) in caplog.text
+    registro = _unico_registro_de_error(caplog, "cataclub.membresias_pagos")
+    assert str(membresia.id) in registro.getMessage()
 
 
 def test_cambiar_plan_membresia_loguea_el_id_si_falla_el_enriquecimiento(
@@ -1144,7 +1218,8 @@ def test_cambiar_plan_membresia_loguea_el_id_si_falla_el_enriquecimiento(
                 json={"nuevo_tipo_membresia_id": tipo_nuevo["id"]},
             )
 
-    assert str(membresia.id) in caplog.text
+    registro = _unico_registro_de_error(caplog, "cataclub.membresias_pagos")
+    assert str(membresia.id) in registro.getMessage()
 
 
 # --- E04-RF002: gratuidad del 4to miembro familiar ---------------------------
