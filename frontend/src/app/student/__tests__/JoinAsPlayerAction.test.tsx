@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import JoinAsPlayerAction from "@/app/student/JoinAsPlayerAction";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { buttonClasses } from "@/components/ui/Button";
 import * as api from "@/services/api";
 
 const push = vi.fn();
@@ -46,6 +47,29 @@ beforeEach(() => {
 });
 
 describe("JoinAsPlayerAction", () => {
+  // Issue #1317: this CTA sits beside "Agregar hijo o dependiente" (a
+  // `buttonClasses("secondary")` `<Link>`) in the same flex row, but
+  // `TipoSelectorForm`'s default trigger is the admin chip (`bg-cata-red/15`,
+  // `mt-2.5`) — height, radius, border and typography all mismatched the
+  // sibling. The trigger must wear the SAME secondary-button classes and the
+  // SAME trailing arrow the sibling has, not the chip.
+  it("renders the trigger in the same secondary-button format as its sibling CTA", async () => {
+    renderAction();
+
+    const trigger = screen.getByRole("button", { name: "Unirme como jugador" });
+
+    for (const cls of buttonClasses("secondary").split(" ")) {
+      expect(trigger).toHaveClass(cls);
+    }
+    expect(trigger).not.toHaveClass("bg-cata-red/15");
+    expect(trigger).not.toHaveClass("mt-2.5");
+
+    const icons = trigger.querySelectorAll("svg");
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toHaveClass("lucide-user-plus");
+    expect(icons[1]).toHaveClass("lucide-arrow-right");
+  });
+
   it("shows the trigger and fetches the plan catalog only after it is clicked", async () => {
     renderAction();
 
