@@ -1978,3 +1978,124 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
     expect(banner).toHaveClass("alert-error");
   });
 });
+
+/**
+ * #1315 — a fresh install must not lie.
+ *
+ * Migration `a4e7c2f9b1d8` (+`d4c7e1b09a35`) seeds the 5 categorías and ZERO
+ * `horario_entrenamiento` rows. The screen gated its empty state on
+ * `horarios.length === 0` but titled it "No hay categorías configuradas", so
+ * the catalog it had already fetched stayed invisible and creating a seeded
+ * label dead-ended on the unique-label 400.
+ */
+describe("GroupsPage — catalog categorías visible on a fresh install (issue #1315)", () => {
+  /** The card whose label is `label`. */
+  function cardFor(label: string): HTMLElement {
+    const card = screen
+      .getAllByTestId("horario-card")
+      .find((element) => within(element).queryByText(label) !== null);
+    if (!card) throw new Error(`No card found for ${label}`);
+    return card;
+  }
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockFetchCategoriasCatalogo.mockReset();
+    mockCrearCategoria.mockReset();
+    mockActualizarCategoria.mockReset();
+    mockFetchAlumnosPorHorario.mockReset();
+    mockFetchRosterDeTodosLosHorarios.mockReset();
+
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchHorarios.mockResolvedValue([]);
+    mockFetchCategoriasCatalogo.mockResolvedValue(DEFAULT_CATEGORIA_CATALOG);
+    mockCrearCategoria.mockResolvedValue({});
+    mockActualizarCategoria.mockResolvedValue({});
+    mockFetchAlumnosPorHorario.mockResolvedValue([]);
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([]);
+  });
+
+  it("renders the seeded categorías as cards instead of claiming none are configured", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.queryByText("No hay categorías configuradas")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(DEFAULT_CATEGORIA_CATALOG.length);
+    expect(screen.getAllByText("Sin horarios de entrenamiento todavía")).toHaveLength(
+      DEFAULT_CATEGORIA_CATALOG.length,
+    );
+  });
+
+  it("shows each categoría's franja and días permitidos from the catalog", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const card = cardFor("Infantil");
+    expect(within(card).getByText(/16:00 — 17:00/)).toBeInTheDocument();
+    const boxes = daysOf(card);
+    // Allowed but not running: the dashed "disponible" state, not "activo".
+    expect(stateOf(boxes, "lun")).toBe("disponible");
+    expect(stateOf(boxes, "sab")).toBe("inactivo");
+  });
+
+  it("opens the existing v6 edit flow pre-filled and saves through actualizarCategoria", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: "Definir horarios de Infantil" }));
+    await screen.findByRole("heading", { name: "Editar categoría" });
+
+    expect(screen.getByLabelText(/^Nombre/)).toHaveValue("Infantil");
+    expect(screen.getByLabelText(/^Hora de inicio/)).toHaveValue("16:00");
+    expect(screen.getByLabelText(/^Hora de fin/)).toHaveValue("17:00");
+    expect(screen.getByRole("checkbox", { name: "Lunes" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Sábado" })).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() =>
+      expect(mockActualizarCategoria).toHaveBeenCalledWith(
+        "INFANTIL",
+        expect.objectContaining({ nombre: "Infantil", hora_inicio: "16:00", hora_fin: "17:00" }),
+      ),
+    );
+  });
+
+  it("shows 'No hay categorías configuradas' only when the catalog itself is empty", async () => {
+    mockFetchCategoriasCatalogo.mockResolvedValue([]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getByText("No hay categorías configuradas")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("horario-card")).toHaveLength(0);
+  });
+
+  it("keeps the empty state hidden while the catalog has entries", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.queryByText("No hay categorías configuradas")).not.toBeInTheDocument();
+  });
+
+  it("turns a duplicate-label 400 into a way into the categoría that already exists", async () => {
+    mockCrearCategoria.mockRejectedValue(
+      new ApiClientError('Ya existe una categoría llamada "Formativo".', 400),
+    );
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: /nueva categoría/i }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Formativo" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de inicio/), { target: { value: "15:00" } });
+    fireEvent.change(screen.getByLabelText(/^Hora de fin/), { target: { value: "16:00" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Lunes" }));
+    fireEvent.click(screen.getByRole("button", { name: /crear categoría/i }));
+
+    const action = await screen.findByRole("button", { name: "Editar «Formativo»" });
+    fireEvent.click(action);
+
+    await screen.findByRole("heading", { name: "Editar categoría" });
+    expect(screen.getByLabelText(/^Nombre/)).toHaveValue("Formativo");
+  });
+});

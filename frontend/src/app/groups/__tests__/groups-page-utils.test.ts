@@ -15,9 +15,13 @@ import {
   DIA_ORDER,
   formatMembresiaVencidaWarning,
   formatSolapeHorarioWarning,
+  buildCatalogoSinHorarios,
+  findCategoriaDuplicada,
+  findCodigoPorLabel,
 } from "../groups-page-utils";
 import type { AlumnoHorario, SolapeHorario } from "@/services/api";
 import type { HorarioGroup } from "@/lib/groups-utils";
+import type { CategoriaInfo } from "@/services/categorias";
 
 function makeAlumno(personaId: number, horarioId: number): AlumnoHorario {
   return {
@@ -323,5 +327,112 @@ describe("formatSolapeHorarioWarning", () => {
 
   it("returns an empty string when nothing collides, so no toast is raised", () => {
     expect(formatSolapeHorarioWarning("Diego Vega", [])).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildCatalogoSinHorarios — fresh-install catalog visibility (issue #1315)
+// ---------------------------------------------------------------------------
+
+function makeCategoria(
+  label: string,
+  horaInicio: string,
+  horaFin: string,
+  dias: string[],
+  edades: string | null = null,
+): CategoriaInfo {
+  return { label, horaInicio, horaFin, dias, edades };
+}
+
+describe("buildCatalogoSinHorarios", () => {
+  const CATALOGO = {
+    FORMATIVO: makeCategoria("Formativo", "15:00", "16:00", ["LUNES", "MARTES", "MIERCOLES"], "5 a 10 años"),
+    INFANTIL: makeCategoria("Infantil", "16:00", "17:00", ["LUNES", "MARTES"]),
+    ADULTOS: makeCategoria("Adultos", "20:00", "21:15", ["LUNES"]),
+  };
+
+  it("returns every catalog entry, with label/franja/días, when no categoría has schedules", () => {
+    const result = buildCatalogoSinHorarios(CATALOGO, []);
+
+    expect(result).toEqual([
+      {
+        categoria: "FORMATIVO",
+        label: "Formativo",
+        horaInicio: "15:00",
+        horaFin: "16:00",
+        dias: ["LUNES", "MARTES", "MIERCOLES"],
+        edades: "5 a 10 años",
+      },
+      {
+        categoria: "INFANTIL",
+        label: "Infantil",
+        horaInicio: "16:00",
+        horaFin: "17:00",
+        dias: ["LUNES", "MARTES"],
+        edades: null,
+      },
+      {
+        categoria: "ADULTOS",
+        label: "Adultos",
+        horaInicio: "20:00",
+        horaFin: "21:15",
+        dias: ["LUNES"],
+        edades: null,
+      },
+    ]);
+  });
+
+  it("orders by start time, then by label — the club's afternoon run", () => {
+    const result = buildCatalogoSinHorarios(CATALOGO, []);
+    expect(result.map((c) => c.label)).toEqual(["Formativo", "Infantil", "Adultos"]);
+  });
+
+  it("omits a catalog entry that already has schedules", () => {
+    const result = buildCatalogoSinHorarios(CATALOGO, ["INFANTIL"]);
+    expect(result.map((c) => c.categoria)).toEqual(["FORMATIVO", "ADULTOS"]);
+  });
+
+  it("returns an empty list for an empty catalog", () => {
+    expect(buildCatalogoSinHorarios({}, [])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findCategoriaDuplicada — duplicate-label 400 (issue #1315)
+// ---------------------------------------------------------------------------
+
+describe("findCategoriaDuplicada", () => {
+  it("extracts the quoted name from the backend's duplicate-label message", () => {
+    expect(findCategoriaDuplicada('Ya existe una categoría llamada "Infantil".')).toBe("Infantil");
+  });
+
+  it("returns null for a message that names no categoría", () => {
+    expect(findCategoriaDuplicada("Ya existe una categoría con ese nombre.")).toBeNull();
+  });
+
+  it("returns null for an unrelated server error", () => {
+    expect(findCategoriaDuplicada("La hora de inicio debe ser anterior a la hora de fin.")).toBeNull();
+    expect(findCategoriaDuplicada("")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findCodigoPorLabel — map the refused name back to the catalog entry
+// ---------------------------------------------------------------------------
+
+describe("findCodigoPorLabel", () => {
+  const CATALOGO = {
+    FORMATIVO: makeCategoria("Formativo", "15:00", "16:00", ["LUNES"]),
+    INFANTIL: makeCategoria("Infantil", "16:00", "17:00", ["LUNES"]),
+  };
+
+  it("matches the label case-insensitively and trims", () => {
+    expect(findCodigoPorLabel(CATALOGO, "Infantil")).toBe("INFANTIL");
+    expect(findCodigoPorLabel(CATALOGO, "  infantil ")).toBe("INFANTIL");
+  });
+
+  it("returns null when no catalog label matches", () => {
+    expect(findCodigoPorLabel(CATALOGO, "Preinfantil")).toBeNull();
+    expect(findCodigoPorLabel({}, "Formativo")).toBeNull();
   });
 });
