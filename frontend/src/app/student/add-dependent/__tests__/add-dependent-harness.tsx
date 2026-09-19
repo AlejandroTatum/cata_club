@@ -84,21 +84,22 @@ export function nextImageDouble(): Record<string, unknown> {
 }
 
 /**
- * A signed-in account. Defaults to a REPRESENTANTE (the original — and
- * still most common — visitor); issue #1318 widened this wizard to also
- * accept a self-managed "estudiante" (an ALUMNO with no representative of
- * their own yet), so a suite exercising that path passes its own
- * `backendRoles`/`userRole`.
+ * A signed-in REPRESENTANTE — the original, and still most common, visitor.
+ *
+ * Issue #1318 widened this wizard to also accept a self-managed "estudiante"
+ * (an ALUMNO with no representative of their own yet), but no suite that
+ * needs THAT session flips it through this double: `vi.mock` factories are
+ * hoisted, so a fixed double can only ever return the session it closes over
+ * at import time. `add-dependent-role-notice.test.tsx` needs the role to
+ * change PER TEST and installs its own hoisted, mutable double instead — see
+ * that file's header for why.
  */
-export function authContextDouble(
-  backendRoles: string[] = ["REPRESENTANTE"],
-  userRole: "representante" | "estudiante" = "representante",
-): Record<string, unknown> {
+export function authContextDouble(): Record<string, unknown> {
   return {
     useAuth: () => ({
       session: {
-        user: { id: "9", name: "Mishell", email: "m@cataclub.com", role: userRole },
-        roles: backendRoles,
+        user: { id: "9", name: "Mishell", email: "m@cataclub.com", role: "representante" },
+        roles: ["REPRESENTANTE"],
       },
       isAuthenticated: true,
       isLoading: false,
