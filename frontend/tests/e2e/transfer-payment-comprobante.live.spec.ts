@@ -106,13 +106,20 @@ const STUDENT_FULL_NAME = "Pedro Salgado";
  * al contenedor (nunca imprime el valor, mismo criterio que el resto del
  * repo para medir un secreto sin leerlo) y lo exporta como
  * `E2E_CLOUDINARY_CONFIGURED=1`/`0`. El cron programado nunca lo tiene
- * (issue #1341, ver el encabezado del archivo); un entorno local con
- * credenciales reales en `.env` sí.
+ * (issue #1341, ver el encabezado del archivo).
+ *
+ * Un `.env` local con credenciales reales NO alcanza por sí solo (revisión
+ * nativa de #1352, R2-004/R3-cloudinary-gate-defaults-to-skip):
+ * `E2E_CLOUDINARY_CONFIGURED` solo llega definida corriendo `make qa-live`
+ * -- invocar `pnpm exec playwright test` directo (el mismo runner que este
+ * encabezado documenta más arriba) deja la variable sin definir y saltea
+ * estos tres tests igual, tenga o no credenciales reales el backend.
  */
 const CLOUDINARY_CONFIGURED = process.env.E2E_CLOUDINARY_CONFIGURED === "1";
 const SIN_CLOUDINARY_MOTIVO =
-  "Requiere Cloudinary configurado (CLOUDINARY_API_KEY) -- ausente en el cron " +
-  "sin secretos (issue #1341); corra con credenciales reales en .env para cubrirlo.";
+  "Requiere E2E_CLOUDINARY_CONFIGURED=1 -- lo fija `make qa-live` (issue #1341) " +
+  "cuando el backend de QA ya levantado reporta CLOUDINARY_API_KEY no vacío. " +
+  "Correr Playwright directo saltea este test igual, tenga o no credenciales reales en .env.";
 
 test.beforeEach(async ({ request }) => {
   // Mismo mecanismo que `payments.live.spec.ts`/`discount-payment-effect.
