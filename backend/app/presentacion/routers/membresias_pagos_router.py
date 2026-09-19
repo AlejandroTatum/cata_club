@@ -116,16 +116,17 @@ async def listar_tarifas_publicas(request: Request, db: Session = Depends(obtene
     return [TarifaPublicaDTO(categoria=t.categoria, precio=t.precio) for t in tipos]
 
 
-# Issue #1349 (R4-001): las dos altas (`crear_membresia`, `crear_membresia_
-# propia`) construyen `cubierto_hasta=None` directo, SIN volver a leer la
-# base -- a diferencia de `_con_cubierto_hasta` (ver su docstring), que sí
-# lee porque una membresía YA existente puede tener cobertura. Una membresía
-# recién creada nunca tiene todavía un `Pago` ni una `CoberturaBonificada`
-# propios, así que `None` es verdad por construcción, nunca por una consulta
-# que podría fallar. Antes, esa lectura post-alta convertía un error
-# transitorio de BD en un 500 sobre un POST que ya había completado -- y el
-# reintento del cliente creaba una segunda membresía.
 def _recien_creada_sin_cobertura(membresia) -> MembresiaResponseDTO:
+    """Issue #1349 (R4-001): las dos altas (`crear_membresia`, `crear_membresia_
+    propia`) construyen `cubierto_hasta=None` directo, SIN volver a leer la
+    base -- a diferencia de `_con_cubierto_hasta` (ver su docstring), que sí
+    lee porque una membresía YA existente puede tener cobertura. Una membresía
+    recién creada nunca tiene todavía un `Pago` ni una `CoberturaBonificada`
+    propios, así que `None` es verdad por construcción, nunca por una consulta
+    que podría fallar. Antes, esa lectura post-alta convertía un error
+    transitorio de BD en un 500 sobre un POST que ya había completado -- y el
+    reintento del cliente creaba una segunda membresía.
+    """
     return MembresiaResponseDTO.model_validate(membresia).model_copy(
         update={"cubierto_hasta": None}
     )
