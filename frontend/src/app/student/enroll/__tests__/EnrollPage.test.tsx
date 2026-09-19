@@ -203,6 +203,52 @@ describe("EnrollPage — the named stepper", () => {
       screen.getByRole("heading", { name: /datos del estudiante/i }),
     );
   });
+
+  // Issue #1347 (item 2, R3-001 negative side): the one-shot flag is consumed
+  // by the jump's own step change — a subsequent ORDINARY step change must
+  // not inherit it. A regression that armed the flag inside `goToStep` itself,
+  // or failed to clear it after consuming it, would steal focus here too.
+  it("keeps focus on the Siguiente button for the step change right after a jump", () => {
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    const stepper = screen.getByRole("list", { name: /pasos de la inscripción/i });
+    fireEvent.click(within(stepper).getByRole("button", { name: "Estudiante" }));
+
+    // `fireEvent.click` does not simulate the browser's own click-focuses-
+    // the-target behavior (unlike a real click, or `userEvent.click`), so
+    // that step is done explicitly here — it is what leaves the button, not
+    // the heading, holding focus in the browser this suite is standing in for.
+    const siguiente = screen.getByRole("button", { name: /^Siguiente/ });
+    siguiente.focus();
+    fireEvent.click(siguiente);
+
+    expect(document.activeElement).toBe(siguiente);
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("heading", { name: /salud y emergencia/i }),
+    );
+  });
+
+  // Issue #1347 (item 2, R3-001 negative side): plain forward/back navigation
+  // never has a heading as `document.activeElement` — only a Stepper-
+  // originated jump does.
+  it("never moves focus to a step heading on plain forward navigation", () => {
+    render(<EnrollPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("heading", { name: /datos del estudiante/i }),
+    );
+
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("heading", { name: /salud y emergencia/i }),
+    );
+  });
 });
 
 // #312 / hallazgo #33 — same gap on the representative step (paso 3).

@@ -86,6 +86,7 @@ import {
   isDemoQuickFillEnabled,
   loadEnrollDraft,
   saveEnrollDraft,
+  shouldFocusStepHeadingOnJump,
   validateEnrollFields,
   validateEnrollStep,
   validateEnrollment,
@@ -291,26 +292,38 @@ function EnrollWizard(): React.ReactElement {
    * programmatic focus target (`tabIndex={-1}`: never in the Tab order,
    * only reachable via `.focus()`).
    *
-   * `stepHeadingRef` is the target; `focusStepHeadingOnNextRender` is a
+   * `stepHeadingRef` is the target; `focusStepHeadingOnNextStepChange` is a
    * one-shot flag so ordinary forward/back navigation (`handleNext`,
    * `handleBack`), which already lands focus sensibly via the button that
    * was clicked, is left alone — only a Stepper-originated jump steals
    * focus. The move happens in an effect keyed on `step`, not inline in the
    * click handler, so it runs AFTER the heading's text has already
    * re-rendered for the destination step.
+   *
+   * Its real lifetime, spelled out by its name: it is consumed the next time
+   * `step` actually changes, not "on the next render". `handleStepperJump`
+   * only arms it when the jump changes the step
+   * (`shouldFocusStepHeadingOnJump`, issue #1347 item 1) — `goToStep`
+   * already no-ops on a same-step jump (`wizard-history.ts`), so arming it
+   * unconditionally would leave it armed for nothing to consume, and the
+   * NEXT ordinary "Siguiente"/"Atrás" would steal focus to the heading in
+   * the jump's place.
    */
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
-  const focusStepHeadingOnNextRender = useRef(false);
+  const focusStepHeadingOnNextStepChange = useRef(false);
 
   useEffect(() => {
-    if (!focusStepHeadingOnNextRender.current) return;
-    focusStepHeadingOnNextRender.current = false;
+    if (!focusStepHeadingOnNextStepChange.current) return;
+    focusStepHeadingOnNextStepChange.current = false;
     stepHeadingRef.current?.focus();
   }, [step]);
 
   function handleStepperJump(index: number): void {
-    focusStepHeadingOnNextRender.current = true;
-    goToStep(effectiveSteps[index]);
+    const destination = effectiveSteps[index];
+    if (shouldFocusStepHeadingOnJump(destination, step)) {
+      focusStepHeadingOnNextStepChange.current = true;
+    }
+    goToStep(destination);
   }
 
   // Live validation: recomputed on every keystroke, but only SHOWN for a field

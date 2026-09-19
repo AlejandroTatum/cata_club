@@ -170,6 +170,27 @@ describe("Stepper — one state derivation feeds both renders (#1332 R2-001)", (
       expect(dots[index].getAttribute("data-state")).toBe(pillState);
     });
   });
+
+  // #1347 (item 4, R3-003): `data-state` alone does not prove the two renders
+  // agree — `deriveStepState`'s `clickable` field decides `<button>` vs
+  // `<span>`, a decision `data-state` never carries. This compares the SET of
+  // clickable indices between the wide pills and the compact dots, so a
+  // future divergence in `clickable` specifically (the one field the parity
+  // test above cannot see) fails here.
+  it("agrees on which steps are clickable between the wide pill and the compact dot", () => {
+    const onStepClick = vi.fn();
+    render(<Stepper steps={STEPS} current={3} label="Pasos" onStepClick={onStepClick} />);
+
+    const wideList = screen.getByRole("list", { name: "Pasos" });
+    const compactRow = screen.getByTestId("stepper-compact");
+    const pillItems = within(wideList).getAllByRole("listitem");
+    const dots = compactRow.querySelectorAll("[data-state]");
+
+    const wideClickable = STEPS.map((_, index) => pillItems[index].querySelector("button") !== null);
+    const compactClickable = STEPS.map((_, index) => dots[index].tagName === "BUTTON");
+
+    expect(compactClickable).toEqual(wideClickable);
+  });
 });
 
 // #1321 — below `sm:` the wrapped pill row is replaced by a one-line phase
@@ -210,7 +231,7 @@ describe("Stepper — compact phone rendering (#1321)", () => {
   });
 });
 
-// #1332 (R4-001, review advisory de #1331): la píldora compacta completada
+// #1332 (R4-001, review advisory de #1331): el punto compacto completado
 // era un `<button>` de 8px (`h-2 w-2`) con `gap-1.5`, en el único breakpoint
 // donde existe — táctil. `min-h-[24px]` (`MIN_TARGET_CLASS`,
 // `lib/target-size.ts`) es el piso del proyecto, pero ese control es
