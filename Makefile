@@ -352,19 +352,17 @@ qa-reset: ## Volver el entorno de QA a su estado recien sembrado (sin rebuild)
 # falló" NO son el mismo caso -- un `compose exec` roto (proyecto mal
 # levantado, `QA_COMPOSE`/`QA_ENV` equivocado, el daemon de Docker con error,
 # un backend reiniciándose) no puede leerse como "Cloudinary no configurado".
-# Solo se captura STDOUT del `exec` -- nunca `2>&1` -- así que un WARN
+# `scripts/qa-cloudinary-probe.sh` (extraído en el follow-up de #1356, para
+# poder probarlo con un `docker compose` de mentira sin levantar el stack
+# real) solo captura STDOUT del `exec` -- nunca `2>&1` -- así que un WARN
 # benigno de Compose en stderr no rompe la comparación ni aborta la suite;
 # el estado de salida del `exec` se chequea aparte, y el `case` interno
 # exige `0`/`1` literal en stdout. El valor calculado se imprime una vez
 # para que la causa del salteo (o su ausencia) quede visible en el log.
 qa-live: ## Correr los specs E2E que atraviesan el backend real de QA
-	@cloudinary=$$($(QA_ENV) $(QA_COMPOSE) exec -T backend sh -c '[ -n "$$CLOUDINARY_API_KEY" ] && echo 1 || echo 0') || \
-		{ echo "qa-live: no se pudo determinar E2E_CLOUDINARY_CONFIGURED -- el exec al backend falló (código $$?)" >&2; exit 1; }; \
-	case "$$cloudinary" in \
-		0|1) ;; \
-		*) echo "qa-live: no se pudo determinar E2E_CLOUDINARY_CONFIGURED -- salida inesperada del exec: $$cloudinary" >&2; exit 1 ;; \
-	esac; \
-	echo "qa-live: E2E_CLOUDINARY_CONFIGURED=$$cloudinary"; \
+	@salida=$$($(QA_ENV) scripts/qa-cloudinary-probe.sh $(QA_COMPOSE)) || exit 1; \
+	echo "$$salida"; \
+	cloudinary=$${salida##*=}; \
 	cd frontend && E2E_LIVE=1 E2E_CLOUDINARY_CONFIGURED=$$cloudinary PLAYWRIGHT_BASE_URL=http://localhost:3000 \
 		pnpm exec playwright test --project=e2e-live
 
