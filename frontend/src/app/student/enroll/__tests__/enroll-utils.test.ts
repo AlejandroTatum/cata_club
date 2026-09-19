@@ -17,6 +17,7 @@ import {
   ENROLLMENT_TYPES,
   fieldsForStep,
   initialFormData,
+  shouldFocusStepHeadingOnJump,
   validateEnrollFields,
   validateEnrollStep,
   type EnrollFieldErrors,
@@ -228,5 +229,23 @@ describe("the school/institution field no longer exists on this wizard", (): voi
     };
     const request = buildEnrollmentRequest(data, true);
     expect(request.alumno).not.toHaveProperty("institucionId");
+  });
+});
+
+// Issue #1347 (item 1, R2-001/R3-002/R4-001, review advisory de #1346): a
+// Stepper-originated jump used to arm the one-shot focus flag unconditionally,
+// before calling `goToStep`. `goToStep` itself already no-ops when the
+// destination equals the current step (`wizard-history.ts`), so a future
+// caller that reaches this guard with a same-step jump — a defensive early
+// return, or a future "clickable but not done" step — would leave the flag
+// armed with no `step` change ever coming to consume it, and the NEXT
+// ordinary "Siguiente"/"Atrás" would steal focus to the heading instead.
+describe("shouldFocusStepHeadingOnJump", (): void => {
+  it("arms the flag when the jump actually changes the step", (): void => {
+    expect(shouldFocusStepHeadingOnJump("health", "personal")).toBe(true);
+  });
+
+  it("does not arm the flag when the destination is already the current step", (): void => {
+    expect(shouldFocusStepHeadingOnJump("health", "health")).toBe(false);
   });
 });
