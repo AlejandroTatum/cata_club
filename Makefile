@@ -335,8 +335,21 @@ qa-reset: ## Volver el entorno de QA a su estado recien sembrado (sin rebuild)
 # `*.live.spec.ts`.
 # El target NO se llama `qa-e2e` porque el `make help` de este archivo filtra
 # con `^[a-zA-Z_-]+:` y un target con dígitos queda invisible en la ayuda.
+#
+# `E2E_CLOUDINARY_CONFIGURED` (issue #1341): el cron programado
+# (`.github/workflows/e2e-live.yml`) se mantiene SIN secretos a propósito
+# (`tests/test_e2e_live_workflow.py::TestSuperficieDeSecretos`), así que su
+# stack de QA nunca tiene credenciales de Cloudinary y los specs que suben un
+# voucher (`transfer-payment-comprobante.live.spec.ts`) fallarían siempre con
+# un 503. En vez de asumirlo o volver a parsear `.env` a mano, se le pregunta
+# al backend YA LEVANTADO si `CLOUDINARY_API_KEY` llegó no vacío -- mismo
+# criterio que el resto del repo usa para medir un secreto sin leerlo: nunca
+# se imprime el valor, solo si está presente. Esos specs lo leen vía
+# `process.env.E2E_CLOUDINARY_CONFIGURED` y se saltean con motivo explícito
+# cuando da `0`.
 qa-live: ## Correr los specs E2E que atraviesan el backend real de QA
-	cd frontend && E2E_LIVE=1 PLAYWRIGHT_BASE_URL=http://localhost:3000 \
+	@cloudinary=$$($(QA_ENV) $(QA_COMPOSE) exec -T backend sh -c '[ -n "$$CLOUDINARY_API_KEY" ] && echo 1 || echo 0' 2>/dev/null || echo 0); \
+	cd frontend && E2E_LIVE=1 E2E_CLOUDINARY_CONFIGURED=$$cloudinary PLAYWRIGHT_BASE_URL=http://localhost:3000 \
 		pnpm exec playwright test --project=e2e-live
 
 qa-logs: ## Ver los logs del entorno de QA

@@ -78,9 +78,17 @@
  * formulario de pago por `ApplyBenefitForm`, que llama a
  * `POST /membresias/:id/aplicar-beneficio` y otorga cobertura sin crear
  * ningún `Pago`. Es una tabla y un camino de código aparte, así que el
- * tercer test de este archivo lo cubre por separado — y documenta, sin
- * arreglarlo, que la pantalla de cobertura del alumno (que solo lee `Pago`s
- * aprobados) no se entera de esa cobertura nueva.
+ * tercer test de este archivo lo cubre por separado.
+ *
+ * Hasta el #1328/#1336 esto era un HALLAZGO pineado: la pantalla del alumno
+ * (`resolveCoverageEnd`, solo `Pago`s APROBADOS) no se enteraba de una
+ * `CoberturaBonificada` nueva. Con #1336 mergeado, `/student/payments` lee
+ * `MembershipSummary.cubiertoHasta` — el ancla combinada de `Pago` Y
+ * `CoberturaBonificada` que ya calcula el backend
+ * (`PagoServicio._fecha_fin_maxima_combinada`) — como fuente PRIMARIA, y
+ * `resolveCoverageEnd` quedó de fallback para un backend viejo que no manda
+ * el campo. El tercer test de este archivo se invirtió (issue #1341) para
+ * afirmar el comportamiento correcto: la cobertura SÍ avanza en pantalla.
  *
  * Efecto colateral PERMANENTE de ese test: a diferencia de un `Pago` (queda
  * `PENDIENTE_VALIDACION` y el `beforeEach` de este archivo lo rechaza), la
@@ -352,6 +360,18 @@ async function comoPedro<T>(browser: Browser, run: (alumnoPage: Page) => Promise
  * puede leerse en falso si todavía no llegó a montarse — comparar dos
  * lecturas sucesivas no depende de ninguna de las dos cosas.
  */
+/**
+ * Mismo formato que `formatDate` (`src/lib/format-utils.ts`): `dd/mm/yyyy`
+ * leído en hora LOCAL, sin `toLocaleDateString`. Repetido acá en vez de
+ * importado — los specs de `tests/e2e` no resuelven el alias `@/` de la app
+ * (ningún otro spec de este directorio lo usa) — para comparar el `<h2>`
+ * contra el mismo `cubiertoHasta` que la pantalla ya formatea.
+ */
+function formatFechaDDMMYYYY(isoDate: string): string {
+  const [year, month, day] = isoDate.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
 async function leerTextoEstable(locator: Locator, timeoutMs = 20_000): Promise<string> {
   let anterior: string | null = null;
   let huboLectura = false;
@@ -440,7 +460,7 @@ test("retirar el beneficio de un alumno restaura el monto completo en su siguien
   });
 });
 
-test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago, y la pantalla del alumno no lo refleja", async ({
+test("un beneficio del 100% aplica cobertura sin generar ningún pago, y la pantalla del alumno la refleja (issue #1328, #1336)", async ({
   page,
   browser,
   request,
@@ -489,27 +509,55 @@ test("HALLAZGO: un beneficio del 100% aplica cobertura sin generar ningún pago,
       await expect(alumnoPage.getByText("cobertura activa")).toBeVisible({ timeout: 15_000 });
       await expect(alumnoPage.getByText("No se generó ningún pago: el beneficio cubrió el 100%.")).toBeVisible();
 
-      // HALLAZGO: `resolveCoverageEnd` (student-utils.ts) solo mira `Pago`s
-      // APROBADOS — la `CoberturaBonificada` recién otorgada vive en una tabla
-      // aparte que `fetchPagosDePersona` nunca toca, así que la pantalla del
-      // propio alumno sigue mostrando exactamente la misma fecha de cobertura
-      // que antes de aplicar el beneficio, pese a que el toast de arriba
-      // acaba de confirmar un período nuevo. No es un defecto que este spec
-      // arregle — es el comportamiento real, para que el dueño del producto
-      // decida si el frontend debe unificar las dos fuentes de cobertura.
-      // Distinto de la lectura de arriba: acá SÍ hay un valor objetivo
-      // conocido (`coberturaAntes`), así que `toHaveText` reintenta solo por
-      // sí mismo hasta que el fetch post-reload resuelva y el texto lo
-      // iguale (o venza el timeout si de verdad cambió).
+      // Con #1336, `/student/payments` lee `MembershipSummary.cubiertoHasta`
+      // (issue #1328) — el ancla combinada de `Pago` Y `CoberturaBonificada`
+      // que el backend ya calcula (`PagoServicio._fecha_fin_maxima_
+      // combinada`) — como fuente PRIMARIA de `coverageEnd`. La cobertura
+      // recién otorgada tiene que verse de inmediato, sin depender de ningún
+      // `Pago`: se compara contra el propio `GET /api/student`, la MISMA
+      // fuente que la pantalla usa, en vez de recalcular la fecha a mano acá.
       await alumnoPage.reload();
-      await expect(alumnoPage.locator("#membership-status-title")).toHaveText(coberturaAntes, {
+      const portal = (await alumnoPage.request
+        .get(`/api/student?personaId=${pedroId}`)
+        .then((r) => r.json())) as { self: { membership: { cubiertoHasta: string | null } } | null };
+      const cubiertoHasta = portal.self?.membership?.cubiertoHasta;
+      expect(cubiertoHasta, "El backend no devolvió cubiertoHasta tras aplicar el beneficio").toBeTruthy();
+      const coberturaEsperada = `Pagado hasta el ${formatFechaDDMMYYYY(cubiertoHasta!)}`;
+
+      await expect(alumnoPage.locator("#membership-status-title")).toHaveText(coberturaEsperada, {
         timeout: 20_000,
       });
+      // La comparación contra el valor ANTERIOR sigue importando: si algún
+      // día `cubiertoHasta` volviera a quedarse en el mismo valor (el
+      // HALLAZGO original), esta línea lo detectaría aunque la de arriba,
+      // por coincidencia, no lo hiciera.
+      expect(
+        coberturaEsperada,
+        "La cobertura debería haber avanzado: aplicar un beneficio del 100% otorga un período nuevo",
+      ).not.toBe(coberturaAntes);
     });
   } finally {
     // Ver el encabezado del archivo: un beneficio del 100% le cambia a Pedro
     // el botón de pago entero — `payments.live.spec.ts` corre después y
     // necesita encontrarlo sin beneficio activo, pase o falle esta aserción.
+    //
+    // Reautenticar ANTES de retirar (issue #1341): la sesión de admin que
+    // `page` abrió al principio del test puede quedar inválida si, mientras
+    // tanto, CUALQUIER OTRO spec en vuelo cierra sesión con la MISMA cuenta
+    // (`admin@cataclub.com`, compartida por casi toda la suite) —
+    // `AuthServicio._bombear_epoch_sesion` bombea `version_sesion` del
+    // USUARIO, no del token, e invalida de inmediato TODO access/refresh
+    // token emitido para esa cuenta desde CUALQUIER sesión (`auth_servicio.
+    // py`, docstring propio). Con `qa-live` corriendo con más de un worker
+    // (CI), `logout.live.spec.ts` cerrando sesión como admin en el otro
+    // worker deja este `page` con un 401 "Token inválido o expirado" justo
+    // acá. Mismo patrón que `rejectPendingPayments` (login fresco antes de
+    // la mutación de higiene) en vez de asumir que la cookie de `page` sigue
+    // viva.
+    const relogin = await page.request.post("/api/auth/login", {
+      data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    });
+    expect(relogin.ok(), `No se pudo reautenticar como admin para la limpieza: ${relogin.status()}`).toBe(true);
     await retirarBeneficio(page, pedroId);
   }
 
