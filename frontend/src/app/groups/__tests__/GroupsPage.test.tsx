@@ -1989,12 +1989,21 @@ describe("GroupsPage — per-field mirror of the training window and día cap (#
  * label dead-ended on the unique-label 400.
  */
 describe("GroupsPage — catalog categorías visible on a fresh install (issue #1315)", () => {
-  /** The card whose label is `label`. */
-  function cardFor(label: string): HTMLElement {
+  /** A pending catalog card (no schedules yet) for `label`. */
+  function pendingCardFor(label: string): HTMLElement {
+    const card = screen
+      .getAllByTestId("catalogo-pendiente-card")
+      .find((element) => within(element).queryByText(label) !== null);
+    if (!card) throw new Error(`No pending card found for ${label}`);
+    return card;
+  }
+
+  /** A scheduled card for `label`. */
+  function scheduledCardFor(label: string): HTMLElement {
     const card = screen
       .getAllByTestId("horario-card")
       .find((element) => within(element).queryByText(label) !== null);
-    if (!card) throw new Error(`No card found for ${label}`);
+    if (!card) throw new Error(`No scheduled card found for ${label}`);
     return card;
   }
 
@@ -2021,7 +2030,9 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     await waitForHorarios();
 
     expect(screen.queryByText("No hay categorías configuradas")).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("horario-card")).toHaveLength(DEFAULT_CATEGORIA_CATALOG.length);
+    expect(screen.getAllByTestId("catalogo-pendiente-card")).toHaveLength(
+      DEFAULT_CATEGORIA_CATALOG.length,
+    );
     expect(screen.getAllByText("Sin horarios de entrenamiento todavía")).toHaveLength(
       DEFAULT_CATEGORIA_CATALOG.length,
     );
@@ -2031,7 +2042,7 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     render(<ToastProvider><GroupsPage /></ToastProvider>);
     await waitForHorarios();
 
-    const card = cardFor("Infantil");
+    const card = pendingCardFor("Infantil");
     expect(within(card).getByText(/16:00 — 17:00/)).toBeInTheDocument();
     const boxes = daysOf(card);
     // Allowed but not running: the dashed "disponible" state, not "activo".
@@ -2069,6 +2080,7 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
 
     expect(screen.getByText("No hay categorías configuradas")).toBeInTheDocument();
     expect(screen.queryAllByTestId("horario-card")).toHaveLength(0);
+    expect(screen.queryAllByTestId("catalogo-pendiente-card")).toHaveLength(0);
   });
 
   it("keeps the empty state hidden while the catalog has entries", async () => {
@@ -2076,6 +2088,43 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     await waitForHorarios();
 
     expect(screen.queryByText("No hay categorías configuradas")).not.toBeInTheDocument();
+  });
+
+  it("keeps the categorías still lacking sessions visible after the first one is scheduled", async () => {
+    // The trap this guards: defining INFANTIL first used to hide the other
+    // four seeded categorías again, the original bug mid-flow.
+    mockFetchHorarios.mockResolvedValue([
+      { id: 1, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+    ]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
+    const formativo = scheduledCardFor("Formativo");
+    expect(
+      within(formativo).queryByText("Sin horarios de entrenamiento todavía"),
+    ).not.toBeInTheDocument();
+
+    expect(screen.getAllByTestId("catalogo-pendiente-card")).toHaveLength(
+      DEFAULT_CATEGORIA_CATALOG.length - 1,
+    );
+    const infantil = pendingCardFor("Infantil");
+    expect(within(infantil).getByText("Sin horarios de entrenamiento todavía")).toBeInTheDocument();
+    expect(within(infantil).getByRole("button", { name: "Definir horarios de Infantil" })).toBeInTheDocument();
+  });
+
+  it("hides the pending queue entirely when every catalog categoría has sessions", async () => {
+    mockFetchCategoriasCatalogo.mockResolvedValue([DEFAULT_CATEGORIA_CATALOG[0]]);
+    mockFetchHorarios.mockResolvedValue([
+      { id: 1, diaSemana: "LUNES", horaInicio: "15:00", horaFin: "16:00", categoria: "FORMATIVO" },
+    ]);
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getAllByTestId("horario-card")).toHaveLength(1);
+    expect(screen.queryAllByTestId("catalogo-pendiente-card")).toHaveLength(0);
+    expect(screen.queryByText("Sin horarios de entrenamiento todavía")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /definir horarios/i })).not.toBeInTheDocument();
   });
 
   it("turns a duplicate-label 400 into a way into the categoría that already exists", async () => {

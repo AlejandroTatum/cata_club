@@ -80,6 +80,9 @@ that caused the refusal. Verified exit on staging: a NEW label `POST`s fine
 - On a fresh install (catalog non-empty, no schedules), the 5 seeded categorías
   are visible as cards marked "sin horarios de entrenamiento todavía", each with
   an action that opens the existing edit form pre-filled from the catalog.
+- The same pending cards stay visible in the mixed state: whenever a catalog
+  categoría has no sessions it renders (after the scheduled cards), so defining
+  one categoría never hides the rest of the seeded catalog again.
 - "No hay categorías configuradas" renders iff the catalog is empty.
 - A duplicate-label 400 on create offers a control that opens that categoría's
   edit flow; the generic server-error banner behavior is unchanged for messages
@@ -117,3 +120,40 @@ that caused the refusal. Verified exit on staging: a NEW label `POST`s fine
     passed (300)`, `Tests 5123 passed (5123)`.
 - Not run: `make pre-pr LANE=frontend` (orchestrator's step after handoff).
 - Commits: recorded in the branch (see `git log fix/1315-horarios-empty-state`).
+
+### Follow-up — mixed state (reopens the fresh-install scope mid-flow)
+
+- Removed scope boundary: the earlier "pending cards only while
+  `horarios.length === 0`" decision is gone. The owner defining horarios for
+  INFANTIL first made the other four seeded categorías vanish again — the
+  original bug mid-flow. Pending catalog cards now render whenever a catalog
+  categoría has no sessions, after the scheduled cards, as a
+  pending-configuration queue.
+- Pending cards now carry `data-testid="catalogo-pendiente-card"` (scheduled
+  cards keep `horario-card`), so scheduled-card counts in the existing suite
+  stay precise and the queue is explicitly assertable.
+- T1 RED (follow-up): `cd frontend && pnpm vitest run
+  src/app/groups/__tests__/GroupsPage.test.tsx` → `3 failed | 92 passed (95)`.
+  Failures: the mixed-state test found zero pending cards (`getAllByTestId`
+  returned `[]`), and the two fresh-install tests still queried the old shared
+  testid. The "pending queue disappears when every categoría has sessions" test
+  already passed on the old gating (that path was already empty), and the
+  `empty catalog → empty state` test is unchanged. The new RED is what proves
+  the gating was wrong, not the removal of the testid.
+- T2 GREEN (follow-up): `cd frontend && pnpm vitest run
+  src/app/groups/__tests__/GroupsPage.test.tsx
+  src/app/groups/__tests__/groups-page-utils.test.ts` → `Test Files 2 passed
+  (2)`, `Tests 136 passed (136)` (up from 134: the mixed-state and
+  all-scheduled tests).
+- New coverage: mixed state (`FORMATIVO` scheduled + the other four pending) —
+  one `horario-card` for `Formativo`, four `catalogo-pendiente-card`s, the
+  pending `Infantil` card carries the badge and "Definir horarios de Infantil",
+  and the scheduled card does not; and the pending queue disappears entirely
+  when every catalog categoría has sessions.
+- T3 re-run (follow-up):
+  - `cd frontend && pnpm lint` → no errors; same pre-existing `sponsors`
+    warning only.
+  - `cd frontend && pnpm type-check` → clean.
+  - `cd frontend && pnpm test` (full frontend unit suite) → `Test Files 300
+    passed (300)`, `Tests 5125 passed (5125)` (up from 5123).
+  - Not run: `make pre-pr LANE=frontend` (orchestrator's step).

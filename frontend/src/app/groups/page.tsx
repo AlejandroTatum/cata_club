@@ -641,13 +641,14 @@ export default function GroupsPage(): React.ReactElement {
   /**
    * Catalog categorías with no schedules yet, shown as their own cards.
    *
-   * Only on a fresh install (no schedules at all). With even one group on the
-   * screen the list already tells the truth about the catalog, and appending
-   * catalog-only cards there would be scope this issue did not ask for.
+   * They stay visible once some categorías are scheduled (mixed state), because
+   * defining one categoría used to hide the rest of the seeded catalog again —
+   * the original bug mid-flow. They render after the scheduled cards as a
+   * pending-configuration queue.
    */
   const catalogoPendientes = useMemo(
-    () => (horarios.length === 0 ? buildCatalogoSinHorarios(categorias, []) : []),
-    [categorias, horarios.length],
+    () => buildCatalogoSinHorarios(categorias, categoriaCards.map((card) => card.categoria)),
+    [categorias, categoriaCards],
   );
 
   /** No catalog answered: the only state where "no hay categorías" is true. */
@@ -1588,13 +1589,16 @@ export default function GroupsPage(): React.ReactElement {
 
               {/* Catalog-only categorías (#1315): real categorías the backend
                   seeded but that have no `horario_entrenamiento` rows yet.
-                  Same card language as the groups above — the difference is
+                  They render after the scheduled cards as a
+                  pending-configuration queue. Same visual treatment as the
+                  groups above — same row language — with a distinct testid so
+                  "scheduled card" assertions stay precise. The difference is
                   the badge and the action: this one opens the v6 edit form so
                   the admin can define its días and franja. */}
               {catalogoPendientes.map((entry) => (
                 <li
                   key={entry.categoria}
-                  data-testid="horario-card"
+                  data-testid="catalogo-pendiente-card"
                   className="min-h-drow px-5 py-4"
                 >
                   <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
