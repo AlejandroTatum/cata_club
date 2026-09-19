@@ -911,6 +911,24 @@ describe("EnrollPage — el conteo de pasos no cambia mientras se decide (#317 /
 });
 
 // ---------------------------------------------------------------------------
+// #1332 (R3-003, review advisory de #1331) — `showCount` was only ever
+// asserted `false` on step 1 (`Stepper.test.tsx`'s own suite covers that
+// directly); nothing exercised the OTHER side of the same prop through
+// `EnrollPage` itself, once the wizard leaves step 1 and `showCount` flips
+// to `true` (`showCount={!isFirst}`).
+// ---------------------------------------------------------------------------
+describe("EnrollPage — el compacto nombra el paso con el total ya resuelto (#1332 R3-003)", () => {
+  it('dice "Paso 2 de 4 · Estudiante" al entrar al paso 2 como jugador', () => {
+    render(<EnrollPage />);
+
+    // Jugador (self) es la selección por defecto: 4 pasos, sin representante.
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(screen.getByText("Paso 2 de 4 · Estudiante")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // #317 / hallazgo #62 — recargar el asistente perdía los datos ya cargados:
 // `formData` vivía solo en memoria, así que un F5 en el paso 3 lo vaciaba
 // entero. El borrador se persiste en `sessionStorage`, se rotula en pantalla
