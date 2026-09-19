@@ -95,7 +95,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, WeekStrip } from "@/components/ui";
+import { Button, Badge, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, WeekStrip } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import {
@@ -118,6 +118,9 @@ import { cargarCategorias, type Categoria, type CategoriaInfo } from "@/services
 import {
   countUniqueAlumnos,
   buildCategoriaCards,
+  buildCatalogoSinHorarios,
+  findCategoriaDuplicada,
+  findCodigoPorLabel,
   formatDiaSet,
   countInscriptos,
   buildDiaTrack,
@@ -126,6 +129,7 @@ import {
   formatTime,
   toStripDias,
   type CategoriaCard,
+  type CategoriaSinHorarios,
   type PersonasPorHorario,
 } from "./groups-page-utils";
 import { toUserMessage } from "@/lib/error-message";
@@ -454,6 +458,12 @@ export default function GroupsPage(): React.ReactElement {
    */
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<CategoriaFieldErrors>({});
+  /**
+   * `categoria` code the server said already exists when a create was refused
+   * on its label. When set, the form's banner offers a way into that categoría
+   * (#1315) instead of leaving the admin at a dead end.
+   */
+  const [duplicateCategoriaCodigo, setDuplicateCategoriaCodigo] = useState<string | null>(null);
   const [pendingDeletions, setPendingDeletions] = useState<PendingDayDeletion[] | null>(null);
   // Distinguishes which flow populated `pendingDeletions`, so the shared
   // confirmation dialog's copy and cancel behavior can differ: "days" comes
@@ -628,12 +638,29 @@ export default function GroupsPage(): React.ReactElement {
    */
   const categoriaCards = useMemo(() => buildCategoriaCards(horarioGroups), [horarioGroups]);
 
+  /**
+   * Catalog categorías with no schedules yet, shown as their own cards.
+   *
+   * They stay visible once some categorías are scheduled (mixed state), because
+   * defining one categoría used to hide the rest of the seeded catalog again —
+   * the original bug mid-flow. They render after the scheduled cards as a
+   * pending-configuration queue.
+   */
+  const catalogoPendientes = useMemo(
+    () => buildCatalogoSinHorarios(categorias, categoriaCards.map((card) => card.categoria)),
+    [categorias, categoriaCards],
+  );
+
+  /** No catalog answered: the only state where "no hay categorías" is true. */
+  const catalogoVacio = Object.keys(categorias).length === 0;
+
   function openCreateForm(): void {
     setEditingGroup(null);
     setFormData(EMPTY_FORM);
     setSelectedDias(new Set());
     setFormError(null);
     setFieldErrors({});
+    setDuplicateCategoriaCodigo(null);
     setExpandedGroup({ key: NEW_GROUP_KEY, tab: "editar" });
   }
 
@@ -666,8 +693,62 @@ export default function GroupsPage(): React.ReactElement {
    * split is real and the admin has to see it.
    */
   function openEditForm(card: CategoriaCard): void {
+    setDuplicateCategoriaCodigo(null);
     selectEditingGroup(card.groups.length === 1 ? card.groups[0] : null);
     setExpandedGroup({ key: card.categoria, tab: "editar" });
+  }
+
+  /**
+   * Opens the v6 edit form for a categoría that exists in the catalog but has
+   * no schedules yet.
+   *
+   * There is no `HorarioGroup` row to edit, so the form is pre-filled from the
+   * catalog: label, franja and its días permitidos. Submitting PUTs
+   * `/asistencias/categorias/{codigo}` (`actualizarCategoria`), which creates
+   * the missing `horario_entrenamiento` rows for the selected días atomically.
+   */
+  function openCatalogoEditForm(entry: CategoriaSinHorarios): void {
+    setEditingGroup({
+      key: entry.categoria,
+      categoria: entry.categoria,
+      horaInicio: entry.horaInicio,
+      horaFin: entry.horaFin,
+      rows: [],
+    });
+    setFormData({
+      nombre: entry.label,
+      horaInicio: entry.horaInicio,
+      horaFin: entry.horaFin,
+      edades: entry.edades ?? "",
+    });
+    setSelectedDias(new Set(entry.dias));
+    setFormError(null);
+    setFieldErrors({});
+    setDuplicateCategoriaCodigo(null);
+    setExpandedGroup({ key: entry.categoria, tab: "editar" });
+  }
+
+  /**
+   * Opens the edit flow for an existing categoría by its código: its own card
+   * when it already has schedules, the catalog-only form when it does not.
+   * Used by the duplicate-label banner so the refused create has an exit.
+   */
+  function openCategoriaEdit(codigo: string): void {
+    const card = categoriaCards.find((c) => c.categoria === codigo);
+    if (card) {
+      openEditForm(card);
+      return;
+    }
+    const info = categorias[codigo];
+    if (!info) return;
+    openCatalogoEditForm({
+      categoria: codigo,
+      label: info.label,
+      horaInicio: info.horaInicio,
+      horaFin: info.horaFin,
+      dias: info.dias,
+      edades: info.edades,
+    });
   }
 
   /** Opens the "Alumnos" accordion tab under a categoría card — loads the
@@ -687,6 +768,7 @@ export default function GroupsPage(): React.ReactElement {
     setSelectedDias(new Set());
     setFormError(null);
     setFieldErrors({});
+    setDuplicateCategoriaCodigo(null);
     roster.reset();
   }
 
@@ -736,8 +818,15 @@ export default function GroupsPage(): React.ReactElement {
       await loadData();
     } catch (err) {
       const message = extractErrorMessage(err, "Error al guardar la categoría.");
+      // A duplicate-label refusal names the categoría that already exists
+      // (issue #1315): the banner then offers a way into it instead of a
+      // dead-end toast. Every other server error keeps the generic banner
+      // plus the toast.
+      const nombreDuplicado = findCategoriaDuplicada(message);
+      const codigoDuplicado = nombreDuplicado ? findCodigoPorLabel(categorias, nombreDuplicado) : null;
+      setDuplicateCategoriaCodigo(codigoDuplicado);
       setFormError(message);
-      showError(message);
+      if (!codigoDuplicado) showError(message);
     } finally {
       setFormSubmitting(false);
     }
@@ -870,7 +959,16 @@ export default function GroupsPage(): React.ReactElement {
           {editingGroup !== null ? "Editar categoría" : "Nueva categoría"}
         </h3>
         {formError && (
-          <div className="alert-error mb-4" role="alert">{formError}</div>
+          <div className="mb-4">
+            <div className="alert-error" role="alert">{formError}</div>
+            {duplicateCategoriaCodigo && (
+              <div className="mt-2">
+                <Button size="sm" onClick={() => openCategoriaEdit(duplicateCategoriaCodigo)}>
+                  Editar «{categoriaLabel(duplicateCategoriaCodigo)}»
+                </Button>
+              </div>
+            )}
+          </div>
         )}
         {/*
           `noValidate` (#861): without it the browser's own constraint
@@ -1050,8 +1148,14 @@ export default function GroupsPage(): React.ReactElement {
             the edit form, not on the card. Deleting removes the categoría
             entera — every día row — so it must not hang off a card that
             names one single day. Blocked server-side (400) when any día has
-            real Asistencia history; see docs/archive/fixes/24-abm-categorias.md. */}
-        {editingGroup !== null && (
+            real Asistencia history; see docs/archive/fixes/24-abm-categorias.md.
+
+            Hidden while the categoría has no día rows yet (a catalog-only
+            categoría being scheduled for the first time, #1315): there is
+            nothing to delete from this form until its first save creates the
+            horarios, so the control would only promise an action that cannot
+            run. */}
+        {editingGroup !== null && editingGroup.rows.length > 0 && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
             <div className="min-w-[220px] flex-1">
               <p className="text-sm font-semibold text-state-bad">Eliminar esta categoría</p>
@@ -1345,7 +1449,7 @@ export default function GroupsPage(): React.ReactElement {
           <div className="card">
             <LoadingState label="Cargando horarios…" />
           </div>
-        ) : categoriaCards.length > 0 ? (
+        ) : categoriaCards.length > 0 || catalogoPendientes.length > 0 ? (
           <div className="card overflow-hidden">
             {/* Column legend, once for the whole list instead of a repeated
                 micro-label inside each of the five rows. Hidden below `xl`,
@@ -1482,11 +1586,71 @@ export default function GroupsPage(): React.ReactElement {
                   </li>
                 );
               })}
+
+              {/* Catalog-only categorías (#1315): real categorías the backend
+                  seeded but that have no `horario_entrenamiento` rows yet.
+                  They render after the scheduled cards as a
+                  pending-configuration queue. Same visual treatment as the
+                  groups above — same row language — with a distinct testid so
+                  "scheduled card" assertions stay precise. The difference is
+                  the badge and the action: this one opens the v6 edit form so
+                  the admin can define its días and franja. */}
+              {catalogoPendientes.map((entry) => (
+                <li
+                  key={entry.categoria}
+                  data-testid="catalogo-pendiente-card"
+                  className="min-h-drow px-5 py-4"
+                >
+                  <div className={`flex flex-col gap-3.5 md:grid md:grid-cols-2 md:items-start md:gap-x-6 ${ROW_COLUMNS}`}>
+                    <div className="min-w-0">
+                      <CellLabel>{COLUMNS[0]}</CellLabel>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <b className="text-base text-ink">{entry.label}</b>
+                        <Badge tone="warn">Sin horarios de entrenamiento todavía</Badge>
+                      </div>
+                    </div>
+
+                    {/* Días permitidos, in words and on the strip. The días are
+                        dashed ("disponible"), never lit: nothing runs yet. */}
+                    <div className="min-w-0">
+                      <CellLabel>{COLUMNS[1]}</CellLabel>
+                      <p className="text-sm text-ink-2">
+                        Días permitidos: {formatDiaSet(entry.dias)} · {formatTime(entry.horaInicio)} —{" "}
+                        {formatTime(entry.horaFin)}
+                      </p>
+                      <div className="mt-2">
+                        <DiaTrack track={entry.dias} dias={[]} />
+                      </div>
+                    </div>
+
+                    {/* No roster exists yet, so no count to show. The empty
+                        cell keeps the action column aligned with the rows
+                        above at `xl`. */}
+                    <div className="hidden min-w-0 xl:block" />
+
+                    <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
+                      <span className="sr-only">{COLUMNS[3]}</span>
+                      <Button
+                        size="sm"
+                        className="flex-1 md:flex-none"
+                        onClick={() => openCatalogoEditForm(entry)}
+                        aria-label={`Definir horarios de ${entry.label}`}
+                      >
+                        Definir horarios
+                      </Button>
+                    </div>
+                  </div>
+
+                  {expandedGroup?.key === entry.categoria && expandedGroup.tab === "editar" && (
+                    <div className="mt-4 border-t border-line pt-4">{renderHorarioForm()}</div>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
         ) : null}
 
-        {!loading && horarios.length === 0 && (
+        {!loading && horarios.length === 0 && catalogoVacio && (
           <EmptyState
             icon={<Calendar size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
             title="No hay categorías configuradas"
