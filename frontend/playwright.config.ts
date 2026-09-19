@@ -32,6 +32,18 @@ const LIVE_ENABLED = process.env.E2E_LIVE === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  /* `tests/e2e/helpers/__tests__/*.unit.test.ts` son specs de Vitest (prueban
+     helpers puros de `tests/e2e/helpers`, ver `frontend/vitest.config.ts`),
+     no de Playwright -- su nombre matchea el patrón `*.test.ts` que
+     Playwright usa por defecto, así que sin excluirlos el proyecto
+     `chromium` los recogía igual y fallaba en el primer `import ... from
+     "vitest"` (CI, PR #1352: "Run Playwright E2E Tests" rojo). Default para
+     cualquier proyecto NUEVO que no declare su propio `testIgnore` -- un
+     `testIgnore` de proyecto REEMPLAZA a este, nunca lo combina, así que
+     `chromium` (el único proyecto que ya tenía el suyo) repite el patrón en
+     el propio. `mobile-chromium`/`e2e-live` no lo necesitan: su `testMatch`
+     ya es tan angosto que nunca hubiera matcheado un `*.unit.test.ts`. */
+  testIgnore: /\.unit\.test\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -99,8 +111,13 @@ export default defineConfig({
          (`make qa-up`). Excluirlos acá mantiene la suite por defecto
          ejecutable en cualquier checkout, sin Docker y sin base sembrada.
          Los `*.mobile.spec.ts` se excluyen por lo contrario: corren en el
-         proyecto de abajo, y correrlos acá los volvería a lo que ya eran. */
-      testIgnore: /\.(live|mobile)\.spec\.ts$/,
+         proyecto de abajo, y correrlos acá los volvería a lo que ya eran.
+         `*.unit.test.ts` son de Vitest (ver el `testIgnore` de arriba, en
+         `defineConfig`) -- un `testIgnore` de proyecto REEMPLAZA, no
+         combina, el de la config raíz, así que el patrón tiene que
+         repetirse acá o este proyecto (el que corre por defecto) vuelve a
+         recogerlos. */
+      testIgnore: /\.(live|mobile)\.spec\.ts$|\.unit\.test\.ts$/,
     },
     /*
      * Un teléfono de verdad — issue #767.
