@@ -67,6 +67,26 @@ const PILL =
 const DISC =
   "flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full text-2xs tracking-flat font-extrabold";
 
+/**
+ * `position` / `done` / `active` / `clickable` for one step — issue #1332
+ * (R2-001): this used to be computed twice, once per render (the wide pills
+ * and the compact dots), so a future field added to one loop and not the
+ * other would silently diverge them. One derivation, fed to both.
+ */
+interface StepState {
+  position: number;
+  done: boolean;
+  active: boolean;
+  clickable: boolean;
+}
+
+function deriveStepState(index: number, current: number, navigable: boolean): StepState {
+  const position = index + 1;
+  const done = position < current;
+  const active = position === current;
+  return { position, done, active, clickable: done && navigable };
+}
+
 export default function Stepper({
   steps,
   current,
@@ -76,6 +96,7 @@ export default function Stepper({
   showCount = true,
 }: StepperProps): ReactElement {
   const currentLabel = steps[current - 1] ?? "";
+  const navigable = Boolean(onStepClick);
 
   return (
     <div className={className}>
@@ -86,10 +107,7 @@ export default function Stepper({
         className="hidden items-center gap-[7px] sm:flex sm:flex-wrap"
       >
         {steps.map((step, index) => {
-          const position = index + 1;
-          const done = position < current;
-          const active = position === current;
-          const clickable = done && Boolean(onStepClick);
+          const { position, done, active, clickable } = deriveStepState(index, current, navigable);
 
           const pillClassName = cn(
             PILL,
@@ -163,12 +181,9 @@ export default function Stepper({
         </p>
         <div className="mt-1.5 flex items-center gap-1.5">
           {steps.map((step, index) => {
-            const position = index + 1;
-            const done = position < current;
-            const active = position === current;
-            const clickable = done && Boolean(onStepClick);
+            const { done, active, clickable } = deriveStepState(index, current, navigable);
             const dotState = done ? "done" : active ? "current" : "upcoming";
-            const dotClassName = cn(
+            const dotVisualClassName = cn(
               "rounded-full",
               active ? "h-2.5 w-2.5 bg-coal" : "h-2 w-2",
               done && "bg-state-ok",
@@ -180,17 +195,28 @@ export default function Stepper({
             // semantics). The rest are decorative — the paragraph above
             // already names the current phase in full — so they are
             // `aria-hidden` rather than read out as five more nameless dots.
+            //
+            // #1332 (R4-001, review advisory de #1331): a clickable dot used
+            // to BE the 8px visual mark, so its own hit area was 8px on the
+            // one breakpoint where this row only ever meets a thumb. The
+            // 8px mark stays exactly as small, now centred inside a 24px
+            // square button — the project's `MIN_TARGET_CLASS` floor
+            // (`lib/target-size.ts`), spelled as `h-6 w-6` because this
+            // control is icon-only, the same carve-out that constant's own
+            // doc comment names for `app/student/enroll`'s checkbox.
             return clickable ? (
               <button
                 key={step}
                 type="button"
                 data-state={dotState}
                 aria-label={`Volver a ${step}`}
-                className={dotClassName}
+                className="flex h-6 w-6 flex-none items-center justify-center"
                 onClick={() => onStepClick?.(index)}
-              />
+              >
+                <span aria-hidden="true" className={dotVisualClassName} />
+              </button>
             ) : (
-              <span key={step} data-state={dotState} aria-hidden="true" className={dotClassName} />
+              <span key={step} data-state={dotState} aria-hidden="true" className={dotVisualClassName} />
             );
           })}
         </div>
