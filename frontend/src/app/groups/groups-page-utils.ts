@@ -408,9 +408,16 @@ export function countInscriptos(
  * the edit form with `rows: []` — there is no `horario_entrenamiento` row
  * yet, so the control would only promise an action that cannot run until the
  * first save creates one.
+ *
+ * Plain `boolean` on purpose (issue #1343): a `editingGroup is HorarioGroup`
+ * type predicate here lies on a real `HorarioGroup` with empty `rows` — it
+ * reports `false` for a value that already satisfies the asserted type. That
+ * mismatch is invisible today because the only call site uses `&&`, but it
+ * would let TypeScript narrow a non-null `editingGroup` to `never`/`null` on
+ * the negative branch of a future `if (!puedeEliminarCategoria(g))`. Callers
+ * that need the narrowed value must null-check `editingGroup` themselves
+ * before calling this helper.
  */
-export function puedeEliminarCategoria(
-  editingGroup: HorarioGroup | null,
-): editingGroup is HorarioGroup {
+export function puedeEliminarCategoria(editingGroup: HorarioGroup | null): boolean {
   return editingGroup !== null && editingGroup.rows.length > 0;
 }
