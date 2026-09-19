@@ -86,3 +86,32 @@ Reproduce the five specs that have failed the daily "E2E Live (QA stack)" cron s
 
 - Defects to open: one issue for the shared Cloudinary-credentials root cause (`transfer-payment-comprobante.live.spec.ts:102/152/188`), one for the `payments.live.spec.ts:66` CI-only flakiness (workers:2 CPU contention).
 - Cron-alerting recommendation: smallest option is a single `actions/github-script` step (`if: failure()`) in `e2e-live.yml` that opens-or-comments-on one tracking issue per run, deduplicated by a fixed label/title (mirrors GitHub's own "auto-file on scheduled-workflow failure" idiom) — tradeoff: a `workflow_run` notification (e.g., to Slack/email) is even smaller to add but leaves no persistent, greppable record the way an issue comment thread does; a github-script step needs `issues: write` added to the otherwise deliberately credential-free workflow. Left to the orchestrator/product owner to decide.
+
+## Owner decisions (extension — same branch, no push/PR/issues)
+
+The owner reviewed the report above and decided, instead of filing the two defects as separate issues:
+
+1. Keep the cron secret-free permanently. The three `transfer-payment-comprobante.live.spec.ts` tests skip (not fail) when Cloudinary is unconfigured, detected without ever printing the secret.
+2. Fix `payments.live.spec.ts:66`'s flaky click at its root (a real render race), instead of raising timeouts/workers.
+3. No cron alerting is added — it would need `issues: write`, which the owner's no-new-permissions rule for this workflow defers. Recorded here as **deferred by the owner**, not forgotten.
+
+### Additional tasks
+
+- [x] T8 — Detect Cloudinary configuration honestly (`make qa-live` asks the already-running backend container whether `CLOUDINARY_API_KEY` is non-empty, never prints the value, exports `E2E_CLOUDINARY_CONFIGURED`); the three affected tests `test.skip(...)` with an explicit reason citing #1341; updated the spec's header comment (previously claimed Cloudinary is always configured).
+- [x] T9 — Root-caused and fixed `payments.live.spec.ts:66`'s flaky click: `PaymentOrBenefitForm` (`student/payments/page.tsx`) is not gated by `pagosState`, so the "Registrar un pago" button mounts assuming `hasPendingPago = false` (empty `pagos` array) before the real `GET /membresias/pagos/persona/{id}` fetch resolves, and can be re-rendered mid-click when it does. `helpers/register-cash-payment.ts` now waits for the "Historial de pagos" heading (rendered in the same `pagosState.status === "ready"` commit) before touching the form.
+- [x] T10 — Re-verify: `pnpm type-check`, eslint on the three changed files, `tests/test_e2e_live_workflow.py` (Makefile touched), `make qa-up` + `make qa-live` + `make qa-down` with the three transfer specs reported as **skipped**, not failed.
+
+### Evidence
+
+**T8** — `Makefile::qa-live` now runs, before `cd frontend`:
+`cloudinary=$(docker compose ... exec -T backend sh -c '[ -n "$CLOUDINARY_API_KEY" ] && echo 1 || echo 0')`, exported as `E2E_CLOUDINARY_CONFIGURED`. `transfer-payment-comprobante.live.spec.ts` reads `process.env.E2E_CLOUDINARY_CONFIGURED === "1"` into `CLOUDINARY_CONFIGURED` and calls `test.skip(!CLOUDINARY_CONFIGURED, SIN_CLOUDINARY_MOTIVO)` as the first line of the 3 affected tests (`102`→`125`, `152`→`176`, `188`→`213` after the header rewrite shifted line numbers; `215`→`241`, the authorization-boundary test that never touches a voucher, is untouched and still runs). Verified both directions locally: `E2E_CLOUDINARY_CONFIGURED=0` → test 125 reports `1 skipped`; `E2E_CLOUDINARY_CONFIGURED=1` (forced, this environment still has no real Cloudinary creds) → same test attempts and fails with the original `503`/`Must supply api_key`, proving the flag genuinely gates execution rather than being a no-op.
+
+**T9** — Traced the race by reading `student/payments/page.tsx`: `PaymentOrBenefitForm` renders unconditionally once `selectedProfile.membership` exists (not gated by `pagosState`); `hasPendingPago = pagos.some(...)` reads `pagos = pagosState.status === "ready" ? pagosState.pagos : []` (line ~2005), so the button's very first render always assumes no pending payment. The "Historial de pagos" `<h2>` (line ~2385) sits inside the `pagosState.status === "ready"` branch, committed in the same React update as the now-real `hasPendingPago`. `register-cash-payment.ts` now `await expect(page.getByRole("heading", { name: "Historial de pagos" })).toBeVisible(...)` before locating/clicking the button — guarantees the button's next render is the settled one. Not independently reproducible locally (CI-only, `workers: 2`), so no local RED/GREEN pair for this one; the CI log (`locator.click: Test timeout of 30000ms exceeded` / "element was detached from the DOM, retrying") is the evidence the fix targets.
+
+**T10**:
+- `cd frontend && pnpm type-check` → clean.
+- `cd frontend && pnpm exec eslint tests/e2e/transfer-payment-comprobante.live.spec.ts tests/e2e/helpers/register-cash-payment.ts` → clean.
+- `cd backend && uv run pytest ../tests/test_e2e_live_workflow.py -q` → `24 passed` (workflow file itself untouched; ran because the Makefile changed).
+- `make qa-up`: containers built/seeded successfully on this branch's HEAD, but `scripts/qa_verify_build_sha.py` reported `no se puede verificar contra origin/main` — `origin/main` advanced to `991f682` (unrelated merges landed) during this session, past this branch's fork point (`59c3a8b`); the branch does not contain that commit and vice versa. The stack itself was up and healthy on this branch's exact code (`up -d --build --wait` + seed both succeeded before the guard step); `make qa-live` was run directly against it. Flagged here rather than silently rebased — the branch was intentionally left as the coordinator's `test/1341-e2e-live-red` without a merge/rebase.
+- `make qa-live` (final): `19 passed, 3 skipped (45.6s)` — the three `transfer-payment-comprobante` tests report **skipped**, `payments.live.spec.ts:66` **passed**, 0 failed.
+- `make qa-down` → `docker compose -p cataclub-qa ps -a` empty.
