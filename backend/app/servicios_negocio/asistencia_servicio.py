@@ -322,7 +322,17 @@ class AsistenciaServicio:
            backfillea automáticamente en el día nuevo -- la inscripción
            sigue siendo atómica por categoria (un alumno en todos los días
            o en ninguno).
-        4. `codigo` nunca cambia acá (ver `_generar_codigo`)."""
+        4. `codigo` nunca cambia acá (ver `_generar_codigo`).
+
+        Issue #1361: las sesiones nuevas se derivan de TODO día permitido
+        resultante que todavía no tiene sesión (`dias_nuevos` menos los
+        días de `horarios_actuales`), no solo de los días agregados al
+        catálogo (`dias_nuevos - dias_actuales`). El catálogo
+        (`categoria_horario_dia`) y las sesiones (`horario_entrenamiento`)
+        pueden arrancar desalineados -- la migración `a4e7c2f9b1d8` siembra
+        el primero sin el segundo -- así que un PUT con los mismos días de
+        siempre sobre una categoria sembrada tiene que dejar una sesión por
+        día igual, no un 200 que no cambia nada."""
         categoria = self.repo_categoria.obtener_por_codigo(codigo)
         if categoria is None:
             raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
@@ -365,6 +375,13 @@ class AsistenciaServicio:
         dias_a_quitar = dias_actuales - dias_nuevos
 
         horarios_actuales = self.repo_horario.listar(codigo)
+        # Issue #1361: las sesiones a crear son las de todo día permitido
+        # sin sesión propia, no solo `dias_a_agregar` -- ese conjunto solo
+        # ve el catálogo (`categoria_horario_dia`) y asume que ya está
+        # alineado con `horario_entrenamiento`, que es justo lo que NO pasa
+        # en una categoria recién sembrada (catálogo con días, cero
+        # sesiones).
+        dias_sin_sesion = dias_nuevos - {h.dia_semana for h in horarios_actuales}
 
         # No se borra historial (decisión #2 de arriba): si CUALQUIER día a
         # quitar ya tiene asistencias, se aborta TODA la edición antes de
@@ -395,7 +412,7 @@ class AsistenciaServicio:
                 categoria=codigo, dia_semana=d,
                 hora_inicio=nueva_hora_inicio, hora_fin=nueva_hora_fin,
             )
-            for d in dias_a_agregar
+            for d in dias_sin_sesion
         ]
         alumno_horario_nuevos = [
             AlumnoHorario(persona_id=persona_id, horario=h)
