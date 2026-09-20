@@ -335,6 +335,13 @@ migraciones nuevas, exporta `MIGRATION_COMPATIBILITY=none` como en este caso.
    `t`/`f`: convertilos antes de reinyectarlos en el `UPDATE`.
 8. Borra el archivo temporal del paso 2.
 
+Desde el issue #1362 (migración `5b09fde49560`), `categoria_horario` YA NO
+se resiembra al migrar desde cero: una base reaprovisionada con este
+procedimiento arranca con 0 categorías de horario, no con las 5 de siempre.
+No es un paso pendiente de este runbook -- el admin las crea a mano desde
+`/groups` («Nueva categoría») después del paso 7, antes de que el club pueda
+cargar horarios o asignar alumnos.
+
 Corrida como `ssh <usuario-staging>@<host-staging> 'bash -s' < script.sh`,
 este procedimiento se corta a la mitad: `docker compose exec -T` y `psql`
 dentro del script consumen el stdin del pipe, así que el resto del script

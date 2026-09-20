@@ -84,6 +84,7 @@ from app.dominio.enums import (
 from app.infraestructura.repositorios.categoria_repositorio import CategoriaRepositorio
 from app.dominio.cedula import cedula_valida
 from app.seguridad.gestor_auth import GestorAutenticacion
+from scripts.catalogo_default import sembrar_catalogo_por_defecto
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +407,17 @@ def main() -> None:
         # 3. Horarios (5 categorías; Competitivo corre Lun-Sáb = 26 filas)
         # Sin entrenador titular (issue #13): el horario es solo categoría,
         # día y hora; la clase la da el entrenador disponible.
+        #
+        # Issue #1362: la migración ya no siembra `categoria_horario` en una
+        # base nueva (el catálogo por defecto dejó de ser dato de producto),
+        # así que este seed lo crea él mismo ANTES de leer vía
+        # `CategoriaRepositorio` -- idempotente, no pisa categorías que el
+        # admin ya haya editado/creado a mano.
         # ==================================================================
+        categorias_creadas = sembrar_catalogo_por_defecto(db)
+        if categorias_creadas:
+            print(f"[seed] Catálogo de categoría_horario sembrado: {categorias_creadas} creadas.")
+
         filas_categoria_horario = CategoriaRepositorio(db).listar()
         horario_count = 0
         for fila_categoria in filas_categoria_horario:
