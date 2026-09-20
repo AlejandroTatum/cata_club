@@ -18,7 +18,7 @@ from app.dominio.enums import DiaSemana, EstadoAsistencia, EstadoMembresia, Tipo
 from app.dominio.excepciones import EntidadNoEncontrada, OperacionInvalida
 from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia, Membresia, TipoMembresia
 from app.servicios_negocio.dtos.asistencia_schemas import (
-    AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO,
+    AlumnoHorarioCreateDTO, CategoriaCreateDTO, CategoriaUpdateDTO, HorarioCreateDTO,
 )
 from app.servicios_negocio.asistencia_servicio import AsistenciaServicio
 
@@ -296,6 +296,85 @@ def test_actualizar_categoria_codigo_inexistente(db_session):
     servicio = AsistenciaServicio(db_session)
     with pytest.raises(EntidadNoEncontrada):
         servicio.actualizar_categoria("NOEXISTE", CategoriaUpdateDTO(nombre="X"))
+
+
+# --- Edición: catálogo sembrado sin sesiones (issue #1361) -----------------
+# La migración `a4e7c2f9b1d8` siembra `categoria_horario_dia` con los días
+# permitidos de las 5 categorías del club pero CERO filas en
+# `horario_entrenamiento`: catálogo y sesiones arrancan desalineados a
+# propósito (la fila de categoría existe antes que la clase se dicte). Los
+# candados de acá arman ese estado directo por ORM (nunca con
+# `crear_categoria`, que sí crea sesiones) para no depender del seed y
+# reproducirlo con una categoría propia.
+def _categoria_sembrada(db_session, dias, codigo="PREJUVENIL", label="Prejuvenil"):
+    fila = CategoriaHorario(
+        codigo=codigo, label=label, hora_inicio=time(15, 0), hora_fin=time(16, 0),
+    )
+    fila.dias_permitidos = [CategoriaHorarioDia(dia_semana=d) for d in dias]
+    db_session.add(fila)
+    db_session.flush()
+    return fila
+
+
+def test_actualizar_categoria_catalogo_sembrado_sin_sesiones_crea_una_por_dia_permitido(db_session):
+    servicio = AsistenciaServicio(db_session)
+    dias = [DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES]
+    categoria = _categoria_sembrada(db_session, dias)
+    assert servicio.listar_horarios(categoria.codigo) == []
+
+    # Payload idéntico al que arma `openCatalogoEditForm` desde el catálogo:
+    # mismo nombre, misma franja, mismos días -- "Guardar" sin tocar nada.
+    servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(
+        nombre=categoria.label, hora_inicio=categoria.hora_inicio,
+        hora_fin=categoria.hora_fin, dias=dias,
+    ))
+
+    horarios = servicio.listar_horarios(categoria.codigo)
+    assert {h.dia_semana for h in horarios} == set(dias)
+    assert all(
+        h.hora_inicio == categoria.hora_inicio and h.hora_fin == categoria.hora_fin
+        for h in horarios
+    )
+
+
+def test_actualizar_categoria_catalogo_sembrado_con_una_sesion_completa_las_faltantes(db_session):
+    servicio = AsistenciaServicio(db_session)
+    dias = [DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES]
+    categoria = _categoria_sembrada(db_session, dias)
+    horario_lunes = servicio.crear_horario(
+        HorarioCreateDTO(categoria=categoria.codigo, dia_semana=DiaSemana.LUNES)
+    )
+
+    servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(dias=dias))
+
+    horarios = servicio.listar_horarios(categoria.codigo)
+    assert len(horarios) == 3
+    assert {h.dia_semana for h in horarios} == set(dias)
+    # El horario que ya existía se conserva (misma fila, mismo id), no se
+    # duplica ni se recrea.
+    conservado = next(h for h in horarios if h.dia_semana == DiaSemana.LUNES)
+    assert conservado.id == horario_lunes.id
+
+
+def test_actualizar_categoria_catalogo_sembrado_backfillea_alumnos_en_las_sesiones_nuevas(db_session, client):
+    servicio = AsistenciaServicio(db_session)
+    dias = [DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES]
+    categoria = _categoria_sembrada(db_session, dias)
+    horario_lunes = servicio.crear_horario(
+        HorarioCreateDTO(categoria=categoria.codigo, dia_semana=DiaSemana.LUNES)
+    )
+    alumno = _crear_persona_api(client)
+    _habilitar_como_jugador(db_session, alumno["id"])
+    servicio.asignar_alumno_a_horario(
+        AlumnoHorarioCreateDTO(persona_id=alumno["id"], horario_id=horario_lunes.id)
+    )
+
+    servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(dias=dias))
+
+    horarios = servicio.listar_horarios(categoria.codigo)
+    assert len(horarios) == 3
+    asignaciones = servicio.listar_horarios_por_alumno(alumno["id"])
+    assert {a.horario_id for a in asignaciones} == {h.id for h in horarios}
 
 
 def test_eliminar_categoria_codigo_inexistente(db_session):
