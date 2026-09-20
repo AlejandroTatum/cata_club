@@ -220,7 +220,13 @@ def esquema_migrado(motor_test):
     """Crea el esquema UNA vez por sesión aplicando las migraciones reales
     de Alembic (decisión 1.2) — nunca `Base.metadata.create_all`, así se
     ejercitan los ENUM nativos, las FKs y cualquier `ALTER TYPE` real, cosas
-    que `create_all` jamás corre."""
+    que `create_all` jamás corre.
+
+    Desde #1362, `alembic upgrade head` deja `categoria_horario` VACÍO (el
+    catálogo por defecto dejó de ser dato de producto -- ver
+    `scripts/catalogo_default.py`). Sembrarlo acá, una sola vez por sesión y
+    con `commit()` real, es lo que mantiene sin tocar los ~28 archivos que
+    todavía asumen que `Categoria.FORMATIVO` etc. existen como filas."""
     with motor_test.connect() as conexion:
         conexion.execute(text("DROP SCHEMA public CASCADE"))
         conexion.execute(text("CREATE SCHEMA public"))
@@ -230,6 +236,11 @@ def esquema_migrado(motor_test):
     raiz_backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     alembic_cfg = AlembicConfig(os.path.join(raiz_backend, "alembic.ini"))
     alembic_command.upgrade(alembic_cfg, "head")
+
+    from scripts.catalogo_default import sembrar_catalogo_por_defecto
+    with Session(bind=motor_test) as sesion:
+        sembrar_catalogo_por_defecto(sesion)
+        sesion.commit()
 
 
 @pytest.fixture(scope="session")

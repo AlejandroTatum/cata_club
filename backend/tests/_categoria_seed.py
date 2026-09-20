@@ -1,48 +1,12 @@
-"""Siembra compartida de `categoria_horario`/`categoria_horario_dia` para
-tests que ejecutan `seed_dev_base.main()` (o cualquier código que lea vía
-`CategoriaRepositorio`) contra un motor en memoria creado con
-`Base.metadata.create_all()` -- a diferencia de `alembic upgrade head`, eso
-NO corre el data-seed de la migración `a4e7c2f9b1d8`.
-
-Una constante más una función, no un fixture de pytest: nada acá necesita
-la resolución de fixtures de pytest (sin `request`, sin scope), así que un
-fixture en `conftest.py` solo agregaría indirección. Vive en su propio
-módulo -- no en `conftest.py` -- para no mezclar datos de siembra con el
-espacio de fixtures que pytest resuelve por magia (mismo criterio que
-separó `arnes_migraciones.py` de `conftest.py`).
-"""
-from datetime import time
-
-from app.dominio.enums import DiaSemana
-from app.dominio.modelos import CategoriaHorario, CategoriaHorarioDia
-
-LUN_VIE = (
-    DiaSemana.LUNES, DiaSemana.MARTES, DiaSemana.MIERCOLES,
-    DiaSemana.JUEVES, DiaSemana.VIERNES,
+"""Re-export delgado: la definición real del catálogo por defecto de
+`categoria_horario` vive en `scripts.catalogo_default` (#1362 la promovió
+desde acá para que `seed_dev_base.py` la comparta con la suite -- ver el
+docstring de ese módulo para el porqué completo). Este archivo se conserva
+para no tocar los imports de `test_seed_dev_base.py`/`test_seed_dev_bulk.py`,
+que siguen escribiendo `from tests._categoria_seed import ...`."""
+from scripts.catalogo_default import (  # noqa: F401
+    CATEGORIAS_SEED,
+    LUN_SAB,
+    LUN_VIE,
+    sembrar_categorias,
 )
-LUN_SAB = LUN_VIE + (DiaSemana.SABADO,)
-
-# Misma copia literal que siembran `a4e7c2f9b1d8` (código/label/horas/días)
-# y `d4c7e1b09a35` (la etiqueta `edades`) -- ver esas migraciones para la
-# fuente real en Postgres.
-CATEGORIAS_SEED = [
-    ("FORMATIVO", "Formativo", "5 a 10 años", time(15, 0), time(16, 0), LUN_VIE),
-    ("INFANTIL", "Infantil", "8 a 12 años", time(16, 0), time(17, 0), LUN_VIE),
-    ("JUVENIL", "Juvenil", "Mayores de 12 años", time(17, 0), time(18, 0), LUN_VIE),
-    ("COMPETITIVO", "Competitivo", "Selección", time(18, 0), time(20, 0), LUN_SAB),
-    ("ADULTOS", "Adultos", "Mayores de 18 años", time(20, 0), time(21, 15), LUN_VIE),
-]
-
-
-def sembrar_categorias(session_factory) -> None:
-    """Abre una sesión desde `session_factory` (el `sessionmaker` del motor
-    en memoria), siembra las 5 categorías + sus días permitidos, y comitea."""
-    with session_factory() as sesion:
-        for codigo, label, edades, hora_inicio, hora_fin, dias in CATEGORIAS_SEED:
-            sesion.add(CategoriaHorario(
-                codigo=codigo, label=label, edades=edades,
-                hora_inicio=hora_inicio, hora_fin=hora_fin,
-            ))
-            for dia in dias:
-                sesion.add(CategoriaHorarioDia(categoria_codigo=codigo, dia_semana=dia))
-        sesion.commit()

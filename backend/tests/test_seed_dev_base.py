@@ -26,6 +26,7 @@ from app.dominio.enums import Categoria, DiaSemana, EstadoMembresia, EstadoPago,
 from app.dominio.modelos import (
     AlumnoHorario,
     Base,
+    CategoriaHorario,
     HorarioEntrenamiento,
     Membresia,
     Pago,
@@ -50,6 +51,16 @@ def _cargar_modulo_seed():
 def _motor_en_memoria(modulo):
     """Motor SQLite fresco con las tablas creadas y `categoria_horario` +
     `categoria_horario_dia` ya sembradas, inyectado en el módulo del seed."""
+    TestingSessionLocal = _motor_vacio(modulo)
+    sembrar_categorias(TestingSessionLocal)
+    return TestingSessionLocal
+
+
+def _motor_vacio(modulo):
+    """Motor SQLite fresco con las tablas creadas pero SIN sembrar
+    `categoria_horario` -- el estado real de una instalación nueva desde
+    #1362 (la migración deja de sembrar el catálogo). `main()` tiene que
+    poder arrancar de acá sola."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -58,7 +69,6 @@ def _motor_en_memoria(modulo):
     registrar_btrim_sqlite(engine)
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    sembrar_categorias(TestingSessionLocal)
 
     modulo.SessionLocal = TestingSessionLocal
     return TestingSessionLocal
@@ -87,6 +97,28 @@ def test_main_persiste_26_horarios_con_categoria_adultos_21_15_y_competitivo_sab
         competitivo_dias = {h.dia_semana for h in horarios if h.categoria == Categoria.COMPETITIVO}
         assert competitivo_dias == set(LUN_SAB)
         assert DiaSemana.SABADO in competitivo_dias
+
+
+def test_main_siembra_el_catalogo_por_defecto_cuando_categoria_horario_esta_vacia():
+    """#1362: desde que la migración deja de sembrar `categoria_horario`,
+    una instalación nueva la tiene vacía. `main()` ya no puede asumir que
+    `CategoriaRepositorio(db).listar()` devuelve las 5 categorías -- tiene
+    que sembrarlas ella misma antes de derivar los 26 horarios."""
+    modulo = _cargar_modulo_seed()
+    SessionLocal = _motor_vacio(modulo)
+
+    modulo.main()
+
+    with SessionLocal() as verificacion:
+        categorias = list(
+            verificacion.execute(select(CategoriaHorario)).scalars().all()
+        )
+        assert {c.codigo for c in categorias} == {
+            "FORMATIVO", "INFANTIL", "JUVENIL", "COMPETITIVO", "ADULTOS",
+        }
+
+        horarios = list(verificacion.execute(select(HorarioEntrenamiento)).scalars().all())
+        assert len(horarios) == 26
 
 
 def test_main_repara_representante_preexistente_sin_roles():
