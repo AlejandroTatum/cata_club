@@ -30,25 +30,22 @@
  * recovery — it says what happened AND what to do — so it carries the pattern
  * the rest of the product copies: what happened → what to do → one action.
  *
- * Because there is no sidebar, there is also no "Ayuda y soporte" entry to
- * open the assistant from. That is the one case the prototype keeps a local
- * trigger for: "Contactar al club" opens the assistant that `HelpChatDock`
- * mounts in the root layout — the same panel the floating launcher opens.
+ * Because there is no sidebar, this screen has no help row either. The
+ * assistant is gone; what remains is the pattern the evaluation praised:
+ * what happened → what to do → one action (log out and wait for the email).
  */
 
 "use client";
 
 import Image from "next/image";
-import { LogOut, MessageCircle } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { openHelpChat, useHelpChatOpen } from "@/components/chatbot/help-chat-store";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui";
 
 function UnauthorizedContent(): React.ReactElement {
   const { logout } = useAuth();
-  const chatOpen = useHelpChatOpen();
 
   return (
     // This route reaches the user through no shell, so it declares its own
@@ -79,17 +76,11 @@ function UnauthorizedContent(): React.ReactElement {
 
         {/* What happened, then what to do — in that order, in one paragraph. */}
         <p className="m-0 text-sm leading-relaxed text-ink-3">
-          El club todavía no le asignó un rol. Escríbenos por el chat de ayuda o espere
-          el correo de confirmación — apenas se lo asignen, entra directo.
+          El club todavía no le asignó un rol. Espere el correo de confirmación —
+          apenas se lo asignen, entra directo.
         </p>
 
         <div className="mt-1.5 flex flex-wrap justify-center gap-2.5">
-          {/* Coal, not red: red is the primary CTA and the destructive colour,
-              and "contactar al club" is neither. */}
-          <Button variant="dark" onClick={(): void => openHelpChat()} aria-expanded={chatOpen}>
-            <MessageCircle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-            Contactar al club
-          </Button>
           <Button variant="secondary" onClick={(): void => void logout()}>
             <LogOut size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Cerrar sesión

@@ -61,17 +61,4 @@ test.describe("crest never requests the image optimizer (issue #681)", () => {
 
     expect(hits).toEqual([]);
   });
-
-  test("chat launcher (any page) and panel avatar (once opened)", async ({ page }) => {
-    const hits = trackCrestOptimizerRequests(page);
-
-    await page.goto("/login");
-    const launcher = page.getByRole("button", { name: /Abrir CATA-BOT/i });
-    await expect(launcher).toBeVisible({ timeout: 20_000 });
-    await launcher.click();
-    await expect(page.locator('div[role="dialog"][aria-label*="CATA-BOT"]')).toBeVisible();
-    await page.waitForTimeout(1_000);
-
-    expect(hits).toEqual([]);
-  });
 });
