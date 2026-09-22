@@ -37,11 +37,11 @@ The owner explicitly requested that the chatbot be removed from the application 
 - TDD mode: disabled; no repository/session instruction enables strict RED/GREEN/REFACTOR for this organic change.
 - Test runner: repository Makefile commands and existing Vitest/Pytest suites.
 - Every implementation task uses `gentle-ai-worker` because it touches multiple non-trivial files.
-- Verification is writer-recorded while RDD is on, followed by native risk assessment/review routing and a bounded parent spot check.
+- RDD is clone-locally disabled with owner authorization; work uses ordinary repository validation and reports `disabled/unmanaged` without claiming review approval.
 
 ## Tasks
 
-### RC-1A — Remove frontend chatbot entrypoints (`in_progress`)
+### RC-1A — Remove frontend chatbot entrypoints (`done`)
 Route: delegated writer; triggers: preparation across 4+ files and multi-file write.
 
 - [x] Remove root, shell, auth, landing, enrollment, unauthorized, and Help-page chatbot mounts/triggers while keeping `/ayuda` and static FAQ content.
@@ -49,7 +49,7 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
 - [x] Keep the dead implementation, BFF route, and client contract temporarily so this independently functional slice stays small.
 - [x] Run focused frontend tests and the canonical full pre-PR lane.
 - [x] Commit one coherent Conventional Commit work unit.
-- [ ] Record native assessment/review outcome, changed-line count, rollback boundary, and PR slice.
+- [x] Record native outcome, changed-line count, rollback boundary, and PR slice.
 
 Implementation applied from the superseded combined candidate `ea77878`'s
 diff, restricted to the entrypoint slice; every edited file byte-matches the
@@ -99,17 +99,21 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
 - 2026-09-21: Combined RC-1 candidate `ea77878` passed local checks but native review refused it before authority creation because its immutable evidence exceeded the lens context budget.
 - 2026-09-21: Preserved the original candidate branch and created `refactor/remove-chatbot-entrypoints` from `7e84ecf` for the smaller RC-1A slice.
 - 2026-09-21: RC-1A implemented in this worktree from the `ea77878` reference diff (11 files: +30/−1,143 before the task document update). `/ayuda` keeps its static FAQ and plain navigation; the sidebar help row no longer opens chat. No replacement floating action, assistant, or ghost button was added. The idle sibling `gentleman-remove-chatbot-ui` `db-test` fixture on port 5436 was stopped (single-tenant rule) before this worktree's backend lane; nothing else outside this worktree was touched.
+- 2026-09-22: Owner authorized clone-local RDD disable after the terminal provider failure and approved a `size:exception` for RC-1A (1,288 changed lines) because the remaining overage is cohesive deletion of retired launcher E2E coverage. Native outcome is `disabled/unmanaged`; no review approval is claimed. PR slice: commit `a3a7518` plus the tracker-evidence commit, targeting `main`.
 
 ## Verification evidence
 - Superseded combined candidate `ea77878`: writer reported Impeccable detector `[]`; frontend 299 files / 5,040 tests passed; backend 2,891 passed / 3 skipped; root 636 passed / 1 skipped; Next 46/46 pages; Playwright 202 passed; `git diff --check` clean. Native review: not started (`lens_context_budget_exceeded`).
 - RC-1A slice (observed in this worktree):
+  - Commit: `a3a7518612df16c8a04a28fabfabb5358c5a8541` (`refactor(frontend): remove chatbot entrypoints`), 12 files, 145 insertions, 1,143 deletions.
   - Impeccable `detect --json` on the seven edited UI files: `[]`.
-  - `make test-frontend`: 305 files / 5,188 tests passed.
-  - `make pre-pr LANE=full`: completed green (backend ruff, lint-imports, pip-audit, backend tests via `db-test`, root tests, then frontend lane ending in Playwright `202 passed (2.7m)`; backend step counts scrolled past capture, green by make fail-fast order).
-  - `git diff --check`: clean.
-  - Bounded search: no active frontend mount/launcher/dialog entrypoint remains. The only remaining in-slice references are the AppShell test's intentional not-in-document guards and comments; dead references are classified for later slices below.
-  - Deferred references: `components/chatbot/**` + `touch-target-usage.test.ts` roster line → RC-1B; `app/api/chatbot/**`, `lib/chatbot-contract.ts`, `services/api.ts` `consultarChatbot` (+ its test) → RC-1C; `error-message.test.ts` backend module fixture → RC-2; chatbot mentions in comments/docs (`LandingMotion.tsx`, `ToastContainer.tsx`, `LoadingState.tsx`, `smooth-scroll.ts` + tests, landing/ayuda test comments) → RC-3.
-  - Rollback boundary: revert this single commit; it only removes entrypoints and their direct test expectations, so the untouched dead implementation keeps the app building and green.
+  - Writer `make test-frontend`: 305 files / 5,188 tests passed.
+  - Writer `make pre-pr LANE=full`: completed green (backend ruff, lint-imports, pip-audit, backend tests via `db-test`, root tests, Next build, and Playwright `202 passed`).
+  - Independent verifier: `make test-frontend` 305 files / 5,188 tests passed; `make test-root` 638 passed / 1 skipped; range `git diff --check` clean; structural entrypoint search passed.
+  - Bounded search: no active frontend mount/launcher/dialog entrypoint remains. Dead implementation/API references are deferred to RC-1B/RC-1C.
+  - Rollback boundary: revert `a3a7518`; it only removes entrypoints and their direct test expectations, so the untouched dead implementation keeps the app building and green.
+  - Native review lineage `review-553a02e0d2bb3efd`: three reviewer artifacts were submitted, then capture became partial/unknown. Reconciled STATUS was terminal `native_stop_required`, authority state `escalated`, cause `unknown_causality`, finding `R3-RemovedHelpExport`. No approval was acknowledged.
+  - Owner-authorized disposition: RDD disabled clone-locally; current delivery status is `disabled/unmanaged`. Upstream occurrence recorded on Gentle AI #4553 and session-scope request opened as #4879.
+  - Review workload: owner-approved `size:exception` for 1,288 changed lines after one honest slicing pass; the overage is primarily cohesive deletion of obsolete chatbot E2E coverage.
 
 ## Next step
-Run native assessment/review on the RC-1A commit, record its outcome above, then delegate RC-1B (delete the dead UI implementation and its tests).
+Commit this tracker evidence, deliver the RC-1A PR to `main`, then begin RC-1B after integration.
