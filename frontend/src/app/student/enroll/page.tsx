@@ -32,6 +32,7 @@ import { formatCurrency } from "@/lib/format-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
 import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
+import LegalReviewDialog, { type LegalReviewDocumentId } from "@/components/legal/LegalReviewDialog";
 import {
   WizardInput,
   BirthDateField,
@@ -218,6 +219,11 @@ function EnrollWizard(): React.ReactElement {
    */
   const sessionConfirmed = sessionOutcome === "authenticated";
   const [summaryReviewed, setSummaryReviewed] = useState(false);
+  // #1368 — which grouped legal document is under review, or none. Reviewing
+  // is an overlay on the summary step: it must never unmount this component,
+  // because everything the visitor entered (and the consent decision itself)
+  // lives here.
+  const [legalReviewDoc, setLegalReviewDoc] = useState<LegalReviewDocumentId | null>(null);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [touched, setTouched] = useState<Set<EnrollField>>(new Set());
   /**
@@ -1244,8 +1250,12 @@ function EnrollWizard(): React.ReactElement {
         {/* `sunken`, not `canvas` — the same inverted ladder as the age well:
             this box is recessed INSIDE the paper card, and `canvas` is the
             surface the page itself stands on. */}
-        <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-sm text-ink-2">
+        <label
+          htmlFor="enroll-consentimiento"
+          className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-sunken p-page text-sm text-ink-2"
+        >
           <input
+            id="enroll-consentimiento"
             type="checkbox"
             checked={summaryReviewed}
             onChange={(e) => {
@@ -1281,10 +1291,16 @@ function EnrollWizard(): React.ReactElement {
               it. The sentence above already says what to do and what it means;
               D11c's rule is that no help repeats the thing it explains. */}
           <span>
-                Acepto los <Link href="/terminos" className="underline">Términos de uso</Link>, el {" "}
-                <Link href="/privacidad" className="underline">Aviso de privacidad</Link>, el tratamiento
+                {/* #1368: the three grouped documents are triggers for the
+                    in-flow review dialog below, NOT links — a link navigated
+                    away and discarded everything the visitor entered. Buttons
+                    inside a label would steal the labeled-control identity
+                    from the checkbox, so the label carries an explicit
+                    `htmlFor` and the input its matching `id` above. */}
+                Acepto los <button type="button" className="underline" onClick={() => setLegalReviewDoc("terminos")}>Términos de uso</button>, el {" "}
+                <button type="button" className="underline" onClick={() => setLegalReviewDoc("privacidad")}>Aviso de privacidad</button>, el tratamiento
                 de datos médicos y la difusión pública de imagen conforme al {" "}
-                <Link href="/permiso-imagen-fetm" className="underline">Permiso de imagen FETM</Link>.
+                <button type="button" className="underline" onClick={() => setLegalReviewDoc("permiso-imagen-fetm")}>Permiso de imagen FETM</button>.
               </span>
         </label>
       </div>
@@ -1739,6 +1755,12 @@ function EnrollWizard(): React.ReactElement {
 
         </div>
       )}
+
+      {/* #1368 — one shared review for all three grouped documents. Opening
+          one overlays the summary step and nothing behind it is reachable;
+          closing lands the visitor exactly where the decision is made, with
+          every entered field and the consent state untouched. */}
+      <LegalReviewDialog documentId={legalReviewDoc} onClose={() => setLegalReviewDoc(null)} />
     </main>
   );
 }
