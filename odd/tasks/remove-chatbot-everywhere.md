@@ -137,8 +137,9 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
   - Writer `make pre-pr LANE=full`: completed green; make sequencing proves every earlier stage passed before the final stage — backend ruff, lint-imports, pip-audit, backend tests via `db-test`, root tests, frontend audit/type-check/lint/coverage, Next build, Playwright `202 passed (3.0m)`.
   - `git diff --check`: clean.
   - Rollback boundary: revert this commit; it only deletes the dead directory and one roster entry, so the entrypoint-free app from RC-1A stays building and green and no unrelated behavior is touched.
-  - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied. No `size:exception` approval was needed from the owner for this slice because the delivery strategy pre-documents the cohesive-deletion allowance, but the pure-deletion rationale is recorded above.
-  - Review workload: pure deletion, 3,724 removed lines across 11 code files; no cohesive sub-split exists that keeps each slice independently green without multiplying review overhead for removed lines only.
+  - Independent verifier: `make test-frontend` 301 files / 5,062 tests passed; `make test-root` 638 passed / 1 skipped; range `git diff --check` clean; deleted-directory/import search passed.
+  - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied.
+  - Review workload: owner-approved `size:exception` for 3,761 changed lines (31 additions, 3,730 deletions). This is a cohesive pure-deletion slice; further file-by-file PRs would not create independent functional units.
 
 ## Next step
 Deliver RC-1B as an independent PR, then remove the frontend chatbot BFF route, contract, and client service methods (RC-1C).
