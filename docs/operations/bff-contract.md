@@ -36,7 +36,7 @@ autenticación. El gate lee:
 | # | Superficie | Qué contiene |
 | --- | --- | --- |
 | 1 | `frontend/src/app/api/**/route.ts` | Los handlers, que llaman a los ayudantes compartidos |
-| 2 | Las mismas llamadas armando la URL a mano | `fetch(\`${getBackendApiUrl()}/chatbot/consultar\`, …)` y sus dos hermanas de `ranking/notificaciones` |
+| 2 | Las mismas llamadas armando la URL a mano | Las dos llamadas de `ranking/notificaciones` que arman `fetch(\`${getBackendApiUrl()}/…\`)` a mano |
 | 3 | `frontend/src/lib/server/*.ts` | `auth.ts` (`/auth/login`, `/auth/me`, `/auth/refresh`, `/auth/logout`) y los adaptadores, como `payments-adapter.ts` |
 
 Los ayudantes a los que se ancla la búsqueda son `backendFetch`,
@@ -192,8 +192,7 @@ not render a guess at it»— es exactamente el razonamiento que la tabla mecani
 
 Cubre `isBackendLoginResponse`, `isBackendMeResponse`, `isBackendRefreshResponse`
 (`lib/server/auth.ts:225,235,249`), `isBackendEnrollmentResponse`
-(`lib/server/enrollment-adapter.ts:144`), `isBackendChatbotResponse`
-(`app/api/chatbot/route.ts:64`) e `isPublicSchedules`.
+(`lib/server/enrollment-adapter.ts:144`) e `isPublicSchedules`.
 
 Se verifican dos cosas por fila, y la segunda es la que atrapa un bug real:
 

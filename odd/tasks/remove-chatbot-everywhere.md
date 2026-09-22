@@ -82,12 +82,36 @@ Acceptance:
   contract remain so RC-1B stays independently functional.
 - Frontend and full pre-PR lanes pass.
 
-### RC-1C — Remove frontend chatbot BFF and client contract (`pending`)
+### RC-1C — Remove frontend chatbot BFF and client contract (`done`)
 Route: delegated writer; triggers: preparation across 4+ files and multi-file write.
 
-- [ ] Delete the chatbot BFF route, chatbot contract, service API methods/types, and dedicated tests.
-- [ ] Update root BFF contract assertions without weakening unrelated route coverage.
-- [ ] Validate and commit.
+- [x] Delete the chatbot BFF route, chatbot contract, service API methods/types, and dedicated tests.
+- [x] Update root BFF contract assertions without weakening unrelated route coverage.
+- [x] Validate and commit.
+
+Deleted `frontend/src/app/api/chatbot/` (`route.ts` + its suite),
+`lib/chatbot-contract.ts` + its suite, the `consultarChatbot`/`ChatbotTurno`/
+`ChatbotRespuesta` block and `CHATBOT_TIMEOUT_MS` from `services/api.ts`, and
+the chatbot timeout test + import + live-tense references from
+`services/__tests__/api.test.ts`. Root gate: dropped the
+`/chatbot/consultar` `Campo` row and lowered the `bff:url-cruda` floor 3→2
+(the deleted route was the third hand-built raw-URL call site); no unrelated
+route coverage weakened. The two `ranking/notificaciones` raw-URL sites and
+all other surfaces keep their coverage. `docs/operations/bff-contract.md`
+updated for the same two facts. Deleted files and `tests/test_bff_contract.py`
+byte-match the superseded reference candidate `ea77878`; `api.ts`/`api.test.ts`
+match it byte-for-byte in every chatbot-adjacent region (remaining differences
+are pre-existing drift from other merged features). Commit:
+`refactor(frontend): remove chatbot BFF and client contract` (this commit).
+
+Acceptance:
+- No frontend chatbot BFF route, contract, client method, or type remains; a
+  bounded scan finds zero references to `consultarChatbot`,
+  `chatbot-contract`, `api/chatbot`, or `isBackendChatbotResponse`.
+- Remaining `chatbot` mentions are past-tense comments and Help/FAQ content,
+  deferred to RC-3 (config/docs/comment sweep).
+- `/ayuda` and all RC-1A/1B behavior are untouched.
+- Frontend and full pre-PR lanes pass.
 
 ### RC-2 — Remove backend chatbot capability (`pending`)
 Route: delegated writer; triggers: preparation across 4+ files and multi-file write.
@@ -116,6 +140,7 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
 - 2026-09-22: Owner authorized clone-local RDD disable after the terminal provider failure and approved a `size:exception` for RC-1A (1,288 changed lines) because the remaining overage is cohesive deletion of retired launcher E2E coverage. Native outcome is `disabled/unmanaged`; no review approval is claimed.
 - 2026-09-22: RC-1A delivered as PR #1377 and squash commit `a5eb731`; PR checks and the full post-merge `main` matrix passed. The local branch/worktree were removed after an exact content-equivalence check, and RC-1B started from fresh `main`.
 - 2026-09-22: RC-1B implemented in this worktree: deleted all 10 files under `frontend/src/components/chatbot/` (3,722 lines) plus the 2-line dead roster entry, byte-matching the `ea77878` reference. `make test-frontend` 301 files / 5,062 tests passed — exactly −4 files / −126 tests vs RC-1A, the deleted chatbot suites. `make pre-pr LANE=full` green with Playwright 202 passed. The sibling `gentleman-pr3-schedule-visibility` `db-test` fixture on port 5436 was verified idle (0 active sessions, 0 established connections) before being stopped under the single-tenant rule; nothing else outside this worktree was touched.
+- 2026-09-22: RC-1C implemented in this worktree from the `ea77878` reference diff restricted to the BFF/contract slice (9 files: 4 deleted, 5 edited including this task document and the BFF contract doc). The sibling `gentleman-remove-chatbot-ui-dead` `db-test` fixture on port 5436 was verified idle (0 active sessions, 0 established connections) before being stopped under the single-tenant rule; nothing else outside this worktree was touched.
 
 ## Verification evidence
 - Superseded combined candidate `ea77878`: writer reported Impeccable detector `[]`; frontend 299 files / 5,040 tests passed; backend 2,891 passed / 3 skipped; root 636 passed / 1 skipped; Next 46/46 pages; Playwright 202 passed; `git diff --check` clean. Native review: not started (`lens_context_budget_exceeded`).
@@ -140,6 +165,16 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
   - Independent verifier: `make test-frontend` 301 files / 5,062 tests passed; `make test-root` 638 passed / 1 skipped; range `git diff --check` clean; deleted-directory/import search passed.
   - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied.
   - Review workload: owner-approved `size:exception` for 3,761 changed lines (31 additions, 3,730 deletions). This is a cohesive pure-deletion slice; further file-by-file PRs would not create independent functional units.
+- RC-1C slice (observed in this worktree):
+  - Commit: `refactor(frontend): remove chatbot BFF and client contract` (this commit), 9 files: 4 deleted (`app/api/chatbot/route.ts` 137 lines, `app/api/chatbot/__tests__/route.test.ts` 140, `lib/chatbot-contract.ts` 47, `lib/__tests__/chatbot-contract.test.ts` 134 — 458 lines), plus `services/api.ts`, `services/__tests__/api.test.ts`, `tests/test_bff_contract.py`, `docs/operations/bff-contract.md`, and this task document.
+  - Focused: `uv run pytest ../tests/test_bff_contract.py` 139 passed / 1 skipped; `vitest run src/services/__tests__/api.test.ts` 78 passed (−1 chatbot timeout test vs before the slice; −2 files / −18 tests attributable to this slice overall: 8 route + 9 contract + 1 timeout).
+  - `make test-frontend`: 301 files / 5,069 tests passed. Absolute totals are not comparable to RC-1B's 5,062: newer `main` added suites (#1381/#1384/#1385) between the measurements; the slice's own delta is −2 files / −18 tests.
+  - Writer `make pre-pr LANE=full`: completed green; make sequencing proves every earlier stage passed before the final stage — backend ruff, lint-imports, pip-audit, backend tests via `db-test`, root tests, frontend audit/type-check/lint/coverage, Next build, Playwright `202 passed (3.6m)`.
+  - `git diff --check`: clean.
+  - Byte-match: `tests/test_bff_contract.py` and all 4 deleted files match `ea77878` exactly; `api.ts`/`api.test.ts` match every chatbot-adjacent region (residual diffs are pre-existing drift from other merged features, zero chatbot lines).
+  - Deferred mentions (RC-3): past-tense comments in `services/api.ts` (#708 Retry-After provenance) and `api.test.ts`, `tailwind.config.ts:16`, `ChatWidget` comment mentions in members/lib sources and tests, `components/README.md`, `ToastContainer.tsx`, `LoadingState.tsx`, `globals.css`, Help/FAQ content mentions, and operational/docs references.
+  - Rollback boundary: revert this commit; it only removes the BFF route, contract, client method, and their tests (and retunes the root gate's floor 3→2), so the entrypoint-free, UI-free app from RC-1A/1B stays building and green; no unrelated route coverage changes.
+  - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied.
 
 ## Next step
-Deliver RC-1B as an independent PR, then remove the frontend chatbot BFF route, contract, and client service methods (RC-1C).
+Deliver RC-1C as an independent PR, then remove the backend chatbot capability (RC-2).

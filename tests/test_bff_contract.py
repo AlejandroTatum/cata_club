@@ -86,7 +86,9 @@ PISOS = {
     "backend:routers": 80,
     "bff:handlers": 85,
     "bff:servidor": 8,
-    "bff:url-cruda": 3,
+    # Dos, no tres: la tercera URL cruda era la del BFF del chatbot, retirado
+    # del frontend. El piso denuncia una regex rota, no congela el inventario.
+    "bff:url-cruda": 2,
 }
 
 _DECORADOR = re.compile(r"@router\.(?:get|post|put|patch|delete)\(")
@@ -840,8 +842,6 @@ CAMPOS_OBLIGATORIOS = (
     Campo("/enrollment/", "access_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
     Campo("/enrollment/", "refresh_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
     Campo("/enrollment/", "persona_id", *_ALTA, "/", "isBackendEnrollmentResponse"),
-    Campo("/chatbot/consultar", "respuesta", "ChatbotRespuestaDTO", "chatbot_schemas.py",
-          "chatbot_router.py", "/consultar", "isBackendChatbotResponse"),
     Campo("/asistencias/horarios-publicos", "category", "PublicScheduleCategoryDTO", *_HORARIOS),
     Campo("/asistencias/horarios-publicos", "ages", "PublicScheduleCategoryDTO", *_HORARIOS),
     Campo("/asistencias/horarios-publicos", "blocks", "PublicScheduleCategoryDTO", *_HORARIOS),
