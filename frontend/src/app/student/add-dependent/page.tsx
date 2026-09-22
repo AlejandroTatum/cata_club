@@ -35,16 +35,27 @@ import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { crearRepresentadoPropio, fetchInstituciones, type Institucion } from "@/services/api";
-import { calculatePersonAge, toStoredPhone } from "@/lib/identity-validation";
+import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
-import { WizardTextarea, WizardInput, PersonIdentityFields, WizardNavigation, example } from "@/components/wizard-fields";
+import {
+  WizardTextarea,
+  WizardInput,
+  BirthDateField,
+  WizardNavigation,
+  example,
+  CEDULA_DIGITS,
+  CEDULA_HINT,
+} from "@/components/wizard-fields";
 import { BackLink, Stepper, buttonClasses } from "@/components/ui";
 import { SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import type { TipoSangre } from "@/types/domain";
 import {
+  Calendar,
+  Hash,
   Heart,
   CheckCircle,
   AlertTriangle,
+  User,
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import {
@@ -242,34 +253,105 @@ function AddDependentContent(): React.ReactElement {
   // ---- Step renderers ----
 
   function renderChildStep(): React.ReactElement {
+    // A represented minor has no phone of their own (issue #1197, already
+    // the public wizard's child branch): the emergency contact derives from
+    // the representante (#1138), so this step hand-renders the same four
+    // identity fields `PersonIdentityFields` would, in the same order,
+    // minus the phone. `PersonIdentityFields` itself stays untouched —
+    // other screens still use it as-is.
+    const age = formData.fechaNacimiento ? calculatePersonAge(formData.fechaNacimiento) : null;
+    const ageValid = age !== null && !Number.isNaN(age);
+    const agePlausible = age !== null && !Number.isNaN(age) && isPlausibleHumanAge(age);
+    const birthDateBounds = studentBirthDateBounds();
+    const cedulaTyped = formData.cedula.replace(/\D/g, "").length;
     return (
       <div className="space-y-field">
         <p className="mb-4 text-sm leading-relaxed text-ink-2">
           Ingrese los datos personales del hijo/dependiente a agregar:
         </p>
 
-        <PersonIdentityFields
-          idPrefix="add-dependent"
+        <WizardInput
+          idPrefix={ADD_DEPENDENT_ID_PREFIX}
+          field={ADD_DEPENDENT_FIELD_TOKEN.nombres}
           disabled={submitting}
-          nombres={formData.nombres}
-          apellidos={formData.apellidos}
-          fechaNacimiento={formData.fechaNacimiento}
-          cedula={formData.cedula}
-          telefono={formData.telefono}
-          onNombresChange={(v) => updateField("nombres", v)}
-          onApellidosChange={(v) => updateField("apellidos", v)}
-          onFechaNacimientoChange={(v) => updateField("fechaNacimiento", v)}
-          onCedulaChange={(v) => updateField("cedula", v)}
-          onTelefonoChange={(v) => updateField("telefono", v)}
-          errors={{
-            nombres: shownError("nombres"),
-            apellidos: shownError("apellidos"),
-            fechaNacimiento: shownError("fechaNacimiento"),
-            cedula: shownError("cedula"),
-            telefono: shownError("telefono"),
-          }}
-          onFieldBlur={(field) => markTouched(field)}
+          label="Nombres"
+          value={formData.nombres}
+          onChange={(v) => updateField("nombres", v)}
+          placeholder={example("Juan Carlos")}
+          required
+          icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+          error={shownError("nombres")}
+          onBlur={() => markTouched("nombres")}
+          autoComplete="given-name"
+          pattern="[A-Za-z\u00C0-\u024F\s]+"
+          maxLength={100}
+          minLength={3}
         />
+        <WizardInput
+          idPrefix={ADD_DEPENDENT_ID_PREFIX}
+          field={ADD_DEPENDENT_FIELD_TOKEN.apellidos}
+          disabled={submitting}
+          label="Apellidos"
+          value={formData.apellidos}
+          onChange={(v) => updateField("apellidos", v)}
+          placeholder={example("Rodríguez López")}
+          required
+          icon={<User size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+          error={shownError("apellidos")}
+          onBlur={() => markTouched("apellidos")}
+          autoComplete="family-name"
+          pattern="[A-Za-z\u00C0-\u024F\s]+"
+          maxLength={100}
+          minLength={3}
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <BirthDateField
+            idPrefix={ADD_DEPENDENT_ID_PREFIX}
+            field={ADD_DEPENDENT_FIELD_TOKEN.fechaNacimiento}
+            disabled={submitting}
+            label="Fecha de nacimiento"
+            value={formData.fechaNacimiento}
+            onChange={(v) => updateField("fechaNacimiento", v)}
+            required
+            icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+            min={birthDateBounds.min}
+            max={birthDateBounds.max}
+            error={shownError("fechaNacimiento")}
+            onBlur={() => markTouched("fechaNacimiento")}
+            hint="Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015)."
+          />
+          <WizardInput
+            idPrefix={ADD_DEPENDENT_ID_PREFIX}
+            field={ADD_DEPENDENT_FIELD_TOKEN.cedula}
+            disabled={submitting}
+            label="Cédula de identidad"
+            value={formData.cedula}
+            onChange={(v) => updateField("cedula", v)}
+            placeholder={example("1712345678")}
+            required
+            icon={<Hash size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+            pattern="[0-9]{10}"
+            inputMode="numeric"
+            numericMode="cedula"
+            error={shownError("cedula")}
+            onBlur={() => markTouched("cedula")}
+            hint={
+              cedulaTyped > 0 && cedulaTyped < CEDULA_DIGITS
+                ? `Lleva ${cedulaTyped} de ${CEDULA_DIGITS} dígitos.`
+                : CEDULA_HINT
+            }
+          />
+        </div>
+        {/* `sunken`, not `canvas` — the same recessed well and the same
+            plausibility gate `PersonIdentityFields` renders for its callers. */}
+        {formData.fechaNacimiento && (
+          <div className="rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong">
+            Edad calculada: {" "}
+            <span className="font-semibold text-ink">
+              {agePlausible ? `${age} años` : ageValid ? "Revise el año." : "—"}
+            </span>
+          </div>
+        )}
 
         {/* School selector */}
         {instituciones.length > 0 && (
@@ -496,7 +578,6 @@ function AddDependentContent(): React.ReactElement {
             "child",
           )}
           {summaryRow("Cédula", formData.cedula || "—", "child", { duplicateCandidate: true })}
-          {summaryRow("Teléfono", formData.telefono ? toStoredPhone(formData.telefono) : "—", "child")}
           {summaryRow(
             "Institución",
             instituciones.find((inst) => String(inst.id) === formData.institucionId)?.nombre
