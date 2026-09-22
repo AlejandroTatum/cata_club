@@ -341,8 +341,9 @@ function makeCategoria(
   horaFin: string,
   dias: string[],
   edades: string | null = null,
+  visible: boolean = true,
 ): CategoriaInfo {
-  return { label, horaInicio, horaFin, dias, edades };
+  return { label, horaInicio, horaFin, dias, edades, visible };
 }
 
 describe("buildCatalogoSinHorarios", () => {

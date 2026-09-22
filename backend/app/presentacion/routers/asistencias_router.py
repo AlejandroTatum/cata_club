@@ -12,7 +12,7 @@ from app.infraestructura.generador_pdf import construir_respuesta_pdf, generar_r
 from app.servicios_negocio.dtos.asistencia_schemas import (
     AsistenciaCreateDTO, AsistenciaCorreccionDTO, AsistenciaCorreccionEntryDTO,
     AsistenciaCorreccionResponseDTO,
-    AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaResponseDTO,
+    AsistenciaResponseDTO, CategoriaCreateDTO, CategoriaPublicacionDTO, CategoriaResponseDTO,
     CategoriaUpdateDTO, HorarioCreateDTO, HorarioUpdateDTO, HorarioResponseDTO,
     PublicScheduleCategoryDTO,
     AlumnoHorarioCreateDTO, AlumnoHorarioDetalleDTO, AsignacionAlumnoHorarioResponseDTO,
@@ -116,6 +116,20 @@ async def actualizar_categoria(
 )
 async def eliminar_categoria(codigo: str, db: Session = Depends(obtener_sesion)):
     AsistenciaServicio(db).eliminar_categoria(codigo)
+
+
+# Publicación en la landing (`categoria_horario.visible_en_landing`):
+# endpoint propio de un solo campo para que ocultar/mostrar no tenga que
+# pasar por la edición atómica de nombre/franja/días. ADMIN-only, como todo
+# el resto de la escritura sobre el catálogo.
+@router.patch(
+    "/categorias/{codigo}/publicacion", response_model=CategoriaResponseDTO,
+    dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],
+)
+async def cambiar_publicacion_categoria(
+    codigo: str, datos: CategoriaPublicacionDTO, db: Session = Depends(obtener_sesion),
+):
+    return AsistenciaServicio(db).cambiar_publicacion(codigo, datos.visible)
 
 
 @router.post("/horarios", response_model=HorarioResponseDTO, status_code=status.HTTP_201_CREATED,

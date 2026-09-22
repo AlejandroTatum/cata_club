@@ -31,6 +31,10 @@ interface BackendCategoria {
   dias: BackendDiaSemana[];
   /** Optional ages label (#789), `null` when the categoría publishes none. */
   edades?: string | null;
+  /** Landing-publication flag (`CategoriaHorario.visible_en_landing`).
+   *  Absent means a backend predating the flag — every categoría was
+   *  published then, so `?? true` preserves exactly that reading. */
+  visible?: boolean;
 }
 
 /** The frontend-shaped categoria catalog entry this route returns. */
@@ -47,6 +51,9 @@ export interface CategoriaCatalogEntry {
    * carries the same shape and consumers never have to tell the two apart.
    */
   edades: string | null;
+  /** Whether the admin publishes this categoría on the public landing.
+   *  Defaults to `true` — the historical state of every entry. */
+  visible: boolean;
 }
 
 function buildCategoriaEntry(categoria: BackendCategoria): CategoriaCatalogEntry {
@@ -57,6 +64,7 @@ function buildCategoriaEntry(categoria: BackendCategoria): CategoriaCatalogEntry
     horaFin: trimSeconds(categoria.horaFin),
     dias: categoria.dias.map((dia) => DIA_SEMANA_BACKEND_TO_FRONTEND[dia]),
     edades: categoria.edades ?? null,
+    visible: categoria.visible ?? true,
   };
 }
 

@@ -1,0 +1,61 @@
+name: Feature request
+description: Propose a new capability or an improvement that creates user value.
+title: "feat: "
+labels:
+  - type:feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Cata Club. Please describe one proposal per report.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: Describe the current situation and why it needs attention.
+      placeholder: Explain who is affected and what currently falls short.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the user-visible result you are proposing.
+      placeholder: Explain what should exist after this change is delivered.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: user-value
+    attributes:
+      label: User value
+      description: Select the strongest value that applies.
+      options:
+        - Unlocks a new core workflow
+        - Improves an existing workflow
+        - Improves usability or accessibility
+        - Improves communication or presentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List the observable outcomes that prove the feature is complete.
+      placeholder: |
+        - [ ] The proposed outcome is available to the affected users.
+        - [ ] The change is verified with a focused test or check.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Supporting context
+      description: Add screenshots, prior discussion, related issues, or reference examples when available.
+      placeholder: Include only privacy-safe context.
+    validations:
+      required: false

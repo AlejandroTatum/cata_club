@@ -1,0 +1,74 @@
+name: Bug report
+description: Report reproducible behavior that differs from the intended product behavior.
+title: "fix: "
+labels:
+  - type:bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Cata Club. Please describe one reproducible problem per report.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and where it occurred.
+      placeholder: Explain what the user did and what the system showed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen?
+      description: Describe the intended behavior.
+      placeholder: Explain the expected user-visible result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: Provide the smallest reliable sequence that demonstrates the problem.
+      placeholder: |
+        1. Go to ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: User impact
+      description: Select the strongest impact that applies.
+      options:
+        - Blocks a critical task
+        - Causes data loss or incorrect data
+        - Breaks a task but has a workaround
+        - Causes a visual or accessibility defect
+        - Minor inconvenience
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Supporting evidence
+      description: Add screenshots, logs without secrets, affected routes, or relevant code locations when available.
+      placeholder: Include only privacy-safe evidence.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List the observable outcomes that prove the defect is fixed.
+      placeholder: |
+        - [ ] The affected flow completes successfully.
+        - [ ] A regression test covers the failure.
+    validations:
+      required: true

@@ -38,6 +38,7 @@ const categoriaFormativo = {
   horaFin: "16:00:00",
   dias: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"],
   edades: "5 a 10 años",
+  visible: true,
 };
 
 const categoriaCompetitivo = {
@@ -47,6 +48,7 @@ const categoriaCompetitivo = {
   horaFin: "20:00:00",
   dias: ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"],
   edades: null,
+  visible: true,
 };
 
 beforeEach(() => {
@@ -96,6 +98,7 @@ describe("GET /api/attendance/categories", () => {
         horaFin: "16:00",
         dias: ["lun", "mar", "mie", "jue", "vie"],
         edades: "5 a 10 años",
+        visible: true,
       },
       {
         codigo: "COMPETITIVO",
@@ -104,8 +107,38 @@ describe("GET /api/attendance/categories", () => {
         horaFin: "20:00",
         dias: ["lun", "mar", "mie", "jue", "vie", "sab"],
         edades: null,
+        visible: true,
       },
     ]);
+  });
+
+  // A hidden categoría keeps its flag end to end: the admin toggle reads this
+  // value, so a flipped `visible` must survive the translation untouched.
+  it("carries a false visible through as false", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse([{ ...categoriaFormativo, visible: false }]),
+    );
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body[0]).toHaveProperty("visible", false);
+  });
+
+  // A backend predating the flag omits it entirely; every categoría was
+  // published then, so absent normalises to `true` — the historical reading.
+  it("normalises a missing visible to true (backward compatibility)", async () => {
+    const { visible: _omitted, ...sinVisible } = categoriaFormativo;
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse([sinVisible]));
+
+    const access = makeJwt(3600);
+    const response = await GET(getRequest(`${ACCESS_TOKEN_COOKIE}=${access}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body[0]).toHaveProperty("visible", true);
   });
 
   // `edades` is optional end to end (#789): a categoría without an ages label

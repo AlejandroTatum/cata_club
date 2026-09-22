@@ -1814,33 +1814,39 @@ function PagoCard({
   const hasDetail = pagoHasDetail(pago);
   const panelId = `pago-detail-mobile-${pago.id}`;
 
+  // Stacked, not side-by-side: the card only renders below `md`
+  // (`ResponsiveList`), where a metadata-plus-actions flex row repeats the
+  // exact failure `DataRow`'s basis-0 comment documents (issue #660) — with
+  // `flex-1` the info block's hypothetical size is 0, so the wide
+  // "Registrar un pago nuevo" link plus "Detalle" claimed the row and the
+  // rejection metadata squeezed into a ~50px column (issue #666's report).
+  // One column: facts, then actions, then (open) detail. The desktop table
+  // row keeps the side-by-side action cell — it has the width for it.
   return (
     <li className="flex flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-field">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="text-base font-bold tabular-nums text-ink">{fields.amount}</span>
-            <Badge tone={fields.estado.tone}>{fields.estado.label}</Badge>
-            {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
-          </div>
-          <p className="mt-1 text-xs text-ink-3-strong">
-            {fields.method} · Registrado el{" "}
-            <span className="tabular-nums">{fields.registeredOn}</span> · Cubre{" "}
-            <span className="tabular-nums">{fields.period}</span>
-          </p>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-base font-bold tabular-nums text-ink">{fields.amount}</span>
+          <Badge tone={fields.estado.tone}>{fields.estado.label}</Badge>
+          {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <PagoActionSlot
-            pago={pago}
-            fields={fields}
-            onUploadFile={onUploadFile}
-            uploadingId={uploadingId}
-            registerHref={registerHref}
-          />
-          {hasDetail && (
-            <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
-          )}
-        </div>
+        <p className="mt-1 text-xs text-ink-3-strong">
+          {fields.method} · Registrado el{" "}
+          <span className="tabular-nums">{fields.registeredOn}</span> · Cubre{" "}
+          <span className="tabular-nums">{fields.period}</span>
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <PagoActionSlot
+          pago={pago}
+          fields={fields}
+          onUploadFile={onUploadFile}
+          uploadingId={uploadingId}
+          registerHref={registerHref}
+        />
+        {hasDetail && (
+          <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
+        )}
       </div>
       {hasDetail && (
         <div id={panelId} hidden={!isOpen}>
