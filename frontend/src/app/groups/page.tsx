@@ -89,6 +89,8 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle2,
+  Eye,
+  EyeOff,
   Loader2,
   UserPlus,
   UserMinus,
@@ -103,6 +105,7 @@ import {
   crearCategoria,
   actualizarCategoria,
   eliminarCategoria,
+  cambiarPublicacionCategoria,
   fetchMembers,
   fetchAlumnosPorHorario,
   fetchRosterDeTodosLosHorarios,
@@ -759,6 +762,72 @@ export default function GroupsPage(): React.ReactElement {
     setExpandedGroup({ key: card.categoria, tab: "alumnos" });
     roster.setPage(1);
     void roster.load(card.rows);
+  }
+
+  /** The código whose publication toggle is mid-flight, so its button alone
+   *  busies out while the PATCH runs. */
+  const [togglingPublicacion, setTogglingPublicacion] = useState<string | null>(null);
+
+  /**
+   * Publishes or hides a categoría on the public landing — the admin's
+   * publication toggle (`visible_en_landing`). One field on purpose: hiding
+   * is an editorial decision, not a data change, so it PATCHes its own
+   * endpoint instead of the atomic nombre/franja/días edit. The catalog
+   * entry is flipped locally on success (the backend echoes the same
+   * value); a failure leaves the state untouched and says so.
+   */
+  async function togglePublicacion(codigo: string): Promise<void> {
+    const info = categorias[codigo as Categoria];
+    const visibleAhora = info?.visible ?? true;
+    setTogglingPublicacion(codigo);
+    try {
+      await cambiarPublicacionCategoria(codigo, !visibleAhora);
+      if (info) {
+        setCategorias((prev) => ({
+          ...prev,
+          [codigo]: { ...info, visible: !visibleAhora },
+        }));
+      }
+      showNotification(
+        "success",
+        visibleAhora
+          ? "La categoría no se publica en la landing."
+          : "La categoría vuelve a publicarse en la landing.",
+      );
+    } catch (error: unknown) {
+      showNotification("error", toUserMessage(error, "No se pudo cambiar la publicación de la categoría."));
+    } finally {
+      setTogglingPublicacion(null);
+    }
+  }
+
+  /** The landing-publication toggle button shared by scheduled cards and
+   *  catalog-only cards — same control, same accessible name contract. */
+  function renderPublicacionToggle(codigo: string, label: string, disabled: boolean): React.ReactElement {
+    const visible = categorias[codigo as Categoria]?.visible ?? true;
+    const isToggling = togglingPublicacion === codigo;
+    return (
+      <Button
+        size="sm"
+        className="flex-1 md:flex-none"
+        onClick={() => void togglePublicacion(codigo)}
+        disabled={disabled || isToggling}
+        aria-label={
+          visible
+            ? `Ocultar ${label} de la landing pública`
+            : `Mostrar ${label} en la landing pública`
+        }
+      >
+        {isToggling ? (
+          <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+        ) : visible ? (
+          <Eye size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        ) : (
+          <EyeOff size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+        )}
+        {visible ? "Ocultar" : "Mostrar"}
+      </Button>
+    );
   }
 
   /** Collapses whichever accordion panel (editar or alumnos) is open. */
@@ -1526,6 +1595,13 @@ export default function GroupsPage(): React.ReactElement {
                           <b className="text-base text-ink">
                             {categoriaLabel(card.categoria)}
                           </b>
+                          {/* The publication fact, readable at a glance — the
+                              toggle button names the ACTION, this names the
+                              STATE, so the card never makes the admin infer
+                              one from the other. */}
+                          {!(categorias[card.categoria as Categoria]?.visible ?? true) && (
+                            <Badge tone="neutral">Oculta en la landing</Badge>
+                          )}
                         </div>
                       </div>
 
@@ -1561,6 +1637,7 @@ export default function GroupsPage(): React.ReactElement {
 
                       <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
                         <span className="sr-only">{COLUMNS[3]}</span>
+                        {renderPublicacionToggle(card.categoria, categoriaLabel(card.categoria), isDeleting)}
                         <Button
                           size="sm"
                           className="flex-1 md:flex-none"
@@ -1615,6 +1692,9 @@ export default function GroupsPage(): React.ReactElement {
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <b className="text-base text-ink">{entry.label}</b>
                         <Badge tone="warn">Sin horarios de entrenamiento todavía</Badge>
+                        {!(categorias[entry.categoria as Categoria]?.visible ?? true) && (
+                          <Badge tone="neutral">Oculta en la landing</Badge>
+                        )}
                       </div>
                     </div>
 
@@ -1638,6 +1718,7 @@ export default function GroupsPage(): React.ReactElement {
 
                     <div className="flex gap-2 md:col-span-2 md:justify-end xl:col-span-1 xl:justify-end">
                       <span className="sr-only">{COLUMNS[3]}</span>
+                      {renderPublicacionToggle(entry.categoria, entry.label, false)}
                       <Button
                         size="sm"
                         className="flex-1 md:flex-none"
