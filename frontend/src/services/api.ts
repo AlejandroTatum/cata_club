@@ -237,8 +237,8 @@ export class ApiClientError extends Error {
   public readonly code: string | undefined;
   /**
    * Seconds to wait before retrying, when the responder sent `Retry-After`
-   * (issue #708 — the chatbot's burst limit is the one caller that sends it
-   * today; see `_manejador_limite_excedido` in `backend/main.py`, which
+   * (issue #708 — the retired chatbot's burst limit was the one caller that
+   * sent it; see `_manejador_limite_excedido` in `backend/main.py`, which
    * computes it from the limiter's own window rather than a guess). `undefined`
    * whenever the header is absent or not a plain non-negative number, so a
    * caller falls back deliberately instead of showing a wait that was never
@@ -2860,50 +2860,4 @@ export async function fetchHorariosPorAlumno(personaId: number): Promise<AlumnoH
   return request<AlumnoHorario[]>(apiEndpoint(`/asistencias/alumnos/${personaId}/horarios`), {
     headers: mockHeaders,
   });
-}
-
-// ---------------------------------------------------------------------------
-// Chatbot (FAQ helper widget)
-// ---------------------------------------------------------------------------
-
-/** One prior turn of the chatbot conversation, kept client-side (no server-side persistence). */
-export interface ChatbotTurno {
-  rol: "usuario" | "asistente";
-  texto: string;
-}
-
-export interface ChatbotRespuesta {
-  reply: string;
-}
-
-/**
- * Longer than DEFAULT_TIMEOUT_MS (10s) and deliberately just past the BFF's own
- * CHATBOT_TIMEOUT_MS (30s, see src/app/api/chatbot/route.ts). An LLM completion
- * routinely takes 3-6s and can take longer, so the shared 10s default aborted
- * live requests: the caller got a bare AbortError with no status, which the
- * widget could only render as the same generic "no se pudo contactar" as a dead
- * backend. Letting the BFF's own abort win means a slow answer comes back as a
- * real 504 the widget can name.
- */
-const CHATBOT_TIMEOUT_MS = 33_000;
-
-/**
- * Ask the FAQ chatbot a question. `historial` is the last few turns of the
- * conversation (the caller is responsible for capping it — see
- * ChatWidget.tsx) so the backend can keep the multi-turn context without
- * this client needing to know its cap.
- *
- * Failures surface as `ApiClientError` carrying the BFF's status: 429 (asking
- * too fast), 504 (took too long), 503 (assistant unreachable), 502 (anything
- * else). ChatWidget renders one message per class.
- */
-export async function consultarChatbot(mensaje: string, historial?: ChatbotTurno[]): Promise<ChatbotRespuesta> {
-  return request<ChatbotRespuesta>(
-    apiEndpoint("/chatbot"),
-    {
-      method: "POST",
-      body: JSON.stringify({ mensaje, historial }),
-    },
-    CHATBOT_TIMEOUT_MS,
-  );
 }
