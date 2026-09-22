@@ -179,6 +179,13 @@ class AsistenciaServicio:
         etiquetas: dict[str, CategoriaHorario] = {}
 
         for horario, categoria in self.repo_horario.listar_con_categoria():
+            # Decisión editorial del club (`visible_en_landing`): ocultar es
+            # un filtro de publicación, no de datos -- la categoría sigue
+            # viva en el ABM con sus horarios e inscriptos, solo no sale
+            # acá. Si TODAS están ocultas el catálogo público es una lista
+            # vacía y la landing muestra su estado vacío de siempre.
+            if not categoria.visible_en_landing:
+                continue
             etiquetas[categoria.codigo] = categoria
             bloques = bloques_por_categoria.setdefault(categoria.codigo, {})
             clave = (horario.hora_inicio, horario.hora_fin)
@@ -206,6 +213,7 @@ class AsistenciaServicio:
     def _a_categoria_dto(c: CategoriaHorario) -> CategoriaResponseDTO:
         return CategoriaResponseDTO(
             codigo=c.codigo, label=c.label, edades=c.edades,
+            visible=c.visible_en_landing,
             hora_inicio=c.hora_inicio, hora_fin=c.hora_fin,
             dias=[d.dia_semana for d in c.dias_permitidos],
         )
@@ -294,6 +302,7 @@ class AsistenciaServicio:
         categoria = CategoriaHorario(
             codigo=codigo, label=nombre,
             edades=self._normalizar_edades(datos.edades),
+            visible_en_landing=datos.visible,
             hora_inicio=datos.hora_inicio, hora_fin=datos.hora_fin,
         )
         categoria.dias_permitidos = [CategoriaHorarioDia(dia_semana=d) for d in dias]
@@ -440,6 +449,10 @@ class AsistenciaServicio:
         # no `datos.edades is not None`).
         if "edades" in update_data:
             categoria.edades = self._normalizar_edades(datos.edades)
+        # `visible` comparte la semántica `exclude_unset`: solo se toca si
+        # vino. Un PUT que solo renombra no publica ni oculta de paso.
+        if "visible" in update_data:
+            categoria.visible_en_landing = datos.visible
         categoria.hora_inicio = nueva_hora_inicio
         categoria.hora_fin = nueva_hora_fin
         categoria.dias_permitidos = [
@@ -485,6 +498,19 @@ class AsistenciaServicio:
         ]
         self.repo_categoria.eliminar_con_horarios(categoria, horarios, alumno_horario_a_borrar)
         self.db.commit()
+
+    def cambiar_publicacion(self, codigo: str, visible: bool) -> CategoriaResponseDTO:
+        """La decisión editorial de publicar u ocultar la categoría en la
+        landing (`CategoriaHorario.visible_en_landing`), sin pasar por la
+        edición atómica de nombre/franja/días -- ocultar es un filtro de
+        publicación, no de datos: no toca horarios, inscriptos ni
+        asistencias, y el toggle del admin es exactamente este flip."""
+        categoria = self.repo_categoria.obtener_por_codigo(codigo)
+        if categoria is None:
+            raise EntidadNoEncontrada(f"Categoría {codigo} no encontrada")
+        categoria.visible_en_landing = visible
+        self.db.commit()
+        return self._a_categoria_dto(categoria)
 
     def actualizar_horario(self, horario_id: int, datos: HorarioUpdateDTO) -> HorarioResponseDTO:
         horario = self.repo_horario.obtener_por_id(horario_id)

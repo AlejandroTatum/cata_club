@@ -754,11 +754,31 @@ export interface CategoriaCatalogEntry {
    *  board, never a rule. `null` when the categoría publishes none, which the
    *  route normalises so absent and cleared look the same here. */
   edades: string | null;
+  /** Whether the admin publishes this categoría on the public landing
+   *  (`categoria_horario.visible_en_landing`). `true` is the historical
+   *  default — a backend predating the flag reads as all-published. */
+  visible: boolean;
 }
 
 /** Fetch the live categoria catalog (hours/label/allowed días per categoria). */
 export async function fetchCategoriasCatalogo(): Promise<CategoriaCatalogEntry[]> {
   return request<CategoriaCatalogEntry[]>(apiEndpoint("/attendance/categories"));
+}
+
+/** Publish or hide a categoría on the public landing — the admin toggle's
+ *  one-field contract (`PATCH .../publicacion` → backend's
+ *  `visible_en_landing`). Resolves void on success; the caller owns the
+ *  optimistic state flip it asked for. */
+export async function cambiarPublicacionCategoria(codigo: string, visible: boolean): Promise<void> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  await request<unknown>(
+    apiEndpoint(`/attendance/categories/${encodeURIComponent(codigo)}/publication`),
+    {
+      method: "PATCH",
+      body: JSON.stringify({ visible }),
+      headers: mockHeaders,
+    },
+  );
 }
 
 /** Fetch attendance records (Asistencia), optionally filtered by date range/horario/persona. */

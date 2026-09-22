@@ -115,3 +115,51 @@ def test_arnes_no_toca_la_base_de_la_suite(arnes_migracion, motor_test):
     arnes_migracion.preparar(REVISION_ANTERIOR)
 
     assert arnes_migracion.motor.url.database != motor_test.url.database
+
+
+# --- La migración `qcatvis` (categoria_horario.visible_en_landing) -------
+
+REVISION_PREVIA_VISIBLE = "5b09fde49560"
+REVISION_VISIBLE = "qcatvis"
+
+
+def _sembrar_categoria(arnes: ArnesMigracion) -> None:
+    """Inserta una categoría con SQL crudo del esquema PREVIO (sin la
+    columna nueva): el caso real que la migración encuentra en producción
+    -- filas que ya existían antes del ADD COLUMN."""
+    arnes.ejecutar(
+        """
+        INSERT INTO categoria_horario (codigo, label, edades, hora_inicio, hora_fin)
+        VALUES ('PREINFANTIL', 'Preinfantil', NULL, TIME '15:00', TIME '16:00')
+        """
+    )
+
+
+def test_visible_en_landing_backfillean_true_y_deja_el_default_en_el_orm(arnes_migracion):
+    """La migración es hacia atrás compatible por construcción: toda fila
+    preexistente sale publicada (TRUE) -- ningún despliegue deja la landing
+    con menos categorías de las que tenía. Y el patrón `f2a8c31d9b64` se
+    respeta: el `server_default` solo existe para el backfill; después se
+    retira para que el único default vivo sea el del ORM."""
+    arnes_migracion.preparar(REVISION_PREVIA_VISIBLE)
+    assert arnes_migracion.tipo_de_columna("categoria_horario", "visible_en_landing") is None
+
+    _sembrar_categoria(arnes_migracion)
+    arnes_migracion.migrar(REVISION_VISIBLE)
+
+    assert arnes_migracion.tipo_de_columna("categoria_horario", "visible_en_landing") == "boolean"
+    assert arnes_migracion.consultar(
+        "SELECT codigo, visible_en_landing FROM categoria_horario ORDER BY codigo"
+    ) == [("PREINFANTIL", True)]
+    assert arnes_migracion.consultar(
+        "SELECT column_default FROM information_schema.columns "
+        "WHERE table_name = 'categoria_horario' AND column_name = 'visible_en_landing'"
+    ) == [(None,)]
+    assert arnes_migracion.revision_actual() == REVISION_VISIBLE
+
+    arnes_migracion.revertir(REVISION_PREVIA_VISIBLE)
+    assert arnes_migracion.tipo_de_columna("categoria_horario", "visible_en_landing") is None
+    # La fila sobrevive al rollback: la columna era publicación, no datos.
+    assert arnes_migracion.consultar("SELECT codigo FROM categoria_horario") == [
+        ("PREINFANTIL",)
+    ]
