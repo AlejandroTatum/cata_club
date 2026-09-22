@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { LegalBlock } from "./legal-content";
+import { LegalDocumentProse } from "@/components/legal/LegalReviewDialog";
 
 interface LegalDocumentPageProps {
   title: string;
@@ -120,21 +121,20 @@ export default function LegalDocumentPage({ title, blocks }: LegalDocumentPagePr
           </div>
         </dl>
       </div>
-      {/*
+      {/**
+       * The blocks render through the SHARED `LegalDocumentProse` — the one
+       * renderer a legal document's blocks have. The wizard's in-flow review
+       * (`LegalReviewDialog`, #1368) passes `headingLevel={3}` because its
+       * document title owns the h2; this page sits under the document h1 and
+       * keeps h2. Every other class is the renderer's, so a heading stays a
+       * heading and the prose reads identically in both places.
+       *
        * `leading-prose` (1.55) is the step the config names for exactly this —
        * "long-form paragraph: help text, legal copy, empty-state prose". The
-       * `leading-8` it replaces was a raw 32px, i.e. 2.13 at the body size, and
+       * `leading-8` it replaced was a raw 32px, i.e. 2.13 at the body size, and
        * that much air between lines pulls a paragraph apart into stripes.
-       *
-       * The dead `legal-document` class went with it: it had no rule anywhere
-       * in the repository, in any sheet, and had not had one for as long as the
-       * page has existed.
        */}
-      <article className="mt-10 space-y-6 leading-prose text-cata-text">
-        {blocks.map((block, index) => block.kind === "heading"
-          ? <h2 key={`${index}-${block.text.slice(0, 24)}`} className="pt-8 font-display text-lg uppercase leading-tight tracking-flat text-cata-text first:pt-0">{block.text}</h2>
-          : <p key={`${index}-${block.text.slice(0, 24)}`}>{block.text}</p>)}
-      </article>
+      <LegalDocumentProse blocks={blocks} className="mt-10 space-y-6 leading-prose text-cata-text" />
       <nav aria-label="Otros documentos públicos" className="mt-16 border-t border-cata-border pt-8">
         {/* A label for the link group, and no red rule: the rule is the
             document's kicker and it stays singular to keep meaning anything. */}
