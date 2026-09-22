@@ -70,6 +70,7 @@ const mockFetchHorarios = vi.fn().mockResolvedValue([]);
 const mockCrearCategoria = vi.fn();
 const mockActualizarCategoria = vi.fn();
 const mockEliminarCategoria = vi.fn();
+const mockCambiarPublicacion = vi.fn().mockResolvedValue(undefined);
 const mockFetchAlumnosPorHorario = vi.fn().mockResolvedValue([]);
 const mockFetchRosterDeTodosLosHorarios = vi.fn().mockResolvedValue([]);
 const mockAsignarAlumnoAHorario = vi.fn();
@@ -112,6 +113,7 @@ vi.mock("@/services/api", () => {
     crearCategoria: (dto: unknown) => mockCrearCategoria(dto),
     actualizarCategoria: (codigo: string, dto: unknown) => mockActualizarCategoria(codigo, dto),
     eliminarCategoria: (codigo: string) => mockEliminarCategoria(codigo),
+    cambiarPublicacionCategoria: (codigo: string, visible: boolean) => mockCambiarPublicacion(codigo, visible),
     fetchAlumnosPorHorario: (horarioId: number) => mockFetchAlumnosPorHorario(horarioId),
     fetchRosterDeTodosLosHorarios: () => mockFetchRosterDeTodosLosHorarios(),
     asignarAlumnoAHorario: (dto: unknown) => mockAsignarAlumnoAHorario(dto),
@@ -155,6 +157,115 @@ async function waitForHorarios(): Promise<void> {
     expect(screen.queryByText("Cargando horarios…")).not.toBeInTheDocument();
   });
 }
+
+/**
+ * The landing-publication toggle (`categoria_horario.visible_en_landing`):
+ * the admin hides/shows a categoría on the public landing with one PATCH —
+ * a publication decision, never a data change. The button names the ACTION
+ * ("Ocultar"/"Mostrar" with the categoría in its accessible name), the
+ * hidden STATE reads as its own badge on the card, and a failed PATCH
+ * leaves the state untouched.
+ */
+describe("GroupsPage — the landing-publication toggle", () => {
+  const RECURRING_ROWS = [
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+  ];
+
+  beforeEach(() => {
+    mockFetchMembers.mockReset();
+    mockFetchHorarios.mockReset();
+    mockFetchAlumnosPorHorario.mockReset();
+    mockFetchRosterDeTodosLosHorarios.mockReset();
+    mockFetchMembers.mockResolvedValue({ accounts: [] });
+    mockFetchAlumnosPorHorario.mockResolvedValue([]);
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue([]);
+    mockCambiarPublicacion.mockReset();
+    mockCambiarPublicacion.mockResolvedValue(undefined);
+    mockFetchCategoriasCatalogo.mockReset();
+    mockFetchCategoriasCatalogo.mockResolvedValue(
+      DEFAULT_CATEGORIA_CATALOG.map((c) =>
+        c.codigo === "COMPETITIVO" ? { ...c, visible: false } : { ...c, visible: true },
+      ),
+    );
+  });
+
+  it("reads a hidden categoría's state as its own badge and a Mostrar action", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    expect(screen.getByText("Oculta en la landing")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Mostrar Competitivo en la landing pública" }),
+    ).toBeInTheDocument();
+    // And the visible sibling keeps its own action name — the toggle is per
+    // categoría, never one global switch.
+    expect(
+      screen.getByRole("button", { name: "Ocultar Formativo de la landing pública" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a published categoría on click, PATCHes false, and flips the card", async () => {
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar Competitivo en la landing pública" }));
+
+    await waitFor(() => expect(mockCambiarPublicacion).toHaveBeenCalledWith("COMPETITIVO", true));
+    // The state flip is local and immediate: the badge goes away and the
+    // action flips to Ocultar without a refetch.
+    await waitFor(() => {
+      expect(screen.queryByText("Oculta en la landing")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByText("La categoría vuelve a publicarse en la landing.")).toBeInTheDocument();
+  });
+
+  it("hides a published categoría on click, PATCHes false, and marks the card", async () => {
+    // This test's intent is the Ocultar direction, so the fixture seeds
+    // every categoría published (the describe's default hides COMPETITIVO).
+    mockFetchCategoriasCatalogo.mockResolvedValue(
+      DEFAULT_CATEGORIA_CATALOG.map((c) => ({ ...c, visible: true })),
+    );
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }));
+
+    await waitFor(() => expect(mockCambiarPublicacion).toHaveBeenCalledWith("COMPETITIVO", false));
+    expect(await screen.findByText("Oculta en la landing")).toBeInTheDocument();
+    expect(
+      await screen.findByText("La categoría no se publica en la landing."),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the state untouched and says so when the PATCH fails", async () => {
+    mockFetchCategoriasCatalogo.mockResolvedValue(
+      DEFAULT_CATEGORIA_CATALOG.map((c) => ({ ...c, visible: true })),
+    );
+    mockFetchHorarios.mockResolvedValue(RECURRING_ROWS);
+    mockCambiarPublicacion.mockRejectedValueOnce(new Error("network outage"));
+
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }));
+
+    expect(await screen.findByText("No se pudo cambiar la publicación de la categoría.")).toBeInTheDocument();
+    // The card stays published: no badge appeared, the action is still Ocultar.
+    expect(
+      screen.getByRole("button", { name: "Ocultar Competitivo de la landing pública" }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("GroupsPage — categoría form is typed input, not a locked catalog select (v6, docs/archive/fixes/24-abm-categorias.md)", () => {
   beforeEach(() => {

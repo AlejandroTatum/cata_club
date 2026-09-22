@@ -768,3 +768,124 @@ def test_delete_categorias_borra(client):
     assert client.get("/api/v1/asistencias/categorias").json()
     codigos = {c["codigo"] for c in client.get("/api/v1/asistencias/categorias").json()}
     assert creada["codigo"] not in codigos
+
+
+# --- Publicación en la landing (visible_en_landing) ----------------------
+
+def test_crear_categoria_se_publica_por_defecto(db_session):
+    """Lo de siempre no cambia: una categoría nueva se publica en la landing
+    salvo que alguien pida lo contrario."""
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    assert categoria.visible is True
+    assert db_session.get(CategoriaHorario, categoria.codigo).visible_en_landing is True
+
+
+def test_crear_categoria_puede_nacer_oculta(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], visible=False,
+    ))
+
+    assert categoria.visible is False
+    assert db_session.get(CategoriaHorario, categoria.codigo).visible_en_landing is False
+
+
+def test_actualizar_categoria_cambia_visible(db_session):
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], visible=False,
+    ))
+
+    actualizada = servicio.actualizar_categoria(categoria.codigo, CategoriaUpdateDTO(visible=True))
+
+    assert actualizada.visible is True
+    assert db_session.get(CategoriaHorario, categoria.codigo).visible_en_landing is True
+
+
+def test_actualizar_categoria_sin_mandar_visible_no_la_toca(db_session):
+    """`exclude_unset` igual que `edades`: un PUT que solo renombra no
+    publica ni oculta de paso."""
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES], visible=False,
+    ))
+
+    actualizada = servicio.actualizar_categoria(
+        categoria.codigo, CategoriaUpdateDTO(nombre="Preinfantil B"),
+    )
+
+    assert actualizada.label == "Preinfantil B"
+    assert actualizada.visible is False
+
+
+def test_cambiar_publicacion_invierte_el_flag_sin_tocar_nada_mas(db_session):
+    """El flip del toggle del admin: ocultar es un filtro de publicación,
+    no de datos -- los días permitidos y la franja quedan intactos."""
+    servicio = AsistenciaServicio(db_session)
+    categoria = servicio.crear_categoria(CategoriaCreateDTO(
+        nombre="Preinfantil", hora_inicio=time(15, 0), hora_fin=time(16, 0),
+        dias=[DiaSemana.LUNES],
+    ))
+
+    ocultada = servicio.cambiar_publicacion(categoria.codigo, False)
+    assert ocultada.visible is False
+    assert db_session.get(CategoriaHorario, categoria.codigo).visible_en_landing is False
+
+    publicada = servicio.cambiar_publicacion(categoria.codigo, True)
+    assert publicada.visible is True
+    assert publicada.dias == [DiaSemana.LUNES]
+    assert publicada.hora_inicio == time(15, 0)
+    assert publicada.hora_fin == time(16, 0)
+
+
+def test_cambiar_publicacion_codigo_inexistente(db_session):
+    servicio = AsistenciaServicio(db_session)
+
+    with pytest.raises(EntidadNoEncontrada):
+        servicio.cambiar_publicacion("NOEXISTE", False)
+
+
+def test_patch_publicacion_oculta_muestra_y_sigue_listando(client):
+    """API: ocultar no es borrar -- el ABM sigue viendo la fila completa,
+    solo con `visible` en FALSE."""
+    creada = client.post("/api/v1/asistencias/categorias", json={
+        "nombre": "Preinfantil", "hora_inicio": "15:00:00", "hora_fin": "16:00:00",
+        "dias": ["LUNES"],
+    }).json()
+
+    oculta = client.patch(
+        f"/api/v1/asistencias/categorias/{creada['codigo']}/publicacion",
+        json={"visible": False},
+    )
+
+    assert oculta.status_code == 200
+    assert oculta.json()["visible"] is False
+    por_codigo = {c["codigo"]: c for c in client.get("/api/v1/asistencias/categorias").json()}
+    assert por_codigo[creada["codigo"]]["visible"] is False
+
+    mostrada = client.patch(
+        f"/api/v1/asistencias/categorias/{creada['codigo']}/publicacion",
+        json={"visible": True},
+    )
+
+    assert mostrada.status_code == 200
+    assert mostrada.json()["visible"] is True
+
+
+def test_patch_publicacion_inexistente_da_404(client):
+    resp = client.patch(
+        "/api/v1/asistencias/categorias/NOEXISTE/publicacion",
+        json={"visible": False},
+    )
+
+    assert resp.status_code == 404

@@ -1530,6 +1530,17 @@ class CategoriaHorario(Base):
     estado ambiguo. El servicio normaliza el texto en blanco a NULL para que
     "sin etiqueta" tenga UNA sola representación (ver
     `AsistenciaServicio._normalizar_edades`).
+
+    `visible_en_landing` es la decisión editorial del club sobre si la
+    categoría aparece en el catálogo público de la landing
+    (`GET /asistencias/horarios-publicos`). Default TRUE: lo de siempre no
+    cambia -- toda categoría existente (y toda categoría nueva) se publica
+    salvo que un admin la oculte. Es un filtro de PUBLICACIÓN, no de datos:
+    ocultar no toca horarios, inscriptos ni asistencias, y el ABM sigue
+    viendo la fila completa (`listar_categorias` no filtra). El toggle del
+    admin vive en `PATCH /categorias/{codigo}/publicacion` para que
+    ocultar/mostrar no tenga que pasar por la edición atómica de
+    nombre/franja/días.
     """
     __tablename__ = "categoria_horario"
     __table_args__ = (
@@ -1538,6 +1549,7 @@ class CategoriaHorario(Base):
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     label: Mapped[str] = mapped_column(String(50))
     edades: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    visible_en_landing: Mapped[bool] = mapped_column(Boolean, default=True)
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
 
