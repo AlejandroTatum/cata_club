@@ -53,6 +53,12 @@ export interface CategoriaInfo {
    * with `null` here is a perfectly normal categoría, not an incomplete one.
    */
   edades: string | null;
+  /**
+   * Whether the admin publishes this categoría on the public landing
+   * (`categoria_horario.visible_en_landing`). `true` is the historical
+   * default — the route normalises an absent flag to exactly that.
+   */
+  visible: boolean;
 }
 
 /**
@@ -92,6 +98,7 @@ export async function cargarCategorias(): Promise<Partial<Record<Categoria, Cate
       horaFin: entrada.horaFin,
       dias: entrada.dias.map((dia) => DIA_FRONTEND_TO_BACKEND[dia]),
       edades: entrada.edades ?? null,
+      visible: entrada.visible,
     };
   }
   return categorias;

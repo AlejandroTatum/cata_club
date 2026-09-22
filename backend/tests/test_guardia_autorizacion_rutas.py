@@ -227,6 +227,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/asistencias/categorias"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
+    # Publicación en la landing (`visible_en_landing`): mismo tier que el
+    # resto de la escritura sobre el catálogo -- es una decisión editorial
+    # del club, no operar la clase del día.
+    ("PATCH", "/asistencias/categorias/{codigo}/publicacion"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
     # `DELETE /personas/{persona_id}` ya no existe: la baja de una persona es
     # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el
