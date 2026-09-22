@@ -41,7 +41,7 @@ Estimated authored diff: 1,200–2,000 lines across six vertical slices. This ex
 
 ## Tasks
 
-- [ ] **CCI-00 — Establish the repository bug Issue Form**
+- [ ] **CCI-00 — Establish the repository bug Issue Form** *(implemented and verified; delivery blocked)*
   - Route: inline direct; one-file repository policy prerequisite explicitly authorized by the user.
   - Add a YAML bug-report form with required reproduction, expected behavior, impact, and validation controls.
   - Deliver and merge this prerequisite before creating the required CCI-01 bug issue.
@@ -98,8 +98,11 @@ Estimated authored diff: 1,200–2,000 lines across six vertical slices. This ex
 - 2026-09-11: User chose to exclude the two areas already owned by sibling worktrees.
 - 2026-09-22: GitHub discovery confirmed no duplicate CCI-01 issue and no YAML Issue Form on `main`; repository policy therefore blocks bug-issue publication.
 - 2026-09-22: User explicitly authorized adding the missing YAML bug Issue Form.
-- No source changes or commits yet.
+- 2026-09-22: Added `.github/ISSUE_TEMPLATE/bug.yml` and committed it with this feature document as `d8bcdfff58f4cf31235f05d33d284e432077aea0` (`chore(repo): add bug issue form`).
+- 2026-09-22: YAML/form validation passed; independent verification passed; native review approved and acknowledgement burned authority for the commit.
+- 2026-09-22: `make pre-pr LANE=integration` passed (`638 passed, 1 skipped`); CI image build/publication was not reproduced locally by that lane.
+- 2026-09-22: Delivery is blocked by a bootstrap cycle: every PR requires an open `status:approved` issue, but issue publication requires a YAML Issue Form already present on `main`. No existing issue semantically authorizes this form.
 
 ## Next step
 
-Implement and deliver CCI-00, then create the conforming CCI-01 bug issue and continue with the frontend slice.
+Obtain a manually created and approved bootstrap issue for the Issue Form, then push/open the CCI-00 PR, enable squash auto-merge, monitor CI, and continue with CCI-01 after the form reaches `main`.
