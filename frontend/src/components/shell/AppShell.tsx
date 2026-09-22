@@ -59,22 +59,7 @@ import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
-import { openHelpChat, useHelpChatOpen } from "@/components/chatbot/help-chat-store";
-import { LAUNCHER_CONTENT_CLEARANCE_PX } from "@/components/chatbot/HelpChatDock";
 import { PageHeader } from "@/components/ui";
-
-/**
- * The assistant's open-state contract moved to `components/chatbot`, where the
- * single panel now lives (`HelpChatDock`, mounted once in the root layout).
- * Re-exported here because screens inside the shell — the trainer's "Avisar al
- * club" — have always imported it from the shell, and that is still the right
- * place for a screen to reach for it.
- */
-export {
-  OPEN_HELP_CHAT_EVENT,
-  openHelpChat,
-  type OpenHelpChatDetail,
-} from "@/components/chatbot/help-chat-store";
 
 export interface AppShellProps {
   /** Main page heading — rendered as the visible `<h1>` of the screen. */
@@ -391,9 +376,6 @@ export default function AppShell({
   // `MOBILE_TABS`) — so Escape can hand focus back to it, the same way
   // closing any other overlay in this shell returns focus to its opener.
   const drawerTriggerRef = useRef<HTMLElement | null>(null);
-  // The panel itself is `HelpChatDock`'s, mounted once in the root layout —
-  // the shell only triggers it and reports its state.
-  const chatOpen = useHelpChatOpen();
 
   // The account's role — what the tab bar, the badge poll, the area label and
   // the user card gate on, and the same value every route guard reads. It used
@@ -788,56 +770,8 @@ export default function AppShell({
           })}
         </nav>
 
-        {/* `.side .foot-nav` — support entry point, then account rows, then the user card. */}
+        {/* `.side .foot-nav` — help, then account rows, then the user card. */}
         <div className="flex flex-col gap-2 border-t border-white/[0.08] p-2.5">
-          <button
-            type="button"
-            onClick={(): void => {
-              openHelpChat();
-              setSidebarOpen(false);
-            }}
-            title="Ayuda y soporte"
-            aria-label="Ayuda y soporte"
-            aria-expanded={chatOpen}
-            className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES} w-full text-left`}
-          >
-            {/*
-              * `CircleHelp`, not a speech bubble: the row asks a question,
-              * and a chat glyph named the mechanism rather than the errand.
-              * `LifeBuoy` is the other conventional support mark and it was
-              * tried first — at this size its six inner strokes collapse into
-              * a smudge on the dark rail, while a question mark stays a
-              * question mark. Legibility at 17-20px wins.
-              *
-              * No sizing box. There used to be one — `h-[17px] w-[17px]` —
-              * back when every nav icon above was a 17px outline and this ring
-              * was drawn at 18 to win back the point a circle loses by only
-              * filling ~79% of its box; the box held the label column on the
-              * nav grid at x=49 while the glyph overflowed it.
-              *
-              * The scale of #30 moved the nav icons to `ICON.base` (18px) and
-              * dropped their boxes, which retired both halves of that reasoning
-              * at once. What was left was a 17px box with `shrink-0` clipping an
-              * 18px glyph to 17 — measured in the browser — and a label column
-              * one pixel off the nav's, which is the opposite of what the box
-              * was for. The row now renders exactly like every nav item above.
-              * The lighter stroke stays: it is weight, not size.
-              */}
-            <CircleHelp
-              size={ICON.base}
-              strokeWidth={1.75}
-              className="shrink-0"
-              aria-hidden="true"
-            />
-            <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>Ayuda y soporte</span>
-          </button>
-
-          {/*
-           * The browsable half of help, beside the ask-a-question half. The
-           * assistant can only answer what you thought to ask; someone who
-           * does not yet know what the club calls a thing needs a list they
-           * can read down.
-           */}
           <Link
             href="/ayuda"
             title="Preguntas frecuentes"
@@ -1039,32 +973,10 @@ export default function AppShell({
             `pt-3`, was `pt-6`: with the divider removed the title no longer
             opens a second slab, so it only needs to clear the utility row —
             12px under a control that already carries 8px of its own bottom
-            margin.
-
-            `--dock-clearance` adds a second reservation, stacked on top of
-            the tab-bar one: `HelpChatDock`'s floating launcher only steers
-            clear of FURNITURE (fixed/sticky bars) — see its own header
-            comment — so it never moves for ordinary scrolling content, and a
-            viewport-fixed launcher over a long list means the last rows can
-            never scroll out from under it (A2). This wrapper is the
-            scrolling surface for every route this shell renders, and the
-            launcher mounts once in the root layout for every one of them, so
-            it always carries the reservation. The number itself lives next
-            to the launcher's own size/inset constants in
-            `LAUNCHER_CONTENT_CLEARANCE_PX`, not retyped here, and it is a CSS
-            variable rather than a Tailwind arbitrary class so that number
-            stays the one source of truth instead of a literal string that
-            could drift from it. `lg:pb-8` still wins from `lg` up, where the
-            launcher steps down for this shell's own rail and there is
-            nothing left to clear. */}
+            margin. */}
         <div
-          style={
-            { "--dock-clearance": `${LAUNCHER_CONTENT_CLEARANCE_PX}px` } as React.CSSProperties
-          }
           className={`flex flex-1 flex-col gap-page px-4 pt-3 sm:px-[26px] ${
-            showMobileTabs
-              ? "pb-[calc(78px+var(--dock-clearance))] lg:pb-8"
-              : "pb-[calc(2rem+var(--dock-clearance))] lg:pb-8"
+            showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
           }`}
         >
           <PageHeader title={title} subtitle={subtitle} actions={actions} />
@@ -1246,13 +1158,6 @@ export default function AppShell({
           </div>
         </div>
       )}
-
-      {/*
-       * No ChatWidget here. "Ayuda y soporte" above opens the ONE panel that
-       * `HelpChatDock` mounts in the root layout, which is also what the
-       * floating launcher opens — one assistant, one conversation, one set of
-       * role-scoped quick replies, whichever way the user reached it.
-       */}
     </div>
   );
 }

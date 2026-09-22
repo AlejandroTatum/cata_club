@@ -11,7 +11,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import AppShell, { MAIN_CONTENT_ID, resolveActiveHref } from "@/components/shell/AppShell";
-import { LAUNCHER_CONTENT_CLEARANCE_PX } from "@/components/chatbot/HelpChatDock";
 
 interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: React.ReactNode;
@@ -93,10 +92,6 @@ vi.mock("@/services/api", () => ({
 import { useAuth } from "@/contexts/AuthContext";
 import { getNavGroupsForRoles } from "@/lib/auth-utils";
 import { createAuthenticatedAuth, createMultiRoleAuth } from "@/components/__tests__/test-utils";
-import {
-  OPEN_HELP_CHAT_EVENT,
-  resetHelpChatForTests,
-} from "@/components/chatbot/help-chat-store";
 
 /**
  * The control that opens the mobile drawer for the role these suites render
@@ -895,32 +890,6 @@ describe("AppShell — the page header row", (): void => {
 
     expect(screen.getByRole("button", { name: "Tomar asistencia" })).toBeInTheDocument();
   });
-
-  it("reserves bottom clearance so a scrolling list can clear the chat launcher (A2)", (): void => {
-    // `HelpChatDock` mounts once in the root layout and only steers clear of
-    // FIXED/STICKY furniture — see its own header comment. It never moves for
-    // ordinary scrolling content, so the last rows of a long list can never
-    // scroll out from under it unless the scrolling surface itself reserves
-    // the space. This shell's `<main>` wrapper is that surface for every
-    // route it renders, so it must carry the reservation, sized off the
-    // launcher's own exported constant rather than a number typed twice.
-    const { container } = render(
-      <AppShell title="Miembros">
-        <p>contenido</p>
-      </AppShell>,
-    );
-
-    const main = container.querySelector("main") as HTMLElement;
-    const wrapper = main.parentElement as HTMLElement;
-
-    expect(wrapper.style.getPropertyValue("--dock-clearance")).toBe(
-      `${LAUNCHER_CONTENT_CLEARANCE_PX}px`,
-    );
-    expect(wrapper.className).toMatch(/pb-\[calc\([^)]*var\(--dock-clearance\)\)\]/);
-    // Still resets from `lg` up, where the launcher steps down for this
-    // shell's own rail and there is nothing left to clear.
-    expect(wrapper).toHaveClass("lg:pb-8");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -982,11 +951,11 @@ describe("resolveActiveHref — real trainer navigation", (): void => {
 });
 
 // ---------------------------------------------------------------------------
-// Help chat: the sidebar row is a TRIGGER for the one panel `HelpChatDock`
-// mounts in the root layout — not a second, competing assistant.
+// Help: the sidebar's help row is a plain `/ayuda` navigation. The assistant
+// is gone; the row must not have grown a replacement chat affordance.
 // ---------------------------------------------------------------------------
 
-describe("AppShell — Ayuda y soporte", (): void => {
+describe("AppShell — Preguntas frecuentes", (): void => {
   beforeEach((): void => {
     // The sidebar is `aria-hidden` while the mobile drawer is closed, and an
     // earlier block leaves `matchMedia` reporting mobile.
@@ -994,43 +963,17 @@ describe("AppShell — Ayuda y soporte", (): void => {
     mockUseAuth.mockReset();
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("admin", "Admin Cata Club"));
     vi.stubGlobal("localStorage", createMemoryStorage());
-    resetHelpChatForTests();
   });
 
-  it("keeps the sidebar entry, and mounts no assistant of its own", (): void => {
+  it("navigates to /ayuda, and mounts no assistant of its own", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    expect(screen.getByRole("button", { name: "Ayuda y soporte" })).toBeInTheDocument();
-    // The launcher and the panel both belong to the dock. A shell that also
-    // rendered one would put two panels on the same screen.
+    const help = screen.getByRole("link", { name: "Preguntas frecuentes" });
+    expect(help).toHaveAttribute("href", "/ayuda");
+    // The launcher and the panel are gone for good; nothing may answer in
+    // their place.
     expect(screen.queryByRole("button", { name: /abrir cata-bot/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /cata-bot/i })).not.toBeInTheDocument();
-  });
-
-  it("opens the shared assistant from that entry", (): void => {
-    const listener = vi.fn();
-    window.addEventListener(OPEN_HELP_CHAT_EVENT, listener);
-    render(<AppShell title="Panel de Control">{null}</AppShell>);
-
-    const entry = screen.getByRole("button", { name: "Ayuda y soporte" });
-    expect(entry).toHaveAttribute("aria-expanded", "false");
-
-    fireEvent.click(entry);
-
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(entry).toHaveAttribute("aria-expanded", "true");
-    window.removeEventListener(OPEN_HELP_CHAT_EVENT, listener);
-  });
-
-  it("closes the drawer as it opens the assistant, so the panel is not behind it", (): void => {
-    render(<AppShell title="Panel de Control">{null}</AppShell>);
-
-    // Admin's phone navigation is the tab bar, so "Más" is what opens the drawer.
-    fireEvent.click(screen.getByRole("button", { name: "Más secciones" }));
-    fireEvent.click(screen.getByRole("button", { name: "Ayuda y soporte" }));
-
-    expect(screen.getByRole("navigation", { name: "Navegación principal" }).closest("aside"))
-      .toHaveClass("-translate-x-full");
   });
 });
 
@@ -1058,10 +1001,9 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     vi.stubGlobal("localStorage", createMemoryStorage());
   });
 
-  it("shows Perfil and Cerrar sesión next to Ayuda y soporte and Preguntas frecuentes, on a plain render", (): void => {
+  it("shows Perfil and Cerrar sesión next to Preguntas frecuentes, on a plain render", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    expect(screen.getByRole("button", { name: "Ayuda y soporte" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Preguntas frecuentes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/profile");
     expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeInTheDocument();
@@ -1071,7 +1013,6 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
     const rows = [
-      screen.getByRole("button", { name: "Ayuda y soporte" }),
       screen.getByRole("link", { name: "Preguntas frecuentes" }),
       screen.getByRole("link", { name: "Perfil" }),
       screen.getByRole("button", { name: "Cerrar sesión" }),
@@ -1088,10 +1029,9 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     }
   });
 
-  it("keeps the reading order: ayuda, preguntas, perfil, cerrar sesión", (): void => {
+  it("keeps the reading order: preguntas, perfil, cerrar sesión", (): void => {
     render(<AppShell title="Panel de Control">{null}</AppShell>);
 
-    const soporte = screen.getByRole("button", { name: "Ayuda y soporte" });
     const faq = screen.getByRole("link", { name: "Preguntas frecuentes" });
     const perfil = screen.getByRole("link", { name: "Perfil" });
     const cerrarSesion = screen.getByRole("button", { name: "Cerrar sesión" });
@@ -1099,7 +1039,6 @@ describe("AppShell — Perfil y Cerrar sesión, filas permanentes del pie", (): 
     // Guards the fix from being "solved" by shuffling the footer: this is
     // also the tab order, so nothing gets reordered for a keyboard user.
     for (const [before, after] of [
-      [soporte, faq],
       [faq, perfil],
       [perfil, cerrarSesion],
     ] as const) {
