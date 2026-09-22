@@ -34,8 +34,6 @@ function validForm(overrides: Partial<AddDependentFormData> = {}): AddDependentF
     apellidos: "Pérez",
     fechaNacimiento: "2015-06-15",
     cedula: "1798765432",
-    // Issue #1296: the field holds the local digits without the trunk 0.
-    telefono: "991234567",
     tipoSangre: "O_POSITIVO",
     enfermedades: "",
     alergias: "",
@@ -120,9 +118,14 @@ describe("validateAddDependentStep — child step", () => {
       .toContain("La cédula de identidad debe tener 10 dígitos.");
   });
 
-  it("requires telefono", () => {
-    expect(validateAddDependentStep("child", validForm({ telefono: "" })))
-      .toContain("El teléfono es obligatorio.");
+  /**
+   * A represented minor has no phone of their own (issue #1197, same rule
+   * the public wizard's child branch applies): the field no longer exists
+   * on this form, so no phone rule can ever block the step.
+   */
+  it("has no telefono field at all — a represented minor has no phone of their own", () => {
+    expect("telefono" in initialAddDependentFormData).toBe(false);
+    expect(validateAddDependentStep("child", validForm())).toEqual([]);
   });
 
   it("reports multiple errors at once", () => {
@@ -232,7 +235,6 @@ describe("buildRepresentadoPayload", () => {
       apellidos: "Pérez",
       cedula: "1798765432",
       fechaNacimiento: "2015-06-15",
-      telefono: "0991234567",
       fichaMedica: {
         tipoSangre: "O_POSITIVO",
         enfermedades: [],
@@ -240,14 +242,23 @@ describe("buildRepresentadoPayload", () => {
     });
   });
 
+  /**
+   * Omitting the key — not sending `""` or a placeholder — is how the
+   * payload says "no phone": the BFF forwards only present keys and the
+   * backend's `RepresentadoCreateDTO.telefono` defaults to NULL.
+   */
+  it("never includes telefono — the payload's way to say the minor has none", () => {
+    const payload = buildRepresentadoPayload(validForm());
+    expect(payload).not.toHaveProperty("telefono");
+  });
+
   it("trims whitespace from text fields", () => {
     const payload = buildRepresentadoPayload(
-      validForm({ nombres: "  Ana  ", apellidos: "  Ruiz  ", cedula: " 1712345678 ", telefono: " 991234567 " }),
+      validForm({ nombres: "  Ana  ", apellidos: "  Ruiz  ", cedula: " 1712345678 " }),
     );
     expect(payload.nombres).toBe("Ana");
     expect(payload.apellidos).toBe("Ruiz");
     expect(payload.cedula).toBe("1712345678");
-    expect(payload.telefono).toBe("0991234567");
   });
 
   it("parses comma-separated enfermedades into a trimmed string array", () => {

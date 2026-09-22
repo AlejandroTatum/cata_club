@@ -2350,7 +2350,11 @@ export interface RepresentadoCreatePayload {
   apellidos: string;
   cedula: string;
   fechaNacimiento: string;
-  telefono: string;
+  /** Optional: a represented minor has no phone of their own (issue #1197,
+   *  same rule the public wizard's child flow applies). Omitting the key is
+   *  how the caller says "no phone" — the BFF drops it from the backend body
+   *  and `RepresentadoCreateDTO` defaults it to NULL. */
+  telefono?: string;
   fichaMedica?: RepresentadoFichaMedicaPayload;
   institucionId?: number;
 }

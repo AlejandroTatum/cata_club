@@ -63,13 +63,14 @@ vi.mock("@/services/api", () => ({
 
 installAddDependentHarness();
 
-/** Fill the identity block the first step asks for, without advancing. */
+/** Fill the identity block the first step asks for, without advancing.
+ *  No phone to fill: a represented minor has none (issue #1197, same as
+ *  the public wizard's child branch). */
 function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Mateo Andres" } });
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano Loor" } });
   fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
   fillBirthDate(addDependentFieldId("fechaNacimiento"), "2014-05-12");
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
 }
 
 /** Walk to the health step (step 2) by filling the identity block the first
@@ -85,9 +86,19 @@ describe("the field ids are declared, not slugged from the label", () => {
   it("renders the dependent step under the ids the token table declares", () => {
     render(<AddDependentPage />);
 
-    for (const field of ["nombres", "apellidos", "fechaNacimiento", "cedula", "telefono"] as const) {
+    for (const field of ["nombres", "apellidos", "fechaNacimiento", "cedula"] as const) {
       expect(document.getElementById(addDependentFieldId(field))).not.toBeNull();
     }
+  });
+
+  /** A represented minor has no phone of their own (issue #1197): the
+   *  wizard collects none, so no `#add-dependent-telefono` may exist —
+   *  the same absence the public wizard's child branch renders. */
+  it("renders no phone field on the dependent step", () => {
+    render(<AddDependentPage />);
+
+    expect(screen.queryByLabelText(/^Teléfono/)).toBeNull();
+    expect(Object.keys(ADD_DEPENDENT_FIELD_TOKEN)).not.toContain("telefono");
   });
 
   it("renders the health step's own controls under those ids too", () => {
@@ -121,8 +132,9 @@ describe("the field ids are declared, not slugged from the label", () => {
     const declared = Object.keys(ADD_DEPENDENT_FIELD_TOKEN) as AddDependentField[];
     expect(declared).toContain("institucionId");
     // Issue #1138: 11 fields dropped to 9 with the removal of
-    // contactoEmergencia/telefonoEmergencia.
-    expect(declared.length).toBeGreaterThanOrEqual(9);
+    // contactoEmergencia/telefonoEmergencia; the phone's removal for the
+    // represented minor (issue #1197) drops the table to 8.
+    expect(declared.length).toBeGreaterThanOrEqual(8);
   });
 });
 
