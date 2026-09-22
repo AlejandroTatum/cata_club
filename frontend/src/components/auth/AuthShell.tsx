@@ -99,7 +99,6 @@
 
 import Image from "next/image";
 import { BackLink } from "@/components/ui";
-import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import { yearsSinceFounding } from "@/app/landing/landing-config";
 
 /**
@@ -657,24 +656,6 @@ export default function AuthShell({
             </p>
           )}
 
-          {/*
-           * The assistant, reachable BEFORE signing in — it answers "¿cómo
-           * inicio sesión?" and "¿cuáles son los horarios?" without an
-           * account, and `POST /chatbot` is public. It lives in the small
-           * print rather than as the floating button it used to be, which
-           * covered this very form. One placement here covers /login,
-           * /forgot-password and /reset-password, since all three inherit
-           * this shell.
-           */}
-          {/*
-           * A DIV, not a P. The launcher renders the panel as a sibling of
-           * its own trigger, and a `<header>` inside a `<p>` is invalid HTML:
-           * opening the assistant from any auth screen logged a React
-           * hydration error and let the browser close the paragraph early.
-           */}
-          <div className={`mx-auto mt-3 text-center ${CARD_WIDTH}`}>
-            <HelpChatLauncher variant="quiet" label="¿Necesita ayuda para entrar?" />
-          </div>
         </div>
       </main>
     </div>
