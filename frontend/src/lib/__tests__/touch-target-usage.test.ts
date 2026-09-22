@@ -194,8 +194,6 @@ const MARKED = FILES.map(({ path, code }) => ({
 const ROSTER: readonly (readonly [string, number])[] = [
   // The phone tab bar (admin) and the shell's skip link.
   ["components/shell/AppShell.tsx", 2],
-  // The floating CATA-BOT disc: 44px on a phone, 76px from `lg` up.
-  ["components/chatbot/HelpChatDock.tsx", 1],
   // The four attendance state controls — 44px at every width, on purpose.
   ["app/trainer/attendance/AttendanceRosterRow.tsx", 1],
   // The public landing: two buttons, the skip link, the nav links, the nav CTA,
