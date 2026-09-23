@@ -619,6 +619,24 @@ def subir_logo_sponsor(contenido: bytes, nombre_publico: str, content_type: str)
     }, f"logo de patrocinador (public_id={nombre_publico})")
 
 
+def subir_imagen_galeria(contenido: bytes, nombre_publico: str, content_type: str) -> str:
+    """Sube una imagen deliberadamente pública de la galería de la landing
+    (issue #1372). Mismo criterio que `subir_logo_sponsor`: recurso `upload`
+    servible por la CDN, sin estado extra, en su propia carpeta."""
+    _configurar_cliente()
+    if not contenido:
+        raise ValueError("El contenido de la imagen está vacío; no se puede subir.")
+    if content_type not in ("image/jpeg", "image/png"):
+        raise ValueError(f"Tipo MIME no soportado para imagen de galería: {content_type}")
+    return _subir(contenido, {
+        "resource_type": "image",
+        "type": "upload",
+        "public_id": nombre_publico,
+        "folder": "cataclub/galeria",
+        "overwrite": False,
+    }, f"imagen de galería (public_id={nombre_publico})")
+
+
 def _destruir_en_cloudinary(
     nombre_publico: str,
     *,
@@ -706,6 +724,27 @@ def eliminar_logo_sponsor(
         tipo=tipo,
         descripcion=descripcion,
         mensaje_no_disponible=_MENSAJE_BORRADO_NO_DISPONIBLE,
+    )
+
+
+_MENSAJE_BORRADO_GALERIA_NO_DISPONIBLE = (
+    "No se pudo eliminar la imagen de la galería. Intente nuevamente."
+)
+
+
+def eliminar_imagen_galeria(nombre_publico: str) -> None:
+    """Retira una imagen pública de la galería; la fila se borra solo si el
+    proveedor responde (issue #1372). Mismo core (`_destruir_en_cloudinary`)
+    que `eliminar_logo_sponsor` -- timeout y circuito incluidos -- con su
+    propia carpeta y mensaje de cara al usuario, como eligió el voucher para
+    su borrado."""
+    _destruir_en_cloudinary(
+        nombre_publico,
+        carpeta="cataclub/galeria",
+        resource_type="image",
+        tipo="upload",
+        descripcion="imagen de galería",
+        mensaje_no_disponible=_MENSAJE_BORRADO_GALERIA_NO_DISPONIBLE,
     )
 
 

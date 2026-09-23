@@ -478,6 +478,11 @@ class TestElCandadoMira:
         assert {
             ("app.servicios_negocio.sponsor_servicio", "SponsorServicio.crear"),
             ("app.servicios_negocio.sponsor_servicio", "SponsorServicio.eliminar"),
+            # Galería de la landing (issue #1372): misma forma que el sponsor
+            # -- subida y borrado en Cloudinary dentro de un método de
+            # servicio -- y por eso mismo obligada a `run_in_threadpool`.
+            ("app.servicios_negocio.galeria_servicio", "GaleriaServicio.crear"),
+            ("app.servicios_negocio.galeria_servicio", "GaleriaServicio.eliminar"),
             ("app.servicios_negocio.persona_servicio", "PersonaServicio.actualizar_foto"),
             ("app.servicios_negocio.auth_servicio", "AuthServicio.actualizar_foto_perfil"),
             ("app.servicios_negocio.enrollment_servicio", "EnrollmentServicio.enroll"),
