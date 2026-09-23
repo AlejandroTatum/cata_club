@@ -113,11 +113,11 @@ puedas distinguir "el backend no publica" de "el BFF no lo está pasando".
 
 Esta clase detecta si sigue existiendo una lista **estática** de horarios
 sirviendo alguna superficie real: `backend/app/servicios_negocio/conocimiento_club.json`,
-leída por el prompt del chatbot (`conocimiento_club.py`) y por la página `/ayuda`
-(`faq-content.ts`, `FAQ_SCHEDULES`).
+leída por la página `/ayuda` (`faq-content.ts`, `FAQ_SCHEDULES`).
 
-Ambas migraciones ya están cerradas. #789 quitó la lista estática de la landing.
-La del chatbot y la de `/ayuda` las quitó #926, resuelto por el PR #928. #899
+Las migraciones ya están cerradas. #789 quitó la lista estática de la landing;
+la de `/ayuda` la quitó #926, resuelto por el PR #928 (el otro lector de la
+instantánea, el chatbot, desapareció con el retiro del chatbot). #899
 (detectar drift de horarios) también está cerrado.
 
 El detector se mantiene igual porque su valor no era señalar un pendiente

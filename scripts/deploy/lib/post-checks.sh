@@ -196,8 +196,7 @@ esperar_servicio_saludable() {
   command -v python3 >/dev/null 2>&1 || die "falta python3 para verificar la salud de $servicio"
   # `while [ cond ]` (no `[ cond ] && break`): con `set -e`, un `&&` a nivel
   # de sentencia tumba el script entero apenas la condición izquierda es
-  # falsa -- el mismo motivo por el que `check_chatbot_config` arma `exigir`
-  # con `if`, no con `&&`, un poco más abajo en este archivo.
+  # falsa.
   while [ "$intentos" -lt "$max_intentos" ]; do
     salud="$(docker compose "${COMPOSE_FILES[@]}" ps --format json 2>/dev/null \
       | python3 -c 'import json, sys
