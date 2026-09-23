@@ -1,12 +1,10 @@
 /**
  * Content locks for the help page's copy.
  *
- * This file used to also carry the drift check against the assistant, by
- * parsing `_FAQ_CONTENIDO` out of `chatbot_servicio.py`. There is no such
- * constant any more: the club's knowledge has one definition, and the drift
- * check moved to `knowledge-parity.test.tsx`, which compares this page's
- * RENDERED DOM against the exact bytes of the system prompt — strictly more
- * than parsing a Python literal ever proved.
+ * The club's knowledge has one definition, and the drift check that guards it
+ * lives in `knowledge-parity.test.tsx`, which compares this page's RENDERED
+ * DOM against the exact bytes of the system prompt — a stronger check than
+ * parsing a source literal ever proved.
  *
  * What stays here is the other half: the specific things this copy is not
  * allowed to say again. Each one is a sentence that shipped, was wrong, and

@@ -25,11 +25,9 @@ interface NativeDialogHandles {
  *   against the *layout* viewport, which sits under the browser's
  *   address bar/toolbar chrome even when that chrome is visible, so a
  *   `100vh`-based max-height allows the dialog to run under it. `dvh` tracks
- *   the *dynamic* (currently visible) viewport instead — the same fix
- *   `ChatWidget.tsx`'s sheet already uses for `--chat-sheet-height`.
+ *   the *dynamic* (currently visible) viewport instead.
  * - `env(safe-area-inset-*)` on every edge: nothing previously kept the
- *   dialog off a device notch or home-indicator strip, unlike `ChatWidget`,
- *   which already subtracts these on all four sides.
+ *   dialog off a device notch or home-indicator strip.
  * - `w-full` had no horizontal inset, so at a 320px viewport the dialog
  *   touched both screen edges exactly; the width now reserves a 2rem gutter
  *   on top of the safe-area insets, same idea as the height clamp.
@@ -47,8 +45,7 @@ interface NativeDialogHandles {
  * was its own body. That is why the report reads "one line at a time".
  *
  * The three custom properties below are the visible box, published by
- * `useNativeDialog` from `useVisualViewportGeometry` — the same measurement
- * `ChatWidget`'s sheet has used since #644, now shared rather than copied. The
+ * `useNativeDialog` from `useVisualViewportGeometry`. The
  * dialog centres between `top` and the keyboard instead of between 0 and the
  * bottom of a viewport it cannot see.
  *
@@ -108,9 +105,9 @@ export const NATIVE_DIALOG_SHELL_CLASS =
  *
  * `contain` (not `none`): the boundary is what matters, and `none` would also
  * kill the platform's own overscroll affordances inside the dialog for no
- * additional benefit. `ChatWidget`'s sheet and `AttendanceRosterList` already
- * carry the same utility, so this is the codebase's established spelling
- * rather than a new convention.
+ * additional benefit. `AttendanceRosterList` already carries the same
+ * utility, so this is the codebase's established spelling rather than a new
+ * convention.
  *
  * `min-h-0` (issue #856) is the other half of the shell's `h-fit` removal: a
  * flex item's `min-height` defaults to `auto`, which means "never shrink
@@ -118,9 +115,7 @@ export const NATIVE_DIALOG_SHELL_CLASS =
  * body needs. Without it, WebKit sized this body to fit its full, unscrolled
  * content and only THEN discovered there was no room left inside the shell's
  * `max-h-[…]`, so the overflow it clipped was the body itself rather than
- * something the body's own scrollbar could reach. `ChatWidget`'s history
- * pane (`ChatWidget.tsx`) already carries `min-h-0` next to its own
- * `flex-auto overflow-y-auto` for the identical reason. That part of #952's
+ * something the body's own scrollbar could reach. That part of #952's
  * fix was correct and stays.
  *
  * ## Issue #1036: `flex-1`'s `0%` basis resolves as a definite zero

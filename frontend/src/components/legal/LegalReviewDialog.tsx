@@ -139,7 +139,7 @@ export default function LegalReviewDialog({
   // Stop the page scrolling behind the dialog, compose-safely: the body's
   // previous value is restored rather than cleared, and the smooth-scroll
   // engine (a no-op on the wizard, which mounts no Lenis) is held through
-  // its own documented lock — the same two locks ChatWidget keeps.
+  // its own documented lock.
   useEffect((): undefined | (() => void) => {
     if (document_ === null) return undefined;
     const { body } = document;

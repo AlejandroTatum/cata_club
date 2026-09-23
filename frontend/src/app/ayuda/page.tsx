@@ -36,7 +36,7 @@ import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
  * not the 4.5:1 body-text floor), matching how those tokens already ship.
  *
  * Keyed by section title rather than folded into `faq-content.ts`: that file
- * is the copy that is tested against the chatbot's own source of truth, and
+ * is the copy that is tested against the club's knowledge snapshot, and
  * this is presentation the content module has no reason to know about.
  */
 const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg: string }> = {

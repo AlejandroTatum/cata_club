@@ -4,7 +4,7 @@
  * The audit found three treatments: a spinning `Clock` icon (dashboard,
  * attendance, trainer, payments, trainer/attendance) — a clock is a schedule,
  * not a spinner, and on an attendance screen full of real clock icons it reads
- * as data; a spinning `Loader2` (members, reports, chatbot); and plain text
+ * as data; a spinning `Loader2` (members, reports); and plain text
  * with no indicator at all (members, student, groups, profile), which is
  * indistinguishable from an empty result.
  *

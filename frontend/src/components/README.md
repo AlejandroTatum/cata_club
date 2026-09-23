@@ -17,7 +17,7 @@ fd -e tsx . src/components -E '__tests__'
 | `ui/` | Las primitivas del sistema visual: botón, tarjeta, campo, insignia, estado vacío. Es la mitad del directorio y lo que `DESIGN.md` gobierna directamente. |
 | `shell/` | El armazón de la aplicación: el riel de navegación, la barra superior, el andamiaje que envuelve a toda pantalla autenticada. |
 | `auth/` | Lo que envuelve a las pantallas de credenciales. |
-| `attendance/`, `chatbot/` | Piezas de un solo dominio, agrupadas porque no se usan fuera de él. |
+| `attendance/` | Piezas de un solo dominio, agrupadas porque no se usan fuera de él. |
 | raíz | Lo transversal que no entra en ninguna de las anteriores. |
 
 **Antes de escribir un componente nuevo, mirá `ui/`.** Varias piezas del

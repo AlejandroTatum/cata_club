@@ -28,9 +28,9 @@ export interface VisualViewportGeometry {
  * still override them (an inline style cannot carry a media query; a variable
  * it reads can be left unread).
  *
- * ## Why this is here and not in `ChatWidget`
+ * ## Why this is a shared hook
  *
- * It WAS in `ChatWidget`, as a private `useSheetGeometry`, and that was the
+ * It started as a private hook inside one sheet component, and that was the
  * whole of issue #767's second cause: `visualViewport` appeared in exactly one
  * file in the repository, so the three `/members` dialogs — `position: fixed`,
  * promoted to the top layer, clamped in `dvh` — stayed centred at full height

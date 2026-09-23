@@ -436,7 +436,7 @@ describe("muted text on the canvas grey — kicker, subtitle, table head", () =>
 
 describe("status badges — each foreground on its own -bg tint", () => {
   // `Badge` renders an 11.5px/700 label in `text-state-X` on `bg-state-X-bg`;
-  // ErrorState, Stepper, ChatWidget and the enrollment notices reuse the same
+  // ErrorState, Stepper and the enrollment notices reuse the same
   // pairing. The pair is the token's whole purpose, so it is the pair that has
   // to clear AA.
   it.each(["ok", "warn", "bad", "neutral"])("meets AA for %s", (tone) => {

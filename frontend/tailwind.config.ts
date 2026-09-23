@@ -12,8 +12,8 @@ const FLOAT_SHADOW = "0 10px 28px rgba(19, 19, 22, 0.30)";
  * The two-tone focus ring: a 2px white band hugging the control, then a 3px
  * coal band around it. Whatever the control and the page happen to be, one of
  * the two bands is high-contrast against its neighbour — the "adjacent
- * colours" test WCAG 1.4.11 / 2.4.11 apply. Measured in
- * `components/chatbot/chat-focus-ring.ts`.
+ * colours" test WCAG 1.4.11 / 2.4.11 apply. The pair is locked by the
+ * contrast gates under `src/lib/__tests__/`.
  */
 const FOCUS_DUO = "0 0 0 2px #FFFFFF, 0 0 0 5px #131316";
 
