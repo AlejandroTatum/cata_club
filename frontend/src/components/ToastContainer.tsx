@@ -39,8 +39,7 @@
  *    header this container is drawn under: the `AppShell` topbar is a fixed
  *    56px (`h-14`), and the sticky `Header` is close behind it — plus 16px
  *    of daylight so the toast never grazes either edge. It stays anchored
- *    top-right rather than moving to the bottom on desktop too: the chatbot
- *    launcher already lives at the bottom-right.
+ *    top-right rather than moving to the bottom on desktop.
  */
 
 "use client";

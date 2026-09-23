@@ -41,8 +41,7 @@
  * repository, by a person, on purpose.
  *
  * **`error.status`, `error.name`, `error instanceof`.** Branching on an error
- * is fine and common (`ChatWidget` reads `.status` to pick a retry hint).
- * Only the human-readable payload is restricted.
+ * is fine and common. Only the human-readable payload is restricted.
  *
  * **A new leak that invents a fourth spelling.** Two spellings are covered —
  * the direct read and the `as`-cast read — because those are the two the

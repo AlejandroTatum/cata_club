@@ -5,9 +5,9 @@
  * ## The mechanism this guards
  *
  * Mobile Safari and Chrome zoom the whole page whenever a focused form control
- * computes to less than 16px, and they do not zoom back out. `ChatWidget.tsx`
- * wrote the diagnosis down for its own composer (issue #644) and fixed that one
- * field; issue #767 is the same defect on the Miembros dialogs, where the zoom
+ * computes to less than 16px, and they do not zoom back out. The diagnosis was
+ * first written down for one composer field (issue #644); issue #767 is the
+ * same defect on the Miembros dialogs, where the zoom
  * magnifies a 590px dialog past the screen edge and leaves the user dragging
  * one line at a time through its scrolling body.
  *

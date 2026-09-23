@@ -3783,11 +3783,9 @@ describe("MembersPage — direct Ficha médica and Pagos entry points (issue #50
  *
  * - `100vh` instead of `100dvh` — mobile browser chrome (address bar/toolbar)
  *   makes a static `vh` unit taller than the actual visible viewport, so the
- *   dialog's max-height allows it to run under the chrome. `ChatWidget.tsx`
- *   already carries the `dvh` fix for its own sheet.
- * - No `env(safe-area-inset-*)` anywhere in these three dialogs, unlike
- *   `ChatWidget.tsx`, so nothing keeps the dialog off a notch or home
- *   indicator.
+ *   dialog's max-height allows it to run under the chrome.
+ * - No `env(safe-area-inset-*)` anywhere in these three dialogs, so nothing
+ *   keeps the dialog off a notch or home indicator.
  * - `w-full` with no horizontal inset touches both screen edges at 320px.
  * - `truncate` on the title `<h2>` in `MedicalRecordDialog` and
  *   `PaymentsDialog` sits directly on a `justify-between` flex row with no
@@ -3900,11 +3898,11 @@ describe("MembersPage — mobile-safe dialog viewport (issue #659)", () => {
  * while the keyboard covers half the screen, and the user is left dragging its
  * body one line at a time.
  *
- * `visualViewport` is the only surface that answers both questions, and
- * `ChatWidget.tsx` has been reading it since #644 — for one sheet, in one file,
- * which is the whole gap. `useVisualViewportGeometry` is that code lifted out
- * of `ChatWidget` unchanged so these three dialogs get the same treatment
- * instead of a second mechanism that drifts from it.
+ * `visualViewport` is the only surface that answers both questions. It used
+ * to be read in exactly one file — a single sheet — which is the whole gap.
+ * `useVisualViewportGeometry` lifts that measurement into a shared hook so
+ * these three dialogs get the same treatment instead of a second mechanism
+ * that drifts from it.
  *
  * These are className and custom-property assertions, for exactly the reason
  * the #659 block above gives: jsdom lays out no `calc()`, no `env()` and no
@@ -3932,8 +3930,8 @@ describe("MembersPage — the dialog follows the visual viewport (issue #767)", 
 
   /**
    * A phone with the keyboard open: a 844px layout viewport, 400px of it
-   * visible, the rest eaten by the keys. The same shape `ChatWidget.test.tsx`
-   * drives, so both use sites are exercised against the same fake device.
+   * visible, the rest eaten by the keys, so the dialog use site is exercised
+   * against a realistic fake device.
    */
   function installVisualViewport(
     { height, offsetTop = 0, innerHeight = 844 }: { height: number; offsetTop?: number; innerHeight?: number },
