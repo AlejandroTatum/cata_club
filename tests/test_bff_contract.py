@@ -33,7 +33,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 ROUTERS = RAIZ / "backend" / "app" / "presentacion" / "routers"
 # Los DTOs de #829 quedaron en dos paquetes: los que solo consumen routers
-# (dashboard, chatbot, notificaciones) siguen acá; los que también arma y
+# (dashboard, notificaciones) siguen acá; los que también arma y
 # devuelve servicios_negocio se mudaron a DTOS.
 ESQUEMAS_DE_PRESENTACION = RAIZ / "backend" / "app" / "presentacion" / "schemas"
 DTOS = RAIZ / "backend" / "app" / "servicios_negocio" / "dtos"
@@ -384,8 +384,8 @@ class TestNormalizacion:
         assert rutas_consumidas(fuente) == (["/asistencias/reportes/pdf"], 0)
 
     def test_una_url_armada_a_mano_tambien_se_consume(self):
-        fuente = "fetch(`${getBackendApiUrl()}/chatbot/consultar`, {\n"
-        assert rutas_consumidas(fuente) == (["/chatbot/consultar"], 0)
+        fuente = "fetch(`${getBackendApiUrl()}/notificaciones`, {\n"
+        assert rutas_consumidas(fuente) == (["/notificaciones"], 0)
 
     def test_una_llamada_con_ruta_variable_se_cuenta_como_opaca(self):
         assert rutas_consumidas("fetch(backendUrl(path), {\n  method: init.method,\n});\n")[1] == 1
@@ -866,7 +866,7 @@ PISOS_DE_ENUM = {
 def ruta_del_esquema(nombre: str) -> Path:
     """El archivo de un DTO, en el paquete que le corresponda (#829): los que
     también arma y devuelve servicios_negocio viven en DTOS; los que solo
-    consumen routers (dashboard, chatbot, notificaciones) siguen en
+    consumen routers (dashboard, notificaciones) siguen en
     ESQUEMAS_DE_PRESENTACION."""
     para_dtos = DTOS / nombre
     return para_dtos if para_dtos.is_file() else ESQUEMAS_DE_PRESENTACION / nombre

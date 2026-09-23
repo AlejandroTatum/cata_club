@@ -67,7 +67,7 @@ backend/
 │   ├── presentacion/          # Routers + Schemas (DTOs Pydantic) — sin SQL ni reglas
 │   │   └── routers/           # auth, personas, membresias_pagos, descuentos,
 │   │                          # asistencias, ficha_medica, geografia,
-│   │                          # notificaciones, enrollment, dashboard, chatbot
+│   │                          # notificaciones, enrollment, dashboard
 │   ├── servicios_negocio/     # Reglas de negocio; usa repos, no conoce FastAPI
 │   ├── seguridad/             # JWT, hashing, gestión de sesiones y permisos
 │   ├── dominio/               # Entidades ORM (modelos.py), enums, excepciones
@@ -87,7 +87,7 @@ manejador global en `main.py` la traduce a HTTP. El router no ve
 
 **Routers montados** (todos bajo `/api/v1`): `auth`, `personas`,
 `membresias_pagos`, `descuentos`, `asistencias`, `ficha_medica`, `geografia`,
-`notificaciones`, `enrollment`, `dashboard`, `chatbot`. El listado exacto de
+`notificaciones`, `enrollment`, `dashboard`. El listado exacto de
 endpoints está en `/docs` (no se mantiene un conteo en este README: es
 volátil).
 

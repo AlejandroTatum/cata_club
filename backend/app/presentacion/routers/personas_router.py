@@ -165,8 +165,8 @@ async def reporte_nuevos_por_periodo(
 # `generar_comprobante_pago_pdf` corre en una tarea de Celery, no inline.
 # Rate-limited (D6-b): mismo escaneo que el JSON hermano de arriba, más el
 # render de PDF bloqueante en threadpool -- el costo por llamada es mayor,
-# así que el tope es más chico (10/min, no 20/min): mismo principio que ya
-# separa `chatbot` por costo real medido.
+# así que el tope es más chico (10/min, no 20/min): mismo principio de topes
+# por costo real medido.
 @router.get(
     "/reportes/nuevos-por-periodo/pdf",
     dependencies=[Depends(GestorPermisos(["ADMINISTRADOR"]))],

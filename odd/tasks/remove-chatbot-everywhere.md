@@ -113,14 +113,43 @@ Acceptance:
 - `/ayuda` and all RC-1A/1B behavior are untouched.
 - Frontend and full pre-PR lanes pass.
 
-### RC-2 — Remove backend chatbot capability (`pending`)
+### RC-2 — Remove backend chatbot capability (`done`)
 Route: delegated writer; triggers: preparation across 4+ files and multi-file write.
 
-- [ ] Remove chatbot router registration, router, schemas, service, diagnostics, verification script, and chatbot-only tests.
-- [ ] Remove provider-specific settings, circuit-breaker constants/state, public-route allowances, and the unused OpenAI dependency/lock entries.
-- [ ] Preserve the static club-knowledge source used by Help/FAQ and remove only prompt/chatbot-specific generation.
-- [ ] Run focused backend/root tests and the canonical full pre-PR lane.
-- [ ] Commit and record native review evidence.
+- [x] Remove chatbot router registration, router, schemas, service, diagnostics, verification script, and chatbot-only tests.
+- [x] Remove provider-specific settings, circuit-breaker constants/state, public-route allowances, and the unused OpenAI dependency/lock entries.
+- [x] Preserve the static club-knowledge source used by Help/FAQ and remove only prompt/chatbot-specific generation.
+- [x] Run focused backend/root tests and the canonical full pre-PR lane.
+- [x] Commit and record native review evidence.
+
+Deleted the chatbot router, schemas, service, diagnostics module,
+`verificar_chatbot.py`, and their three dedicated suites (8 files, 2,352
+lines). Removed the `/chatbot/consultar` registration from `backend/main.py`
+(the FastAPI entrypoint is `backend/main.py`, not `backend/app/main.py` as
+first delegated; the orchestrator corrected the surface), the four
+OpenCode/chatbot settings fields + `chatbot_modelos` property + their
+production-exclusion rationale entries, both `CIRCUITO_CHATBOT_*`
+constants, the chatbot entry from the public-route guard, the chatbot
+circuit/client reset from `conftest.py`, the chatbot blocking-primitive and
+wrapped-call-site entries from the event-loop lock (floors re-measured 5→4
+primitives, 11→10 wrapped sites), and the `openai` dependency
+(`uv remove openai`; −101 lock lines incl. transitive deps).
+Knowledge preserved per owner decision: `conocimiento_club.json` is
+byte-identical (the sync script rewrote it and both frontend mirrors with
+zero diff); `prompt_sistema.txt` was regenerated to knowledge-only bytes
+(7,619 → 5,312 chars, assistant-persona instructions dropped) and
+`sincronizar_conocimiento.py` now derives it from
+texto_para_prompt(CONOCIMIENTO); the /ayuda and landing divergence guards
+and the root glossary gate keep consuming those bytes unchanged. Removed
+the chatbot-only knowledge helpers (`respuestas_por_pregunta`,
+`respuesta_de_contacto`) and reworked `test_conocimiento_club.py` (snapshot
+now locked to the knowledge serialization; model-token-budget class and
+local-fallback class retired). `tests/test_bff_contract.py`: replaced the
+hand-built-URL parser example that cited the deleted `/chatbot/consultar`
+route with the surviving `/notificaciones` raw URL and dropped `chatbot`
+from the two DTO-package listing comments; the past-tense
+`bff:url-cruda` floor note stays. Commit:
+`refactor(backend): remove chatbot capability` (this commit).
 
 ### RC-3 — Remove operational and documentation residue (`pending`)
 Route: delegated writer; triggers: preparation across 4+ files and multi-file write.
@@ -132,6 +161,8 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
 - [ ] Commit and record native review evidence.
 
 ## Progress
+- 2026-09-22: RC-2 implemented in this worktree (25 files: 8 deleted, 17 edited; +97/−2,802). The prior attempt's `db-test` fixture (`gentleman-remove-chatbot-bff-db-test-1`, port 5436) was found idle (0 active client sessions, only `cataclub_test`) and stopped under the single-tenant rule before this slice's backend runs; nothing else outside this worktree was touched. Focused tests: `test_conocimiento_club.py + test_configuracion.py + test_main.py` 140 passed; `test_bloqueo_del_event_loop.py + test_guardia_autorizacion_rutas.py + test_vocabulario_en_mensajes_de_usuario.py + test_circuito_breaker.py` 62 passed; root `test_bff_contract.py` 139 passed / 1 skipped; `sincronizar_conocimiento.py --verificar` synchronized; `lint-imports` 3 kept / 0 broken. `make pre-pr LANE=full` completed the backend lane (ruff clean, pip-audit, backend suite via db-test, root tests 636 passed / 1 skipped) and aborted only at the frontend entry guard: missing `node_modules` (environmental, this worktree had never run `pnpm install`). Classified transient/environmental, installed deps with the documented prerequisite `pnpm install --frozen-lockfile`, and reran only `make pre-pr LANE=frontend`: audit, type-check, lint, coverage, Next build, Playwright 202 passed (3.5m). Root-test total 638 → 636 vs RC-1C is explained by main moving between measurements (#1387 merged), not by this slice: RC-2 removes zero root tests. Local lane did not reproduce CI's `migraciones-desde-cero` and `docker-images` jobs.
+- 2026-09-22: RC-2 mapping completed in `refactor/remove-chatbot-backend` @ `28715b3`; no source written yet. Reference candidate `ea77878` contains NO backend slice (its own message defers backend to later slices), so RC-2 is original implementation. Two surface issues block the first write, escalated to the orchestrator: (1) the delegated surface `backend/app/main.py` does not exist — the FastAPI entrypoint is `backend/main.py` (chatbot import line 38, include_router line 395); (2) fully removing prompt/chatbot-specific generation per the RC-2 bullet requires regenerating `backend/app/servicios_negocio/prompt_sistema.txt` (knowledge-only bytes, currently 7,619 incl. assistant-persona instructions) and reworking its only generator `backend/scripts/sincronizar_conocimiento.py` (imports `conocimiento_club.SYSTEM_PROMPT`); neither is in the allowed surface list. That snapshot is load-bearing for Help/FAQ parity: consumed by `frontend/src/app/ayuda/__tests__/knowledge-parity.test.tsx`, `frontend/src/app/landing/__tests__/landing-knowledge-parity.test.tsx`, and root `tests/test_glossary_contract.py` (all read-only consumers; their assertions target knowledge-block shapes, so a knowledge-only snapshot should keep them green — verified by the full lane). Out-of-surface findings recorded: `backend/scripts/verificar_entrega_pdf.py` + its test mention `verificar_chatbot.py` comment-only (RC-3); `Makefile` `qa-chatbot-check` and deploy-script `verificar_chatbot.py` calls break only on manual/RC-3 surfaces (RC-3); `tests/test_release_controls.py` and `tests/test_docker_compose_config.py` assert on untouched deploy/compose text so they stay green; `scripts/diagnostico_horarios.py:163` message text mentions the chatbot prompt (static residue, RC-3); `Settings.extra="ignore"` keeps the backend booting while compose still passes `OPENCODE_*`/`CHATBOT_*` until RC-3.
 - 2026-09-21: Read-only repository mapping completed.
 - 2026-09-21: Owner selected stacked PRs targeting `main`.
 - 2026-09-21: Combined RC-1 candidate `ea77878` passed local checks but native review refused it before authority creation because its immutable evidence exceeded the lens context budget.
@@ -176,5 +207,14 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
   - Rollback boundary: revert this commit; it only removes the BFF route, contract, client method, and their tests (and retunes the root gate's floor 3→2), so the entrypoint-free, UI-free app from RC-1A/1B stays building and green; no unrelated route coverage changes.
   - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied.
 
+- RC-2 slice (observed in this worktree):
+  - Commit: `refactor(backend): remove chatbot capability` (this commit), 25 files: 8 deleted (router 56, schemas 27, service 508, diagnostics 177, verificar script 89, test_chatbot 1033, test_diagnostico 153, test_verificar 318 — 2,352 lines), 17 edited; totals +97/−2,802 including this task document.
+  - Focused: backend 140 passed (conocimiento/configuracion/main) + 62 passed (event-loop/guardia/vocabulario/circuito); root BFF contract 139 passed / 1 skipped; sync `--verificar` synchronized; `lint-imports` 3 kept / 0 broken.
+  - `make pre-pr LANE=full`: backend lane green through root tests (636 passed / 1 skipped); frontend stage stopped at its dependency guard (missing `node_modules` — environmental). After the documented `pnpm install --frozen-lockfile`, `make pre-pr LANE=frontend` completed green: audit, type-check, lint, coverage, Next build, Playwright `202 passed (3.5m)`.
+  - Knowledge contract: `conocimiento_club.json` byte-identical; frontend mirrors byte-identical; `prompt_sistema.txt` knowledge-only (5,312 chars) and locked by `test_la_instantanea_de_conocimiento_esta_al_dia`; /ayuda, landing, and glossary gates read it unchanged.
+  - Deferred mentions (RC-3): past-tense history in `conocimiento_club.py` docstring/snapshot comment, `sincronizar_conocimiento.py` provenance note, event-loop docstring issue #834 narrative, `verificar_entrega_pdf.py` + its test comments, `Makefile` `qa-chatbot-check` + deploy-script `verificar_chatbot.py` calls, `tests/test_release_controls.py` / `test_docker_compose_config.py` deploy/compose-text assertions, `scripts/diagnostico_horarios.py` message text, compose `OPENCODE_*`/`CHATBOT_*` variables (backend boots despite them via `Settings.extra="ignore"` until RC-3).
+  - Rollback boundary: revert this commit; it only removes the chatbot capability and its direct test coupling, so the entrypoint-free, UI-free, BFF-free app from RC-1A/1B/1C stays building and green; `/ayuda` keeps its static knowledge via the unchanged canonical JSON.
+  - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied.
+
 ## Next step
-Deliver RC-1C as an independent PR, then remove the backend chatbot capability (RC-2).
+Deliver RC-2 as an independent PR, then remove the operational and documentation residue (RC-3).

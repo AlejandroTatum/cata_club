@@ -363,8 +363,8 @@ def prosa_con_enum(codigo: str, ruta_relativa: str) -> list[str]:
     Mira SOLO argumentos de llamada, y eso es la regla, no una comodidad: un
     literal que se pasa a una función es un fragmento en tránsito, que es el
     mecanismo del que hay que defenderse. Una constante de módulo o una
-    docstring no viajan a ningún mensaje -- por eso el conocimiento del chatbot
-    (hoy `conocimiento_club.json`, que habla de "el administrador") no es
+    docstring no viajan a ningún mensaje -- por eso el conocimiento estático
+    del club (`conocimiento_club.json`, que habla de "el administrador") no es
     asunto de esta guarda, y de hecho no es un mensaje de error de nadie.
     """
     arbol = ast.parse(codigo)
@@ -600,7 +600,7 @@ class TestElDetectorNoMarcaProsaLegitima:
         assert prosa_con_enum(codigo, "x.py") == []
 
     def test_una_constante_de_modulo_no_es_un_fragmento_en_transito(self):
-        # El prompt del chatbot no alimenta ningún mensaje de error.
+        # El bloque de conocimiento del club no alimenta ningún mensaje de error.
         codigo = '_FAQ = """La ficha médica la gestiona el ADMINISTRADOR del club."""\n'
         assert prosa_con_enum(codigo, "x.py") == []
 
