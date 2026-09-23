@@ -2503,3 +2503,22 @@ class ContadorCorreoDiario(Base):
     enviados: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+
+
+# ---------------------------------------------------------------------------
+# Galería de la landing (issue #1372)
+# ---------------------------------------------------------------------------
+class EntradaGaleria(Base):
+    """Imagen pública de la galería de la landing, administrada por el club.
+
+    Misma forma que `Sponsor`: contenido deliberadamente público (la landing
+    lo muestra sin sesión), más un identificador interno para retirar el
+    recurso del proveedor al borrar."""
+    __tablename__ = "entrada_galeria"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    titulo: Mapped[str] = mapped_column(String(80))
+    descripcion: Mapped[str] = mapped_column(String(500))
+    imagen_url: Mapped[str] = mapped_column(String(500))
+    # Identificador interno para retirar el recurso del proveedor al borrar.
+    imagen_public_id: Mapped[str] = mapped_column(String(64), unique=True)

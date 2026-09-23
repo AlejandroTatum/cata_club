@@ -71,6 +71,14 @@ def _subir_logo(**overrides):
     return cc.subir_logo_sponsor(**kwargs)
 
 
+def _subir_galeria(**overrides):
+    kwargs = dict(
+        contenido=b"contenido-galeria", nombre_publico="galeria-1", content_type="image/jpeg",
+    )
+    kwargs.update(overrides)
+    return cc.subir_imagen_galeria(**kwargs)
+
+
 FUNCIONES = [
     ("subir_pdf_membresia", _subir_pdf),
     ("subir_voucher_pago", _subir_voucher),
@@ -79,6 +87,10 @@ FUNCIONES = [
     # `_subir()`; estaba fuera de esta lista y por lo tanto de todos los
     # candados de contrato de abajo (issue #838).
     ("subir_logo_sponsor", _subir_logo),
+    # La imagen de la galería de la landing es la 5ta (issue #1372): se
+    # registra acá a propósito, desde el día uno, para no repetir el hueco
+    # del logo.
+    ("subir_imagen_galeria", _subir_galeria),
 ]
 
 
@@ -650,6 +662,37 @@ def test_fallo_al_eliminar_logo_redacta_credenciales_de_log_y_detalle(monkeypatc
     assert secreto not in caplog.text
     assert secreto not in error.value.detalle_tecnico
     assert "[REDACTED]" in caplog.text
+
+
+# --- 8c. Galería de la landing (issue #1372): contenido deliberadamente
+# público, mismo criterio que `subir_logo_sponsor` -- y por eso NO entra en
+# el candado de `type="authenticated"` de arriba. Lo que sí se fija acá es
+# que su carpeta es propia y su borrado habla del mismo recurso.
+
+def test_subir_imagen_galeria_es_un_upload_publico_en_su_carpeta():
+    with _parchear_upload() as mock_upload:
+        mock_upload.return_value = {"secure_url": "https://cdn.test/recurso"}
+
+        cc.subir_imagen_galeria(b"contenido-galeria", "galeria-1", "image/jpeg")
+
+        _, kwargs = mock_upload.call_args
+        assert kwargs["type"] == "upload"
+        assert kwargs["resource_type"] == "image"
+        assert kwargs["folder"] == "cataclub/galeria"
+        assert kwargs["public_id"] == "galeria-1"
+
+
+def test_eliminar_imagen_galeria_destruye_el_recurso_de_su_carpeta():
+    with _parchear_destroy() as mock_destroy:
+        mock_destroy.return_value = {"result": "ok"}
+
+        cc.eliminar_imagen_galeria("galeria-1")
+
+        args, kwargs = mock_destroy.call_args
+        assert args[0] == "cataclub/galeria/galeria-1"
+        assert kwargs["resource_type"] == "image"
+        assert kwargs["type"] == "upload"
+        assert isinstance(kwargs["timeout"], Timeout)
 
 
 # --- 9. Guardia estructural: el umbral/cooldown deben venir de resiliencia.py,
