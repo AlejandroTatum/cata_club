@@ -75,7 +75,7 @@ chmod 600 "$CURRENT_RECORD"
 # imagen y el ledger YA quedaron persistidos arriba, así que un `die` acá deja
 # evidencia (el registro apunta al SHA objetivo) en vez de tapar el estado
 # real. Se deja fuera a propósito `do_checks` entero (deploy.sh): el chequeo
-# de `/docs` deshabilitado, la frescura del backup y el smoke del chatbot no
+# de `/docs` deshabilitado y la frescura del backup no
 # son sobre la salud del borde tras un rollback.
 (
   cd "$STACK_DIR"

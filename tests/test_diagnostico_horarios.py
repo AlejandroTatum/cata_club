@@ -515,7 +515,7 @@ def test_horarios_estaticos_presentes_son_static_schedule_authority():
     hallazgos = diag.detectar_hallazgos_estaticos(observacion)
     assert [h["clase"] for h in hallazgos] == [diag.CLASE_AUTORIDAD_ESTATICA]
     assert "5" in hallazgos[0]["observado"]
-    assert "chatbot" in hallazgos[0]["detalle"]
+    assert "instantánea de conocimiento" in hallazgos[0]["detalle"]
     assert "/ayuda" in hallazgos[0]["detalle"]
 
 

@@ -185,7 +185,7 @@ _VARIABLES_CRITICAS_DE_PRODUCCION: dict[str, tuple[str, ...]] = {
     # equivocada solo la puede rechazar el proveedor, nunca el arranque.
     #
     # Pero este bloque no comprueba eso. Comprueba la propiedad ORTOGONAL que
-    # ya se documentó para `OPENCODE_API_KEY`: que la variable sea de verdad
+    # este mismo dict fija para cada credencial: que la variable sea de verdad
     # interpolada y no un literal escrito en el compose. Son la ÚNICA vía por
     # la que las credenciales del correo llegan al backend, al worker y a
     # beat; si alguna quedara fija en el archivo, el operador no tendría cómo
@@ -201,22 +201,6 @@ _VARIABLES_CRITICAS_DE_PRODUCCION: dict[str, tuple[str, ...]] = {
     "CLOUDINARY_CLOUD_NAME": ("CLOUDINARY_CLOUD_NAME",),
     "CLOUDINARY_API_KEY": ("CLOUDINARY_API_KEY",),
     "CLOUDINARY_API_SECRET": ("CLOUDINARY_API_SECRET",),
-    # `OPENCODE_API_KEY` no es crítica para arrancar -- el chatbot es opcional
-    # y `Settings` la excluye del fail-fast a propósito -- pero sí comparte la
-    # propiedad que este bloque protege: es la ÚNICA vía por la que la clave
-    # del proveedor llega al backend (issue #645). Si alguna vez quedara
-    # hardcodeada, el operador no tendría forma de suministrarla y
-    # `scripts/verificar_chatbot.py` reportaría `ausente` para siempre.
-    "OPENCODE_API_KEY": ("OPENCODE_API_KEY",),
-    # Mismo motivo que `OPENCODE_API_KEY`, ahora para el gateway y el id del
-    # modelo (issue #766): estaban HARDCODEADOS en `chatbot_servicio.py`, así
-    # que retirar un modelo gratuito -- que pasa sin aviso -- obligaba a
-    # desplegar código. Si vuelven a quedar fijos en el compose, el operador no
-    # tendría cómo cambiarlos y el chatbot quedaría degradado a su FAQ local
-    # hasta el próximo release.
-    "OPENCODE_BASE_URL": ("OPENCODE_BASE_URL",),
-    "CHATBOT_MODELO": ("CHATBOT_MODELO",),
-    "CHATBOT_MODELOS_RESPALDO": ("CHATBOT_MODELOS_RESPALDO",),
 }
 
 # Un centinela por variable exportable por el operador, único para que una
@@ -368,9 +352,8 @@ def test_ningun_archivo_de_compose_declara_un_secreto_literal(archivo):
     """`docker compose config` imprime los valores YA interpolados, así que
     mirar el render no distingue un secreto que puso el operador de uno que
     quedó escrito en el repositorio. Lo que hay que fijar es la FUENTE: en los
-    cuatro archivos versionados, toda variable con nombre de secreto --
-    `OPENCODE_API_KEY` incluida (issue #645) -- tiene que venir de `${...}`.
-    Un literal acá es un secreto commiteado, y el guard de `.env` de CI no lo
+    cuatro archivos versionados, toda variable con nombre de secreto tiene
+    que venir de `${...}`. Un literal acá es un secreto commiteado, y el guard de `.env` de CI no lo
     ve porque no está en un `.env`."""
     for numero, linea in enumerate((RAIZ / archivo).read_text().splitlines(), start=1):
         coincidencia = _NOMBRE_DE_SECRETO.match(linea)
