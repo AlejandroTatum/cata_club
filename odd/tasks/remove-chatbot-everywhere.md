@@ -1,7 +1,7 @@
 # Remove chatbot everywhere
 
 ## Objective
-Remove the chatbot from every product, API, operational, test, configuration, and documentation surface while preserving the standalone Help/FAQ experience.
+Remove the chatbot capability and its active product, API, deployment, test, and documentation integrations while preserving the standalone Help/FAQ experience. The owner explicitly chose to retain three tracked environment-example templates; this is not a claim that every textual reference is gone.
 
 ## Problem
 The chatbot is mounted across public and authenticated frontend surfaces, exposed through a frontend BFF and backend API, and coupled to deployment checks, environment configuration, dependencies, tests, and documentation. Removing only the visible widget would leave dead and misleading infrastructure behind.
@@ -13,7 +13,7 @@ The owner explicitly requested that the chatbot be removed from the application 
 - Remove all chatbot UI launchers, dock/widget components, client APIs, BFF route, contracts, and chatbot-specific tests.
 - Keep `/ayuda` and its static FAQ/knowledge content, but remove its assistant trigger.
 - Remove the backend chatbot endpoint, service, schemas, diagnostics, verification script, provider dependency, and dedicated tests.
-- Remove chatbot-only environment, Compose, deployment, Makefile, resilience, release-control, contract, and documentation references.
+- Remove chatbot-only Compose, deployment, Makefile, resilience, release-control, contract, and documentation references, excluding the three owner-retained environment-example templates.
 - Preserve unrelated landing-page work and the static knowledge synchronization needed by Help/FAQ.
 
 ## Constraints
@@ -152,7 +152,7 @@ from the two DTO-package listing comments; the past-tense
 `refactor(backend): remove chatbot capability` (this commit).
 
 ### RC-3A — Accessible operational and documentation residue (`done`)
-Owner decision 2026-09-22: split RC-3. RC-3A covers every accessible surface; RC-3B holds the three blocked `.env` example templates. RC-3A completion does NOT close RC-3.
+RC-3A covers the active operational and documentation surfaces. The owner later chose to close the scoped removal without editing the three `.env` example templates; their retained content is an explicit exception, not completed cleanup.
 Route: delegated writer; triggers: preparation across 4+ files and multi-file write.
 
 - [x] Remove chatbot Compose variables, deploy health checks, Make targets, and release-control assertions (`.env` templates excluded — RC-3B).
@@ -162,12 +162,8 @@ Route: delegated writer; triggers: preparation across 4+ files and multi-file wr
 - [x] Run focused root tests and the canonical full pre-PR lane.
 - [x] Commit and record native review evidence.
 
-### RC-3B — Blocked environment-example follow-up (`pending`)
-Blocked by owner safety decision 2026-09-22: leave ALL THREE templates untouched; never access blocked `.env*` paths.
-
-- [ ] `backend/.env.example` (tracked, NOT in the delegated surface): remove the live chatbot env block (lines 62-66: `OPENCODE_API_KEY=` + comments citing the RC-2-deleted `verificar_chatbot.py` and the RC-3A-deleted provisioning section).
-- [ ] Root `.env.example` (chatbot block lines 73-95) and `.env.production.example` (lines 79-94): chatbot blocks pending; the harness safety policy blocks reading any `.env*` path, so exact edit anchors cannot be constructed safely. No test or script cross-references either file, so the pending state is inert to validation.
-- [ ] Requires an owner-authorized surface change and an explicit safety-policy resolution before any edit.
+### Retained environment examples — explicitly out of scope
+The owner chose not to remove the chatbot-related placeholders from `backend/.env.example`, root `.env.example`, or root `.env.production.example`. These files remain untouched and are not represented as cleaned. The harness safety policy blocks reading `.env*` paths; no bypass or claim about their exact current contents is made. The prior RC-3 mapping found no test or script cross-references to the root templates. Any future cleanup requires a new owner decision and a policy-permitted editing method.
 
 ## Progress
 - 2026-09-22: RC-3A implemented in this worktree per the owner's partial-RC-3 decision (29 files: 28 code/config/docs + this task document; +81/−371). Deleted: compose `&backend_env` chatbot block, `qa-chatbot-check` Make target, `check_chatbot_config` + its `do_checks` call + the `CHATBOT_REQUERIDO` machinery in `deploy.sh`, the `*verificar_chatbot.py*` docker-stub case and the six-issue-#766 chatbot deploy tests in `test_release_controls.py`, the four `OPENCODE_*`/`CHATBOT_*` entries in `test_docker_compose_config.py`'s critical-variables dict (their sentinel cases vanish with the parametrization), the whole chatbot section of `provisioning.md` (generic staging caveat preserved under its own `## Límite conocido: staging` heading). Rewritten: `diagnostico_horarios.py` static-surface reader ("la instantánea de conocimiento"; test retuned), the SMTP-comment cross-reference and the secret-literal docstring in `test_docker_compose_config.py`, the `post-checks.sh`/`rollback-release.sh` comment analogies, `diagnostico-horarios.md` (chatbot reader dropped, regression-detector rationale kept), `glossary-contract.md` (`entradas_sha256` recompute corrected to Python-only reality; gate assertions on hashes/terms untouched), and 16 frontend comment-only sites (`tailwind.config.ts`, `globals.css`, `components/README.md`, `ToastContainer`, `LoadingState`, `ayuda/page.tsx`, `faq-content.test.ts`, `useVisualViewport.ts`, `LegalReviewDialog.tsx`, `useNativeDialog.ts`, `MembersPage.test.tsx`, `usted-register.test.ts`, `error-message.test.ts` 429 PRODUCERS row keeps only the live password-recovery producer, `error-message-usage`, `color-contrast`, `field-font-size-usage`). All three `.env` example templates untouched (RC-3B). The idle sibling `gentleman-1372-db-test-1` fixture on port 5436 was verified idle (0 client sessions) and stopped under the single-tenant rule before this slice's runs. Final classification: intentional history kept — `api.ts:240`/`api.test.ts:317` (#708 past tense), `conocimiento_club.py` docstring/snapshot history, `sincronizar_conocimiento.py:24`, `test_bloqueo_del_event_loop.py` (#834 narrative), `test_conocimiento_club.py:5,15`, `test_bff_contract.py:89`, and the new past-tense line in `diagnostico-horarios.md`; out-of-surface follow-ups NOT edited — `verificar_entrega_pdf.py:35,46` + `test_verificar_entrega_pdf.py:22` (deleted-file analogy comments) and `landing-config-no-schedule-list.test.ts:13` (cites the retired backend test name `test_el_modulo_del_chatbot_ya_no_guarda_una_copia_del_conocimiento`, confirmed gone). No missing in-scope surfaces found; the only pending surfaces are RC-3B's three `.env` templates.
@@ -233,9 +229,13 @@ Blocked by owner safety decision 2026-09-22: leave ALL THREE templates untouched
   - Focused: root `test_docker_compose_config.py + test_release_controls.py + test_diagnostico_horarios.py + test_staging_runbook_contract.py + test_glossary_contract.py + test_bff_contract.py` 401 passed / 1 skipped; frontend vitest on the 7 touched suites 341 passed (7 files).
   - `make pre-pr LANE=full`: completed green end-to-end — backend ruff, lint-imports, pip-audit, backend tests via `db-test`, root tests, frontend audit/type-check/lint/coverage, Next build, Playwright `202 passed (3.2m)`. `db-test` was single-tenant: the idle sibling `gentleman-1372-db-test-1` fixture (0 client sessions) was stopped before the runs.
   - Bounded final search: remaining `chatbot`/`OpenCode` mentions are all classified — intentional history (api.ts/api.test.ts #708 past tense, `conocimiento_club.py`, `sincronizar_conocimiento.py:24`, event-loop #834 narrative, `test_conocimiento_club.py:5,15`, `test_bff_contract.py:89`, `diagnostico-horarios.md` past-tense line) or out-of-surface follow-ups (`verificar_entrega_pdf.py:35,46`, `test_verificar_entrega_pdf.py:22`, stale `test_el_modulo_del_chatbot_ya_no_guarda_una_copia_del_conocimiento` citation in `landing-config-no-schedule-list.test.ts:13` — test name confirmed absent from backend).
-  - `.env` templates: all three untouched, never read; RC-3B pending.
+  - `.env` templates: all three untouched; subsequently excluded by the owner rather than counted as completed cleanup.
   - Rollback boundary: revert this commit; it only removes chatbot deploy/compose/QA checks and comment/docs residue, so the app from RC-1A–RC-2 stays building and green; `/ayuda` and its parity gates are untouched.
   - Native review: `disabled/unmanaged` (RDD clone-locally disabled by owner); no review approval claimed or implied.
 
-## Next step
-Deliver RC-3A as an independent PR slice; RC-3B (three `.env` example templates) stays pending behind an owner safety/surface decision. Overall RC-3 is NOT done.
+## Closure
+- RC-1C: PR #1387 merged; post-merge `main` CI green.
+- RC-2: PR #1388 merged with an owner-approved `size:exception`; post-merge `main` CI green.
+- RC-3A: PR #1389 and PR #1390 merged; post-merge `main` CI green after one failed-job rerun for a diagnosed transient BuildKit connection timeout on #1390.
+- Scope decision: the three environment-example templates are intentionally retained, not cleaned. The chatbot capability and the agreed accessible integration surfaces are removed; literal repository-wide absence is not asserted.
+- No further implementation is planned under this scoped feature. Revisit the retained templates only on a new request with a policy-permitted method.
