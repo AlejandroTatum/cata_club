@@ -140,7 +140,6 @@ RUTAS_PUBLICAS = {
     # está registrada (ver `test_verificacion_correo_outbox.py`).
     ("POST", "/auth/verificar-correo"),
     ("POST", "/auth/verificar-correo/reenviar"),
-    ("POST", "/chatbot/consultar"),
     ("POST", "/enrollment/"),
     ("GET", "/metrics"),  # issue #1309: sin auth por el mismo motivo que /health --
                           # un scraper interno no trae token. No expone dato de

@@ -11,8 +11,10 @@ dejaba al asistente contradiciendo a la página de ayuda, con total seguridad y
 sin que nada se pusiera rojo.
 
 `conocimiento_club.json`, al lado de este módulo, es ahora la única definición.
-Este módulo la carga, la valida y la serializa al texto que viaja en el system
-prompt; la página de ayuda renderiza la misma definición para humanos.
+Este módulo la carga, la valida y la serializa a la instantánea de texto que
+comparten los consumidores; la página de ayuda renderiza la misma definición
+para humanos. (El chatbot que motivó la unificación se retiró después; el
+conocimiento estático quedó, porque `/ayuda` y la landing lo siguen usando.)
 
 ## Por qué un archivo de datos, y no un endpoint ni un generador
 
@@ -43,27 +45,28 @@ Lo que se cede: existe un archivo derivado (`frontend/src/data/club-knowledge.js
 que puede quedar viejo. Por eso hay dos candados, y ninguno depende de que
 alguien se acuerde: `tests/test_conocimiento_club.py` compara el espejo byte a
 byte contra este archivo, y el guardián de divergencia del frontend compara el
-DOM renderizado de `/ayuda` contra los bytes exactos del prompt. Un espejo viejo
-renderiza contenido viejo y pone rojo al segundo.
+DOM renderizado de `/ayuda` contra los bytes exactos de la instantánea de
+conocimiento. Un espejo viejo renderiza contenido viejo y pone rojo al segundo.
 
 ## Qué NO entra acá
 
-Nada que no sea información pública del club. El endpoint del chatbot no pide
-autenticación (`chatbot_router.py`, sin `GestorPermisos`), así que todo lo que
-se agregue a este archivo queda a disposición de cualquiera que sepa preguntar.
+Nada que no sea información pública del club. La página de ayuda no pide
+autenticación, así que todo lo que se agregue a este archivo queda a
+disposición de cualquiera que la abra.
 """
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 RUTA_CONOCIMIENTO = Path(__file__).with_name("conocimiento_club.json")
 
-# Instantánea del prompt exacto que se le envía al modelo. Es un artefacto
-# derivado, regenerado por `scripts/sincronizar_conocimiento.py` y clavado al
-# valor vivo por la suite. Existe para que el guardián de divergencia del
-# frontend pueda comparar su DOM renderizado contra lo que el modelo realmente
-# recibe, sin levantar Python; de paso, deja el prompt visible en el diff de
-# cualquier PR que lo agrande.
+# Instantánea del bloque de conocimiento serializado (`texto_para_prompt`).
+# Es un artefacto derivado, regenerado por `scripts/sincronizar_conocimiento.py`
+# y clavado al valor vivo por la suite. Existe para que el guardián de
+# divergencia del frontend pueda comparar su DOM renderizado contra esos mismos
+# bytes sin levantar Python; de paso, deja el conocimiento visible en el diff
+# de cualquier PR que lo agrande. (Nació como el system prompt del chatbot; el
+# nombre del archivo sobrevivió al chatbot porque los guardianes lo leen.)
 RUTA_INSTANTANEA_PROMPT = Path(__file__).with_name("prompt_sistema.txt")
 
 _SECCIONES = ("club", "ubicacion", "contacto", "horarios", "faq", "atajos")
@@ -91,37 +94,8 @@ def cargar_conocimiento() -> dict:
     return datos
 
 
-def respuestas_por_pregunta(conocimiento: dict) -> Dict[str, str]:
-    """Índice pregunta -> respuesta de todo el FAQ.
-
-    Lo consume el respaldo local del chatbot: cuando el proveedor no atiende, la
-    respuesta que se entrega es la canónica, no una cuarta copia escrita a
-    mano."""
-    return {
-        entrada["pregunta"]: entrada["respuesta"]
-        for seccion in conocimiento["faq"]
-        for entrada in seccion["entradas"]
-    }
-
-
-def respuesta_de_contacto(conocimiento: dict) -> str:
-    """Dónde queda el club y a qué número se escribe, en una oración.
-
-    No es una entrada del FAQ: es la misma ubicación y el mismo contacto del
-    archivo canónico, redactados para el respaldo local del chatbot. Se compone
-    acá y no allá justamente para que no exista una séptima redacción de la
-    dirección del club en el repositorio."""
-    ubicacion = conocimiento["ubicacion"]
-    numeros = " o al ".join(conocimiento["contacto"]["whatsapp"])
-    return (
-        f"El club queda en {ubicacion['direccion']} "
-        f"({ubicacion['referencia'].lower()}, Plus Code {ubicacion['plus_code']}). "
-        f"Puede escribir por WhatsApp al {numeros}."
-    )
-
-
 def texto_para_prompt(conocimiento: dict) -> str:
-    """El conocimiento serializado tal como viaja en el system prompt.
+    """El conocimiento serializado tal como viaja en la instantánea compartida.
 
     Formato plano y regular a propósito: `- Categoría (edades): días, de HH:MM
     a HH:MM.` y pares `P:`/`R:`. El guardián de divergencia del frontend lee
@@ -170,45 +144,4 @@ def texto_para_prompt(conocimiento: dict) -> str:
     return "\n".join(lineas)
 
 
-# --- Instrucciones de comportamiento ----------------------------------------
-# Viven acá, y no en `chatbot_servicio`, por una razón operativa: este módulo no
-# importa `settings`, así que el script que regenera la instantánea del prompt
-# puede armarlo entero sin `.env` ni base de datos. El servicio del chatbot
-# reexporta `SYSTEM_PROMPT` y sigue siendo el dueño de la llamada al proveedor.
-_INSTRUCCIONES = """
-Eres el asistente virtual de "Cata Club", un club de tenis de mesa, y de su app de gestión
-(asistencias, membresías y pagos, fichas médicas, horarios y grupos). Tu función es ayudar a los
-usuarios a entender CÓMO USAR la app y a resolver las dudas más comunes sobre el club —horarios,
-categorías, ubicación y contacto— basándote exclusivamente en la información que se te da a
-continuación.
-
-Reglas:
-1. Responde solo preguntas sobre el club o sobre cómo usar la app, apoyándote en la información
-   provista. Si la pregunta no está cubierta por esa información, di que no cuentas con esa
-   información y sugiere contactar a un administrador del club — nunca inventes funcionalidades,
-   horarios, valores ni datos de contacto que no aparezcan ahí.
-2. Sé muy conciso. Si la respuesta es una sola idea, usa 1 a 3 oraciones cortas. Si implica varios
-   elementos (ej. varios horarios, varios pasos), estructúrala como una lista: una línea por elemento,
-   cada línea empezando con "• " (viñeta simple), sin meter todo en un párrafo corrido. Nunca un muro
-   de texto en un solo bloque.
-3. NUNCA menciones rutas, URLs ni nombres técnicos de páginas (nada de "/trainer/attendance",
-   "/groups", etc.). Refiérete siempre a las secciones por su nombre visible en el menú, tal como
-   aparecen en la FAQ (ej. "Mi Cuenta", "Horarios"), como lo haría una persona explicándole
-   a otra dónde hacer clic.
-4. Usa español neutro de Ecuador: trata al usuario de "usted" (nunca "tú" ni "vos", ni conjugaciones
-   de voseo como "podés" o "tenés"), con un tono cordial y profesional, sin modismos de otros países
-   (nada de "che", "boludo", "vale", "tío", etc.).
-5. Responde siempre en el mismo idioma en el que escribe el usuario; si no puedes determinarlo, responde
-   en español.
-6. Texto plano únicamente: nunca uses sintaxis markdown (nada de **negrita**, _cursiva_ ni backticks).
-   Las viñetas "• " sí están permitidas y se muestran bien (ver regla 2) — no son markdown, es el
-   único formato de lista que soporta el chat. El nombre de una sección puede ir entre comillas
-   normales si hace falta destacarlo.
-""".strip()
-
 CONOCIMIENTO = cargar_conocimiento()
-
-SYSTEM_PROMPT = (
-    f"{_INSTRUCCIONES}\n\n--- Información de Cata Club ---\n"
-    f"{texto_para_prompt(CONOCIMIENTO)}"
-)

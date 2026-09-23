@@ -11,21 +11,21 @@ ayuda con total seguridad.
 Estos tests cubren el lado del backend de esa unificación:
 
   · el archivo canónico carga y tiene la forma que ambos consumidores esperan;
-  · el prompt de sistema se SERIALIZA de ese archivo, y ya no hay una copia
-    propia dentro del módulo del chatbot;
-  · el espejo del frontend y la instantánea del prompt están al día — los dos
-    artefactos derivados que existen porque los contextos de build de Docker
-    son `./backend` y `./frontend` por separado (docker-compose.override.yml),
-    así que ningún archivo fuera de cada uno entra a su imagen;
-  · el tamaño del prompt queda medido y anotado, con un techo explícito;
-  · nada de `docs/manuales/` entra al prompt: el endpoint del chatbot es
-    público y sin autenticar, y ese directorio contiene una auditoría interna
+  · la instantánea de conocimiento se SERIALIZA de ese archivo (el módulo que
+    la generaba a mano —el chatbot, retirado— ya no existe);
+  · el espejo del frontend y la instantánea de conocimiento están al día — los
+    dos artefactos derivados que existen porque los contextos de build de
+    Docker son `./backend` y `./frontend` por separado
+    (docker-compose.override.yml), así que ningún archivo fuera de cada uno
+    entra a su imagen;
+  · nada de `docs/manuales/` entra al conocimiento: la página de ayuda es
+    pública y sin autenticar, y ese directorio contiene una auditoría interna
     de producción con vulnerabilidades todavía abiertas.
 
 La comprobación de divergencia contra lo que RENDERIZA la página de ayuda vive
 del otro lado, en `frontend/src/app/ayuda/__tests__/knowledge-parity.test.tsx`:
-compara el DOM renderizado contra los bytes exactos del prompt, nunca una
-constante compartida contra sí misma.
+compara el DOM renderizado contra los bytes exactos de la instantánea, nunca
+una constante compartida contra sí misma.
 """
 import json
 from pathlib import Path
@@ -33,14 +33,6 @@ from pathlib import Path
 import pytest
 
 from app.servicios_negocio import conocimiento_club
-from app.servicios_negocio.chatbot_servicio import (
-    PROMPT_SISTEMA_CARACTERES,
-    PROMPT_SISTEMA_TOKENS_APROX,
-    PROMPT_SISTEMA_TOKENS_MEDIDOS,
-    SYSTEM_PROMPT,
-    TECHO_PROMPT_SISTEMA_TOKENS,
-    ChatbotServicio,
-)
 
 RAIZ_REPO = Path(__file__).resolve().parents[2]
 DATOS_FRONTEND = RAIZ_REPO / "frontend" / "src" / "data"
@@ -134,21 +126,18 @@ class TestArchivoCanonico:
 
 
 # ---------------------------------------------------------------------------
-# El prompt se serializa del archivo, no se escribe a mano
+# El conocimiento se serializa del archivo, no se escribe a mano
 # ---------------------------------------------------------------------------
 
 
-class TestPromptSerializado:
-    def test_el_modulo_del_chatbot_ya_no_guarda_una_copia_del_conocimiento(self):
-        fuente = Path(conocimiento_club.__file__).with_name("chatbot_servicio.py")
-        assert "_FAQ_CONTENIDO" not in fuente.read_text(encoding="utf-8")
-
+class TestConocimientoSerializado:
     def test_el_prompt_contiene_cada_horario_publicado(self, conocimiento):
+        texto = conocimiento_club.texto_para_prompt(conocimiento)
         for horario in conocimiento["horarios"]:
             linea = next(
                 (
                     fila
-                    for fila in SYSTEM_PROMPT.splitlines()
+                    for fila in texto.splitlines()
                     if fila.startswith(f"- {horario['categoria']} (")
                 ),
                 None,
@@ -157,12 +146,13 @@ class TestPromptSerializado:
             assert horario["edades"] in linea
             assert horario["horas"] in linea
 
-    def test_el_prompt_contiene_cada_pregunta_y_respuesta_del_faq(self, conocimiento):
+    def test_el_texto_contiene_cada_pregunta_y_respuesta_del_faq(self, conocimiento):
+        texto = conocimiento_club.texto_para_prompt(conocimiento)
         for seccion in conocimiento["faq"]:
-            assert seccion["titulo"] in SYSTEM_PROMPT
+            assert seccion["titulo"] in texto
             for entrada in seccion["entradas"]:
-                assert entrada["pregunta"] in SYSTEM_PROMPT
-                assert entrada["respuesta"] in SYSTEM_PROMPT
+                assert entrada["pregunta"] in texto
+                assert entrada["respuesta"] in texto
 
     @pytest.mark.parametrize(
         "hecho",
@@ -177,16 +167,18 @@ class TestPromptSerializado:
             "@cataclub_tenis_de_mesa",
         ],
     )
-    def test_el_prompt_sabe_cosas_que_antes_no_sabia(self, hecho):
-        # Criterio 3 del issue: el bot contesta preguntas que hoy no puede
-        # porque su respuesta solo vivía en la web o en la landing.
-        assert hecho in SYSTEM_PROMPT
+    def test_el_conocimiento_sabe_cosas_que_antes_no_sabia(self, hecho):
+        # Criterio 3 del issue original: con la unificación, la superficie
+        # compartida contesta cosas que antes solo vivían en la web o en la
+        # landing.
+        assert hecho in conocimiento_club.texto_para_prompt(
+            conocimiento_club.CONOCIMIENTO
+        )
 
     def test_el_conocimiento_sigue_sin_mencionar_rutas_tecnicas(self, conocimiento):
-        # Regla 3 de las instrucciones: nunca rutas ni URLs de pantallas. El
-        # conocimiento creció mucho; la regla no cambió. Se mira el bloque de
-        # conocimiento y no el prompt entero porque las instrucciones SÍ
-        # nombran rutas, como ejemplo de lo que el modelo no debe decir.
+        # El texto se renderiza en la página pública de ayuda: los nombres de
+        # sección son los que una persona ve en el menú, nunca rutas ni URLs
+        # técnicas.
         texto = conocimiento_club.texto_para_prompt(conocimiento)
         for ruta in ("/student", "/trainer", "/payments", "/groups", "/admin"):
             assert ruta not in texto, ruta
@@ -198,14 +190,17 @@ class TestPromptSerializado:
 
 
 class TestArtefactosDerivados:
-    def test_la_instantanea_del_prompt_esta_al_dia(self):
+    def test_la_instantanea_de_conocimiento_esta_al_dia(self):
         # `frontend` compara su DOM renderizado contra ESTOS bytes, así que una
         # instantánea vieja convertiría el guardián de divergencia en un test
-        # que aprueba lo que ya no se envía.
+        # que aprueba contenido que ya no es el vigente.
         assert conocimiento_club.RUTA_INSTANTANEA_PROMPT.exists()
         instantanea = conocimiento_club.RUTA_INSTANTANEA_PROMPT.read_text(encoding="utf-8")
-        assert instantanea == SYSTEM_PROMPT, (
-            "La instantánea del prompt quedó vieja: corré `make sync-knowledge`."
+        assert instantanea == conocimiento_club.texto_para_prompt(
+            conocimiento_club.CONOCIMIENTO
+        ), (
+            "La instantánea del conocimiento quedó vieja: corré "
+            "`make sync-knowledge`."
         )
 
     def test_el_espejo_del_frontend_es_identico_al_canonico(self):
@@ -228,39 +223,16 @@ class TestArtefactosDerivados:
 
 
 # ---------------------------------------------------------------------------
-# El tamaño, medido y anotado (criterio 4 del issue)
-# ---------------------------------------------------------------------------
-
-
-class TestTamanioDelPrompt:
-    def test_el_numero_anotado_en_el_codigo_es_el_real(self):
-        # La constante es un literal a propósito: obliga a que agrandar el
-        # conocimiento aparezca como un número que cambia en el diff, en vez de
-        # crecer en silencio.
-        assert PROMPT_SISTEMA_TOKENS_MEDIDOS == PROMPT_SISTEMA_TOKENS_APROX, (
-            "El prompt cambió de tamaño: actualizá PROMPT_SISTEMA_TOKENS_MEDIDOS "
-            f"a {PROMPT_SISTEMA_TOKENS_APROX}."
-        )
-
-    def test_la_medicion_se_deriva_del_prompt_que_se_envia(self):
-        assert PROMPT_SISTEMA_CARACTERES == len(SYSTEM_PROMPT)
-        assert PROMPT_SISTEMA_TOKENS_APROX == PROMPT_SISTEMA_CARACTERES // 4
-
-    def test_el_prompt_no_supera_el_techo_declarado(self):
-        assert PROMPT_SISTEMA_TOKENS_APROX <= TECHO_PROMPT_SISTEMA_TOKENS
-
-
-# ---------------------------------------------------------------------------
 # Exclusión de `docs/manuales/` (criterio 5 del issue)
 # ---------------------------------------------------------------------------
 
 
 class TestAuditoriaExcluida:
-    def test_el_prompt_no_trae_nada_de_la_auditoria_de_produccion(self):
+    def test_el_conocimiento_no_trae_nada_de_la_auditoria_de_produccion(self):
         # `docs/manuales/` contiene una auditoría interna de producción con
-        # fallos de seguridad, algunos abiertos. El endpoint del chatbot es
-        # público y sin autenticar: incorporarla sería publicárselos a
-        # cualquiera que sepa preguntar.
+        # fallos de seguridad, algunos abiertos. La página de ayuda es pública
+        # y sin autenticar: incorporarla sería publicárselos a cualquiera que
+        # la abra.
         for titulo in (
             "auditoría",
             "auditoria",
@@ -270,7 +242,9 @@ class TestAuditoriaExcluida:
             "antes de desplegar",
             "staging",
         ):
-            assert titulo.lower() not in SYSTEM_PROMPT.lower(), titulo
+            assert titulo.lower() not in conocimiento_club.texto_para_prompt(
+                conocimiento_club.CONOCIMIENTO
+            ).lower(), titulo
 
     def test_el_conocimiento_solo_lee_su_propio_archivo(self):
         # La única lectura de disco del módulo es el JSON canónico. Sin esto,
@@ -281,35 +255,3 @@ class TestAuditoriaExcluida:
         assert "glob" not in fuente
         assert "open(" not in fuente
         assert fuente.count("read_text") == 1
-
-
-# ---------------------------------------------------------------------------
-# El respaldo local también sale del archivo canónico
-# ---------------------------------------------------------------------------
-
-
-class TestRespaldoLocal:
-    def test_contesta_una_pregunta_que_solo_vivia_en_el_faq_de_la_web(self):
-        # Antes este respaldo tenía SU PROPIA tabla de respuestas escritas a
-        # mano — una cuarta copia. Ahora devuelve la respuesta canónica, así
-        # que con el proveedor caído el bot contesta algo que antes no sabía.
-        respuesta = ChatbotServicio._respuesta_local(
-            "Represento a más de un hijo, ¿cómo cambio entre ellos?"
-        )
-        assert "selector de estudiante" in respuesta
-
-    def test_dice_donde_queda_el_club_sin_una_septima_copia_de_la_direccion(self, conocimiento):
-        # La ubicación y el contacto no son una entrada del FAQ, así que el
-        # respaldo los compone del archivo canónico en vez de tener su propia
-        # redacción de la dirección.
-        respuesta = ChatbotServicio._respuesta_local("¿A qué número de WhatsApp escribo?")
-        assert conocimiento["contacto"]["whatsapp"][0] in respuesta
-        assert conocimiento["ubicacion"]["direccion"] in respuesta
-
-    def test_avisa_siempre_que_el_asistente_externo_no_esta(self):
-        respuesta = ChatbotServicio._respuesta_local("¿cómo inicio sesión?")
-        assert respuesta.startswith("El asistente externo no está disponible")
-
-    def test_no_inventa_cuando_no_sabe(self):
-        respuesta = ChatbotServicio._respuesta_local("¿quién ganó el mundial de 1986?")
-        assert "contacte a un administrador" in respuesta.lower()
