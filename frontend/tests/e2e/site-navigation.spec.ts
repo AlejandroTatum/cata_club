@@ -15,7 +15,7 @@
  * Two `page.goto` calls, deliberately: the landing is the heaviest page in the
  * product and the e2e budget on a 4-vCPU runner is the constraint. The trip
  * from `/terminos` ends ON the landing, so the "does this section exist"
- * sweep over all six links rides along for free.
+ * sweep over all five links rides along for free.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -41,7 +41,6 @@ test.describe("public navigation (issue #771)", () => {
       "Inicio",
       "Horarios",
       "Valores",
-      "Logros",
       "Galería",
       "Contacto",
     ]);
@@ -51,7 +50,6 @@ test.describe("public navigation (issue #771)", () => {
       "/#inicio",
       "/#horarios",
       "/#valores",
-      "/#logros",
       "/#galeria",
       "/#contacto",
     ]);

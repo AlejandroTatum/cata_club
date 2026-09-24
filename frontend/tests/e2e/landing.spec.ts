@@ -468,24 +468,29 @@ test.describe("Landing page", () => {
       expect(overflow, "no horizontal page scroll under reduced motion").toBeLessThanOrEqual(0);
     });
 
-    test("sends the scroll cue to the real Palmarés section, contiguous with Valores", async ({ page }) => {
+    test("retires Logros with no dead anchor left behind (issue #1372)", async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
 
-      const cue = page.locator(".landing-tablero-cue");
-      await expect(cue).toHaveAttribute("href", "#logros");
+      // The section and the tablero's exit cue into it are gone; a dead
+      // anchor is worse than no section, so nothing anywhere on the page —
+      // navbar, tablero or footer — may still target `#logros`.
+      await expect(page.locator("#logros")).toHaveCount(0);
+      await expect(page.locator(".landing-tablero-cue")).toHaveCount(0);
+      const deadLinks = await page.evaluate((): string[] =>
+        Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href='#logros']")).map((link): string => link.textContent ?? ""),
+      );
+      expect(deadLinks).toEqual([]);
 
+      // Values now flows straight into the CTA band that followed Logros.
       const flow = await page.evaluate(() => {
         const values = document.querySelector<HTMLElement>(".landing-values");
-        const palmares = document.querySelector<HTMLElement>("#logros");
-        if (!values || !palmares) return null;
-        return { palmaresIsNextSection: values.nextElementSibling === palmares };
+        const motto = document.querySelector<HTMLElement>(".landing-motto");
+        if (!values || !motto) return null;
+        return { mottoIsNextSection: values.nextElementSibling === motto };
       });
-      expect(flow, "Values and Palmarés render").not.toBeNull();
-      expect(flow?.palmaresIsNextSection, "Palmarés follows Values directly").toBe(true);
-
-      await cue.click();
-      await expect(page).toHaveURL(/#logros$/);
+      expect(flow, "Values and the CTA band render").not.toBeNull();
+      expect(flow?.mottoIsNextSection, "The CTA band follows Values directly").toBe(true);
     });
   });
 
