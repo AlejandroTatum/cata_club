@@ -446,29 +446,60 @@
 .landing-motto .landing-button { background: var(--landing-highlight); color: var(--landing-on-highlight); }
 .landing-motto .landing-button:hover { background: var(--landing-brand-fuchsia); color: var(--landing-on-highlight); }
 
+/* Issue #1372 made the gallery's photos managed content (GET /api/galeria);
+   after a static detour the section is back to the pre-#1372 full-bleed
+   moving strip: uniform slide height, native aspect ratios, one endless GSAP
+   pass owned by `LandingMotion`. The runtime enhances only a ready track
+   (`[data-carousel][data-ready]`, set once the fetch, the photo measurements
+   and the planned slide run have committed), so async entries can never race
+   the loop measurement. Captions ride the bottom scrim and reveal on hover,
+   keyboard focus or a touch tap; the strip holds still while a card is read. */
+
 /* Full-bleed by cancelling the section gutter, never by `100vw`: inside this
    centring flex column `100vw` resolves against the wrong box, and it also
    counts the scrollbar, which pushes the track off-centre and adds overflow. */
 .landing-carousel-wrap { position: relative; align-self: stretch; margin-inline: calc(-1 * var(--landing-gutter)); }
-/* The strip is presentation-only: LandingMotion drives its transform
-   automatically when normal motion is preferred. There is no user
-   interaction and no horizontal scroll state. */
-.landing-carousel { display: flex; gap: 22px; padding: 8px var(--landing-gutter); overflow: hidden; }
+.landing-carousel { display: flex; gap: 22px; margin: 0; padding: 8px var(--landing-gutter); overflow: hidden; list-style: none; }
 .landing-carousel.is-enhanced { padding-inline: 0; }
 
-/* `figure` carries a UA margin of `1em 40px`. Left in place it adds 80px of
-   layout width per slide, so the loop measures a track wider than the visible
-   one and the spacing drifts out by that much on every frame. */
 /* Uniform height, natural width. Forcing every frame into one portrait box
-   would crop the wide group shots down to a third of the people in them, and
-   would make HEIGHT the binding dimension under `object-fit: cover` — the one
-   dimension `sizes` cannot describe, which is how a landscape photo ends up
-   scaled 2.2x past the resolution the browser actually downloaded.
-   Keep in step with SLIDE_HEIGHT_DESKTOP / SLIDE_HEIGHT_MOBILE. */
+   would crop the wide group shots down to a third of the people in them.
+   Each slide's `aspect-ratio` is inline, measured from its own photograph
+   before the strip is declared ready, so no photo is cropped at all and the
+   loop's width math is correct even before the bytes paint.
+   Keep the heights in step with SLIDE_HEIGHT_DESKTOP / SLIDE_HEIGHT_MOBILE. */
 .landing-carousel { --landing-slide-height: 468px; }
-.landing-slide { position: relative; height: var(--landing-slide-height); flex: none; margin: 0; overflow: hidden; border-radius: 16px; background: var(--landing-brand-black); scroll-snap-align: center; }
+.landing-slide { position: relative; height: var(--landing-slide-height); flex: none; margin: 0; overflow: hidden; border-radius: 16px; background: var(--landing-vitrina-photo-bg); }
 .landing-slide img { display: block; width: auto; height: 100%; object-fit: cover; }
+.landing-slide:focus-visible { outline: 2px solid var(--landing-brand-red); outline-offset: 3px; }
 .landing-slide::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--landing-brand-black) 72%, transparent) 0%, transparent 42%); }
+
+/* The caption is the reveal: photo first, words on the scrim when the
+   visitor asks for them — hover, keyboard focus, or a touch tap (`.is-open`).
+   `opacity`, never `display`: the text stays in the accessibility tree at
+   all times, and the image's alt already carries the description besides.
+   The title speaks the landing's own heading voice — Barlow 800, uppercase,
+   the same register as the section's labels (issue #1372: the caption
+   briefly wore Playfair; the serif is the motto's voice, not the gallery's). */
+.landing-slide-caption { position: absolute; inset-inline: 0; bottom: 0; z-index: 1; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 20px; opacity: 0; transform: translateY(8px); transition: opacity 0.25s ease-out, transform 0.25s ease-out; }
+.landing-slide:hover .landing-slide-caption, .landing-slide:focus .landing-slide-caption, .landing-slide.is-open .landing-slide-caption { opacity: 1; transform: none; }
+.landing-slide-title { color: var(--landing-surface); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; }
+.landing-slide-description { color: var(--landing-vitrina-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 15px; line-height: 1.45; }
+.landing-gallery-status { margin: 0; color: var(--landing-text-muted); font-family: var(--font-landing-barlow), sans-serif; font-size: 17px; }
+
+/* Browse controls (issue #1372): previous/next bring a chosen photo to the
+   strip's edge and hold it while its caption is read. They ride the strip's
+   own edges — the gutter gradients already dim exactly where they sit — and
+   they retime the autoplay's loop timeline rather than animating the track
+   themselves, so the marquee and the arrows can never fight over transforms.
+   The component omits them for a one-photo catalog (nothing to browse); the
+   reduced-motion block below drops them with the clones. */
+.landing-gallery-nav { position: absolute; inset-inline: 0; top: 0; bottom: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between; padding-inline: clamp(16px, 2.2vw, 44px); pointer-events: none; }
+/* @touch-target Photo browsing is a tap gesture; 48px, like the CTA. */
+.landing-gallery-nav button { pointer-events: auto; display: grid; place-items: center; width: 48px; min-height: 48px; border: 1px solid var(--landing-border); border-radius: 50%; background: var(--landing-surface); color: var(--landing-text-strong); cursor: pointer; box-shadow: 0 8px 20px color-mix(in srgb, var(--landing-brand-black) 18%, transparent); transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
+.landing-gallery-nav button:hover { border-color: var(--landing-action); color: var(--landing-action); transform: translateY(-2px); }
+.landing-gallery-nav button:focus-visible { outline: 3px solid var(--landing-focus); outline-offset: 3px; }
+.landing-gallery-nav svg { width: 18px; height: 18px; }
 
 /* Tells the eye the strip continues past the viewport edge. */
 .landing-carousel-wrap::before, .landing-carousel-wrap::after { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; width: var(--landing-gutter); pointer-events: none; }
@@ -768,4 +799,16 @@
      are the CSS-only backstop for the same two keyframes. */
   .landing-schedule-time--animate .landing-schedule-digit, .landing-schedule-day--pop { animation: none; }
   .landing-schedule-tab, .landing-schedule-dot, .landing-schedule-tab::before, .landing-schedule-day, .landing-schedule-card::after { transition: none; }
+  /* The gallery's motion runtime never loads under reduced motion, so the
+     same strip markup presents as a complete wrapped layout — every photo
+     and caption reachable, zero movement — and the loop-only visual clones
+     drop out instead of publishing duplicates. */
+  .landing-carousel-wrap { margin-inline: 0; }
+  .landing-carousel-wrap::before, .landing-carousel-wrap::after { content: none; }
+  .landing-carousel { flex-wrap: wrap; justify-content: center; overflow: visible; padding-inline: 0; }
+  .landing-slide-clone { display: none; }
+  .landing-slide-caption { transition: none; }
+  /* The browse controls drive the loop; the wrapped static strip needs none
+     — every photo is already on the page, in order. */
+  .landing-gallery-nav { display: none; }
 }
