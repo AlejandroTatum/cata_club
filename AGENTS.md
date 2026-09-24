@@ -25,21 +25,29 @@ worktree.
 
 ## Pi delivery standing authorization
 
-For user-authorized implementation work in Pi, that authorization covers the
-end-to-end delivery workflow in `CLAUDE.md`: use an isolated worktree and branch
-with one writer/integrator, run applicable focused and canonical validation,
-commit conventionally, push, and open a PR. For a standard PR targeting `main`,
-enable GitHub auto-merge with squash; branch protection must require all checks
-and a branch current with `main`. Never enable auto-merge on an intermediate
-stacked PR whose base is another feature branch. After the automatic merge,
-confirm post-merge `main` CI is green, then delete the local branch and worktree
-and prune worktrees.
+For user-authorized implementation work in Pi, that authorization covers
+implementation and local verification only, following the delivery workflow in
+`CLAUDE.md`: use an isolated worktree and branch with one writer/integrator,
+run applicable focused and canonical validation, and prepare the change
+evidence. It is never implicit delivery authorization.
+
+Before any delivery step, present the evidence for the reviewable cut to the
+user — changed paths with a diff summary and the result of every local check —
+and stop for explicit approval. Only that explicit approval per reviewable cut
+(each candidate PR) authorizes the delivery steps, as appropriate for the cut:
+commit conventionally, push, and open the PR. For a standard PR targeting
+`main`, enable GitHub auto-merge with squash; branch protection must require
+all checks and a branch current with `main`. Never enable auto-merge on an
+intermediate stacked PR whose base is another feature branch. After the
+automatic merge, confirm post-merge `main` CI is green, then delete the local
+branch and worktree and prune worktrees.
 
 This standing authorization never permits force-pushes, red or pending CI
 merges, manual bypass of branch protection, direct `main` commits, production
 deployment or configuration changes, destructive actions, scope expansion, or
-bypassing human or product decisions. If validation or CI fails, stop safely and
-report it rather than delivering; do not disable auto-merge safeguards.
+bypassing human or product decisions. Approval to implement is not approval to
+deliver. If validation or CI fails, stop safely and report it rather than
+delivering; do not disable auto-merge safeguards.
 
 ## Validation
 
