@@ -35,8 +35,8 @@ from app.presentacion.routers import (
     notificaciones_router,
     enrollment_router,
     dashboard_router,
-    chatbot_router,
     sponsors_router,
+    galeria_router,
     supresion_datos_router,
 )
 from app.dominio.excepciones import (
@@ -392,8 +392,8 @@ app.include_router(geografia_router.router, prefix="/api/v1")
 app.include_router(notificaciones_router.router, prefix="/api/v1")
 app.include_router(enrollment_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
-app.include_router(chatbot_router.router, prefix="/api/v1")
 app.include_router(sponsors_router.router, prefix="/api/v1")
+app.include_router(galeria_router.router, prefix="/api/v1")
 app.include_router(supresion_datos_router.router, prefix="/api/v1")
 
 

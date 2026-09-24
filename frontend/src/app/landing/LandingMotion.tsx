@@ -5,12 +5,17 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 import type { HeroSlideChangeDetail } from "./HeroCarousel";
+import { GALLERY_HOLD_EVENT, GALLERY_READY_EVENT, GALLERY_SEEK_EVENT, seekDeltaPx, type GallerySeekDetail } from "./landing-gallery";
 import { registerSmoothScroll } from "@/lib/smooth-scroll";
 import Lenis from "lenis";
 
 interface CarouselLoop extends gsap.core.Timeline {
   /** Total travel of one full pass, in pixels. */
   loopWidth: number;
+  /** Pixels of pattern travel at which slide `i` sits aligned at the strip's left edge. */
+  alignmentOffsets: number[];
+  /** The timeline's own travel speed, in pixels per second of timeline time. */
+  pixelsPerSecond: number;
 }
 
 /**
@@ -50,11 +55,17 @@ function buildHorizontalLoop(items: HTMLElement[], speed: number, gap: number): 
   const last = items[length - 1];
   const loopWidth =
     last.offsetLeft + (xPercents[length - 1] / 100) * widths[length - 1] - startX + last.offsetWidth + gap;
+  /* Alignment offsets, captured at build time next to the geometry they are
+   * derived from (slide widths are fixed by the section's height + ratio, so
+   * they only go stale across the same responsive-height resize that already
+   * stalemates the loop itself — a pre-existing limitation, not a new one). */
+  const alignmentOffsets: number[] = [];
 
   for (let index = 0; index < length; index += 1) {
     const item = items[index];
     const curX = (xPercents[index] / 100) * widths[index];
     const distanceToStart = item.offsetLeft + curX - startX;
+    alignmentOffsets[index] = distanceToStart;
     const distanceToLoop = distanceToStart + widths[index];
     timeline
       .to(item, {
@@ -78,11 +89,28 @@ function buildHorizontalLoop(items: HTMLElement[], speed: number, gap: number): 
   // Pre-render both ends so the first frame does not jump.
   timeline.progress(1, true).progress(0, true);
   timeline.loopWidth = loopWidth;
+  timeline.alignmentOffsets = alignmentOffsets;
+  timeline.pixelsPerSecond = pixelsPerSecond;
   return timeline;
 }
 
-/** Runs the gallery's autonomous presentation loop. There are no user input
- * listeners or mutable horizontal state; reduced motion never calls this. */
+/** Runs the gallery's autonomous presentation loop.
+ *
+ * The track is only handed over once it is ready (`Gallery` sets
+ * `[data-ready]` and fires `landing:gallery-ready` after its async fetch,
+ * measurements and planned run have committed), so slides can never race
+ * the measurement. While a card is being read — hover, keyboard focus or a
+ * touch tap pin — `Gallery` raises `landing:gallery-hold` and the loop
+ * pauses; release resumes it. Reduced motion never calls this: the loader
+ * does not mount this module at all, and the stylesheet presents the strip
+ * as a complete wrapped layout instead.
+ *
+ * Browsing (`landing:gallery-seek`) is not a second animation system: the
+ * request names a UNIQUE photo (clones are presentation-only), and the seek
+ * retimes THIS timeline to the moment that photo sits aligned — forward for
+ * "next", backward through the seam for "prev" — while the reading hold
+ * keeps it still. Because both behaviours speak through one pause/play
+ * authority, the autoplay and the arrows can never fight over the track. */
 function enhanceCarousel(track: HTMLElement): () => void {
   const slides = gsap.utils.toArray<HTMLElement>(".landing-slide", track);
   if (slides.length === 0) return (): void => {};
@@ -92,7 +120,76 @@ function enhanceCarousel(track: HTMLElement): () => void {
   const loop = buildHorizontalLoop(slides, 0.6, gap);
   loop.play();
 
+  let held = false;
+  let seeking = false;
+  let seekTween: gsap.core.Tween | null = null;
+
+  /** One playback authority: reading holds, an in-flight seek owns the clock. */
+  const applyMotion = (): void => {
+    if (seeking || held) loop.pause();
+    else loop.play();
+  };
+
+  const finishSeek = (): void => {
+    if (!seeking) return;
+    seeking = false;
+    seekTween = null;
+    applyMotion();
+  };
+
+  const onGalleryHold = (event: Event): void => {
+    held = (event as CustomEvent<{ held?: boolean }>).detail?.held ?? false;
+    // Mid-seek the clock belongs to the tween; the hold state is remembered
+    // and answered the moment the requested photo is in place.
+    if (!seeking) applyMotion();
+  };
+
+  const onGallerySeek = (event: Event): void => {
+    const { index, direction } = (event as CustomEvent<GallerySeekDetail>).detail;
+    const uniqueSlides = slides.filter((slide): boolean => !slide.closest(".landing-slide-clone"));
+    const slide = uniqueSlides[index];
+    if (!slide) return;
+    const targetOffset = loop.alignmentOffsets[slides.indexOf(slide)];
+    const travelled = loop.time() * loop.pixelsPerSecond;
+    const delta = seekDeltaPx(travelled, targetOffset, loop.loopWidth, direction);
+
+    seekTween?.kill();
+    seeking = true;
+    loop.pause();
+    if (Math.abs(delta) < 1) {
+      // Already aligned: the caller still pins the caption; nothing to travel.
+      finishSeek();
+      return;
+    }
+    // The tween drives an unbounded pixel clock, not the timeline's `time`
+    // directly: a backward seek would target a negative time, and GSAP clamps
+    // negative time to 0 (verified), collapsing the travel. Each update writes
+    // the clock wrapped into the timeline's [0, duration) — the rendered
+    // pattern is periodic, so the wrap is invisible and the requested
+    // direction survives the seam.
+    const duration = loop.duration();
+    const clock = { offsetPx: loop.time() * loop.pixelsPerSecond };
+    const writeClock = (): void => {
+      const raw = (clock.offsetPx / loop.pixelsPerSecond) % duration;
+      loop.time(raw < 0 ? raw + duration : raw);
+    };
+    seekTween = gsap.to(clock, {
+      offsetPx: clock.offsetPx + delta,
+      duration: Math.min(1.2, 0.45 + Math.abs(delta) / 2500),
+      ease: "power2.inOut",
+      onUpdate: writeClock,
+      onComplete: finishSeek,
+      onInterrupt: finishSeek,
+    });
+  };
+
+  document.addEventListener(GALLERY_HOLD_EVENT, onGalleryHold);
+  document.addEventListener(GALLERY_SEEK_EVENT, onGallerySeek);
+
   return (): void => {
+    document.removeEventListener(GALLERY_HOLD_EVENT, onGalleryHold);
+    document.removeEventListener(GALLERY_SEEK_EVENT, onGallerySeek);
+    seekTween?.kill();
     loop.kill();
     track.classList.remove("is-enhanced");
     gsap.set(slides, { clearProps: "all" });
@@ -254,6 +351,21 @@ export default function LandingMotion(): null {
       let teardownTicker: (() => void) | undefined;
       let teardownMotto: (() => void) | undefined;
 
+      /*
+       * The gallery's entries arrive asynchronously, so the track may not
+       * exist yet — or may not be ready — when this runtime mounts. Enhance
+       * a ready track now, and listen for the announcement so a track that
+       * becomes ready later (fetch after mount, or a runtime remount after
+       * a reduced-motion toggle) still starts its loop. Both orders land
+       * here exactly once per track.
+       */
+      const startGallery = (): void => {
+        const track = document.querySelector<HTMLElement>("[data-carousel]");
+        if (!track || track.classList.contains("is-enhanced") || !track.hasAttribute("data-ready")) return;
+        teardownCarousel = enhanceCarousel(track);
+      };
+      const onGalleryReady = (): void => startGallery();
+
       const context = gsap.context((): void => {
         const heading = document.querySelector<HTMLElement>("[data-split]");
         if (heading) {
@@ -330,6 +442,9 @@ export default function LandingMotion(): null {
         const heroFrame = document.querySelector<HTMLElement>("[data-media-reveal]");
         if (heroFrame) teardownHeroCarousel = enhanceHeroCarousel(heroFrame);
 
+        document.addEventListener(GALLERY_READY_EVENT, onGalleryReady);
+        startGallery();
+
         // No count-up on the trust band. It seeded itself at 0 and overwrote
         // `textContent`, so any trigger that failed to fire left the real figure
         // replaced by 0 — the reveals carry `immediateRender: false` for exactly
@@ -339,6 +454,7 @@ export default function LandingMotion(): null {
       return (): void => {
         unregisterSmoothScroll?.();
         unregisterSmoothScroll = undefined;
+        document.removeEventListener(GALLERY_READY_EVENT, onGalleryReady);
         teardownCarousel?.();
         teardownHeroCarousel?.();
         teardownTicker?.();

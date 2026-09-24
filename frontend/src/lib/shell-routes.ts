@@ -87,6 +87,9 @@ const APP_SHELL_PREFIXES = [
   "/trainer",
   "/reports",
   "/sponsors",
+  // `/galeria` (admin de la galería de la landing, issue #1372) renders
+  // `AppShell` itself, same as `/sponsors` beside it.
+  "/galeria",
   "/student",
   "/profile",
   // `/admin/crear-cuenta` (admin account CRUD) renders `AppShell` itself.

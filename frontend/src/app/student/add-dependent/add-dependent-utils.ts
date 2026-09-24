@@ -15,8 +15,6 @@ import type { TipoSangre } from "@/types/domain";
 import { toUserMessage } from "@/lib/error-message";
 import {
   cedulaRule,
-  phoneFieldRule,
-  toStoredPhone,
   personNameRule,
   normalizePersonName,
   studentBirthDateRule,
@@ -70,13 +68,18 @@ export const ADD_DEPENDENT_SHORT_LABELS: Record<AddDependentStep, string> = {
  * `representanteId`), and a represented minor's emergency contact is
  * derived from the representante at read time — never a free-text field
  * this form collects and the visitor has to keep in sync by hand.
+ *
+ * No `telefono` either: a represented minor has no phone of their own —
+ * the same rule the public wizard's child branch already applies (issue
+ * #1197, `enroll/page.tsx`). The emergency contact derives from the
+ * representante, so a second phone number for the child would be a field
+ * nobody owns and nobody reads.
  */
 export interface AddDependentFormData {
   nombres: string;
   apellidos: string;
   fechaNacimiento: string;
   cedula: string;
-  telefono: string;
   institucionId: string;
   tipoSangre: TipoSangre | "";
   /** Raw comma-separated input — parsed into a string[] by `buildRepresentadoPayload`. */
@@ -90,7 +93,6 @@ export const initialAddDependentFormData: AddDependentFormData = {
   apellidos: "",
   fechaNacimiento: "",
   cedula: "",
-  telefono: "",
   institucionId: "",
   tipoSangre: "",
   enfermedades: "",
@@ -184,7 +186,6 @@ export const ADD_DEPENDENT_FIELD_TOKEN: Record<AddDependentField, string> = {
   apellidos: "apellidos",
   fechaNacimiento: "fecha-nacimiento",
   cedula: "cedula",
-  telefono: "telefono",
   institucionId: "institucion",
   tipoSangre: "tipo-sangre",
   enfermedades: "enfermedades",
@@ -217,10 +218,6 @@ const FIELD_RULES: Partial<Record<AddDependentField, (d: AddDependentFormData) =
   apellidos: (d) => personNameRule(d.apellidos, "Los apellidos"),
   fechaNacimiento: (d) => studentBirthDateRule(d.fechaNacimiento),
   cedula: (d) => cedulaRule(d.cedula, "La cédula de identidad"),
-  // Issue #1296: the field's own digits (no trunk 0) — the shared
-  // `phoneFieldRule` restores the local form first, same rule every other
-  // phone field on the app validates against.
-  telefono: (d) => phoneFieldRule(d.telefono, "El teléfono"),
   tipoSangre: (d) => (isTipoSangre(d.tipoSangre) ? null : "El tipo de sangre es obligatorio."),
 };
 
@@ -229,7 +226,6 @@ const CHILD_FIELDS: AddDependentField[] = [
   "apellidos",
   "fechaNacimiento",
   "cedula",
-  "telefono",
 ];
 
 // Issue #1138: sin contacto de emergencia propio -- se deriva del
@@ -274,7 +270,6 @@ const FIELD_LABELS: Partial<Record<AddDependentField, string>> = {
   apellidos: "Apellidos",
   fechaNacimiento: "Fecha de nacimiento",
   cedula: "Cédula de identidad",
-  telefono: "Teléfono",
   tipoSangre: "Tipo de sangre",
 };
 
@@ -339,9 +334,9 @@ function parseEnfermedades(raw: string): string[] {
 }
 
 /**
- * Build the `RepresentadoCreatePayload` sent to `crearRepresentado`, matching
- * the backend's `RepresentadoCreateDTO` shape (camelCase here — the BFF
- * route converts to snake_case before calling FastAPI).
+ * Build the `RepresentadoCreatePayload` sent to `crearRepresentadoPropio`,
+ * matching the backend's `RepresentadoCreateDTO` shape (camelCase here — the
+ * BFF route converts to snake_case before calling FastAPI).
  *
  * Issue #1137, invariante (B): no credentials are ever built into this
  * payload — a represented dependent never has a `Usuario` of their own.
@@ -350,6 +345,11 @@ function parseEnfermedades(raw: string): string[] {
  * `telefonoEmergencia` — this endpoint always creates a represented minor,
  * and the backend rejects those two fields explicitly (422) rather than
  * ignoring them.
+ *
+ * No `telefono`: a represented minor has no phone of their own (issue
+ * #1197, same as the public wizard's child flow). The field stays optional
+ * on `RepresentadoCreatePayload`/`RepresentadoCreateDTO` — omitting it is
+ * the payload's way to say "no phone", and the backend stores NULL.
  */
 export function buildRepresentadoPayload(data: AddDependentFormData): RepresentadoCreatePayload {
   const payload: RepresentadoCreatePayload = {
@@ -357,8 +357,6 @@ export function buildRepresentadoPayload(data: AddDependentFormData): Representa
     apellidos: normalizePersonName(data.apellidos),
     cedula: data.cedula.trim(),
     fechaNacimiento: data.fechaNacimiento,
-    // Issue #1296: the field holds the local digits with no trunk 0 — restore it for the wire contract (#228).
-    telefono: toStoredPhone(data.telefono),
     fichaMedica: {
       tipoSangre: data.tipoSangre as TipoSangre,
       enfermedades: parseEnfermedades(data.enfermedades),

@@ -43,7 +43,6 @@ import {
   downloadBlob,
   exportNuevosPorPeriodoPdf,
   exportAsistenciaReportePdf,
-  consultarChatbot,
   fetchMembresiaDeuda,
   regularizarDeuda,
   fetchTarifas,
@@ -283,14 +282,14 @@ describe("error handling", () => {
 describe("ApiClientError.code", () => {
   it("carries the responder's code when the body names one", async () => {
     vi.mocked(global.fetch).mockResolvedValue(
-      errorResponse(400, { message: "El mensaje es muy largo.", code: "chatbot_mensaje_demasiado_largo" }),
+      errorResponse(400, { message: "El mensaje es muy largo.", code: "mensaje_demasiado_largo" }),
     );
 
     try {
       await fetchPaymentValidations();
       expect.fail("Expected an error");
     } catch (error) {
-      expect((error as ApiClientError).code).toBe("chatbot_mensaje_demasiado_largo");
+      expect((error as ApiClientError).code).toBe("mensaje_demasiado_largo");
     }
   });
 
@@ -315,7 +314,7 @@ describe("ApiClientError.code", () => {
 // ---------------------------------------------------------------------------
 // ApiClientError.retryAfterSeconds (issue #708) — the burst limit's REAL wait
 //
-// The 429 the chatbot's BFF route forwards carries `Retry-After` (seconds,
+// The 429 the chatbot's BFF route used to forward carried `Retry-After` (seconds,
 // set by the backend's own handler — see `_manejador_limite_excedido` in
 // backend/main.py). Before this, the client threw away the header and the
 // widget could only say "wait a few seconds", a constant that had nothing to
@@ -528,33 +527,6 @@ describe("timeout / abort", () => {
       expect(toUserMessage(error, "No se pudo cargar la lista.")).toBe(
         TIMED_OUT_TEXT,
       );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("gives the chatbot longer than the BFF's own 30 s abort", async () => {
-    vi.useFakeTimers();
-
-    let capturedSignal: AbortSignal | undefined;
-    vi.mocked(global.fetch).mockImplementation((_url, opts) => {
-      capturedSignal = opts?.signal as AbortSignal | undefined;
-      return new Promise(() => {});
-    });
-
-    try {
-      const promise = consultarChatbot("¿Cómo veo mis pagos?");
-      promise.catch(() => {});
-
-      // The BFF (src/app/api/chatbot/route.ts) aborts at 30 s and answers 504.
-      // If the browser client gave up at the shared 10 s default it would throw
-      // a bare AbortError instead — no status, so the widget could not tell a
-      // slow answer from a dead backend.
-      await vi.advanceTimersByTimeAsync(30_001);
-
-      expect(capturedSignal).toBeDefined();
-      if (!capturedSignal) throw new Error("Expected fetch to receive an AbortSignal.");
-      expect(capturedSignal.aborted).toBe(false);
     } finally {
       vi.useRealTimers();
     }

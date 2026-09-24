@@ -358,7 +358,7 @@ describe("STATUS_MESSAGES — the table promises nothing this stack cannot send"
   const PRODUCERS: Readonly<Record<number, string>> = {
     401: "backend/app/main.py maps CredencialesInvalidas; every BFF route forwards it",
     403: "backend/app/main.py maps PermisosInsuficientes (e.g. EFECTIVO registered by an admin)",
-    429: "backend/app/servicios_negocio/chatbot_servicio.py:162, and the password-recovery routes",
+    429: "the password-recovery routes",
   };
 
   it("carries a producer for every message it can show", () => {

@@ -1110,6 +1110,85 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
   });
 });
 
+/**
+ * The screenshot finding: on a narrow phone a REJECTED payment's row actions
+ * ("Registrar un pago nuevo" + "Detalle") sat BESIDE the metadata in one
+ * `flex-wrap` row whose info block was `flex-1` — basis 0, so it never
+ * wrapped and the actions claimed the width, squeezing the metadata into a
+ * ~50px column (the same basis-0 failure `DataRow`'s own comment documents
+ * for /tarifas, issue #660). The card now stacks: facts, then actions. The
+ * desktop table row keeps its side-by-side action cell — it has the width.
+ */
+describe("StudentPaymentsPage — the mobile card keeps its metadata readable", () => {
+  function renderRejectedPayment(): Promise<HTMLElement> {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({
+        id: 8,
+        estadoPago: "RECHAZADO",
+        tipoPago: "TRANSFERENCIA",
+        voucherUrl: null,
+        motivoRechazo: "El comprobante no coincide",
+      }),
+    ]);
+    render(<StudentPaymentsPage />);
+    return screen.findByTestId("student-payments-cards");
+  }
+
+  it("stacks a rejected payment's actions under its metadata instead of beside it", async () => {
+    await renderRejectedPayment();
+
+    const card = within(historyCards()).getByRole("listitem");
+    // The metadata line ("Transferencia · Registrado el … · Cubre …") is the
+    // info block's own paragraph — the card's first stacked child.
+    const metadata = card.querySelector("p");
+    expect(metadata).not.toBeNull();
+    expect(metadata!.textContent).toContain("Transferencia");
+    expect(metadata!.textContent).toContain("Cubre");
+    const infoBlock = metadata!.parentElement as HTMLElement;
+
+    // Both blocks are DIRECT children of the stacked `li` — the old markup
+    // nested them side by side inside an intermediate flex-wrap row, which
+    // is exactly the containment that produced the squeezed column.
+    expect(infoBlock.parentElement).toBe(card);
+    const actionsBlock = infoBlock.nextElementSibling as HTMLElement;
+    expect(actionsBlock.parentElement).toBe(card);
+
+    // The "Registrar un pago nuevo" link lives in the actions block, never
+    // inside the metadata's block.
+    const registerLink = /registrar un pago nuevo/i;
+    expect(within(infoBlock).queryByRole("link", { name: registerLink })).not.toBeInTheDocument();
+    expect(within(actionsBlock).getByRole("link", { name: registerLink })).toBeInTheDocument();
+    expect(within(actionsBlock).getByRole("button", { name: /detalle/i })).toBeInTheDocument();
+  });
+
+  // Triangulates: the stacking is the card's own shape, not something only a
+  // rejected payment gets — an ordinary approved row stacks the same way.
+  it("keeps the same stacked shape for an approved payment's upload action", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({
+        id: 9,
+        estadoPago: "PENDIENTE_VALIDACION",
+        tipoPago: "TRANSFERENCIA",
+        voucherUrl: null,
+      }),
+    ]);
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-cards");
+
+    const card = within(historyCards()).getByRole("listitem");
+    const infoBlock = (card.querySelector("p") as HTMLElement).parentElement as HTMLElement;
+    expect(infoBlock.parentElement).toBe(card);
+    const actionsBlock = infoBlock.nextElementSibling as HTMLElement;
+    expect(actionsBlock.parentElement).toBe(card);
+    expect(
+      within(infoBlock).queryByRole("button", { name: /subir comprobante/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(actionsBlock).getByRole("button", { name: /subir comprobante/i }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("StudentPaymentsPage — registering a payment", () => {
   it("starts the new period where the paid one ends, so paying early loses no days", async () => {
     mockFetchStudentPortal.mockResolvedValueOnce({

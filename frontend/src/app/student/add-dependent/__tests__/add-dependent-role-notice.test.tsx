@@ -58,7 +58,6 @@ function fillChildStep(): void {
   fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Zambrano" } });
   fireEvent.change(screen.getByLabelText(/^Cédula/), { target: { value: "1798765432" } });
   fillBirthDate(addDependentFieldId("fechaNacimiento"), "2014-05-12");
-  fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991234567" } });
 }
 
 function goToSummaryStep(): void {

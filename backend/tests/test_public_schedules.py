@@ -153,3 +153,99 @@ def test_public_schedule_catalog_groups_ordered_blocks_without_internal_fields(
     ]
     assert [item["category"] for item in body] == sorted(item["category"] for item in body)
     assert all(set(item) == {"category", "ages", "blocks"} for item in body)
+
+
+def test_public_schedule_omits_hidden_categories(client_sin_permisos, db_session):
+    """`visible_en_landing` es un filtro de publicación, no de datos: la
+    categoría oculta tiene su sesión real y sigue viva en el ABM, pero no
+    sale en el catálogo público."""
+    visible = CategoriaHorario(
+        codigo="public-visible", label="Public Visible",
+        hora_inicio=time(8), hora_fin=time(9),
+        dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.LUNES)],
+    )
+    oculta = CategoriaHorario(
+        codigo="public-oculta", label="Public Oculta",
+        hora_inicio=time(10), hora_fin=time(11),
+        visible_en_landing=False,
+        dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.MARTES)],
+    )
+    db_session.add_all([visible, oculta])
+    db_session.add_all([
+        HorarioEntrenamiento(
+            categoria="public-visible", dia_semana=DiaSemana.LUNES,
+            hora_inicio=time(8), hora_fin=time(9),
+        ),
+        HorarioEntrenamiento(
+            categoria="public-oculta", dia_semana=DiaSemana.MARTES,
+            hora_inicio=time(10), hora_fin=time(11),
+        ),
+    ])
+    db_session.commit()
+
+    response = client_sin_permisos.get(RUTA)
+
+    assert response.status_code == 200
+    labels = [item["category"] for item in response.json()]
+    assert "Public Visible" in labels
+    assert "Public Oculta" not in labels
+
+
+def test_public_schedule_is_empty_when_every_category_is_hidden(client_sin_permisos, db_session):
+    """El estado que la landing ya sabe mostrar ("Aún no hay horarios
+    publicados."): con TODAS las categorías ocultas el catálogo público es
+    una lista vacía con un 200 -- no un error ni un catálogo parcial."""
+    oculta = CategoriaHorario(
+        codigo="public-todas-ocultas", label="Public Todas Ocultas",
+        hora_inicio=time(8), hora_fin=time(9),
+        visible_en_landing=False,
+        dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.LUNES)],
+    )
+    db_session.add(oculta)
+    db_session.add(HorarioEntrenamiento(
+        categoria="public-todas-ocultas", dia_semana=DiaSemana.LUNES,
+        hora_inicio=time(8), hora_fin=time(9),
+    ))
+    db_session.commit()
+
+    response = client_sin_permisos.get(RUTA)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_patch_publicacion_vuelve_a_publicar_una_categoria_oculta(client, db_session):
+    """Round-trip del toggle del admin: la categoría oculta vuelve al
+    catálogo público en la misma franja que ya tenía. (Solo `client`: el
+    GET público no exige token y el PATCH exige admin -- pedir además
+    `client_sin_permisos` pisaría la sobrecarga del token con un rol sin
+    permisos, por el orden de los fixtures.)"""
+    categoria = CategoriaHorario(
+        codigo="public-republicada", label="Public Republicada",
+        hora_inicio=time(16), hora_fin=time(17),
+        visible_en_landing=False,
+        dias_permitidos=[CategoriaHorarioDia(dia_semana=DiaSemana.JUEVES)],
+    )
+    db_session.add(categoria)
+    db_session.add(HorarioEntrenamiento(
+        categoria="public-republicada", dia_semana=DiaSemana.JUEVES,
+        hora_inicio=time(16), hora_fin=time(17),
+    ))
+    db_session.commit()
+
+    oculta = client.get(RUTA).json()
+    assert "Public Republicada" not in [item["category"] for item in oculta]
+
+    respuesta = client.patch(
+        f"/api/v1/asistencias/categorias/{categoria.codigo}/publicacion",
+        json={"visible": True},
+    )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["visible"] is True
+    publicada = client.get(RUTA).json()
+    assert {
+        "category": "Public Republicada",
+        "ages": None,
+        "blocks": [{"days": ["JUEVES"], "startTime": "16:00", "endTime": "17:00"}],
+    } in publicada

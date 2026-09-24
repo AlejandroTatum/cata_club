@@ -18,9 +18,10 @@ contiene su propio árbol. De ahí los dos derivados:
      páginas (medido: 7,9 KB de 25 KB del chunk `app/layout-*.js`) para
      mostrar dos preguntas. Sigue siendo una proyección, no una copia: nadie
      puede editarla sin que el candado la vuelva a escribir.
-  3. `app/servicios_negocio/prompt_sistema.txt` — el prompt exacto que se le
-     manda al modelo, para que el guardián de divergencia del frontend compare
-     su DOM renderizado contra lo que el modelo realmente recibe.
+  3. `app/servicios_negocio/prompt_sistema.txt` — el bloque de conocimiento
+     serializado, para que el guardián de divergencia del frontend compare
+     su DOM renderizado contra esos mismos bytes. (Nació como el system
+     prompt del chatbot; el chatbot se retiró y el conocimiento se quedó.)
 
 Ninguno de los dos puede quedarse viejo en silencio: la suite del backend
 compara ambos contra la fuente y falla apuntando a este script. `--verificar`
@@ -70,7 +71,9 @@ def _esperado() -> dict[Path, str]:
         conocimiento_club.RUTA_CONOCIMIENTO: _json_canonico(),
         ESPEJO_FRONTEND: _json_canonico(),
         ATAJOS_FRONTEND: _json_de_atajos(),
-        conocimiento_club.RUTA_INSTANTANEA_PROMPT: conocimiento_club.SYSTEM_PROMPT,
+        conocimiento_club.RUTA_INSTANTANEA_PROMPT: conocimiento_club.texto_para_prompt(
+            conocimiento_club.CONOCIMIENTO
+        ),
     }
 
 
@@ -103,8 +106,8 @@ def main() -> int:
     sincronizar()
     for ruta in _esperado():
         print(f"escrito: {ruta}")
-    caracteres = len(conocimiento_club.SYSTEM_PROMPT)
-    print(f"Prompt de sistema: {caracteres} caracteres ≈ {caracteres // 4} tokens")
+    caracteres = len(conocimiento_club.texto_para_prompt(conocimiento_club.CONOCIMIENTO))
+    print(f"Instantánea de conocimiento: {caracteres} caracteres")
     return 0
 
 

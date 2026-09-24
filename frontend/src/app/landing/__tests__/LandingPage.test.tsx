@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { CLUB_PLUS_CODE, clubOpenStreetMapUrl } from "@/app/landing/club-location";
 import { deriveContactHours, landingConfig, toWhatsAppLink, yearsSinceFounding } from "@/app/landing/landing-config";
-import { GALLERY_PHOTOS } from "@/app/landing/landing-gallery";
+import { GALLERY_BROWSE_HOLD_MS, GALLERY_HOLD_EVENT, GALLERY_SEEK_EVENT, type GallerySeekDetail } from "@/app/landing/landing-gallery";
 import { HERO_PHOTOS } from "@/app/landing/landing-hero-photos";
 import { mapPublicSchedules } from "@/app/landing/schedule-data";
 import LandingPage from "@/app/landing/LandingPage";
@@ -79,6 +79,82 @@ function contactHoursRow(): HTMLElement {
   return within(card as HTMLElement).getByText("Horario").closest("p") as HTMLElement;
 }
 
+/** The gallery section — the one the public navbar's "Galería" anchor names. */
+function gallerySection(): HTMLElement {
+  return document.querySelector("#galeria") as HTMLElement;
+}
+
+/**
+ * What GET /api/galeria answers for the current test. `[]` is the gallery's
+ * real initial state — the club publishes entries from /galeria — and every
+ * test below starts from it unless it deliberately publishes photos.
+ */
+let galleryPayload: unknown = [];
+
+/**
+ * Stands in for the gallery's ratio probe. The real probe measures each
+ * photo with a throwaway `new Image()`; jsdom never loads resources, so the
+ * stub answers asynchronously with a known 3:2 photo (1500x1000) — or fails,
+ * for the fallback-ratio path. Without a stub a publishing test would sit on
+ * the measurement timeout instead of reaching the ready state.
+ */
+function stubGalleryImages({ width = 1500, height = 1000, fail = false }: { width?: number; height?: number; fail?: boolean } = {}): void {
+  vi.stubGlobal("Image", class GalleryProbeDouble {
+    naturalWidth = width;
+    naturalHeight = height;
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(_value: string) {
+      queueMicrotask((): void => { if (fail) this.onerror?.(); else this.onload?.(); });
+    }
+  });
+}
+
+/** Publishes a payload and, with it, photos the probe can measure. */
+function publishGallery(payload: unknown, probe?: Parameters<typeof stubGalleryImages>[0]): void {
+  galleryPayload = payload;
+  stubGalleryImages(probe);
+}
+
+/** Records what the strip asks the motion runtime to do about reading. */
+interface HoldTracker {
+  held: boolean[];
+  stop: () => void;
+}
+function trackHolds(): HoldTracker {
+  const held: boolean[] = [];
+  const listener = (event: Event): void => {
+    held.push((event as CustomEvent<{ held: boolean }>).detail.held);
+  };
+  document.addEventListener(GALLERY_HOLD_EVENT, listener);
+  return { held, stop: (): void => { document.removeEventListener(GALLERY_HOLD_EVENT, listener); } };
+}
+
+/** Records the browse requests the section aims at the motion runtime. */
+interface SeekTracker {
+  detail: GallerySeekDetail[];
+  stop: () => void;
+}
+function trackSeeks(): SeekTracker {
+  const detail: GallerySeekDetail[] = [];
+  const listener = (event: Event): void => {
+    detail.push({ ...(event as CustomEvent<GallerySeekDetail>).detail });
+  };
+  document.addEventListener(GALLERY_SEEK_EVENT, listener);
+  return { detail, stop: (): void => { document.removeEventListener(GALLERY_SEEK_EVENT, listener); } };
+}
+
+/** The two-photo catalog most gallery tests publish. */
+const TWO_PHOTOS = [
+  { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+  { id: 2, titulo: "La final", descripcion: "El punto decisivo del torneo regional.", imagenUrl: "https://res.cloudinary.com/club/la-final.jpg" },
+];
+
+/** The gallery's slide figures, in run order. */
+function galleryFigures(): HTMLElement[] {
+  return Array.from(gallerySection().querySelectorAll("figure"));
+}
+
 describe("LandingPage", (): void => {
   let reducedMotion = true;
   let matchMediaCalls: MockedMediaQueryList[] = [];
@@ -86,11 +162,12 @@ describe("LandingPage", (): void => {
   beforeEach((): void => {
     reducedMotion = true;
     matchMediaCalls = [];
+    galleryPayload = [];
     motionMount.mockClear();
     // The sponsor strip is now data-driven: it calls public GET /api/sponsors on mount.
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
           const url = String(input);
-          return Promise.resolve({ ok: true, json: async (): Promise<unknown> => url.includes("/api/schedules") ? publicSchedulePayload : [] });
+          return Promise.resolve({ ok: true, json: async (): Promise<unknown> => url.includes("/api/schedules") ? publicSchedulePayload : url.includes("/api/galeria") ? galleryPayload : [] });
         }));
     vi.stubGlobal("ResizeObserver", class {
       observe(): void {}
@@ -859,85 +936,320 @@ describe("LandingPage", (): void => {
     });
   });
 
-  it("keeps gallery captions out of visible markup", (): void => {
+  /**
+   * The gallery is data-driven (issue #1372): it renders only what
+   * GET /api/galeria returns, and it starts empty — the club publishes its
+   * photos from /galeria. The default fetch stub answers with an empty list,
+   * which is the section's real initial state.
+   */
+  it("says the gallery is empty until the club publishes photos", async (): Promise<void> => {
     render(<LandingPage />);
 
-    // Scoped to the gallery: the Logros section now also carries this same
-    // fact, so an unscoped query would match more than one element.
-    const gallery = document.querySelector(".landing-gallery") as HTMLElement;
-    expect(gallery.querySelectorAll("figcaption")).toHaveLength(0);
-    GALLERY_PHOTOS.forEach((photo): void => {
-      expect(gallery).not.toHaveTextContent(photo.caption);
-    });
+    const status = await within(gallerySection()).findByRole("status");
+    expect(status).toHaveTextContent("Aún no hay fotos en la galería.");
+    expect(within(gallerySection()).queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("renders every configured photo as a carousel slide", (): void => {
+  it("renders one accessible photo per published entry, caption in the tree", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+      { id: 2, titulo: "La final", descripcion: "El punto decisivo del torneo regional.", imagenUrl: "https://res.cloudinary.com/club/la-final.jpg" },
+    ]);
+
     render(<LandingPage />);
 
-    const slides = Array.from(document.querySelectorAll(".landing-slide"));
-    expect(slides).toHaveLength(GALLERY_PHOTOS.length);
-    GALLERY_PHOTOS.forEach((photo, index): void => {
-      expect(slides[index].querySelector("img")).toHaveAttribute("src", photo.src);
-      expect(slides[index].querySelector("img")).toHaveAttribute("alt", photo.alt);
-      expect(slides[index].querySelector("figcaption")).toBeNull();
-    });
+    const images = await within(gallerySection()).findAllByRole("img");
+    expect(images).toHaveLength(2);
+    // The description — not the slogan — is the photograph's alt text.
+    expect(images[0]).toHaveAttribute("alt", "Una jugada frente al público de la sala.");
+    expect(images[0]).toHaveAttribute("src", "https://res.cloudinary.com/club/en-juego.jpg");
+    // The catalog covers the viewport, so nothing had to be repeated.
+    expect(gallerySection().querySelectorAll("li[aria-hidden='true']")).toHaveLength(0);
+    // The caption rides in the accessibility tree (the reveal is visual only:
+    // opacity, never display), and every photo is a focusable reveal surface.
+    expect(within(gallerySection()).getByText("En juego")).toBeInTheDocument();
+    expect(within(gallerySection()).getByText("Una jugada frente al público de la sala.")).toBeInTheDocument();
+    const slides = within(gallerySection()).queryAllByRole("figure", { hidden: true });
+    expect(slides).toHaveLength(2);
+    expect(slides[0]).toHaveAttribute("tabindex", "0");
   });
 
   /**
-   * The gallery is presentation-only ("sin interacción con el usuario"):
-   * slides are decorative figures, not controls. There is no lightbox, no
-   * open affordance, and no pause/resume channel — clicking or keyboarding
-   * a slide must do nothing, and the markup carries no interaction state.
+   * A catalog too narrow to cover the viewport — the demo preview's real
+   * one-photo state — would send a lone slide across a mostly empty track.
+   * The run is repeated visually, but every repeat is silenced: assistive
+   * technology reads each photo exactly once, and only the first pass is
+   * focusable.
    */
-  it("ships the gallery as a non-interactive strip with no open affordance", (): void => {
+  it("repeats a one-photo catalog visually while keeping it silent to assistive technology", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
+
     render(<LandingPage />);
 
-    const gallery = document.querySelector(".landing-gallery");
-    const track = document.querySelector(".landing-carousel");
-    expect(track).not.toBeNull();
-    expect(track).toHaveAttribute("data-carousel");
-    expect(track?.className).not.toContain("is-enhanced");
-
-    // Slides are plain figures: no buttons, no lightbox, no drag handle.
-    expect(gallery?.querySelectorAll(".landing-slide")).toHaveLength(GALLERY_PHOTOS.length);
-    expect(gallery?.querySelectorAll("button")).toHaveLength(0);
-    expect(gallery?.querySelector(".landing-lightbox")).toBeNull();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const gallery = gallerySection();
+    const images = await within(gallery).findAllByRole("img", { hidden: true });
+    expect(images.length).toBeGreaterThan(1);
+    expect(within(gallery).queryAllByRole("img")).toHaveLength(1); // exactly one speaks
+    const clones = images.slice(1);
+    expect(clones.length).toBeGreaterThan(0);
+    clones.forEach((clone): void => {
+      expect(clone.closest("li")).toHaveAttribute("aria-hidden", "true");
+      expect(clone.closest("figure") ?? clone.closest("li")).not.toHaveAttribute("tabindex");
+    });
   });
 
-  it("ignores clicks on slides: nothing opens and the page never locks scrolling", (): void => {
+  it("announces the published photos once, through a screen-reader-only status", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
+
     render(<LandingPage />);
 
-    const slide = document.querySelector(".landing-slide") as HTMLElement;
-    fireEvent.click(slide);
-    fireEvent.keyDown(slide, { key: "Enter" });
+    const status = await within(gallerySection()).findByText(/Galería: En juego\./);
+    expect(status).toHaveClass("sr-only");
+  });
 
+  /**
+   * Cards are not controls: nothing opens, nothing navigates. What a card
+   * DOES do is reveal its caption to whoever is reading it — pointer hover,
+   * keyboard focus, or a touch tap pin — and each of those asks the motion
+   * runtime to hold the loop still for the read.
+   */
+  it("reveals the caption to hover, focus and tap while asking the loop to hold", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ]);
+
+    render(<LandingPage />);
+
+    const gallery = gallerySection();
+    const figure = (await within(gallery).findByRole("img")).closest("figure") as HTMLElement;
+    const track = document.querySelector("[data-carousel]") as HTMLElement;
+    const holds = trackHolds();
+
+    // Still no control semantics and no overlay surface of any kind.
+    expect(within(gallery).queryAllByRole("button")).toHaveLength(0);
+
+    // Touch/mouse tap pins the caption open.
+    fireEvent.click(figure);
+    expect(figure).toHaveClass("is-open");
+    expect(holds.held).toEqual([true]);
+
+    // A tap anywhere outside the strip releases the pin.
+    fireEvent.click(document.body);
+    expect(figure).not.toHaveClass("is-open");
+    expect(holds.held).toEqual([true, false]);
+
+    // Pointer hover holds; leaving the strip releases.
+    fireEvent.mouseOver(track);
+    expect(holds.held).toEqual([true, false, true]);
+    fireEvent.mouseOut(track);
+    expect(holds.held).toEqual([true, false, true, false]);
+
+    // Keyboard focus holds until focus moves away.
+    figure.focus();
+    expect(holds.held).toEqual([true, false, true, false, true]);
+    figure.blur();
+    expect(holds.held).toEqual([true, false, true, false, true, false]);
+
+    // Nothing ever opens a dialog, and the page behind the strip never locks.
+    fireEvent.click(figure);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(document.querySelector(".landing-lightbox")).toBeNull();
     expect(document.body.style.overflow).toBe("");
+    holds.stop();
   });
 
-  it("exposes the strip as a labelled group, not as a set of buttons", (): void => {
+  /**
+   * The browse controls (issue #1372 task 6): previous/next bring a chosen
+   * UNIQUE photo forward — clones never count — pin its caption while it is
+   * read, and hand a seek to the motion runtime. A one-photo catalog has
+   * nothing to browse, so it ships no controls at all (the reveal test above
+   * locks that); two photos are the first catalog where an arrow means
+   * anything, and every arrow names its photo for assistive technology.
+   */
+  it("offers previous/next browse controls once two photos are published", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
     render(<LandingPage />);
 
-    const track = document.querySelector("[data-carousel]");
-    expect(track).toHaveAttribute("role", "group");
-    expect(track).toHaveAttribute("aria-label", "Galería de fotos del club");
-    expect(within(track as HTMLElement).queryAllByRole("button")).toHaveLength(0);
+    await within(gallerySection()).findAllByRole("img");
+    const previous = within(gallerySection()).getByRole("button", { name: "Foto anterior" });
+    const next = within(gallerySection()).getByRole("button", { name: "Foto siguiente" });
+    expect(previous).toHaveAttribute("aria-controls", "galeria-track");
+    expect(next).toHaveAttribute("aria-controls", "galeria-track");
+    expect(document.getElementById("galeria-track")).not.toBeNull();
+    expect(within(gallerySection()).getByRole("group", { name: "Navegar por la galería" }))
+      .toContainElement(previous);
   });
 
-  describe("gallery motion contract", (): void => {
-    it("renders the strip with the markup the autonomous loop needs", (): void => {
-      render(<LandingPage />);
+  it("browses by unique photo, wrapping at both ends of the catalog", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
 
-      const track = document.querySelector(".landing-carousel");
-      const slides = Array.from(track?.querySelectorAll(".landing-slide") ?? []);
-      expect(slides).toHaveLength(GALLERY_PHOTOS.length);
-      // Images stay draggable=false so nothing can mis-interpret a pointer press.
-      slides.forEach((slide): void => {
-        expect(slide.querySelector("img")).toHaveAttribute("draggable", "false");
-      });
+    await within(gallerySection()).findAllByRole("img");
+    const holds = trackHolds();
+    const seeks = trackSeeks();
+    const figures = galleryFigures();
+
+    // Next from the strip's starting photo lands on photo 2, forward.
+    fireEvent.click(within(gallerySection()).getByRole("button", { name: "Foto siguiente" }));
+    expect(seeks.detail).toEqual([{ index: 1, direction: "next" }]);
+    expect(figures[1]).toHaveClass("is-open");
+    expect(figures[0]).not.toHaveClass("is-open");
+    expect(holds.held).toEqual([true]);
+    expect(within(gallerySection()).getByText("Foto 2 de 2: La final")).toBeInTheDocument();
+
+    // Next again wraps around the end of the catalog, not off of it.
+    fireEvent.click(within(gallerySection()).getByRole("button", { name: "Foto siguiente" }));
+    expect(seeks.detail[1]).toEqual({ index: 0, direction: "next" });
+    expect(figures[0]).toHaveClass("is-open");
+    expect(figures[1]).not.toHaveClass("is-open");
+
+    // Previous walks the same ring backwards, from wherever browsing sits.
+    fireEvent.click(within(gallerySection()).getByRole("button", { name: "Foto anterior" }));
+    expect(seeks.detail[2]).toEqual({ index: 1, direction: "prev" });
+    fireEvent.click(within(gallerySection()).getByRole("button", { name: "Foto anterior" }));
+    expect(seeks.detail[3]).toEqual({ index: 0, direction: "prev" });
+
+    holds.stop();
+    seeks.stop();
+  });
+
+  it("holds the browsed photo through a reading window, then lets the loop resume", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    const figures = await within(gallerySection()).findAllByRole("figure", { hidden: true });
+    const holds = trackHolds();
+    const next = within(gallerySection()).getByRole("button", { name: "Foto siguiente" });
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(next);
+      expect(figures[1]).toHaveClass("is-open");
+      expect(holds.held.at(-1)).toBe(true);
+
+      // Just before the window closes the strip is still being held...
+      await act(async (): Promise<void> => { await vi.advanceTimersByTimeAsync(GALLERY_BROWSE_HOLD_MS - 1); });
+      expect(figures[1]).toHaveClass("is-open");
+      expect(holds.held.at(-1)).toBe(true);
+
+      // ...and exactly at the window's end the pin releases, so the loop
+      // resumes from wherever the seek parked it — never from zero.
+      await act(async (): Promise<void> => { await vi.advanceTimersByTimeAsync(1); });
+      expect(figures[1]).not.toHaveClass("is-open");
+      expect(holds.held.at(-1)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      holds.stop();
+    }
+  });
+
+  it("does not mistake a browse control's click for the outside tap that releases a pin", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    await within(gallerySection()).findAllByRole("img");
+    const holds = trackHolds();
+    const next = within(gallerySection()).getByRole("button", { name: "Foto siguiente" });
+
+    // The controls overlay the strip's edges, so their clicks bubble past it;
+    // they are part of the strip's surface and must keep the pin alive.
+    fireEvent.click(next);
+    fireEvent.click(next);
+    expect(galleryFigures()[0]).toHaveClass("is-open");
+    expect(holds.held.at(-1)).toBe(true);
+
+    // A genuine outside click still ends the read early.
+    fireEvent.click(document.body);
+    expect(galleryFigures()[0]).not.toHaveClass("is-open");
+    expect(holds.held.at(-1)).toBe(false);
+
+    holds.stop();
+  });
+
+  it("browses with the arrow keys from wherever focus sits inside the strip", async (): Promise<void> => {
+    publishGallery(TWO_PHOTOS);
+    render(<LandingPage />);
+
+    const figures = await within(gallerySection()).findAllByRole("figure", { hidden: true });
+    const seeks = trackSeeks();
+    const track = document.getElementById("galeria-track") as HTMLElement;
+
+    fireEvent.keyDown(track, { key: "ArrowRight" });
+    expect(seeks.detail).toEqual([{ index: 1, direction: "next" }]);
+    expect(figures[1]).toHaveClass("is-open");
+
+    fireEvent.keyDown(track, { key: "ArrowLeft" });
+    expect(seeks.detail[1]).toEqual({ index: 0, direction: "prev" });
+
+    seeks.stop();
+  });
+
+  /**
+   * The old bundled gallery was measured by the motion runtime exactly once
+   * at its own mount, so an asynchronously mounted slide raced the enhancer.
+   * The contract is now inverted: this section owns readiness, marks its
+   * track `[data-ready]` only after the fetch, the ratio measurements and
+   * the planned run have committed, and announces it — the runtime enhances
+   * a ready track in either mount order. In this environment the runtime
+   * itself never mounts (reduced motion), so `motionMount` staying quiet
+   * proves the markup carries the whole contract.
+   */
+  it("marks the strip ready for the motion runtime only after data and measurements settle", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+      { id: 2, titulo: "La final", descripcion: "El punto decisivo del torneo regional.", imagenUrl: "https://res.cloudinary.com/club/la-final.jpg" },
+    ]);
+
+    render(<LandingPage />);
+
+    // While the fetch and the measurements are still running: no track.
+    expect(document.querySelector("[data-carousel]")).toBeNull();
+
+    const images = await within(gallerySection()).findAllByRole("img");
+    expect(images).toHaveLength(2);
+    const track = document.querySelector("[data-carousel]");
+    expect(track).not.toBeNull();
+    expect(track).toHaveAttribute("data-ready", "true");
+    expect(motionMount).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Motion must start reliably even when a photo never answers: a failed
+   * measurement falls back to the shared landscape ratio instead of stalling
+   * the strip forever.
+   */
+  it("still reaches the ready state when a photo's measurement fails", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+    ], { fail: true });
+
+    render(<LandingPage />);
+
+    await waitFor((): void => {
+      expect(document.querySelector("[data-carousel]")).toHaveAttribute("data-ready", "true");
     });
+    expect(within(gallerySection()).queryAllByRole("img", { hidden: true }).length).toBeGreaterThan(0);
+  });
+
+  it("reports a failed gallery fetch honestly instead of inventing photos", async (): Promise<void> => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL): Promise<{ ok: boolean; status?: number; json: () => Promise<unknown> }> => {
+      const url = String(input);
+      if (url.includes("/api/galeria")) {
+        return Promise.resolve({ ok: false, status: 503, json: async (): Promise<unknown> => ({ message: "No se pudo cargar la galería." }) });
+      }
+      return Promise.resolve({ ok: true, json: async (): Promise<unknown> => url.includes("/api/schedules") ? publicSchedulePayload : [] });
+    }));
+
+    render(<LandingPage />);
+
+    expect(await within(gallerySection()).findByRole("status")).toHaveTextContent(
+      "No se pudieron cargar las fotos de la galería.",
+    );
+    expect(within(gallerySection()).queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("exposes the active landing destination to assistive technology", (): void => {
@@ -984,15 +1296,21 @@ describe("LandingPage", (): void => {
   });
 
   /**
-   * Fourteen carousel photos below the fold must not compete with the hero for
-   * bandwidth, or the LCP image lands behind images nobody has scrolled to.
+   * Published gallery photos sit below the fold and must not compete with the
+   * hero for bandwidth, or the LCP image lands behind images nobody has
+   * scrolled to.
    */
-  it("defers every carousel photo so it cannot delay the hero", (): void => {
+  it("defers every published gallery photo so it cannot delay the hero", async (): Promise<void> => {
+    publishGallery([
+      { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: "https://res.cloudinary.com/club/en-juego.jpg" },
+      { id: 2, titulo: "La final", descripcion: "El punto decisivo del torneo regional.", imagenUrl: "https://res.cloudinary.com/club/la-final.jpg" },
+    ]);
+
     render(<LandingPage />);
 
-    const slideImages = Array.from(document.querySelectorAll(".landing-slide img"));
-    expect(slideImages.length).toBeGreaterThan(0);
-    slideImages.forEach((image): void => {
+    const galleryImages = await within(gallerySection()).findAllByRole("img");
+    expect(galleryImages.length).toBeGreaterThan(0);
+    galleryImages.forEach((image): void => {
       expect(image).toHaveAttribute("loading", "lazy");
     });
   });
@@ -1135,7 +1453,9 @@ describe("LandingPage", (): void => {
       // The content that must not wait on GSAP/Lenis is already there.
       expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
       expect(screen.getAllByRole("link", { name: /inscr/i }).length).toBeGreaterThan(0);
-      expect(document.querySelectorAll(".landing-slide")).toHaveLength(GALLERY_PHOTOS.length);
+      // The gallery's static section (and its honest empty state) renders
+      // without the motion runtime — it owes GSAP nothing.
+      expect(screen.getByRole("heading", { name: "Galería" })).toBeInTheDocument();
     });
 
     it("loads the motion runtime once the visitor does not prefer reduced motion", async (): Promise<void> => {
@@ -1199,7 +1519,7 @@ describe("LandingPage", (): void => {
           expect(consoleError).toHaveBeenCalled();
         });
         expect(screen.getAllByRole("link", { name: /inscr/i }).length).toBeGreaterThan(0);
-        expect(document.querySelectorAll(".landing-slide")).toHaveLength(GALLERY_PHOTOS.length);
+        expect(screen.getByRole("heading", { name: "Galería" })).toBeInTheDocument();
       } finally {
         consoleError.mockRestore();
         vi.doUnmock("@/app/landing/LandingMotion");
@@ -1235,9 +1555,16 @@ describe("LandingPage", (): void => {
        */
       expect(html).toContain("<strong>Horario</strong><span>Cargando horarios…</span>");
       expect(html).not.toMatch(/<strong>Horario<\/strong><span>\s*<\/span>/);
-      GALLERY_PHOTOS.forEach((photo): void => {
-        expect(html).not.toContain(photo.caption);
-      });
+      /*
+       * The gallery's entries live behind GET /api/galeria, and that fetch is
+       * an effect — server rendering never runs it. The static output carries
+       * the section and its loading status, names no photograph it has not
+       * fetched, and invents none (issue #1372: the gallery starts empty).
+       */
+      expect(html).toContain("Galería");
+      expect(html).toContain("Cargando la galería…");
+      expect(html).not.toContain("landing-gallery-card");
+      expect(html).not.toContain("cloudinary");
       expect(motionMount).not.toHaveBeenCalled();
     });
   });

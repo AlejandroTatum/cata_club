@@ -128,6 +128,7 @@ RUTAS_PUBLICAS = {
     ("GET", "/membresias/tarifas"),  # issue #394/#331: mitad pública del catálogo
                                       # de tarifas, misma clase que /personas/instituciones.
     ("GET", "/sponsors/"),
+    ("GET", "/galeria/"),  # issue #1372: contenido público de la landing, misma clase que /sponsors/
     ("GET", "/asistencias/horarios-publicos"),  # public landing catalog, no internal data
     ("POST", "/auth/login"),
     ("POST", "/auth/recuperar-contrasenia"),
@@ -140,7 +141,6 @@ RUTAS_PUBLICAS = {
     # está registrada (ver `test_verificacion_correo_outbox.py`).
     ("POST", "/auth/verificar-correo"),
     ("POST", "/auth/verificar-correo/reenviar"),
-    ("POST", "/chatbot/consultar"),
     ("POST", "/enrollment/"),
     ("GET", "/metrics"),  # issue #1309: sin auth por el mismo motivo que /health --
                           # un scraper interno no trae token. No expone dato de
@@ -227,6 +227,10 @@ RUTAS_ROLES_REQUERIDOS = {
     ("POST", "/asistencias/categorias"): frozenset({"ADMINISTRADOR"}),
     ("PUT", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/categorias/{codigo}"): frozenset({"ADMINISTRADOR"}),
+    # Publicación en la landing (`visible_en_landing`): mismo tier que el
+    # resto de la escritura sobre el catálogo -- es una decisión editorial
+    # del club, no operar la clase del día.
+    ("PATCH", "/asistencias/categorias/{codigo}/publicacion"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/asistencias/horarios/{horario_id}"): frozenset({"ADMINISTRADOR"}),
     # `DELETE /personas/{persona_id}` ya no existe: la baja de una persona es
     # LÓGICA (`PATCH /personas/{persona_id}/estado`, más abajo), porque el
@@ -237,6 +241,10 @@ RUTAS_ROLES_REQUERIDOS = {
     # en el issue #400 (slice 06, ver Balde 2) -- POST/DELETE no cambiaron.
     ("DELETE", "/personas/{persona_id}/beneficio"): frozenset({"ADMINISTRADOR"}),
     ("DELETE", "/sponsors/{sponsor_id}"): frozenset({"ADMINISTRADOR"}),
+    # Galería de la landing (issue #1372): alta y baja de contenido público,
+    # mismo tier que su vecino de sponsors -- decidir qué muestra la landing
+    # es una decisión del club, no de cualquier autenticado.
+    ("DELETE", "/galeria/{entrada_id}"): frozenset({"ADMINISTRADOR"}),
     ("GET", "/asistencias/horarios/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/horarios/{horario_id}/alumnos"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
     ("GET", "/asistencias/reportes"): frozenset({"ADMINISTRADOR", "ENTRENADOR"}),
@@ -340,6 +348,7 @@ RUTAS_ROLES_REQUERIDOS = {
     ("PATCH", "/membresias/tipos/{tipo_id}"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/personas/"): frozenset({"ADMINISTRADOR"}),
     ("POST", "/sponsors/"): frozenset({"ADMINISTRADOR"}),
+    ("POST", "/galeria/"): frozenset({"ADMINISTRADOR"}),
         ("POST", "/personas/{persona_id}/antecedentes-club"): frozenset({"ADMINISTRADOR"}),
     # Issue #398: solo el club (ADMINISTRADOR) concede un beneficio -- el
     # propio beneficiario nunca puede pedirlo (ver docstring del endpoint).

@@ -1,10 +1,9 @@
 /**
  * `/ayuda` — the answers, browsable.
  *
- * The assistant could already answer all of this, but only if you thought of
- * the question first. That is the whole gap P10 was capped on: searching and
- * browsing answer different needs, and a family opening the app for the first
- * time cannot ask about something they do not yet know exists.
+ * A page of answers, browsable: searching and browsing answer different
+ * needs, and a family opening the app for the first time needs to find what
+ * the club calls a thing, not guess it first.
  *
  * Deliberately reachable WITHOUT a session. The two questions asked most often
  * — "when does my child train" and "how do I sign in" — are asked by people
@@ -17,10 +16,9 @@ import { Dumbbell, HelpCircle, Rocket, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
-import { Accordion, BackLink, Button, ScrollableTable } from "@/components/ui";
+import { Accordion, BackLink, ScrollableTable } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
-import { openHelpChat } from "@/components/chatbot/help-chat-store";
 import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
 
 /**
@@ -38,7 +36,7 @@ import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
  * not the 4.5:1 body-text floor), matching how those tokens already ship.
  *
  * Keyed by section title rather than folded into `faq-content.ts`: that file
- * is the copy that is tested against the chatbot's own source of truth, and
+ * is the copy that is tested against the club's knowledge snapshot, and
  * this is presentation the content module has no reason to know about.
  */
 const SECTION_ACCENT: Record<string, { icon: LucideIcon; iconBg: string; iconFg: string }> = {
@@ -282,7 +280,8 @@ export default function AyudaPage(): React.ReactElement {
       {/*
        * The escape hatch, at the bottom rather than the top: someone who
        * scrolled this far did not find their answer, and that is exactly the
-       * moment to offer a person.
+       * moment to offer a person. Every way to reach one is the club's own
+       * contact information, already on this page right above.
        */}
       {/* A sunken inset, not a card — so its heading stays at the dense step
           and in Barlow. It is a question put to the reader, not the name of a
@@ -291,13 +290,9 @@ export default function AyudaPage(): React.ReactElement {
         <HelpCircle size={ICON.base} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
         <h2 className="text-sm font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
         <p className="mx-auto mt-1 max-w-md text-xs text-ink-2">
-          Pregúntele al asistente con sus propias palabras, o escríbale al club directamente.
+          Escríbale al club directamente: su WhatsApp y su dirección están
+          en la sección «El club», aquí arriba.
         </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-3">
-          <Button variant="primary" onClick={() => openHelpChat()}>
-            Preguntar al asistente
-          </Button>
-        </div>
       </section>
     </AppShell>
   );

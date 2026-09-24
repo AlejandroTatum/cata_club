@@ -31,7 +31,6 @@ import { toUserMessage } from "@/lib/error-message";
 import { formatCurrency } from "@/lib/format-utils";
 import { clearLegacyEnrollmentSession } from "@/lib/enrollment-session";
 import { furthestReachableIndex, useWizardHistory } from "@/lib/wizard-history";
-import HelpChatLauncher from "@/components/chatbot/HelpChatLauncher";
 import LegalReviewDialog, { type LegalReviewDocumentId } from "@/components/legal/LegalReviewDialog";
 import {
   WizardInput,
@@ -1523,11 +1522,9 @@ function EnrollWizard(): React.ReactElement {
                  resuelve la casa de cada rol, y es la MISMA función que usa
                  /ayuda: la regla se escribió dos veces y la segunda salió
                  mal. */}
-          {/* Back on the left, help on the right — the two things a visitor
-              reaches for when a five-step form stops making sense. The
-              assistant is public (`POST /chatbot` needs no session), which is
-              the point: most people filling this in have no account yet. */}
-          {/* The two elements no longer carry margins of their own: the column
+          {/* Back on the left — the one thing a visitor reaches for when a
+              five-step form stops making sense. */}
+          {/* The element no longer carries margins of its own: the column
               above puts the page step between blocks, which is the whole point
               of the doctrine — a distance belongs to the container, not to
               each thing inside it. */}
@@ -1537,10 +1534,6 @@ function EnrollWizard(): React.ReactElement {
             ) : (
               <BackLink href={backHrefForRole(session?.user.role)} />
             )}
-            <HelpChatLauncher
-              variant="quiet"
-              label="¿Tiene dudas? Pregunte al asistente"
-            />
           </div>
 
           {/* Step header + the NAMED stepper. The five steps are named from

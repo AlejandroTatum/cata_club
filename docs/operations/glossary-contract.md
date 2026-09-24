@@ -26,9 +26,9 @@ un snapshot generado y fijado. El snapshot de esta revisión proviene de:
   se regenera (ver abajo).
 - `entradas_sha256` es el sha256 de la serialización canónica de `entradas`
   (`json.dumps(..., sort_keys=True, ensure_ascii=False, separators=(",", ":"))`).
-  Es recomputable **offline**, de ambos lados: Python (`hashlib`) en
-  `tests/test_glossary_contract.py` y Node (`node:crypto`) en
-  `frontend/src/lib/__tests__/chatbot-contract.test.ts`.
+  Es recomputable **offline** del lado Python (`hashlib`) en
+  `tests/test_glossary_contract.py`. El frontend no lo recomputa: consume el
+  espejo byte a byte del snapshot.
 - `sha256_fuente_publicada` es el hash de los **bytes publicados** en docs. Es
   el ancla al repo de autoridad: se verifica con `git show` al regenerar, no en
   cada corrida de CI.

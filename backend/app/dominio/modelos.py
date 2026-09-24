@@ -1530,6 +1530,17 @@ class CategoriaHorario(Base):
     estado ambiguo. El servicio normaliza el texto en blanco a NULL para que
     "sin etiqueta" tenga UNA sola representación (ver
     `AsistenciaServicio._normalizar_edades`).
+
+    `visible_en_landing` es la decisión editorial del club sobre si la
+    categoría aparece en el catálogo público de la landing
+    (`GET /asistencias/horarios-publicos`). Default TRUE: lo de siempre no
+    cambia -- toda categoría existente (y toda categoría nueva) se publica
+    salvo que un admin la oculte. Es un filtro de PUBLICACIÓN, no de datos:
+    ocultar no toca horarios, inscriptos ni asistencias, y el ABM sigue
+    viendo la fila completa (`listar_categorias` no filtra). El toggle del
+    admin vive en `PATCH /categorias/{codigo}/publicacion` para que
+    ocultar/mostrar no tenga que pasar por la edición atómica de
+    nombre/franja/días.
     """
     __tablename__ = "categoria_horario"
     __table_args__ = (
@@ -1538,6 +1549,7 @@ class CategoriaHorario(Base):
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     label: Mapped[str] = mapped_column(String(50))
     edades: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    visible_en_landing: Mapped[bool] = mapped_column(Boolean, default=True)
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time] = mapped_column(Time)
 
@@ -2491,3 +2503,22 @@ class ContadorCorreoDiario(Base):
     enviados: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+
+
+# ---------------------------------------------------------------------------
+# Galería de la landing (issue #1372)
+# ---------------------------------------------------------------------------
+class EntradaGaleria(Base):
+    """Imagen pública de la galería de la landing, administrada por el club.
+
+    Misma forma que `Sponsor`: contenido deliberadamente público (la landing
+    lo muestra sin sesión), más un identificador interno para retirar el
+    recurso del proveedor al borrar."""
+    __tablename__ = "entrada_galeria"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    titulo: Mapped[str] = mapped_column(String(80))
+    descripcion: Mapped[str] = mapped_column(String(500))
+    imagen_url: Mapped[str] = mapped_column(String(500))
+    # Identificador interno para retirar el recurso del proveedor al borrar.
+    imagen_public_id: Mapped[str] = mapped_column(String(64), unique=True)

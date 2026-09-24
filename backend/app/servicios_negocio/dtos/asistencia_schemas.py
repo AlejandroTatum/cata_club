@@ -70,6 +70,10 @@ class CategoriaResponseDTO(ResponseBase, BaseModel):
     # Etiqueta de edades opcional (ver `CategoriaHorario.edades`): texto de
     # orientación para la cartelera, nunca una validación de edad.
     edades: Optional[str] = None
+    # Decisión editorial de publicación en la landing
+    # (`CategoriaHorario.visible_en_landing`): TRUE es "se publica", el
+    # estado de siempre. El ABM lo lee para pintar el toggle del admin.
+    visible: bool = True
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana]
@@ -94,6 +98,10 @@ class CategoriaCreateDTO(BaseModel):
     una sola representación en la base."""
     nombre: str = Field(min_length=1, max_length=50)
     edades: Optional[str] = Field(default=None, max_length=50)
+    # TRUE ("se publica") es el default: una categoría nueva se publica
+    # salvo que el cuerpo pida lo contrario (ver
+    # `CategoriaHorario.visible_en_landing`).
+    visible: bool = True
     hora_inicio: time
     hora_fin: time
     dias: list[DiaSemana] = Field(min_length=1)
@@ -112,9 +120,22 @@ class CategoriaUpdateDTO(BaseModel):
     en el payload), que es también lo que permite limpiarla."""
     nombre: Optional[str] = Field(default=None, min_length=1, max_length=50)
     edades: Optional[str] = Field(default=None, max_length=50)
+    # `visible` sigue la misma semántica `exclude_unset` que `edades`: solo
+    # se toca si vino en el payload. (A diferencia de `edades`, es un
+    # booleano -- no hay tercer estado que distinguir.)
+    visible: Optional[bool] = None
     hora_inicio: Optional[time] = None
     hora_fin: Optional[time] = None
     dias: Optional[list[DiaSemana]] = Field(default=None, min_length=1)
+
+
+class CategoriaPublicacionDTO(BaseModel):
+    """Cuerpo de `PATCH /categorias/{codigo}/publicacion`: la decisión
+    editorial de publicar (TRUE) u ocultar (FALSE) la categoría en la
+    landing. Un endpoint propio y de un solo campo a propósito: ocultar no
+    tiene que pasar por la edición atómica de nombre/franja/días, y el
+    toggle del admin manda exactamente esto."""
+    visible: bool
 
 
 class AsistenciaCreateDTO(BaseModel):

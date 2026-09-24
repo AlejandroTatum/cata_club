@@ -124,17 +124,14 @@ PAQUETE_ROUTERS = "app.presentacion.routers"
 #     Faltaba en la primera versión de esta lista, y esa omisión dejó afuera
 #     un décimo handler (`personas_router.py::independizar_persona`) que
 #     ninguna otra prueba veía.
-#   · `.chat.completions.create`: el gateway del chatbot, con un presupuesto de
-#     pared de 24 s (issue #834).
 #
 # Se comparan por SUFIJO de la cadena de atributos porque el receptor de base
-# varía (`client.chat.completions.create` donde `client` sale de una función).
+# varía (`client.uploader.upload` donde `client` sale de una función).
 PRIMITIVAS_BLOQUEANTES = frozenset({
     ("cloudinary", "uploader", "upload"),
     ("cloudinary", "uploader", "destroy"),
     ("pwd_context", "hash"),
     ("pwd_context", "verify"),
-    ("chat", "completions", "create"),
 })
 
 _LARGOS_DE_PRIMITIVA = frozenset(len(p) for p in PRIMITIVAS_BLOQUEANTES)
@@ -459,17 +456,18 @@ class TestElCandadoMira:
         assert len(HANDLERS) >= 60
 
     def test_encuentra_las_primitivas_bloqueantes_en_el_codigo(self):
-        # Los CINCO puntos donde el bloqueo REALMENTE ocurre. Si un refactor
+        # Los CUATRO puntos donde el bloqueo REALMENTE ocurre. Si un refactor
         # mueve o renombra alguno, esta prueba lo dice en vez de dejar al
         # candado vigilando un conjunto vacío. `verificar_contrasenia` entró
         # con `pwd_context.verify`: faltaba, y su ausencia escondía a
-        # `personas_router::independizar_persona`.
+        # `personas_router::independizar_persona`. (El quinto original fue
+        # `ChatbotServicio.consultar`; el chatbot se retiró y con él su
+        # primitiva.)
         assert MAPA.bloqueantes_directos == {
             ("app.infraestructura.cloudinary_cliente", "_subir"),
             ("app.infraestructura.cloudinary_cliente", "_destruir_en_cloudinary"),
             ("app.seguridad.gestor_auth", "GestorAutenticacion.obtener_hash_contrasenia"),
             ("app.seguridad.gestor_auth", "GestorAutenticacion.verificar_contrasenia"),
-            ("app.servicios_negocio.chatbot_servicio", "ChatbotServicio.consultar"),
         }
 
     def test_el_cierre_cruza_las_capas(self):
@@ -480,6 +478,11 @@ class TestElCandadoMira:
         assert {
             ("app.servicios_negocio.sponsor_servicio", "SponsorServicio.crear"),
             ("app.servicios_negocio.sponsor_servicio", "SponsorServicio.eliminar"),
+            # Galería de la landing (issue #1372): misma forma que el sponsor
+            # -- subida y borrado en Cloudinary dentro de un método de
+            # servicio -- y por eso mismo obligada a `run_in_threadpool`.
+            ("app.servicios_negocio.galeria_servicio", "GaleriaServicio.crear"),
+            ("app.servicios_negocio.galeria_servicio", "GaleriaServicio.eliminar"),
             ("app.servicios_negocio.persona_servicio", "PersonaServicio.actualizar_foto"),
             ("app.servicios_negocio.auth_servicio", "AuthServicio.actualizar_foto_perfil"),
             ("app.servicios_negocio.enrollment_servicio", "EnrollmentServicio.enroll"),
@@ -539,13 +542,13 @@ class TestElCandadoMira:
         # que se le pasa a `run_in_threadpool`, esta lista quedaría vacía y la
         # regla de arriba pasaría por la razón equivocada.
         #
-        # Medido sobre este commit: 11 referencias envueltas. La cota bajó de
+        # Medido sobre este commit: 10 referencias envueltas. La cota bajó de
         # 12 al eliminar `EnrollmentServicio._crear_usuario_alumno` (issue
         # #1137: un alumno representado ya no tiene Usuario propio, así que
-        # ese sitio bloqueante dejó de existir); las 11 rutas bloqueantes que
-        # siguen existiendo deben conservar su envoltura. DESENVOLVER una, o
-        # perder una primitiva de la lista, pone roja la prueba.
-        assert len(ENVUELTAS) >= 11
+        # ese sitio bloqueante dejó de existir) y de 11 al retirar el
+        # endpoint del chatbot (#834): las 10 rutas bloqueantes que siguen
+        # existiendo deben conservar su envoltura. DESENVOLVER una, o perder
+        # una primitiva de la lista, pone roja la prueba.
+        assert len(ENVUELTAS) >= 10
         nombres = {(modulo.split(".")[-1], handler) for modulo, handler, _ in ENVUELTAS}
         assert ("membresias_pagos_router", "subir_voucher") in nombres
-        assert ("chatbot_router", "consultar") in nombres

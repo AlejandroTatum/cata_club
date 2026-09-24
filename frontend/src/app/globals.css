@@ -281,9 +281,9 @@
  *     1.96:1. There was no `:focus-visible` anywhere in this stylesheet.
  *
  * A single flat colour cannot pass on both the coal rail and the three light
- * surfaces — that is the whole reason the assistant grew its own local ring
- * (`components/chatbot/chat-focus-ring.ts`). This promotes that idea to the
- * shared layer instead of leaving it in one component.
+ * surfaces, which is why the first ring of this shape lived inside one
+ * component. This file promotes that idea to the shared layer instead of
+ * leaving it in one component.
  *
  * ## The ring
  *
@@ -355,8 +355,8 @@
  *
  * `maximum-scale=1` in the viewport meta would also stop it, by taking
  * pinch-zoom away from everyone (WCAG 1.4.4). So the FIELD carries the floor,
- * which is the same conclusion `ChatWidget.tsx` reached for its composer in
- * #644 — with one difference: it fixed one field, and this is every field.
+ * the conclusion the one-composer fix in #644 reached first — with one
+ * difference: that fixed one field, and this is every field.
  * Measured before writing this: of the 74 text-entry controls in `src/`, all
  * 40 that declared a size declared one under the threshold. There is no
  * "just the dialogs" version of this defect.

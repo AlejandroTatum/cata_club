@@ -160,7 +160,7 @@ _PATRON_HORA = re.compile(r"^\d{2}:\d{2}$")
 
 # Dónde sigue mandando la lista estática. #789 la sacó SOLO de la landing.
 _SUPERFICIES_ESTATICAS = (
-    "el prompt del chatbot (backend/app/servicios_negocio/conocimiento_club.py:85,161)",
+    "la instantánea de conocimiento (backend/app/servicios_negocio/conocimiento_club.py)",
     "la página /ayuda (frontend/src/app/ayuda/faq-content.ts:88, FAQ_SCHEDULES)",
 )
 

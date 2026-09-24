@@ -217,6 +217,24 @@ class _RelojFalso:
         return self.valor
 
 
+class _RelojFalsoSdk:
+    """Congela el `timestamp` que el SDK firma por su cuenta:
+    `cloudinary.utils.private_download_url` calcula `"timestamp": now()` con
+    el `time.time()` del propio `cloudinary.utils`, AJENO al `cc.time`
+    parcheado por `_RelojFalso` (que solo controla `expires_at`). Sin
+    congelarlo, cada firma lleva el segundo real en que corrió y dos firmas
+    a ambos lados de un límite de segundo difieren en `timestamp` y en su
+    `signature` -- ese fue el flake post-merge de CI (63a1c391): el mismo
+    test pasó en el PR y falló en main por 1 segundo. El valor es
+    controlable para cruzar ese límite de forma determinista, sin sleeps."""
+
+    def __init__(self, valor: int):
+        self.valor = valor
+
+    def now(self) -> str:
+        return str(self.valor)
+
+
 _FAKE_FOTO_URL_JPG = "https://res.cloudinary.com/test/image/upload/perfil-fake.jpg"
 _FAKE_FOTO_URL_PNG = "https://res.cloudinary.com/test/image/upload/perfil-fake.png"
 _FAKE_VERSION_JPG = 1700000001  # issue #662: subir_foto_perfil devuelve `version`, no URL
@@ -332,6 +350,13 @@ def test_auth_me_foto_heredada_url_publica_se_devuelve_sin_tocar(client, db_sess
 # dos firmas dentro del MISMO segundo son byte-idénticas. El reloj se inyecta
 # para probar lo que el mecanismo realmente garantiza: pasando un segundo, la
 # URL cambia (no queda fijada para siempre, que era el residual del #662).
+#
+# Flake 63a1c391: el SDK además estampa SU PROPIO `timestamp` (segundo real,
+# ver `_RelojFalsoSdk`) en cada firma, así que el reemplazo y el `GET`
+# posterior firmado en otro segundo producen URLs byte-distintas SIN que
+# cambie nada del recurso. Por eso lo que el GET debe mantener se compara
+# por campos estables (mismo link de entrega) y firma válida por URL, no
+# byte a byte.
 @patch(
     "app.infraestructura.cloudinary_cliente.subir_foto_perfil",
     side_effect=[1700000001, 1700000002],
@@ -346,6 +371,8 @@ def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(
 
     reloj = _RelojFalso(1_700_000_000.0)
     monkeypatch.setattr(cc, "time", reloj)
+    reloj_sdk = _RelojFalsoSdk(1_700_000_000)
+    monkeypatch.setattr(cc.cloudinary.utils, "now", reloj_sdk.now)
 
     contenido_1 = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100  # JPEG-ish, foto original
     resp_1 = client.post(
@@ -374,9 +401,48 @@ def test_reemplazar_foto_perfil_produce_una_url_distinta_a_la_anterior(
     )
 
     # También debe persistir tras un `GET /auth/me` posterior (hard refresh).
+    # El re-firmado del GET ocurre en OTRO segundo (se avanza el reloj del SDK
+    # determinísticamente, sin sleeps): exactamente el escenario del flake
+    # 63a1c391, donde el POST y el GET caían en segundos reales distintos y
+    # la comparación byte a byte fallaba aunque el link servido fuera el
+    # mismo. Lo que el endpoint garantiza (#1072) es el MISMO link de
+    # entrega: mismos campos estables y firma genuina por URL, con el
+    # `timestamp` del SDK como único campo volátil.
+    reloj_sdk.valor += 1
     resp_get = client.get("/api/v1/auth/me")
     assert resp_get.status_code == 200, resp_get.text
-    assert resp_get.json()["fotoUrl"] == url_foto_reemplazada
+    url_get = resp_get.json()["fotoUrl"]
+    _assert_url_firmada_de_perfil(url_get, persona.id)
+
+    from urllib.parse import parse_qs, urlparse
+
+    from cloudinary.utils import api_sign_request
+
+    from app.soporte_transversal.configuracion import settings
+
+    params_reemplazo = parse_qs(urlparse(url_foto_reemplazada).query)
+    params_get = parse_qs(urlparse(url_get).query)
+
+    # La única diferencia permitida entre dos firmas del mismo recurso y la
+    # misma vigencia es el `timestamp` del SDK (y la `signature` que lo
+    # cubre). Antes de comparar, probar que de verdad se cruzó el límite de
+    # segundo: con timestamps iguales esta regresión no ejercitaría nada.
+    assert params_reemplazo["timestamp"] != params_get["timestamp"]
+    volatiles = {"timestamp", "signature"}
+    estables_reemplazo = {k: v for k, v in params_reemplazo.items() if k not in volatiles}
+    estables_get = {k: v for k, v in params_get.items() if k not in volatiles}
+    assert estables_reemplazo == estables_get, (
+        "el GET posterior debe servir el MISMO link de entrega que el "
+        "reemplazo (mismo recurso, misma vigencia); solo el `timestamp` "
+        "del re-firmado puede variar"
+    )
+
+    # Cada URL lleva una firma GENUINA sobre sus propios parámetros con las
+    # credenciales de prueba (el `api_key` va fuera de la firma, igual que
+    # lo arma `sign_request` del SDK).
+    for params in (params_reemplazo, params_get):
+        a_firmar = {k: v for k, v in params.items() if k not in ("signature", "api_key")}
+        assert params["signature"][0] == api_sign_request(a_firmar, settings.cloudinary_api_secret)
 
 
 # --- R3-001 (#1072): reemplazar la foto debe destruir la anterior ---------

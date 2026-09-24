@@ -56,6 +56,7 @@ from app.servicios_negocio.dtos.persona_schemas import (
 from app.servicios_negocio.persona_servicio import PersonaServicio
 
 RUTA_SPONSORS = "/api/v1/sponsors/"
+RUTA_GALERIA = "/api/v1/galeria/"
 RUTA_ENROLLMENT = "/api/v1/enrollment/"
 
 # Firma binaria real de un JPEG, igual que en `test_sponsors.py`: el servicio
@@ -165,6 +166,41 @@ def test_subida_lenta_de_logo_no_bloquea_el_event_loop(client, monkeypatch):
         f"GET /health tardó {duracion:.3f}s (mínimo de {duraciones}) mientras "
         f"una subida de logo de {SEGUNDOS_DE_LA_LLAMADA_LENTA:.0f}s estaba en "
         "curso -- el event loop parece bloqueado"
+    )
+
+
+def test_subida_lenta_de_galeria_no_bloquea_el_event_loop(client, monkeypatch):
+    """Mismo escenario que el test del logo, sobre `POST /galeria/`
+    (issue #1372): la subida del endpoint nuevo nace con la disciplina del
+    threadpool, no la hereda después de un incidente."""
+    en_vuelo = threading.Event()
+
+    def _subida_lenta(contenido, public_id, content_type):
+        en_vuelo.set()
+        time.sleep(SEGUNDOS_DE_LA_LLAMADA_LENTA)
+        return f"https://cdn/{public_id}.jpg"
+
+    monkeypatch.setattr(
+        "app.servicios_negocio.galeria_servicio.subir_imagen_galeria", _subida_lenta,
+    )
+
+    duracion, respuesta, duraciones = _medir_salud_durante(
+        client,
+        # El `public_id` sale de un `uuid4()` en `GaleriaServicio.crear`, así
+        # que ninguna colisión de unicidad frena la 2da/3ra repetición.
+        lambda _iteracion: client.post(
+            RUTA_GALERIA,
+            data={"titulo": "Torneo", "descripcion": "Cierre anual"},
+            files={"archivo": ("foto.jpg", JPEG_VALIDO, "image/jpeg")},
+        ),
+        en_vuelo,
+    )
+
+    assert respuesta.status_code == 201
+    assert duracion < TECHO_DE_SALUD_SEGUNDOS, (
+        f"GET /health tardó {duracion:.3f}s (mínimo de {duraciones}) mientras "
+        f"una subida de galería de {SEGUNDOS_DE_LA_LLAMADA_LENTA:.0f}s estaba "
+        "en curso -- el event loop parece bloqueado"
     )
 
 

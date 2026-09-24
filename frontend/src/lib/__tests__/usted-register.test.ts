@@ -4,11 +4,10 @@
  * ProfilePage.test.tsx's "usted register" describe block only ever renders
  * `/profile`, so it can only ever catch a regression there. The audit that
  * fixed `/profile` found the SAME defect (voseo/tuteo copy) already shipped
- * in eight other files — ProtectedRoute's error banner, the age-up
- * confirmation dialog, the trainer's session card, the chatbot's placeholder
- * and its own error-message table, the dashboard's pending-payments banner,
- * and a BFF route's fallback error message — none of which `/profile`'s
- * render-and-assert test could ever see.
+ * in five other files — ProtectedRoute's error banner, the age-up
+ * confirmation dialog, the trainer's session card, the dashboard's
+ * pending-payments banner, and a BFF route's fallback error message — none
+ * of which `/profile`'s render-and-assert test could ever see.
  *
  * This is a static sweep instead of a render sweep on purpose: rendering
  * every screen in the app would mean rebuilding every screen's auth/data
@@ -41,8 +40,8 @@ const SRC = join(__dirname, "..", "..");
  * as inert text is harmless. `readableText()`'s other consumer,
  * ui-vocabulary.test.ts, matches by substring, where the same interpolation
  * IS a false positive (`EDAD_MAXIMA_ALUMNO` contains "ALUMNO") — that
- * consumer stays on quoted-literal/JSX-text extraction only. Same reason
- * this catches ChatWidget's `mensajeDeError()` table, which the original
+ * consumer stays on quoted-literal/JSX-text extraction only. The same
+ * reason makes this catch the error-message tables, which the original
  * issue #340 audit's list never saw: those messages are backtick strings,
  * invisible to a scanner that only reads double quotes.
  */

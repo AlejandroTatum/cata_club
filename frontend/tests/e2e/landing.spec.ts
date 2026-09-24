@@ -12,7 +12,7 @@
  * club, just from two different components now.
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 test.describe("Landing page", () => {
   test("renders the navbar logo on a visibly light token-backed card", async ({ page }) => {
@@ -490,151 +490,272 @@ test.describe("Landing page", () => {
   });
 
   /**
-   * The gallery carousel is driven by a GSAP timeline whose geometry only
-   * exists once the browser has laid the strip out, so jsdom cannot see any of
-   * this. Both regressions below shipped looking perfectly correct in a
-   * screenshot, which is exactly why they are measured here.
+   * The gallery is the pre-#1372 full-bleed moving strip again, fed by
+   * GET /api/galeria (issue #1372). The e2e harness starts no backend, so
+   * the catalog is answered through route stubs — the same pattern
+   * `legal-header-session.spec.ts` uses for the session answer. What the
+   * browser proves here is what jsdom cannot: the motion runtime really
+   * enhances an asynchronously readied track, the loop geometry keeps the
+   * pre-#1372 slide height, and the caption reveal/hold behaviors work with
+   * real pointer and keyboard events. Reduced motion gets its own test:
+   * the same markup must present complete and motionless.
    */
-  test.describe("gallery carousel", () => {
-    test("spaces slides by their own width plus the flex gap", async ({ page }) => {
-      await page.goto("/");
-      const track = page.locator("[data-carousel]");
-      await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
-
-      // `figure` carries a UA margin of `1em 40px`. Unreset, it adds 80px of
-      // layout width per slide, so the loop measures a track wider than the
-      // visible one and the spacing silently drifts.
-      // Slides keep their own aspect ratio, so each step is that slide's own
-      // width plus the gap — never one shared width.
-      const steps = await track.evaluate((element: HTMLElement) => {
-        const slides = Array.from(element.querySelectorAll<HTMLElement>(".landing-slide"));
-        const gap = parseFloat(getComputedStyle(element).columnGap) || 0;
-        return slides.slice(1, 6).map((slide, index) => ({
-          actual: slide.offsetLeft - slides[index].offsetLeft,
-          expected: slides[index].offsetWidth + gap,
-        }));
-      });
-
-      expect(steps.length).toBeGreaterThan(0);
-      steps.forEach((step) => {
-        expect(Math.abs(step.actual - step.expected)).toBeLessThanOrEqual(1);
-      });
-    });
-
+  test.describe("gallery", () => {
     /**
-     * The defect this guards shipped invisibly: a landscape photo in a portrait
-     * frame made height the binding dimension under `object-fit: cover`, so the
-     * browser upscaled a file it had chosen by width alone — one slide by 2.23x.
+     * The fixture photo rides on the one image host the app's CSP allows
+     * (`res.cloudinary.com`) and is answered by a route stub with a tiny
+     * real PNG — so the browser exercises the real measured-ratio path, not
+     * the fallback. (A `data:` URL would be CSP-blocked and silently prove
+     * only the onerror fallback.)
      */
-    test("never paints a slide larger than the file it downloaded", async ({ page }) => {
+    const PHOTO = "https://res.cloudinary.com/club/en-juego.png";
+    const PHOTO_PNG = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+
+    const publishOnePhoto = async (page: Page): Promise<void> => {
+      await page.route("**/api/galeria", (route): Promise<void> =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: PHOTO },
+          ]),
+        }));
+      await page.route("**/res.cloudinary.com/**", (route): Promise<void> =>
+        route.fulfill({ status: 200, contentType: "image/png", body: PHOTO_PNG }));
+    };
+
+    /** Two published photos — the first catalog where an arrow means anything. Both share the fixture bytes, so both slides measure the same ratio and the loop math stays symmetric. */
+    const publishTwoPhotos = async (page: Page): Promise<void> => {
+      await page.route("**/api/galeria", (route): Promise<void> =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            { id: 1, titulo: "En juego", descripcion: "Una jugada frente al público de la sala.", imagenUrl: PHOTO },
+            { id: 2, titulo: "La final", descripcion: "El punto decisivo del torneo regional.", imagenUrl: PHOTO },
+          ]),
+        }));
+      await page.route("**/res.cloudinary.com/**", (route): Promise<void> =>
+        route.fulfill({ status: 200, contentType: "image/png", body: PHOTO_PNG }));
+    };
+
+    test("says the gallery is empty until the club publishes photos", async ({ page }) => {
+      // The empty catalog is the production truth for a fresh club, so the
+      // payload is answered here: the e2e harness (lane and CI alike) starts
+      // no backend and sets no BACKEND_API_URL, and an unanswerable BFF makes
+      // the page report the fetch error instead of the empty state under
+      // test — the same route-stub pattern `legal-header-session.spec.ts`
+      // uses for the session answer. What the page RENDERS for an empty
+      // catalog is this test's contract; the BFF's own plumbing is jsdom
+      // territory (LandingPage.test.tsx).
+      await page.route("**/api/galeria", (route): Promise<void> =>
+        route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+
       await page.goto("/");
-      await expect(page.locator("[data-carousel]")).toHaveClass(/is-enhanced/, { timeout: 10_000 });
-      await page.locator("[data-carousel]").scrollIntoViewIfNeeded();
-
-      // Lazy slides only decode once they have been near the viewport.
-      await expect
-        .poll(async () =>
-          page.locator(".landing-slide img").evaluateAll(
-            (images: HTMLImageElement[]) => images.filter((image) => image.naturalWidth > 0).length,
-          ),
-        { timeout: 15_000 })
-        .toBeGreaterThan(3);
-
-      const upscaled = await page.locator(".landing-slide img").evaluateAll((images: HTMLImageElement[]) =>
-        images
-          .filter((image) => image.naturalWidth > 0)
-          .map((image) => {
-            const box = image.getBoundingClientRect();
-            return {
-              src: image.currentSrc,
-              scale: Math.max(box.width / image.naturalWidth, box.height / image.naturalHeight),
-            };
-          })
-          // 1.05 absorbs sub-pixel rounding and the srcset ladder's granularity.
-          .filter((entry) => entry.scale > 1.05),
-      );
-
-      expect(upscaled).toEqual([]);
+      const gallery = page.locator("#galeria");
+      await expect(gallery.getByRole("heading", { name: "Galería" })).toBeVisible();
+      await expect(gallery.getByRole("status")).toHaveText(/Aún no hay fotos en la galería\./);
+      await expect(gallery.locator("img")).toHaveCount(0);
     });
 
-    test("moves the strip continuously on its own, with no user steering", async ({ page }) => {
+    test("runs the restored loop over a one-photo catalog with silent clones", async ({ page }) => {
+      await publishOnePhoto(page);
       await page.goto("/");
+
+      const gallery = page.locator("#galeria");
+      await gallery.scrollIntoViewIfNeeded();
+
       const track = page.locator("[data-carousel]");
-      await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
-      await track.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(300);
+      await expect(track).toHaveAttribute("data-ready", "true");
+      // Async data started the loop: the runtime enhanced the ready track.
+      await expect(track).toHaveClass(/is-enhanced/, { timeout: 15_000 });
 
-      const firstSlide = page.locator(".landing-slide").first();
-      const before = (await firstSlide.boundingBox())?.x ?? 0;
-      // No pointer, wheel, or keyboard input of any kind: the strip advances
-      // by itself, so its position must drift without any gesture.
-      await page.waitForTimeout(1500);
-      const after = (await firstSlide.boundingBox())?.x ?? 0;
-      expect(Math.abs(after - before)).toBeGreaterThan(30);
-    });
+      // The pre-#1372 desktop slide height, back for good.
+      const firstSlide = track.locator(".landing-slide").first();
+      await expect(firstSlide).toHaveCSS("height", "468px");
 
-    test("keeps normal vertical page scrolling when the wheel passes over the gallery", async ({ page }) => {
-      await page.goto("/");
-      const track = page.locator("[data-carousel]");
-      await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
-      await track.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(250);
+      // One photo cannot cover the viewport, so the run repeats — but every
+      // repeat is aria-hidden and unfocusable, and exactly one photo speaks.
+      const slides = track.locator(".landing-slide");
+      expect(await slides.count()).toBeGreaterThan(1);
+      const clones = track.locator("li.landing-slide-clone");
+      expect(await clones.count()).toBe((await slides.count()) - 1);
+      const cloneCount = await clones.count();
+      for (let index = 0; index < cloneCount; index += 1) {
+        await expect(clones.nth(index)).toHaveAttribute("aria-hidden", "true");
+      }
+      await expect(track.locator("li:not(.landing-slide-clone) img")).toHaveCount(1);
 
-      const before = await page.evaluate(() => scrollY);
-      await track.dispatchEvent("wheel", { deltaY: 700, bubbles: true, cancelable: true });
-      await page.waitForTimeout(700);
-      const after = await page.evaluate(() => scrollY);
+      // Reading holds the loop still and reveals the caption. Hover the
+      // stationary track first: a moving slide never passes Playwright's
+      // stability check, and holding is exactly what stops it.
+      type HoldsWindow = Window & { __galleryHolds?: boolean[] };
+      await page.evaluate((): void => {
+        (window as HoldsWindow).__galleryHolds = [];
+        document.addEventListener("landing:gallery-hold", (event): void => {
+          const detail = (event as CustomEvent<{ held: boolean }>).detail;
+          (window as HoldsWindow).__galleryHolds!.push(detail.held);
+        });
+      });
+      await track.hover();
+      await firstSlide.hover();
+      await expect(firstSlide.locator(".landing-slide-caption")).toHaveCSS("opacity", "1");
+      let holds = await page.evaluate((): boolean[] => (window as HoldsWindow).__galleryHolds ?? []);
+      expect(holds).toContain(true);
 
-      // The gallery intercepts nothing: wheel input keeps its usual meaning and
-      // scrolls the page vertically (smoothly, via Lenis).
-      expect(after).toBeGreaterThan(before);
-    });
+      // Leaving the strip releases the hold and hides the caption again.
+      await page.mouse.move(5, 5);
+      await expect(firstSlide.locator(".landing-slide-caption")).toHaveCSS("opacity", "0");
+      holds = await page.evaluate((): boolean[] => (window as HoldsWindow).__galleryHolds ?? []);
+      expect(holds.at(-1)).toBe(false);
 
-    test("does not let a pointer drag steer the strip", async ({ page }) => {
-      await page.goto("/");
-      const track = page.locator("[data-carousel]");
-      await expect(track).toHaveClass(/is-enhanced/, { timeout: 10_000 });
-      await track.scrollIntoViewIfNeeded();
+      // Keyboard reaches the same caption, on the same terms.
+      await firstSlide.focus();
+      await expect(firstSlide.locator(".landing-slide-caption")).toHaveCSS("opacity", "1");
 
-      const box = await track.boundingBox();
-      if (!box) throw new Error("carousel track has no layout box");
-      const firstSlide = page.locator(".landing-slide").first();
-      const startLeft = (await firstSlide.boundingBox())?.x ?? 0;
-
-      const midY = box.y + box.height / 2;
-      await page.mouse.move(box.x + box.width * 0.7, midY);
-      await page.mouse.down();
-      await page.mouse.move(box.x + box.width * 0.7 - 100, midY, { steps: 4 });
-      await page.mouse.move(box.x + box.width * 0.7 - 300, midY, { steps: 8 });
-      const draggedLeft = (await firstSlide.boundingBox())?.x ?? 0;
-      await page.mouse.up();
-
-      // No Draggable, no inertia: the 300px pointer travel must not become
-      // strip travel. Only the autonomous loop moves it (~60px/s), so anything
-      // near the drag distance is a regression.
-      const travelled = startLeft - draggedLeft;
-      expect(travelled).toBeGreaterThan(0);
-      expect(travelled).toBeLessThan(150);
-    });
-
-    test("keeps the strip a static, non-interactive presentation under reduced motion", async ({ page }) => {
-      await page.emulateMedia({ reducedMotion: "reduce" });
-      await page.goto("/");
-      const track = page.locator("[data-carousel]");
-      await expect(track).not.toHaveClass(/is-enhanced/);
-      await track.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(300);
-
-      const firstSlide = page.locator(".landing-slide").first();
-      const before = (await firstSlide.boundingBox())?.x ?? 0;
-      await page.waitForTimeout(1200);
-      const after = (await firstSlide.boundingBox())?.x ?? 0;
-
-      // Static: no autonomous loop, no transform drift of any kind.
-      expect(Math.abs(after - before)).toBeLessThan(1);
-      // Still presentation-only: clicking a slide opens nothing.
-      await firstSlide.click({ position: { x: 20, y: 20 } });
+      // Cards are still not controls: nothing opens, nothing navigates.
+      expect(await gallery.getByRole("button").count()).toBe(0);
+      await firstSlide.click();
       await expect(page.locator("[role='dialog']")).toHaveCount(0);
+    });
+
+    /** Installs the hold recorder the browse tests read back. */
+    const trackHolds = async (page: Page): Promise<void> => {
+      type HoldsWindow = Window & { __galleryHolds?: boolean[] };
+      await page.evaluate((): void => {
+        (window as HoldsWindow).__galleryHolds = [];
+        document.addEventListener("landing:gallery-hold", (event): void => {
+          const detail = (event as CustomEvent<{ held: boolean }>).detail;
+          (window as HoldsWindow).__galleryHolds!.push(detail.held);
+        });
+      });
+    };
+    const holdsSeen = (page: Page): Promise<boolean[]> =>
+      page.evaluate((): boolean[] => (window as { __galleryHolds?: boolean[] }).__galleryHolds ?? []);
+
+    /** The unique slide for a catalog index — the presentation-only clones never count. The FIGURE is measured, not its li: the loop's transforms land on `.landing-slide` elements, while the li is the static flex slot they travel through. */
+    const uniqueSlide = (track: Locator, index: number): Locator =>
+      track.locator("li:not(.landing-slide-clone)").nth(index).locator(".landing-slide");
+
+    /** Waits until the slide sits aligned at the strip's left edge (±3px). */
+    const expectAligned = async (slide: Locator, label: string): Promise<void> => {
+      await expect
+        .poll(async (): Promise<number> => {
+          const box = await slide.boundingBox();
+          return box ? Math.abs(box.x) : Number.POSITIVE_INFINITY;
+        }, { timeout: 6_000, intervals: [100] })
+        .toBeLessThan(3);
+      await expect(slide.locator(".landing-slide-caption"), `${label} caption is the one being read`)
+        .toHaveCSS("opacity", "1");
+    };
+
+    test("brings the requested photo to the strip's edge, holds it for reading, then resumes", async ({ page }) => {
+      await publishTwoPhotos(page);
+      await page.goto("/");
+
+      const gallery = page.locator("#galeria");
+      await gallery.scrollIntoViewIfNeeded();
+      const track = page.locator("[data-carousel]");
+      await expect(track).toHaveClass(/is-enhanced/, { timeout: 15_000 });
+      await trackHolds(page);
+
+      const next = gallery.getByRole("button", { name: "Foto siguiente" });
+      const second = uniqueSlide(track, 1);
+      await next.click();
+
+      // The requested photo visibly arrives — aligned at the viewport's left
+      // edge, caption open — instead of the loop merely continuing past it.
+      await expectAligned(second, "photo 2");
+
+      // Give any in-flight seek room to land, then prove the strip is HELD:
+      // two samples 500ms apart agree to sub-pixel while the caption is read.
+      await page.waitForTimeout(1_300);
+      const still1 = (await second.boundingBox())!.x;
+      await page.waitForTimeout(500);
+      const still2 = (await second.boundingBox())!.x;
+      expect(Math.abs(still2 - still1)).toBeLessThan(1);
+
+      // The reading window ends on its own: the hold releases and the
+      // marquee resumes from where the seek parked it (~60px/s leftward).
+      await expect.poll((): Promise<boolean | undefined> => holdsSeen(page).then((holds): boolean | undefined => holds.at(-1)), { timeout: 9_000, intervals: [250] })
+        .toBe(false);
+      const moving1 = (await second.boundingBox())!.x;
+      await page.waitForTimeout(900);
+      const moving2 = (await second.boundingBox())!.x;
+      expect(moving2).toBeLessThan(moving1 - 20);
+    });
+
+    test("wraps previous around the seam and walks the ring in both directions", async ({ page }) => {
+      await publishTwoPhotos(page);
+      await page.goto("/");
+
+      const gallery = page.locator("#galeria");
+      await gallery.scrollIntoViewIfNeeded();
+      const track = page.locator("[data-carousel]");
+      await expect(track).toHaveClass(/is-enhanced/, { timeout: 15_000 });
+
+      // "Previous" from the strip's starting photo travels BACKWARD through
+      // the seam to the catalog's last photo — the loop is endless both ways.
+      const first = uniqueSlide(track, 0);
+      const second = uniqueSlide(track, 1);
+      await gallery.getByRole("button", { name: "Foto anterior" }).click();
+      await expectAligned(second, "photo 2");
+
+      // And "next" from there comes forward to photo 1 again.
+      await gallery.getByRole("button", { name: "Foto siguiente" }).click();
+      await expectAligned(first, "photo 1");
+    });
+
+    test("presents the complete strip without motion under reduced motion", async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await publishOnePhoto(page);
+      await page.goto("/");
+
+      const gallery = page.locator("#galeria");
+      await gallery.scrollIntoViewIfNeeded();
+
+      const track = page.locator("[data-carousel]");
+      await expect(track).toHaveAttribute("data-ready", "true");
+      // The runtime never mounts for this visitor; give any would-be
+      // enhancement a beat to prove it never arrives.
+      await page.waitForTimeout(1_500);
+      await expect(track).not.toHaveClass(/is-enhanced/);
+
+      // The loop-only visual clones drop out instead of publishing duplicates.
+      const clones = track.locator("li.landing-slide-clone");
+      const cloneCount = await clones.count();
+      expect(cloneCount).toBeGreaterThan(0);
+      for (let index = 0; index < cloneCount; index += 1) {
+        await expect(clones.nth(index)).toBeHidden();
+      }
+
+      // Info stays available without motion: a tap reveals the caption.
+      const slide = track.locator(".landing-slide").first();
+      await slide.click();
+      await expect(slide.locator(".landing-slide-caption")).toHaveCSS("opacity", "1");
+      await expect(gallery.getByRole("heading", { name: "Galería" })).toBeVisible();
+    });
+
+    test("offers no browse controls under reduced motion — the wrapped strip needs none", async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await publishTwoPhotos(page);
+      await page.goto("/");
+
+      const gallery = page.locator("#galeria");
+      await gallery.scrollIntoViewIfNeeded();
+      const track = page.locator("[data-carousel]");
+      await expect(track).toHaveAttribute("data-ready", "true");
+
+      // The controls drive the loop; with no loop they drop out entirely
+      // (CSS `display: none` takes them out of the accessibility tree too).
+      await expect(gallery.locator(".landing-gallery-nav")).toBeHidden();
+
+      // The whole catalog is already on the page, in order, motionless.
+      await expect(track.locator("li:not(.landing-slide-clone)")).toHaveCount(2);
+      await expect(track.locator("li:not(.landing-slide-clone)").first()).toBeVisible();
     });
   });
 

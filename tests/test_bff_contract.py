@@ -33,7 +33,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 ROUTERS = RAIZ / "backend" / "app" / "presentacion" / "routers"
 # Los DTOs de #829 quedaron en dos paquetes: los que solo consumen routers
-# (dashboard, chatbot, notificaciones) siguen acá; los que también arma y
+# (dashboard, notificaciones) siguen acá; los que también arma y
 # devuelve servicios_negocio se mudaron a DTOS.
 ESQUEMAS_DE_PRESENTACION = RAIZ / "backend" / "app" / "presentacion" / "schemas"
 DTOS = RAIZ / "backend" / "app" / "servicios_negocio" / "dtos"
@@ -86,7 +86,9 @@ PISOS = {
     "backend:routers": 80,
     "bff:handlers": 85,
     "bff:servidor": 8,
-    "bff:url-cruda": 3,
+    # Dos, no tres: la tercera URL cruda era la del BFF del chatbot, retirado
+    # del frontend. El piso denuncia una regex rota, no congela el inventario.
+    "bff:url-cruda": 2,
 }
 
 _DECORADOR = re.compile(r"@router\.(?:get|post|put|patch|delete)\(")
@@ -382,8 +384,8 @@ class TestNormalizacion:
         assert rutas_consumidas(fuente) == (["/asistencias/reportes/pdf"], 0)
 
     def test_una_url_armada_a_mano_tambien_se_consume(self):
-        fuente = "fetch(`${getBackendApiUrl()}/chatbot/consultar`, {\n"
-        assert rutas_consumidas(fuente) == (["/chatbot/consultar"], 0)
+        fuente = "fetch(`${getBackendApiUrl()}/notificaciones`, {\n"
+        assert rutas_consumidas(fuente) == (["/notificaciones"], 0)
 
     def test_una_llamada_con_ruta_variable_se_cuenta_como_opaca(self):
         assert rutas_consumidas("fetch(backendUrl(path), {\n  method: init.method,\n});\n")[1] == 1
@@ -840,8 +842,6 @@ CAMPOS_OBLIGATORIOS = (
     Campo("/enrollment/", "access_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
     Campo("/enrollment/", "refresh_token", *_ALTA, "/", "isBackendEnrollmentResponse"),
     Campo("/enrollment/", "persona_id", *_ALTA, "/", "isBackendEnrollmentResponse"),
-    Campo("/chatbot/consultar", "respuesta", "ChatbotRespuestaDTO", "chatbot_schemas.py",
-          "chatbot_router.py", "/consultar", "isBackendChatbotResponse"),
     Campo("/asistencias/horarios-publicos", "category", "PublicScheduleCategoryDTO", *_HORARIOS),
     Campo("/asistencias/horarios-publicos", "ages", "PublicScheduleCategoryDTO", *_HORARIOS),
     Campo("/asistencias/horarios-publicos", "blocks", "PublicScheduleCategoryDTO", *_HORARIOS),
@@ -866,7 +866,7 @@ PISOS_DE_ENUM = {
 def ruta_del_esquema(nombre: str) -> Path:
     """El archivo de un DTO, en el paquete que le corresponda (#829): los que
     también arma y devuelve servicios_negocio viven en DTOS; los que solo
-    consumen routers (dashboard, chatbot, notificaciones) siguen en
+    consumen routers (dashboard, notificaciones) siguen en
     ESQUEMAS_DE_PRESENTACION."""
     para_dtos = DTOS / nombre
     return para_dtos if para_dtos.is_file() else ESQUEMAS_DE_PRESENTACION / nombre
