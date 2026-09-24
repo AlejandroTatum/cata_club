@@ -77,7 +77,7 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
     await page.goto("/");
 
     const links = page.locator(".landing-nav-links a");
-    await expect(links).toHaveCount(6);
+    await expect(links).toHaveCount(5);
 
     // One row: every link shares the same top edge. This is the assertion
     // that goes RED on today's code — "Contacto" drops onto a second row.
@@ -86,13 +86,13 @@ test.describe("Landing header and schedule hours on a real mobile engine", () =>
       expect(y, `link ${index} y vs first`).toBeCloseTo(boxes[0], 0);
     });
 
-    // The strip genuinely overflows its own track — six links need ~426px
-    // at this padding/font-size and the phone's content width is ~358px —
-    // while the page itself never gains horizontal scroll: the overflow
-    // lives inside the strip's own scroll container, never on the body.
-    const nav = page.locator(".landing-nav-links");
-    const stripOverflow = await nav.evaluate((el) => el.scrollWidth - el.clientWidth);
-    expect(stripOverflow).toBeGreaterThan(0);
+    // Since #1372 removed Logros the five links fit this track (measured
+    // overflow: 0 on Pixel 7), so the strip has nothing to scroll — there is
+    // no overflow figure worth locking (a `<= 0` bound is vacuous:
+    // `scrollWidth >= clientWidth` always, and it would misfire the day the
+    // menu legitimately grows again). What stays load-bearing is page
+    // safety: any overflow that ever returns lives inside the strip's own
+    // scroll container, never on the body.
     const bodyOverflow = await page.evaluate(() => {
       const root = document.documentElement;
       return root.scrollWidth - root.clientWidth;

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // the unscoped `.landing-button-outline` rule (0,1,0), so the hero's
 // secondary CTA ("Ver horarios") computes the same solid background as the
 // primary one. jsdom cannot resolve CSS specificity, so — the same
-// convention `landing-logros-colors.test.ts` and `Sponsors.test.tsx` use —
+// convention `landing-stats-band.test.ts` and `Sponsors.test.tsx` use —
 // this reads the authored stylesheet directly and locks the hero override to
 // stay scoped away from the outline variant.
 const landingCss = (): string =>
