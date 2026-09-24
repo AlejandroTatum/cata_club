@@ -197,10 +197,11 @@ const ROSTER: readonly (readonly [string, number])[] = [
   // The four attendance state controls — 44px at every width, on purpose.
   ["app/trainer/attendance/AttendanceRosterRow.tsx", 1],
   // The public landing: two buttons, the skip link, the nav links, the nav
-  // CTA, the hero carousel's arrows, the gallery's photo-browsing arrows, the
-  // `max-width: 768px` override that once shrank a link to 40px, and the
-  // Valores tablero's scroll cue into Logros.
-  ["app/landing/landing.css", 9],
+  // CTA, the hero carousel's arrows, the gallery's photo-browsing arrows and
+  // the `max-width: 768px` override that once shrank a link to 40px. (Was 9:
+  // the Valores tablero's scroll cue into Logros left with the section in
+  // issue #1372.)
+  ["app/landing/landing.css", 8],
 ];
 
 describe("a promised touch surface stays at 44px", () => {

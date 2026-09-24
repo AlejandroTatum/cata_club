@@ -19,7 +19,6 @@ import HeroCarousel from "./HeroCarousel";
 import LandingMap from "./LandingMap";
 import LandingMotionLoader from "./LandingMotionLoader";
 import NavScrollSpy from "./NavScrollSpy";
-import Palmares from "./Palmares";
 import ScheduleSelector from "./ScheduleSelector";
 import Sponsors from "./Sponsors";
 import Ticker from "./Ticker";
@@ -315,7 +314,6 @@ function Values(): React.ReactElement {
         <ValueCard title="Esfuerzo">Cada punto se gana con entrega y dedicación total.</ValueCard>
         <ValueCard title="Compañerismo">Crecemos como una familia, celebrando juntos cada logro.</ValueCard>
       </div>
-      <a className="landing-tablero-cue" href="#logros">Logros del club <span aria-hidden="true">↓</span></a>
     </section>
   );
 }
@@ -465,7 +463,7 @@ export default function LandingPage(): React.ReactElement {
           so the landmark structure below is exactly what it was. */}
       <PublicSchedules>
         <main>
-          <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Palmares /><Motto /><Gallery /><Location />
+          <Hero /><Ticker /><Stats /><Schedule /><MissionVision /><Values /><Motto /><Gallery /><Location />
         </main>
       </PublicSchedules>
       {/* The sponsor strip sits between the page's main landmark and the footer:

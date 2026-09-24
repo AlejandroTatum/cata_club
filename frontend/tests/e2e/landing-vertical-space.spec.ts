@@ -3,8 +3,7 @@
  *
  * Valores and the CTA final reserve less structural space than the original
  * template — tighter section gaps, tighter ask/warning padding and a shorter
- * CTA padding (Logros held that tighter rhythm until #1154 restored the
- * shared one; see the history below). Valores itself later
+ * CTA padding. Valores itself later
  * dropped the scroll-scrubbed rally (ball, guide, scoreboard counter,
  * dimming) for a static tablero of four numeral tiles: it does not scrub
  * anything into place, so it cannot break the way the rally did on mobile.
@@ -19,20 +18,13 @@
  * file runs (`pnpm exec playwright test`), so a future reader can see what
  * the sections cost without re-running the measurement.
  *
- * `.landing-wins` dropped sharply once Logros was redesigned (issue #657's
- * follow-up) from the five-row placeholder trophy wall to a single documented
- * result told as a feature story plus a four-photo podios row — see
- * `landing-logros-d-historia.html`. Issue #1154 then deliberately moved it
- * back UP: the section returned to the shared vertical rhythm (76px/64px
- * padding, 44px gap — #871's trim reverted) and its thumbnails grew into
- * image-over-text cards worth actually reading. The higher `logros` and
- * `scrollHeight` numbers below are the approved new rhythm, not a regression;
- * the #871-era compressed values were 788px/1067px and scrollHeight
- * 6146px/8197px.
+ * The Logros band (`.landing-wins`) this file also used to measure and cap
+ * left the page in issue #1372; its measurements, its geometry lock and its
+ * ceiling retired with the section.
  *
  * `document.scrollHeight` moved twice for Mission/Vision (`#nosotros`):
- * `.landing-values`, `.landing-wins` and `.landing-motto` — the three
- * sections this file actually shrinks — never changed size at either point,
+ * `.landing-values` and `.landing-motto` — the two bands this file still
+ * measures — never changed size at either point,
  * so their individual ceilings below are untouched by either move.
  *
  * It first ROSE when each pillar gained one photo BELOW its body copy:
@@ -54,15 +46,20 @@
  *
  *   Section (desktop 1440x900)          height
  *   .landing-values (tablero)            701px
- *   .landing-wins (#1154)               1027px
  *   .landing-motto                       384px
  *   document.scrollHeight (photo beside copy)      6472px
  *
  *   Section (mobile 390x844)            height
  *   .landing-values (tablero)            941px
- *   .landing-wins (#1154)               1194px
  *   .landing-motto                       438px
  *   document.scrollHeight (unchanged — pillar still stacks)  9057px
+ *
+ * Issue #1372 then removed the Logros band from between Valores and the CTA
+ * (roughly one `.landing-wins` height, ~1027px desktop / ~1194px mobile, off
+ * the page). No fresh measurement run has re-based the scrollHeight ceilings
+ * yet, so they keep their pre-removal values: still valid upper bounds over
+ * the now-shorter page, just looser than the recorded-numbers convention
+ * wants. Re-tighten them from a new measured run, not by arithmetic.
  */
 import { test, expect } from "@playwright/test";
 
@@ -78,22 +75,14 @@ const VIEWPORTS = [
  *  `desktop.valores` moved from #871's 660px to 709px (701px measured + 8px
  *  headroom, same convention as every other ceiling here): the tablero's four
  *  200px-class tiles plus their text row cost more vertical space than the
- *  rally's single 148px stage did, even after trimming the tile to 176px, the
- *  tile→text gap to 18px and the cue's `margin-top` to 36px — the numbers
+ *  rally's single 148px stage did, even after trimming the tile to 176px and
+ *  the tile→text gap to 18px — the numbers
  *  `landing-vertical-space.test.ts` locks. Nothing else in #871's approved
  *  range moved.
  *
- *  `logros` and `scrollHeight` dropped hard with the Logros redesign (feature
- *  story + podios row replacing the five-row placeholder wall), then rose
- *  again with #1154's approved rhythm — the sections above and below Logros
- *  did not move. The ceilings below carry the same headroom convention (+8px)
- *  over the measured numbers recorded in the file header; `scrollHeight`
- *  keeps a wider buffer because it aggregates the whole page and absorbs
- *  environment font-metric variance.
- *
  *  `scrollHeight` rose from 6505px to 7093px desktop, 8445px to 9177px mobile,
  *  for Mission/Vision's per-pillar photos when they sat BELOW the copy (see
- *  the file header) — neither `valores`, `logros` nor `cta` moved, so only
+ *  the file header) — neither `valores` nor `cta` moved, so only
  *  `scrollHeight` needed a new ceiling.
  *
  *  It then DROPPED — desktop only — once the photo moved beside the copy
@@ -103,15 +92,18 @@ const VIEWPORTS = [
  *  buffer convention, rather than keeping the old 7093px headroom the new
  *  layout no longer needs. Mobile's `scrollHeight` did not move at all — the
  *  pillar still stacks copy above photo below the breakpoint — so its
- *  ceiling stays exactly as it was (120px over the same measured 9057px). */
+ *  ceiling stays exactly as it was (120px over the same measured 9057px).
+ *
+ *  The `logros` ceiling and its scrollHeight share of #1154's rhythm left
+ *  with the section in #1372 (see the file header). */
 const CEILINGS: Record<(typeof VIEWPORTS)[number]["name"], Record<string, number>> = {
-  desktop: { valores: 709, logros: 1035, cta: 400, scrollHeight: 6592 },
-  mobile: { valores: 1170, logros: 1203, cta: 450, scrollHeight: 9177 },
+  desktop: { valores: 709, cta: 400, scrollHeight: 6592 },
+  mobile: { valores: 1170, cta: 450, scrollHeight: 9177 },
 };
 
 test.describe("landing vertical space", () => {
   for (const vp of VIEWPORTS) {
-    test(`shrinks Valores, Logros and the CTA on ${vp.name} without overflow`, async ({
+    test(`shrinks Valores and the CTA on ${vp.name} without overflow`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
@@ -125,7 +117,6 @@ test.describe("landing vertical space", () => {
         };
         return {
           valores: heightOf(".landing-values"),
-          logros: heightOf(".landing-wins"),
           cta: heightOf(".landing-motto"),
           scrollHeight: document.documentElement.scrollHeight,
           overflowPx: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -140,7 +131,6 @@ test.describe("landing vertical space", () => {
       const ceilings = CEILINGS[vp.name];
       expect(heights.valores, `.landing-values height at ${vp.name}`).not.toBeNull();
       expect(heights.valores as number, `.landing-values height at ${vp.name}`).toBeLessThanOrEqual(ceilings.valores);
-      expect(heights.logros as number, `.landing-wins height at ${vp.name}`).toBeLessThanOrEqual(ceilings.logros);
       expect(heights.cta as number, `.landing-motto height at ${vp.name}`).toBeLessThanOrEqual(ceilings.cta);
       expect(heights.scrollHeight, `document scrollHeight at ${vp.name}`).toBeLessThanOrEqual(ceilings.scrollHeight);
       // No overlap/clipping shows up as horizontal overflow: a card or row
@@ -148,65 +138,6 @@ test.describe("landing vertical space", () => {
       expect(heights.overflowPx, `no horizontal overflow at ${vp.name}`).toBeLessThanOrEqual(0);
     });
   }
-
-  /**
-   * The redesigned Logros geometry: one feature photo at its fixed height and
-   * a horizontally scrollable competition selector whose tabs retain a useful
-   * touch target. Every geometry read waits for the feature's own reveal via
-   * `expect.poll`; a one-shot read after `scrollIntoView` races the transition.
-   */
-  test("keeps the feature photo and competition tabs at their intended heights", async ({ page }, testInfo) => {
-    await page.goto("/");
-    await page.locator("#logros").scrollIntoViewIfNeeded();
-
-    const logroReveal = page.locator("#logros .landing-logro[data-reveal]");
-    await expect.poll(async () => logroReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
-
-    const desktopMetrics = await page.evaluate(() => {
-      const feature = document.querySelector<HTMLElement>(".landing-logro-photo");
-      const tabs = Array.from(document.querySelectorAll<HTMLElement>(".landing-logro-tab"));
-      return {
-        featureHeight: feature ? feature.getBoundingClientRect().height : null,
-        tabCount: tabs.length,
-        tabHeights: tabs.map((tab) => tab.getBoundingClientRect().height),
-      };
-    });
-
-    await testInfo.attach("logros-geometry-desktop", {
-      body: JSON.stringify(desktopMetrics, null, 2),
-      contentType: "application/json",
-    });
-
-    expect(desktopMetrics.featureHeight, "feature photo height on desktop").toBeCloseTo(380, 0);
-    expect(desktopMetrics.tabCount, "competition tab count").toBe(7);
-    for (const height of desktopMetrics.tabHeights) {
-      expect(height, "competition tab touch target on desktop").toBeGreaterThanOrEqual(94);
-    }
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    await page.locator("#logros").scrollIntoViewIfNeeded();
-    await expect.poll(async () => logroReveal.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
-
-    const mobileMetrics = await page.evaluate(() => {
-      const feature = document.querySelector<HTMLElement>(".landing-logro-photo");
-      const tabs = Array.from(document.querySelectorAll<HTMLElement>(".landing-logro-tab"));
-      return {
-        featureHeight: feature ? feature.getBoundingClientRect().height : null,
-        tabHeights: tabs.map((tab) => tab.getBoundingClientRect().height),
-      };
-    });
-
-    await testInfo.attach("logros-geometry-mobile", {
-      body: JSON.stringify(mobileMetrics, null, 2),
-      contentType: "application/json",
-    });
-
-    expect(mobileMetrics.featureHeight, "feature photo height on mobile").toBeCloseTo(160, 0);
-    for (const height of mobileMetrics.tabHeights) {
-      expect(height, "competition tab touch target on mobile").toBeGreaterThanOrEqual(94);
-    }
-  });
 
   /**
    * The CTA's own accessibility/motion contract: the shorter padding must not
