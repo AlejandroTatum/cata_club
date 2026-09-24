@@ -360,9 +360,17 @@ function ProofViewer({
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofPreviewUrl ? PROOF_ATTACHED_LABEL : "Sin comprobante adjunto"}
         </span>
-        <span className="shrink-0 text-2xs tracking-flat text-ink-3">
-          {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
-        </span>
+        {/* Issue #1400: the file-type badge is a property OF an attachment —
+            a cash payment with no voucher (the normal case there) used to
+            read "Sin comprobante adjunto  Imagen": a type label for a file
+            that does not exist. With nothing attached there is no type to
+            name, so the badge renders only when a proof does; a transfer
+            with a voucher, or cash with a receipt, keeps it unchanged. */}
+        {request.proofPreviewUrl && (
+          <span className="shrink-0 text-2xs tracking-flat text-ink-3">
+            {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
+          </span>
+        )}
       </div>
 
       <div className="flex min-h-[280px] items-center justify-center bg-canvas p-4">
