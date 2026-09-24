@@ -22,7 +22,10 @@ from app.servicios_negocio.dtos.enrollment_schemas import (
 )
 from app.dominio.mensajes import MENSAJE_IDENTIDAD_DUPLICADA
 from app.dominio.excepciones import OperacionInvalida
-from app.servicios_negocio.enrollment_servicio import EnrollmentServicio
+from app.servicios_negocio.enrollment_servicio import (
+    MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO,
+    EnrollmentServicio,
+)
 
 
 # Regression tests for a bug where `_asignar_rol` only called `db.flush()`
@@ -421,6 +424,57 @@ def test_representante_cedula_duplicada_rechazada(db_session):
     )
     from app.dominio.excepciones import EntidadDuplicada
     with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
+        EnrollmentServicio(db_session).enroll(datos)
+
+
+def test_representante_con_cedula_igual_al_alumno_rechazada(db_session):
+    """Issue #1397: en un mismo request, la cédula del representante y la del
+    alumno no pueden coincidir. Es un choque ENTRE CAMPOS del propio
+    formulario -- ambos valores los escribió quien envía el cuerpo -- así que
+    responde el mensaje preciso que nombra ambos campos, nunca el texto
+    anti-enumeración: `MENSAJE_IDENTIDAD_DUPLICADA` queda reservado para
+    choques contra el padrón existente."""
+    cedula = cedula_valida(256)
+    datos = _enrollment_dto(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula,
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia-igual-alumno@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(cedula=cedula),
+    )
+
+    with pytest.raises(OperacionInvalida) as exc_info:
+        EnrollmentServicio(db_session).enroll(datos)
+
+    assert MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO in str(exc_info.value)
+    assert MENSAJE_IDENTIDAD_DUPLICADA not in str(exc_info.value)
+    assert db_session.query(Persona).count() == 0
+
+
+def test_cedula_igual_al_alumno_responde_igual_si_la_identidad_existe(db_session):
+    """Issue #1397, frontera con la respuesta anti-enumeración: el mensaje de
+    colisión entre campos es el MISMO tenga o no la cédula dueño en el padrón
+    -- el estado de la base no puede cambiar lo que el llamador lee, así que
+    la respuesta no filtra si la identidad existe."""
+    cedula = cedula_valida(257)
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula=cedula,
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.commit()
+
+    datos = _enrollment_dto(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula,
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia-colision-registrada@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(cedula=cedula),
+    )
+
+    with pytest.raises(OperacionInvalida, match=MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO):
         EnrollmentServicio(db_session).enroll(datos)
 
 
@@ -825,4 +879,36 @@ def test_api_self_enrollment_sin_telefono_rechazada(client):
         },
     )
     assert respuesta.status_code == 422, respuesta.text
+
+
+def test_api_representante_con_cedula_igual_al_alumno_devuelve_400_preciso(client, db_session):
+    """Issue #1397: la colisión entre los dos campos del MISMO request
+    responde 400 con el mensaje que nombra ambos campos, y nunca con el texto
+    anti-enumeración -- nombrarlos no filtra nada: quien envió el cuerpo
+    escribió ambos valores. Y nada se persiste."""
+    cedula = cedula_valida(596)
+    total_antes = db_session.query(Persona).count()
+    respuesta = client.post(
+        "/api/v1/enrollment/",
+        json={
+            "representante": {
+                "nombres": "Sofia", "apellidos": "Martinez", "cedula": cedula,
+                "fecha_nacimiento": "1990-05-20", "telefono": "0991234567",
+                "correo": "sofia-api-igual@example.com", "contrasenia": "password8",
+            },
+            "alumno": {
+                "nombres": "Lucas", "apellidos": "Martinez", "cedula": cedula,
+                "fecha_nacimiento": "2015-06-15",
+            },
+            # Camino representado (issue #1138): sin contacto de emergencia
+            # propio, se deriva del representante.
+            "ficha_medica": {"tipo_sangre": "O_POSITIVO", "enfermedades": []},
+            "acepta_consentimientos": True,
+        },
+    )
+    assert respuesta.status_code == 400, respuesta.text
+    assert MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO in respuesta.text
+    assert MENSAJE_IDENTIDAD_DUPLICADA not in respuesta.text
+    assert db_session.query(Persona).count() == total_antes
+    assert db_session.query(Persona).filter(Persona.cedula == cedula).count() == 0
 

@@ -79,6 +79,21 @@ MENSAJE_IDEMPOTENCIA_REUTILIZADA = (
 # (PENDIENTE). Segundos, HTTP `Retry-After`.
 REINTENTO_SEGUNDOS_EN_VUELO = 2
 
+# Issue #1397: cédula del representante y cédula del alumno en el MISMO
+# request. Es un choque ENTRE CAMPOS del propio formulario -- ambos valores
+# los escribió quien envía el cuerpo -- así que el mensaje puede nombrar los
+# dos campos con precisión: no revela nada que el llamador no sepa ya, y por
+# eso NO es el caso de `MENSAJE_IDENTIDAD_DUPLICADA`, que sigue siendo la
+# única respuesta para choques contra identidades ya registradas (el estado
+# del padrón no puede cambiar esta respuesta: con ambos campos iguales el
+# rechazo es el mismo tenga o no la cédula dueño registrado).
+# Espejo verbatim de `REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE`
+# (`frontend/src/lib/identity-validation.ts`); cambiar uno sin el otro las
+# hace divergir.
+MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO = (
+    "La cédula del representante debe ser diferente de la cédula del estudiante."
+)
+
 
 class ConflictoIdempotencia(ErrorDominio):
     """La clave de idempotencia está en vuelo (PENDIENTE) o ya fue consumida por
@@ -158,6 +173,12 @@ class EnrollmentServicio:
 
         hay_representante = datos.representante is not None
         if datos.representante:
+            # Issue #1397: la colisión entre los dos campos del MISMO
+            # formulario se resuelve antes que cualquier consulta -- es puro
+            # chequeo de forma, no toca el padrón, y su mensaje preciso
+            # nombra ambos campos (ver la constante de arriba).
+            if datos.representante.cedula == datos.alumno.cedula:
+                raise OperacionInvalida(MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO)
             # Validar cédula única del representante
             if self.repo_persona.obtener_por_cedula(datos.representante.cedula):
                 raise EntidadDuplicada(MENSAJE_IDENTIDAD_DUPLICADA)
