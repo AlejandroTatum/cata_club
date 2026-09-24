@@ -2651,6 +2651,35 @@ export async function eliminarSponsor(id: number): Promise<void> {
   await request<unknown>(apiEndpoint(`/sponsors/${id}`), { method: "DELETE" });
 }
 
+/** One published gallery entry — wire contract mirrors Sponsor (camelCase via
+ * the backend's ResponseBase alias generator, asserted by
+ * backend/tests/test_galeria.py). */
+export interface GaleriaEntry {
+  id: number;
+  titulo: string;
+  descripcion: string;
+  imagenUrl: string;
+}
+
+/** Public entries shown on the landing page gallery. */
+export async function fetchGaleria(): Promise<GaleriaEntry[]> {
+  return request<GaleriaEntry[]>(apiEndpoint("/galeria"));
+}
+
+/** Admin-only: publish one gallery photo with its title and accessible description. */
+export async function crearEntradaGaleria(titulo: string, descripcion: string, archivo: File): Promise<GaleriaEntry> {
+  const formData = new FormData();
+  formData.append("titulo", titulo);
+  formData.append("descripcion", descripcion);
+  formData.append("archivo", archivo);
+  return request<GaleriaEntry>(apiEndpoint("/galeria"), { method: "POST", body: formData }, 30_000);
+}
+
+/** Admin-only: remove a gallery entry and its hosted photo. */
+export async function eliminarEntradaGaleria(id: number): Promise<void> {
+  await request<unknown>(apiEndpoint(`/galeria/${id}`), { method: "DELETE" });
+}
+
 const FOTO_PERFIL_UPLOAD_TIMEOUT_MS = 30_000;
 
 /**

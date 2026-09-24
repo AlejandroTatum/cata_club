@@ -69,6 +69,9 @@ const NO_HEADER_ACTION: Record<string, string> = {
   // Uploading needs the name and logo fields beside its submit control; separating
   // it into the page header would disconnect the action from the required inputs.
   "app/sponsors/page.tsx": "upload form — the submit action belongs with its required fields",
+  // Same shape, same reason (issue #1372): the gallery upload needs título,
+  // descripción and the photo file beside its submit control.
+  "app/galeria/page.tsx": "upload form — the submit action belongs with its required fields",
   // --- The five family screens, decided in #43 -----------------------------
   // A wizard. Its buttons are "Continuar" and "Confirmar asistencia": they move
   // through the steps rather than act on the page, and which one is showing is
