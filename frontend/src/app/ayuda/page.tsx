@@ -1,9 +1,11 @@
 /**
  * `/ayuda` — the answers, browsable.
  *
- * A page of answers, browsable: searching and browsing answer different
- * needs, and a family opening the app for the first time needs to find what
- * the club calls a thing, not guess it first.
+ * This page is the FAQ and nothing else (#1374 correction): the four
+ * audience groups below are the whole surface. Schedules are answered by the
+ * landing's live section — the one place the club's published catalog is
+ * shown — and the club's own facts live in the knowledge the retired
+ * assistant left behind, not as blocks to scroll past here.
  *
  * Deliberately reachable WITHOUT a session. The two questions asked most often
  * — "when does my child train" and "how do I sign in" — are asked by people
@@ -12,14 +14,14 @@
 
 "use client";
 
-import { Dumbbell, HelpCircle, Rocket, ShieldCheck, Users } from "lucide-react";
+import { Dumbbell, Rocket, ShieldCheck, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import AppShell from "@/components/shell/AppShell";
-import { Accordion, BackLink, ScrollableTable } from "@/components/ui";
+import { Accordion, BackLink } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { backHrefForRole } from "@/lib/auth-utils";
-import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "./faq-content";
+import { FAQ_SECTIONS } from "./faq-content";
 
 /**
  * The audience color system #203 asks for — one hue per "who this section is
@@ -67,23 +69,49 @@ function sectionSlug(title: string): string {
 }
 
 /**
- * Where the club is and how to reach it, in the order someone narrows a place
- * down: the street, the landmark it sits beside, then the Plus Code that
- * closes the gap a street with no number leaves. The same order the landing's
- * contact card uses.
+ * Answers that hand the reader to the surface that actually holds the fact
+ * (#1374 correction): the schedule answer directs to the landing's live
+ * section instead of restating times this page cannot keep current — the
+ * landing reads the published catalog, and its `#horarios` anchor is where
+ * the header's own "Horarios" link has always landed.
  *
- * One row per canonical field rather than one composed sentence: each value is
- * its own fact, so the divergence guard can tell WHICH one drifted from the
- * assistant's rather than reporting a whole paragraph as different.
+ * The link text is a VERBATIM substring of the canonical answer, so the
+ * parity guard keeps comparing the same words on both sides — the anchor
+ * changes where a phrase points, never what it says.
  */
-const CLUB_DETAILS: ReadonlyArray<{ label: string; values: string[] }> = [
-  { label: "Dirección", values: [CLUB_PROFILE.address] },
-  { label: "Referencia", values: [CLUB_PROFILE.landmark] },
-  { label: "Plus Code", values: [CLUB_PROFILE.plusCode] },
-  { label: "WhatsApp", values: CLUB_PROFILE.whatsapp },
-  { label: "Facebook", values: [CLUB_PROFILE.facebook] },
-  { label: "Instagram", values: [CLUB_PROFILE.instagram] },
-];
+const ANSWER_LINKS: Readonly<Record<string, { linkText: string; href: string }>> = {
+  "¿Cuáles son los horarios?": {
+    linkText: "Horarios de la página principal",
+    href: "/#horarios",
+  },
+};
+
+/**
+ * The answer's own words, with the mapped phrase promoted to a link. If the
+ * canonical answer drifts away from the mapped phrase, the answer still
+ * renders whole — and `AyudaPage.test.tsx` fails loudly, because the link it
+ * guards would be gone.
+ */
+function AnswerWithLink({ question, answer }: { question: string; answer: string }): React.ReactElement {
+  const link = ANSWER_LINKS[question];
+  if (!link) return <>{answer}</>;
+
+  const [before, after] = answer.split(link.linkText);
+  if (after === undefined) return <>{answer}</>;
+
+  return (
+    <>
+      {before}
+      <a
+        href={link.href}
+        className="font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
+      >
+        {link.linkText}
+      </a>
+      {after}
+    </>
+  );
+}
 
 export default function AyudaPage(): React.ReactElement {
   const { session } = useAuth();
@@ -93,76 +121,6 @@ export default function AyudaPage(): React.ReactElement {
       subtitle="Cómo funciona la app del club, sección por sección."
     >
       <BackLink href={backHrefForRole(session?.user.role)} />
-
-      {/*
-       * The schedule first, and as a table rather than prose. It is the most
-       * asked question in the club and the only answer here that someone
-       * needs to READ OFF rather than read — a parent checking whether they
-       * make it from school by 16:00 is scanning a column, not a paragraph.
-       */}
-      <section aria-labelledby="horarios-heading" className="card p-page">
-        {/* The `title` step: 20px Graduate, uppercase, weight 400 — the name of
-            a card, spelled the way every other card on this shell spells it.
-            `tracking-flat` cancels the -0.02em the step carries for Barlow. */}
-        <h2
-          id="horarios-heading"
-          className="mb-1 font-display text-lg uppercase leading-tight tracking-flat text-ink"
-        >
-          Horarios de entrenamiento
-        </h2>
-        <p className="mb-4 text-xs text-ink-2">
-          Días y horas fijos del club, por categoría.
-        </p>
-
-        <ScrollableTable label="Horarios, tabla desplazable">
-          <table className="w-full min-w-[420px] border-collapse text-left">
-            <thead>
-              <tr className="border-b border-line">
-                <th scope="col" className="pb-2 pr-4 text-2xs font-bold uppercase text-ink-3-strong">
-                  Categoría
-                </th>
-                <th scope="col" className="pb-2 pr-4 text-2xs font-bold uppercase text-ink-3-strong">
-                  Para quién
-                </th>
-                <th scope="col" className="pb-2 pr-4 text-2xs font-bold uppercase text-ink-3-strong">
-                  Días
-                </th>
-                <th scope="col" className="pb-2 text-2xs font-bold uppercase text-ink-3-strong">
-                  Hora
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {FAQ_SCHEDULES.map((schedule) => (
-                <tr key={schedule.category} className="border-b border-line last:border-b-0">
-                  <th scope="row" className="py-2.5 pr-4 text-sm font-bold text-ink">
-                    {schedule.category}
-                  </th>
-                  <td className="py-2.5 pr-4 text-xs text-ink-2">{schedule.ages}</td>
-                  <td className="py-2.5 pr-4 text-xs text-ink-2">{schedule.days}</td>
-                  <td className="py-2.5 text-xs font-semibold tabular-nums text-ink">
-                    {schedule.hours}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollableTable>
-
-        {/*
-         * #315 hallazgo #48: this table cannot be reconciled with a reader's
-         * OWN carnet, because a plan's NAME can share a word with a categoría
-         * ("Mensual Infantil") without being that categoría — the plan is a
-         * price, never a schedule (`franja_horaria` was dropped from
-         * `tipo_membresia` for exactly this reason, #160). Without this line
-         * a family comparing the two concludes their own horario is loaded
-         * wrong, when it is the plan name that never promised a franja.
-         */}
-        <p className="mt-3 text-2xs text-ink-3">
-          El nombre del plan es una tarifa, no indica la categoría ni la franja: la franja real de
-          cada alumno es la que figura en su propio carnet, en Mi Cuenta.
-        </p>
-      </section>
 
       {/*
        * Two columns on desktop, one on narrow screens — #203's grid. Each
@@ -202,98 +160,13 @@ export default function AyudaPage(): React.ReactElement {
                 items={section.entries.map((entry) => ({
                   id: sectionSlug(entry.question),
                   question: entry.question,
-                  answer: entry.answer,
+                  answer: <AnswerWithLink question={entry.question} answer={entry.answer} />,
                 }))}
               />
             </section>
           );
         })}
       </div>
-
-      {/*
-       * The club itself, last of the answers and first of the ways out: a
-       * reader who got here without finding their question still gets the
-       * address and the phone number before being handed the escape hatch
-       * below.
-       *
-       * This block is also the page's half of issue #768. The assistant is
-       * given these same facts — it used to refuse "¿dónde queda?" while the
-       * landing had been answering it for months — and the two are reconciled
-       * by `__tests__/knowledge-parity.test.tsx`, which reads every
-       * `club-fact` off this DOM and looks for it in the prompt the model is
-       * actually sent.
-       */}
-      <section aria-labelledby="club-heading" className="card p-page">
-        <h2
-          id="club-heading"
-          className="mb-1 font-display text-lg uppercase leading-tight tracking-flat text-ink"
-        >
-          El club
-        </h2>
-        <p className="mb-4 text-xs text-ink-2" data-testid="club-fact">
-          {CLUB_PROFILE.summary}
-        </p>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <h3 className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">Misión</h3>
-            <p className="text-xs leading-prose text-ink-2" data-testid="club-fact">
-              {CLUB_PROFILE.mission}
-            </p>
-          </div>
-          <div>
-            <h3 className="mb-1 text-2xs font-bold uppercase text-ink-3-strong">Visión</h3>
-            <p className="text-xs leading-prose text-ink-2" data-testid="club-fact">
-              {CLUB_PROFILE.vision}
-            </p>
-          </div>
-        </div>
-
-        <h3 className="mb-1 mt-4 text-2xs font-bold uppercase text-ink-3-strong">Valores</h3>
-        <ul className="flex flex-col gap-1">
-          {CLUB_PROFILE.values.map((value) => (
-            <li key={value.name} className="text-xs leading-prose text-ink-2" data-testid="club-fact">
-              <strong className="font-bold text-ink">{value.name}</strong>
-              {`: ${value.description}`}
-            </li>
-          ))}
-        </ul>
-
-        <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-field sm:grid-cols-2">
-          {CLUB_DETAILS.map((detail) => (
-            <div key={detail.label}>
-              <dt className="text-2xs font-bold uppercase text-ink-3-strong">{detail.label}</dt>
-              {detail.values.map((value) => (
-                <dd key={value} className="text-xs text-ink-2" data-testid="club-fact">
-                  {value}
-                </dd>
-              ))}
-            </div>
-          ))}
-        </dl>
-
-        <p className="mt-4 text-2xs text-ink-3" data-testid="club-fact">
-          {CLUB_PROFILE.contactNote}
-        </p>
-      </section>
-
-      {/*
-       * The escape hatch, at the bottom rather than the top: someone who
-       * scrolled this far did not find their answer, and that is exactly the
-       * moment to offer a person. Every way to reach one is the club's own
-       * contact information, already on this page right above.
-       */}
-      {/* A sunken inset, not a card — so its heading stays at the dense step
-          and in Barlow. It is a question put to the reader, not the name of a
-          block, and "si dudás, es Barlow". */}
-      <section className="rounded-card border border-line-2 bg-sunken p-page text-center">
-        <HelpCircle size={ICON.base} strokeWidth={1.5} aria-hidden="true" className="mx-auto mb-2 text-ink-3" />
-        <h2 className="text-sm font-extrabold text-ink">¿No encontró lo que buscaba?</h2>
-        <p className="mx-auto mt-1 max-w-md text-xs text-ink-2">
-          Escríbale al club directamente: su WhatsApp y su dirección están
-          en la sección «El club», aquí arriba.
-        </p>
-      </section>
     </AppShell>
   );
 }

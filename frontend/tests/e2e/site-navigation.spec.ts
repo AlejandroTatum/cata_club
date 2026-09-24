@@ -98,3 +98,27 @@ test.describe("public navigation (issue #771)", () => {
     expect(await page.evaluate((): number => window.scrollY)).toBeGreaterThan(before);
   });
 });
+
+test.describe("public help surface (issue #1374)", () => {
+  test("/ayuda answers schedules by linking to the landing's live section", async ({ page }) => {
+    await page.goto("/ayuda");
+
+    await expect(page.getByRole("heading", { name: "Preguntas frecuentes" })).toBeVisible();
+
+    // The correction made /ayuda the FAQ alone: no schedule table, no static
+    // copy of volatile facts. The answer hands the reader to the one surface
+    // that publishes them.
+    await expect(page.getByRole("table")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "¿Cuáles son los horarios?" })).toBeVisible();
+
+    await page.getByRole("button", { name: "¿Cuáles son los horarios?" }).click();
+    const link = page.getByRole("link", { name: "Horarios de la página principal" });
+    await expect(link).toBeVisible();
+
+    // The anchor is a working one: the click lands on the landing's schedule
+    // section, the same destination the site's own "Horarios" nav link uses.
+    await link.click();
+    await expect(page).toHaveURL(/\/#horarios$/);
+    await expect(page.locator("#horarios")).toBeInViewport();
+  });
+});

@@ -16,6 +16,18 @@
  * (`resolveJsonModule` infers the literal type of the file's contents, so the
  * assignments at the bottom are real compile-time checks, not casts).
  *
+ * Schedules are deliberately NOT part of that projection (#1374): the club
+ * edits them inside the app and `GET /api/schedules` serves the live catalog
+ * to the landing — the one surface that renders them. The canonical file's
+ * `horarios[]` stays empty — both knowledge suites fail if a static list ever
+ * reappears — and the schedule QUESTION on this page directs to the landing's
+ * section instead of restating anything.
+ *
+ * Since the #1374 correction the page renders the FAQ sections ONLY: the
+ * schedule table and the club-profile blocks left the screen, so
+ * `CLUB_PROFILE` below stays as the typed, price-locked projection of the
+ * canonical club section rather than as rendered copy.
+ *
  * ## Why the import points at a mirror inside `src/`
  *
  * Docker builds this app from the `./frontend` context alone
@@ -32,15 +44,6 @@
  */
 
 import knowledge from "@/data/club-knowledge.json";
-
-export interface FaqSchedule {
-  /** The category, as the club names it. */
-  category: string;
-  /** Who it is for, in plain words. */
-  ages: string;
-  days: string;
-  hours: string;
-}
 
 export interface FaqEntry {
   question: string;
@@ -80,19 +83,6 @@ export interface ClubProfile {
   instagram: string;
   contactNote: string;
 }
-
-/**
- * Fixed club training times. Kept in the same order the canonical file lists
- * them — youngest first — because that is the order a parent scans.
- */
-export const FAQ_SCHEDULES: FaqSchedule[] = knowledge.horarios.map(
-  (schedule): FaqSchedule => ({
-    category: schedule.categoria,
-    ages: schedule.edades,
-    days: schedule.dias,
-    hours: schedule.horas,
-  }),
-);
 
 export const FAQ_SECTIONS: FaqSection[] = knowledge.faq.map(
   (section): FaqSection => ({
