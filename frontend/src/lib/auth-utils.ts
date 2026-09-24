@@ -115,6 +115,7 @@ function sectionsForRole(role: UserRole, studentIsAdult: boolean): NavLinkDef[] 
         row("/payments"),
         row("/discounts"),
         row("/sponsors"),
+        row("/galeria"),
         row("/tarifas"),
         row("/attendance"),
         row("/reports"),

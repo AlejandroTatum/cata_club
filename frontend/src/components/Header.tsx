@@ -32,6 +32,7 @@ import {
   Percent,
   Tag,
   Handshake,
+  Images,
   X,
   House,
   User,
@@ -91,6 +92,10 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   "/payments": CreditCard,
   "/discounts": Percent,
   "/sponsors": Handshake,
+  // `Images` — una pila de fotos, que es literalmente lo que administra la
+  // pantalla. Glifo propio: `Handshake` ya es "/sponsors" y `House` es el
+  // fallback silencioso que este mapa existe para evitar.
+  "/galeria": Images,
   "/tarifas": Tag,
   "/attendance": ClipboardCheck,
   "/trainer": LayoutGrid,

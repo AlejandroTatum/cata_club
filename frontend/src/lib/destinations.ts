@@ -79,6 +79,9 @@ export const DESTINATIONS: Record<string, Destination> = {
   "/payments": { label: "Membresías y Pagos", preposition: "a" },
   "/discounts": { label: "Descuentos", preposition: "a" },
   "/sponsors": { label: "Patrocinadores", preposition: "a" },
+  // La galería de la landing es contenido del club igual que los
+  // patrocinadores: se administra adentro y se publica afuera (issue #1372).
+  "/galeria": { label: "Galería", preposition: "a" },
   "/tarifas": { label: "Tarifas", preposition: "a" },
   "/attendance": { label: "Asistencias", preposition: "a" },
   "/reports": { label: "Reportes", preposition: "a" },
