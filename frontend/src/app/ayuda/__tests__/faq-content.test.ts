@@ -10,30 +10,14 @@
  * allowed to say again. Each one is a sentence that shipped, was wrong, and
  * was corrected — a shared definition does not stop the copy from being
  * rewritten into the same mistake.
+ *
+ * Schedules are no longer copy anywhere in this page's sources (#1374): the
+ * table renders the live catalog fetched from `GET /api/schedules`, so the
+ * schedule literals this file used to lock were removed with their surface.
  */
 
 import { describe, it, expect } from "vitest";
-import { CLUB_PROFILE, FAQ_SCHEDULES, FAQ_SECTIONS } from "../faq-content";
-
-describe("FAQ_SCHEDULES", () => {
-  it("lists every category the club actually trains", () => {
-    expect(FAQ_SCHEDULES.map((s) => s.category)).toEqual([
-      "Formativo",
-      "Infantil",
-      "Juvenil",
-      "Competitivo",
-      "Adultos",
-    ]);
-  });
-
-  it("says who each category is for, on what days, at what time", () => {
-    for (const schedule of FAQ_SCHEDULES) {
-      expect(schedule.ages.trim().length, schedule.category).toBeGreaterThan(0);
-      expect(schedule.days.trim().length, schedule.category).toBeGreaterThan(0);
-      expect(schedule.hours, schedule.category).toMatch(/\d{2}:\d{2} a \d{2}:\d{2}/);
-    }
-  });
-});
+import { CLUB_PROFILE, FAQ_SECTIONS } from "../faq-content";
 
 describe("CLUB_PROFILE", () => {
   it("quotes no price, because the club's plans are not written down here", () => {
@@ -79,28 +63,28 @@ describe("FAQ_SECTIONS", () => {
     }
   });
 
-  it("no longer tells a representante they cannot correct the medical record themselves", () => {
-    // FIC-4: the backend already authorized a representante to read/correct a
-    // representado's ficha médica, and `/student/medical-record` now mounts
-    // the screen — this entry used to flatly say "No", which became a lie the
-    // moment the screen shipped. See `docs/archive/fixes/13-ficha-medica-representante.md`.
+  it("states who can correct the medical record, in the owner-approved words (#1374 C3)", () => {
     const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
       (e) => e.question === "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
     );
     expect(entry).toBeDefined();
-    expect(entry!.answer).toMatch(/representante.*(s[ií]|puede)/i);
+    // The approved copy opens with the condition and names both people who
+    // can act — the old copy's lie (a flat "No") must not come back.
+    expect(entry!.answer).toMatch(/^Sí, si gestiona su propia cuenta o representa al estudiante\./);
+    expect(entry!.answer).toContain("su representante o un administrador");
     expect(entry!.answer.toLowerCase().trim().startsWith("no:")).toBe(false);
   });
 
-  it("opens the medical-record answer with the condition, not with a flat 'Sí' (#315 hallazgo #69)", () => {
-    // The account reading this can be a minor's own — for that reader the
-    // true answer is "no". Opening with "Sí." teaches the wrong thing before
-    // the sentence that corrects it ever arrives.
+  it("keeps the condition in the medical-record answer's first breath (#315 hallazgo #69)", () => {
+    // A minor's own account reads this: the condition must ride in the first
+    // sentence, never after a flat "Sí". The approved copy satisfies it by
+    // opening with the condition itself.
     const entry = FAQ_SECTIONS.flatMap((s) => s.entries).find(
       (e) => e.question === "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
     );
     expect(entry).toBeDefined();
     expect(entry!.answer.trim().startsWith("Sí.")).toBe(false);
+    expect(entry!.answer.trim().startsWith("Sí, si gestiona")).toBe(true);
   });
 
   it("never teaches the batch-approval flow /payments does not have (#315 hallazgo #13)", () => {

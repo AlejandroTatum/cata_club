@@ -113,17 +113,16 @@ puedas distinguir "el backend no publica" de "el BFF no lo está pasando".
 
 Esta clase detecta si sigue existiendo una lista **estática** de horarios
 sirviendo alguna superficie real: `backend/app/servicios_negocio/conocimiento_club.json`,
-leída por la página `/ayuda` (`faq-content.ts`, `FAQ_SCHEDULES`).
+leída por la página `/ayuda`.
 
-Las migraciones ya están cerradas. #789 quitó la lista estática de la landing;
-la de `/ayuda` la quitó #926, resuelto por el PR #928 (el otro lector de la
-instantánea, el chatbot, desapareció con el retiro del chatbot). #899
-(detectar drift de horarios) también está cerrado.
-
-El detector se mantiene igual porque su valor no era señalar un pendiente
-conocido, sino poder detectar una **regresión**: si alguien reintroduce una
-lista estática en cualquiera de esas superficies, o agrega una nueva, esta
-clase la vuelve a encontrar.
+La migración ya está completa: #789 quitó la lista estática de la landing;
+#1374 vació la lista del conocimiento y retiró el bloque de horarios de
+`/ayuda`: el catálogo dinámico (`GET /api/schedules`) alimenta al landing,
+que quedó como la única superficie que muestra horarios. Desde #1374, esta
+clase **no es un pendiente conocido: es un candado de regresión**. Si da un
+positivo, alguien reintrodujo entradas en `horarios[]` o puso una lista
+estática a alimentar otra superficie, y vuelve a haber dos copias que nadie
+sincroniza.
 
 **Se reporta, no se repara.** Si esta clase da un positivo, no edites
 `conocimiento_club.json` como parte de un diagnóstico — eso indica que la

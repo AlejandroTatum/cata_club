@@ -158,10 +158,14 @@ DIAS_RENDERIZABLES = frozenset(
 )
 _PATRON_HORA = re.compile(r"^\d{2}:\d{2}$")
 
-# Dónde sigue mandando la lista estática. #789 la sacó SOLO de la landing.
+# Dónde seguiría mandando una lista estática si alguien la reintroduce. La
+# migración quedó completa: #789 la sacó de la landing y #1374 vació la lista
+# del conocimiento y retiró el bloque de horarios de /ayuda, que hoy deja el
+# dato al landing: el catálogo dinámico (GET /api/schedules) alimenta la
+# única superficie que muestra horarios. El detector quedó como candado de
+# regresión, no como pendiente.
 _SUPERFICIES_ESTATICAS = (
     "la instantánea de conocimiento (backend/app/servicios_negocio/conocimiento_club.py)",
-    "la página /ayuda (frontend/src/app/ayuda/faq-content.ts:88, FAQ_SCHEDULES)",
 )
 
 
@@ -613,12 +617,15 @@ def detectar_hallazgos_estaticos(observacion: dict) -> list[dict]:
             fuente,
             "ninguna lista estática de horarios sirviendo una superficie",
             f"{observacion['entradas']} entradas en horarios[]",
-            "Todavía manda en: "
+            "Todavía alimentaría a: "
             + "; ".join(_SUPERFICIES_ESTATICAS)
-            + ". #789 sacó la lista estática SOLO de la landing. Si estos "
-            "horarios contradicen al catálogo dinámico, esas dos superficies "
-            "muestran lo viejo. Esto se REPORTA, no se repara: completar la "
-            "migración es #789, y #899 lo excluye de sus objetivos.",
+            + ". La migración quedó completa: #789 la sacó de la landing y "
+            "#1374 vació esta lista y retiró los horarios de /ayuda; el "
+            "catálogo dinámico (GET /api/schedules) alimenta al landing, hoy "
+            "la única superficie que muestra horarios. Entradas acá son una "
+            "REGRESIÓN de esa migración, no un pendiente. Esto se REPORTA, no "
+            "se repara: el arreglo es un cambio de código con su propio "
+            "issue, no un paso del diagnóstico.",
         )
     ]
 
