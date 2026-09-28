@@ -634,9 +634,19 @@ function AddDependentContent(): React.ReactElement {
     <AppShell
       title="Agregar dependiente"
       subtitle="Complete los pasos para agregar un nuevo dependiente a su cuenta de representante."
+      // Issue #1396: through the shell's `back` slot, so the control precedes
+      // the title in document order — `PageHeader` is drawn above `<main>`,
+      // so a back control among the children lands after the title by
+      // construction. The wrapper carries the wizard's own 760px cap:
+      // `back` draws at full canvas width as a sibling of `<main>`, and an
+      // uncapped control would start left of the capped column below it.
+      back={
+        <div className="w-full max-w-[760px]">
+          <BackLink href="/student" />
+        </div>
+      }
     >
       <div className="flex w-full max-w-[760px] flex-col gap-page">
-      <BackLink href="/student" />
 
       {/* Named stepper — the same contract as the other two wizards. The
           counter's wrapper `<div>` is gone: it carried nothing and made the

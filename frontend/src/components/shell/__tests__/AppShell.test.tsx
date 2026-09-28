@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import AppShell, { MAIN_CONTENT_ID, resolveActiveHref } from "@/components/shell/AppShell";
+import { BackLink } from "@/components/ui";
 
 interface MockLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children: React.ReactNode;
@@ -163,6 +164,25 @@ describe("AppShell", (): void => {
     // default, so focus stays in the chrome and the next Tab undoes the skip.
     expect(main).toHaveAttribute("tabindex", "-1");
     expect(main).toContainElement(screen.getByText("contenido"));
+  });
+
+  it("renders an optional back control directly before the page title, in the DOM", (): void => {
+    render(
+      <AppShell title="Dashboard" back={<BackLink href="/dashboard" />}>
+        <p>contenido</p>
+      </AppShell>,
+    );
+
+    const back = screen.getByRole("link", { name: /volver al panel de control/i });
+    const title = screen.getByRole("heading", { name: "Dashboard" });
+    // Placement is document order, not CSS — the rule `BackLink` itself
+    // writes down. The control must PRECEDE the title it sits above, so tab
+    // order and a screen reader meet "back" before the screen's name.
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Shell furniture above the header row, not page content: a screen
+    // cannot get this order by rendering the control among its children,
+    // which is exactly why the slot exists (issue #1396).
+    expect(screen.getByRole("main")).not.toContainElement(back);
   });
 
   it("renders page content as children", (): void => {

@@ -40,6 +40,12 @@ export default function NotFoundCard(): React.ReactElement {
           />
         </span>
 
+        {/* #1396: the way back sits ABOVE the page title, in the document —
+            the card has no shell to do it, so the card orders it itself. */}
+        <div className="mt-1.5 flex justify-center">
+          <BackLink href={backHrefForRole(session?.user.role)} />
+        </div>
+
         <h1 className="m-0 text-balance font-display text-lg uppercase tracking-flat text-ink">
           No encontramos esta página
         </h1>
@@ -48,10 +54,6 @@ export default function NotFoundCard(): React.ReactElement {
           La dirección puede estar mal escrita o el enlace puede haber cambiado. Vuelva a un
           lugar conocido del portal.
         </p>
-
-        <div className="mt-1.5 flex justify-center">
-          <BackLink href={backHrefForRole(session?.user.role)} />
-        </div>
       </div>
     </main>
   );
