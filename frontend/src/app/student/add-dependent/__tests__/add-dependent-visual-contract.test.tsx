@@ -263,3 +263,31 @@ describe("the kicker clears AA on the surface it actually lands on", () => {
     expect(kicker.className).not.toMatch(/\btext-ink-3(?![\w-])/);
   });
 });
+
+/**
+ * Issue #1396 — the back control is page furniture the shell owns now, and
+ * placement is a document-order guarantee, not a CSS one: it must PRECEDE the
+ * page title in the DOM, so tab order and a screen reader's read-out meet
+ * "Volver" before the screen's own name. `AppShell`'s `back` slot draws it
+ * before `PageHeader`; as a child of the wizard it landed after the title by
+ * construction.
+ */
+describe("the way back sits above the page title", () => {
+  it("renders the BackLink before the page title in document order", () => {
+    render(<AddDependentPage />);
+
+    const back = screen.getByRole("link", { name: /volver a mi cuenta/i });
+    const title = screen.getByRole("heading", { name: "Agregar dependiente" });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  /** The wizard caps its column at 760px; the shell draws `back` as a
+   *  full-canvas sibling of `<main>`, so the wrapper must carry the same cap
+   *  or the control starts left of the column below it. */
+  it("keeps the back control inside the wizard's 760px column", () => {
+    render(<AddDependentPage />);
+
+    const back = screen.getByRole("link", { name: /volver a mi cuenta/i });
+    expect(back.parentElement?.className).toMatch(/max-w-\[760px\]/);
+  });
+});
