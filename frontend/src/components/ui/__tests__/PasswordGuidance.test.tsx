@@ -3,9 +3,10 @@
  *
  * Covers the part of #1395's contract this component alone owns: the
  * checklist is EXACTLY the pure signal set (one source, no drift), signals
- * tick while typing, the meter walks the five readings, a common password
- * never reads strong — and nothing here blocks anything, because there is
- * no submit to block: the component is a readout.
+ * tick while typing, the strength verdict walks the five readings as a
+ * quiet dot-plus-text line, a common password never reads strong — and
+ * nothing here blocks anything, because there is no submit to block: the
+ * component is a readout.
  *
  * @vitest-environment jsdom
  */
@@ -46,9 +47,9 @@ function meter(): HTMLElement {
   return screen.getByRole("status", { name: METER });
 }
 
-/** Filled meter segments, read off the aria-hidden bar inside the live region. */
-function filledSegments(): number {
-  return meter().querySelectorAll("[class*='bg-state-']").length;
+/** The verdict dot, read off the aria-hidden marker inside the live region. */
+function verdictDot(): Element | null {
+  return meter().querySelector("[class*='bg-state-']");
 }
 
 describe("PasswordGuidance — the advisory checklist", () => {
@@ -71,8 +72,8 @@ describe("PasswordGuidance — the advisory checklist", () => {
     render(<TypingHarness />);
     const input = screen.getByLabelText("Password");
 
-    fireEvent.change(input, { target: { value: "nubesverdes" } });
-    expect(advisoryItem("Al menos 12 caracteres")).toHaveAttribute("data-met", "false");
+    fireEvent.change(input, { target: { value: "nubesverd" } });
+    expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "false");
     expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "false");
     expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "false");
     expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(
@@ -81,7 +82,7 @@ describe("PasswordGuidance — the advisory checklist", () => {
     );
 
     fireEvent.change(input, { target: { value: "Nubes-Verdes-2024" } });
-    expect(advisoryItem("Al menos 12 caracteres")).toHaveAttribute("data-met", "true");
+    expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "true");
     expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "true");
     expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "true");
     expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(
@@ -99,36 +100,39 @@ describe("PasswordGuidance — the advisory checklist", () => {
   });
 });
 
-describe("PasswordGuidance — the meter", () => {
-  it("reads no verdict and fills no segment while the field is empty", () => {
+describe("PasswordGuidance — the strength verdict", () => {
+  it("reads no verdict and shows no dot while the field is empty", () => {
     render(<PasswordGuidance password="" />);
     expect(meter().textContent).toBe("");
-    expect(filledSegments()).toBe(0);
+    expect(verdictDot()).toBeNull();
   });
 
-  it("walks the five readings — and the bar with them — as the content gets stronger", () => {
+  it("walks the five readings — caution dot below Fuerte, ok dot from there — as the content gets stronger", () => {
     render(<TypingHarness />);
     const input = screen.getByLabelText("Password");
 
-    fireEvent.change(input, { target: { value: "nubesverdes" } });
+    fireEvent.change(input, { target: { value: "nubesver" } });
+    expect(meter()).toHaveTextContent("Fortaleza:");
     expect(meter()).toHaveTextContent("Débil");
-    expect(filledSegments()).toBe(1);
+    expect(verdictDot()).toHaveClass("bg-state-warn");
 
-    fireEvent.change(input, { target: { value: "nubes1234" } });
+    fireEvent.change(input, { target: { value: "nubesverdes" } });
     expect(meter()).toHaveTextContent("Aceptable");
-    expect(filledSegments()).toBe(2);
+    expect(verdictDot()).toHaveClass("bg-state-warn");
 
     fireEvent.change(input, { target: { value: "Nubes1234" } });
     expect(meter()).toHaveTextContent("Fuerte");
-    expect(filledSegments()).toBe(3);
+    expect(verdictDot()).toHaveClass("bg-state-ok");
 
     fireEvent.change(input, { target: { value: "Nubes-Verdes-2024" } });
     expect(meter()).toHaveTextContent("Muy fuerte");
-    expect(filledSegments()).toBe(4);
+    expect(verdictDot()).toHaveClass("bg-state-ok");
   });
 
   it("never reads a common password above Débil, however it is dressed up", () => {
     render(<PasswordGuidance password="contrasena1" />);
     expect(meter()).toHaveTextContent("Débil");
+    expect(verdictDot()).toHaveClass("bg-state-warn");
+    expect(verdictDot()).not.toHaveClass("bg-state-ok");
   });
 });

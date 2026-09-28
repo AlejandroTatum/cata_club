@@ -774,19 +774,20 @@ describe("contraseña", () => {
   describe("buildPasswordCompositionSignals (issue #1395 — advisory only)", () => {
     it("reports every recommendation pending for an empty password", () => {
       expect(buildPasswordCompositionSignals("")).toEqual([
-        { label: "Al menos 12 caracteres", met: false },
+        { label: "Al menos 10 caracteres", met: false },
         { label: "Mayúsculas y minúsculas", met: false },
         { label: "Al menos un número", met: false },
         { label: "Al menos un símbolo (por ejemplo, ! o #)", met: false },
       ]);
     });
 
-    it("ticks the recommended length at exactly 12 — above the 8 the policy enforces", () => {
-      expect(buildPasswordCompositionSignals("nubesverdes")[0].met).toBe(false); // 11 chars
-      expect(
-        buildPasswordCompositionSignals("nubesverdes2")[0].met,
-      ).toBe(true); // 12 chars
-      expect(PASSWORD_ADVISORY_MIN_LENGTH).toBeGreaterThan(PASSWORD_MIN_LENGTH);
+    it("recommends 10 characters — above the 8 the policy enforces, never replacing it", () => {
+      // Preview feedback (#1395) read the old 12 as too demanding; 10 is the
+      // correction, and the hard floor stays exactly where the policy put it.
+      expect(PASSWORD_ADVISORY_MIN_LENGTH).toBe(10);
+      expect(PASSWORD_MIN_LENGTH).toBe(8);
+      expect(buildPasswordCompositionSignals("nubesverd")[0].met).toBe(false); // 9 chars
+      expect(buildPasswordCompositionSignals("nubesverde")[0].met).toBe(true); // 10 chars
     });
 
     it("ticks the case-mix signal only when BOTH cases appear", () => {
@@ -823,15 +824,15 @@ describe("contraseña", () => {
 
     it("walks the five readings as length and variety grow", () => {
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nub")]).toBe("Muy débil");
-      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesverdes")]).toBe("Débil");
-      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubes1234")]).toBe("Aceptable");
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesver")]).toBe("Débil"); // 8 chars, 1 category
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesverdes")]).toBe("Aceptable"); // 11 chars, 1 category
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes1234")]).toBe("Fuerte");
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes-Verdes-2024")]).toBe("Muy fuerte");
     });
 
     it("reserves the top reading for real length AND real variety", () => {
       // 9 characters with all four categories: variety alone must not buy
-      // "Muy fuerte" — the advisory length (12) is part of the deal.
+      // "Muy fuerte" — the advisory length (10) is part of the deal.
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes-123")]).toBe("Fuerte");
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes-Verdes-2024")]).toBe("Muy fuerte");
     });
@@ -844,9 +845,10 @@ describe("contraseña", () => {
     });
 
     it("measures the trimmed value, the same one the policy judges", () => {
-      // "nubesverdes" padded with spaces to 12+ characters must not buy the
-      // advisory length point the way the raw string would suggest.
-      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesverdes      ")]).toBe("Débil");
+      // "nubesver" padded past the advisory length with spaces must not buy
+      // the advisory point its raw length suggests — the trimmed 8
+      // characters are what get scored.
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesver      ")]).toBe("Débil");
     });
   });
 });

@@ -613,10 +613,10 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     goToSelfStudentStep();
 
     fireEvent.change(screen.getByLabelText(/^Contraseña/), {
-      target: { value: "nubesverdes" },
+      target: { value: "nubesverd" },
     });
     const list = screen.getByRole("status", { name: CHECKLIST });
-    expect(within(list).getByText("Al menos 12 caracteres").closest("li")).toHaveAttribute(
+    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
       "data-met",
       "false",
     );
@@ -625,7 +625,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fireEvent.change(screen.getByLabelText(/^Contraseña/), {
       target: { value: "Nubes-Verdes-2024" },
     });
-    expect(within(list).getByText("Al menos 12 caracteres").closest("li")).toHaveAttribute(
+    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
       "data-met",
       "true",
     );
@@ -656,14 +656,14 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     render(<EnrollPage />);
     goToSelfStudentStep();
     fillEnrollStudentStep();
-    // Replace the fill with an all-lowercase 11-character password: it
+    // Replace the fill with an all-lowercase 9-character password: it
     // clears the hard policy, so the meter reads "Débil" and Siguiente
     // must still advance to the health step.
     fireEvent.change(screen.getByLabelText(/^Contraseña/), {
-      target: { value: "nubesverdes" },
+      target: { value: "nubesverd" },
     });
     fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), {
-      target: { value: "nubesverdes" },
+      target: { value: "nubesverd" },
     });
     expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
 

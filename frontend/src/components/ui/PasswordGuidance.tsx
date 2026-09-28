@@ -20,6 +20,12 @@
  * look different would imply a difference in kind that does not exist —
  * both are readouts, one binding, one advisory; only the heading says
  * which is which.
+ *
+ * Preview feedback on the first cut (#1395): the segmented strength bar
+ * and the row spacing read as loud. The bar is gone — the strength verdict
+ * is now one quiet line (a small colored dot plus "Fortaleza: …") and the
+ * checklist rhythm is tight. Same information, same live regions, none of
+ * the visual weight.
  */
 
 import type { ReactElement } from "react";
@@ -38,15 +44,21 @@ export const PASSWORD_GUIDANCE_HEADING = "Para una contraseña más fuerte";
 const CHECKLIST_LABEL = "Recomendaciones para la contraseña";
 const METER_LABEL = "Fortaleza de la contraseña";
 
-/** The meter never reads as an error: weak is the caution ramp, strong the ok ramp. */
-const METER_TEXT_TONE: Record<number, string> = {
+/**
+ * The verdict never reads as an error: weak is the caution ramp, strong the
+ * ok ramp — score 0 included (a short non-empty password reads "Muy débil",
+ * and it deserves the same caution tint, not an untinted one).
+ */
+const VERDICT_TEXT_TONE: Record<number, string> = {
+  0: "text-state-warn",
   1: "text-state-warn",
   2: "text-state-warn",
   3: "text-state-ok",
   4: "text-state-ok",
 };
 
-const METER_SEGMENT_TONE: Record<number, string> = {
+const VERDICT_DOT_TONE: Record<number, string> = {
+  0: "bg-state-warn",
   1: "bg-state-warn",
   2: "bg-state-warn",
   3: "bg-state-ok",
@@ -67,17 +79,17 @@ export default function PasswordGuidance({
   const score = scorePasswordStrength(password);
   // An empty field reads no verdict at all — "Muy débil" before anything is
   // typed would be a verdict about nothing.
-  const label = password.trim() ? PASSWORD_STRENGTH_LABELS[score] : null;
+  const verdict = password.trim() ? PASSWORD_STRENGTH_LABELS[score] : null;
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn("flex flex-col gap-1.5", className)}>
       <p className="text-2xs font-bold uppercase text-ink-3">{PASSWORD_GUIDANCE_HEADING}</p>
       {/*
        * `role="status"` so a screen reader hears a recommendation tick over
        * while typing — the same live-readout contract the reset screen's
        * hard checklist already ships.
        */}
-      <ul role="status" aria-label={CHECKLIST_LABEL} className="flex flex-col gap-1.5">
+      <ul role="status" aria-label={CHECKLIST_LABEL} className="flex flex-col gap-1">
         {signals.map((signal) => (
           <li
             key={signal.label}
@@ -96,25 +108,23 @@ export default function PasswordGuidance({
         ))}
       </ul>
       {/*
-       * The bar itself is decoration (aria-hidden); the label next to it is
+       * One quiet verdict line in place of the old bar: the dot is
+       * decoration (aria-hidden, color mirrors the text tint); the words are
        * the accessible reading, announced through this second live region.
+       * The region stays mounted even while the field is empty — the
+       * readout exists, the verdict awaits content.
        */}
-      <div role="status" aria-label={METER_LABEL} className="flex items-center gap-2">
-        <div aria-hidden="true" className="flex flex-1 gap-1">
-          {[1, 2, 3, 4].map((segment) => (
+      <div role="status" aria-label={METER_LABEL} className="flex items-center gap-1.5">
+        {verdict && (
+          <>
             <span
-              key={segment}
-              className={cn(
-                "h-1 flex-1 rounded-full transition-colors",
-                segment <= score ? METER_SEGMENT_TONE[score] : "bg-line",
-              )}
+              aria-hidden="true"
+              className={cn("h-1.5 w-1.5 flex-none rounded-full", VERDICT_DOT_TONE[score])}
             />
-          ))}
-        </div>
-        {label && (
-          <span className={cn("flex-none text-xs font-semibold", METER_TEXT_TONE[score])}>
-            {label}
-          </span>
+            <span className={cn("text-xs font-semibold", VERDICT_TEXT_TONE[score])}>
+              Fortaleza: {verdict}
+            </span>
+          </>
         )}
       </div>
     </div>

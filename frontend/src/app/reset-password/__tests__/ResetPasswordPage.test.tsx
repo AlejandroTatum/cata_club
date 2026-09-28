@@ -352,15 +352,15 @@ describe("ResetPasswordPage", () => {
       render(<ResetPasswordPage />);
 
       fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
-        target: { value: "nubesverdes" },
+        target: { value: "nubesverd" },
       });
-      expect(advisoryItem("Al menos 12 caracteres")).toHaveAttribute("data-met", "false");
+      expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "false");
       expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "false");
 
       fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
         target: { value: "Nubes-Verdes-2024" },
       });
-      expect(advisoryItem("Al menos 12 caracteres")).toHaveAttribute("data-met", "true");
+      expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "true");
       expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "true");
       expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "true");
       expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(
@@ -373,7 +373,7 @@ describe("ResetPasswordPage", () => {
       render(<ResetPasswordPage />);
 
       fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
-        target: { value: "nubesverdes" },
+        target: { value: "nubesver" },
       });
       expect(meter()).toHaveTextContent("Débil");
 
@@ -387,8 +387,8 @@ describe("ResetPasswordPage", () => {
       mockRestablecerContrasenia.mockResolvedValue(undefined);
       render(<ResetPasswordPage />);
 
-      // 11 all-lowercase characters: every HARD rule met, meter reading "Débil".
-      fillMatchingPasswords("nubesverdes");
+      // 9 all-lowercase characters: every HARD rule met, meter reading "Débil".
+      fillMatchingPasswords("nubesverd");
       expect(meter()).toHaveTextContent("Débil");
 
       const submit = screen.getByRole("button", { name: "Guardar contraseña" });
@@ -396,7 +396,7 @@ describe("ResetPasswordPage", () => {
       fireEvent.click(submit);
 
       await waitFor(() => {
-        expect(mockRestablecerContrasenia).toHaveBeenCalledWith("valid-token", "nubesverdes");
+        expect(mockRestablecerContrasenia).toHaveBeenCalledWith("valid-token", "nubesverd");
       });
       expect(mockShowError).not.toHaveBeenCalled();
     });

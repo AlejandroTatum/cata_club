@@ -684,10 +684,13 @@ export function passwordRule(value: string, subject: string): string | null {
 
 /**
  * The length worth RECOMMENDING, above the 8-character floor the backend
- * enforces. Length is the cheapest resistance win there is; 12 is the usual
- * public guidance figure. Advisory: 8 characters still pass everything.
+ * enforces. Advisory: 8 characters still pass everything. Tuned down from
+ * the usual public guidance figure of 12 after preview feedback (#1395)
+ * read 12 as too demanding for this audience; 10 keeps the recommendation
+ * a real step above the floor without making the checklist feel
+ * unreachable. It never feeds any submit gate.
  */
-export const PASSWORD_ADVISORY_MIN_LENGTH = 12;
+export const PASSWORD_ADVISORY_MIN_LENGTH = 10;
 
 /** One line of the advisory checklist — `met` ticks it live while typing. */
 export interface PasswordCompositionSignal {
