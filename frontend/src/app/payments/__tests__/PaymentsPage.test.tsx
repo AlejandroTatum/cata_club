@@ -362,6 +362,45 @@ describe("PaymentsPage — opens on the pending queue", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 1b. The way back sits above the page title (issue #1396)
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — the way back sits above the page title", () => {
+  /**
+   * Placement is a document-order guarantee, not a CSS one: the back control
+   * has to PRECEDE the page title in the DOM (issue #1396), so the tab order
+   * and a screen reader's read-out meet "back" before the screen's own name.
+   */
+  function expectBeforeTitle(back: HTMLElement): void {
+    const title = screen.getByRole("heading", { name: "Membresías y Pagos" });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+
+  it("offers a named BackLink above the title while the queue is showing", async () => {
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    expectBeforeTitle(await screen.findByRole("link", { name: /volver al panel de control/i }));
+  });
+
+  it("keeps the detail's BackLink working, moved above the title", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const back = await screen.findByRole("link", { name: /volver a membresías y pagos/i });
+    expect(back).toHaveAttribute("href", "/payments");
+    expectBeforeTitle(back);
+
+    // Same contract as before the move: the click is the in-page queue⇄detail
+    // state reset — `href` stays the real fallback destination — so this must
+    // hand the view back to the queue without navigating.
+    fireEvent.click(back);
+    expect(await screen.findByTestId("payments-table")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 1a. Real pagination, no silent truncation past 200 (issue #400, criterio 4/5)
 // ---------------------------------------------------------------------------
 
