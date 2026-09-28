@@ -41,12 +41,14 @@ Estimated authored diff: 1,200–2,000 lines across six vertical slices. This ex
 
 ## Tasks
 
-- [ ] **CCI-00 — Establish the repository bug Issue Form** *(implemented and verified; delivery in progress)*
+- [x] **CCI-00 — Establish repository Issue Forms and complete the issue catalog**
+  - Delivered bug form in PR #1367 and feature form in PR #1371.
+  - Created and read back all eight requested product issues: #1368–#1370 and #1372–#1376.
   - Route: inline direct; one-file repository policy prerequisite explicitly authorized by the user.
   - Add a YAML bug-report form with required reproduction, expected behavior, impact, and validation controls.
   - Deliver and merge this prerequisite before creating the required CCI-01 bug issue.
   - Checks: YAML parse/readback and repository policy inspection.
-- [ ] **CCI-01 — Preserve enrolment state while reviewing legal documents**
+- [x] **CCI-01 — Preserve enrolment state while reviewing legal documents** *(implemented — issue #1368)*
   - Route: delegated writer; multi-file frontend change and Playwright verification.
   - Build an in-flow legal review surface using landing visual language, return to confirmation, and retain all entered data and consent state.
   - Add component tests and Playwright coverage for the round trip.
@@ -91,6 +93,23 @@ Estimated authored diff: 1,200–2,000 lines across six vertical slices. This ex
 - Child registration/payment events notify the representative and the intended administrator audience without duplicates.
 - Focused tests and the required pre-PR lane pass for each delivered slice.
 
+## Issue catalog
+
+- #1368 — Preserve enrolment wizard data when reviewing legal documents.
+- #1369 — Complete the 100% discount lifecycle.
+- #1370 — Notify representatives about child registration and payments.
+- #1372 — Manage and showcase an interactive achievement gallery.
+- #1373 — Add sick and competition attendance states.
+- #1374 — Replace the chatbot with a maintainable FAQ experience.
+- #1375 — Introduce branded transactional email templates.
+- #1376 — Allow direct payment when registering a minor.
+
+Implementation ownership:
+
+- This worktree: #1368, #1369, #1370, #1372, #1373, #1375.
+- Existing sibling worktree `refactor/remove-chatbot-ui`: #1374.
+- Existing sibling worktree `fix/minor-registration-payments-schedules`: #1376.
+
 ## Progress and evidence
 
 - 2026-09-11: Created isolated worktree and branch from `origin/main` at `7e84ecf`.
@@ -103,6 +122,15 @@ Estimated authored diff: 1,200–2,000 lines across six vertical slices. This ex
 - 2026-09-22: `make pre-pr LANE=integration` passed (`638 passed, 1 skipped`); CI image build/publication was not reproduced locally by that lane.
 - 2026-09-22: Reinspection corrected an overly strict generic-policy interpretation: repository-local `CLAUDE.md` requires linked issues only for bug fixes, while CCI-00 is a chore; branch protection and CI expose no broader issue-link gate. Latest issue `#1364` is unrelated and must not be reused.
 
+- 2026-09-22: Bug Issue Form merged through PR #1367; feature Issue Form merged through PR #1371.
+- 2026-09-22: All eight requested product issues were created after open/closed duplicate searches and confirmed by immediate readback.
+
+- 2026-09-22: Started issue #1368 on fresh branch `fix/enroll-legal-review` from current `origin/main`; no product source changes yet.
+
+- 2026-09-22: CCI-01 implemented. `LegalReviewDialog` (`frontend/src/components/legal/`) renders the three grouped documents from the same `content.ts` modules the public pages publish; the consent sentence's three links became dialog triggers, and `LegalDocumentPage` now renders blocks through the shared `LegalDocumentProse` renderer (identical markup).
+- 2026-09-22: CCI-01 checks: focused Vitest (`LegalReviewDialog` 13 passed; `EnrollPage` 65 passed; consolidated run with legal-pages, main-landmark, focus-trap: 112 passed). Focused Playwright `tests/e2e/enroll-legal-review.spec.ts`: 1 passed (representative-path journey against the production build). `git diff --check` clean. Impeccable design detector over the changed UI files: no findings.
+- 2026-09-22: CCI-01 gates skipped locally: the frontend pre-PR lane (parent runs the single canonical lane after review) and standalone type-check/lint (covered indirectly by the production build the Playwright webServer compiled and served).
+
 ## Next step
 
-Push/open the CCI-00 chore PR without an unrelated issue link, enable squash auto-merge, monitor CI, and continue with CCI-01 after the form reaches `main`.
+CCI-01 is implemented and verified locally. Commit the work unit; the parent owns native review, the single canonical pre-PR lane, and delivery.

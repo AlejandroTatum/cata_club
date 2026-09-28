@@ -810,13 +810,25 @@ describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () =>
     expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
   });
 
-  it("links each grouped legal document to its public page", () => {
+  it("opens the in-flow legal review for each grouped document — no link leaves the wizard (#1368)", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
-    expect(screen.getByRole("link", { name: /términos de uso/i })).toHaveAttribute("href", "/terminos");
-    expect(screen.getByRole("link", { name: /aviso de privacidad/i })).toHaveAttribute("href", "/privacidad");
-    expect(screen.getByRole("link", { name: /permiso de imagen fetm/i })).toHaveAttribute("href", "/permiso-imagen-fetm");
+    // #1368: the three documents used to be links to the public pages, and
+    // following one discarded the whole wizard. They are dialog triggers now,
+    // so the consent sentence contains no link at all.
+    const documents = [
+      ["Términos de uso", "Términos de uso de Cata Club"],
+      ["Aviso de privacidad", "Aviso de privacidad de Cata Club"],
+      ["Permiso de imagen FETM", "Permiso público de difusión de imagen FETM"],
+    ] as const;
+    for (const [triggerName, dialogName] of documents) {
+      fireEvent.click(screen.getByRole("button", { name: triggerName }));
+      expect(screen.getByRole("dialog", { name: dialogName })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+      expect(screen.queryByRole("dialog", { name: dialogName })).not.toBeInTheDocument();
+    }
+    expect(within(screen.getByRole("checkbox").closest("label") as HTMLLabelElement).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("enables 'Confirmar inscripción' and drops the reason once the checkbox is checked", () => {
@@ -879,15 +891,15 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     reachSummaryStep();
 
     const consent = screen.getByRole("checkbox").closest("label") as HTMLLabelElement;
-    const links = within(consent).getAllByRole("link");
+    const triggers = within(consent).getAllByRole("button");
 
-    expect(links).toHaveLength(3);
-    expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/terminos",
-      "/privacidad",
-      "/permiso-imagen-fetm",
+    expect(triggers).toHaveLength(3);
+    expect(triggers.map((trigger) => trigger.textContent)).toEqual([
+      "Términos de uso",
+      "Aviso de privacidad",
+      "Permiso de imagen FETM",
     ]);
-    links.forEach((link) => expect(link).toHaveAccessibleName());
+    triggers.forEach((trigger) => expect(trigger).toHaveAccessibleName());
   });
 
   it("still blocks the submit through the business rule, not through the browser's bubble", () => {
@@ -915,6 +927,78 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
 
     expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1368 — reviewing the grouped legal documents used to be three links to the
+// public pages: one click discarded every entered field AND the consent
+// decision itself, because the wizard's state lives in this component and a
+// navigation unmounts it. The documents now open one shared in-flow dialog,
+// so reviewing them costs no data, and closing lands back on the summary.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — revisión legal sin perder el estado (#1368)", () => {
+  it("keeps the entered data and the consent state after reviewing and closing a document", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    // The visitor agrees BEFORE reading the documents — the exact order the
+    // reproduction in #1368 punished.
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Aviso de privacidad" }));
+    expect(screen.getByRole("dialog", { name: "Aviso de privacidad de Cata Club" })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // Same summary, same data, same decision — and still no navigation.
+    expect(window.location.pathname).toBe("/student/enroll");
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(screen.getByText(/Sofia Martinez/)).toBeInTheDocument();
+    expect(screen.getByText("1798765432")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
+  });
+
+  it("returns focus to the document trigger after the review closes", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    const trigger = screen.getByRole("button", { name: "Términos de uso" });
+    // jsdom does not focus on click; a real browser does when the visitor
+    // activates the trigger, and that is the element the trap restores.
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it("does not toggle the consent checkbox when a document trigger is clicked", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    // The triggers live inside the checkbox's <label>: opening a review must
+    // never grant (or revoke) the consent on the visitor's behalf.
+    fireEvent.click(screen.getByRole("button", { name: "Permiso de imagen FETM" }));
+
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("dialog", { name: "Permiso público de difusión de imagen FETM" })).toBeInTheDocument();
+  });
+
+  it("publishes the accepted document text inside the review, from the same public content", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("button", { name: "Términos de uso" }));
+
+    // Transcribed from `src/app/terminos/content.ts`: if the document text
+    // drifts, this test breaks loudly instead of silently reviewing a copy.
+    expect(
+      screen.getByText(
+        "La aceptación agrupada debe registrar por separado cada documento o versión cubierta, timestamp, cuenta y representante cuando aplique. No debe activarse por defecto ni permitir continuar sin una acción afirmativa.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 

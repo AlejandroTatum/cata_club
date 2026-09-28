@@ -89,15 +89,6 @@ describe("AyudaPage", () => {
  * the reader rather than the name of a block. "Si dudás, es Barlow."
  */
 describe("AyudaPage — the club's face on its card titles", () => {
-  it("draws the schedule table's title at the title step, in Graduate", () => {
-    render(<AyudaPage />);
-
-    const heading = screen.getByRole("heading", { name: "Horarios de entrenamiento" });
-    expect(heading.className).toMatch(/\bfont-display\b/);
-    expect(heading.className).toMatch(/\btext-lg\b/);
-    expect(heading.className).toMatch(/\btracking-flat\b/);
-  });
-
   it("draws every audience section's title the same way", () => {
     render(<AyudaPage />);
 
@@ -123,25 +114,6 @@ describe("AyudaPage — the club's face on its card titles", () => {
 // ---------------------------------------------------------------------------
 // #203 — the FAQ grid collapses to one column and never fragments a section
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// #315 hallazgo #48 — the schedule table cannot be reconciled with a
-// student's own carnet without saying the plan is a price, not a category
-// ---------------------------------------------------------------------------
-
-describe("AyudaPage — the fixed-schedule table says a carnet's franja can differ (#315 hallazgo #48)", () => {
-  it("tells the reader their own carnet is the source, not the plan's name", () => {
-    render(<AyudaPage />);
-
-    // #160 already settled this for the app itself (`franja_horaria` was
-    // dropped from `tipo_membresia`; a plan is a price, never a schedule).
-    // This is the same fact stated where a reader can act on it: the one
-    // screen presenting the club's schedules as if they were fixed per name.
-    expect(
-      screen.getByText(/el plan .*(precio|tarifa).*no (indica|define) la categor[ií]a/i),
-    ).toBeInTheDocument();
-  });
-});
 
 describe("AyudaPage — FAQ grid (#203)", () => {
   it("lays the FAQ sections out two-up on desktop and one-up on narrow screens", () => {
@@ -195,7 +167,6 @@ describe("AyudaPage — questions are accordions (#203)", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText(entry.answer)).toBeVisible();
   });
-
   it("allows at most one open question per section", () => {
     render(<AyudaPage />);
     const [first, second] = FAQ_SECTIONS[0].entries;
@@ -207,12 +178,6 @@ describe("AyudaPage — questions are accordions (#203)", () => {
 
     expect(secondTrigger).toHaveAttribute("aria-expanded", "true");
     expect(firstTrigger).toHaveAttribute("aria-expanded", "false");
-  });
-
-  it("still renders the schedule table in full, outside the accordion grid", () => {
-    render(<AyudaPage />);
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Horarios de entrenamiento" })).toBeInTheDocument();
   });
 });
 
@@ -277,18 +242,54 @@ describe("AyudaPage — the way back follows who is asking (#295)", () => {
   });
 });
 
-/**
- * #821 — the schedule table's horizontal-scroll wrapper held nothing
- * focusable, so a keyboard user had no way to reach or scroll it on mobile,
- * where the table does not fit. axe flags this as
- * `scrollable-region-focusable` (serious).
- */
-describe("AyudaPage — the schedule table's scroll wrapper is keyboard-reachable (#821)", () => {
-  it("puts the scroll wrapper in the tab order, named for assistive tech", () => {
+// ---------------------------------------------------------------------------
+// #1374 correction — /ayuda is the FAQ, whole. The schedule answer directs to
+// the landing's live section; nothing on this page restates volatile facts.
+// ---------------------------------------------------------------------------
+
+describe("AyudaPage — the FAQ is the whole surface (#1374 correction)", () => {
+  it("renders no schedule table, club facts, or leftover informational blocks", () => {
+    const { container } = render(<AyudaPage />);
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(container.querySelectorAll('[data-testid="club-fact"]')).toHaveLength(0);
+    expect(screen.queryByRole("heading", { name: "El club" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No encontró lo que buscaba/i)).not.toBeInTheDocument();
+  });
+
+  it("directs the horarios answer to the landing's live section with a working link", () => {
     render(<AyudaPage />);
 
-    const region = screen.getByRole("region", { name: /tabla desplazable/i });
-    expect(region).toHaveAttribute("tabIndex", "0");
-    expect(region).toContainElement(screen.getByRole("table"));
+    const trigger = screen.getByRole("button", { name: "¿Cuáles son los horarios?" });
+    fireEvent.click(trigger);
+
+    const link = screen.getByRole("link", { name: "Horarios de la página principal" });
+    expect(link).toHaveAttribute("href", "/#horarios");
+    expect(link).toBeVisible();
+  });
+
+  it("never restates a schedule, price, or other unverifiable figure in an answer", () => {
+    render(<AyudaPage />);
+
+    // The landing owns the volatile facts. Any HH:MM or money figure showing
+    // up in an answer panel means static copy snuck back in.
+    const answers = FAQ_SECTIONS.flatMap((section) =>
+      section.entries.map((entry) => entry.answer),
+    ).join(" ");
+
+    expect(answers).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(answers).not.toMatch(/\$\s?\d|USD\s?\d/);
+  });
+
+  it("points every rendered answer link at the landing's schedule anchor", () => {
+    const { container } = render(<AyudaPage />);
+
+    // The only in-answer navigation is the one hop to the live schedules. A
+    // second link pattern here needs its own guard, not this one's silence.
+    const links = Array.from(container.querySelectorAll('[data-testid="faq-grid"] a'));
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", "/#horarios");
+    }
   });
 });
