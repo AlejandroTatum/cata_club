@@ -35,7 +35,29 @@ beforeEach(() => {
 
 vi.mock("@/components/shell/AppShell", () => ({
   __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  /*
+   * Faithful to the real shell's document order (#1396): the shell draws the
+   * page's `back` control FIRST, then the visible `<h1>` title (`PageHeader`),
+   * then the page's children. Transcribing that order here — rather than a
+   * bare `{children}` passthrough — is what makes the placement test below a
+   * real regression guard: if the page ever moved its BackLink back among its
+   * children, the link would land after the title and the test would fail.
+   */
+  default: ({
+    back,
+    children,
+    title,
+  }: {
+    back?: React.ReactNode;
+    children: React.ReactNode;
+    title: string;
+  }) => (
+    <div>
+      {back}
+      <h1>{title}</h1>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock("next/link", () => ({
@@ -239,6 +261,28 @@ describe("AyudaPage — the way back follows who is asking (#295)", () => {
     render(<AyudaPage />);
 
     expect(screen.getAllByRole("link", { name: /^volver/i })).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1396 — the way back sits ABOVE the page title, not below it
+// ---------------------------------------------------------------------------
+
+describe("AyudaPage — the way back sits above the page title (#1396)", () => {
+  /**
+   * Placement is a document-order guarantee, not a CSS one: the back control
+   * has to PRECEDE the page title in the DOM, so the tab order and a screen
+   * reader's read-out meet "back" before the screen's own name. The shell's
+   * slot (`AppShell.back`) is what puts it there — this holds the page to
+   * using that slot instead of drawing the control among its children, which
+   * lands after the title by construction.
+   */
+  it("offers the back control before the h1 in the document", () => {
+    render(<AyudaPage />);
+
+    const back = screen.getByRole("link", { name: /^volver/i });
+    const title = screen.getByRole("heading", { name: "Preguntas frecuentes", level: 1 });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

@@ -1899,6 +1899,22 @@ describe("StudentPaymentsPage — the way back", () => {
     const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
     expect(back).toHaveAttribute("href", "/student");
   });
+
+  /**
+   * Issue #1396: placement is a document-order guarantee, not a CSS one — the
+   * back control must PRECEDE the page title in the DOM, so tab order and a
+   * screen reader's read-out meet "Volver" before the screen's own name. It
+   * travels through `AppShell`'s `back` slot, which draws it before
+   * `PageHeader`; as a child of the screen it landed after the title by
+   * construction.
+   */
+  it("renders the BackLink above the page title in document order", async () => {
+    render(<StudentPaymentsPage />);
+
+    const back = await screen.findByRole("link", { name: /volver a mi cuenta/i });
+    const title = screen.getByRole("heading", { name: "Pagos" });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
 
 /**

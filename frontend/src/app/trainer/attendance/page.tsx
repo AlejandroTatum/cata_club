@@ -278,11 +278,17 @@ export default function TrainerAttendancePage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
-      <AppShell title="Pasar lista">
-        {/* Issue #213: unconditional now — `handleLeaveWizard` already
-            no-ops once `confirmed` is true, so this costs nothing and
-            restores the frame every other screen in the panel keeps. */}
-        <BackLink href={backHref} onClick={leaveGuard.handleLeaveWizard} className="mb-6" />
+      <AppShell
+        title="Pasar lista"
+        back={
+          /* Issue #213: unconditional now — `handleLeaveWizard` already
+              no-ops once `confirmed` is true, so this costs nothing and
+              restores the frame every other screen in the panel keeps.
+              #1396: the shell draws it BEFORE the title through this slot;
+              no `mb-6` any more — the shell's own flex gap spaces it. */
+          <BackLink href={backHref} onClick={leaveGuard.handleLeaveWizard} />
+        }
+      >
         <AttendanceLeaveDialog
           pendingConfirmation={leaveGuard.pendingConfirmation}
           reviewedCount={marking.reviewedCount}
