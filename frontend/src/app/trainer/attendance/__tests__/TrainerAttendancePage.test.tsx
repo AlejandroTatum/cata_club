@@ -2410,8 +2410,9 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
      */
     const backLinks = screen.getAllByRole("link", { name: /Volver a Mi día/ });
     expect(backLinks).toHaveLength(1);
-    // The frame's, carrying the page's own bottom margin.
-    expect(backLinks[0].className).toContain("mb-6");
+    // The shell draws it now (#1396): the page carries no margin of its own —
+    // the shell's own flex gap spaces it against the header row.
+    expect(backLinks[0]).not.toHaveClass("mb-6");
     expect(backLinks[0]).toHaveAttribute("href", "/trainer");
   });
 
@@ -2581,6 +2582,29 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     await waitFor(() => expect(retry).not.toHaveAttribute("aria-disabled", "true"));
     expect(retry).toHaveFocus();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1396 — the way back sits ABOVE the page title, not below it
+// ---------------------------------------------------------------------------
+
+describe("TrainerAttendancePage — the way back sits above the page title (#1396)", () => {
+  /**
+   * Placement is a document-order guarantee, not a CSS one: the tab order and
+   * a screen reader's read-out meet "Volver" before the screen's own name. The
+   * control travels through `AppShell.back`, which the shell draws before the
+   * title — this holds the page to that contract instead of drawing the
+   * control among its children, which lands after the title by construction.
+   */
+  it("offers the leave-guarded back control before the h1 in the document", async () => {
+    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
+    await screen.findByRole("heading", { name: "Pasar lista", level: 1 });
+
+    const back = screen.getByRole("link", { name: /Volver a Mi día/ });
+    expect(back).toHaveAttribute("href", "/trainer");
+    const title = screen.getByRole("heading", { name: "Pasar lista", level: 1 });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

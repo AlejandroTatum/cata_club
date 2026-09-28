@@ -119,9 +119,8 @@ export default function AyudaPage(): React.ReactElement {
     <AppShell
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
+      back={<BackLink href={backHrefForRole(session?.user.role)} />}
     >
-      <BackLink href={backHrefForRole(session?.user.role)} />
-
       {/*
        * Two columns on desktop, one on narrow screens — #203's grid. Each
        * `FAQ_SECTIONS` entry renders as exactly one `<section>`, which is

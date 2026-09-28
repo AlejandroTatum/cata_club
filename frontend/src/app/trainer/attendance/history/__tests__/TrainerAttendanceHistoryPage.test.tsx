@@ -736,4 +736,38 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
       screen.getByText(/no se compara contra el horario semanal al filtrar por alumno/i),
     ).toBeInTheDocument();
   });
+
+  // -------------------------------------------------------------------------
+  // #1396 — the way back sits ABOVE the page title, not below it
+  // -------------------------------------------------------------------------
+
+  /*
+   * Placement is a document-order guarantee, not a CSS one: the tab order and
+   * a screen reader's read-out meet "Volver" before the screen's own name. The
+   * control travels through `AppShell.back`, which the shell draws before the
+   * title — this holds the page to that contract instead of drawing the
+   * control among its children, which lands after the title by construction.
+   */
+  it("dibuja el camino de vuelta antes del título en el documento (#1396)", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+
+    const back = screen.getByRole("link", { name: /Volver a Mi día/ });
+    expect(back).toHaveAttribute("href", "/trainer");
+    const title = screen.getByRole("heading", { name: "Historial de asistencias", level: 1 });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("ofrece un solo control de vuelta, con nombre y destino reales", async () => {
+    render(<TrainerAttendanceHistoryPage />);
+
+    await screen.findAllByRole("row");
+
+    // Accessibility: one back control, a real link whose name the destination
+    // registry owns — never a bare "Volver", never a second copy.
+    const backs = screen.getAllByRole("link", { name: /^volver/i });
+    expect(backs).toHaveLength(1);
+    expect(backs[0]).toHaveAttribute("href", "/trainer");
+  });
 });
