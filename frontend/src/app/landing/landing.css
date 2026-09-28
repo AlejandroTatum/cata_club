@@ -26,10 +26,11 @@
   --landing-third-party-whatsapp: #25d366;
   --landing-third-party-facebook: #1877f2;
   --landing-third-party-instagram: #e1306c;
-  /* Logros' dark ground (--landing-brand-black): quiet text and photo
+  /* Dark-ground text/photo tokens: quiet description text and photo
      placeholder fill, distinct in both role and value from
      --landing-text-muted-base, which is calibrated for the light
-     --landing-bg-base ground instead. */
+     --landing-bg-base ground instead. Both serve the gallery (issue #1372)
+     now that the Logros section they were minted for has left the page. */
   --landing-vitrina-text-muted: #b9c0c8;
   --landing-vitrina-photo-bg: #151515;
   /* Warm light grey for the stats band (issue #691): the palette's existing
@@ -359,10 +360,6 @@
 .landing-tablero-item h3 { margin: 0; font-family: var(--font-landing-barlow); font-weight: 800; font-size: 22px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--landing-text-strong); }
 .landing-tablero-item p { margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: color-mix(in srgb, var(--landing-brand-black) 82%, var(--landing-highlight)); }
 
-/* @touch-target The quiet scroll cue into the black Logros band below. */
-.landing-tablero-cue { display: inline-flex; align-items: center; gap: 12px; min-height: 48px; margin-top: 36px; align-self: flex-end; font-family: var(--font-landing-barlow); font-weight: 700; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--landing-text-strong); text-decoration: none; }
-.landing-tablero-cue::after { content: ""; width: 34px; height: 3px; background: currentColor; }
-
 /* Section colour rhythm (issue #611, v2 redesign): each content band owns a
    solid brand ground so the page scans white (Horarios) -> white
    (Misión/Visión) -> yellow (Valores) as it descends. #nosotros used to be
@@ -379,62 +376,10 @@
    ground and need no such override. */
 .landing-values .landing-eyebrow { color: var(--landing-text-strong); }
 
-/* Logros. Dark ground, one documented result told as a short story with a
-   fact sheet (approved prototype `landing-logros-d-historia.html`), instead
-   of the retired five-row placeholder trophy wall and its default-off demo
-   toggle. Issue #1154 restored the shared rhythm here — padding inherited
-   from `.landing-section` (76px desktop / 64px mobile, both above the 56px
-   floor the issue sets) and gap back at the shared 44px — reverting #871's
-   deliberate trim, which the fact sheet no longer needs. */
-.landing-wins { background: var(--landing-brand-black); color: var(--landing-surface); gap: 44px; }
-.landing-wins .landing-section-header h2 { color: var(--landing-surface); }
-.landing-wins .landing-eyebrow { color: var(--landing-highlight); }
-.landing-logro { display: grid; grid-template-columns: 5fr 7fr; grid-template-rows: auto auto; column-gap: 48px; row-gap: 20px; align-items: stretch; width: 100%; }
-.landing-logro-photo { position: relative; grid-column: 1; grid-row: 1 / span 2; margin: 0; width: 100%; height: 380px; overflow: hidden; background: var(--landing-vitrina-photo-bg); }
-.landing-logro-photo img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
-.landing-logro-index { position: absolute; top: 10px; left: 10px; font-weight: 700; font-size: 12px; letter-spacing: 3px; color: var(--landing-highlight); }
-.landing-logro-story { grid-column: 2; grid-row: 1; display: flex; min-height: 330px; flex-direction: column; justify-content: center; gap: 18px; }
-.landing-logro-kicker { margin: 0; font-weight: 700; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--landing-highlight); }
-/* The headline breaks on an explicit two-span/<br> pair instead of the
-   browser's own line-wrap, so it never breaks mid-phrase. */
-.landing-logro-title { margin: 0; font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; line-height: 0.95; font-size: clamp(30px, 3.4vw, 50px); color: var(--landing-surface); }
-.landing-logro-title span { white-space: nowrap; }
-.landing-logro-story > p { margin: 0; max-width: 52ch; font-weight: 400; font-size: 18px; line-height: 1.6; color: color-mix(in srgb, var(--landing-surface) 82%, transparent); }
-.landing-logro-facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 32px; }
-.landing-logro-fact { border-top: 1px solid color-mix(in srgb, var(--landing-surface) 22%, transparent); padding-top: 3px; }
-.landing-logro-fact dt { margin: 0 0 1px; font-weight: 700; font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--landing-vitrina-text-muted); }
-.landing-logro-fact dd { margin: 0; font-weight: 600; font-size: 17px; color: var(--landing-surface); }
-/* Secondary row: the other four photos, index only, no captions. */
-
-.landing-logro-controls { grid-column: 2; grid-row: 2; display: flex; align-items: center; gap: 10px; }
-.landing-logro-position { min-width: 42px; color: var(--landing-highlight); font-size: 12px; font-weight: 800; letter-spacing: 1.5px; font-variant-numeric: tabular-nums; }
-.landing-logro-control { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--landing-surface) 44%, transparent); border-radius: 10px; background: transparent; color: var(--landing-surface); cursor: pointer; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
-.landing-logro-control:hover { border-color: var(--landing-highlight); background: var(--landing-highlight); color: var(--landing-on-highlight); }
-.landing-logro-control:focus-visible, .landing-logro-tab:focus-visible { outline: 3px solid var(--landing-highlight); outline-offset: 3px; }
-.landing-logro-control svg { width: 18px; height: 18px; }
-.landing-logro-control-pause { padding-inline: 14px; font-weight: 700; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; }
-.landing-logro-story > .landing-logro-source-note { width: 100%; max-width: 52ch; margin: 0; color: var(--landing-vitrina-text-muted); font-size: 12px; line-height: 1.5; }
-.landing-logro-thumbnails { width: 100%; min-width: 0; }
-.landing-logro-tablist { display: flex; gap: 10px; width: 100%; overflow-x: auto; padding: 3px 2px 8px; scrollbar-color: var(--landing-highlight) color-mix(in srgb, var(--landing-surface) 16%, transparent); }
-/* Thumbnail: image over text, full card width — the old 54px side column
-   left 28px of dead space under the photo (issue 1154). The card grew with
-   the photo; the strip keeps its horizontal scroll and the shared focus
-   ring below. `flex: 1 1 176px` (issue 1159) lets the seven tabs share out
-   whatever width is left over in `.landing-logro-tablist` evenly, instead of
-   one flex-grow:0 tab leaving it stranded past the last card. min-width
-   keeps 176px a hard floor: below the viewport where 7 × 176px + 6 × 10px
-   gaps (1292px) no longer fits the strip's content width, the tabs stop
-   shrinking and the strip falls back to its horizontal scroll instead. That
-   floor minus the 2x6px padding and the 2x1px border is also the render
-   width `Palmares.tsx` declares as `sizes` for narrow viewports — change
-   them together; the wide-viewport branch of that `sizes` string is derived
-   separately, from this same growth math, in the comment there. */
-.landing-logro-tab { position: relative; display: grid; flex: 1 1 176px; min-width: 176px; min-height: 150px; grid-template-columns: 1fr; grid-template-rows: auto auto auto; gap: 6px; align-content: start; padding: 6px; border: 1px solid color-mix(in srgb, var(--landing-surface) 24%, transparent); border-radius: 10px; background: transparent; color: color-mix(in srgb, var(--landing-surface) 76%, transparent); cursor: pointer; text-align: left; transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease; }
-.landing-logro-tab:hover { border-color: color-mix(in srgb, var(--landing-highlight) 72%, transparent); color: var(--landing-surface); }
-.landing-logro-tab[aria-selected="true"] { border-color: var(--landing-highlight); background: color-mix(in srgb, var(--landing-highlight) 12%, transparent); color: var(--landing-surface); }
-.landing-logro-tab img { grid-column: 1; grid-row: 1; width: 100%; height: 100px; object-fit: cover; }
-.landing-logro-tab-index { grid-column: 1; grid-row: 2; color: var(--landing-highlight); font-weight: 800; font-size: 11px; letter-spacing: 2px; }
-.landing-logro-tab > span:last-child { grid-column: 1; grid-row: 3; font-size: 11px; font-weight: 700; line-height: 1.2; text-transform: uppercase; }
+/* Issue #1372 retired the Logros section (`.landing-wins` and its
+   `.landing-logro-*` carousel), its data module and the tablero's exit cue
+   into it. The gallery (#galeria) is where published photos live now; the
+   `--landing-vitrina-*` tokens above stay for the gallery card. */
 
 .landing-motto { gap: 22px; padding: 60px 14vw; background: var(--landing-action); }
 .landing-motto .landing-halftone { mask-image: radial-gradient(circle at 4% 96%,var(--landing-brand-black),transparent 42%); }
@@ -729,7 +674,6 @@
   .landing-tablero-tile { height: 140px; padding: 16px; font-size: clamp(56px, 16vw, 80px); }
   .landing-tablero-item h3 { font-size: 19px; }
   .landing-tablero-item p { font-size: 15px; margin-top: 10px; }
-  .landing-tablero-cue { align-self: flex-start; }
   .landing-pillars { grid-template-columns: 1fr; row-gap: 40px; }
   /* Undoes the desktop side-by-side split: below this breakpoint
      `.landing-pillars` itself is already one column, so a photo beside the
@@ -780,13 +724,6 @@
   .landing-sponsor { height: 168px; }
   .landing-footer-top { flex-direction: column; gap: 36px; }
   .landing-footer nav { width: 100%; }
-  .landing-logro { display: flex; flex-direction: column; row-gap: 12px; }
-  .landing-logro-photo { height: 160px; }
-  .landing-logro-story { min-height: 0; gap: 12px; }
-  .landing-logro-title { font-size: clamp(28px, 7vw, 40px); }
-  .landing-logro-story > p { font-size: 16px; line-height: 1.55; }
-  .landing-logro-facts { grid-template-columns: 1fr; gap: 8px; }
-  .landing-logro-tablist { margin-inline: -2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

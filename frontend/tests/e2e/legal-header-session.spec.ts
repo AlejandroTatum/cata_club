@@ -69,7 +69,7 @@ test.describe("legal pages and a live session (issue #782)", () => {
     const accountMenu = page.getByRole("button", { name: /Menú de cuenta/i });
 
     // The bar is already drawn — the part of it that depends on no session.
-    await expect(page.locator("header nav ul a")).toHaveCount(6);
+    await expect(page.locator("header nav ul a")).toHaveCount(5);
     // …and while the answer is outstanding it names neither state. A login
     // link here is the whole defect: it is what the reader sees first, and
     // what he clicks before the real answer ever arrives.

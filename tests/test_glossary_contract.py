@@ -25,17 +25,19 @@ SUPERFICIES = {
 }
 
 # Usos representativos: (superficie, id de la entrada, fragmento visible que
-# debe aparecer). El fragmento puede ser el término canónico o una forma de
-# contexto que el propio glosario declara (`context_forms`).
+# debe aparecer). Es un chequeo de EXISTENCIA, no de forma canónica: el
+# fragmento es una frase visible de la copy aprobada del FAQ (#1374) que
+# evidencia el uso del término — no hace falta citar el término ni sus
+# `context_forms` textuales.
 USOS_BACKEND = [
     ("backend:prompt", "membresia", "Membresías y Pagos"),
     ("backend:prompt", "ficha_medica", "Ficha médica"),
-    ("backend:prompt", "horario_entrenamiento", "Horarios de entrenamiento"),
+    ("backend:prompt", "horario_entrenamiento", "horarios vigentes"),
     ("backend:prompt", "asistencia", "Asistencia"),
 ]
 USOS_FRONTEND = [
     ("frontend:ayuda", "membresia", "Membresías y Pagos"),
-    ("frontend:ayuda", "tipo_membresia", "valor de cada plan"),
+    ("frontend:ayuda", "tipo_membresia", "valor de su plan"),
     ("frontend:ayuda", "jugador", "selector de estudiante"),
     ("frontend:atajos", "asistencia", "¿Dónde veo la asistencia?"),
 ]

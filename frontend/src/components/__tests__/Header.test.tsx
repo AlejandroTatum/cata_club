@@ -208,7 +208,6 @@ describe("Header", (): void => {
     // the institutional bar is the one being drawn.
     expect(screen.getByRole("link", { name: "Inicio" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Horarios" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Logros" })).toBeInTheDocument();
 
     // Login button for unauthenticated users
     expect(
