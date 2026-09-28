@@ -37,57 +37,26 @@
     "instagram": "@cataclub_tenis_de_mesa",
     "nota": "Para inscripciones y consulta de cupo, lo más rápido es escribir por WhatsApp."
   },
-  "horarios": [
-    {
-      "categoria": "Formativo",
-      "edades": "5 a 10 años",
-      "dias": "Lunes a viernes",
-      "horas": "15:00 a 16:00"
-    },
-    {
-      "categoria": "Infantil",
-      "edades": "8 a 12 años",
-      "dias": "Lunes a viernes",
-      "horas": "16:00 a 17:00"
-    },
-    {
-      "categoria": "Juvenil",
-      "edades": "Mayores de 12 años",
-      "dias": "Lunes a viernes",
-      "horas": "17:00 a 18:00"
-    },
-    {
-      "categoria": "Competitivo",
-      "edades": "Selección",
-      "dias": "Lunes a sábado",
-      "horas": "18:00 a 20:00"
-    },
-    {
-      "categoria": "Adultos",
-      "edades": "Mayores de 18 años",
-      "dias": "Lunes a viernes",
-      "horas": "20:00 a 21:15"
-    }
-  ],
+  "horarios": [],
   "faq": [
     {
       "titulo": "Para empezar",
       "entradas": [
         {
           "pregunta": "¿Cómo inicio sesión?",
-          "respuesta": "Con su correo y su contraseña, en la pantalla de inicio de sesión. Si olvidó la contraseña, desde esa misma pantalla puede pedir un enlace de recuperación por correo."
+          "respuesta": "Ingrese con su correo y contraseña. Si olvidó la contraseña, solicite un enlace de recuperación en la pantalla de inicio de sesión."
         },
         {
           "pregunta": "¿Cuáles son los horarios?",
-          "respuesta": "Cada categoría entrena en días y horas fijos, iguales durante toda la temporada. En Horarios de entrenamiento está cada categoría con su franja de días y hora; el horario de un alumno en particular figura además en su carnet, en Mi Cuenta."
+          "respuesta": "Consulte los horarios vigentes en la sección Horarios de la página principal."
         },
         {
           "pregunta": "¿Cuánto cuesta la mensualidad?",
-          "respuesta": "El valor de cada plan lo define el club y puede cambiar de temporada, así que aquí no figura ninguna cifra. En Mi Cuenta cada familia ve el valor de su propio plan y el estado de sus pagos; para conocer los valores vigentes, escriba por WhatsApp o consulte con un administrador del club."
+          "respuesta": "Consulte el valor de su plan en Mi Cuenta. Para conocer los planes disponibles, escriba al club por WhatsApp."
         },
         {
           "pregunta": "¿Por qué mi pantalla no se parece a la de otra persona del club?",
-          "respuesta": "Cada quien ve solo lo suyo. Un administrador ve la gestión completa del club; un entrenador ve lo operativo del día a día; una familia ve Mi Cuenta, con su propia información y nada más."
+          "respuesta": "Cada persona ve las funciones que corresponden a su rol: administrador, entrenador o familia."
         }
       ]
     },
@@ -96,19 +65,19 @@
       "entradas": [
         {
           "pregunta": "¿Dónde veo si mi pago fue aprobado?",
-          "respuesta": "En Mi Cuenta. Ahí aparece el estado de cada pago y el de la membresía. Si un pago fue rechazado, verá el motivo y podrá subir un comprobante nuevo."
+          "respuesta": "En Mi Cuenta puede consultar el estado de sus pagos y de su membresía. Si un pago fue rechazado, verá el motivo y podrá enviar otro comprobante."
         },
         {
           "pregunta": "¿Dónde veo la asistencia?",
-          "respuesta": "También en Mi Cuenta. Cada registro muestra el día y el horario de esa clase, así que ahí mismo puede ver a qué hora entrena."
+          "respuesta": "En Mi Cuenta puede consultar las clases y asistencias registradas."
         },
         {
           "pregunta": "Necesito corregir la ficha médica. ¿Puedo hacerlo yo?",
-          "respuesta": "Depende de quién es el titular. Un representante puede hacerlo por cada hijo o dependiente a su cargo, y un socio mayor de edad que gestiona su propia cuenta, por la suya: en Mi Cuenta, bajo Ficha médica, se ven y se corrigen las alergias, enfermedades, tipo de sangre y contacto de emergencia. La ficha de un menor con cuenta propia no la corrige el menor: la corrige su representante o un administrador del club."
+          "respuesta": "Sí, si gestiona su propia cuenta o representa al estudiante. Abra Ficha médica en Mi Cuenta. La ficha de un menor con cuenta propia la corrige su representante o un administrador."
         },
         {
           "pregunta": "Represento a más de un hijo. ¿Cómo cambio entre ellos?",
-          "respuesta": "Con el selector de estudiante que aparece arriba en Mi Cuenta. Lo que elija se mantiene mientras navega entre pantallas."
+          "respuesta": "Use el selector de estudiante en Mi Cuenta para elegir a quién desea consultar."
         }
       ]
     },
@@ -117,15 +86,15 @@
       "entradas": [
         {
           "pregunta": "¿Cómo tomo asistencia?",
-          "respuesta": "Desde Asistencia. Elige el horario, pasa lista y confirma. Todos empiezan en Presente para que una sesión completa no cueste ni un toque, y el contador de sin revisar le dice a cuántos todavía nadie miró."
+          "respuesta": "Abra Asistencia, elija el horario, pase lista y confirme."
         },
         {
           "pregunta": "Me equivoqué al marcar. ¿Puedo deshacerlo?",
-          "respuesta": "Sí. El botón Deshacer de la barra inferior revierte la última marca, y también la acción de marcar a todos los restantes como presentes."
+          "respuesta": "Sí. Use Deshacer en la barra inferior para revertir la última acción."
         },
         {
           "pregunta": "¿Dónde veo lo que ya cargué?",
-          "respuesta": "En Historial Asistencia, con las listas registradas por sesión."
+          "respuesta": "En Historial Asistencia puede consultar las listas registradas."
         }
       ]
     },
@@ -134,23 +103,23 @@
       "entradas": [
         {
           "pregunta": "¿Cómo valido un pago?",
-          "respuesta": "Desde Membresías y Pagos. Antes de aprobar tiene que confirmar lo que revisó; las preguntas cambian según el pago: un comprobante se revisa como comprobante, y un pago en efectivo recibido en persona no le pide certificar un comprobante que no existe."
+          "respuesta": "Abra Membresías y Pagos, revise la solicitud y confirme su decisión."
         },
         {
           "pregunta": "Tengo muchos pagos iguales. ¿Debo aprobarlos de a uno?",
-          "respuesta": "Sí, uno por uno. La cola de Membresías y Pagos revisa y decide cada solicitud por separado, con su propia lista de verificación: no hay una acción para aprobar varias a la vez."
+          "respuesta": "Sí. Cada solicitud se revisa y aprueba por separado."
         },
         {
           "pregunta": "Aprobé un pago por error. ¿Puedo revertirlo?",
-          "respuesta": "Durante unos segundos, sí: la decisión queda retenida y Deshacer la cancela antes de que salga. Pasado ese momento, el pago ya quedó registrado."
+          "respuesta": "Puede usar Deshacer durante los segundos posteriores a la aprobación. Después, el pago queda registrado."
         },
         {
           "pregunta": "¿Quién define los horarios?",
-          "respuesta": "El administrador, desde Horarios. Cada categoría tiene su franja de días y hora; no hay entrenadores asignados a un horario, la clase la da el entrenador disponible."
+          "respuesta": "El administrador los configura en Horarios."
         },
         {
           "pregunta": "¿Dónde genero los reportes del club?",
-          "respuesta": "Desde Reportes. Esa sección arma los reportes de gestión del club a partir de lo que ya está registrado."
+          "respuesta": "En Reportes puede generar los informes con los datos registrados."
         }
       ]
     }

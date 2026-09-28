@@ -28,6 +28,7 @@ compara el DOM renderizado contra los bytes exactos de la instantánea, nunca
 una constante compartida contra sí misma.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -66,20 +67,13 @@ class TestArchivoCanonico:
             "glosario",  # snapshot fijado del glosario canónico (issue #903)
         }
 
-    def test_lista_las_cinco_categorias_que_el_club_entrena(self, conocimiento):
-        categorias = [horario["categoria"] for horario in conocimiento["horarios"]]
-        assert categorias == [
-            "Formativo",
-            "Infantil",
-            "Juvenil",
-            "Competitivo",
-            "Adultos",
-        ]
-
-    def test_cada_horario_dice_para_quien_que_dias_y_a_que_hora(self, conocimiento):
-        for horario in conocimiento["horarios"]:
-            assert set(horario) == {"categoria", "edades", "dias", "horas"}
-            assert all(horario[campo].strip() for campo in horario)
+    def test_la_lista_estatica_de_horarios_queda_vacia(self, conocimiento):
+        # Issue #1374, cerrando la migración que #789 empezó: el catálogo
+        # dinámico (`/asistencias/horarios-publicos`, administrado desde la
+        # app) es la ÚNICA fuente de horarios. #789 la sacó de la landing y
+        # #1374 sacó a /ayuda de esta lista; una lista estática acá sería una
+        # segunda copia que nadie sincroniza con lo que el club publica.
+        assert conocimiento["horarios"] == []
 
     def test_cada_entrada_de_faq_pregunta_y_responde(self, conocimiento):
         for seccion in conocimiento["faq"]:
@@ -97,8 +91,9 @@ class TestArchivoCanonico:
             "Reportes",  # el administrador genera reportes
             "Membresías y Pagos",
             "Historial Asistencia",
-            "entrenador disponible",  # no hay entrenadores asignados a horarios
             "recuperación",  # recuperación de contraseña por correo
+            # ("entrenador disponible" salió con la copy aprobada en la
+            # corrección C3 de #1374: la respuesta de horarios quedó corta.)
         ):
             assert hecho in texto, hecho
 
@@ -131,20 +126,16 @@ class TestArchivoCanonico:
 
 
 class TestConocimientoSerializado:
-    def test_el_prompt_contiene_cada_horario_publicado(self, conocimiento):
+    def test_el_prompt_no_trae_horarios_estaticos(self, conocimiento):
+        # El reverso de la migración de #1374: la serialización NO puede
+        # volver a listar horarios, porque la página que comparaba su tabla
+        # contra estas líneas ahora lee el catálogo dinámico. Una línea con la
+        # forma que `texto_para_prompt` le daba a cada horario (`- Categoría
+        # (edades): días, de HH:MM a HH:MM.`) es una regresión, no un dato.
         texto = conocimiento_club.texto_para_prompt(conocimiento)
-        for horario in conocimiento["horarios"]:
-            linea = next(
-                (
-                    fila
-                    for fila in texto.splitlines()
-                    if fila.startswith(f"- {horario['categoria']} (")
-                ),
-                None,
-            )
-            assert linea is not None, horario["categoria"]
-            assert horario["edades"] in linea
-            assert horario["horas"] in linea
+        patron = re.compile(r"^- .+ \(.+\): .+, de \d{2}:\d{2} a \d{2}:\d{2}\.$")
+        for linea in texto.splitlines():
+            assert patron.match(linea) is None, linea
 
     def test_el_texto_contiene_cada_pregunta_y_respuesta_del_faq(self, conocimiento):
         texto = conocimiento_club.texto_para_prompt(conocimiento)
@@ -160,7 +151,7 @@ class TestConocimientoSerializado:
             # Solo estaba en el FAQ de la web (`faq-content.ts`).
             "selector de estudiante",
             "Deshacer",
-            "subir un comprobante nuevo",
+            "enviar otro comprobante",  # copy aprobada en la corrección C3 de #1374
             # Solo estaba en la landing.
             "0994219619",
             "Coliseo Ciudad de Loja",
