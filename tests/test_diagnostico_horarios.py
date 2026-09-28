@@ -502,7 +502,7 @@ def test_obtener_catalogo_con_forma_invalida_levanta_error_sin_devolver_vacio():
             raise AssertionError("se esperaba RuntimeError ante una forma inválida")
 
 
-# ─── static_schedule_authority — los sobrevivientes de #789 ────────────────
+# ─── static_schedule_authority — candado de la migración completada ────────
 
 
 def test_horarios_estaticos_presentes_son_static_schedule_authority():
@@ -516,12 +516,16 @@ def test_horarios_estaticos_presentes_son_static_schedule_authority():
     assert [h["clase"] for h in hallazgos] == [diag.CLASE_AUTORIDAD_ESTATICA]
     assert "5" in hallazgos[0]["observado"]
     assert "instantánea de conocimiento" in hallazgos[0]["detalle"]
-    assert "/ayuda" in hallazgos[0]["detalle"]
+    # La migración de #1374 pasó a /ayuda al catálogo dinámico: la lista no
+    # puede volver a gobernarla, así que ninguna superficie del detalle la
+    # nombra como su lectora.
+    assert all("/ayuda" not in superficie for superficie in diag._SUPERFICIES_ESTATICAS)
+    assert "catálogo dinámico" in hallazgos[0]["detalle"]
 
 
 def test_sin_entradas_estaticas_no_hay_hallazgo():
-    """Si algún día se completa la migración de #789 el hallazgo desaparece
-    solo, sin tocar este código."""
+    """El estado esperado desde que #1374 completó la migración: con la lista
+    vacía el hallazgo desaparece solo, sin tocar este código."""
     observacion = {"ruta": diag.RUTA_RELATIVA_CONOCIMIENTO, "entradas": 0, "categorias": [], "error": None}
     assert diag.detectar_hallazgos_estaticos(observacion) == []
 
@@ -536,7 +540,8 @@ def test_el_diagnostico_no_repara_los_horarios_estaticos():
 def test_observar_horarios_estaticos_lee_el_archivo_real_del_repo():
     observacion = diag.observar_horarios_estaticos(diag.RUTA_CONOCIMIENTO_CLUB)
     assert observacion["error"] is None
-    assert observacion["entradas"] == 5
+    # #1374 vació la lista: el archivo real no debe volver a tener entradas.
+    assert observacion["entradas"] == 0
     assert observacion["ruta"] == diag.RUTA_RELATIVA_CONOCIMIENTO
 
 

@@ -12,8 +12,8 @@
  * jsdom cannot lay out CSS Grid, so real alignment is out of scope here —
  * this suite anchors only the DOM shape: eight children in tile/tile/tile/
  * tile/item/item/item/item order, indices decorative, titles and copy in
- * document order for assistive technology, and the scroll cue pointing at
- * the real Palmarés section.
+ * document order for assistive technology. The section once ended in a
+ * scroll cue into Logros; issue #1372 retired both.
  */
 
 import { readFileSync } from "node:fs";
@@ -26,7 +26,7 @@ import { resetLandingTestEnvironment, stubLandingGlobals } from "./landing-test-
 
 // jsdom cannot compute a `::before` pseudo-element's background-image or
 // opacity, so the crest motif's placement is locked against the authored
-// stylesheet directly — the same convention landing-logros-colors.test.ts
+// stylesheet directly — the same convention landing-stats-band.test.ts
 // uses for stylesheet-only contracts.
 const landingCss = (): string =>
   readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
@@ -85,13 +85,11 @@ describe("Valores tablero (rally replacement)", (): void => {
     ]);
   });
 
-  it("points the scroll cue at the real Palmarés section", (): void => {
+  it("carries no scroll cue and no Logros anchor (issue #1372 retired both)", (): void => {
     const { container } = render(<LandingPage />);
 
-    const cue = container.querySelector("#valores .landing-tablero-cue");
-    expect(cue).not.toBeNull();
-    expect(cue).toHaveAttribute("href", "#logros");
-    expect(container.querySelector("#logros")).not.toBeNull();
+    expect(container.querySelector("#valores .landing-tablero-cue")).toBeNull();
+    expect(container.querySelector("#logros")).toBeNull();
   });
 
   it("carries no rally, ball, guide, counter, or dimming machinery", (): void => {
