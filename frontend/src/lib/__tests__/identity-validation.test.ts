@@ -763,6 +763,15 @@ describe("contraseña", () => {
       expect(message).not.toContain("72 caracteres");
     });
 
+    it("measures multibyte characters in bytes, where the truncation actually surprises", () => {
+      // Each emoji is 4 UTF-8 bytes: 18 emoji = 72 bytes (right at the edge),
+      // 19 = 76 bytes (already over it). Measuring `.length` (UTF-16 code
+      // units) would let far more than 18 through.
+      expect(passwordRule("😀".repeat(18), "La contraseña")).toBeNull();
+      expect(passwordRule("😀".repeat(19), "La contraseña")).toContain(
+        `${PASSWORD_MAX_BYTES} bytes`,
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------
