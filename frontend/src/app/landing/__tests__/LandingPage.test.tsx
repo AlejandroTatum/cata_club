@@ -1267,7 +1267,6 @@ describe("LandingPage", (): void => {
       ["Inicio", "#inicio"],
       ["Horarios", "#horarios"],
       ["Valores", "#valores"],
-      ["Logros", "#logros"],
       ["Galería", "#galeria"],
       ["Contacto", "#contacto"],
     ]);
@@ -1359,8 +1358,21 @@ describe("LandingPage", (): void => {
 
     expect(document.querySelector("[data-rally]")).toBeNull();
     expect(document.querySelectorAll("[data-value]")).toHaveLength(0);
-    const cue = document.querySelector(".landing-tablero-cue");
-    expect(cue).toHaveAttribute("href", "#logros");
+  });
+
+  /**
+   * Issue #1372 retired the Logros section and every affordance that pointed
+   * at it. A dead anchor is worse than no section: nothing rendered anywhere
+   * on the page may still target `#logros`.
+   */
+  it("retires Logros without leaving a dead anchor behind", (): void => {
+    render(<LandingPage />);
+
+    expect(document.getElementById("logros")).toBeNull();
+    expect(document.querySelector(".landing-wins")).toBeNull();
+    expect(document.querySelector(".landing-tablero-cue")).toBeNull();
+    const deadLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href='#logros']"));
+    expect(deadLinks.map((link): string | null => link.textContent)).toEqual([]);
   });
 
       it("gives every footer service link its own destination", (): void => {

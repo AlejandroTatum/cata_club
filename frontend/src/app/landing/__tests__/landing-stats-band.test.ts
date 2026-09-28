@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 // ENTRENAMIENTOS section below it shared the same white grid background, so
 // the boundary between the two disappeared. These locks read the authored
 // stylesheet directly — jsdom cannot compute custom properties or ::before
-// pseudo-elements — the same convention landing-palmares-colors.test.ts and
-// landing-gallery.test.ts use for stylesheet-only contracts.
+// pseudo-elements — the same convention landing-gallery.test.ts and
+// Sponsors.test.tsx use for stylesheet-only contracts.
 const landingCss = (): string =>
   readFileSync(resolve(process.cwd(), "src/app/landing/landing.css"), "utf8");
 

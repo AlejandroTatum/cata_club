@@ -17,6 +17,13 @@
  *     as `backend/app/servicios_negocio/prompt_sistema.txt` and locked to the
  *     live `SYSTEM_PROMPT` by `backend/tests/test_conocimiento_club.py`.
  *
+ * Schedules left this shared definition in #1374: the snapshot must never
+ * carry static schedule lines, and the page's schedule answer directs to the
+ * landing's live section — guards below fail if either side regresses.
+ * Since the #1374 correction the page renders the FAQ and nothing else, so
+ * the club-profile blocks are guarded by their ABSENCE: that knowledge stays
+ * with the model, not on this screen.
+ *
  * Neither side reads the other's source, and neither side reads the canonical
  * JSON: a guard that reads the same definition twice can only ever agree with
  * itself.
@@ -82,24 +89,6 @@ function normalise(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-interface RenderedSchedule {
-  category: string;
-  ages: string;
-  days: string;
-  hours: string;
-}
-
-/** The schedule table, read off the page the way a parent reads it. */
-function renderedSchedules(root: HTMLElement): RenderedSchedule[] {
-  const rows = Array.from(root.querySelectorAll("tbody tr"));
-  return rows.map((row): RenderedSchedule => {
-    const cells = Array.from(row.querySelectorAll("th, td")).map((cell): string =>
-      normalise(cell.textContent ?? ""),
-    );
-    return { category: cells[0], ages: cells[1], days: cells[2], hours: cells[3] };
-  });
-}
-
 interface RenderedEntry {
   question: string;
   answer: string;
@@ -120,13 +109,6 @@ function renderedFaq(root: HTMLElement): RenderedEntry[] {
   );
 }
 
-/** The club facts the page states about itself, one element per fact. */
-function renderedClubFacts(root: HTMLElement): string[] {
-  return Array.from(root.querySelectorAll('[data-testid="club-fact"]')).map((node): string =>
-    normalise(node.textContent ?? ""),
-  );
-}
-
 /** The questions the prompt itself carries, as the serialiser writes them. */
 function promptQuestions(prompt: string): string[] {
   return prompt
@@ -143,25 +125,19 @@ describe("club knowledge parity — /ayuda vs the system prompt (issue #768)", (
     expect(systemPrompt().length).toBeGreaterThan(2000);
 
     const page = render(<AyudaPage />).container;
-    expect(renderedSchedules(page).length).toBeGreaterThan(0);
     expect(renderedFaq(page).length).toBeGreaterThan(0);
-    expect(renderedClubFacts(page).length).toBeGreaterThan(0);
   });
 
-  it("states the same training times to a parent and to the model", (): void => {
-    const page = render(<AyudaPage />).container;
-    const prompt = systemPrompt();
+  it("carries no static schedule the page no longer shows (#1374)", (): void => {
+    // The page's schedule question directs to the landing's live section; the
+    // snapshot's old per-category line (`- Categoría (edades): días, de
+    // HH:MM a HH:MM.`) would be a second, unsynchronised answer to the same
+    // question. The backend suite guards the same contract from its side.
+    const offender = systemPrompt()
+      .split("\n")
+      .find((line): boolean => /^- .+ \(.+\): .+, de \d{2}:\d{2} a \d{2}:\d{2}\.$/.test(line));
 
-    for (const schedule of renderedSchedules(page)) {
-      const line = prompt
-        .split("\n")
-        .find((candidate): boolean => candidate.startsWith(`- ${schedule.category} (`));
-
-      expect(line, `the prompt never mentions ${schedule.category}`).toBeDefined();
-      expect(line, `${schedule.category} audience drifted`).toContain(schedule.ages);
-      expect(line, `${schedule.category} days drifted`).toContain(schedule.days);
-      expect(line, `${schedule.category} hours drifted`).toContain(schedule.hours);
-    }
+    expect(offender).toBeUndefined();
   });
 
   it("answers every browsable question with the same words the model was given", (): void => {
@@ -187,13 +163,14 @@ describe("club knowledge parity — /ayuda vs the system prompt (issue #768)", (
     }
   });
 
-  it("tells a visitor the same thing about the club that it tells the model", (): void => {
+  it("renders no club facts the correction moved off the page (#1374)", (): void => {
+    // The product correction made /ayuda the FAQ alone: the club-profile
+    // blocks left the screen. Their facts stay in the snapshot for whatever
+    // reads it, but this page must not grow them back silently — a return
+    // here is a product decision, not a drive-by render.
     const page = render(<AyudaPage />).container;
-    const prompt = normalise(systemPrompt());
 
-    for (const fact of renderedClubFacts(page)) {
-      expect(prompt, `club fact not in the prompt: ${fact}`).toContain(fact);
-    }
+    expect(page.querySelectorAll('[data-testid="club-fact"]')).toHaveLength(0);
   });
 
   it("keeps the whole page in the 'usted' register once the copy moved out of TypeScript", (): void => {
