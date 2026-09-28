@@ -540,3 +540,23 @@ describe("cuando no hay padrón que mostrar", () => {
     expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// El camino de vuelta queda SOBRE el título, no debajo (#1396)
+// ---------------------------------------------------------------------------
+
+describe("el camino de vuelta queda sobre el título (#1396)", () => {
+  it("dibuja «Volver a Mi día» antes del «Alumnos del club» en el documento", async () => {
+    render(<TrainerStudentsPage />);
+
+    await screen.findByTestId("student-row-7");
+
+    const back = screen.getByRole("link", { name: /Volver a Mi día/ });
+    expect(back).toHaveAttribute("href", "/trainer");
+    // Orden del documento, no CSS: el tabulador y un lector de pantalla
+    // encuentran «Volver» antes que el nombre de la pantalla. El control viaja
+    // por el slot `AppShell.back`, que el shell dibuja antes del `<h1>`.
+    const title = screen.getByRole("heading", { name: "Alumnos del club", level: 1 });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

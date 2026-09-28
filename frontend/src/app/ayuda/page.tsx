@@ -91,9 +91,8 @@ export default function AyudaPage(): React.ReactElement {
     <AppShell
       title="Preguntas frecuentes"
       subtitle="Cómo funciona la app del club, sección por sección."
+      back={<BackLink href={backHrefForRole(session?.user.role)} />}
     >
-      <BackLink href={backHrefForRole(session?.user.role)} />
-
       {/*
        * The schedule first, and as a table rather than prose. It is the most
        * asked question in the club and the only answer here that someone
