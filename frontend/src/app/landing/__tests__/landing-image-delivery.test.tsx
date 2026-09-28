@@ -44,8 +44,8 @@ afterEach((): void => {
 
 /**
  * Above this, a source is far larger than any box on this page and the top
- * srcset bucket is a real cost. Small sources (the 240px palmares thumbnails,
- * the 84px crests) are already proportionate without a `sizes` prop.
+ * srcset bucket is a real cost. Small sources (the 84px crests, the 312px
+ * sponsor logos) are already proportionate without a `sizes` prop.
  */
 const LARGE_SOURCE_WIDTH = 1000;
 
