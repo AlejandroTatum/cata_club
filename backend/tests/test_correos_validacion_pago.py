@@ -2,11 +2,12 @@
 Correos transaccionales del ciclo de validación de pagos (PR 1 de mejoras de
 experiencia del alumno).
 
-T1: pago APROBADO -- plan, período cubierto, "vigente hasta" y una línea
-corta de agradecimiento.
-T2: pago RECHAZADO -- el motivo que dio el club y los tres pasos para
-reintentar (el mismo procedimiento que la ayuda "Cómo se registra un pago"
-del portal del alumno).
+T1: pago APROBADO -- plan, período cubierto y vigencia como filas de
+detalle en la caja resaltada, chip verde de estado y una línea corta de
+agradecimiento.
+T2: pago RECHAZADO -- el motivo que dio el club como fila de detalle, chip
+rojo de estado, y los tres pasos para reintentar (el mismo procedimiento
+que la ayuda "Cómo se registra un pago" del portal del alumno).
 
 Mismo criterio que `test_correo_plantillas.py`: se valida contra un doble de
 `smtplib.SMTP` (sin conexión real) el asunto, el destinatario, el remitente y
@@ -29,6 +30,7 @@ from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia, EstadoPago, TipoNotificacion, TipoPago, TipoRol
 from app.dominio.modelos import Membresia, Notificacion, Pago, Persona, Rol, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.infraestructura.plantillas_correo import ID_CONTENIDO_ESCUDO
 from app.servicios_negocio.dtos.membresia_pago_schemas import PagoValidarDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from app.soporte_transversal.configuracion import settings
@@ -107,7 +109,8 @@ def _texto(envio: dict) -> str:
 
 
 def _html(envio: dict) -> str:
-    return _decodificar(_partes(envio["mensaje"])[1][1])
+    parsed = _partes(envio["mensaje"])[0]
+    return _decodificar(next(p for p in parsed.walk() if p.get_content_type() == "text/html"))
 
 
 def _pago_pendiente(db_session, *, con_cuenta: bool) -> tuple[Persona, Persona, Membresia, Pago]:
@@ -175,6 +178,31 @@ def _pago_de_representado(db_session, *, representante_con_cuenta: bool = True):
     return admin, representante, representado, membresia, pago
 
 
+@pytest.mark.parametrize(("envio",), [
+    pytest.param(lambda: ServicioNotificaciones().enviar_pago_aprobado(
+        correo=CORREO_FICTICIO, nombre="Ana Ficticia", plan=PLAN,
+        fecha_inicio=INICIO, fecha_fin=FIN, vigente_hasta=FIN,
+    ), id="pago_aprobado"),
+    pytest.param(lambda: ServicioNotificaciones().enviar_pago_rechazado(
+        correo=CORREO_FICTICIO, nombre="Ana Ficticia", motivo_rechazo=MOTIVO_RECHAZO,
+    ), id="pago_rechazado"),
+])
+def test_los_correos_del_ciclo_de_pago_viajan_con_el_layout_de_marca(
+    smtp_capturado, envio,
+):
+    """Issue #1375: HTML de marca con lang=es, tablas presentacionales y el
+    escudo adjunto inline (cid:) + alt significativo; el nombre del club
+    queda en texto para clientes que bloquean imágenes."""
+    envio()
+
+    html = _html(smtp_capturado[0])
+    assert '<html lang="es">' in html
+    assert 'role="presentation"' in html
+    assert f'src="cid:{ID_CONTENIDO_ESCUDO}"' in html
+    assert 'alt="Cata Club"' in html
+    assert "Cata Club" in html
+
+
 def test_pago_aprobado_cuenta_plan_periodo_vigencia_y_agradecimiento(smtp_capturado):
     """T1: el correo dice qué se aprobó, qué período cubre, hasta cuándo
     queda vigente y cierra con un agradecimiento corto. Sin montos: el club
@@ -196,13 +224,18 @@ def test_pago_aprobado_cuenta_plan_periodo_vigencia_y_agradecimiento(smtp_captur
     assert direccion_remitente == settings.smtp_from
     assert len(partes) == 2
 
-    assert texto.startswith("Hola Ana Ficticia,")
-    assert PLAN in texto
-    assert INICIO_TXT in texto and FIN_TXT in texto
-    assert f"vigente hasta el {FIN_TXT}" in texto
+    assert texto.startswith("Pago aprobado\n\nHola Ana Ficticia,")
+    # Detalle del evento como filas etiqueta/valor (layout v2 de #1375).
+    assert f"Plan: {PLAN}" in texto
+    assert f"Período: {INICIO_TXT} al {FIN_TXT}" in texto
+    assert f"Vigente hasta: {FIN_TXT}" in texto
     assert "Gracias" in texto
-    assert PLAN in html
-    assert f"vigente hasta el {FIN_TXT}" in html
+    # En el HTML la etiqueta y el valor van en celdas separadas.
+    assert "Plan" in html and PLAN in html
+    assert "Vigente hasta" in html and FIN_TXT in html
+    # Chip de estado verde para el pago aprobado.
+    assert "Aprobado" in html
+    assert "background-color:#e7f6ec" in html
 
 
 def test_pago_aprobado_saluda_generico_sin_nombre(smtp_capturado):
@@ -212,7 +245,7 @@ def test_pago_aprobado_saluda_generico_sin_nombre(smtp_capturado):
         fecha_inicio=INICIO, fecha_fin=FIN, vigente_hasta=FIN,
     )
 
-    assert _texto(smtp_capturado[0]).startswith("Hola,")
+    assert _texto(smtp_capturado[0]).startswith("Pago aprobado\n\nHola,")
 
 
 def test_validar_pago_aprobado_manda_el_correo_junto_con_el_aviso_in_app(db_session, smtp_capturado):
@@ -226,8 +259,8 @@ def test_validar_pago_aprobado_manda_el_correo_junto_con_el_aviso_in_app(db_sess
 
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_FICTICIO]
     texto = _texto(smtp_capturado[0])
-    assert PLAN in texto
-    assert f"vigente hasta el {FIN_TXT}" in texto
+    assert f"Plan: {PLAN}" in texto
+    assert f"Vigente hasta: {FIN_TXT}" in texto
     aviso = (
         db_session.query(Notificacion)
         .filter_by(
@@ -283,14 +316,19 @@ def test_pago_rechazado_cuenta_el_motivo_y_los_tres_pasos_para_reintentar(smtp_c
     assert _asunto_decodificado(parsed) == "Cata Club | Pago rechazado"
     assert parsed["To"] == CORREO_FICTICIO
     assert len(partes) == 2
-    assert texto.startswith("Hola Ana Ficticia,")
+    assert texto.startswith("Pago rechazado\n\nHola Ana Ficticia,")
     assert MOTIVO_RECHAZO in texto
     assert "cuántos meses" in texto
     assert "forma de pago" in texto
     assert "comprobante" in texto
     assert "en revisión" in texto
     assert "/student/payments" in texto
-    assert MOTIVO_RECHAZO in _html(smtp_capturado[0])
+    html = _html(smtp_capturado[0])
+    assert MOTIVO_RECHAZO in html
+    # Chip de estado rojo y motivo como fila de detalle en la caja resaltada.
+    assert "Rechazado" in html
+    assert "background-color:#fdecec" in html
+    assert "background-color:#f9fafb;border:1px solid #e5e7eb" in html
 
 
 def test_pago_rechazado_es_neutral_y_no_menciona_deuda_ni_presion(smtp_capturado):
@@ -313,7 +351,7 @@ def test_pago_rechazado_sin_motivo_no_inventa_uno(smtp_capturado):
     )
 
     texto = _texto(smtp_capturado[0])
-    assert texto.startswith("Hola,")
+    assert texto.startswith("Pago rechazado\n\nHola,")
     assert "no pudo aprobar su pago." in texto
     assert "None" not in texto
     assert "Motivo:" not in texto
@@ -374,9 +412,10 @@ def test_pago_aprobado_para_otro_destinatario_nombra_al_alumno(smtp_capturado):
 
     texto = _texto(smtp_capturado[0])
     html = _html(smtp_capturado[0])
-    assert texto.startswith("Hola Marta Torres,")
-    assert f"El pago del plan {PLAN} de Nico <Torres> fue aprobado" in texto
-    assert "La membresía de Nico <Torres> queda vigente" in texto
+    assert texto.startswith("Pago aprobado\n\nHola Marta Torres,")
+    # El alumno viaja como fila de detalle, no escondido en la prosa.
+    assert "Alumno: Nico <Torres>" in texto
+    assert f"Plan: {PLAN}" in texto
     assert "Nico &lt;Torres&gt;" in html
 
 
@@ -387,7 +426,7 @@ def test_pago_rechazado_para_otro_destinatario_nombra_al_alumno(smtp_capturado):
     )
 
     texto = _texto(smtp_capturado[0])
-    assert texto.startswith("Hola Marta Torres,")
+    assert texto.startswith("Pago rechazado\n\nHola Marta Torres,")
     assert "El club no pudo aprobar el pago de Nico." in texto
     assert MOTIVO_RECHAZO in texto
 
@@ -407,10 +446,10 @@ def test_validar_pago_aprobado_de_representado_avisa_al_representante(
     assert resultado.estado_pago == EstadoPago.APROBADO
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
     texto = _texto(smtp_capturado[0])
-    assert texto.startswith("Hola Marta,")
+    assert texto.startswith("Pago aprobado\n\nHola Marta,")
     assert "Nico" in texto
-    assert f"El pago del plan {PLAN} de Nico fue aprobado" in texto
-    assert f"vigente hasta el {FIN_TXT}" in texto
+    assert "Alumno: Nico" in texto
+    assert f"Vigente hasta: {FIN_TXT}" in texto
     # El aviso in-app sigue naciendo en el mismo punto, para el ALUMNO.
     aviso = (
         db_session.query(Notificacion)
@@ -438,7 +477,7 @@ def test_validar_pago_rechazado_de_representado_avisa_al_representante(
     assert resultado.estado_pago == EstadoPago.RECHAZADO
     assert [envio["destinatario"] for envio in smtp_capturado] == [CORREO_REPRESENTANTE]
     texto = _texto(smtp_capturado[0])
-    assert texto.startswith("Hola Marta,")
+    assert texto.startswith("Pago rechazado\n\nHola Marta,")
     assert "El club no pudo aprobar el pago de Nico." in texto
     assert MOTIVO_RECHAZO in texto
 
