@@ -1,12 +1,12 @@
 """Add the payment-recorded in-app notification type (#1370).
 
 Revision ID: s1370pagoreg
-Revises: r1372galeria
+Revises: c4b3a1d9e7f2
 """
 from alembic import op
 
 revision = "s1370pagoreg"
-down_revision = "r1372galeria"
+down_revision = "c4b3a1d9e7f2"
 branch_labels = None
 depends_on = None
 
