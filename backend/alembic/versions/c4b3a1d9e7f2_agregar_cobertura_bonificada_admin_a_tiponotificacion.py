@@ -1,7 +1,7 @@
 """agregar cobertura_bonificada_admin al enum tiponotificacion
 
 Revision ID: c4b3a1d9e7f2
-Revises: r1372galeria
+Revises: r1373asis
 Create Date: 2026-08-19 09:00:00.000000
 
 Añade el label ``COBERTURA_BONIFICADA_ADMIN`` al enum PostgreSQL
@@ -27,7 +27,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'c4b3a1d9e7f2'
-down_revision: Union[str, Sequence[str], None] = 'r1372galeria'
+down_revision: Union[str, Sequence[str], None] = 'r1373asis'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
