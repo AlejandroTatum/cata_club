@@ -1,21 +1,20 @@
 """
-Cambio de texto de las cinco variantes de correo transaccional (issue #898,
-ronda 2 de revisión humana): recuperación de contraseña, verificación de
+Cambio de texto y layout de marca de los correos transaccionales (issue
+#1375 sobre la base de #898): recuperación de contraseña, verificación de
 correo, vencimiento próximo de membresía y mora (día 1 y día 8, que
 comparten superficie pero difieren en asunto).
 
-Ronda 1 introdujo un layout HTML compartido (tablas, preheader oculto, CTA
-con apariencia de botón); el dueño lo rechazó explícitamente ("esas pantallas
-no tienen nada que ver, simplemente cambia el texto, nada de la UI"). Estos
-tests verifican SOLO texto -- asunto exacto, remitente con nombre, frases
-obligatorias, fecha -- sobre la MISMA estructura MIME/HTML que ya existía:
-recuperación y verificación mandan texto plano + un HTML simple (`<html>
-<body>...`, sin tablas ni preheader); vencimiento y mora mandan solo texto
-plano, como siempre lo hicieron.
+Issue #1375 introduce UN layout de marca compartido para los cinco correos
+transaccionales (tablas con role=presentation, escudo adjunto inline por
+cid:, alt significativo y el nombre del club siempre en texto): la decisión
+explícita del dueño reemplaza la ronda 2 de #898, que había pedido solo
+texto. Los CORREOS DE ALERTA (vencimiento y mora, en `alertas_tareas.py`)
+quedan fuera de #1375 y siguen saliendo solo texto plano.
 
 Se valida contra un doble de `smtplib.SMTP` (sin conexión SMTP real) el
-asunto, el remitente y las frases que pide el issue. Los datos usados
-(correo, token, nombre) son ficticios; ninguno es un dato personal real.
+asunto, el remitente, las frases que pide el issue y el layout de marca.
+Los datos usados (correo, token, nombre) son ficticios; ninguno es un dato
+personal real.
 """
 from datetime import date
 from email import message_from_string
@@ -26,6 +25,7 @@ from email.utils import parseaddr
 import pytest
 
 from app.dominio.enums import TipoNotificacion
+from app.infraestructura.plantillas_correo import ID_CONTENIDO_ESCUDO, bytes_del_escudo
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
 from app.infraestructura.tareas.alertas_tareas import _render_mora, _render_vencimiento
 from app.soporte_transversal.configuracion import settings
@@ -78,10 +78,10 @@ def smtp_capturado(monkeypatch):
 
 
 def _partes(mensaje_raw: str) -> tuple[Message, list[Message]]:
-    """Parsea el mensaje MIME crudo. Devuelve `(mensaje, partes)`: 1 parte
-    (solo texto) para vencimiento/mora, 2 partes (texto + HTML, en ese
-    orden) para recuperación/verificación -- mismo formato que ya existía
-    antes de #898."""
+    """Parsea el mensaje MIME crudo. Devuelve `(mensaje, partes)` de primer
+    nivel: 1 parte (solo texto) para vencimiento/mora -- fuera del alcance
+de #1375 -- y 2 partes (texto + related de marca) para los
+    transaccionales."""
     parsed = message_from_string(mensaje_raw)
     assert parsed.is_multipart()
     return parsed, parsed.get_payload()
@@ -94,6 +94,13 @@ def _decodificar(parte: Message) -> str:
 def _asunto_decodificado(parsed: Message) -> str:
     """`Subject` puede llegar como encoded-word (RFC 2047) por los acentos."""
     return str(make_header(decode_header(parsed["Subject"])))
+
+
+def _html(cap: dict) -> str:
+    """Parte HTML de un envío capturado (los transaccionales de #1375 viajan
+    con texto + related de marca; el HTML vive dentro del related)."""
+    parsed, _ = _partes(cap["mensaje"])
+    return _decodificar(next(p for p in parsed.walk() if p.get_content_type() == "text/html"))
 
 
 def _enviar_recuperacion() -> None:
@@ -150,9 +157,11 @@ CASOS = [
 def test_asunto_remitente_y_forma_del_mensaje(
     smtp_capturado, accion, asunto_esperado, partes_esperadas,
 ):
-    """Asunto exacto del issue, remitente con nombre, y la MISMA cantidad de
-    partes MIME que el formato ya tenía (no se agrega HTML donde no había,
-    no se agregan partes nuevas donde ya había texto+HTML)."""
+    """Asunto exacto del issue, remitente con nombre, y la MISMA forma MIME
+de primer nivel que el formato ya tenía: los transaccionales siguen siendo
+alternative(texto + related), solo que el related ahora lleva el escudo
+adjunto; los avisos de texto siguen siendo una única parte plain, sin
+related ni adjuntos."""
     accion()
 
     parsed, partes = _partes(smtp_capturado["mensaje"])
@@ -168,14 +177,49 @@ def test_asunto_remitente_y_forma_del_mensaje(
     assert len(partes) == partes_esperadas
     assert partes[0].get_content_type() == "text/plain"
     if partes_esperadas == 2:
-        assert partes[1].get_content_type() == "text/html"
+        assert partes[1].get_content_type() == "multipart/related"
+
+
+def test_los_avisos_de_texto_no_llevan_related_ni_adjuntos(smtp_capturado):
+    """Vencimiento/mora (fuera del alcance de #1375): solo texto, sin parte
+    related ni image/png -- el cambio de marca no toca esos envíos."""
+    _enviar_vencimiento()
+
+    parsed, partes = _partes(smtp_capturado["mensaje"])
+
+    assert parsed.get_content_type() == "multipart/alternative"
+    assert [p.get_content_type() for p in partes] == ["text/plain"]
+    assert not any(p.get_content_type() == "image/png" for p in parsed.walk())
+
+
+def test_el_escudo_viaja_adjunto_en_linea_y_el_html_lo_referencia(smtp_capturado):
+    """Feedback de #1375: el escudo NO sale por URL remota -- muchos clientes
+    la bloquean y el host puede no ser público. Viaja como parte image/png
+    con Content-ID dentro del multipart/related (después del HTML), con
+    Content-Disposition inline, y el HTML lo referencia como `cid:`."""
+    _enviar_recuperacion()
+
+    parsed, _ = _partes(smtp_capturado["mensaje"])
+    related = next(
+        p for p in parsed.walk() if p.get_content_type() == "multipart/related"
+    )
+    subpartes = related.get_payload()
+
+    assert subpartes[0].get_content_type() == "text/html"
+    imagen = subpartes[1]
+    assert imagen.get_content_type() == "image/png"
+    assert imagen["Content-ID"] == f"<{ID_CONTENIDO_ESCUDO}>"
+    assert "inline" in (imagen["Content-Disposition"] or "")
+    assert imagen.get_payload(decode=True) == bytes_del_escudo()
+    html = _decodificar(subpartes[0])
+    assert f'src="cid:{ID_CONTENIDO_ESCUDO}"' in html
 
 
 def test_recuperacion_advierte_token_de_un_solo_uso_y_30_minutos(smtp_capturado):
     _enviar_recuperacion()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
-    html = _decodificar(partes[1])
+    html = _html(smtp_capturado)
     assert "30 minutos" in texto
     assert "un solo uso" in texto.lower()
     assert "Restablecer contraseña" in html
@@ -190,7 +234,7 @@ def test_verificacion_advierte_24_horas_y_cuenta_la_historia_de_la_inscripcion(s
     _enviar_verificacion()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
-    html = _decodificar(partes[1])
+    html = _html(smtp_capturado)
     assert "24 horas" in texto
     assert "Verificar mi correo" in html
     assert "WhatsApp" in texto
@@ -207,7 +251,7 @@ def test_verificacion_no_afirma_uso_normal_ni_vincular_representado(smtp_captura
     _enviar_verificacion()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0]).lower()
-    html = _decodificar(partes[1]).lower()
+    html = _html(smtp_capturado).lower()
     assert "con normalidad" not in texto
     assert "representad" not in texto
     assert "con normalidad" not in html
@@ -218,16 +262,16 @@ def test_verificacion_saluda_con_el_nombre_cuando_esta_disponible(smtp_capturado
     _enviar_verificacion_con_nombre()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
-    html = _decodificar(partes[1])
-    assert texto.startswith("Hola Ana Ficticia,")
-    assert "<p>Hola Ana Ficticia,</p>" in html
+    html = _html(smtp_capturado)
+    assert texto.startswith("Verificación de correo\n\nHola Ana Ficticia,")
+    assert "Hola Ana Ficticia," in html
 
 
 def test_verificacion_saluda_generico_sin_nombre(smtp_capturado):
     _enviar_verificacion()
     _, partes = _partes(smtp_capturado["mensaje"])
     texto = _decodificar(partes[0])
-    assert texto.startswith("Hola,")
+    assert texto.startswith("Verificación de correo\n\nHola,")
 
 
 def test_vencimiento_menciona_ir_a_mis_pagos_whatsapp_y_fecha(smtp_capturado):
@@ -268,20 +312,32 @@ def test_ultimo_aviso_de_mora_no_repite_la_idea_del_ultimo_aviso(smtp_capturado)
     assert texto.lower().count("último aviso") == 1
 
 
-@pytest.mark.parametrize(
-    ("accion", "prohibido"),
-    [
-        (_enviar_recuperacion, "<table"),
-        (_enviar_verificacion, "<table"),
-        (_enviar_vencimiento, "<table"),
-        (_enviar_mora_dia_1, "<table"),
-        (_enviar_mora_dia_8, "<table"),
-        (_enviar_recuperacion, "role=\"presentation\""),
-        (_enviar_verificacion, "role=\"presentation\""),
-    ],
-)
-def test_no_reintroduce_layout_de_tabla_de_la_ronda_1(smtp_capturado, accion, prohibido):
-    """Guardia de no-regresión (ronda 2): el layout con tablas de #898/ronda 1
-    fue retirado por pedido del dueño; nada debe volver a introducirlo."""
+@pytest.mark.parametrize(("accion", "con_html_de_marca"), [
+    pytest.param(_enviar_recuperacion, True, id="recuperacion"),
+    pytest.param(_enviar_verificacion, True, id="verificacion"),
+    pytest.param(_enviar_vencimiento, False, id="vencimiento"),
+    pytest.param(_enviar_mora_dia_1, False, id="mora_dia_1"),
+    pytest.param(_enviar_mora_dia_8, False, id="mora_dia_8"),
+])
+def test_layout_de_marca_en_transaccionales_y_texto_plano_en_alertas(
+    smtp_capturado, accion, con_html_de_marca,
+):
+    """Contrato de #1375: los transaccionales viajan con el layout de marca
+    (lang=es, tablas presentacionales, escudo adjunto inline referenciado
+    por cid:, alt significativo y "Cata Club" visible en texto para el
+    cliente que bloquea imágenes). Los avisos de alerta siguen siendo de
+    solo texto, como siempre: quedan fuera de #1375."""
     accion()
-    assert prohibido not in smtp_capturado["mensaje"]
+
+    mensaje = smtp_capturado["mensaje"]
+    if not con_html_de_marca:
+        assert "<html" not in mensaje
+        return
+
+    html = _html(smtp_capturado)
+    assert '<html lang="es">' in html
+    assert 'role="presentation"' in html
+    assert f'src="cid:{ID_CONTENIDO_ESCUDO}"' in html
+    assert 'alt="Cata Club"' in html
+    assert "Cata Club" in html
+    # Sin celdas de relleno vacías: la marca se lee incluso sin imágenes.

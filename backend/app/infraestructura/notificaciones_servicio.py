@@ -15,9 +15,9 @@ import logging
 import smtplib
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from html import escape as escapar_html
 from typing import NamedTuple, Optional
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -38,8 +38,14 @@ from app.infraestructura.asuntos_correo import (
     ASUNTO_PAGO_APROBADO,
     ASUNTO_PAGO_RECHAZADO,
     ASUNTO_RECUPERACION,
+    ASUNTO_VERIFICACION_CORREO,
 )
 from app.infraestructura.db import SessionLocal
+from app.infraestructura.plantillas_correo import (
+    ID_CONTENIDO_ESCUDO,
+    bytes_del_escudo,
+    construir_correo,
+)
 from app.soporte_transversal.circuito_breaker import CircuitoBreaker
 from app.soporte_transversal.configuracion import settings
 from app.soporte_transversal.resiliencia import (
@@ -54,6 +60,23 @@ logger = logging.getLogger("cataclub.notificaciones")
 # Identidad de remitente de las cuatro superficies de correo transaccional
 # (issue #898). Ronda 2: solo texto -- no cambia estructura MIME ni maquetado.
 NOMBRE_REMITENTE = "Cata Club"
+
+
+def _parte_html_con_escudo(cuerpo_html: str) -> MIMEMultipart:
+    """HTML de marca con el escudo DENTRO del mensaje (feedback #1375: la
+    URL remota salía bloqueada por muchos clientes y rota si el host del
+    frontend no es público). Es un `multipart/related` con la parte
+    `text/html` como raíz y el PNG justo detrás, con `Content-ID` e
+    `inline`: el `src="cid:..."` que el HTML referencia lo define
+    `plantillas_correo.ID_CONTENIDO_ESCUDO` (un solo lugar decide la
+    identidad del adjunto)."""
+    related = MIMEMultipart("related")
+    related.attach(MIMEText(cuerpo_html, "html", "utf-8"))
+    escudo = MIMEImage(bytes_del_escudo(), _subtype="png")
+    escudo.add_header("Content-ID", f"<{ID_CONTENIDO_ESCUDO}>")
+    escudo.add_header("Content-Disposition", "inline", filename="cata-club-crest.png")
+    related.attach(escudo)
+    return related
 
 
 # Los errores de SMTP pueden repetir el usuario o la contraseña que el cliente
@@ -425,7 +448,7 @@ class ServicioNotificaciones:
         msg["To"] = destinatario
         msg.attach(MIMEText(cuerpo_texto, "plain", "utf-8"))
         if cuerpo_html:
-            msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
+            msg.attach(_parte_html_con_escudo(cuerpo_html))
 
         try:
             with smtplib.SMTP(self._host, self._port, timeout=TIMEOUT_SMTP_SEGUNDOS) as server:
@@ -492,29 +515,23 @@ class ServicioNotificaciones:
     def enviar_recuperacion_contrasenia(self, correo: str, token: str) -> None:
         """Envía el enlace de restablecimiento de contraseña al usuario.
 
-        Ronda 2 del issue #898: solo texto (asunto, aclaración de "un solo
-        uso") sobre la misma estructura MIME/HTML que ya existía -- sin
-        layout nuevo."""
+        Issue #1375: mismo texto de #898, ahora sobre el layout de marca
+        compartido (`plantillas_correo`), con CTA de botón y texto plano
+        derivado de la misma historia."""
         enlace = f"{self._frontend_url}/reset-password?token={token}"
         asunto = ASUNTO_RECUPERACION
-        texto = (
-            f"Hola,\n\n"
-            f"Recibimos una solicitud para restablecer su contraseña en Cata Club.\n"
-            f"Puede hacerlo haciendo clic en el siguiente enlace, válido por 30 "
-            f"minutos y de un solo uso:\n\n"
-            f"{enlace}\n\n"
-            f"Si no solicitó el cambio, ignore este correo.\n\n"
-            f"Saludos,\nEquipo Cata Club"
-        )
-        html = (
-            "<html><body>"
-            "<p>Hola,</p>"
-            "<p>Recibimos una solicitud para restablecer su contraseña en Cata Club.</p>"
-            f'<p><a href="{enlace}">Restablecer contraseña</a> (válido por 30 '
-            "minutos, de un solo uso)</p>"
-            "<p>Si no solicitó el cambio, ignore este correo.</p>"
-            "<p>Saludos,<br>Equipo Cata Club</p>"
-            "</body></html>"
+        texto, html = construir_correo(
+            titulo="Recuperación de contraseña",
+            preheader="Enlace de un solo uso, válido por 30 minutos.",
+            saludo="Hola,",
+            parrafos=(
+                "Recibimos una solicitud para restablecer su contraseña en Cata Club.",
+                "Puede hacerlo con el botón de abajo. El enlace es válido por 30 "
+                "minutos y de un solo uso.",
+                "Si no solicitó el cambio, ignore este correo.",
+            ),
+            cta_etiqueta="Restablecer contraseña",
+            cta_url=enlace,
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[RECUPERAR_CONTRASENIA] correo=%s", _enmascarar_correo(correo))
@@ -531,31 +548,23 @@ class ServicioNotificaciones:
         registrado, algo que #1186 retiró. `nombre` es opcional: quien
         despacha la cola conoce a la persona y lo pasa cuando lo tiene."""
         enlace = f"{self._frontend_url}/verificar-correo?token={token}"
-        asunto = "Cata Club | Verificación de correo"
+        asunto = ASUNTO_VERIFICACION_CORREO
         saludo = f"Hola {nombre}," if nombre else "Hola,"
-        texto = (
-            f"{saludo}\n\n"
-            f"Gracias por registrarse en Cata Club. Para confirmar que esta "
-            f"dirección es suya, abra el siguiente enlace (válido por 24 horas):\n\n"
-            f"{enlace}\n\n"
-            f"Después, acérquese al club o escríbanos por WhatsApp para "
-            f"registrar la inscripción y el primer pago: el club lo valida y "
-            f"ahí se activa la membresía.\n\n"
-            f"Si usted no se registró, ignore este correo.\n\n"
-            f"Saludos,\nEquipo Cata Club"
-        )
-        html = (
-            "<html><body>"
-            f"<p>{saludo}</p>"
-            "<p>Gracias por registrarse en Cata Club. Para confirmar que esta "
-            "dirección es suya, abra el siguiente enlace:</p>"
-            f'<p><a href="{enlace}">Verificar mi correo</a> (válido por 24 horas)</p>'
-            "<p>Después, acérquese al club o escríbanos por WhatsApp para "
-            "registrar la inscripción y el primer pago: el club lo valida y "
-            "ahí se activa la membresía.</p>"
-            "<p>Si usted no se registró, ignore este correo.</p>"
-            "<p>Saludos,<br>Equipo Cata Club</p>"
-            "</body></html>"
+        texto, html = construir_correo(
+            titulo="Verificación de correo",
+            preheader="Confirme su dirección: el enlace es válido por 24 horas.",
+            saludo=saludo,
+            parrafos=(
+                "Gracias por registrarse en Cata Club. Para confirmar que esta "
+                "dirección es suya, use el botón de abajo (el enlace es válido "
+                "por 24 horas).",
+                "Después, acérquese al club o escríbanos por WhatsApp para "
+                "registrar la inscripción y el primer pago: el club lo valida y "
+                "ahí se activa la membresía.",
+                "Si usted no se registró, ignore este correo.",
+            ),
+            cta_etiqueta="Verificar mi correo",
+            cta_url=enlace,
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[VERIFICAR_CORREO] correo=%s", _enmascarar_correo(correo))
@@ -596,45 +605,30 @@ class ServicioNotificaciones:
         fin_txt = fecha_fin.strftime("%d/%m/%Y")
         vigencia_txt = vigente_hasta.strftime("%d/%m/%Y")
         alumno = (nombre_alumno or "").strip()
+        # Layout v2 (#1375): los datos del evento van como filas de detalle
+        # en la caja resaltada, con el chip verde de estado; el nombre del
+        # alumno viaja escapado por el layout compartido y el texto plano lo
+        # conserva tal cual.
+        filas = [("Plan", plan)]
         if alumno:
-            parrafo_periodo = (
-                f"El pago del plan {plan} de {alumno} fue aprobado. El período "
-                f"cubierto va del {inicio_txt} al {fin_txt}."
-            )
-            parrafo_vigencia = (
-                f"La membresía de {alumno} queda vigente hasta el {vigencia_txt}."
-            )
-            parrafo_periodo_html = (
-                f"El pago del plan {plan} de {escapar_html(alumno)} fue aprobado. "
-                f"El período cubierto va del {inicio_txt} al {fin_txt}."
-            )
-            parrafo_vigencia_html = (
-                f"La membresía de {escapar_html(alumno)} queda vigente hasta el "
-                f"{vigencia_txt}."
-            )
-        else:
-            parrafo_periodo = (
-                f"Su pago del plan {plan} fue aprobado. El período cubierto va del "
-                f"{inicio_txt} al {fin_txt}."
-            )
-            parrafo_vigencia = f"Su membresía queda vigente hasta el {vigencia_txt}."
-            parrafo_periodo_html = parrafo_periodo
-            parrafo_vigencia_html = parrafo_vigencia
-        texto = (
-            f"{saludo}\n\n"
-            f"{parrafo_periodo}\n\n"
-            f"{parrafo_vigencia}\n\n"
-            f"Gracias por seguir siendo parte de Cata Club.\n\n"
-            f"Saludos,\nEquipo Cata Club"
+            filas.append(("Alumno", alumno))
+        filas.append(("Período", f"{inicio_txt} al {fin_txt}"))
+        filas.append(("Vigente hasta", vigencia_txt))
+        parrafo_confirmacion = (
+            f"El club aprobó el pago de {alumno} y quedó registrado en su historial."
+            if alumno
+            else "El club aprobó su pago y quedó registrado en su historial."
         )
-        html = (
-            "<html><body>"
-            f"<p>{saludo}</p>"
-            f"<p>{parrafo_periodo_html}</p>"
-            f"<p>{parrafo_vigencia_html}</p>"
-            "<p>Gracias por seguir siendo parte de Cata Club.</p>"
-            "<p>Saludos,<br>Equipo Cata Club</p>"
-            "</body></html>"
+        texto, html = construir_correo(
+            titulo="Pago aprobado",
+            preheader="El club aprobó su pago y su membresía queda vigente.",
+            saludo=saludo,
+            parrafos=(
+                parrafo_confirmacion,
+                "Gracias por seguir siendo parte de Cata Club.",
+            ),
+            filas=filas,
+            chip=("Aprobado", "exito"),
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_APROBADO] correo=%s", _enmascarar_correo(correo))
@@ -670,40 +664,31 @@ class ServicioNotificaciones:
         motivo = (motivo_rechazo or "").strip()
         alumno = (nombre_alumno or "").strip()
         sujeto = f"el pago de {alumno}" if alumno else "su pago"
-        parrafo_motivo = (
-            f"El club no pudo aprobar {sujeto}. Motivo: {motivo}."
-            if motivo
-            else f"El club no pudo aprobar {sujeto}."
-        )
         enlace = f"{self._frontend_url}/student/payments"
-        pasos = (
-            'Ingrese a "Registrar un pago" y elija cuántos meses va a pagar y '
-            "la forma de pago.",
-            "Si paga por transferencia, adjunte el comprobante (PDF, JPG o PNG).",
-            "El pago queda en revisión en su historial hasta que el club lo "
-            "apruebe.",
-        )
-        texto = (
-            f"{saludo}\n\n"
-            f"{parrafo_motivo}\n\n"
-            f"Para volver a intentarlo, el procedimiento es el mismo de siempre:\n\n"
-            f"1. {pasos[0]}\n"
-            f"2. {pasos[1]}\n"
-            f"3. {pasos[2]}\n\n"
-            f"El formulario está en {enlace}.\n\n"
-            f"Ante cualquier duda, escríbanos por WhatsApp.\n\n"
-            f"Saludos,\nEquipo Cata Club"
-        )
-        html = (
-            "<html><body>"
-            f"<p>{saludo}</p>"
-            f"<p>{escapar_html(parrafo_motivo)}</p>"
-            "<p>Para volver a intentarlo, el procedimiento es el mismo de siempre:</p>"
-            f"<p>1. {pasos[0]}<br>2. {pasos[1]}<br>3. {pasos[2]}</p>"
-            f'<p>El formulario está en <a href="{enlace}">{enlace}</a>.</p>'
-            "<p>Ante cualquier duda, escríbanos por WhatsApp.</p>"
-            "<p>Saludos,<br>Equipo Cata Club</p>"
-            "</body></html>"
+        # Layout v2 (#1375): el motivo deja la prosa y viaja como fila de
+        # detalle (solo cuando existe); el chip rojo marca el estado.
+        filas = [("Motivo", motivo)] if motivo else None
+        # Issue #1375: motivo y nombres viajan escapados por el layout
+        # compartido; los pasos son párrafos numerados (en el HTML quedan
+        # como líneas propias, en el texto como la misma lista).
+        texto, html = construir_correo(
+            titulo="Pago rechazado",
+            preheader="Qué pasó y cómo volver a intentarlo.",
+            saludo=saludo,
+            parrafos=(
+                f"El club no pudo aprobar {sujeto}.",
+                "Para volver a intentarlo, el procedimiento es el mismo de siempre:",
+                "1. Ingrese a \"Registrar un pago\" y elija cuántos meses va a pagar "
+                "y la forma de pago.",
+                "2. Si paga por transferencia, adjunte el comprobante (PDF, JPG o PNG).",
+                "3. El pago queda en revisión en su historial hasta que el club lo apruebe.",
+                f"El formulario está en {enlace}.",
+                "Ante cualquier duda, escríbanos por WhatsApp.",
+            ),
+            filas=filas,
+            chip=("Rechazado", "error"),
+            cta_etiqueta="Ir a registrar un pago",
+            cta_url=enlace,
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[PAGO_RECHAZADO] correo=%s", _enmascarar_correo(correo))
@@ -720,25 +705,17 @@ class ServicioNotificaciones:
         """
         asunto = ASUNTO_BIENVENIDA_INSCRIPCION
         saludo = f"Hola {nombre}," if nombre else "Hola,"
-        texto = (
-            f"{saludo}\n\n"
-            f"Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.\n\n"
-            f"Próximos pasos:\n\n"
-            f"1. El primer pago se hace en persona, en administración del club.\n"
-            f"2. El club registra ese pago y activa su membresía.\n\n"
-            f"Cuando la membresía esté activa, va a poder verla en su cuenta.\n\n"
-            f"Saludos,\nEquipo Cata Club"
-        )
-        html = (
-            "<html><body>"
-            f"<p>{saludo}</p>"
-            "<p>Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.</p>"
-            "<p>Próximos pasos:</p>"
-            "<p>1. El primer pago se hace en persona, en administración del club."
-            "<br>2. El club registra ese pago y activa su membresía.</p>"
-            "<p>Cuando la membresía esté activa, va a poder verla en su cuenta.</p>"
-            "<p>Saludos,<br>Equipo Cata Club</p>"
-            "</body></html>"
+        texto, html = construir_correo(
+            titulo="Bienvenida",
+            preheader="Su inscripción quedó registrada: los próximos pasos.",
+            saludo=saludo,
+            parrafos=(
+                "Le damos la bienvenida a Cata Club. Su inscripción quedó registrada.",
+                "Próximos pasos:",
+                "1. El primer pago se hace en persona, en administración del club.",
+                "2. El club registra ese pago y activa su membresía.",
+                "Cuando la membresía esté activa, va a poder verla en su cuenta.",
+            ),
         )
         self.enviar_correo(correo, asunto, texto, html)
         logger.info("[BIENVENIDA_INSCRIPCION] correo=%s", _enmascarar_correo(correo))
