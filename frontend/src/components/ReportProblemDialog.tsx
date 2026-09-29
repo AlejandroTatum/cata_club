@@ -24,7 +24,10 @@ export default function ReportProblemDialog({ onClose, requestId }: ReportProble
     const form = new FormData();
     form.set("descripcion", description.trim());
     form.set("ruta", window.location.pathname);
-    if (screenshot) form.set("captura", screenshot);
+    if (screenshot) {
+      form.set("captura", screenshot);
+      form.set("consentimiento_captura", "true");
+    }
     try {
       const response = await fetch("/api/reportes-error", {
         method: "POST", body: form,

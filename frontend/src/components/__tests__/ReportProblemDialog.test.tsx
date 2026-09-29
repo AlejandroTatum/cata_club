@@ -17,12 +17,16 @@ describe("ReportProblemDialog", () => {
     expect(init?.headers).toEqual({ "X-Request-ID": "req-123" });
   });
 
-  it("requires explicit consent for a selected screenshot", () => {
+  it("requires explicit consent for a selected screenshot", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(new Response("{}", { status: 201 }));
     render(<ReportProblemDialog onClose={vi.fn()} />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Falla" } });
     fireEvent.change(screen.getByLabelText(/Captura opcional/), { target: { files: [new File(["png"], "foto.png", { type: "image/png" })] } });
     expect(screen.getByRole("button", { name: "Enviar reporte" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByRole("button", { name: "Enviar reporte" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar reporte" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect((fetchMock.mock.calls[0][1]?.body as FormData).get("consentimiento_captura")).toBe("true");
   });
 });

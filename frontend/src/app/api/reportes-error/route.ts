@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
+import { setAuthCookies } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (screenshot !== null && (!(screenshot instanceof File) || screenshot.size > 2 * 1024 * 1024 || !["image/png", "image/jpeg", "image/webp"].includes(screenshot.type))) {
     return NextResponse.json({ message: "Adjunta una imagen PNG, JPEG o WebP de hasta 2 MB." }, { status: 400 });
   }
+  if (screenshot !== null && form.get("consentimiento_captura") !== "true") {
+    return NextResponse.json({ message: "Debe aceptar el envío de la captura." }, { status: 400 });
+  }
   const requestId = request.headers.get("X-Request-ID");
   const result = await backendFetchAuthed(request, "/reportes-error/", {
     method: "POST", body: form,
@@ -20,7 +24,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
   if (!result.ok) return NextResponse.json({ message: "No se pudo contactar al servicio de reportes." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo enviar el reporte.");
-  return NextResponse.json(await result.response.json(), { status: 201 });
+  const response = NextResponse.json(await result.response.json(), { status: 201, headers: { "Cache-Control": "no-store" } });
+  if (result.refreshedAccessToken) setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  return response;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -28,5 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const result = await backendFetchAuthed(request, `/reportes-error/${search}`, { method: "GET" });
   if (!result.ok) return NextResponse.json({ message: "No se pudo cargar la bandeja." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo cargar la bandeja.");
-  return NextResponse.json(await result.response.json());
+  const response = NextResponse.json(await result.response.json(), { headers: { "Cache-Control": "no-store" } });
+  if (result.refreshedAccessToken) setAuthCookies(response, { accessToken: result.refreshedAccessToken });
+  return response;
 }

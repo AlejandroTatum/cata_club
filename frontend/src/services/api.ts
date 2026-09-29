@@ -247,8 +247,10 @@ export class ApiClientError extends Error {
   public readonly retryAfterSeconds: number | undefined;
   /** The backend's structured validation location, when safely preserved by the BFF. */
   public readonly validationLoc: string[] | undefined;
+  /** Backend correlation ID, when exposed by the failed request. */
+  public readonly requestId: string | undefined;
 
-  constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number, validationLoc?: string[]) {
+  constructor(message: string, status: number, safe = false, code?: string, retryAfterSeconds?: number, validationLoc?: string[], requestId?: string) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
@@ -256,6 +258,7 @@ export class ApiClientError extends Error {
     this.code = code;
     this.retryAfterSeconds = retryAfterSeconds;
     this.validationLoc = validationLoc;
+    this.requestId = requestId;
   }
 }
 
@@ -518,7 +521,7 @@ async function request<T>(
         // ignore parse errors — use default message
       }
       const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("Retry-After"));
-      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc);
+      throw new ApiClientError(message, response.status, safe, code, retryAfterSeconds, validationLoc, response.headers.get("X-Request-ID") ?? undefined);
     }
 
     // 204 No Content never carries a body — calling response.json() on it

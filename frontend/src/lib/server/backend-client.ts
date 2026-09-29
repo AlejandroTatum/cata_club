@@ -175,7 +175,7 @@ export async function passthroughBackendError(response: Response, fallback: stri
     message,
     mensaje_seguro: mensajeSeguro,
     ...(validationLoc ? { validation_loc: validationLoc } : {}),
-  }, { status: response.status });
+  }, { status: response.status, headers: response.headers.get("X-Request-ID") ? { "X-Request-ID": response.headers.get("X-Request-ID")! } : {} });
 }
 
 /**
