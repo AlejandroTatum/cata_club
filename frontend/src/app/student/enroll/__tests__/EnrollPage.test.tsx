@@ -1284,10 +1284,102 @@ describe("EnrollPage — one consistent story about what follows enrolment (#119
     await completeSelfEnrollmentWizard();
 
     expect(
-      screen.getByText(/verifique su correo: le enviamos un enlace de confirmación/i),
+      screen.getByText(
+        /verifique su correo: registramos el envío de un enlace de confirmación/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/subir el comprobante/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/representado que ya esté registrado/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1398 — el resumen y la pantalla de éxito afirmaban «le enviamos» en el
+// momento de confirmar, cuando la entrega real es asincrónica: el correo de
+// verificación entra al outbox commiteado con la inscripción y lo entrega
+// después el beat `despachar-inscripcion-notificaciones` (~2 minutos, #1295;
+// entrega at-least-once con reintentos, #839). Al mostrarse estas pantallas
+// el resultado de la entrega todavía no existe. El copy dice lo que SÍ es
+// hecho en ese momento (la solicitud de envío quedó registrada), nombra la
+// demora posible y la salida si no llega (reenviar desde la pantalla de
+// activación, donde también puede corregir el correo, #1245) — y ninguna
+// superficie anuncia un fallo de envío que no puede conocer.
+// ---------------------------------------------------------------------------
+describe("EnrollPage — la confirmación no afirma la entrega del correo como hecho (#1398)", () => {
+  /** Los textos que ninguna de las dos superficies puede decir con verdad. */
+  function expectNoDeliveryClaim(): void {
+    // «Le enviamos» como hecho consumado es exactamente lo que estas pantallas
+    // no saben todavía. (La apertura de activación «Le enviamos un enlace a»
+    // es otra pantalla, con la entrega ya en curso a sus espaldas.)
+    expect(screen.queryByText(/le enviamos/i)).not.toBeInTheDocument();
+    // Y el fallo de envío tampoco se anuncia: estas pantallas no lo conocen.
+    expect(screen.queryByText(/fall[oó] el env[ií]o/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos enviar/i)).not.toBeInTheDocument();
+  }
+
+  /** Lo que SÍ pueden afirmar: solicitud registrada, demora y salida. */
+  function expectTruthfulEmailCopy(): void {
+    // El resumen registra «un correo para verificarla»; la pantalla de
+    // éxito, «un enlace de confirmación». La verdad común es la misma.
+    expect(screen.getByText(/registramos el env[ií]o de un (correo|enlace)/i)).toBeInTheDocument();
+    expect(screen.getByText(/puede tardar unos minutos en llegar/i)).toBeInTheDocument();
+    // La salida si no llega (#1245): reenviar desde la activación y corregir
+    // el correo ahí mismo.
+    expect(screen.getByText(/reenv[ií]elo desde la pantalla de activaci[oó]n/i)).toBeInTheDocument();
+    expect(screen.getByText(/corregir el correo/i)).toBeInTheDocument();
+  }
+
+  it("el resumen describe la solicitud de verificación, su demora y la salida, no la entrega", async () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillEnrollHealthStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();
+    expectTruthfulEmailCopy();
+    expectNoDeliveryClaim();
+  });
+
+  it("el resumen del representante lleva la misma verdad: quien recibe el correo es el adulto", async () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1723456719" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Sofia" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Torres" } });
+    fillBirthDate(enrollFieldId("fechaNacimientoRepresentante"), "1990-05-20");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), { target: { value: "1798765432" } });
+    fireEvent.change(screen.getByLabelText(/^Teléfono/), { target: { value: "0991112233" } });
+    fireEvent.change(screen.getByLabelText(/^Correo electrónico/), { target: { value: "sofia@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "password8" } });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), { target: { value: "password8" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fireEvent.change(screen.getByLabelText(/tipo de sangre/i), { target: { value: "O_POSITIVO" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(await screen.findByText(/resumen y confirmaci[oó]n/i)).toBeInTheDocument();
+    expectTruthfulEmailCopy();
+    expectNoDeliveryClaim();
+  });
+
+  it("la pantalla de éxito no afirma la entrega y nombra la salida", async () => {
+    vi.mocked(enrollStudent).mockResolvedValueOnce({ enrolled: true });
+    render(<EnrollPage />);
+    await completeSelfEnrollmentWizard();
+
+    expect(
+      screen.getByText(
+        /verifique su correo: registramos el envío de un enlace de confirmación/i,
+      ),
+    ).toBeInTheDocument();
+    expectTruthfulEmailCopy();
+    expectNoDeliveryClaim();
   });
 });
 

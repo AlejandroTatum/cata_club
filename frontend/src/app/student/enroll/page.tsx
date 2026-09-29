@@ -1253,7 +1253,19 @@ function EnrollWizard(): React.ReactElement {
         </DataRowList>
 
         <p className="text-sm text-ink-2">
-          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"} y le enviamos un correo para verificarla.
+          {/* #1398: «le enviamos» afirmaba una entrega que al confirmar todavía
+              no existe — el correo de verificación queda ENCOLADO en el outbox
+              commiteado con la inscripción (`enrollment_servicio.py`) y lo
+              entrega después el beat `despachar-inscripcion-notificaciones`
+              (~2 minutos, #1295), con reintentos at-least-once (#839). Lo que
+              SÍ es hecho en el momento en que este párrafo se lee: la
+              solicitud de envío quedó registrada. La demora posible y la
+              salida si no llega (#1245: reenviar desde la pantalla de
+              activación, donde también puede corregir el correo) van en la
+              misma oración para que «no llegó» tenga adónde ir — y ninguna
+              superficie promete ni anuncia un resultado de entrega que no
+              puede conocer. */}
+          Al confirmar creamos {isChild ? "su cuenta de representante y el perfil del estudiante" : "su cuenta de estudiante"} y registramos el envío de un correo para verificarla: puede tardar unos minutos en llegar. Si no llega, reenvíelo desde la pantalla de activación, donde también puede corregir el correo.
           Luego, acérquese al club o escríbanos por WhatsApp para registrar la inscripción y el primer pago:{" "}
           <b className="font-semibold text-ink">el club lo valida y ahí se activa la membresía</b>.
         </p>
@@ -1444,9 +1456,15 @@ function EnrollWizard(): React.ReactElement {
                       ? "Su cuenta ya está creada y la sesión, iniciada."
                       : "Su cuenta ya está creada. Inicie sesión con su correo y su contraseña.",
                     /* #1196: la historia completa empieza acá -- antes la
-                       confirmación no mencionaba la verificación de correo,
-                       aunque el enlace ya viaja apenas se crea la cuenta. */
-                    "Verifique su correo: le enviamos un enlace de confirmación.",
+                       confirmación no mencionaba la verificación de correo.
+                       #1398: «le enviamos» afirmaba la entrega como hecho
+                       consumado, pero el enlace no «viaja apenas se crea la
+                       cuenta»: la solicitud queda registrada en el outbox y
+                       la entrega la hace después el beat (~2 minutos, #1295,
+                       reintentos at-least-once, #839). Esta línea dice la
+                       solicitud registrada, la demora posible y la salida si
+                       no llega (#1245) — nunca la entrega misma. */
+                    "Verifique su correo: registramos el envío de un enlace de confirmación; puede tardar unos minutos en llegar. Si no llega, reenvíelo desde la pantalla de activación, donde también puede corregir el correo.",
                     /* #348: "Mis pagos" no tiene ningún botón para el primer
                        pago -- registrarlo requiere una membresía que todavía
                        no existe, y crearla es una acción exclusiva del
