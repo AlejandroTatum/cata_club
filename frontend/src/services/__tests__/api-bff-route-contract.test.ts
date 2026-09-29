@@ -44,6 +44,7 @@ import {
   fetchRecentAttendanceSessions,
   fetchMembresiasPorPersona,
   fetchPagosDePersona,
+  fetchCoberturasDePersona,
   desasignarAlumnoDeHorario,
   actualizarHorario,
   crearHorario,
@@ -228,6 +229,10 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     // 05b/06/07 missing from this list — same 404-blind-spot risk as the six
     // above if its route directory ever moved or was renamed.
     ["aplicarBeneficio", () => aplicarBeneficio(3)],
+    // Issue #1369 (slice 3): same 404-blind-spot risk as every case above —
+    // the coberturas history is a NEW route directory; if it moves or is
+    // renamed, this call must fail here, not as a Next.js HTML 404.
+    ["fetchCoberturasDePersona", () => fetchCoberturasDePersona("3")],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
