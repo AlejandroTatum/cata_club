@@ -175,6 +175,7 @@ RUTAS_SOLO_AUTENTICADAS = {
     ("GET", "/geografia/provincias"),                            # (a)
     ("GET", "/geografia/provincias/{provincia_id}"),             # (a)
     ("GET", "/membresias/mias"),                                 # (b)
+    ("GET", "/membresias/coberturas/persona/{persona_id}"),     # (b) - ownership via PoliticaAccesoPersona
     ("GET", "/membresias/pagos/persona/{persona_id}"),           # (b)
     ("GET", "/membresias/pagos/{pago_id}"),                      # (b)
     ("GET", "/membresias/persona/{persona_id}"),                 # (b)
