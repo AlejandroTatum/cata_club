@@ -5,6 +5,21 @@
  * Administrators can select cash or transfer when registering on a member's behalf.
  * Transfer payments require a voucher; cash payments do not.
  *
+ * Issue #1402: only the FIRST inscription payment — the membership's
+ * `estadoBackend` is INACTIVA, i.e. it never activated — goes IN PERSON via
+ * `POST /api/membresias/pagos/presencial` (admin-only; the backend decides
+ * server-side — no client-settable flag): EFECTIVO returns APROBADO
+ * immediately with the regular reviewer/time audit; TRANSFERENCIA returns
+ * PENDIENTE_VALIDACION until its voucher is uploaded by a SEPARATE request
+ * and this form finalizes with the admin-only validar call. A failed upload
+ * leaves the payment pending and offers an actionable "Reintentar
+ * comprobante" retry that never re-registers the payment.
+ *
+ * Any OTHER membership state (renewals and subsequent payments) keeps the
+ * original `registrarPago` flow — plain registration, voucher uploaded
+ * right after, payment lands in the regular validation queue — because the
+ * presencial endpoint rejects everything that is not a first inscription.
+ *
  *
  *
  *
@@ -16,7 +31,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Plus, Upload } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
-import { registrarPago } from "@/services/api";
+import { registrarPago, registrarPagoPresencial, subirVoucherPago, validarPago } from "@/services/api";
 import type { RegistrarPagoInput } from "@/services/api";
 import { calendarIsoDate, clubIsoDate, clubToday } from "@/lib/club-date";
 import { toUserMessage } from "@/lib/error-message";
@@ -60,6 +75,15 @@ export default function RegisterPaymentForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
     const [tipoPago, setTipoPago] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
+  // Issue #1402: the payment already registered backend-side that is still
+  // missing its voucher (TRANSFERENCIA). Non-null switches the form into
+  // retry mode: submit re-attempts upload + approval and NEVER re-registers.
+  const [pagoPendienteId, setPagoPendienteId] = useState<number | null>(null);
+  // True only when the in-person FIRST-inscription flow completed with an
+  // approval (cash in the same request, transfer after voucher + validar).
+  // A renewal completes through the original flow, whose payment usually
+  // lands PENDIENTE_VALIDACION — "y aprobado" would be a lie there.
+  const [aprobadoEnPersona, setAprobadoEnPersona] = useState(false);
 
   // Issue #465: the error message below used to be a plain, unannounced
   // `<p>` — no `id`, no `role="alert"`/`aria-live` on it or on any ancestor
@@ -171,6 +195,8 @@ export default function RegisterPaymentForm({
     setError(null);
     setRegistered(false);
     setVoucherFile(null);
+    setPagoPendienteId(null);
+    setAprobadoEnPersona(false);
     // A calendar date, so `calcEndDate` adds months to a day rather than to an instant.
     const hoy = clubToday();
     setFechaInicio(calendarIsoDate(hoy));
@@ -231,7 +257,57 @@ export default function RegisterPaymentForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [errorAnnounceKey]);
 
+  /** Issue #1402: completes an in-person TRANSFERENCIA whose payment is
+   *  already registered and PENDIENTE_VALIDACION: upload the voucher (the
+   *  separate evidence request), then finalize with the admin-only validar
+   *  call. Only ever reached with a staged file — the backend still refuses
+   *  to approve a transfer without its voucher (issue #459 rule intact). */
+  async function subirYFinalizar(pagoId: number): Promise<void> {
+    if (!voucherFile) {
+      setError("Seleccione el comprobante de la transferencia para reintentar.");
+      setErrorAnnounceKey((key) => key + 1);
+      return;
+    }
+    await subirVoucherPago(pagoId, voucherFile);
+    await validarPago(pagoId, { estadoPago: "APROBADO" });
+    finalizarAprobado();
+  }
+
+  function finalizarAprobado(): void {
+    setRegistered(true);
+    setOpen(false);
+    setVoucherFile(null);
+    setPagoPendienteId(null);
+    setAprobadoEnPersona(true);
+    showSuccess("Pago registrado y aprobado. La membresía quedó activa.");
+    // Issue #1199: refresh the caller's data instead of asking the admin to
+    // reload manually — fired here (and not right after registration) so the
+    // refetch already shows the FINAL state (#1402: approved + active).
+    onPaymentRegistered?.();
+  }
+
   async function handleSubmit(): Promise<void> {
+    // Retry mode (#1402): the payment EXISTS and is pending only for its
+    // voucher. Re-submitting must never register a second payment.
+    if (pagoPendienteId !== null) {
+      setLoading(true);
+      setError(null);
+      try {
+        await subirYFinalizar(pagoPendienteId);
+      } catch {
+        // Still pending — the backend keeps the payment PENDIENTE_VALIDACION
+        // on any upload/approval failure: actionable retry, same flow.
+        setError(
+          "El pago sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
+          + "Verifique el archivo y presione \"Reintentar comprobante\".",
+        );
+        setErrorAnnounceKey((key) => key + 1);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     const montoNum = Number(monto);
     const invalid = validate(montoNum);
     if (invalid) {
@@ -242,6 +318,14 @@ export default function RegisterPaymentForm({
 
     setLoading(true);
     setError(null);
+    // #1402: synchronous witness of "the pago was already registered". The
+    // `pagoPendienteId` STATE cannot be read for this — `setPagoPendienteId`
+    // queued right before the `await` below is still stale inside THIS
+    // closure run when the upload/finalize throws, so the catch would read
+    // `null` and misreport a registered-but-pending payment as "not
+    // registered". A plain local set right after the presencial call resolves
+    // cannot lie.
+    let pagoRegistradoId: number | null = null;
     try {
       const input: RegistrarPagoInput = {
         // The discount, if any, is no longer chosen here (issue #398): the
@@ -259,19 +343,57 @@ export default function RegisterPaymentForm({
         personaId,
         membresiaId: membresia.id,
       };
-      const nuevoPago = await registrarPago(input);
-      if (tipoPago === "TRANSFERENCIA" && voucherFile && nuevoPago?.id) {
-        const { subirVoucherPago } = await import("@/services/api");
-        await subirVoucherPago(nuevoPago.id, voucherFile);
+      if (membresia.estadoBackend !== "INACTIVA") {
+        // Renewal / subsequent payment (#1402): the presencial endpoint only
+        // accepts a FIRST inscription, so every other state keeps the
+        // original flow — register, upload the staged voucher right after,
+        // and let the payment land in the regular validation queue.
+        const nuevoPago = await registrarPago(input);
+        if (tipoPago === "TRANSFERENCIA" && voucherFile && nuevoPago?.id) {
+          await subirVoucherPago(nuevoPago.id, voucherFile);
+        }
+        setRegistered(true);
+        setOpen(false);
+        setVoucherFile(null);
+        showSuccess("Pago registrado correctamente.");
+        // Issue #1199: refresh the caller's data instead of asking the admin
+        // to reload manually — the message above no longer has to say so.
+        onPaymentRegistered?.();
+        return;
       }
-      setRegistered(true);
-      setOpen(false);
-      setVoucherFile(null);
-      showSuccess("Pago registrado correctamente.");
-      // Issue #1199: refresh the caller's data instead of asking the admin
-      // to reload manually — the message below no longer has to say so.
-      onPaymentRegistered?.();
+      const nuevoPago = await registrarPagoPresencial(input);
+      if (nuevoPago?.estadoPago === "APROBADO") {
+        // EFECTIVO en persona (#1402): the backend approved it in the same
+        // request with the regular reviewer/time audit — membership active.
+        finalizarAprobado();
+        return;
+      }
+      // TRANSFERENCIA (#1402): registered PENDIENTE_VALIDACION. Evidence is
+      // a SEPARATE request; only after the voucher upload succeeds does the
+      // admin-only finalize run. Any failure leaves the payment pending with
+      // an actionable retry (never approved without the voucher).
+      setPagoPendienteId(nuevoPago.id);
+      pagoRegistradoId = nuevoPago.id;
+      await subirYFinalizar(nuevoPago.id);
     } catch (err) {
+      // Issue #1402: a failure AFTER the payment was registered (voucher
+      // upload or finalize) must NOT read as "the payment was not
+      // registered": the pago exists and is PENDIENTE_VALIDACION, so the
+      // message points at the actionable retry instead. `pagoPendienteId`
+      // was already set right after `registrarPagoPresencial` resolved.
+      if (pagoRegistradoId !== null) {
+        const pendienteMsg =
+          "El pago quedó registrado y PENDIENTE: no se pudo completar el comprobante "
+          + "o su aprobación. Verifique el archivo y presione \"Reintentar comprobante\".";
+        setError(pendienteMsg);
+        setErrorAnnounceKey((key) => key + 1);
+        showError(pendienteMsg);
+        // The registration DID succeed: the caller's refetch shows the
+        // pending payment in the history even though this form stays open
+        // for the actionable retry.
+        onPaymentRegistered?.();
+        return;
+      }
       // Issue #666: a 422 on THIS payload (`meses`, `tipoPago`, `personaId`,
       // `membresiaId`) can only realistically come from the backend's own
       // defensive ceiling (`PagoCreateDTO.meses`, `gt=0, le=12`) — `validate()`
@@ -313,7 +435,10 @@ export default function RegisterPaymentForm({
     return (
       <p className="flex items-center gap-1 text-xs text-state-ok">
         <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        Pago registrado.
+        {/* #1402: the in-person flow only completes on approval — cash
+            approved in the same request, transfer after voucher + admin-only
+            finalize — while a renewal keeps the plain original outcome. */}
+        {aprobadoEnPersona ? "Pago registrado y aprobado." : "Pago registrado."}
       </p>
     );
   }
@@ -503,7 +628,9 @@ export default function RegisterPaymentForm({
           className="inline-flex h-ctl items-center gap-2 rounded-lg bg-cata-red px-4 text-sm font-semibold text-white transition-colors hover:bg-cata-red/80 disabled:opacity-50"
         >
           {loading ? <Loader2 size={ICON.base} className="animate-spin" /> : <Plus size={ICON.base} />}
-          Registrar pago
+          {/* #1402 retry mode: the payment exists; the button retries the
+              voucher upload + approval, never a second registration. */}
+          {pagoPendienteId !== null ? "Reintentar comprobante" : "Registrar pago"}
         </button>
         <button
           type="button"
