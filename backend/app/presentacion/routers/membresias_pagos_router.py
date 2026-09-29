@@ -17,7 +17,7 @@ from app.servicios_negocio.dtos.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, TipoMembresiaResponseDTO, TarifaPublicaDTO,
     DeudaMembresiaResponseDTO, DeudaMembresiaBulkItemDTO, RegularizacionDeudaDTO, SuspensionReactivacionDTO,
     CorreccionPagoDTO, CorreccionPagoResponseDTO, CorreccionPagoResultadoDTO,
-    CambioPlanMembresiaDTO,
+    CambioPlanMembresiaDTO, InscripcionRepresentadoPagoDTO,
 )
 from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -634,6 +634,23 @@ async def aplicar_beneficio_bonificado(
         roles_solicitante=token_payload.get("roles", []),
     )
     return servicio.cobertura_bonificada_a_response_dto(cobertura)
+
+
+@router.post(
+    "/representado/pago", response_model=PagoResponseDTO, status_code=201,
+)
+@limiter.limit("10/minute")
+async def inscribir_representado_con_pago(
+    request: Request,
+    datos: InscripcionRepresentadoPagoDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorPermisos(["REPRESENTANTE"])),
+):
+    servicio = PagoServicio(db)
+    pago = await run_in_threadpool(
+        servicio.inscribir_representado_con_pago, datos, token_payload.get("persona_id"),
+    )
+    return servicio.pago_a_response_dto(pago)
 
 
 # Registra un pago pendiente. A diferencia de antes, ya NO basta con estar
