@@ -295,3 +295,58 @@ def test_listar_correcciones_por_asistencia_ordena_mas_reciente_primero(db_sessi
     )
     assert [c.id for c in correcciones] == [segunda.id, primera.id]
     assert correcciones[0].corregido_por_nombre == "Leo Pardo"
+
+
+# --- Issue #1373: ENFERMO y COMPETENCIA --------------------------------------
+def test_estado_asistencia_persiste_enfermo_y_competencia(db_session):
+    """Roundtrip de persistencia de los dos estados nuevos: el enum PG
+    `estadoasistencia` los acepta y el modelo los recarga tal cual (la
+    migración `r1373asis` es quien agrega los valores al tipo)."""
+    persona = _crear_persona(db_session, cedula_valida(601), "Eva", "Suárez")
+    horario = _crear_horario(db_session)
+    # Fechas distintas (dos lunes seguidos): el unique
+    # `uq_asistencia_persona_horario_fecha` prohíbe dos filas de la misma
+    # persona en la misma sesión.
+    db_session.add(Asistencia(
+        fecha_entrenamiento=date(2026, 8, 3), estado=EstadoAsistencia.ENFERMO,
+        persona_id=persona.id, horario_id=horario.id,
+    ))
+    db_session.add(Asistencia(
+        fecha_entrenamiento=date(2026, 8, 10), estado=EstadoAsistencia.COMPETENCIA,
+        persona_id=persona.id, horario_id=horario.id,
+    ))
+    db_session.commit()
+    db_session.expire_all()
+
+    estados = {
+        fila.estado
+        for fila in db_session.execute(
+            select(Asistencia).where(Asistencia.persona_id == persona.id)
+        ).scalars()
+    }
+    assert estados == {EstadoAsistencia.ENFERMO, EstadoAsistencia.COMPETENCIA}
+
+
+def test_estado_asistencia_enfermo_competencia_no_cuentan_como_ausentes_en_conteos(db_session):
+    """`listar_ultimas_sesiones` devuelve el conteo por estado tal cual; el
+    plegado justificado/neutral vive en el servicio. Este candado fija que
+    el conteo bruto distingue los seis estados -- si el conteo agrupara, el
+    plegado del servicio sería indetectable."""
+    horario = _crear_horario(db_session)
+    fecha = date(2026, 8, 3)
+    for offset, estado in enumerate([
+        EstadoAsistencia.PRESENTE, EstadoAsistencia.ENFERMO,
+        EstadoAsistencia.COMPETENCIA, EstadoAsistencia.AUSENTE,
+    ]):
+        persona = _crear_persona(db_session, cedula_valida(610 + offset), f"A{offset}", "Test")
+        db_session.add(Asistencia(
+            fecha_entrenamiento=fecha, estado=estado,
+            persona_id=persona.id, horario_id=horario.id,
+        ))
+    db_session.commit()
+
+    sesiones = AsistenciaRepositorio(db_session).listar_ultimas_sesiones(limit=5)
+    sesion = next(s for s in sesiones if s["horario_id"] == horario.id)
+    assert sesion["conteos"][EstadoAsistencia.ENFERMO] == 1
+    assert sesion["conteos"][EstadoAsistencia.COMPETENCIA] == 1
+    assert sesion["conteos"][EstadoAsistencia.AUSENTE] == 1

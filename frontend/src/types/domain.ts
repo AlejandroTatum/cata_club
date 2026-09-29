@@ -315,8 +315,13 @@ export interface FichaMedica {
   observaciones?: string;
 }
 
-/** Attendance state for a single student in a session. */
-export type EstadoAsistencia = "present" | "absent" | "late" | "justified";
+/** Attendance state for a single student in a session.
+ *
+ *  `sick` and `competition` (issue #1373) are justified/neutral states: the
+ *  student did not train, but neither one is an unexcused absence — reports
+ *  and statistics must never count them against the student.
+ */
+export type EstadoAsistencia = "present" | "absent" | "late" | "justified" | "sick" | "competition";
 
 /** An attendance record (Asistencia). */
 export interface Asistencia {

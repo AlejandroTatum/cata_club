@@ -139,7 +139,9 @@ function horarioStartMinutes(horario: string): number {
 }
 
 function emptyCounts(): Record<EstadoAsistencia, number> {
-  return { present: 0, absent: 0, late: 0, justified: 0 };
+  // Issue #1373: the two authorized-absence states start at zero like the
+  // rest — every state is always a key, even before any record arrives.
+  return { present: 0, absent: 0, late: 0, justified: 0, sick: 0, competition: 0 };
 }
 
 /**
@@ -514,8 +516,10 @@ export function buildDayRail(
 // states all four counts and the total every time.
 // ---------------------------------------------------------------------------
 
-/** Reading order for the four attendance states — best news first, as on every other screen. */
-export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+/** Reading order for the six attendance states — best news first, as on every other screen.
+ *  Issue #1373 slots the two authorized-absence states between justified and absent:
+ *  a known reason is never a worse verdict than an unexcused one. */
+export const STATE_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
 
 export interface SessionBarSegment {
   estado: EstadoAsistencia;
@@ -541,6 +545,10 @@ const BAR_STATE_NOUNS: Record<EstadoAsistencia, [singular: string, plural: strin
   present: ["presente", "presentes"],
   late: ["tardanza", "tardanzas"],
   justified: ["justificado", "justificados"],
+  // Issue #1373: inasistencias autorizadas — mismos nombres que usa el resto
+  // de la app (getAttendanceLabel), en singular y plural para el aria-label.
+  sick: ["enfermo", "enfermos"],
+  competition: ["competencia", "competencias"],
   absent: ["ausente", "ausentes"],
 };
 

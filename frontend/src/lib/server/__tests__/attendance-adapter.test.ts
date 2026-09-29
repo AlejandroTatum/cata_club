@@ -38,6 +38,15 @@ describe("ESTADO_ASISTENCIA maps", () => {
       expect(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND[frontendEstado]).toBe(backendEstado);
     }
   });
+
+  // Issue #1373: the two authorized-absence states map explicitly — a typo
+  // here would silently corrupt what gets persisted on correction submit.
+  it("maps the issue #1373 states ENFERMO↔sick and COMPETENCIA↔competition", () => {
+    expect(ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND.ENFERMO).toBe("sick");
+    expect(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND.sick).toBe("ENFERMO");
+    expect(ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND.COMPETENCIA).toBe("competition");
+    expect(ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND.competition).toBe("COMPETENCIA");
+  });
 });
 
 describe("horarioLabel", () => {
@@ -180,14 +189,26 @@ describe("buildRecentSession", () => {
     total: 8,
   };
 
-  it("builds a RecentSession with the four counts keyed by frontend estado", () => {
+  it("builds a RecentSession with the counts keyed by frontend estado", () => {
     expect(buildRecentSession(lista)).toEqual({
       horarioId: 1,
       fecha: "2026-08-03",
       horario: "Lunes 15:00 — 16:30",
-      counts: { present: 5, late: 1, justified: 1, absent: 1 },
+      counts: { present: 5, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 },
       total: 8,
     });
+  });
+
+  // Issue #1373: the backend folds ENFERMO/COMPETENCIA into `justificados`
+  // (the justified/neutral family — never unexcused absences), and this
+  // summary card deliberately stays four counts wide. The 0s here are the
+  // shape contract, not lost data; the per-state breakdown lives in the
+  // record lists.
+  it("reports sick/competition as 0 and lets justified carry the authorized-absence family", () => {
+    const conAutorizadas = buildRecentSession({ ...lista, justificados: 3 });
+    expect(conAutorizadas.counts.sick).toBe(0);
+    expect(conAutorizadas.counts.competition).toBe(0);
+    expect(conAutorizadas.counts.justified).toBe(3);
   });
 
   it("carries no author field — the club's list, not any one trainer's", () => {

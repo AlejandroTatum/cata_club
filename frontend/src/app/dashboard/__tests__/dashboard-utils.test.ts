@@ -24,6 +24,8 @@ function buildStats(overrides: Partial<AttendanceDayStats> = {}): AttendanceDayS
     totalAbsent: 0,
     totalLate: 0,
     totalJustified: 0,
+    totalSick: 0,
+    totalCompetition: 0,
     totalUnknown: 0,
     totalStudents: 0,
     ...overrides,
@@ -35,18 +37,20 @@ function buildStats(overrides: Partial<AttendanceDayStats> = {}): AttendanceDayS
 // ---------------------------------------------------------------------------
 
 describe("buildAttendanceStatusSegments", () => {
-  it("computes rounded percentages against the total record count, in present/late/justified/absent order", () => {
+  it("computes rounded percentages against the total record count, in present/late/justified/sick/competition/absent order", () => {
     const stats = buildStats({
-      totalPresent: 60,
+      totalPresent: 50,
       totalLate: 20,
       totalJustified: 10,
-      totalAbsent: 10,
+      totalSick: 10,
+      totalCompetition: 5,
+      totalAbsent: 5,
       totalStudents: 100,
     });
     const segments = buildAttendanceStatusSegments(stats);
-    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "justified", "absent"]);
-    expect(segments.map((s) => s.percentage)).toEqual([60, 20, 10, 10]);
-    expect(segments.map((s) => s.value)).toEqual([60, 20, 10, 10]);
+    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "justified", "sick", "competition", "absent"]);
+    expect(segments.map((s) => s.percentage)).toEqual([50, 20, 10, 10, 5, 5]);
+    expect(segments.map((s) => s.value)).toEqual([50, 20, 10, 10, 5, 5]);
   });
 
   it("returns 0% for every segment when there are no records at all (never divides by zero)", () => {
@@ -61,10 +65,19 @@ describe("buildAttendanceStatusSegments", () => {
     }
   });
 
-  it("includes a segment even when its count is zero, so the legend always shows all 4 states", () => {
+  it("includes a segment even when its count is zero, so the legend always shows all 6 states", () => {
     const segments = buildAttendanceStatusSegments(buildStats({ totalPresent: 5, totalStudents: 5 }));
-    expect(segments).toHaveLength(4);
+    expect(segments).toHaveLength(6);
     expect(segments.find((s) => s.estado === "absent")?.value).toBe(0);
+  });
+
+  it("never folds sick/competition into the absent segment (issue #1373: authorized absences)", () => {
+    const segments = buildAttendanceStatusSegments(
+      buildStats({ totalSick: 3, totalCompetition: 2, totalAbsent: 1, totalStudents: 6 }),
+    );
+    expect(segments.find((s) => s.estado === "sick")?.value).toBe(3);
+    expect(segments.find((s) => s.estado === "competition")?.value).toBe(2);
+    expect(segments.find((s) => s.estado === "absent")?.value).toBe(1);
   });
 });
 

@@ -2,7 +2,7 @@ import { formatStateCount } from "@/app/trainer/trainer-day-utils";
 import { countByState, type SessionStudent } from "./attendance-utils";
 import type { EstadoAsistencia } from "@/types/domain";
 
-const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
 
 interface AttendanceTotalsSummaryProps {
   students: SessionStudent[];

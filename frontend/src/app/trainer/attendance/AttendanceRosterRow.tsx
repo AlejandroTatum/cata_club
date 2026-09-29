@@ -1,4 +1,4 @@
-import { FileText, Timer, UserCheck, UserX } from "lucide-react";
+import { FileText, Thermometer, Timer, Trophy, UserCheck, UserX } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { Badge } from "@/components/ui";
 import { getAttendanceBadgeTone, getAttendanceBadgeTokens } from "@/app/attendance/attendance-utils";
@@ -11,6 +11,10 @@ const ATTENDANCE_ICONS: Record<EstadoAsistencia, React.ReactNode> = {
   absent: <UserX size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
   late: <Timer size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
   justified: <FileText size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
+  // Issue #1373: inasistencias autorizadas, cada una con su ícono propio
+  // para que el toggle no dependa solo del color del badge.
+  sick: <Thermometer size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
+  competition: <Trophy size={ICON.sm} strokeWidth={2} aria-hidden="true" />,
 };
 
 interface AttendanceRosterRowProps {
@@ -26,10 +30,18 @@ interface AttendanceRosterRowProps {
 }
 
 /**
- * One fiche: 48px, avatar + name + state, and the whole surface is the tap
- * target — plus the four-state radiogroup, the deliberate path. Isolated on
- * its own because it is the single densest piece of the roll call's markup
- * (issue #318/#25's `overflow-y-auto` box only needed `shrink-0` fixed here).
+ * One fiche: avatar + name + state, and the whole surface is the tap target
+ * — plus the six-state radiogroup, the deliberate path. Isolated on its own
+ * because it is the single densest piece of the roll call's markup (issue
+ * #318/#25's `overflow-y-auto` box only needed `shrink-0` fixed here).
+ *
+ * The row's height is CONTENT-DRIVEN at every breakpoint (#1373): no fixed
+ * height may fight the picker. The picker itself wraps 3-wide (3×2 of 44px
+ * targets) below `lg`, and from `lg` up — where the fiche is wide — all six
+ * states sit in ONE horizontal row (`lg:grid-cols-6`, user feedback on the
+ * #1373 preview: the desktop 2×3 block made rows read as too tall).
+ * `overflow-hidden` stays only as the rounded-corner clip for the name
+ * button's hover surface — harmless once no fixed height can fight the grid.
  */
 export default function AttendanceRosterRow({
   student,
@@ -48,7 +60,7 @@ export default function AttendanceRosterRow({
     <li
       data-attendance={student.attendance}
       data-reviewed={reviewed}
-      className={`flex shrink-0 flex-col overflow-hidden rounded-ctl border bg-paper sm:h-12 sm:flex-row sm:items-center ${
+      className={`flex shrink-0 flex-col overflow-hidden rounded-ctl border bg-paper sm:flex-row sm:items-center ${
         reviewed ? "border-line-2" : "border-dashed border-ink-3/50"
       }`}
     >
@@ -85,7 +97,7 @@ export default function AttendanceRosterRow({
       <div
         role="radiogroup"
         aria-labelledby={`${groupLabelId} ${nameId}`}
-        className="grid w-full grid-cols-4 gap-0.5 border-t border-line p-1 sm:h-full sm:w-auto sm:border-l sm:border-t-0 sm:p-0.5"
+        className="grid w-full grid-cols-3 gap-0.5 border-t border-line p-1 sm:h-full sm:w-auto sm:border-l sm:border-t-0 sm:p-0.5 lg:grid-cols-6"
       >
         <span id={groupLabelId} className="sr-only">
           Estado de asistencia de
@@ -112,9 +124,9 @@ export default function AttendanceRosterRow({
               }`}
             >
               {ATTENDANCE_ICONS[state]}
-              {/* hallazgo #24: escondido desde 640px (`sm:sr-only`), visible
-                  desde `lg` (1024px), donde la ficha ya no es una columna
-                  angosta. */}
+              {/* hallazgo #24: escondido debajo de `lg` (1024px), visible
+                  desde `lg`, donde los seis estados comparten una sola fila
+                  ancha y cada control tiene lugar para su etiqueta. */}
               <span className="sr-only lg:not-sr-only">{ATTENDANCE_LABELS[state]}</span>
             </button>
           );

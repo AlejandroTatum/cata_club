@@ -171,7 +171,7 @@ describe("groupRecordsBySession", () => {
     ]);
 
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].counts).toEqual({ present: 2, late: 1, absent: 1, justified: 1 });
+    expect(sessions[0].counts).toEqual({ present: 2, late: 1, absent: 1, justified: 1, sick: 0, competition: 0 });
     expect(sessions[0].total).toBe(5);
   });
 
@@ -461,10 +461,16 @@ describe("formatStateCount", () => {
     expect(formatStateCount("late", 1)).toBe("1 tardanza");
     expect(formatStateCount("justified", 0)).toBe("0 justificados");
     expect(formatStateCount("absent", 2)).toBe("2 ausentes");
+    // Issue #1373: the authorized-absence states get their own nouns, in the
+    // same singular/plural grammar as the original four.
+    expect(formatStateCount("sick", 1)).toBe("1 enfermo");
+    expect(formatStateCount("sick", 3)).toBe("3 enfermos");
+    expect(formatStateCount("competition", 1)).toBe("1 competencia");
+    expect(formatStateCount("competition", 2)).toBe("2 competencias");
   });
 
   it("spells the same nouns the bar's accessible name already used", () => {
-    const counts = { present: 9, late: 1, justified: 0, absent: 2 };
+    const counts = { present: 9, late: 1, justified: 0, absent: 2, sick: 0, competition: 0 };
     const label = buildSessionBarAriaLabel(counts, 12);
     for (const estado of ["present", "late", "justified", "absent"] as const) {
       expect(label).toContain(formatStateCount(estado, counts[estado]));
@@ -479,21 +485,21 @@ describe("formatStateCount", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildSessionBarSegments", () => {
-  it("returns the four states in the fixed reading order, with a share of the total", () => {
+  it("returns the six states in the fixed reading order, with a share of the total", () => {
     const segments = buildSessionBarSegments(
-      { present: 9, late: 1, justified: 1, absent: 1 },
+      { present: 9, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 },
       12,
     );
 
-    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "justified", "absent"]);
-    expect(segments.map((s) => s.count)).toEqual([9, 1, 1, 1]);
+    expect(segments.map((s) => s.estado)).toEqual(["present", "late", "justified", "sick", "competition", "absent"]);
+    expect(segments.map((s) => s.count)).toEqual([9, 1, 1, 0, 0, 1]);
     expect(segments[0].widthPercent).toBeCloseTo(75, 5);
-    expect(segments[1].widthPercent).toBeCloseTo(100 / 12, 5);
+    expect(segments[5].widthPercent).toBeCloseTo(100 / 12, 5);
   });
 
   it("returns zero widths rather than dividing by zero when the session has no records", () => {
     const segments = buildSessionBarSegments(
-      { present: 0, late: 0, justified: 0, absent: 0 },
+      { present: 0, late: 0, justified: 0, absent: 0, sick: 0, competition: 0 },
       0,
     );
 
@@ -502,15 +508,23 @@ describe("buildSessionBarSegments", () => {
 });
 
 describe("buildSessionBarAriaLabel", () => {
-  it("enunciates all four counts and the total, singular/plural agreeing with each count", () => {
-    expect(buildSessionBarAriaLabel({ present: 9, late: 1, justified: 1, absent: 1 }, 12)).toBe(
-      "9 presentes, 1 tardanza, 1 justificado y 1 ausente sobre 12 registros",
+  it("enunciates all six counts and the total, singular/plural agreeing with each count", () => {
+    expect(buildSessionBarAriaLabel({ present: 9, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 }, 12)).toBe(
+      "9 presentes, 1 tardanza, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 12 registros",
+    );
+  });
+
+  // Issue #1373: an authorized absence is never read as an unexcused one —
+  // sick/competition get their own nouns, never folded into "ausentes".
+  it("names sick and competition on their own, never as ausentes", () => {
+    expect(buildSessionBarAriaLabel({ present: 4, late: 0, justified: 0, absent: 0, sick: 2, competition: 1 }, 7)).toBe(
+      "4 presentes, 0 tardanzas, 0 justificados, 2 enfermos, 1 competencia y 0 ausentes sobre 7 registros",
     );
   });
 
   it("still names a state at zero, rather than omitting it", () => {
-    expect(buildSessionBarAriaLabel({ present: 8, late: 1, justified: 0, absent: 1 }, 10)).toBe(
-      "8 presentes, 1 tardanza, 0 justificados y 1 ausente sobre 10 registros",
+    expect(buildSessionBarAriaLabel({ present: 8, late: 1, justified: 0, absent: 1, sick: 0, competition: 0 }, 10)).toBe(
+      "8 presentes, 1 tardanza, 0 justificados, 0 enfermos, 0 competencias y 1 ausente sobre 10 registros",
     );
   });
 });
@@ -568,6 +582,8 @@ describe("buildMonthAttendanceRate", () => {
     totalAbsent: total - present - late,
     totalLate: late,
     totalJustified: 0,
+    totalSick: 0,
+    totalCompetition: 0,
     totalUnknown: 0,
     totalStudents: total,
   });

@@ -30,14 +30,14 @@ const SESSIONS: RecentAttendanceSession[] = [
     horarioId: 1,
     fecha: "2026-07-20",
     horario: "Lunes 15:00 — 16:00",
-    counts: { present: 9, late: 1, justified: 1, absent: 1 },
+    counts: { present: 9, late: 1, justified: 1, absent: 1, sick: 0, competition: 0 },
     total: 12,
   },
   {
     horarioId: 2,
     fecha: "2026-07-19",
     horario: "Domingo 09:00 — 10:00",
-    counts: { present: 8, late: 1, justified: 0, absent: 1 },
+    counts: { present: 8, late: 1, justified: 0, absent: 1, sick: 0, competition: 0 },
     total: 10,
   },
 ];
@@ -55,7 +55,7 @@ describe("RecentSessionsList", () => {
     render(<RecentSessionsList sessions={SESSIONS} />);
 
     const bar = screen.getByRole("img", {
-      name: "9 presentes, 1 tardanza, 1 justificado y 1 ausente sobre 12 registros",
+      name: "9 presentes, 1 tardanza, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 12 registros",
     });
     expect(bar).toBeInTheDocument();
   });
@@ -101,12 +101,12 @@ describe("RecentSessionsList", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "9 presentes, 1 tardanza, 1 justificado y 1 ausente sobre 12 registros",
+        name: "9 presentes, 1 tardanza, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 12 registros",
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("img", {
-        name: "8 presentes, 1 tardanza, 0 justificados y 1 ausente sobre 10 registros",
+        name: "8 presentes, 1 tardanza, 0 justificados, 0 enfermos, 0 competencias y 1 ausente sobre 10 registros",
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("img")).toHaveLength(2);

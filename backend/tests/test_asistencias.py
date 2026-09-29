@@ -1158,3 +1158,104 @@ def test_historial_no_agrega_n_mas_uno_al_exponer_el_nombre(client, db_session, 
     assert len(selects) == 1, (
         f"Se esperaba 1 sola sentencia SELECT (persona ya joinedloaded), se ejecutaron {len(selects)}: {selects}"
     )
+
+
+# --- Issue #1373: ENFERMO y COMPETENCIA --------------------------------------
+# Dos estados nuevos de inasistencia autorizada: el alumno no entrenó, pero
+# hay una razón conocida del lado del club. Persisten y se filtran igual que
+# los cuatro estados originales, y la estadística los trata como familia
+# justificada/neutral -- nunca como ausencia injustificada.
+def test_registrar_enfermo_y_competencia_persisten_y_se_listan(client):
+    """AC persistencia: ambos estados nuevos cruzan todo el stack API y
+    vuelven intactos en el historial del alumno."""
+    horario = _crear_horario_api(client)
+    enfermo = _crear_persona_api(client, cedula_valida(8200), "Eva")
+    competidor = _crear_persona_api(client, cedula_valida(8201), "Ciro")
+    _registrar_lista(client, enfermo["id"], horario["id"], "2026-07-06", "ENFERMO")
+    _registrar_lista(client, competidor["id"], horario["id"], "2026-07-06", "COMPETENCIA")
+
+    historial_enfermo = client.get(f"/api/v1/asistencias/persona/{enfermo['id']}")
+    historial_competidor = client.get(f"/api/v1/asistencias/persona/{competidor['id']}")
+    assert historial_enfermo.status_code == 200
+    assert historial_competidor.status_code == 200
+    assert historial_enfermo.json()["items"][0]["estado"] == "ENFERMO"
+    assert historial_competidor.json()["items"][0]["estado"] == "COMPETENCIA"
+
+
+def test_reporte_filtra_enfermo_y_competencia_por_periodo(client):
+    """AC filtros: el reporte de admin filtra filas ENFERMO/COMPETENCIA con
+    los mismos filtros (horario, rango de fechas) que el resto de estados."""
+    horario = _crear_horario_api(client)
+    alumno = _crear_persona_api(client, cedula_valida(8202), "Eva")
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": "2026-07-06", "estado": "ENFERMO",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+    client.post(
+        "/api/v1/asistencias/",
+        json={
+            "fecha_entrenamiento": "2026-08-03", "estado": "COMPETENCIA",
+            "persona_id": alumno["id"], "horario_id": horario["id"],
+        },
+    )
+
+    julio = client.get(
+        "/api/v1/asistencias/reportes",
+        params={"fecha_inicio": "2026-07-01", "fecha_fin": "2026-07-31"},
+    )
+    assert julio.status_code == 200
+    assert [f["estado"] for f in julio.json()["items"]] == ["ENFERMO"]
+
+
+def test_listar_ultimas_listas_enfermo_y_competencia_son_justificados(client):
+    """AC estadística: ENFERMO y COMPETENCIA cuentan en `justificados` y
+    JAMÁS en `ausentes` -- no penalizan al alumno como ausencia
+    injustificada."""
+    horario = _crear_horario_api(client)
+    estudiantes = [
+        _crear_persona_api(client, cedula_valida(8210 + i), f"Alumno{i}") for i in range(5)
+    ]
+    for persona, estado in zip(
+        estudiantes, ["PRESENTE", "JUSTIFICADO", "ENFERMO", "COMPETENCIA", "AUSENTE"],
+    ):
+        _registrar_lista(client, persona["id"], horario["id"], "2026-08-03", estado)
+
+    resp = client.get("/api/v1/asistencias/ultimas-listas")
+    assert resp.status_code == 200
+    lista = resp.json()[0]
+    assert lista["justificados"] == 3  # JUSTIFICADO + ENFERMO + COMPETENCIA
+    assert lista["ausentes"] == 1      # solo AUSENTE
+    assert lista["total"] == 5
+
+
+def test_admin_corrige_hacia_enfermo_y_competencia_registra_anterior(client, monkeypatch):
+    """AC API: la corrección acepta los dos estados nuevos y la traza deja
+    el `estadoAnterior` real, como con cualquier otro estado."""
+    _congelar_hoy_asistencia(monkeypatch, _HOY_CORRECCION)
+    fecha = str(_HOY_CORRECCION - timedelta(days=5))
+    payload = _preparar_asistencia_para_corregir(client, fecha)
+    asistencia_id = _id_de_la_asistencia(client, payload["persona_id"])
+
+    resp = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "ENFERMO", "motivo": "Diagnóstico médico del día."},
+    )
+    assert resp.status_code == 200, resp.text
+    cuerpo = resp.json()
+    assert cuerpo["asistencia"]["estado"] == "ENFERMO"
+    assert cuerpo["estadoAnterior"] == "PRESENTE"
+
+    segunda = client.patch(
+        f"/api/v1/asistencias/{asistencia_id}/corregir",
+        json={"estado": "COMPETENCIA", "motivo": "Convocada a la selección."},
+    )
+    assert segunda.status_code == 200, segunda.text
+    assert segunda.json()["asistencia"]["estado"] == "COMPETENCIA"
+    assert segunda.json()["estadoAnterior"] == "ENFERMO"

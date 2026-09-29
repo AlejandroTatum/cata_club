@@ -57,8 +57,19 @@ describe("nextAttendanceState", () => {
     expect(nextAttendanceState("late")).toBe("justified");
   });
 
-  it("cycles justified → absent (wraps around)", () => {
-    expect(nextAttendanceState("justified")).toBe("absent");
+  // Issue #1373: the authorized-absence states sit between justified and
+  // absent in the tap cycle — a known reason is never a worse verdict than
+  // an unexcused one.
+  it("cycles justified → sick", () => {
+    expect(nextAttendanceState("justified")).toBe("sick");
+  });
+
+  it("cycles sick → competition", () => {
+    expect(nextAttendanceState("sick")).toBe("competition");
+  });
+
+  it("cycles competition → absent (wraps around)", () => {
+    expect(nextAttendanceState("competition")).toBe("absent");
   });
 
   it("handles unknown state by returning absent", () => {
@@ -76,18 +87,22 @@ describe("arrowAttendanceState", () => {
     expect(arrowAttendanceState("late", "ArrowRight")).toBe("justified");
   });
 
-  it("wraps from the last state back to the first with ArrowRight", () => {
-    expect(arrowAttendanceState("justified", "ArrowRight")).toBe("present");
+  // Issue #1373: the display order gained sick/competition after justified —
+  // the arrow walk follows the row the eye sees, all six states.
+  it("walks into the authorized-absence states and wraps from competition (ArrowRight)", () => {
+    expect(arrowAttendanceState("justified", "ArrowRight")).toBe("sick");
+    expect(arrowAttendanceState("sick", "ArrowRight")).toBe("competition");
+    expect(arrowAttendanceState("competition", "ArrowRight")).toBe("present");
   });
 
   it("moves backward with ArrowLeft, wrapping from the first to the last", () => {
     expect(arrowAttendanceState("absent", "ArrowLeft")).toBe("present");
-    expect(arrowAttendanceState("present", "ArrowLeft")).toBe("justified");
+    expect(arrowAttendanceState("present", "ArrowLeft")).toBe("competition");
   });
 
   it("treats ArrowDown/ArrowUp the same as ArrowRight/ArrowLeft", () => {
     expect(arrowAttendanceState("present", "ArrowDown")).toBe("absent");
-    expect(arrowAttendanceState("present", "ArrowUp")).toBe("justified");
+    expect(arrowAttendanceState("present", "ArrowUp")).toBe("competition");
   });
 });
 
@@ -125,7 +140,7 @@ describe("countByState", () => {
 });
 
 describe("buildAttendanceReceipt", () => {
-  it("returns all four states, including a zero, in a plain count record", () => {
+  it("returns all six states, including a zero, in a plain count record", () => {
     const students: SessionStudent[] = [
       { id: "a", name: "A", attendance: "present" },
       { id: "b", name: "B", attendance: "present" },
@@ -137,6 +152,26 @@ describe("buildAttendanceReceipt", () => {
       absent: 1,
       late: 0,
       justified: 1,
+      sick: 0,
+      competition: 0,
+    });
+  });
+
+  // Issue #1373: the two authorized-absence states get their own receipt rows
+  // — a sick or competing student must never be reported as absent.
+  it("counts sick and competition on their own rows, never as absent", () => {
+    const students: SessionStudent[] = [
+      { id: "a", name: "A", attendance: "sick" },
+      { id: "b", name: "B", attendance: "sick" },
+      { id: "c", name: "C", attendance: "competition" },
+    ];
+    expect(buildAttendanceReceipt(students)).toEqual({
+      present: 0,
+      absent: 0,
+      late: 0,
+      justified: 0,
+      sick: 2,
+      competition: 1,
     });
   });
 
@@ -146,6 +181,8 @@ describe("buildAttendanceReceipt", () => {
       absent: 0,
       late: 0,
       justified: 0,
+      sick: 0,
+      competition: 0,
     });
   });
 
@@ -164,6 +201,8 @@ describe("buildAttendanceReceipt", () => {
       absent: 1,
       late: 0,
       justified: 0,
+      sick: 0,
+      competition: 0,
     });
   });
 });
@@ -524,13 +563,13 @@ describe("tapWizardAttendance", () => {
   it("never returns the sentinel", () => {
     const seen = new Set<string>();
     let student: SessionStudent = { id: "a", name: "A", attendance: "present" };
-    for (let i = 0; i < 8; i += 1) {
+    for (let i = 0; i < 12; i += 1) {
       const next = tapWizardAttendance(student);
       expect(next).not.toBe(UNMARKED);
       seen.add(next);
       student = { ...student, attendance: next, reviewed: true };
     }
-    expect(seen).toEqual(new Set(["present", "late", "justified", "absent"]));
+    expect(seen).toEqual(new Set(["present", "late", "justified", "sick", "competition", "absent"]));
   });
 });
 
@@ -580,6 +619,8 @@ describe("countByState / buildAttendanceReceipt with unmarked students", () => {
       absent: 0,
       late: 0,
       justified: 0,
+      sick: 0,
+      competition: 0,
     });
   });
 });
@@ -597,7 +638,11 @@ describe("cycleWizardAttendance", () => {
     expect(cycleWizardAttendance(UNMARKED)).toBe("present");
     expect(cycleWizardAttendance("present")).toBe("late");
     expect(cycleWizardAttendance("late")).toBe("justified");
-    expect(cycleWizardAttendance("justified")).toBe("absent");
+    // Issue #1373: the tap cycle continues through the authorized-absence
+    // states before wrapping at absent.
+    expect(cycleWizardAttendance("justified")).toBe("sick");
+    expect(cycleWizardAttendance("sick")).toBe("competition");
+    expect(cycleWizardAttendance("competition")).toBe("absent");
   });
 
   it("loops back to present, never back to unmarked", () => {
