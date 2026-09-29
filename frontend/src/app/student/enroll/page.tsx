@@ -52,6 +52,7 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
+  PasswordGuidance,
   Stepper,
   buttonClasses,
 } from "@/components/ui";
@@ -862,6 +863,15 @@ function EnrollWizard(): React.ReactElement {
                 hint: "Al menos 8 caracteres.",
                 autoComplete: "new-password",
               })}
+              {/**
+               * Issue #1395 — the advisory layer, LIVE under the field it
+               * reads: recommendations and a strength reading that move
+               * while the visitor types. Information only — the hard
+               * policy (floor + common list) stays the only gate, so a
+               * password that clears it advances with the meter reading
+               * "Débil".
+               */}
+              <PasswordGuidance password={formData.contrasenia} />
               {renderField("contraseniaConfirmacion", {
                 label: "Confirmar contraseña",
                 value: formData.contraseniaConfirmacion,
@@ -962,6 +972,8 @@ function EnrollWizard(): React.ReactElement {
           hint: "Al menos 8 caracteres.",
           autoComplete: "new-password",
         })}
+        {/** Same advisory layer as the self flow (#1395): informs, never gates. */}
+        <PasswordGuidance password={formData.contraseniaRepresentante} />
 
         {renderField("contraseniaRepresentanteConfirmacion", {
           label: "Confirmar contraseña",

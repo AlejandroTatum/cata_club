@@ -133,4 +133,33 @@ describe("buildPaymentValidationRequest", () => {
     const request = buildPaymentValidationRequest(conVoucher, "Sofia Martinez", membresia, tipo);
     expect(request).not.toHaveProperty("proofFileName");
   });
+
+  // Issue #1400: "is there a proof to show" is answered from
+  // `proofPreviewUrl` alone, so a voucher-less pago — the NORMAL EFECTIVO
+  // case (issue #452) — must map to NO url at all. `proofFileType` keeps
+  // its "image" default (the interface's field is required), but the
+  // absence itself must stay absent: the payments screen gates the type
+  // badge and the preview on the URL, never on the type field.
+  it("keeps a voucher-less pago's proofPreviewUrl absent so no phantom attachment can render", () => {
+    const efectivoSinVoucher: BackendPagoCore = {
+      ...pago,
+      tipoPago: "EFECTIVO",
+      voucherUrl: null,
+      voucherFormato: null,
+    };
+    const request = buildPaymentValidationRequest(efectivoSinVoucher, "Sofia Martinez", membresia, tipo);
+    expect(request.paymentMethod).toBe("Efectivo");
+    expect(request.proofPreviewUrl).toBeUndefined();
+  });
+
+  it("carries an attached voucher through intact, url and format together", () => {
+    const conVoucher: BackendPagoCore = {
+      ...pago,
+      voucherUrl: "https://files.example/voucher.png",
+      voucherFormato: "PNG",
+    };
+    const request = buildPaymentValidationRequest(conVoucher, "Sofia Martinez", membresia, tipo);
+    expect(request.proofPreviewUrl).toBe("https://files.example/voucher.png");
+    expect(request.proofFileType).toBe("image");
+  });
 });

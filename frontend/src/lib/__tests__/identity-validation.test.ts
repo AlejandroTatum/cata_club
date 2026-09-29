@@ -30,6 +30,10 @@ import {
   PASSWORD_MAX_BYTES,
   isCommonPassword,
   passwordRule,
+  PASSWORD_ADVISORY_MIN_LENGTH,
+  PASSWORD_STRENGTH_LABELS,
+  buildPasswordCompositionSignals,
+  scorePasswordStrength,
   PHONE_LOCAL_HINT,
   toPhoneFieldDigits,
   toStoredPhone,
@@ -767,6 +771,100 @@ describe("contraseña", () => {
       expect(passwordRule("😀".repeat(19), "La contraseña")).toContain(
         `${PASSWORD_MAX_BYTES} bytes`,
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Issue #1395 — the advisory layer. Everything below INFORMS; nothing here
+  // is allowed to become a requirement (the enforcing policy is still length
+  // + common list, and `passwordRule` above is untouched by this section).
+  // ---------------------------------------------------------------------------
+
+  describe("buildPasswordCompositionSignals (issue #1395 — advisory only)", () => {
+    it("reports every recommendation pending for an empty password", () => {
+      expect(buildPasswordCompositionSignals("")).toEqual([
+        { label: "Al menos 10 caracteres", met: false },
+        { label: "Mayúsculas y minúsculas", met: false },
+        { label: "Al menos un número", met: false },
+        { label: "Al menos un símbolo (por ejemplo, ! o #)", met: false },
+      ]);
+    });
+
+    it("recommends 10 characters — above the 8 the policy enforces, never replacing it", () => {
+      // Preview feedback (#1395) read the old 12 as too demanding; 10 is the
+      // correction, and the hard floor stays exactly where the policy put it.
+      expect(PASSWORD_ADVISORY_MIN_LENGTH).toBe(10);
+      expect(PASSWORD_MIN_LENGTH).toBe(8);
+      expect(buildPasswordCompositionSignals("nubesverd")[0].met).toBe(false); // 9 chars
+      expect(buildPasswordCompositionSignals("nubesverde")[0].met).toBe(true); // 10 chars
+    });
+
+    it("ticks the case-mix signal only when BOTH cases appear", () => {
+      expect(buildPasswordCompositionSignals("nubesverdes")[1].met).toBe(false);
+      expect(buildPasswordCompositionSignals("NUBESVERDES")[1].met).toBe(false);
+      expect(buildPasswordCompositionSignals("Nubesverdes")[1].met).toBe(true);
+    });
+
+    it("counts tildes and ñ as letters, never as the symbol category", () => {
+      // A Spanish-language product whose own meter read "ñ" as a special
+      // character would be advising people to avoid their own alphabet.
+      expect(buildPasswordCompositionSignals("niñoseguro")[3].met).toBe(false);
+      expect(buildPasswordCompositionSignals("niñoseguro")[1].met).toBe(false);
+      expect(buildPasswordCompositionSignals("Niñoseguro")[1].met).toBe(true);
+      expect(buildPasswordCompositionSignals("niño-seguro")[3].met).toBe(true);
+    });
+
+    it("never turns a recommendation into a requirement: the policy verdict is unchanged", () => {
+      // All-lowercase, 9 characters, not common: every composition signal
+      // pending — and `passwordRule` STILL accepts it, because the advisory
+      // layer must not grow into a gate (#230, #1395).
+      const weak = "nubesverk";
+      expect(buildPasswordCompositionSignals(weak).every((signal) => !signal.met)).toBe(true);
+      expect(passwordRule(weak, "La contraseña")).toBeNull();
+      expect(scorePasswordStrength(weak)).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe("scorePasswordStrength (issue #1395 — informational, never blocking)", () => {
+    it("scores an empty password 0", () => {
+      expect(scorePasswordStrength("")).toBe(0);
+      expect(scorePasswordStrength("   ")).toBe(0);
+    });
+
+    it("never drops below 0 for letters outside every category", () => {
+      // CJK letters are neither upper/lower case, digits nor symbols: zero
+      // categories must not push a short password to -1 (no label exists).
+      expect(scorePasswordStrength("日本")).toBe(0);
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("日本")]).toBe("Muy débil");
+    });
+
+    it("walks the five readings as length and variety grow", () => {
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nub")]).toBe("Muy débil");
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesver")]).toBe("Débil"); // 8 chars, 1 category
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesverdes")]).toBe("Aceptable"); // 11 chars, 1 category
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes1234")]).toBe("Fuerte");
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes-Verdes-2024")]).toBe("Muy fuerte");
+    });
+
+    it("reserves the top reading for real length AND real variety", () => {
+      // 9 characters with all four categories: variety alone must not buy
+      // "Muy fuerte" — the advisory length (10) is part of the deal.
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes-123")]).toBe("Fuerte");
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("Nubes-Verdes-2024")]).toBe("Muy fuerte");
+    });
+
+    it("never reads a common password above Débil, however it is dressed up", () => {
+      // "contrasena1" clears the length floor and mixes cases of variety it
+      // does not have — the cap, not the shape, decides its reading.
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("contrasena1")]).toBe("Débil");
+      expect(isCommonPassword("contrasena1")).toBe(true);
+    });
+
+    it("measures the trimmed value, the same one the policy judges", () => {
+      // "nubesver" padded past the advisory length with spaces must not buy
+      // the advisory point its raw length suggests — the trimmed 8
+      // characters are what get scored.
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesver      ")]).toBe("Débil");
     });
   });
 });

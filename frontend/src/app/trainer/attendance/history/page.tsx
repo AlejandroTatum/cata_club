@@ -238,6 +238,7 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell
         title="Historial de asistencias"
+        back={<BackLink href="/trainer" />}
         /*
          * The same link, with the same label and the same arrow, that `/attendance`
          * — this screen's admin twin, reading the same records — has carried in its
@@ -252,8 +253,6 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           </Link>
         }
       >
-        <BackLink href="/trainer" className="mb-6" />
-
         <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
 
         {/*

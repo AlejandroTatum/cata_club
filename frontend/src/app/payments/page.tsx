@@ -73,6 +73,7 @@ import AppShell from "@/components/shell/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PagoCorreccionSection from "@/app/payments/PagoCorreccionSection";
 import { useModalFocusTrap } from "@/lib/focus-trap";
+import { backHrefForRole } from "@/lib/auth-utils";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ShieldCheck,
@@ -360,9 +361,17 @@ function ProofViewer({
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
           {request.proofPreviewUrl ? PROOF_ATTACHED_LABEL : "Sin comprobante adjunto"}
         </span>
-        <span className="shrink-0 text-2xs tracking-flat text-ink-3">
-          {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
-        </span>
+        {/* Issue #1400: the file-type badge is a property OF an attachment —
+            a cash payment with no voucher (the normal case there) used to
+            read "Sin comprobante adjunto  Imagen": a type label for a file
+            that does not exist. With nothing attached there is no type to
+            name, so the badge renders only when a proof does; a transfer
+            with a voucher, or cash with a receipt, keeps it unchanged. */}
+        {request.proofPreviewUrl && (
+          <span className="shrink-0 text-2xs tracking-flat text-ink-3">
+            {request.proofFileType === "pdf" ? "PDF" : "Imagen"}
+          </span>
+        )}
       </div>
 
       <div className="flex min-h-[280px] items-center justify-center bg-canvas p-4">
@@ -1314,21 +1323,10 @@ export default function PaymentsPage(): React.ReactElement {
     return (
       <div>
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          {/* A view swap, not a route: `selectedId` is local state, so the
-              detail and the queue share one URL. `href` still names a real
-              fallback destination for a screen reader or a "open in new
-              tab" — but the actual "back" is the `onClick` state reset.
-              `preventDefault` stops `next/link` from also pushing a second
-              history entry for the SAME url, which — left unstopped — would
-              make the browser's own Back button need an extra press per
-              queue⇄detail round trip to actually leave the page. */}
-          <BackLink
-            href="/payments"
-            onClick={(e) => {
-              e.preventDefault();
-              setSelectedId(null);
-            }}
-          />
+          {/* The detail's own BackLink moved ABOVE the page title (#1396): it
+              is now the `back` slot the AppShell draws before the header.
+              This row keeps the view-state furniture that belongs inside the
+              detail — the position in the pending queue and the status. */}
           <span className="flex-1" />
           {queue.position > 0 && (
             <>
@@ -1754,7 +1752,36 @@ export default function PaymentsPage(): React.ReactElement {
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <AppShell title="Membresías y Pagos">
+      {/* The one back control for this screen, above its title (#1396).
+          Which control it is follows the view swap:
+
+          · detail — the view-state reset that has always driven the
+            queue⇄detail round trip, `href` kept as the real fallback
+            destination. A view swap, not a route: `selectedId` is local
+            state, the detail and the queue share one URL, and
+            `preventDefault` stops `next/link` from also pushing a second
+            history entry for the SAME url, which — left unstopped — would
+            make the browser's own Back button need an extra press per
+            round trip to actually leave the page.
+          · queue — the signed-in role's named destination (#295: no
+            `router.back()`; the registry names the label), like every other
+            second-level screen. */}
+      <AppShell
+        title="Membresías y Pagos"
+        back={
+          selectedRequest ? (
+            <BackLink
+              href="/payments"
+              onClick={(e) => {
+                e.preventDefault();
+                setSelectedId(null);
+              }}
+            />
+          ) : (
+            <BackLink href={backHrefForRole(session?.user.role)} />
+          )
+        }
+      >
         {selectedRequest ? renderDetail(selectedRequest) : renderQueue()}
 
         <ConfirmDialog

@@ -322,6 +322,86 @@ describe("ResetPasswordPage", () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // Issue #1395 — the advisory layer. The hard checklist above gates submit;
+  // this block only informs, and a policy-compliant password submits no
+  // matter what the meter says.
+  // ---------------------------------------------------------------------------
+
+  describe("advisory composition guidance (#1395)", () => {
+    function advisoryItem(label: string): HTMLElement {
+      const list = screen.getByRole("status", { name: "Recomendaciones para la contraseña" });
+      return within(list).getByText(label).closest("li") as HTMLElement;
+    }
+
+    function meter(): HTMLElement {
+      return screen.getByRole("status", { name: "Fortaleza de la contraseña" });
+    }
+
+    it("renders the advisory checklist and meter next to the enforcing checklist", () => {
+      render(<ResetPasswordPage />);
+
+      expect(screen.getByRole("status", { name: "Requisitos de la contraseña" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("status", { name: "Recomendaciones para la contraseña" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Fortaleza de la contraseña" })).toBeInTheDocument();
+    });
+
+    it("ticks the recommendations while typing, without moving the hard rules", () => {
+      render(<ResetPasswordPage />);
+
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
+        target: { value: "nubesverd" },
+      });
+      expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "false");
+      expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "false");
+
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
+        target: { value: "Nubes-Verdes-2024" },
+      });
+      expect(advisoryItem("Al menos 10 caracteres")).toHaveAttribute("data-met", "true");
+      expect(advisoryItem("Mayúsculas y minúsculas")).toHaveAttribute("data-met", "true");
+      expect(advisoryItem("Al menos un número")).toHaveAttribute("data-met", "true");
+      expect(advisoryItem("Al menos un símbolo (por ejemplo, ! o #)")).toHaveAttribute(
+        "data-met",
+        "true",
+      );
+    });
+
+    it("moves the meter as the content changes", () => {
+      render(<ResetPasswordPage />);
+
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
+        target: { value: "nubesver" },
+      });
+      expect(meter()).toHaveTextContent("Débil");
+
+      fireEvent.change(screen.getByLabelText(/^Nueva contraseña/), {
+        target: { value: "Nubes-Verdes-2024" },
+      });
+      expect(meter()).toHaveTextContent("Muy fuerte");
+    });
+
+    it("never gates submit on strength: a weak-composed password that clears the policy submits", async () => {
+      mockRestablecerContrasenia.mockResolvedValue(undefined);
+      render(<ResetPasswordPage />);
+
+      // 9 all-lowercase characters: every HARD rule met, meter reading "Débil".
+      fillMatchingPasswords("nubesverd");
+      expect(meter()).toHaveTextContent("Débil");
+
+      const submit = screen.getByRole("button", { name: "Guardar contraseña" });
+      expect(submit).toBeEnabled();
+      fireEvent.click(submit);
+
+      await waitFor(() => {
+        expect(mockRestablecerContrasenia).toHaveBeenCalledWith("valid-token", "nubesverd");
+      });
+      expect(mockShowError).not.toHaveBeenCalled();
+    });
+  });
+
   describe("successful reset", () => {
     it("shows the success toast AND keeps the persistent success card", async () => {
       mockRestablecerContrasenia.mockResolvedValue(undefined);

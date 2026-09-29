@@ -670,3 +670,115 @@ export function passwordRule(value: string, subject: string): string | null {
     ? `${subject} es una de las más usadas y fácil de adivinar; elija otra.`
     : null;
 }
+
+// ---------------------------------------------------------------------------
+// Advisory composition guidance and strength — INFORMATION only (issue #1395).
+//
+// Nothing in this section feeds `passwordRule` or any submit gate. #230
+// settled the enforceable policy (the length floor plus the common-password
+// list, ported to the backend by #1017); an advisory signal that quietly
+// grew into a requirement would reject passwords the server accepts — the
+// exact drift #230 closed. A password that clears `passwordRule` submits no
+// matter what the meter says: the meter informs, it never blocks.
+// ---------------------------------------------------------------------------
+
+/**
+ * The length worth RECOMMENDING, above the 8-character floor the backend
+ * enforces. Advisory: 8 characters still pass everything. Tuned down from
+ * the usual public guidance figure of 12 after preview feedback (#1395)
+ * read 12 as too demanding for this audience; 10 keeps the recommendation
+ * a real step above the floor without making the checklist feel
+ * unreachable. It never feeds any submit gate.
+ */
+export const PASSWORD_ADVISORY_MIN_LENGTH = 10;
+
+/** One line of the advisory checklist — `met` ticks it live while typing. */
+export interface PasswordCompositionSignal {
+  label: string;
+  met: boolean;
+}
+
+// Category detection is Unicode-aware so tildes and ñ count as LETTERS, not
+// as the "symbol" category (a Spanish-language product whose own meter
+// penalized "contraseñasegura" for the ñ would be its own joke).
+const HAS_LOWERCASE = /\p{Ll}/u;
+const HAS_UPPERCASE = /\p{Lu}/u;
+const HAS_DIGIT = /\p{Nd}/u;
+/** Anything that is neither letter nor number: punctuation, space, emoji. */
+const HAS_SYMBOL = /[^\p{L}\p{Nd}]/u;
+
+/**
+ * The advisory checklist shown under every password-creation field: what
+ * makes a password MORE resistant than the bare policy minimum. Four
+ * recommendations — recommended length, case mix, a number, a symbol — each
+ * ticking over live. Deliberately EXCLUDES the two hard rules (floor and
+ * common list): those belong to the enforcing checklist, and repeating them
+ * here as "recommendations" would blur the line between what blocks and
+ * what merely advises (the reset screen's hard checklist already shows the
+ * common-list rule live).
+ */
+export function buildPasswordCompositionSignals(password: string): PasswordCompositionSignal[] {
+  const candidate = password.trim();
+  return [
+    {
+      label: `Al menos ${PASSWORD_ADVISORY_MIN_LENGTH} caracteres`,
+      met: candidate.length >= PASSWORD_ADVISORY_MIN_LENGTH,
+    },
+    {
+      label: "Mayúsculas y minúsculas",
+      met: HAS_UPPERCASE.test(candidate) && HAS_LOWERCASE.test(candidate),
+    },
+    {
+      label: "Al menos un número",
+      met: HAS_DIGIT.test(candidate),
+    },
+    {
+      label: "Al menos un símbolo (por ejemplo, ! o #)",
+      met: HAS_SYMBOL.test(candidate),
+    },
+  ];
+}
+
+/** The meter's five readings, indexed by score. Index 0 is also the empty field's reading. */
+export const PASSWORD_STRENGTH_LABELS = [
+  "Muy débil",
+  "Débil",
+  "Aceptable",
+  "Fuerte",
+  "Muy fuerte",
+] as const;
+
+export type PasswordStrengthScore = 0 | 1 | 2 | 3 | 4;
+
+function countPasswordCharacterCategories(password: string): number {
+  let count = 0;
+  if (HAS_LOWERCASE.test(password)) count += 1;
+  if (HAS_UPPERCASE.test(password)) count += 1;
+  if (HAS_DIGIT.test(password)) count += 1;
+  if (HAS_SYMBOL.test(password)) count += 1;
+  return count;
+}
+
+/**
+ * The strength score behind the informational meter: 0 (empty/muy débil) to
+ * 4 (muy fuerte). Two length points (the hard floor, then the advisory
+ * target) plus up to two for character variety — deliberately capped so the
+ * top reading takes real length AND real variety, not one 9-character
+ * stroke of luck. Measured on the TRIMMED value, the same normalization
+ * `passwordRule` uses, so the meter and the policy always argue about the
+ * same string.
+ *
+ * A password on the common list never reads above "Débil" no matter how it
+ * is dressed up: the policy will reject it on submit, and a meter calling
+ * "qwerty123!" strong would be lying while it did.
+ */
+export function scorePasswordStrength(password: string): PasswordStrengthScore {
+  const candidate = password.trim();
+  if (!candidate) return 0;
+  let score = 0;
+  if (candidate.length >= PASSWORD_MIN_LENGTH) score += 1;
+  if (candidate.length >= PASSWORD_ADVISORY_MIN_LENGTH) score += 1;
+  score += Math.max(0, Math.min(countPasswordCharacterCategories(candidate) - 1, 2));
+  if (isCommonPassword(candidate)) score = Math.min(score, 1);
+  return Math.min(score, 4) as PasswordStrengthScore;
+}

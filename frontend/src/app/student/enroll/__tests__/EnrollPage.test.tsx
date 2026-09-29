@@ -578,6 +578,101 @@ describe("EnrollPage — un enrolamiento de menor nunca pide sus credenciales (#
 });
 
 /**
+ * Issue #1395 — the advisory layer on the credential-creation steps. The
+ * checklist and meter inform while the visitor types; the hard policy (the
+ * 8-character floor and the common-password list) stays the only gate, so
+ * a weak-composed but policy-compliant password advances the wizard.
+ */
+describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
+  const CHECKLIST = "Recomendaciones para la contraseña";
+  const METER = "Fortaleza de la contraseña";
+
+  function goToSelfStudentStep(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  function fillChildStudentStep(): void {
+    fireEvent.change(screen.getByLabelText(/^Nombres/), { target: { value: "Lucas" } });
+    fireEvent.change(screen.getByLabelText(/^Apellidos/), { target: { value: "Martinez" } });
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2015-06-15");
+    fireEvent.change(screen.getByLabelText(/cédula de identidad/i), {
+      target: { value: "1798765432" },
+    });
+  }
+
+  it("shows the advisory checklist and meter in the self credentials block", () => {
+    render(<EnrollPage />);
+    goToSelfStudentStep();
+
+    expect(screen.getByRole("status", { name: CHECKLIST })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: METER })).toBeInTheDocument();
+  });
+
+  it("ticks the recommendations while typing, without moving any hard rule", () => {
+    render(<EnrollPage />);
+    goToSelfStudentStep();
+
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), {
+      target: { value: "nubesverd" },
+    });
+    const list = screen.getByRole("status", { name: CHECKLIST });
+    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
+      "data-met",
+      "false",
+    );
+    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
+
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), {
+      target: { value: "Nubes-Verdes-2024" },
+    });
+    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
+      "data-met",
+      "true",
+    );
+    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Muy fuerte");
+  });
+
+  it("shows the same guidance under the representative's own credentials", () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    fillChildStudentStep();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(screen.getByRole("status", { name: CHECKLIST })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: METER })).toBeInTheDocument();
+  });
+
+  it("renders no guidance on the child flow's personal step — no credentials there", () => {
+    render(<EnrollPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+
+    expect(screen.queryByRole("status", { name: CHECKLIST })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: METER })).not.toBeInTheDocument();
+  });
+
+  it("never gates the step on the meter: a policy-compliant but weak password advances", () => {
+    render(<EnrollPage />);
+    goToSelfStudentStep();
+    fillEnrollStudentStep();
+    // Replace the fill with an all-lowercase 9-character password: it
+    // clears the hard policy, so the meter reads "Débil" and Siguiente
+    // must still advance to the health step.
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), {
+      target: { value: "nubesverd" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), {
+      target: { value: "nubesverd" },
+    });
+    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
+  });
+});
+
+/**
  * Issue #860: the emergency phone must differ from the student's own — a
  * contact of emergency that repeats the student's number cannot reach anyone
  * the student cannot already reach themselves.

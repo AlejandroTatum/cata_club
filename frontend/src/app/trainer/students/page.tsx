@@ -221,8 +221,8 @@ export default function TrainerStudentsPage(): React.ReactElement {
       <AppShell
         title="Alumnos del club"
         subtitle="El padrón completo, con la ficha de emergencia de cada chico a un toque."
+        back={<BackLink href="/trainer" />}
       >
-        <BackLink href="/trainer" />
 
         {/*
          * El buscador va en el panel, no suelto sobre el lienzo: es el único

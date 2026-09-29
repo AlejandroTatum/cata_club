@@ -76,4 +76,16 @@ describe("the global 404", () => {
     const back = screen.getByRole("link", { name: /volver al inicio/i });
     expect(back).toHaveAttribute("href", "/");
   });
+
+  // #1396 — placement is a document-order guarantee, not a CSS one: the card
+  // has no shell above it, so the BackLink itself has to PRECEDE the `<h1>`
+  // in the DOM, and tab order / a screen reader's read-out meet "back" before
+  // the page's own name.
+  it("puts the way back above the page title in the document (#1396)", () => {
+    render(<NotFound />);
+
+    const back = screen.getByRole("link", { name: /volver al inicio/i });
+    const title = screen.getByRole("heading", { name: /no encontramos esta página/i, level: 1 });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
