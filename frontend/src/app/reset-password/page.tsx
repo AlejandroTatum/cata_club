@@ -36,7 +36,7 @@ import AuthShell, {
   AUTH_LABEL_CLASSES,
   AUTH_LINK_CLASSES,
 } from "@/components/auth/AuthShell";
-import { Button, buttonClasses } from "@/components/ui";
+import { Button, buttonClasses, PasswordGuidance } from "@/components/ui";
 import { buildPasswordRules } from "./reset-password-utils";
 import { toUserMessage } from "@/lib/error-message";
 
@@ -237,6 +237,14 @@ function ResetPasswordContent(): React.ReactElement {
             </li>
           ))}
         </ul>
+
+        {/**
+         * The advisory layer (issue #1395) — the recommendations and the
+         * strength reading BELOW the enforcing checklist. The hard rules
+         * above gate submit; this block informs only, so a password that
+         * clears every rule submits even with the meter reading "Débil".
+         */}
+        <PasswordGuidance password={password} />
 
         <div>
           <label htmlFor="confirmPassword" className={AUTH_LABEL_CLASSES}>
