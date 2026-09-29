@@ -221,3 +221,23 @@ formas.
 La tercera cola del club, `enrollment_notificacion_outbox`, queda fuera de
 todo esto a propósito: no habla SMTP y ya tiene su propia guarda de
 idempotencia.
+
+## El avatar del buzón no se controla desde el HTML (issue #1375)
+
+Los correos transaccionales llevan layout de marca (`plantillas_correo.py`),
+pero eso es el CUERPO del mensaje. El avatar redondo que muestra el cliente
+junto al remitente no lo elige el mensaje: lo elige el PROVEEDOR DE CORREO,
+y solo por dos caminos -- BIMI con certificado VMC (verificación de marca,
+de costo anual, publicado en el DNS del dominio) o la foto/perfil de la
+cuenta de remitente del propio proveedor. Ningún header, imagen ni logo en
+el HTML del correo puede fijarlo.
+
+Por eso el remitente visible es "Cata Club" con el nombre en texto y el
+escudo dentro del cuerpo: el PNG viaja como adjunto inline (parte
+`image/png` con `Content-ID` dentro del `multipart/related`, referencia
+`cid:` en el HTML, ver `plantillas_correo.py`) embebido en el propio
+mensaje -- no por URL remota, que muchos clientes bloquean. Si el buzón
+todavía no muestra avatar, la marca viaja igual. La decisión de
+comprar/instalar BIMI o configurar el perfil del remitente es de
+configuración de proveedor y DNS; pertenece al repositorio
+`cata_club-docs`, no a este.
