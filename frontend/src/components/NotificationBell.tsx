@@ -29,6 +29,7 @@ const TIPO_LABELS: Record<TipoNotificacion, string> = {
   COBERTURA_BONIFICADA_OTORGADA: "Cobertura bonificada otorgada",
   COBERTURA_BONIFICADA_ADMIN: "Cobertura bonificada (admin)",
   RESUMEN_CUPO_CORREO_ADMIN: "Tope de correos",
+  NUEVO_REPORTE_ERROR: "Nuevo reporte de error",
   RECORDATORIO_SESION: "Recordatorio de sesión",
 };
 
