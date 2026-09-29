@@ -71,8 +71,10 @@ def _crear_descuento_api(client, *, porcentaje=None, monto=None, nombre="Becado"
     return resp.json()
 
 
-def _aplicar(client, membresia_id: int, meses: int = 1):
-    return client.post(RUTA_APLICAR.format(membresia_id=membresia_id), json={"meses": meses})
+def _aplicar(client, membresia_id: int):
+    """Issue #1369: el cuerpo ya no lleva `meses` -- una activación otorga
+    exactamente un mes, decidido por el backend."""
+    return client.post(RUTA_APLICAR.format(membresia_id=membresia_id), json={})
 
 
 def _autenticar_como(persona_id, roles):
@@ -163,12 +165,12 @@ def test_beneficio_100_porcentual_crea_cobertura_activa_membresia_y_no_crea_pago
     persona, membresia, descuento = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    resp = _aplicar(client, membresia["id"], meses=2)
+    resp = _aplicar(client, membresia["id"])
     assert resp.status_code == 201, resp.text
     cuerpo = resp.json()
     assert cuerpo["membresiaId"] == membresia["id"]
     assert cuerpo["personaId"] == persona["id"]
-    assert cuerpo["mesesComprados"] == 2
+    assert cuerpo["mesesComprados"] == 1
     assert cuerpo["tarifaMensualAplicada"] == "35.00"
     assert cuerpo["asignacionDescuento"]["descuento"]["id"] == descuento["id"]
     assert cuerpo["otorgadaPorPersonaId"] == persona["id"]
@@ -183,11 +185,13 @@ def test_beneficio_100_porcentual_crea_cobertura_activa_membresia_y_no_crea_pago
 
 
 def test_beneficio_100_monto_fijo_igual_a_la_base_tambien_funciona(client, db_session):
-    # tarifa 35.00 * 1 mes = base 35.00: el monto fijo debe ser EXACTAMENTE eso.
+    # tarifa 35.00 * 1 mes = base 35.00: el monto fijo debe ser EXACTAMENTE eso
+    # (issue #1369: la base es SIEMPRE un mes, así que el monto fijo que
+    # alcanza es exactamente la tarifa mensual).
     persona, membresia, _ = _escenario_con_beneficio_total(client, monto=Decimal("35.00"))
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    resp = _aplicar(client, membresia["id"], meses=1)
+    resp = _aplicar(client, membresia["id"])
     assert resp.status_code == 201, resp.text
     assert db_session.query(CoberturaBonificada).count() == 1
 
@@ -196,7 +200,7 @@ def test_beneficio_parcial_es_rechazado_con_mensaje_claro(client):
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("50.00"))
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    resp = _aplicar(client, membresia["id"], meses=1)
+    resp = _aplicar(client, membresia["id"])
     assert resp.status_code == 400, resp.text
     assert "100%" in resp.json()["detail"]
     assert "pago normal" in resp.json()["detail"].lower()
@@ -207,9 +211,37 @@ def test_beneficio_monto_fijo_que_no_iguala_la_base_es_rechazado(client):
     persona, membresia, _ = _escenario_con_beneficio_total(client, monto=Decimal("20.00"))
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    resp = _aplicar(client, membresia["id"], meses=1)
+    resp = _aplicar(client, membresia["id"])
     assert resp.status_code == 400, resp.text
     assert "100%" in resp.json()["detail"]
+
+
+def test_una_activacion_otorga_exactamente_un_mes_y_la_siguiente_cubre_el_mes_posterior(client):
+    """Issue #1369: una activación otorga EXACTAMENTE un mes, sin importar lo
+    que el cliente mande -- el cuerpo ya no decide nada (un `meses: 3` que se
+    cuela se ignora, nunca se honra). Cubrir el mes siguiente exige una
+    SEGUNDA activación, y esa arranca recién donde terminó la primera:
+    `_hay_cobertura_en_rango` queda intacto, ningún mes ya cubierto se pisa."""
+    persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
+    _autenticar_como(persona["id"], ["ALUMNO"])
+
+    intento = client.post(
+        RUTA_APLICAR.format(membresia_id=membresia["id"]), json={"meses": 3},
+    )
+    assert intento.status_code == 201, intento.text
+    primera = intento.json()
+    assert primera["mesesComprados"] == 1
+    assert primera["fechaFin"] == mps._sumar_meses(
+        date.fromisoformat(primera["fechaInicio"]), 1,
+    ).isoformat()
+
+    segunda_resp = client.post(RUTA_APLICAR.format(membresia_id=membresia["id"]), json={})
+    assert segunda_resp.status_code == 201, segunda_resp.text
+    segunda = segunda_resp.json()
+    # Solo DESPUÉS del vencimiento de la primera hay cobertura nueva: el mes
+    # corrido ya estaba cubierto y la segunda activación no lo extiende.
+    assert segunda["fechaInicio"] == primera["fechaFin"]
+    assert segunda["mesesComprados"] == 1
 
 
 # --- 3. Estructuralmente invisible para PDF y reconciliación ------------------
@@ -223,7 +255,7 @@ def test_beneficio_100_no_dispara_generacion_de_pdf(client, monkeypatch):
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    resp = _aplicar(client, membresia["id"], meses=1)
+    resp = _aplicar(client, membresia["id"])
     assert resp.status_code == 201, resp.text
     assert llamadas == []
 
@@ -238,8 +270,8 @@ def test_segunda_aplicacion_ancla_sobre_la_cobertura_bonificada_previa(client):
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
     _autenticar_como(persona["id"], ["ALUMNO"])
 
-    r1 = _aplicar(client, membresia["id"], meses=1)
-    r2 = _aplicar(client, membresia["id"], meses=1)
+    r1 = _aplicar(client, membresia["id"])
+    r2 = _aplicar(client, membresia["id"])
     assert r1.status_code == 201, r1.text
     assert r2.status_code == 201, r2.text
     primera, segunda = r1.json(), r2.json()
@@ -273,7 +305,7 @@ def test_aplicacion_ancla_sobre_el_ultimo_pago_aprobado(client, db_session):
     asignar_beneficio_api(client, persona["id"], descuento["id"])
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    cobertura = _aplicar(client, membresia["id"], meses=1).json()
+    cobertura = _aplicar(client, membresia["id"]).json()
     assert cobertura["fechaInicio"] == aprobado["fechaFin"]
     assert db_session.query(Pago).count() == 1  # el único Pago sigue siendo el normal
 
@@ -366,7 +398,7 @@ def test_reintento_con_pre_check_ciego_no_crea_dos_coberturas_solapadas(motor_te
         servicio = PagoServicio(sesion_servicio)
         with pytest.raises(OperacionInvalida, match="cobertura"):
             servicio.aplicar_beneficio_bonificado(
-                membresia_id, CoberturaBonificadaCreateDTO(meses=1),
+                membresia_id, CoberturaBonificadaCreateDTO(),
                 persona_id_solicitante=beneficiario_id, roles_solicitante=["ALUMNO"],
             )
     finally:
@@ -435,7 +467,7 @@ def test_dos_aplicaciones_concurrentes_se_serializan_sin_perder_ni_solapar_cober
         try:
             barrera.wait()
             resultados[indice] = PagoServicio(sesion).aplicar_beneficio_bonificado(
-                membresia_id, CoberturaBonificadaCreateDTO(meses=1),
+                membresia_id, CoberturaBonificadaCreateDTO(),
                 persona_id_solicitante=beneficiario_id, roles_solicitante=["ALUMNO"],
             )
         except BaseException as error:  # noqa: BLE001 -- el test inspecciona el fallo
@@ -534,7 +566,7 @@ def test_aplicar_beneficio_concurrente_con_suspender_no_deja_estado_inconsistent
         try:
             barrera.wait()
             resultados[0] = PagoServicio(sesion).aplicar_beneficio_bonificado(
-                membresia_id, CoberturaBonificadaCreateDTO(meses=1),
+                membresia_id, CoberturaBonificadaCreateDTO(),
                 persona_id_solicitante=beneficiario_id, roles_solicitante=["ALUMNO"],
             )
         except BaseException as error:  # noqa: BLE001 -- el test inspecciona el fallo
@@ -703,7 +735,7 @@ def test_aplicar_beneficio_concurrente_con_corregir_pago_no_pierde_ni_solapa_cob
         try:
             barrera.wait()
             resultados[1] = PagoServicio(sesion).aplicar_beneficio_bonificado(
-                membresia_id, CoberturaBonificadaCreateDTO(meses=1),
+                membresia_id, CoberturaBonificadaCreateDTO(),
                 persona_id_solicitante=socio_id, roles_solicitante=["ALUMNO"],
             )
         except BaseException as error:  # noqa: BLE001 -- el test inspecciona el fallo
@@ -865,7 +897,7 @@ def test_pago_normal_ancla_despues_de_cobertura_bonificada_existente(client, db_
     DENTRO del período ya otorgado."""
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
     _autenticar_como(persona["id"], ["ALUMNO"])
-    cobertura = _aplicar(client, membresia["id"], meses=3).json()
+    cobertura = _aplicar(client, membresia["id"]).json()
 
     resp = registrar_pago_api(client, persona["id"], membresia["id"], tipo_pago="TRANSFERENCIA")
     assert resp.status_code == 201, resp.text
@@ -895,7 +927,7 @@ def test_regularizar_deuda_no_puede_backdatear_sobre_cobertura_bonificada(client
     explícitamente, no solo "anclar mejor"."""
     persona, membresia, _ = _escenario_con_beneficio_total(client, porcentaje=Decimal("100.00"))
     _autenticar_como(persona["id"], ["ALUMNO"])
-    cobertura = _aplicar(client, membresia["id"], meses=1).json()
+    cobertura = _aplicar(client, membresia["id"]).json()
 
     _autenticar_como_admin()
     resp = client.post(
@@ -941,7 +973,7 @@ def test_aplicar_beneficio_rechaza_solapar_pago_aprobado_aunque_el_ancla_falle(
     monkeypatch.setattr(mps.PagoServicio, "_fecha_fin_maxima_combinada", lambda self, mid: None)
 
     _autenticar_como(persona["id"], ["ALUMNO"])
-    resp = _aplicar(client, membresia["id"], meses=1)
+    resp = _aplicar(client, membresia["id"])
     assert resp.status_code == 400, resp.text
     assert db_session.query(CoberturaBonificada).count() == 0
 

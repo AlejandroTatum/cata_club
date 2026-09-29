@@ -185,6 +185,12 @@ MENSAJE_MEMBRESIA_YA_GRATUITA = (
     "Esta membresía ya tiene cobertura gratuita por regla familiar; "
     "aplicar un beneficio bonificado no corresponde."
 )
+# Issue #1369: una activación del beneficio bonificado otorga EXACTAMENTE un
+# mes -- nunca una cantidad elegida por el cliente. Cubrir el mes siguiente
+# exige activar de nuevo (la segunda activación ancla donde terminó la
+# anterior, sin pisarla: `_hay_cobertura_en_rango`). Un descuento de monto
+# FIJO califica como "100%" solo si iguala exactamente la tarifa de ESE mes.
+MESES_POR_ACTIVACION_BENEFICIO = 1
 
 logger = logging.getLogger("cataclub.servicios.pagos")
 
@@ -1742,10 +1748,11 @@ class PagoServicio:
              excluyentes por construcción, mismo gate que `registrar_pago`.
           2. El beneficio debe cubrir el 100% EXACTO del monto base de ESTE
              período (`_congelar_beneficio_activo`, misma matemática que
-             `registrar_pago`): un descuento porcentual del 100% siempre
-             alcanza, pero uno de monto FIJO solo si ese monto iguala
-             exactamente `tarifa * meses` -- "100%" es una propiedad del PAR
-             (asignación, meses), no de la asignación sola. Sin beneficio
+             `registrar_pago`). Issue #1369: el período es SIEMPRE un mes
+             (`MESES_POR_ACTIVACION_BENEFICIO`) -- el cliente ya no lo elige,
+             así que la base es `tarifa * 1`: un descuento porcentual del
+             100% siempre alcanza, y uno de monto FIJO solo si ese monto
+             iguala exactamente la tarifa mensual. Sin beneficio
              vigente, o un beneficio que cubre solo una parte, se rechaza:
              ese caso sigue el camino normal de `registrar_pago`, con un
              cobro real (posiblemente parcial).
@@ -1827,7 +1834,10 @@ class PagoServicio:
         self._exigir_membresia_financieramente_operativa(membresia)
 
         precio_mensual = membresia.monto_aplicado
-        meses = datos.meses
+        # Issue #1369: el cuerpo (`CoberturaBonificadaCreateDTO`) ya no lleva
+        # `meses` -- una activación otorga exactamente un mes, sin importar
+        # lo que el cliente mande.
+        meses = MESES_POR_ACTIVACION_BENEFICIO
         monto_base = precio_mensual * meses
 
         descuento_congelado, monto_final = self._congelar_beneficio_activo(
@@ -1881,9 +1891,9 @@ class PagoServicio:
             persona_id=membresia.persona_id,
             entidad_relacionada_id=cobertura.id,
             tipo=TipoNotificacion.COBERTURA_BONIFICADA_OTORGADA,
+            # Issue #1369: la activación otorga siempre exactamente un mes.
             mensaje=(
-                f"Se le otorgó cobertura bonificada de {meses} "
-                f"{'mes' if meses == 1 else 'meses'} para su membresía."
+                "Se le otorgó cobertura bonificada de 1 mes para su membresía."
             ),
             id_para_log=f"cobertura bonificada {cobertura.id}",
         )

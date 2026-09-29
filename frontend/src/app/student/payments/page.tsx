@@ -1216,17 +1216,18 @@ function ApplyBenefitForm({
   studentName: string | null;
   onRegistered: () => void;
 }): React.ReactElement {
-  const [months, setMonths] = useState<number>(MESES_MINIMO);
   const [fechaInicio, setFechaInicio] = useState<string>("");
   const { showSuccess } = useToast();
 
+  // Issue #1369: no month selector — one activation grants EXACTLY one
+  // month, decided by the backend. The preview and the confirmation both
+  // derive the period from that fixed length.
   const fechaFin = useMemo(
-    () => (fechaInicio ? addMonthsIso(fechaInicio, months) : ""),
-    [fechaInicio, months],
+    () => (fechaInicio ? addMonthsIso(fechaInicio, 1) : ""),
+    [fechaInicio],
   );
 
   const seedForm = useCallback((): void => {
-    setMonths(MESES_MINIMO);
     const today = clubToday();
     const paidThrough = coverageEnd ? fromIsoDate(coverageEnd) : null;
     setFechaInicio(
@@ -1252,7 +1253,7 @@ function ApplyBenefitForm({
 
     let cobertura: CoberturaBonificada;
     try {
-      cobertura = await aplicarBeneficio(membership.id, months);
+      cobertura = await aplicarBeneficio(membership.id);
     } catch (err) {
       action.setError(toUserMessage(err, "No se pudo aplicar el beneficio."));
       action.setConfirming(false);
@@ -1304,15 +1305,13 @@ function ApplyBenefitForm({
         </p>
       )}
 
-      <MonthCountField value={months} onChange={setMonths} disabled={action.loading} />
-
       <div className="rounded-ctl bg-sunken px-3.5 py-3">
         <p className="text-2xs font-bold uppercase text-ink-3-strong">Período que cubre</p>
         <p className="mt-1 text-sm font-bold tabular-nums text-ink">
           {fechaInicio && fechaFin ? formatDateRange(fechaInicio, fechaFin) : "—"}
         </p>
         <p className="mt-0.5 text-xs text-ink-3-strong">
-          {months === 1 ? "1 mes" : `${months} meses`}, sin costo — el beneficio cubre el 100%.
+          1 mes, sin costo — el beneficio cubre el 100%.
         </p>
       </div>
 

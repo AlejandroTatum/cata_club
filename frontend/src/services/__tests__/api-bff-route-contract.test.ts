@@ -227,7 +227,7 @@ describe("API client URLs resolve to a real BFF route handler", () => {
     // Issue #400 (entrega 06): aplicarBeneficio was the one new function of
     // 05b/06/07 missing from this list — same 404-blind-spot risk as the six
     // above if its route directory ever moved or was renamed.
-    ["aplicarBeneficio", () => aplicarBeneficio(3, 1)],
+    ["aplicarBeneficio", () => aplicarBeneficio(3)],
   ];
 
   it.each(CASES)("%s targets an existing route handler", async (_name, call) => {
