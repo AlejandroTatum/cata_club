@@ -27,10 +27,17 @@ export const ATTENDANCE_STATUS_CHART_COLORS: Record<EstadoAsistencia, string> = 
   late: "#eda100",
   justified: "#2a78d6",
   absent: "#e34948",
+  // Issue #1373: sick (violet) and competition (teal) join the donut. The
+  // four original colors were validated with the dataviz skill's palette
+  // validator (adjacent-pair CVD checks); the two additions have NOT been
+  // through that validator — flagged for design review rather than silently
+  // inheriting the old validation.
+  sick: "#b04fc9",
+  competition: "#0e8f92",
 };
 
 /** Fixed render order — also the validated adjacent-pair order (do not reorder without re-running the validator). */
-const ATTENDANCE_STATUS_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+const ATTENDANCE_STATUS_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
 
 export interface AttendanceStatusSegment {
   estado: EstadoAsistencia;
@@ -43,7 +50,7 @@ export interface AttendanceStatusSegment {
 
 /**
  * One segment per known attendance state, in `ATTENDANCE_STATUS_ORDER`. Always
- * returns all 4 states (even at 0 count) so the legend shows the full picture.
+ * returns all 6 states (even at 0 count) so the legend shows the full picture.
  * Percentage is 0 for every segment when there are no records — never NaN.
  */
 export function buildAttendanceStatusSegments(stats: AttendanceDayStats): AttendanceStatusSegment[] {
@@ -51,6 +58,10 @@ export function buildAttendanceStatusSegments(stats: AttendanceDayStats): Attend
     present: stats.totalPresent,
     late: stats.totalLate,
     justified: stats.totalJustified,
+    // Issue #1373: sick/competition carry their own stats counts — they are
+    // never folded into absent (justified/neutral family, never unexcused).
+    sick: stats.totalSick,
+    competition: stats.totalCompetition,
     absent: stats.totalAbsent,
   };
 

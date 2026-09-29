@@ -196,3 +196,21 @@ def test_reporte_asistencia_pagina_sin_solape_con_orden_estable(client, db_sessi
     _paginas_sin_solape_y_completas(
         client, "/api/v1/asistencias/reportes?", esperados, tamano_pagina=2,
     )
+
+
+# --- Issue #1373: ENFERMO y COMPETENCIA --------------------------------------
+def test_historial_persona_pagina_incluye_enfermo_y_competencia(client, db_session):
+    """Los dos estados nuevos fluyen por el mismo envelope paginado que el
+    resto: ni el filtrado ni el `total` los pierde."""
+    persona = _crear_persona(db_session, "Eva", "Suárez", cedula_valida(490))
+    horario = _crear_horario(db_session)
+    _crear_asistencia(db_session, persona, horario, date(2026, 7, 6), EstadoAsistencia.ENFERMO)
+    _crear_asistencia(db_session, persona, horario, date(2026, 7, 13), EstadoAsistencia.COMPETENCIA)
+    db_session.commit()
+
+    resp = client.get(f"/api/v1/asistencias/persona/{persona.id}?skip=0&limit=10")
+
+    assert resp.status_code == 200
+    cuerpo = resp.json()
+    assert cuerpo["total"] == 2
+    assert {item["estado"] for item in cuerpo["items"]} == {"ENFERMO", "COMPETENCIA"}

@@ -123,14 +123,14 @@ const RECENT_SESSIONS: RecentAttendanceSession[] = [
     horarioId: 2,
     fecha: "2026-07-20",
     horario: "Lunes 16:00 — 17:00",
-    counts: { present: 6, late: 0, justified: 1, absent: 1 },
+    counts: { present: 6, late: 0, justified: 1, absent: 1, sick: 0, competition: 0 },
     total: 8,
   },
   {
     horarioId: 3,
     fecha: "2026-07-19",
     horario: "Domingo 09:00 — 10:00",
-    counts: { present: 4, late: 1, justified: 0, absent: 0 },
+    counts: { present: 4, late: 1, justified: 0, absent: 0, sick: 0, competition: 0 },
     total: 5,
   },
 ];
@@ -510,7 +510,7 @@ describe("TrainerPage — Mi día", () => {
     expect(section.getByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
     expect(
       section.getByRole("img", {
-        name: "6 presentes, 0 tardanzas, 1 justificado y 1 ausente sobre 8 registros",
+        name: "6 presentes, 0 tardanzas, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 8 registros",
       }),
     ).toBeInTheDocument();
   });

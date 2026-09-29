@@ -23,7 +23,10 @@ import type { DiaSemana, EstadoAsistencia } from "@/types/domain";
 // ---------------------------------------------------------------------------
 
 export type BackendDiaSemana = "LUNES" | "MARTES" | "MIERCOLES" | "JUEVES" | "VIERNES" | "SABADO" | "DOMINGO";
-export type BackendEstadoAsistencia = "PRESENTE" | "AUSENTE" | "ATRASADO" | "JUSTIFICADO";
+/** Mirror of the backend `EstadoAsistencia` enum — kept in lockstep by the
+ *  enum-parity test. `ENFERMO`/`COMPETENCIA` (issue #1373) are the two
+ *  authorized-absence states added on top of the original four. */
+export type BackendEstadoAsistencia = "PRESENTE" | "AUSENTE" | "ATRASADO" | "JUSTIFICADO" | "ENFERMO" | "COMPETENCIA";
 
 export interface BackendHorario {
   id: number;
@@ -90,6 +93,8 @@ export const ESTADO_ASISTENCIA_BACKEND_TO_FRONTEND: Record<BackendEstadoAsistenc
   AUSENTE: "absent",
   ATRASADO: "late",
   JUSTIFICADO: "justified",
+  ENFERMO: "sick",
+  COMPETENCIA: "competition",
 };
 
 export const ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND: Record<EstadoAsistencia, BackendEstadoAsistencia> = {
@@ -97,6 +102,8 @@ export const ESTADO_ASISTENCIA_FRONTEND_TO_BACKEND: Record<EstadoAsistencia, Bac
   absent: "AUSENTE",
   late: "ATRASADO",
   justified: "JUSTIFICADO",
+  sick: "ENFERMO",
+  competition: "COMPETENCIA",
 };
 
 // ---------------------------------------------------------------------------
@@ -169,7 +176,14 @@ export function buildAttendanceRecord(
 /** `GET /asistencias/ultimas-listas` DTO — a session (horario + fecha) with
  *  at least one Asistencia, and its four counts. This summary card carries
  *  no author (it's counts-only): `Asistencia` now records who took the list
- *  (#263), but that author is surfaced in the history, not here. */
+ *  (#263), but that author is surfaced in the history, not here.
+ *
+ *  Issue #1373: the backend folds `ENFERMO` and `COMPETENCIA` into
+ *  `justificados` (they are the justified/neutral family, never unexcused
+ *  absences), so this summary shape stays four counts wide on purpose —
+ *  the per-state breakdown lives in the record lists, not in the summary
+ *  card. `buildRecentSession` therefore reports `sick`/`competition` as 0
+ *  here; that is the shape contract, not lost data. */
 export interface BackendUltimaLista {
   horarioId: number;
   fechaEntrenamiento: string;
@@ -204,8 +218,13 @@ export function buildRecentSession(lista: BackendUltimaLista): RecentSession {
     counts: {
       present: lista.presentes,
       late: lista.tardanzas,
+      // Includes ENFERMO/COMPETENCIA records — see BackendUltimaLista's doc
+      // comment: the backend folds the justified/neutral family into this
+      // one count, and the summary card deliberately stays four counts wide.
       justified: lista.justificados,
       absent: lista.ausentes,
+      sick: 0,
+      competition: 0,
     },
     total: lista.total,
   };

@@ -101,6 +101,10 @@ export const ATTENDANCE_LABELS: Record<EstadoAsistencia, string> = {
   absent: "Ausente",
   late: "Tardanza",
   justified: "Justificado",
+  // Issue #1373: mismos labels que la vista admin usa para los dos estados
+  // nuevos, para que ninguna pantalla invente un segundo nombre.
+  sick: "Enfermo",
+  competition: "Competencia",
 };
 
 // Badge/status color tokens for each attendance state come from the shared
@@ -115,6 +119,11 @@ export const ATTENDANCE_STATES: EstadoAsistencia[] = [
   "absent",
   "late",
   "justified",
+  // Issue #1373: inasistencias autorizadas. Van al final del orden visual:
+  // el caso común (presente) queda primero y los dos estados nuevos no
+  // empujan a los cuatro de siempre fuera de su lugar.
+  "sick",
+  "competition",
 ];
 
 // ---------------------------------------------------------------------------
@@ -123,14 +132,16 @@ export const ATTENDANCE_STATES: EstadoAsistencia[] = [
 
 /**
  * Cycle to the next attendance state in a defined order:
- * absent → present → late → justified → absent → ...
+ * absent → present → late → justified → sick → competition → absent → ...
  *
- * This provides a predictable toggle sequence for the UI.
+ * This provides a predictable toggle sequence for the UI. The two issue
+ * #1373 states sit between justified and absent: they are authorized
+ * absences (justified family), never a worse verdict than absent.
  */
 export function nextAttendanceState(
   current: EstadoAsistencia,
 ): EstadoAsistencia {
-  const order: EstadoAsistencia[] = ["absent", "present", "late", "justified"];
+  const order: EstadoAsistencia[] = ["absent", "present", "late", "justified", "sick", "competition"];
   const idx = order.indexOf(current);
   if (idx === -1 || idx === order.length - 1) return order[0];
   return order[idx + 1];
@@ -166,7 +177,7 @@ export function arrowAttendanceState(
  * tap should settle the common case, not the rarest one.
  *
  * `UNMARKED` is an ENTRY point only — the cycle never returns to it. Tapping
- * is an accelerator over the four explicit controls, and an accelerator that
+ * is an accelerator over the six explicit controls, and an accelerator that
  * can silently un-decide a student would hand back exactly the ambiguity the
  * sentinel exists to remove. A trainer who wants to undo a mark has the four
  * explicit controls right there.
@@ -180,6 +191,10 @@ export function cycleWizardAttendance(current: WizardAttendance): EstadoAsistenc
     case "late":
       return "justified";
     case "justified":
+      return "sick";
+    case "sick":
+      return "competition";
+    case "competition":
       return "absent";
     case "absent":
     default:
@@ -226,7 +241,7 @@ export function resolveFailedStudentNames(
 /**
  * Count how many students have a given attendance state.
  *
- * `UNMARKED` students match none of the four real states, so they are never
+ * `UNMARKED` students match none of the six real states, so they are never
  * silently folded into the "absent" tally.
  */
 export function countByState(
@@ -296,13 +311,13 @@ export function toAttendanceMarks(students: SessionStudent[]): AttendanceStudent
 /**
  * Post-submission counts by state, for the confirmation receipt (issue
  * #213). Replaces `buildAttendanceSummary`, which rendered the result as one
- * joined sentence — the receipt needs the four counts as data, one per row of
+ * joined sentence — the receipt needs the six counts as data, one per row of
  * a grid plus a proportional bar, not pre-formatted text.
  *
  * Counts what was SAVED, not what the trainer marked (decision 2): pass
  * `result.failed`'s persona ids as `failedPersonaIds` and this excludes those
  * students from the tally, because the receipt describes what got filed, not
- * the trainer's intent. Every one of the four states is always a key of the
+ * the trainer's intent. Every one of the six states is always a key of the
  * returned record, even at zero — the caller must render it anyway (decision
  * 1): a missing row would read as "not reported" instead of "reported as
  * zero".
@@ -318,6 +333,8 @@ export function buildAttendanceReceipt(
     absent: countByState(saved, "absent"),
     late: countByState(saved, "late"),
     justified: countByState(saved, "justified"),
+    sick: countByState(saved, "sick"),
+    competition: countByState(saved, "competition"),
   };
 }
 
@@ -481,7 +498,7 @@ export function attendanceDraftKey(horarioId: number, fecha: string): string {
   return `${DRAFT_KEY_PREFIX}${horarioId}:${fecha}`;
 }
 
-/** id → state, holding only the four real states. */
+/** id → state, holding only the six real states. */
 export type AttendanceDraft = Record<string, EstadoAsistencia>;
 
 /** A draft found in storage, as the "resume" offer needs to describe it. */

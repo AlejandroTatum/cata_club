@@ -22,6 +22,19 @@ import {
 } from "../attendance-utils";
 import type { EstadoAsistencia } from "@/types/domain";
 
+/** Minimal AttendanceRecord for state-counting tests (issue #1373 additions). */
+function makeRecord(id: string, estado: EstadoAsistencia): AttendanceRecord {
+  return {
+    id,
+    fecha: "2026-07-01",
+    horario: "Test",
+    horarioId: 1,
+    personaId: Number(id.replace(/\D/g, "")) || 1,
+    estudiante: `Student ${id}`,
+    estado,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // buildAttendanceStats
 // ---------------------------------------------------------------------------
@@ -34,6 +47,8 @@ describe("buildAttendanceStats", () => {
       totalAbsent: 0,
       totalLate: 0,
       totalJustified: 0,
+      totalSick: 0,
+      totalCompetition: 0,
       totalUnknown: 0,
       totalStudents: 0,
     });
@@ -47,6 +62,22 @@ describe("buildAttendanceStats", () => {
     expect(stats.totalLate).toBe(1);
     expect(stats.totalJustified).toBe(1);
     expect(stats.totalUnknown).toBe(0);
+  });
+
+  // Issue #1373: sick/competition get their own counts — the "unknown"
+  // fallback must not swallow them, and they must never land in totalAbsent
+  // (authorized absences are the justified/neutral family, never unexcused).
+  it("counts sick and competition separately and never as absent (issue #1373)", () => {
+    const stats = buildAttendanceStats([
+      makeRecord("e1", "sick"),
+      makeRecord("e2", "sick"),
+      makeRecord("e3", "competition"),
+    ]);
+    expect(stats.totalSick).toBe(2);
+    expect(stats.totalCompetition).toBe(1);
+    expect(stats.totalAbsent).toBe(0);
+    expect(stats.totalUnknown).toBe(0);
+    expect(stats.totalStudents).toBe(3);
   });
 
   it("counts correctly when all students have the same state", () => {
@@ -195,6 +226,17 @@ describe("getAttendanceBadgeTokens", () => {
     });
   });
 
+  it("returns violet/teal light tokens for the issue #1373 states", () => {
+    expect(getAttendanceBadgeTokens("sick")).toEqual({
+      badgeClass: "bg-violet-50 text-violet-700",
+      iconClass: "text-violet-700",
+    });
+    expect(getAttendanceBadgeTokens("competition")).toEqual({
+      badgeClass: "bg-teal-50 text-teal-700",
+      iconClass: "text-teal-700",
+    });
+  });
+
   it("returns a neutral fallback for unknown estado values — never throws", () => {
     expect(getAttendanceBadgeTokens("unexpected_value")).toEqual({
       badgeClass: "bg-cata-border/40 text-cata-text/65",
@@ -203,7 +245,7 @@ describe("getAttendanceBadgeTokens", () => {
   });
 
   it("never returns a dark-theme (rgba/900 or bare white) token — regression guard for B4", () => {
-    for (const estado of ["present", "absent", "late", "justified", "unknown_value"]) {
+    for (const estado of ["present", "absent", "late", "justified", "sick", "competition", "unknown_value"]) {
       const tokens = getAttendanceBadgeTokens(estado);
       expect(tokens.badgeClass).not.toMatch(/900|text-white|bg-white/);
       expect(tokens.iconClass).not.toMatch(/900|text-white|bg-white/);
@@ -227,6 +269,8 @@ describe("getAttendanceRatePercent", () => {
       totalAbsent: 11,
       totalLate: 0,
       totalJustified: 0,
+      totalSick: 0,
+      totalCompetition: 0,
       totalUnknown: 0,
       totalStudents: 100,
     };
@@ -239,6 +283,8 @@ describe("getAttendanceRatePercent", () => {
       totalAbsent: 1,
       totalLate: 0,
       totalJustified: 0,
+      totalSick: 0,
+      totalCompetition: 0,
       totalUnknown: 0,
       totalStudents: 3,
     };
