@@ -670,7 +670,7 @@ function AddDependentContent(): React.ReactElement {
 
   function renderPaymentStep(): React.ReactElement {
     return (
-      <div className="space-y-page">
+      <div className="space-y-section">
         <p className="text-sm text-ink-2">El dependiente ya fue agregado. Seleccione el plan y registre su primer pago. Administración lo validará antes de activar la membresía.</p>
         <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
         <select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
