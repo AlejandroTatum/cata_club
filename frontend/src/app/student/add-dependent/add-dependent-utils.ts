@@ -118,6 +118,26 @@ const TIPO_SANGRE_VALUES: TipoSangre[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Direct payment validation
+// ---------------------------------------------------------------------------
+
+export function validateDependentPayment(
+  planId: string, months: number, method: string, voucher: File | null,
+): string[] {
+  const errors: string[] = [];
+  if (!Number.isSafeInteger(Number(planId)) || Number(planId) < 1) errors.push("Seleccione un plan.");
+  if (!Number.isInteger(months) || months < 1 || months > 12) errors.push("Seleccione entre 1 y 12 meses.");
+  if (method !== "EFECTIVO" && method !== "TRANSFERENCIA") errors.push("Seleccione un medio de pago.");
+  if (method === "TRANSFERENCIA") {
+    if (!voucher) errors.push("Adjunte el comprobante de transferencia.");
+    else if (!["image/jpeg", "image/png", "application/pdf"].includes(voucher.type) || voucher.size > 5 * 1024 * 1024) {
+      errors.push("El comprobante debe ser JPG, PNG o PDF y pesar hasta 5 MB.");
+    }
+  }
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 

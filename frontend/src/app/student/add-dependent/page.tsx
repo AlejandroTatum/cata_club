@@ -34,7 +34,11 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { crearRepresentadoPropio, fetchInstituciones, type Institucion } from "@/services/api";
+import {
+  crearRepresentadoPropio, fetchInstituciones, fetchTiposMembresia,
+  inscribirRepresentadoConPago, subirVoucherPago,
+  type Institucion, type TipoMembresiaCatalogo,
+} from "@/services/api";
 import { calculatePersonAge, isPlausibleHumanAge, studentBirthDateBounds } from "@/lib/identity-validation";
 import { isDuplicateIdentityError } from "@/lib/duplicate-identity";
 import {
@@ -74,6 +78,7 @@ import {
   validateAddDependentForm,
   buildRepresentadoPayload,
   getAddDependentErrorMessage,
+  validateDependentPayment,
   type AddDependentField,
   type AddDependentFormData,
   type AddDependentStep,
@@ -95,6 +100,14 @@ function AddDependentContent(): React.ReactElement {
   const [touched, setTouched] = useState<Set<AddDependentField>>(new Set());
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
   const [tipoEscuelaFilter, setTipoEscuelaFilter] = useState<string>("");
+  const [payNow, setPayNow] = useState(false);
+  const [createdDependentId, setCreatedDependentId] = useState<number | null>(null);
+  const [pendingPaymentId, setPendingPaymentId] = useState<number | null>(null);
+  const [plans, setPlans] = useState<TipoMembresiaCatalogo[]>([]);
+  const [planId, setPlanId] = useState("");
+  const [months, setMonths] = useState(1);
+  const [method, setMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("TRANSFERENCIA");
+  const [voucher, setVoucher] = useState<File | null>(null);
 
   // Issue #1318: read straight from the session's own backend-role list —
   // no portal fetch needed just to know whether saving will also switch the
@@ -136,6 +149,7 @@ function AddDependentContent(): React.ReactElement {
 
   useEffect(() => {
     fetchInstituciones().then(setInstituciones).catch(() => {});
+    fetchTiposMembresia().then(setPlans).catch(() => {});
   }, []);
 
   // ---- Helpers ----
@@ -172,6 +186,26 @@ function AddDependentContent(): React.ReactElement {
   async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     if (submitting) return;
+    if (createdDependentId !== null) {
+      const errors = validateDependentPayment(planId, months, method, voucher);
+      if (errors.length) { setFormErrors(errors); return; }
+      setSubmitting(true);
+      try {
+        const paymentId = pendingPaymentId ?? (await inscribirRepresentadoConPago({
+          personaId: createdDependentId, tipoMembresiaId: Number(planId),
+          tipoPago: method, meses: months,
+        })).id;
+        setPendingPaymentId(paymentId);
+        if (method === "TRANSFERENCIA" && voucher) await subirVoucherPago(paymentId, voucher);
+        showSuccess("Pago registrado. Queda pendiente de validación por administración.");
+        router.push("/student");
+      } catch (error: unknown) {
+        setFormErrors([getAddDependentErrorMessage(error)]);
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     if (step !== "summary") {
       handleNext();
       return;
@@ -187,7 +221,8 @@ function AddDependentContent(): React.ReactElement {
     }
     setSubmitting(true);
     try {
-      await crearRepresentadoPropio(buildRepresentadoPayload(formData));
+      const created = await crearRepresentadoPropio(buildRepresentadoPayload(formData));
+      setCreatedDependentId(created.representado.id);
     } catch (error: unknown) {
       setSubmitting(false);
       const message = getAddDependentErrorMessage(error);
@@ -215,7 +250,8 @@ function AddDependentContent(): React.ReactElement {
     }
     // Navigation-remount: /student refetches the portal summary on mount,
     // so the new dependent appears without any optimistic client state.
-    router.push("/student");
+    if (!payNow) router.push("/student");
+    else setSubmitting(false);
   }
 
   // ---- Render helpers ----
@@ -603,6 +639,14 @@ function AddDependentContent(): React.ReactElement {
           </div>
         )}
 
+        <div className="rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
+          <label htmlFor="dependent-pay-choice">¿Cuándo desea pagar?</label>
+          <select id="dependent-pay-choice" className="input-field mt-2" value={payNow ? "now" : "later"} onChange={(e) => setPayNow(e.target.value === "now")}>
+            <option value="later">Agregar dependiente y pagar más tarde</option>
+            <option value="now">Agregar dependiente y registrar el pago ahora</option>
+          </select>
+        </div>
+
         <label className="flex cursor-pointer items-start gap-3 rounded-ctl border border-line-2 bg-canvas p-4 text-sm text-ink-2">
           <input
             type="checkbox"
@@ -620,6 +664,37 @@ function AddDependentContent(): React.ReactElement {
             </span>
           </span>
         </label>
+      </div>
+    );
+  }
+
+  function renderPaymentStep(): React.ReactElement {
+    return (
+      <div className="space-y-5">
+        <p className="text-sm text-ink-2">El dependiente ya fue agregado. Seleccione el plan y registre su primer pago. Administración lo validará antes de activar la membresía.</p>
+        <label className="block text-sm text-ink-2" htmlFor="dependent-plan">Plan de membresía</label>
+        <select id="dependent-plan" className="input-field" value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={submitting}>
+          <option value="">Seleccione un plan</option>
+          {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.categoria} — ${plan.precio}</option>)}
+        </select>
+        <label className="block text-sm text-ink-2" htmlFor="dependent-months">Meses a pagar</label>
+        <input id="dependent-months" type="number" className="input-field" min={1} max={12} value={months} onChange={(e) => setMonths(Number(e.target.value))} disabled={submitting} />
+        <label className="block text-sm text-ink-2" htmlFor="dependent-method">Medio de pago</label>
+        <select id="dependent-method" className="input-field" value={method} onChange={(e) => { setMethod(e.target.value as typeof method); setPendingPaymentId(null); }} disabled={submitting || pendingPaymentId !== null}>
+          <option value="TRANSFERENCIA">Transferencia</option>
+          <option value="EFECTIVO">Efectivo</option>
+        </select>
+        {method === "TRANSFERENCIA" && <>
+          <label className="block text-sm text-ink-2" htmlFor="dependent-voucher">Comprobante de transferencia (JPG, PNG o PDF; máximo 5 MB)</label>
+          <input id="dependent-voucher" type="file" accept="image/jpeg,image/png,application/pdf" onChange={(e) => setVoucher(e.target.files?.[0] ?? null)} disabled={submitting} />
+        </>}
+        {formErrors.length > 0 && <div role="alert" className="text-sm text-state-bad">{formErrors.join(" ")}</div>}
+        <div className="flex flex-wrap gap-3">
+          <button type="submit" disabled={submitting} className={buttonClasses("primary", "md")}>
+            {submitting ? "Registrando…" : pendingPaymentId ? "Reintentar comprobante" : "Registrar pago"}
+          </button>
+          <button type="button" className={buttonClasses("secondary", "md")} onClick={() => router.push("/student")}>Pagar más tarde</button>
+        </div>
       </div>
     );
   }
@@ -652,13 +727,13 @@ function AddDependentContent(): React.ReactElement {
           counter's wrapper `<div>` is gone: it carried nothing and made the
           `gap-page` column count a block where there was only a line. */}
       <p className="text-2xs font-bold uppercase tracking-caps text-ink-3-strong">
-        Paso {currentIndex + 1} de {ADD_DEPENDENT_STEP_ORDER.length}
+        Paso {createdDependentId !== null ? 4 : currentIndex + 1} de {payNow ? 4 : ADD_DEPENDENT_STEP_ORDER.length}
       </p>
 
       <Stepper
         label="Pasos para agregar un dependiente"
-        current={currentIndex + 1}
-        steps={ADD_DEPENDENT_STEP_ORDER.map((s) => ADD_DEPENDENT_SHORT_LABELS[s])}
+        current={createdDependentId !== null ? 4 : currentIndex + 1}
+        steps={[...ADD_DEPENDENT_STEP_ORDER.map((s) => ADD_DEPENDENT_SHORT_LABELS[s]), ...(payNow ? ["Pago"] : [])]}
       />
 
       {/* Form card */}
@@ -669,10 +744,11 @@ function AddDependentContent(): React.ReactElement {
             class: Graduate has one 400 cut, and a CSS bold on top of it asks
             the browser to synthesise a stroke the face cannot draw. */}
         <h2 className="mb-6 font-display text-lg uppercase leading-tight tracking-flat text-ink">
-          {ADD_DEPENDENT_STEP_LABELS[step]}
+          {createdDependentId !== null ? "Primer pago" : ADD_DEPENDENT_STEP_LABELS[step]}
         </h2>
 
         <form onSubmit={handleConfirm}>
+          {createdDependentId !== null ? renderPaymentStep() : <>
           {/* Step content */}
           {step === "child" && renderChildStep()}
           {step === "health" && renderHealthStep()}
@@ -705,6 +781,7 @@ function AddDependentContent(): React.ReactElement {
               </button>
             }
           />
+          </>}
         </form>
       </div>
       </div>

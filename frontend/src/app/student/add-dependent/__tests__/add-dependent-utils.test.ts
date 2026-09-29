@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { ApiClientError } from "@/services/api";
 import {
+  validateDependentPayment,
   validateAddDependentStep,
   validateAddDependentForm,
   buildRepresentadoPayload,
@@ -22,6 +23,22 @@ import {
  * `services/api.ts` throws `ApiClientError(message, status)`, so an error
  * carrying a `message` and no `status` is a shape the client cannot produce.
  */
+describe("dependent payment validation", () => {
+  const voucher = new File(["ok"], "receipt.png", { type: "image/png" });
+
+  it("requires a valid plan and payment period", () => {
+    expect(validateDependentPayment("", 1, "EFECTIVO", null)).toContain("Seleccione un plan.");
+    expect(validateDependentPayment("2", 0, "EFECTIVO", null)).toContain("Seleccione entre 1 y 12 meses.");
+  });
+
+  it("requires a valid voucher only for transfers", () => {
+    expect(validateDependentPayment("2", 1, "EFECTIVO", null)).toEqual([]);
+    expect(validateDependentPayment("2", 1, "TRANSFERENCIA", null)).toContain("Adjunte el comprobante de transferencia.");
+    expect(validateDependentPayment("2", 1, "TRANSFERENCIA", voucher)).toEqual([]);
+    expect(validateDependentPayment("2", 1, "TRANSFERENCIA", new File(["x"], "a.txt", { type: "text/plain" }))).toHaveLength(1);
+  });
+});
+
 function apiError(message: string, status: number): ApiClientError {
   return new ApiClientError(message, status);
 }
