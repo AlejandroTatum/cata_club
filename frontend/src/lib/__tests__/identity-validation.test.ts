@@ -9,6 +9,8 @@ import {
   normalizeEcuadorianMobile,
   emergencyPhoneDiffersRule,
   EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE,
+  representativeCedulaDiffersRule,
+  REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE,
   PERSON_NAME_PATTERN,
   PERSON_NAME_MAX_WORDS,
   PERSON_NAME_MAX_LETTERS_PER_WORD,
@@ -121,6 +123,43 @@ describe("cédula", () => {
 
     it("passes a valid cédula", () => {
       expect(cedulaRule("1798765432", "La cédula")).toBeNull();
+    });
+  });
+
+  /**
+   * Issue #1397: the enrollment form asks for the student's cédula AND the
+   * representante's — a typo or copy/paste collision between them is caught
+   * beside the field, naming both, before it can travel to the server.
+   */
+  describe("representativeCedulaDiffersRule (issue #1397)", () => {
+    it("rejects when both sides hold the same number", () => {
+      expect(representativeCedulaDiffersRule("1798765432", "1798765432"))
+        .toBe(REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE);
+    });
+
+    it("compares trimmed values, not raw typing noise", () => {
+      expect(representativeCedulaDiffersRule(" 1798765432 ", "1798765432"))
+        .toBe(REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE);
+    });
+
+    it("accepts two different numbers", () => {
+      expect(representativeCedulaDiffersRule("1798765432", "1723456719")).toBeNull();
+    });
+
+    it("does not fire when the representante cédula is blank — that is cedulaRule's job", () => {
+      expect(representativeCedulaDiffersRule("", "1798765432")).toBeNull();
+      expect(representativeCedulaDiffersRule("   ", "1798765432")).toBeNull();
+    });
+
+    it("does not fire when the student cédula is blank — never turns it into a requirement", () => {
+      // The self path never fills the representante side; a blank student
+      // cédula stays `cedulaRule`'s error, not this rule's.
+      expect(representativeCedulaDiffersRule("1798765432", "")).toBeNull();
+      expect(representativeCedulaDiffersRule("1798765432", "   ")).toBeNull();
+    });
+
+    it("does not fire when both are blank", () => {
+      expect(representativeCedulaDiffersRule("", "")).toBeNull();
     });
   });
 });
