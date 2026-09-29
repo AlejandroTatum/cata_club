@@ -23,6 +23,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/groups/horarios/route";
 import { PUT } from "@/app/api/groups/horarios/[id]/route";
 import { POST as POST_PAGO } from "@/app/api/membresias/pagos/route";
+import { POST as POST_DEPENDENT_PAYMENT } from "@/app/api/membresias/representado/pago/route";
 import { PUT as PUT_PAYMENT } from "@/app/api/payments/[id]/route";
 import { PATCH as PATCH_FICHA_MEDICA } from "@/app/api/fichas-medicas/persona/[id]/route";
 import { POST as POST_BENEFICIO } from "@/app/api/personas/[id]/beneficio/route";
@@ -54,6 +55,7 @@ import {
   searchStudents,
   subirVoucherPago,
   registrarPago,
+  inscribirRepresentadoConPago,
   fetchDescuentos,
   crearDescuento,
   actualizarDescuento,
@@ -140,6 +142,41 @@ async function capturePathname(call: () => Promise<unknown>): Promise<string> {
   return new URL(requested, "http://localhost").pathname;
 }
 
+describe("dependent direct payment BFF", () => {
+  beforeEach(() => { process.env.BACKEND_API_URL = "http://localhost:8000/api/v1"; });
+  afterEach(() => { vi.restoreAllMocks(); delete process.env.BACKEND_API_URL; });
+
+  it("forwards only the validated payment fields", async () => {
+    const token = makeSeamJwt();
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 8, estadoPago: "PENDIENTE_VALIDACION" }), {
+        status: 201, headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const response = await POST_DEPENDENT_PAYMENT(new NextRequest(
+      "http://localhost/api/membresias/representado/pago", {
+        method: "POST", headers: { cookie: `${ACCESS_TOKEN_COOKIE}=${token}` },
+        body: JSON.stringify({ personaId: 2, tipoMembresiaId: 3, tipoPago: "EFECTIVO", meses: 1, extra: "drop" }),
+      },
+    ));
+    expect(response.status).toBe(201);
+    expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))).toEqual({
+      persona_id: 2, tipo_membresia_id: 3, tipo_pago: "EFECTIVO", meses: 1,
+    });
+  });
+
+  it("rejects missing or invalid plan without reaching the backend", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+    const response = await POST_DEPENDENT_PAYMENT(new NextRequest(
+      "http://localhost/api/membresias/representado/pago", {
+        method: "POST", body: JSON.stringify({ personaId: 2, tipoPago: "EFECTIVO", meses: 1 }),
+      },
+    ));
+    expect(response.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("API client URLs resolve to a real BFF route handler", () => {
   beforeEach(() => {
     process.env.NEXT_PUBLIC_USE_MOCKS = "true";
@@ -155,6 +192,9 @@ describe("API client URLs resolve to a real BFF route handler", () => {
   });
 
   const CASES: [string, () => Promise<unknown>][] = [
+    ["inscribirRepresentadoConPago", () => inscribirRepresentadoConPago({
+      personaId: 2, tipoMembresiaId: 3, tipoPago: "EFECTIVO", meses: 1,
+    })],
     ["obtenerRolesDePersona", () => obtenerRolesDePersona(2)],
     ["asignarRol", () => asignarRol(2, "ENTRENADOR")],
     ["quitarRol", () => quitarRol(2, "ENTRENADOR")],
