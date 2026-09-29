@@ -94,6 +94,10 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
     },
     membresias_pagos_router: {
         "registrar_pago": "10/minute",
+        # #1402: el admin anota el primer pago presencialmente; misma
+        # naturaleza operativa acotada que `registrar_pago` (un pago por
+        # petición, admin-only), mismo tope.
+        "registrar_pago_presencial": "10/minute",
         "validar_pago": "20/minute",
         "adjuntar_comprobante": "20/minute",
         "subir_voucher": "5/minute",
