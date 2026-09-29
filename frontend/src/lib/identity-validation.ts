@@ -280,6 +280,33 @@ export function emergencyPhoneDiffersRule(emergencyPhone: string, personalPhone:
   return canonicalEmergency === canonicalPersonal ? EMERGENCY_PHONE_SAME_AS_PERSONAL_MESSAGE : null;
 }
 
+/**
+ * Shown when the representante's cédula is the same number as the student's
+ * own (issue #1397) — the enrollment form asks for both, and a typo or
+ * copy/paste collision must be caught beside the field instead of traveling
+ * to the server to die as an opaque rejection. One constant, mirrored
+ * verbatim by the backend's
+ * `enrollment_servicio.py::MENSAJE_CEDULA_REPRESENTANTE_IGUAL_ALUMNO` so the
+ * two never drift; naming both FIELDS is safe against enumeration because
+ * whoever submitted the form typed both values.
+ */
+export const REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE =
+  "La cédula del representante debe ser diferente de la cédula del estudiante.";
+
+/**
+ * Whether the representante's cédula is identical to the student's (issue
+ * #1397). Returns `null` when either side is blank: the representante only
+ * exists on the "child" path, and — like `emergencyPhoneDiffersRule` — this
+ * compares two values that BOTH exist; it never turns that path difference
+ * into an error.
+ */
+export function representativeCedulaDiffersRule(representativeCedula: string, studentCedula: string): string | null {
+  const representative = representativeCedula.trim();
+  const student = studentCedula.trim();
+  if (!representative || !student) return null;
+  return representative === student ? REPRESENTATIVE_CEDULA_SAME_AS_STUDENT_MESSAGE : null;
+}
+
 // ---------------------------------------------------------------------------
 // Person name — nombres, apellidos, and (per issue #230) the emergency
 // contact, which is a person's name and was validated as if it were not one.

@@ -10,6 +10,7 @@ import {
   initialFormData,
   isStepComplete,
   validateEnrollFields,
+  validateEnrollment,
   STEP_SHORT_LABELS,
   STEP_ORDER,
   type EnrollFormData,
@@ -258,6 +259,70 @@ describe("validateEnrollFields", () => {
         validForm({ telefono: "991234567", telefonoEmergencia: "123" }),
       );
       expect(errors.telefonoEmergencia).toMatch(/celular.*fijo/);
+    });
+  });
+
+  /**
+   * Issue #1397: the representante's cédula must differ from the student's
+   * own — both live on the same request, and a copy/paste or typo collision
+   * is caught beside the field instead of dying as an opaque server 400.
+   * The message lands on `cedulaRepresentante`, the field the visitor fills
+   * second (the representante step comes after the personal step).
+   */
+  describe("cedulaRepresentante must differ from cedula (#1397)", () => {
+    it("rejects the exact same number, keyed to cedulaRepresentante", () => {
+      const errors = validateEnrollFields(
+        "representative",
+        validForm({ enrollmentType: "child", cedula: "1798765432", cedulaRepresentante: "1798765432" }),
+      );
+      expect(errors.cedulaRepresentante).toBe(
+        "La cédula del representante debe ser diferente de la cédula del estudiante.",
+      );
+      expect(isStepComplete("representative", validForm({
+        enrollmentType: "child",
+        cedula: "1798765432",
+        cedulaRepresentante: "1798765432",
+      }))).toBe(false);
+    });
+
+    it("accepts a representante cédula different from the student's", () => {
+      const errors = validateEnrollFields(
+        "representative",
+        validForm({ enrollmentType: "child", cedula: "1798765432", cedulaRepresentante: "1723456719" }),
+      );
+      expect(errors.cedulaRepresentante).toBeUndefined();
+    });
+
+    it("still reports a malformed number first, even when it happens to differ from cedula", () => {
+      // `cedulaRule` is chained BEFORE this rule: a malformed value never
+      // reaches the equality check.
+      const errors = validateEnrollFields(
+        "representative",
+        validForm({ enrollmentType: "child", cedula: "1798765432", cedulaRepresentante: "12345" }),
+      );
+      expect(errors.cedulaRepresentante).toBe("La cédula del representante debe tener 10 dígitos.");
+    });
+
+    it("never blames a representante field on a self enrollment", () => {
+      // A self enrollment renders no representante fields at all; a leftover
+      // value from an abandoned child attempt must not block the self path.
+      const errors = validateEnrollFields(
+        "representative",
+        validForm({ enrollmentType: "self", cedula: "1798765432", cedulaRepresentante: "1798765432" }),
+      );
+      expect(errors).toEqual({});
+    });
+
+    it("also blocks the final submit gate, which re-validates every step", () => {
+      // A visitor who passed the representante step and then went back to
+      // change the STUDENT cédula into a copy of the representante's one is
+      // still stopped by `validateEnrollment` before the request is built.
+      const errors = validateEnrollment(
+        validForm({ enrollmentType: "child", cedula: "1798765432", cedulaRepresentante: "1798765432" }),
+      );
+      expect(errors).toContain(
+        "La cédula del representante debe ser diferente de la cédula del estudiante.",
+      );
     });
   });
 
