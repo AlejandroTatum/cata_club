@@ -13,7 +13,8 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("ALTER TYPE tiponotificacion ADD VALUE IF NOT EXISTS 'NUEVO_REPORTE_ERROR'")
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE tiponotificacion ADD VALUE IF NOT EXISTS 'NUEVO_REPORTE_ERROR'")
     op.create_table(
         "reporte_error",
         sa.Column("id", sa.Integer(), primary_key=True),
