@@ -778,7 +778,7 @@ export function scorePasswordStrength(password: string): PasswordStrengthScore {
   let score = 0;
   if (candidate.length >= PASSWORD_MIN_LENGTH) score += 1;
   if (candidate.length >= PASSWORD_ADVISORY_MIN_LENGTH) score += 1;
-  score += Math.min(countPasswordCharacterCategories(candidate) - 1, 2);
+  score += Math.max(0, Math.min(countPasswordCharacterCategories(candidate) - 1, 2));
   if (isCommonPassword(candidate)) score = Math.min(score, 1);
   return Math.min(score, 4) as PasswordStrengthScore;
 }

@@ -831,6 +831,13 @@ describe("contraseña", () => {
       expect(scorePasswordStrength("   ")).toBe(0);
     });
 
+    it("never drops below 0 for letters outside every category", () => {
+      // CJK letters are neither upper/lower case, digits nor symbols: zero
+      // categories must not push a short password to -1 (no label exists).
+      expect(scorePasswordStrength("日本")).toBe(0);
+      expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("日本")]).toBe("Muy débil");
+    });
+
     it("walks the five readings as length and variety grow", () => {
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nub")]).toBe("Muy débil");
       expect(PASSWORD_STRENGTH_LABELS[scorePasswordStrength("nubesver")]).toBe("Débil"); // 8 chars, 1 category
