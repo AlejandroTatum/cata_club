@@ -331,6 +331,12 @@ RUTAS_ROLES_REQUERIDOS = {
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,
     # mismo criterio que regularizar-deuda/suspender/reactivar.
     ("POST", "/membresias/pagos/{pago_id}/corregir"): frozenset({"ADMINISTRADOR"}),
+    # Issue #1402: anotar EN EL CLUB el primer pago de una membresía es un
+    # acto de administración -- la ruta declara `GestorPermisos(ROL_ADMIN)`
+    # y el servicio re-verifica "en persona" y "primera inscripción" del lado
+    # del servidor, de modo que el rol de la ruta es el mismo que sus
+    # hermanas de pagos admin-only.
+    ("POST", "/membresias/pagos/presencial"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5a): "Solo administración suspende o reactiva" es
     # texto explícito del issue -- a diferencia de POST .../aplicar-beneficio
     # (autoservicio, ver el comentario en la lista de arriba), estos dos SÍ

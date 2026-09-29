@@ -673,6 +673,42 @@ async def registrar_pago(
     return servicio.pago_a_response_dto(pago)
 
 
+# --- Pago presencial de primera inscripción (issue #1402) -------------------
+# El admin anota EN EL CLUB el primer pago de una membresía: EFECTIVO queda
+# APROBADO al instante (con auditoría de revisor/tiempo de `validar_pago`) y
+# activa la membresía; TRANSFERENCIA queda PENDIENTE_VALIDACION hasta que el
+# voucher suba por SU propia petición (`POST /pagos/{id}/voucher`) y el admin
+# finalice con el `PATCH /pagos/{id}/validar` admin-only de siempre. Sin
+# bandera seteable por el cliente: la ruta exige rol ADMINISTRADOR y el
+# servicio re-verifica "en persona" y "primera inscripción" del lado del
+# servidor, de modo que ni autoservicio ni renovaciones se autoaprueban.
+@router.post(
+    "/pagos/presencial",
+    response_model=PagoResponseDTO,
+    status_code=201,
+    dependencies=[Depends(GestorPermisos(ROL_ADMIN))],
+)
+@limiter.limit("10/minute")
+async def registrar_pago_presencial(
+    request: Request,
+    datos: PagoCreateDTO,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    servicio = PagoServicio(db)
+    # `run_in_threadpool` (issue #451, misma clase de bug que `registrar_
+    # pago` arriba): el camino toma el lock `FOR UPDATE` de la membresía y
+    # después el del pago, DIRECTO en esta coroutine sería deadlock del event
+    # loop. Mismo mecanismo, misma razón.
+    pago = await run_in_threadpool(
+        servicio.registrar_pago_presencial,
+        datos,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+    )
+    return servicio.pago_a_response_dto(pago)
+
+
 @router.patch("/pagos/{pago_id}/validar", response_model=PagoResponseDTO)
 @limiter.limit("20/minute")
 async def validar_pago(

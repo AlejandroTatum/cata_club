@@ -168,3 +168,57 @@ def test_registrar_pago_no_conserva_ramas_de_autorizacion_inalcanzables():
                     for objetivo in nodo.targets
                     if isinstance(objetivo, ast.Name)
                 }
+
+
+# --- Issue #1402: pago presencial de primera inscripción (EFECTIVO) ---------
+#
+# El efectivo anotado EN PERSONA por un admin para la PRIMERA inscripción se
+# aprueba al instante (evidencia completa: el cobro en efectivo es el acto
+# mismo). La autorización de fondo no cambia: la ruta exige ADMINISTRADOR y
+# el servicio rechaza el pago propio del admin (autoservicio nunca se
+# autoaprueba).
+
+
+def _presencial(client, persona_id: int, membresia_id: int):
+    return client.post(
+        "/api/v1/membresias/pagos/presencial",
+        json={
+            "meses": 1, "tipo_pago": "EFECTIVO",
+            "persona_id": persona_id, "membresia_id": membresia_id,
+        },
+    )
+
+
+def test_presencial_efectivo_admin_registra_y_queda_aprobado(client):
+    """Token del conftest: ADMINISTRADOR persona_id=1, distinto del dueño."""
+    crear_persona_api(client, cedula=cedula_valida(740))  # relleno -> id=1 (el admin)
+    persona = crear_persona_api(client, cedula="1710034073")  # id=2
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["estadoPago"] == "APROBADO"
+
+
+def test_presencial_efectivo_del_propio_admin_da_400(client):
+    """El pago propio de un admin es autoservicio: el camino presencial lo
+    rechaza y el pago deberá pasar por el flujo regular con su cola."""
+    persona = crear_persona_api(client, cedula="1710034073")  # id=1 == token admin
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 400, resp.text
+
+
+def test_presencial_sin_rol_admin_da_403(client):
+    """Un ALUMNO sin vínculo no entra ni por la ruta: 403 antes del servicio."""
+    tercero = crear_persona_api(client, cedula=cedula_valida(741))
+    persona = crear_persona_api(client, cedula="1710034073")
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+
+    _autenticar_como(tercero["id"], ["ALUMNO"])
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 403, resp.text
