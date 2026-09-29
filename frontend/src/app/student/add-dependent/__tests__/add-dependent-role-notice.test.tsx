@@ -12,10 +12,10 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AddDependentPage from "@/app/student/add-dependent/page";
-import { crearRepresentadoPropio } from "@/services/api";
+import { crearRepresentadoPropio, inscribirRepresentadoConPago } from "@/services/api";
 import { installAddDependentHarness } from "./add-dependent-harness";
 import { addDependentFieldId } from "@/app/student/add-dependent/add-dependent-utils";
 import { fillBirthDate } from "@/lib/__tests__/fill-birth-date";
@@ -47,9 +47,13 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/services/api", () => ({
   crearRepresentadoPropio: vi.fn(),
   fetchInstituciones: vi.fn().mockResolvedValue([]),
+  fetchTiposMembresia: vi.fn().mockResolvedValue([{ id: 3, categoria: "Infantil", precio: "30.00", modalidad: "MENSUAL" }]),
+  inscribirRepresentadoConPago: vi.fn(),
+  subirVoucherPago: vi.fn(),
 }));
 
 installAddDependentHarness();
+beforeEach(() => vi.mocked(crearRepresentadoPropio).mockReset());
 
 const NOTICE_TEXT = /al guardar, su cuenta pasa a ser de representante/i;
 
@@ -86,6 +90,32 @@ describe("the role-change notice only appears for a non-representative caller", 
     goToSummaryStep();
 
     expect(screen.queryByText(NOTICE_TEXT)).not.toBeInTheDocument();
+  });
+
+  it("offers direct payment only after creating the dependent", async () => {
+    authState.roles = ["REPRESENTANTE"];
+    authState.role = "representante";
+    vi.mocked(crearRepresentadoPropio).mockResolvedValue({
+      representado: {
+        id: 42, nombres: "Mateo", apellidos: "Zambrano", cedula: "1798765432",
+        fechaNacimiento: "2014-05-12", telefono: "0991234567",
+      },
+    });
+    vi.mocked(inscribirRepresentadoConPago).mockResolvedValue({ id: 91 } as Awaited<ReturnType<typeof inscribirRepresentadoConPago>>);
+    render(<AddDependentPage />);
+    goToSummaryStep();
+    fireEvent.change(screen.getByLabelText(/cuándo desea pagar/i), { target: { value: "now" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /agregar dependiente/i }));
+    await waitFor(() => expect(screen.getByText(/el dependiente ya fue agregado/i)).toBeInTheDocument());
+    expect(inscribirRepresentadoConPago).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/plan de membresía/i), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText(/medio de pago/i), { target: { value: "EFECTIVO" } });
+    fireEvent.click(screen.getByRole("button", { name: /registrar pago/i }));
+    await waitFor(() => expect(inscribirRepresentadoConPago).toHaveBeenCalledWith({
+      personaId: 42, tipoMembresiaId: 3, tipoPago: "EFECTIVO", meses: 1,
+    }));
+    expect(crearRepresentadoPropio).toHaveBeenCalledTimes(1);
   });
 
   it("submits through crearRepresentadoPropio — the self-service endpoint, never a persona id in the URL", async () => {

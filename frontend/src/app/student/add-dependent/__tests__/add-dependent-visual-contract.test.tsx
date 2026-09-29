@@ -59,6 +59,7 @@ vi.mock("@/contexts/ToastContext", async () => (await harness()).toastContextDou
 vi.mock("@/services/api", () => ({
   crearRepresentadoPropio: vi.fn(),
   fetchInstituciones: vi.fn().mockResolvedValue([]),
+  fetchTiposMembresia: vi.fn().mockResolvedValue([]),
 }));
 
 installAddDependentHarness();
