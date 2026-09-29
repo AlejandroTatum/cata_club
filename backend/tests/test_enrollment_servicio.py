@@ -392,13 +392,26 @@ def test_alumno_menor_de_5_anos_rechazado(db_session):
 
 
 def test_alumno_cedula_duplicada_rechazada(db_session):
+    """La cédula del alumno ya pertenece a una identidad registrada del
+    padrón: se rechaza con el mensaje anti-enumeración. La colisión es
+    contra una TERCERA persona preexistente; la cédula del representante
+    del mismo request es distinta -- el cruce de los dos campos del propio
+    formulario es el caso #1397 y responde `OperacionInvalida` (ver
+    `test_representante_con_cedula_igual_al_alumno_rechazada`)."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(252),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.commit()
+
     datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia@example.com", contrasenia="password8",
         ),
-        alumno=_alumno_dto(cedula=cedula_valida(250)),  # misma cédula que representante
+        alumno=_alumno_dto(cedula=cedula_valida(252)),  # ya registrada (persona de arriba)
     )
     from app.dominio.excepciones import EntidadDuplicada
     with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
@@ -732,19 +745,31 @@ def test_alumno_cedula_duplicada_no_deja_representante_huerfano(db_session):
     """Falla tardía #3 (hallada al explorar el servicio, no reportada en el
     issue): la cédula del alumno se validaba DESPUÉS de crear la Persona del
     representante, dejando un representante huérfano ante una cédula de
-    alumno duplicada."""
+    alumno duplicada. La duplicidad es contra una identidad ya registrada
+    del padrón (persona preexistente); la cédula del representante es
+    distinta -- el cruce de los dos campos del propio formulario es el caso
+    #1397."""
+    persona = Persona(
+        nombres="Existente", apellidos="Test", cedula=cedula_valida(252),
+        fecha_nacimiento=date(1990, 1, 1), telefono="0990000000",
+    )
+    db_session.add(persona)
+    db_session.commit()
+
     datos = _enrollment_dto(
         representante=EnrollmentRepresentanteDTO(
             nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
             fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
             correo="sofia-cedula@example.com", contrasenia="password8",
         ),
-        alumno=_alumno_dto(cedula=cedula_valida(250)),  # misma cédula que representante
+        alumno=_alumno_dto(cedula=cedula_valida(252)),  # ya registrada (persona de arriba)
     )
     from app.dominio.excepciones import EntidadDuplicada
     with pytest.raises(EntidadDuplicada, match=MENSAJE_IDENTIDAD_DUPLICADA):
         EnrollmentServicio(db_session).enroll(datos)
 
+    # El intento rechazado no persiste nada: la Persona del representante
+    # (cédula 250, distinta de la duplicada) no queda huérfana.
     assert db_session.query(Persona).filter(Persona.cedula == cedula_valida(250)).count() == 0
 
 
