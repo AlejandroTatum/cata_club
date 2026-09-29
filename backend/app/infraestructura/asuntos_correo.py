@@ -23,3 +23,8 @@ ASUNTO_RECUPERACION = "Cata Club | Recuperación de contraseña"
 ASUNTO_PAGO_APROBADO = "Cata Club | Pago aprobado"
 ASUNTO_PAGO_RECHAZADO = "Cata Club | Pago rechazado"
 ASUNTO_BIENVENIDA_INSCRIPCION = "Cata Club | Bienvenida"
+
+# Verificación de correo (issue #1375): era el único asunto que seguía
+# inline en `notificaciones_servicio.py`; se mueve acá por la misma razón
+# que los anteriores -- una sola fuente, sin copias.
+ASUNTO_VERIFICACION_CORREO = "Cata Club | Verificación de correo"
