@@ -1922,6 +1922,48 @@ export async function registrarPago(data: RegistrarPagoInput): Promise<PagoPerso
   });
 }
 
+/** Issue #1402 — register an IN-PERSON first-inscription payment —
+ *  `POST /api/membresias/pagos/presencial` (admin-only).
+ *
+ *  Same body as `registrarPago`, different outcome, decided SERVER-side (no
+ *  client-settable auto-approval flag exists): the backend verifies admin
+ *  role, that the payment is for someone else (never self-service), and
+ *  that the membership is a first inscription (INACTIVA, no approved
+ *  payment). EFECTIVO comes back APROBADO immediately — with the regular
+ *  reviewer/time audit — and the membership is active; TRANSFERENCIA comes
+ *  back PENDIENTE_VALIDACION until its voucher is uploaded by a SEPARATE
+ *  request (`subirVoucherPago`) and the admin finalizes via `validarPago`.
+ *  Renewals and subsequent payments are rejected here and go through the
+ *  regular flow + validation queue. */
+export async function registrarPagoPresencial(data: RegistrarPagoInput): Promise<PagoPersona> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<PagoPersona>(apiEndpoint("/membresias/pagos/presencial"), {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: { "Content-Type": "application/json", ...mockHeaders },
+  });
+}
+
+/** Validate (approve or reject) a pending payment —
+ *  `PATCH /api/membresias/pagos/{pagoId}/validar` (admin-only, backend route
+ *  guard `GestorPermisos(ROL_ADMIN)`). This is the existing validation queue
+ *  action; issue #1402's in-person transfer flow calls it AFTER the voucher
+ *  upload succeeds, so a transfer is never approved without its evidence. */
+export interface ValidarPagoInput {
+  estadoPago: "APROBADO" | "RECHAZADO";
+  motivoRechazo?: string | null;
+  motivoExcepcionSinComprobante?: string | null;
+}
+
+export async function validarPago(pagoId: number, datos: ValidarPagoInput): Promise<PagoPersona> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<PagoPersona>(apiEndpoint(`/membresias/pagos/${pagoId}/validar`), {
+    method: "PATCH",
+    body: JSON.stringify(datos),
+    headers: { "Content-Type": "application/json", ...mockHeaders },
+  });
+}
+
 /**
  * `CoberturaBonificadaResponseDTO` (backend cobertura_bonificada_schemas.py).
  *
