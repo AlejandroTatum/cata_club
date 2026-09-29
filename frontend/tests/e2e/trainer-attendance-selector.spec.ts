@@ -109,12 +109,16 @@ test("trainer directly selects every attendance state at 390px", async ({ page }
   await page.getByRole("button", { name: "Continuar" }).click();
 
   /*
-   * The four states are now a `radiogroup` of `role="radio"` controls, not a
+   * The states are a `radiogroup` of `role="radio"` controls, not a
    * `group` of `aria-pressed` toggles: they are mutually exclusive, and four
    * independent toggle buttons never conveyed that. The behaviour this test
    * guards is unchanged and is asserted just as strictly — every state is
    * reachable in one tap and reports itself as the selected one — through the
    * roles and the selection attribute the controls actually expose now.
+   *
+   * Issue #1373 adds the two authorized-absence states (Enfermo/
+   * Competencia): they must be first-class radios exactly like the original
+   * four, not rendered-only badges.
    *
    * The group's accessible name still comes from the RENDERED student name
    * (`aria-labelledby` pointing at the sr-only prefix plus the name element),
@@ -124,7 +128,7 @@ test("trainer directly selects every attendance state at 390px", async ({ page }
   const stateGroup = page.getByRole("radiogroup", { name: "Estado de asistencia de Ana López" });
   await expect(stateGroup).toBeVisible();
 
-  for (const name of ["Presente", "Ausente", "Tardanza", "Justificado"]) {
+  for (const name of ["Presente", "Ausente", "Tardanza", "Justificado", "Enfermo", "Competencia"]) {
     const stateControl = stateGroup.getByRole("radio", { name, exact: true });
     await expect(stateControl).toBeVisible();
     await stateControl.click();
