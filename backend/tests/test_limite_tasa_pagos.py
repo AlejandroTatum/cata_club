@@ -98,6 +98,7 @@ _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
         # naturaleza operativa acotada que `registrar_pago` (un pago por
         # petición, admin-only), mismo tope.
         "registrar_pago_presencial": "10/minute",
+        "inscribir_representado_con_pago": "10/minute",
         "validar_pago": "20/minute",
         "adjuntar_comprobante": "20/minute",
         "subir_voucher": "5/minute",

@@ -327,6 +327,7 @@ RUTAS_ROLES_REQUERIDOS = {
     # nunca ADMINISTRADOR (que ya tiene la ruta de arriba, sin el límite de
     # "solo mi persona") ni ENTRENADOR (fuera de este contrato).
     ("POST", "/membresias/propia"): frozenset({"REPRESENTANTE", "ALUMNO"}),
+    ("POST", "/membresias/representado/pago"): frozenset({"REPRESENTANTE"}),
     ("POST", "/membresias/{membresia_id}/regularizar-deuda"): frozenset({"ADMINISTRADOR"}),
     # Issue #400 (slice 5b): corregir un campo financiero congelado de un
     # pago ya aprobado es tan sensible como crear el pago mismo -- admin-only,

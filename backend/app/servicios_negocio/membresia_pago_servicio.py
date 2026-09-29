@@ -43,7 +43,7 @@ from app.servicios_negocio.dtos.membresia_pago_schemas import (
     TipoMembresiaCreateDTO, TipoMembresiaUpdateDTO, MembresiaCreateDTO, PagoCreateDTO, PagoValidarDTO,
     ComprobantePagoCreateDTO,
     PagoListItemDTO, PagoResponseDTO, RegularizacionDeudaDTO, CorreccionPagoDTO,
-    CambioPlanMembresiaDTO,
+    CambioPlanMembresiaDTO, InscripcionRepresentadoPagoDTO,
 )
 from app.servicios_negocio.dtos.cobertura_bonificada_schemas import (
     CoberturaBonificadaCreateDTO, CoberturaBonificadaResponseDTO,
@@ -261,6 +261,13 @@ class MembresiaServicio:
         return resultado
 
     def crear_membresia(self, datos: MembresiaCreateDTO) -> Membresia:
+        membresia = self._crear_membresia_sin_commit(datos)
+        self.db.commit()
+        if inspeccionar_orm(membresia).expired:
+            self.db.refresh(membresia)
+        return membresia
+
+    def _crear_membresia_sin_commit(self, datos: MembresiaCreateDTO) -> Membresia:
         if not self.repo_persona.obtener_por_id(datos.persona_id):
             raise EntidadNoEncontrada(f"Persona con id {datos.persona_id} no encontrada")
         tipo = self.repo_tipo.obtener_por_id(datos.tipo_membresia_id)
@@ -302,9 +309,7 @@ class MembresiaServicio:
             tipo_membresia_id=datos.tipo_membresia_id,
         )
         membresia = self.repo.crear(membresia)
-        self.db.commit()
-        if inspeccionar_orm(membresia).expired:
-            self.db.refresh(membresia)
+        self.db.flush()
         return membresia
 
     def crear_membresia_propia(self, persona_id: int, tipo_membresia_id: int) -> Membresia:
@@ -496,6 +501,101 @@ class PagoServicio:
             raise OperacionInvalida(MENSAJE_MEMBRESIA_SUSPENDIDA)
 
     def registrar_pago(
+        self,
+        datos: PagoCreateDTO,
+        persona_id_solicitante: int | None = None,
+        roles_solicitante: list[str] | None = None,
+    ) -> Pago:
+        resultado = self._registrar_pago_sin_commit(
+            datos, persona_id_solicitante, roles_solicitante,
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            if "uq_pago_pendiente_por_membresia" in str(error.orig):
+                raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
+            raise
+        if inspeccionar_orm(resultado).expired:
+            self.db.refresh(resultado)
+        self._notificar_pago_registrado(resultado)
+        return resultado
+
+    def _notificar_pago_registrado(self, pago: Pago) -> None:
+        try:
+            persona = self.repo_persona.obtener_por_id(pago.persona_id)
+            if persona is not None and persona.representante_id:
+                self._crear_notificacion_pago(
+                    pago, TipoNotificacion.PAGO_REGISTRADO,
+                    f"Su pago de ${pago.monto} fue registrado y está pendiente de validación.",
+                )
+        except Exception:
+            self.db.rollback()
+            logger.exception("No se pudo notificar el pago registrado %s", pago.id)
+
+    def inscribir_representado_con_pago(
+        self, datos: InscripcionRepresentadoPagoDTO, representante_id: int,
+    ) -> Pago:
+        """Enroll and record a dependent's first payment in one transaction.
+
+        Lock the dependent row to serialize two concurrent enrolment attempts.
+        A matching pending payment is the result of a retried request.
+        """
+        try:
+            persona = self.db.query(Persona).filter(
+                Persona.id == datos.persona_id,
+            ).with_for_update().one_or_none()
+            if persona is None or persona.representante_id != representante_id:
+                raise PermisosInsuficientes("Solo el representante puede inscribir a su representado")
+            if _calcular_edad(persona.fecha_nacimiento) >= 18:
+                raise OperacionInvalida("Esta inscripción directa requiere un menor de edad")
+
+            membresias = self.repo_membresia.listar_por_persona(datos.persona_id)
+            operativas = [m for m in membresias if m.estado in (
+                EstadoMembresia.ACTIVA, EstadoMembresia.SUSPENDIDA,
+            )]
+            inactivas = [m for m in membresias if m.estado == EstadoMembresia.INACTIVA]
+            if operativas:
+                raise OperacionInvalida(MENSAJE_MEMBRESIA_ACTIVA_DUPLICADA)
+            membresia = next(
+                (m for m in inactivas if m.tipo_membresia_id == datos.tipo_membresia_id), None,
+            )
+            if membresia is None:
+                if inactivas:
+                    raise OperacionInvalida("Ya existe una membresía inactiva con otro plan")
+                membresia = MembresiaServicio(self.db)._crear_membresia_sin_commit(
+                    MembresiaCreateDTO(
+                        persona_id=datos.persona_id,
+                        tipo_membresia_id=datos.tipo_membresia_id,
+                    )
+                )
+            pendiente = self.db.query(Pago).filter(
+                Pago.membresia_id == membresia.id,
+                Pago.estado_pago == EstadoPago.PENDIENTE_VALIDACION,
+            ).one_or_none()
+            if pendiente is not None:
+                if pendiente.tipo_pago != datos.tipo_pago or pendiente.meses_comprados != datos.meses:
+                    raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO)
+                self.db.commit()
+                return pendiente
+            pago = self._registrar_pago_sin_commit(
+                PagoCreateDTO(
+                    persona_id=datos.persona_id, membresia_id=membresia.id,
+                    tipo_pago=datos.tipo_pago, meses=datos.meses,
+                ),
+                persona_id_solicitante=representante_id,
+                roles_solicitante=["REPRESENTANTE"],
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        if inspeccionar_orm(pago).expired:
+            self.db.refresh(pago)
+        self._notificar_pago_registrado(pago)
+        return pago
+
+    def _registrar_pago_sin_commit(
         self,
         datos: PagoCreateDTO,
         persona_id_solicitante: int | None = None,
@@ -712,25 +812,12 @@ class PagoServicio:
         # inválida para cualquier uso posterior.
         try:
             resultado = self.repo.crear(pago)
-            self.db.commit()
+            self.db.flush()
         except IntegrityError as error:
             self.db.rollback()
             if "uq_pago_pendiente_por_membresia" in str(error.orig):
                 raise OperacionInvalida(MENSAJE_PAGO_PENDIENTE_DUPLICADO) from error
             raise
-        # Issue #826/#451 (ver el comentario de `PersonaServicio.
-        # crear_representado`): este método corre dentro de
-        # `run_in_threadpool` y el router arma la respuesta (`pago_a_
-        # response_dto`) DESPUÉS, ya en el event loop.
-        if inspeccionar_orm(resultado).expired:
-            self.db.refresh(resultado)
-        persona_pago = self.repo_persona.obtener_por_id(resultado.persona_id)
-        if persona_pago is not None and persona_pago.representante_id:
-            self._crear_notificacion_pago(
-                resultado,
-                TipoNotificacion.PAGO_REGISTRADO,
-                f"Su pago de ${resultado.monto} fue registrado y está pendiente de validación.",
-            )
         return resultado
 
     # --- Issue #1402: pago presencial de primera inscripción -----------------

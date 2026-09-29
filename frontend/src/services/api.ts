@@ -1928,6 +1928,23 @@ export interface RegistrarPagoInput {
  *  Works for both admin-created payments and student/representante renewals:
  *  the backend enforces authorization at the service layer (owner, their
  *  representative, or ADMINISTRADOR). */
+export interface InscribirRepresentadoConPagoInput {
+  personaId: number;
+  tipoMembresiaId: number;
+  tipoPago: "EFECTIVO" | "TRANSFERENCIA";
+  meses: number;
+}
+
+/** Atomically enroll a dependent and register a pending first payment. */
+export async function inscribirRepresentadoConPago(data: InscribirRepresentadoConPagoInput): Promise<PagoPersona> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<PagoPersona>(apiEndpoint("/membresias/representado/pago"), {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: { "Content-Type": "application/json", ...mockHeaders },
+  });
+}
+
 export async function registrarPago(data: RegistrarPagoInput): Promise<PagoPersona> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   return request<PagoPersona>(apiEndpoint("/membresias/pagos"), {

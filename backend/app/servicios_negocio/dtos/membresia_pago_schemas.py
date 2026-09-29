@@ -144,6 +144,13 @@ class MembresiaEstadisticasResponseDTO(ResponseBase, BaseModel):
 
 
 # --- Pago ---
+class InscripcionRepresentadoPagoDTO(BaseModel):
+    persona_id: int
+    tipo_membresia_id: int
+    tipo_pago: TipoPago
+    meses: int = Field(..., gt=0, le=12)
+
+
 class PagoCreateDTO(BaseModel):
     """Registrar un pago dice CUÁNTO y CÓMO, nunca CON QUÉ DESCUENTO
     (issue #398/#400).
