@@ -227,6 +227,7 @@ describe("getNavGroupsForRoles", () => {
         { href: "/discounts", label: "Descuentos" },
         { href: "/sponsors", label: "Patrocinadores" },
         { href: "/galeria", label: "Galería" },
+        { href: "/admin/reportes-error", label: "Reportes de error" },
         { href: "/tarifas", label: "Tarifas" },
         { href: "/attendance", label: "Asistencias" },
         { href: "/reports", label: "Reportes" },
