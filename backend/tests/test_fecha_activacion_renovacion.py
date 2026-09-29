@@ -15,6 +15,7 @@ primera activación, nunca la última renovación.
 """
 from datetime import datetime, timezone
 
+from app.dominio.cedula import cedula_valida
 from app.dominio.enums import EstadoMembresia
 from app.dominio.modelos import Membresia
 
@@ -123,3 +124,44 @@ def test_pago_aprobado_en_membresia_vencida_reactiva_sin_pisar_fecha_activacion(
     membresia_reactivada = client.get(f"/api/v1/membresias/{membresia['id']}").json()
     assert membresia_reactivada["estado"] == "ACTIVA"
     assert _fecha_activacion_api(client, membresia["id"]) == fecha_activacion_original
+
+
+# --- Issue #1402: pago presencial de primera inscripción --------------------
+#
+# El pago presencial aprueba POR DENTRO con el mismo `validar_pago` (misma
+# cola de activación), así que la primera activación real también acá fija un
+# instante real de `fecha_activacion` -- pero en UNA sola petición, sin el
+# segundo paso humano de validación.
+
+
+def _presencial_efectivo(client, persona_id: int, membresia_id: int):
+    return client.post(
+        "/api/v1/membresias/pagos/presencial",
+        json={
+            "meses": 1, "tipo_pago": "EFECTIVO",
+            "persona_id": persona_id, "membresia_id": membresia_id,
+        },
+    )
+
+
+def test_pago_presencial_primera_inscripcion_fija_fecha_activacion_real(client):
+    """Caso presencial (#1402): admin persona_id=1 (token del conftest)
+    registra en persona el primer pago de un socio distinto; la respuesta ya
+    viene APROBADA y `fecha_activacion` es un instante real dentro de la
+    ventana de la petición."""
+    crear_persona_api(client, cedula_valida(750))  # relleno -> id=1 (el admin)
+    persona = crear_persona_api(client, cedula="1710034073")  # id=2
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+    assert membresia["estado"] == "INACTIVA"
+
+    antes = datetime.now(timezone.utc)
+    resp = _presencial_efectivo(client, persona["id"], membresia["id"])
+    despues = datetime.now(timezone.utc)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["estadoPago"] == "APROBADO"
+
+    membresia_actualizada = client.get(f"/api/v1/membresias/{membresia['id']}").json()
+    assert membresia_actualizada["estado"] == "ACTIVA"
+    fecha_activacion = _fecha_activacion_api(client, membresia["id"])
+    assert antes <= fecha_activacion <= despues
