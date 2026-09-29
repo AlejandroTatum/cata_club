@@ -12,8 +12,9 @@
  * authenticated caller and relays the backend's 401/403/400/422 — same
  * pattern as `POST /api/membresias/pagos`.
  *
- * Body carries only `meses` (a whole number of months, `gt=0, le=12` on the
- * backend) — no `monto`, no `tipoPago`, no voucher: a 100% benefit never
+ * Body carries no fields (issue #1369): one activation grants EXACTLY one
+ * month — the period is no longer the caller's choice — so an empty `{}` is
+ * forwarded. No `monto`, no `tipoPago`, no voucher: a 100% benefit never
  * creates a `Pago`, so there is no amount or payment method to collect.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -29,27 +30,19 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
   const membresiaId = parseNumericIdOrBadRequest((await context.params).id, "membresía");
   if (membresiaId instanceof NextResponse) return membresiaId;
 
-  let body: unknown;
+  // JSON validity stays a 400; the content itself is ignored (issue #1369:
+  // no field is required — a stale client's `meses` is neither read nor
+  // forwarded). The backend grants exactly one month per activation.
   try {
-    body = await request.json();
+    await request.json();
   } catch {
     return NextResponse.json({ message: "JSON inválido en el cuerpo de la solicitud." }, { status: 400 });
   }
 
-  if (
-    typeof body !== "object"
-    || body === null
-    || typeof (body as Record<string, unknown>).meses !== "number"
-  ) {
-    return NextResponse.json({ message: "El campo meses es obligatorio y debe ser numérico." }, { status: 400 });
-  }
-
-  const meses = (body as { meses: number }).meses;
-
   const result = await backendFetchAuthed(request, `/membresias/${membresiaId}/aplicar-beneficio`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ meses }),
+    body: JSON.stringify({}),
   });
 
   if (!result.ok) {

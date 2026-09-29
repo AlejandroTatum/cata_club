@@ -675,7 +675,9 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     ).toBeInTheDocument();
   });
 
-  it("applies the benefit only after the checkpoint, sending meses and no monto/tipoPago", async () => {
+  // Issue #1369: the month selector is gone — one activation grants exactly
+  // one month, decided by the backend, so the client sends no `meses` at all.
+  it("applies the benefit only after the checkpoint, sending no body fields (no meses, no monto/tipoPago)", async () => {
     mockFetchBeneficio.mockReset().mockResolvedValue(BENEFICIO_TOTAL);
     mockAplicarBeneficio.mockReset().mockResolvedValue({
       id: 9,
@@ -696,7 +698,7 @@ describe("StudentPaymentsPage — the club's benefit, read before paying", () =>
     fireEvent.click(screen.getByRole("button", { name: /confirmar y aplicar/i }));
 
     await waitFor(() => {
-      expect(mockAplicarBeneficio).toHaveBeenCalledWith(3, 1);
+      expect(mockAplicarBeneficio).toHaveBeenCalledWith(3);
     });
     expect(mockShowSuccess).toHaveBeenCalledTimes(1);
     const [message] = mockShowSuccess.mock.calls[0];

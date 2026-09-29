@@ -186,10 +186,10 @@ def test_aplicar_beneficio_extrano_recibe_403_uniforme_exista_o_no(client):
 
     _autenticar_como(extrano["id"], ["ALUMNO"])
     resp_existente = client.post(
-        f"/api/v1/membresias/{membresia['id']}/aplicar-beneficio", json={"meses": 1},
+        f"/api/v1/membresias/{membresia['id']}/aplicar-beneficio", json={},
     )
     resp_inexistente = client.post(
-        f"/api/v1/membresias/{ID_INEXISTENTE}/aplicar-beneficio", json={"meses": 1},
+        f"/api/v1/membresias/{ID_INEXISTENTE}/aplicar-beneficio", json={},
     )
 
     assert resp_existente.status_code == 403, resp_existente.text
@@ -209,10 +209,10 @@ def test_aplicar_beneficio_admin_tambien_recibe_403_uniforme(client):
 
     _autenticar_como_admin()  # persona_id=1, distinto del titular
     resp_existente = client.post(
-        f"/api/v1/membresias/{membresia['id']}/aplicar-beneficio", json={"meses": 1},
+        f"/api/v1/membresias/{membresia['id']}/aplicar-beneficio", json={},
     )
     resp_inexistente = client.post(
-        f"/api/v1/membresias/{ID_INEXISTENTE}/aplicar-beneficio", json={"meses": 1},
+        f"/api/v1/membresias/{ID_INEXISTENTE}/aplicar-beneficio", json={},
     )
 
     assert resp_existente.status_code == 403, resp_existente.text

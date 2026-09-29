@@ -4,28 +4,30 @@ beneficio 100% personal (`AsignacionDescuento`, issue #398) otorga sin
 generar ningún `Pago` -- ver el docstring de `CoberturaBonificada` en
 `app/dominio/modelos.py` para el porqué de la tabla dedicada.
 
-`CoberturaBonificadaCreateDTO` lleva ÚNICAMENTE `meses`: igual que
-`PagoCreateDTO` (issue #400/4b), el usuario elige una cantidad ENTERA de
-meses, nunca un monto ni el descuento a aplicar -- el backend resuelve la
-asignación VIGENTE del pagador y calcula el período. `membresia_id` viaja en
-la URL (`POST /membresias/{membresia_id}/aplicar-beneficio`), no en el
-cuerpo, mismo criterio que `regularizar_deuda_membresia`.
+`CoberturaBonificadaCreateDTO` no lleva campos (issue #1369): una activación
+otorga EXACTAMENTE un mes -- el período ya no se elige, así que el cuerpo es
+`{}`. Igual que en `PagoCreateDTO`, nunca viaja un monto ni el descuento a
+aplicar -- el backend resuelve la asignación VIGENTE del pagador y calcula el
+período. `membresia_id` viaja en la URL
+(`POST /membresias/{membresia_id}/aplicar-beneficio`), no en el cuerpo, mismo
+criterio que `regularizar_deuda_membresia`.
 """
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.servicios_negocio.dtos.base import ResponseBase
 from app.servicios_negocio.dtos.beneficio_schemas import AsignacionDescuentoResponseDTO
 
 
 class CoberturaBonificadaCreateDTO(BaseModel):
-    """`le=12` es el mismo techo defensivo que `PagoCreateDTO.meses` (ver su
-    docstring): doce es la cobertura más larga que el club vende hoy, no una
-    regla de producto."""
-    meses: int = Field(..., gt=0, le=12)
+    """Sin campos (issue #1369): una activación otorga EXACTAMENTE un mes --
+    el mes corrido (o el siguiente libre, si ya había cobertura), nunca una
+    cantidad elegida por el cliente. El modelo queda en pié como cuerpo del
+    endpoint: un `{}` válido descarta de raíz que el cliente pueda pedir más
+    de un mes, que es exactamente el hueco que el issue cierra."""
 
 
 class CoberturaBonificadaResponseDTO(ResponseBase, BaseModel):

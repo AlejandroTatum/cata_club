@@ -1989,24 +1989,23 @@ export interface CoberturaBonificada {
 }
 
 /**
- * Apply the caller's active 100% benefit to a whole number of months, with
- * no `Pago` created — `POST /api/membresias/:membresiaId/aplicar-beneficio`
- * (issue #400, slice 06).
+ * Apply the caller's active 100% benefit for exactly ONE month, with no
+ * `Pago` created — `POST /api/membresias/:membresiaId/aplicar-beneficio`
+ * (issue #400, slice 06; one-month rule issue #1369).
  *
  * Autoservicio: dueño o su representante, nunca un ADMINISTRADOR "por"
  * ellos (`membresia_pago_servicio.aplicar_beneficio_bonificado`). No
  * `tipoPago`, no voucher, no `monto` — a 100% benefit never creates a
- * `Pago`, so there is nothing to collect. `meses` is the same whole-number
- * month count `registrarPago` takes.
+ * `Pago`, so there is nothing to collect. No `meses` either (issue #1369):
+ * one activation grants exactly one month — covering the next month means
+ * activating again — so the body is empty and the backend decides the
+ * period.
  */
-export async function aplicarBeneficio(
-  membresiaId: number,
-  meses: number,
-): Promise<CoberturaBonificada> {
+export async function aplicarBeneficio(membresiaId: number): Promise<CoberturaBonificada> {
   const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
   return request<CoberturaBonificada>(apiEndpoint(`/membresias/${membresiaId}/aplicar-beneficio`), {
     method: "POST",
-    body: JSON.stringify({ meses }),
+    body: JSON.stringify({}),
     headers: { "Content-Type": "application/json", ...mockHeaders },
   });
 }
