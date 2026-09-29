@@ -348,10 +348,11 @@ class SupresionDatosServicio:
         return objetivos, residuos
 
     def _suprimir_en_base(self, persona: Persona, residuos: List[str]) -> str:
-        # D10: borrar también las descripciones y capturas de esta persona.
-        ReporteErrorRepositorio(self.db).borrar_por_persona(persona.id)
         """Todas las mutaciones de la supresión, en la transacción del caso de
         uso. El `commit()` lo hace `ejecutar` (issue #831)."""
+
+        # D10: borrar también las descripciones y capturas de esta persona.
+        ReporteErrorRepositorio(self.db).borrar_por_persona(persona.id)
 
         # Capturar ids ANTES de borrar: los outboxes de recuperación y
         # verificación apuntan a `usuario.id`.
