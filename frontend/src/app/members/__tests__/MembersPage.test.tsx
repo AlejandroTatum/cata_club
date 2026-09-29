@@ -126,6 +126,11 @@ const mockActualizarFichaMedica = vi.fn();
 const mockFetchTiposMembresia = vi.fn().mockResolvedValue([]);
 const mockCrearMembresia = vi.fn();
 const mockRegistrarPago = vi.fn();
+// Issue #1402: the in-person FIRST-inscription flow and its admin-only
+// finalize — both only reachable from a membership with `estadoBackend:
+// "INACTIVA"`; every other state keeps the plain `registrarPago` flow.
+const mockRegistrarPagoPresencial = vi.fn();
+const mockValidarPago = vi.fn();
 const mockSubirVoucherPago = vi.fn().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
 const mockFetchDescuentos = vi.fn().mockResolvedValue([]);
 const mockFetchBeneficio = vi.fn().mockResolvedValue(null);
@@ -178,6 +183,8 @@ vi.mock("@/services/api", () => {
     fetchTiposMembresia: () => mockFetchTiposMembresia(),
     crearMembresia: (data: unknown) => mockCrearMembresia(data),
     registrarPago: (data: unknown) => mockRegistrarPago(data),
+    registrarPagoPresencial: (data: unknown) => mockRegistrarPagoPresencial(data),
+    validarPago: (pagoId: number, datos: unknown) => mockValidarPago(pagoId, datos),
     subirVoucherPago: (pagoId: number, archivo: File) => mockSubirVoucherPago(pagoId, archivo),
     fetchDescuentos: () => mockFetchDescuentos(),
     fetchBeneficio: (personaId: number) => mockFetchBeneficio(personaId),
@@ -1081,6 +1088,8 @@ describe("MembersPage — Registrar pago inline form", () => {
     mockFetchMembers.mockReset();
     mockFetchTiposMembresia.mockReset().mockResolvedValue([]);
     mockRegistrarPago.mockReset();
+    mockRegistrarPagoPresencial.mockReset().mockResolvedValue({ id: 99, estadoPago: "PENDIENTE_VALIDACION" });
+    mockValidarPago.mockReset().mockResolvedValue({ id: 99, estadoPago: "APROBADO" });
     mockSubirVoucherPago.mockReset().mockResolvedValue({ voucherUrl: "https://example.test/voucher.pdf" });
     mockFetchDescuentos.mockReset().mockResolvedValue([]);
   });
@@ -1256,6 +1265,48 @@ describe("MembersPage — Registrar pago inline form", () => {
       membresiaId: 42,
       meses: 1,
       tipoPago: "TRANSFERENCIA",
+    });
+    // Issue #1402: this fixture (VENCIDA, no `estadoBackend`) is a RENEWAL —
+    // the in-person first-inscription endpoint and its finalize must never
+    // see it.
+    expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
+    expect(mockValidarPago).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(within(dialog).getByText(/pago registrado/i)).toBeInTheDocument();
+    });
+  });
+
+  /** Issue #1402: a membership that never activated (`estadoBackend:
+   *  "INACTIVA"`) is a FIRST inscription: the same form must go through the
+   *  dedicated in-person endpoint — register, upload the voucher as a
+   *  separate request, then finalize with the admin-only validar call — and
+   *  never through the plain renewal flow. */
+  it("routes a first inscription (estadoBackend INACTIVA) through registrarPagoPresencial + validar, never registrarPago", async () => {
+    const dialog = await openMemberDialog({
+      membresia: { ...MEMBRESIA_VENCIDA, estadoBackend: "INACTIVA" },
+    });
+    await openPaymentForm(dialog);
+    await within(dialog).findByDisplayValue("85");
+
+    submitPaymentWithVoucher(dialog);
+
+    await waitFor(() => {
+      expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
+    });
+    expect(mockRegistrarPagoPresencial.mock.calls[0][0]).toMatchObject({
+      personaId: 10,
+      membresiaId: 42,
+      meses: 1,
+      tipoPago: "TRANSFERENCIA",
+    });
+    // Never the plain renewal flow for a first inscription.
+    expect(mockRegistrarPago).not.toHaveBeenCalled();
+    // Evidence is a separate request, and approval only AFTER it succeeded.
+    await waitFor(() => {
+      expect(mockSubirVoucherPago).toHaveBeenCalledWith(99, expect.any(File));
+    });
+    await waitFor(() => {
+      expect(mockValidarPago).toHaveBeenCalledWith(99, { estadoPago: "APROBADO" });
     });
     await waitFor(() => {
       expect(within(dialog).getByText(/pago registrado/i)).toBeInTheDocument();
