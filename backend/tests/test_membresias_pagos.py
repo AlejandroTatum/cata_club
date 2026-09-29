@@ -13,7 +13,9 @@ from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.dtos.membresia_pago_schemas import MembresiaResponseDTO
 from app.servicios_negocio.membresia_pago_servicio import PagoServicio
 from tests.fabricas_pagos import (
-    crear_membresia_orm, crear_pago_orm, crear_persona_orm, crear_tipo_membresia_orm,
+    crear_membresia_api, crear_membresia_orm, crear_pago_orm, crear_persona_api,
+    crear_persona_orm, crear_tipo_membresia_api, crear_tipo_membresia_orm,
+    registrar_pago_api,
 )
 
 
@@ -1478,3 +1480,281 @@ def test_retirada_tiene_deuda_individual_y_bulk_en_cero(client, db_session):
     assert individual.json()["mesesAdeudados"] == 0
     assert bulk.json()[0]["mesesAdeudados"] == 0
     assert regularizacion.status_code == 400
+
+
+# --- Issue #1402: pago presencial de primera inscripción --------------------
+#
+# El admin anota EN PERSONA el primer pago de una membresía: EFECTIVO queda
+# APROBADO al instante con la auditoría de `validar_pago` y activa la
+# membresía; TRANSFERENCIA queda PENDIENTE_VALIDACION hasta que el voucher
+# suba por su propia petición y el admin finalice con el validar admin-only.
+# Sin bandera seteable por el cliente, sin autoservicio, sin renovaciones.
+
+
+def _presencial(client, persona_id: int, membresia_id: int, *, tipo_pago="EFECTIVO", meses=1):
+    return client.post(
+        "/api/v1/membresias/pagos/presencial",
+        json={
+            "meses": meses, "tipo_pago": tipo_pago,
+            "persona_id": persona_id, "membresia_id": membresia_id,
+        },
+    )
+
+
+def _armar_primera_inscripcion(client, cedula: str):
+    """Relleno id=1 (el persona_id del token admin del conftest) + el socio
+    real en id=2, mismo idioma de `test_efectivo_solo_por_socio.py`."""
+    crear_persona_api(client, cedula=cedula_valida(700))  # relleno -> id=1 (admin)
+    persona = crear_persona_api(client, cedula=cedula)    # id=2
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+    return persona, membresia
+
+
+def test_presencial_efectivo_primera_inscripcion_aprueba_y_activa(client, db_session):
+    from app.dominio.modelos import Pago as PagoModel
+
+    persona, membresia = _armar_primera_inscripcion(client, cedula_valida(701))
+
+    antes = datetime.now(timezone.utc)
+    resp = _presencial(client, persona["id"], membresia["id"])
+    despues = datetime.now(timezone.utc)
+    assert resp.status_code == 201, resp.text
+
+    body = resp.json()
+    # Aprobado en el mismo acto, SIN una segunda llamada humana de validación.
+    assert body["estadoPago"] == "APROBADO"
+    # Auditoría existente de revisor y tiempo (issue #458): quién y cuándo.
+    assert body["validadoPorPersonaId"] == 1
+    fecha_validacion = datetime.fromisoformat(body["fechaValidacion"].replace("Z", "+00:00"))
+    assert antes <= fecha_validacion <= despues
+
+    fila = db_session.get(PagoModel, body["id"])
+    assert fila.estado_pago == EstadoPago.APROBADO
+    assert fila.validado_por_persona_id == 1
+    membresia_api = client.get(f"/api/v1/membresias/{membresia['id']}").json()
+    assert membresia_api["estado"] == "ACTIVA"
+
+
+def test_presencial_transferencia_queda_pendiente_y_finaliza_admin_con_voucher(
+    client, db_session,
+):
+    from app.dominio.modelos import Pago as PagoModel
+
+    persona, membresia = _armar_primera_inscripcion(client, cedula_valida(702))
+
+    resp = _presencial(client, persona["id"], membresia["id"], tipo_pago="TRANSFERENCIA")
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    # La evidencia (voucher) viaja en OTRA petición: sin ella el pago NO se
+    # aprueba nunca, queda pendiente y la membresía sigue inactiva.
+    assert body["estadoPago"] == "PENDIENTE_VALIDACION"
+    assert body["fechaValidacion"] is None
+    assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "INACTIVA"
+
+    # Aprobar sin voucher y sin motivo sigue prohibido (issue #459 intacto).
+    sin_voucher = client.patch(
+        f"/api/v1/membresias/pagos/{body['id']}/validar", json={"estado_pago": "APROBADO"},
+    )
+    assert sin_voucher.status_code == 400
+
+    # Voucher presente (mecánica de subida cubierta por test_voucher_pago.py;
+    # acá interesa la regla de finalización) -> el admin finaliza por el
+    # camino normal, sin excepción auditada, y la membresía se activa.
+    fila = db_session.get(PagoModel, body["id"])
+    fila.voucher_url = "voucher-fake-existente"
+    fila.voucher_formato = "image/jpeg"
+    db_session.commit()
+
+    final = client.patch(
+        f"/api/v1/membresias/pagos/{body['id']}/validar", json={"estado_pago": "APROBADO"},
+    )
+    assert final.status_code == 200, final.text
+    assert final.json()["estadoPago"] == "APROBADO"
+    assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "ACTIVA"
+
+
+def test_presencial_pago_propio_del_admin_no_se_autoaprueba(client):
+    """Autoservicio jamás: ni siquiera el admin aprueba su propio pago por el
+    camino presencial -- ese es exactamente el agujero que #1402 cierra."""
+    persona = crear_persona_api(client, cedula=cedula_valida(703))  # id=1 == token admin
+    tipo = crear_tipo_membresia_api(client)
+    membresia = crear_membresia_api(client, persona["id"], tipo["id"])
+
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 400, resp.text
+    assert "flujo regular" in resp.json()["detail"]
+    assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "INACTIVA"
+
+
+def test_presencial_renovacion_o_pago_posterior_se_rechaza(client, db_session):
+    persona, membresia = _armar_primera_inscripcion(client, cedula_valida(704))
+    assert _presencial(client, persona["id"], membresia["id"]).status_code == 201
+
+    # La membresía ya está ACTIVA (primera inscripción consumida): cualquier
+    # pago posterior es renovación y vuelve al flujo regular con cola.
+    renewal = _presencial(client, persona["id"], membresia["id"], tipo_pago="TRANSFERENCIA")
+    assert renewal.status_code == 400, renewal.text
+    assert "primera inscripción" in renewal.json()["detail"]
+
+    # La regla es POR MEMBRESÍA, no por persona: la segunda inscripción de
+    # alguien cuya primera membresía ya NO es operativa (VENCIDA) sí es
+    # primera inscripción de la nueva membresía y se aprueba. La API no deja
+    # crear una segunda membresía mientras la primera sigue ACTIVA (invariante
+    # "una operativa por persona"), así que este historial lo fija el ORM; el
+    # índice único parcial no se molesta: sólo cubre ACTIVA/SUSPENDIDA.
+    from app.dominio.enums import EstadoMembresia as EstadoMembresiaEnum
+    from app.dominio.modelos import Membresia as MembresiaModel
+    from app.dominio.modelos import Persona, TipoMembresia
+
+    fila = db_session.get(MembresiaModel, membresia["id"])
+    fila.estado = EstadoMembresiaEnum.VENCIDA
+    otra = crear_membresia_orm(
+        db_session,
+        db_session.get(Persona, persona["id"]),
+        db_session.get(TipoMembresia, crear_tipo_membresia_api(client)["id"]),
+        EstadoMembresiaEnum.INACTIVA,
+    )
+    db_session.commit()
+
+    assert _presencial(client, persona["id"], otra.id).json()["estadoPago"] == "APROBADO"
+
+
+def test_presencial_inactiva_con_pago_aprobado_previo_no_existe_como_primera(
+    client, db_session,
+):
+    """El candado explícito de la guardia: INACTIVA + pago APROBADO previo
+    (histórico raro pero posible tras correcciones) NO es primera
+    inscripción -- la regla mira el historial, no solo el estado."""
+    from app.dominio.enums import EstadoMembresia
+    from app.dominio.modelos import Membresia as MembresiaModel
+
+    persona, membresia = _armar_primera_inscripcion(client, cedula_valida(705))
+    assert _presencial(client, persona["id"], membresia["id"]).status_code == 201
+
+    fila = db_session.get(MembresiaModel, membresia["id"])
+    fila.estado = EstadoMembresia.INACTIVA  # revertido por corrección manual
+    db_session.commit()
+
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 400, resp.text
+
+
+def test_presencial_sin_rol_admin_da_403(client_sin_permisos):
+    # La guardia de ruta (`GestorPermisos(ROL_ADMIN)`) corta ANTES de tocar la
+    # base: basta el ALUMNO autenticado del fixture con ids cualesquiera,
+    # mismo idioma de `test_registrar_pago_ajeno_da_403`.
+    resp = client_sin_permisos.post(
+        "/api/v1/membresias/pagos/presencial",
+        json={"meses": 1, "tipo_pago": "EFECTIVO", "persona_id": 999, "membresia_id": 1},
+    )
+    assert resp.status_code == 403, resp.text
+
+
+# --- Issue #1402 (hallazgo del revisor): carrera de la guardia de primera
+# inscripción --------------------------------------------------------------
+# La guardia leía la membresía SIN lock: dos peticiones concurrentes (o una
+# presencial y una aprobación de la cola que se cruza) pasaban la guardia con
+# el dato vencido y la segunda aprobaba un SEGUNDO pago como primera
+# inscripción. El fix lee la membresía con el MISMO `SELECT ... FOR UPDATE`
+# que `registrar_pago`: el perdedor de la carrera se bloquea en la guardia,
+# relee el estado ya commiteado y sale rechazado. Estos tres tests fijan el
+# desenlace obligatorio de cada tramo de esa carrera.
+
+
+def test_presencial_tras_aprobacion_concurrente_no_segundo_pago(client, db_session):
+    """Carrera, tramo final: la aprobación competidora YA commiteó cuando la
+    petición presencial llega a la guardia. Bajo lock la relectura ve
+    ACTIVA/con pago aprobado y rechaza -- jamás crea ni aprueba un segundo
+    pago (con la guardia vencida de antes, acá quedaba un segundo APROBADO)."""
+    persona, membresia = _armar_primera_inscripcion(client, cedula_valida(707))
+
+    # Transacción ganadora de la carrera: registra y aprueba el primer pago
+    # por el camino normal (mismo efecto que una validación de la cola que
+    # se cruza con el presencial).
+    ganador = registrar_pago_api(client, persona["id"], membresia["id"], tipo_pago="EFECTIVO")
+    assert ganador.status_code == 201, ganador.text
+    aprobado = client.patch(
+        f"/api/v1/membresias/pagos/{ganador.json()['id']}/validar",
+        json={"estado_pago": "APROBADO"},
+    )
+    assert aprobado.status_code == 200, aprobado.text
+
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 400, resp.text
+    assert "primera inscripción" in resp.json()["detail"]
+
+    # El desenlace que importa: UN solo pago, el ya aprobado. Ni un segundo
+    # pago creado (la guardia corta ANTES de registrar).
+    pagos = db_session.query(Pago).all()
+    assert len(pagos) == 1
+    assert pagos[0].estado_pago == EstadoPago.APROBADO
+
+
+def test_presencial_con_pendiente_concurrente_degrada_sin_duplicar(client, db_session):
+    """Carrera, tramo intermedio: la competidora alcanzó a REGISTRAR su
+    pendiente (aún no aprobarlo). La membresía sigue INACTIVA y sin
+    aprobados, así que la guardia pasa -- y el índice único de pendiente
+    (vía `registrar_pago`) corta el duplicado: degradación segura al flujo
+    regular, un solo pago, nunca dos."""
+    persona, membresia = _armar_primera_inscripcion(client, cedula_valida(709))
+
+    pendiente = registrar_pago_api(client, persona["id"], membresia["id"], tipo_pago="EFECTIVO")
+    assert pendiente.status_code == 201, pendiente.text
+
+    resp = _presencial(client, persona["id"], membresia["id"])
+    assert resp.status_code == 400, resp.text
+    assert "pendiente de validación" in resp.json()["detail"]
+
+    pagos = db_session.query(Pago).all()
+    assert len(pagos) == 1
+    assert pagos[0].estado_pago == EstadoPago.PENDIENTE_VALIDACION
+    assert client.get(f"/api/v1/membresias/{membresia['id']}").json()["estado"] == "INACTIVA"
+
+
+def test_presencial_guardia_primera_inscripcion_bajo_mismo_lock(db_session, monkeypatch):
+    """El ancla mecánica de la carrera: la guardia de primera inscripción
+    resuelve la membresía con el MISMO `obtener_por_id_con_bloqueo` (`SELECT
+    ... FOR UPDATE`) que usa `registrar_pago` -- nunca por la lectura sin
+    lock. Sin ese lock, la serialización contra la aprobación competidora no
+    existe y los dos tramos de arriba vuelven a ser aprobables dos veces."""
+    from app.dominio.enums import TipoPago
+    from app.dominio.excepciones import OperacionInvalida
+    from app.infraestructura.repositorios.membresia_repositorio import MembresiaRepositorio
+    from app.servicios_negocio.dtos.membresia_pago_schemas import PagoCreateDTO
+
+    persona = crear_persona_orm(db_session, cedula_valida(708))
+    tipo = crear_tipo_membresia_orm(db_session)
+    membresia = crear_membresia_orm(db_session, persona, tipo, EstadoMembresia.ACTIVA)
+    db_session.commit()
+
+    llamadas = {"con_lock": 0, "sin_lock": 0}
+    original_con_lock = MembresiaRepositorio.obtener_por_id_con_bloqueo
+    original_sin_lock = MembresiaRepositorio.obtener_por_id
+
+    def con_lock(self, membresia_id):
+        llamadas["con_lock"] += 1
+        return original_con_lock(self, membresia_id)
+
+    def sin_lock(self, membresia_id):
+        llamadas["sin_lock"] += 1
+        return original_sin_lock(self, membresia_id)
+
+    monkeypatch.setattr(MembresiaRepositorio, "obtener_por_id_con_bloqueo", con_lock)
+    monkeypatch.setattr(MembresiaRepositorio, "obtener_por_id", sin_lock)
+
+    servicio = PagoServicio(db_session)
+    datos = PagoCreateDTO(
+        persona_id=persona.id, membresia_id=membresia.id,
+        tipo_pago=TipoPago.EFECTIVO, meses=1,
+    )
+    with pytest.raises(OperacionInvalida, match="primera inscripción"):
+        servicio.registrar_pago_presencial(
+            datos, persona_id_solicitante=persona.id + 1,
+            roles_solicitante=["ADMINISTRADOR"],
+        )
+
+    # La decisión de elegibilidad pasó por el camino con lock, y ninguna
+    # lectura sin lock participó de ella.
+    assert llamadas["con_lock"] >= 1
+    assert llamadas["sin_lock"] == 0

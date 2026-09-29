@@ -157,6 +157,21 @@ MENSAJE_FECHA_EFECTIVA_RETROCEDE = (
     "última transición registrada de esta membresía."
 )
 
+# --- Issue #1402: pago presencial de primera inscripción --------------------
+# El admin anota en el club el PRIMER pago de inscripción de una membresía.
+# El endpoint es admin-only; estos mensajes cubren las dos guardias que la
+# ruta no puede resolver sola (necesitan leer el payload y la base).
+MENSAJE_PAGO_PRESENCIAL_PROPIO = (
+    "El pago presencial de primera inscripción se registra para el socio "
+    "presente en el club; para un pago propio use el flujo regular, que "
+    "queda pendiente de validación."
+)
+MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION = (
+    "La aprobación inmediata presencial solo aplica a la primera inscripción: "
+    "una membresía inactiva sin ningún pago aprobado. Registre renovaciones "
+    "por el flujo regular y apruébelas desde la cola de validación."
+)
+
 # --- Issue #400 (slice 4d): cobertura bonificada -----------------------------
 MENSAJE_COBERTURA_YA_APLICADA = (
     "El período indicado ya tiene cobertura (un pago aprobado, o un "
@@ -701,6 +716,130 @@ class PagoServicio:
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
         return resultado
+
+    # --- Issue #1402: pago presencial de primera inscripción -----------------
+    def registrar_pago_presencial(
+        self,
+        datos: PagoCreateDTO,
+        persona_id_solicitante: int | None,
+        roles_solicitante: list[str] | None,
+    ) -> Pago:
+        """Primer pago de inscripción anotado EN PERSONA por un admin (#1402).
+
+        Producto: el socio está en el club, paga en efectivo (o pasa su
+        transferencia frente al admin) y la membresía debe quedar ACTIVA en
+        el mismo acto, sin un segundo paso humano de revisión -- pero con la
+        MISMA auditoría de siempre (`validado_por_persona_id` +
+        `fecha_validacion`) porque la aprobación la ejecuta
+        `validar_pago`, no una bifurcación nueva.
+
+        Por qué endpoint aparte y no una bandera en `POST /pagos`: la
+        bandera sería un campo seteable por el cliente (#1402 lo prohíbe
+        explícitamente) y bastaría un `curl` de un ALUMNO para intentar
+        autoaprobarse. Acá la ruta exige `GestorPermisos(ROL_ADMIN)` y el
+        servicio re-verifica las tres condiciones que hacen segura la
+        aprobación inmediata, todas del lado del servidor:
+
+        1. En persona: el admin registra para OTRA persona. El pago propio
+           de un admin es autoservicio y nunca se autoaprueba (mismo camino
+           que el resto: `POST /pagos` + cola de validación).
+        2. Primera inscripción: la membresía está INACTIVA y NO tiene ni
+           un pago APROBADO previo (`fecha_fin_maxima_aprobada is None`).
+           Renovaciones, reactivaciones y segundas inscripciones quedan
+           fuera por definición del producto.
+        3. Evidencia completa ANTES de aprobar:
+           - EFECTIVO: la evidencia es el acto mismo del cobro (un pago en
+             efectivo nunca lleva voucher, issue #452) → se aprueba acá.
+           - TRANSFERENCIA: la evidencia es el voucher, que sube por una
+             petición SEPARADA (`POST /pagos/{id}/voucher`) → el pago
+             queda PENDIENTE_VALIDACION. Nunca se aprueba sin voucher:
+             cuando el voucher ya está, el admin finaliza por el endpoint
+             admin-only `PATCH /pagos/{id}/validar` (camino normal, sin
+             excepción auditada); si la subida falla, el pago sigue
+             pendiente y el reintento vuelve a ser seguro.
+
+        La cola de aprobación (activación, gratuidad familiar, notificación,
+        correo y disparo del PDF) no se duplica: se delega entera a
+        `validar_pago`, cuya guardia de estado + lock `FOR UPDATE` además
+        serializa esta aprobación contra cualquier validación concurrente
+        del mismo pago.
+
+        No es una sola transacción: `registrar_pago` commitea el pendiente y
+        `validar_pago` commitea la aprobación. La ventana de degradación es
+        segura por construcción -- si el proceso muere entre ambos commits,
+        el pago queda exactamente como en el flujo de siempre
+        (PENDIENTE_VALIDACION, aprobable desde la cola); jamás queda
+        aprobado sin evidencia, que es el único desenlace inaceptable.
+        """
+        # Autoría fail-closed (issue #458, mismo criterio que `validar_pago`):
+        # sin `persona_id` en el token no hay admin identificable que firmar
+        # la aprobación -- la ruta ya exigió rol ADMINISTRADOR, pero el actor
+        # explícito es quien queda en la auditoría.
+        if persona_id_solicitante is None:
+            raise PermisosInsuficientes(
+                "No se pudo identificar al administrador que registra el pago "
+                "presencial.",
+                detalle_tecnico="pago presencial: token sin persona_id",
+            )
+
+        # Guardia 1: en persona, nunca autoservicio. `GestorPermisos` ya
+        # garantiza el rol; esto evita que un admin use el camino de
+        # aprobación inmediata para su propia membresía.
+        if persona_id_solicitante == datos.persona_id:
+            raise OperacionInvalida(MENSAJE_PAGO_PRESENCIAL_PROPIO)
+
+        # Guardia 2: primera inscripción (membresía inicial INACTIVA, sin
+        # ningún pago aprobado). La lectura es `FOR UPDATE` (hallazgo del
+        # revisor de #1402): con la lectura sin lock, dos peticiones
+        # concurrentes (o una presencial y una aprobación de la cola que se
+        # cruza) leían la misma membresía INACTIVA antes de que cualquiera
+        # commiteara, ambas pasaban esta guardia con el dato vencido y la
+        # segunda aprobaba un SEGUNDO pago como si fuera primera
+        # inscripción. Bajo el MISMO lock de fila que `registrar_pago`
+        # re-adquiere (no-op: misma transacción, mismo método) y que toda
+        # aprobación competidora retiene desde su UPDATE de activación hasta
+        # el commit, el perdedor de la carrera queda bloqueado acá, relee el
+        # estado ya commiteado (ACTIVA o con pago aprobado) y la guardia lo
+        # rechaza: la elegibilidad se decide con el mismo dato que verá el
+        # registro y la aprobación. Sin deadlock nuevo: `registrar_pago`
+        # commitea y suelta este lock ANTES de que `validar_pago` tome el
+        # del pago (mismo orden [pago -> membresía] que cualquier
+        # `validar_pago` de la cola), y la espera acá está acotada por
+        # `lock_timeout` (issue #451: el perdedor recibe 409, nunca cuelga).
+        membresia = self.repo_membresia.obtener_por_id_con_bloqueo(datos.membresia_id)
+        if not membresia:
+            raise EntidadNoEncontrada(f"Membresía con id {datos.membresia_id} no encontrada")
+        es_primera_inscripcion = (
+            membresia.estado == EstadoMembresia.INACTIVA
+            and self.repo.fecha_fin_maxima_aprobada(membresia.id) is None
+        )
+        if not es_primera_inscripcion:
+            raise OperacionInvalida(MENSAJE_PAGO_PRESENCIAL_NO_PRIMERA_INSCRIPCION)
+
+        # Mismo camino de registro de siempre: autorización (dueño/
+        # representante/admin), pago cruzado, menores, duplicado pendiente,
+        # derivación de cobertura y congelado de tarifa/descuento -- cero
+        # lógica nueva de registro.
+        pago = self.registrar_pago(
+            datos,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        )
+
+        # Guardia 3: evidencia completa antes de aprobar (ver docstring).
+        # TRANSFERENCIA vuelve PENDIENTE_VALIDACION: su evidencia (voucher)
+        # viaja en otra petición y la aprobación final es el `validar`
+        # admin-only de siempre.
+        if pago.tipo_pago != TipoPago.EFECTIVO:
+            return pago
+
+        # EFECTIVO: cola de validación completa reusada, con auditoría de
+        # revisor y tiempo (`validado_por_persona_id`/`fecha_validacion`).
+        return self.validar_pago(
+            pago.id,
+            PagoValidarDTO(estado_pago=EstadoPago.APROBADO),
+            actor_persona_id=persona_id_solicitante,
+        )
 
     # --- Issue #398/3c: beneficio del pagador, resuelto server-side --------
     def _congelar_beneficio_activo(
