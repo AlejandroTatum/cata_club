@@ -11,8 +11,8 @@ propio servicio.
 from types import SimpleNamespace
 from typing import Optional
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, exists, func, not_, or_
+from sqlalchemy.orm import Session, aliased
 
 from app.dominio.modelos import Notificacion
 from app.dominio.excepciones import EntidadNoEncontrada, PermisosInsuficientes
@@ -93,10 +93,10 @@ class NotificacionServicio:
         self, persona_id: int, skip: int = 0, limit: Optional[int] = None
     ) -> tuple[list[Notificacion], int]:
         """Para representantes: incluye notificaciones propias y de sus
-        hijos. Desde el #1227 cada fila SIEMPRE pertenece a su titular real
-        (nunca hay una copia escrita para el representante -- ver
-        `MembresiaPagoServicio._crear_notificacion`), así que acá, al leer,
-        se antepone "Para <nombre acortado>: " al `mensaje` de toda fila cuyo
+        hijos. Payment rows belong to the child (#1227); registration now
+        also addresses the representative directly (#1370). A matching child
+        event is hidden before counting/pagination. On read, prepend
+        "Para <nombre acortado>: " to the `mensaje` of every row whose
         `persona_id` no sea el de quien pide el feed. Un solo query resuelve
         los nombres de los dependientes (nunca uno por fila -- `contar_
         selects` en `conftest.py` lo mide)."""
@@ -109,20 +109,31 @@ class NotificacionServicio:
             h.id: nombre_completo(h.nombres, h.apellidos) for h in hijos
         }
         todos_ids = [persona_id] + list(nombres_hijos.keys())
+        propia = aliased(Notificacion)
+        # Prefer the representative's addressed row when a child row names
+        # the same type and event. Apply this predicate before both pagination
+        # and count; otherwise a duplicate can consume a page slot.
+        duplicada = exists().where(and_(
+            propia.persona_id == persona_id,
+            propia.tipo == Notificacion.tipo,
+            propia.entidad_relacionada_id == Notificacion.entidad_relacionada_id,
+        ))
+        visible = and_(
+            Notificacion.persona_id.in_(todos_ids),
+            or_(Notificacion.persona_id == persona_id,
+                Notificacion.entidad_relacionada_id.is_(None),
+                not_(duplicada)),
+        )
         query = (
             self.db.query(Notificacion)
-            .filter(Notificacion.persona_id.in_(todos_ids))
+            .filter(visible)
             .order_by(Notificacion.fecha_creacion.desc(), Notificacion.id.desc())
             .offset(skip)
         )
         if limit is not None:
             query = query.limit(limit)
         items = query.all()
-        total = (
-            self.db.query(func.count(Notificacion.id))
-            .filter(Notificacion.persona_id.in_(todos_ids))
-            .scalar()
-        )
+        total = self.db.query(func.count(Notificacion.id)).filter(visible).scalar()
         items = [
             self._con_prefijo_si_es_de_un_hijo(item, persona_id, nombres_hijos)
             for item in items

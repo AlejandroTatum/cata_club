@@ -20,6 +20,7 @@ const TIPO_LABELS: Record<TipoNotificacion, string> = {
   MIEMBRESIA_VENCIMIENTO_PROXIMO: "Membresía próxima a vencer",
   PAGO_APROBADO: "Pago aprobado",
   PAGO_RECHAZADO: "Pago rechazado",
+  PAGO_REGISTRADO: "Pago registrado",
   NUEVA_INSCRIPCION: "Nueva inscripción",
   VINCULACION_REPRESENTANTE: "Vinculación de representante",
   MIEMBRESIA_MORA_DIA_1: "Membresía vencida",

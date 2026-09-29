@@ -139,6 +139,30 @@ class TestFeedNotificacionesPaginado:
 
 
 class TestFeedNotificacionesRepresentante:
+    def test_fila_propia_gana_a_copia_del_hijo_antes_de_paginar_y_contar(self, db_session):
+        from app.servicios_negocio.notificacion_servicio import NotificacionServicio
+
+        representante = _crear_persona(db_session, cedula="1710034065")
+        hijo = _crear_persona(db_session, cedula="1710034073", fecha_nacimiento=date(2015, 1, 1))
+        hijo.representante_id = representante.id
+        db_session.add_all([
+            Notificacion(tipo=TipoNotificacion.NUEVA_INSCRIPCION, mensaje="Mi alta",
+                         persona_id=representante.id, entidad_relacionada_id=hijo.id,
+                         fecha_creacion=FECHA),
+            Notificacion(tipo=TipoNotificacion.NUEVA_INSCRIPCION, mensaje="Copia del hijo",
+                         persona_id=hijo.id, entidad_relacionada_id=hijo.id,
+                         fecha_creacion=FECHA),
+            Notificacion(tipo=TipoNotificacion.PAGO_APROBADO, mensaje="Otro evento",
+                         persona_id=hijo.id, entidad_relacionada_id=42,
+                         fecha_creacion=FECHA),
+        ])
+        db_session.commit()
+        servicio = NotificacionServicio(db_session)
+        primera, total = servicio.listar_para_persona_y_hijos(representante.id, limit=1)
+        segunda, total_2 = servicio.listar_para_persona_y_hijos(representante.id, skip=1, limit=1)
+        assert (total, total_2) == (2, 2)
+        assert [n.mensaje for n in primera + segunda] == ["Para Ana Vega: Otro evento", "Mi alta"]
+
     def test_representante_pagina_su_feed_y_el_de_sus_hijos(self, db_session):
         representante = _crear_persona(db_session, cedula="1710034065")
         hijo = _crear_persona(db_session, cedula="1710034073",
