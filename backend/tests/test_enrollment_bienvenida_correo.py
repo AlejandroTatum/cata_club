@@ -20,6 +20,7 @@ import pytest
 from app.dominio.cedula import cedula_valida
 from app.dominio.modelos import EnrollmentNotificacionOutbox, Notificacion, Persona, Usuario
 from app.infraestructura.notificaciones_servicio import ServicioNotificaciones
+from app.infraestructura.plantillas_correo import ID_CONTENIDO_ESCUDO
 from app.soporte_transversal.configuracion import settings
 from tests.smtp_falso import configurar_smtp_falso
 
@@ -71,6 +72,15 @@ def _texto(envio: dict) -> str:
     parsed = message_from_string(envio["mensaje"])
     assert parsed.is_multipart()
     return parsed.get_payload()[0].get_payload(decode=True).decode("utf-8")
+
+
+def _html(envio: dict) -> str:
+    parsed = message_from_string(envio["mensaje"])
+    return next(
+        p.get_payload(decode=True).decode("utf-8")
+        for p in parsed.walk()
+        if p.get_content_type() == "text/html"
+    )
 
 
 def _asunto(envio: dict) -> str:
@@ -131,7 +141,7 @@ def test_bienvenida_cuenta_el_primer_pago_en_el_club_y_la_activacion(smtp_captur
     envio = smtp_capturado[0]
     assert _asunto(envio) == "Cata Club | Bienvenida"
     texto = _texto(envio)
-    assert texto.startswith("Hola Ana Ficticia,")
+    assert texto.startswith("Bienvenida\n\nHola Ana Ficticia,")
     assert "bienvenida" in texto.lower()
     assert "en persona" in texto
     assert "activa" in texto
@@ -139,10 +149,25 @@ def test_bienvenida_cuenta_el_primer_pago_en_el_club_y_la_activacion(smtp_captur
     assert "Bienvenida" in envio["mensaje"]
 
 
+def test_bienvenida_viaja_con_el_layout_de_marca(smtp_capturado):
+    """Issue #1375: el quinto transaccional comparte el layout de marca:
+    HTML con lang=es, tablas presentacionales, escudo adjunto inline (cid:)
+    y alt significativo, y el nombre del club en texto si el cliente bloquea
+    imágenes. El texto plano no cambia."""
+    ServicioNotificaciones().enviar_bienvenida_inscripcion(CORREO_ALUMNO, "Ana Ficticia")
+
+    html = _html(smtp_capturado[0])
+    assert '<html lang="es">' in html
+    assert 'role="presentation"' in html
+    assert f'src="cid:{ID_CONTENIDO_ESCUDO}"' in html
+    assert 'alt="Cata Club"' in html
+    assert "Cata Club" in html
+
+
 def test_bienvenida_saluda_generico_sin_nombre(smtp_capturado):
     ServicioNotificaciones().enviar_bienvenida_inscripcion(CORREO_ALUMNO)
 
-    assert _texto(smtp_capturado[0]).startswith("Hola,")
+    assert _texto(smtp_capturado[0]).startswith("Bienvenida\n\nHola,")
 
 
 # --- La entrega -------------------------------------------------------------
