@@ -445,6 +445,12 @@ export type TipoNotificacion =
   // "your payment of $X was approved" (that would describe money that never
   // moved). See `PagoServicio.aplicar_beneficio_bonificado`.
   | "COBERTURA_BONIFICADA_OTORGADA"
+  // Issue #1369 (slice 2): operational notice to every active admin on each
+  // 100%-coverage activation. Own type — COBERTURA_BONIFICADA_OTORGADA is the
+  // TITULAR's notice with another recipient and message, and the dedup key
+  // `(tipo, persona_id, entidad_relacionada_id)` distinguishes by type. See
+  // `backend/app/servicios_negocio/membresia_pago_servicio.py`.
+  | "COBERTURA_BONIFICADA_ADMIN"
   // PR D (student-experience debt): operational notice to the admins when the
   // daily SMTP cap (Resend free plan) is exhausted and sends are being
   // skipped. Own type on purpose — the one-notification-per-admin-per-day

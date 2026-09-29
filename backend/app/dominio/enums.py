@@ -173,6 +173,13 @@ class TipoNotificacion(str, enum.Enum):
     # "Su pago de $X fue aprobado" (eso describiría un movimiento de dinero
     # que no ocurrió). Ver `PagoServicio.aplicar_beneficio_bonificado`.
     COBERTURA_BONIFICADA_OTORGADA = "COBERTURA_BONIFICADA_OTORGADA"
+    # Issue #1369 (slice 2): aviso OPERATIVO a cada administrador con cuenta
+    # activa en cada activación de cobertura bonificada. Tipo PROPIO -- no
+    # reusa COBERTURA_BONIFICADA_OTORGADA (ese es el aviso del TITULAR, con
+    # otro destinatario y otro mensaje) -- porque la clave de dedup
+    # `(tipo, persona_id, entidad_relacionada_id)` y los filtros del feed
+    # distinguen por tipo. Ver `PagoServicio._notificar_admins_cobertura`.
+    COBERTURA_BONIFICADA_ADMIN = "COBERTURA_BONIFICADA_ADMIN"
     # PR D (deuda de experiencia del alumno): aviso OPERATIVO a los
     # administradores de que el guardarraíl diario de correos (plan gratuito
     # de Resend) se agotó y hubo envíos omitidos. Es lo contrario de los

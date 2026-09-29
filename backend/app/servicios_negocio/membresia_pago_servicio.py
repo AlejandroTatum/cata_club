@@ -14,7 +14,7 @@ from app.dominio.modelos import (
     HistorialEstadoMembresia, CorreccionPago, HistorialCambioPlanMembresia, Persona,
 )
 from app.dominio.enums import (
-    EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, EfectoCoberturaCorreccion,
+    EstadoPago, EstadoMembresia, TipoNotificacion, TipoPago, TipoRol, EfectoCoberturaCorreccion,
 )
 from app.dominio.etiquetas import estado_de_pago_en_castellano
 from app.dominio.excepciones import (
@@ -33,8 +33,10 @@ from app.infraestructura.repositorios.descuento_repositorio import (
     AsignacionDescuentoRepositorio, DescuentoRepositorio,
 )
 from app.infraestructura.repositorios.notificacion_repositorio import NotificacionRepositorio
+from app.infraestructura.repositorios.rol_repositorio import RolRepositorio
 from app.servicios_negocio.persona_servicio import _calcular_edad
 from app.servicios_negocio.politica_acceso import PoliticaAccesoPersona
+from app.servicios_negocio.notificacion_servicio import acortar_nombre_para_notificacion
 from app.soporte_transversal.firma_archivos import es_firma_valida
 from app.soporte_transversal.tiempo import hoy_club
 from app.servicios_negocio.dtos.membresia_pago_schemas import (
@@ -478,6 +480,7 @@ class PagoServicio:
         self.repo_descuento = DescuentoRepositorio(db)
         self.repo_asignacion = AsignacionDescuentoRepositorio(db)
         self.repo_cobertura_bonificada = CoberturaBonificadaRepositorio(db)
+        self.repo_rol = RolRepositorio(db)
         # Issue #400 (slice 5a): `repo_tipo` resincroniza la tarifa al
         # reactivar (`TipoMembresia.precio` vigente, no el congelado);
         # `repo_historial_estado` lee la última reactivación para el reloj
@@ -1897,6 +1900,9 @@ class PagoServicio:
             ),
             id_para_log=f"cobertura bonificada {cobertura.id}",
         )
+        # Issue #1369 (slice 2): aviso operativo a cada administrador activo,
+        # después del commit de la cobertura y sin poder romperla.
+        self._notificar_admins_cobertura(cobertura, membresia)
         # Issue #826/#451: este método corre dentro de `run_in_threadpool` y
         # el router arma la respuesta después, ya en el event loop.
         if inspeccionar_orm(cobertura).expired:
@@ -2538,6 +2544,69 @@ class PagoServicio:
             logger.warning(
                 "Correo de %s no enviado a persona_id=%s: %s",
                 tipo.value, pago.persona_id, type(exc).__name__,
+            )
+
+    def _notificar_admins_cobertura(
+        self, cobertura: CoberturaBonificada, membresia: Membresia,
+    ) -> None:
+        """Aviso operativo a cada administrador con cuenta activa por la
+        activación recién commiteada (issue #1369, slice 2). Complementa el
+        aviso del titular (`COBERTURA_BONIFICADA_OTORGADA`): un admin que no
+        es el titular ni su representante hoy se entera sólo si abre la
+        membresía a mano.
+
+        Igual que `_crear_notificacion` (mismo criterio del #400/4d y de los
+        avisos de pago): corre DESPUÉS del commit de la operación principal,
+        con try/except + rollback propio -- un fallo del aviso nunca convierte
+        en 5xx una activación que en los hechos SÍ se procesó, y el rollback
+        deja la sesión usable para serializar la respuesta.
+
+        Los admins salen de `RolRepositorio.obtener_por_tipo_con_usuarios`
+        (una sola consulta con `joinedload`, issue #810), igual que
+        `enrollment_servicio._notificar_nueva_inscripcion`. El admin que es a
+        la vez titular NO recibe la segunda fila: su aviso de titular ya le
+        avisó de esta misma cobertura (mismo criterio anti-duplicado que el
+        #1227).
+        """
+        try:
+            rol_admin = self.repo_rol.obtener_por_tipo_con_usuarios(
+                TipoRol.ADMINISTRADOR
+            )
+            if not rol_admin:
+                return
+            titular = membresia.persona
+            nombre_titular = acortar_nombre_para_notificacion(
+                nombre_completo(titular.nombres, titular.apellidos)
+                if titular else f"persona {membresia.persona_id}"
+            )
+            mensaje = (
+                f"Cobertura bonificada (100%) activada para {nombre_titular}: "
+                f"1 mes (del {cobertura.fecha_inicio.isoformat()} al "
+                f"{cobertura.fecha_fin.isoformat()})."
+            )
+            for admin in (
+                u.persona for u in rol_admin.usuarios if u.persona and u.activo
+            ):
+                if admin.id == membresia.persona_id:
+                    continue
+                self._crear_notificacion(
+                    persona_id=admin.id,
+                    entidad_relacionada_id=cobertura.id,
+                    tipo=TipoNotificacion.COBERTURA_BONIFICADA_ADMIN,
+                    mensaje=mensaje,
+                    id_para_log=(
+                        f"cobertura bonificada {cobertura.id} (admin "
+                        f"{admin.id})"
+                    ),
+                )
+        except Exception:
+            # `rollback()` deshace SOLO la transacción parcial de estos
+            # avisos; la cobertura y la membresía ya están commiteadas.
+            self.db.rollback()
+            logger.exception(
+                "No se pudo notificar a los administradores de la cobertura "
+                "bonificada %s. La activación YA está commiteada.",
+                cobertura.id,
             )
 
     def _crear_notificacion(
