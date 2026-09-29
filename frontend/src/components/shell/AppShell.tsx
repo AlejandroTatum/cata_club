@@ -59,6 +59,7 @@ import { useNotificaciones } from "@/lib/useNotificaciones";
 import { usePendingPaymentsCount } from "@/lib/usePendingPayments";
 import { NAV_ICON_MAP } from "@/components/Header";
 import NotificationBell from "@/components/NotificationBell";
+import ReportProblemDialog from "@/components/ReportProblemDialog";
 import { PageHeader } from "@/components/ui";
 
 export interface AppShellProps {
@@ -378,6 +379,7 @@ export default function AppShell({
   const { notificaciones, loadError, markRead, marcarTodasLeidas, marcandoTodas, errorMarcarTodas } =
     useNotificaciones(!!session);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const isDesktopViewport = useIsDesktopViewport();
   // Desktop-only collapse state, independent from the mobile drawer
   // (`sidebarOpen` above). Initialized from localStorage so the preference
@@ -791,6 +793,10 @@ export default function AppShell({
 
         {/* `.side .foot-nav` — help, then account rows, then the user card. */}
         <div className="flex flex-col gap-2 border-t border-white/[0.08] p-2.5">
+          <button type="button" onClick={() => setReportOpen(true)} className={`${NAV_ITEM_CLASSES} ${NAV_ITEM_IDLE_CLASSES}`}>
+            <CircleHelp size={ICON.base} aria-hidden="true" />
+            <span className={collapsed ? "lg:hidden" : ""}>Reportar un problema</span>
+          </button>
           <Link
             href="/ayuda"
             title="Preguntas frecuentes"
@@ -1181,6 +1187,7 @@ export default function AppShell({
           </div>
         </div>
       )}
+      {reportOpen && <ReportProblemDialog onClose={() => setReportOpen(false)} />}
     </div>
   );
 }
