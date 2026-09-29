@@ -26,6 +26,7 @@ const TIPO_LABELS: Record<TipoNotificacion, string> = {
   MIEMBRESIA_MORA_DIA_8: "Membresía vencida",
   RESUMEN_MORA_ADMIN: "Resumen de mora",
   COBERTURA_BONIFICADA_OTORGADA: "Cobertura bonificada otorgada",
+  COBERTURA_BONIFICADA_ADMIN: "Cobertura bonificada (admin)",
   RESUMEN_CUPO_CORREO_ADMIN: "Tope de correos",
   RECORDATORIO_SESION: "Recordatorio de sesión",
 };
