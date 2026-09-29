@@ -20,17 +20,27 @@ import RegisterPaymentForm from "../RegisterPaymentForm";
 import type { MemberStudentSummary } from "../members-utils";
 
 const mockRegistrarPago = vi.fn();
+const mockRegistrarPagoPresencial = vi.fn();
 const mockSubirVoucherPago = vi.fn();
+const mockValidarPago = vi.fn();
 
 vi.mock("@/services/api", () => ({
+  // #1402: `registrarPago` is the ORIGINAL registration endpoint, kept for
+  // renewals/subsequent payments; the in-person FIRST-inscription flow goes
+  // through the dedicated admin-only `registrarPagoPresencial` instead.
   registrarPago: (data: unknown) => mockRegistrarPago(data),
+  registrarPagoPresencial: (data: unknown) => mockRegistrarPagoPresencial(data),
   subirVoucherPago: (pagoId: number, archivo: File) => mockSubirVoucherPago(pagoId, archivo),
+  validarPago: (pagoId: number, datos: unknown) => mockValidarPago(pagoId, datos),
 }));
 
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
 }));
 
+/** #1402 FIRST-inscription fixture: `estadoBackend` INACTIVA is exactly the
+ *  branch the form keys on — a membership that never activated, whose first
+ *  payment goes through the in-person presencial flow. */
 const MEMBRESIA: NonNullable<MemberStudentSummary["membresia"]> = {
   tipo: "Mensual",
   estado: "activa",
@@ -38,6 +48,7 @@ const MEMBRESIA: NonNullable<MemberStudentSummary["membresia"]> = {
   fechaFin: "2026-12-31",
   monto: 25,
   id: 54,
+  estadoBackend: "INACTIVA",
 };
 
 function fileInput(): HTMLInputElement {
@@ -97,14 +108,14 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
   });
 
   it("registers cash without a voucher and sends EFECTIVO without uploading one", async () => {
-    mockRegistrarPago.mockResolvedValue({ id: 501 });
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 
     await waitFor(() => {
-      expect(mockRegistrarPago).toHaveBeenCalledWith(expect.objectContaining({ tipoPago: "EFECTIVO" }));
+      expect(mockRegistrarPagoPresencial).toHaveBeenCalledWith(expect.objectContaining({ tipoPago: "EFECTIVO" }));
     });
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
     expect(fileInput()).not.toBeInTheDocument();
@@ -114,7 +125,7 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
   // this calls the caller's refresh instead, so the row/dialog updates on
   // its own.
   it("calls onPaymentRegistered after a successful registration, and never asks the admin to reload", async () => {
-    mockRegistrarPago.mockResolvedValue({ id: 501 });
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     const onPaymentRegistered = vi.fn();
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} onPaymentRegistered={onPaymentRegistered} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
@@ -122,18 +133,18 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 
     await waitFor(() => expect(onPaymentRegistered).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Pago registrado.")).toBeInTheDocument();
+    expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument();
     expect(screen.queryByText(/recarga/i)).not.toBeInTheDocument();
   });
 
   it("does not throw when onPaymentRegistered is omitted", async () => {
-    mockRegistrarPago.mockResolvedValue({ id: 501 });
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 
-    await waitFor(() => expect(screen.getByText("Pago registrado.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
   });
 
   it("clears the staged voucher and voucher error when switching to cash", () => {
@@ -200,8 +211,12 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
   });
 
   it("clears the alert and the file input's aria wiring once the voucher is attached and the resubmit succeeds", async () => {
-    mockRegistrarPago.mockResolvedValue({ id: 501 });
-    mockSubirVoucherPago.mockResolvedValue({});
+    // #1402 transfer flow: registration returns the payment PENDIENTE_VALIDACION,
+    // then the separate voucher upload succeeds and the admin-only validar
+    // finalize completes the approval.
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "PENDIENTE_VALIDACION" });
+    mockSubirVoucherPago.mockResolvedValue({ id: 501, estadoPago: "PENDIENTE_VALIDACION" });
+    mockValidarPago.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     openAndSubmitEmpty();
     expect(fileInput()).toHaveAttribute("aria-invalid", "true");
 
@@ -210,14 +225,182 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 
     // `setError(null)` runs synchronously once validation passes, ahead of
-    // the async `registrarPago` call — the silenced/invalid wiring drops
-    // immediately, not only after the request resolves.
+    // the async `registrarPagoPresencial` call — the silenced/invalid wiring
+    // drops immediately, not only after the request resolves.
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(fileInput()).not.toHaveAttribute("aria-invalid");
     expect(fileInput()).not.toHaveAttribute("aria-describedby");
 
-    await waitFor(() => expect(mockRegistrarPago).toHaveBeenCalled());
+    await waitFor(() => expect(mockRegistrarPagoPresencial).toHaveBeenCalled());
     await waitFor(() => expect(mockSubirVoucherPago).toHaveBeenCalledWith(501, file));
+    // Finalize happens only AFTER the voucher upload succeeded (#1402).
+    await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(501, { estadoPago: "APROBADO" }));
+    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+  });
+});
+
+// Issue #1402: the in-person flow decides everything server-side. EFECTIVO
+// comes back approved in the same request; TRANSFERENCIA only completes
+// after the separate voucher upload succeeds and the admin-only validar
+// finalize runs. Any failure leaves the payment PENDIENTE_VALIDACION and
+// offers an actionable retry that never re-registers the payment.
+describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402)", () => {
+  function openCash(): void {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+  }
+
+  function openTransferWithVoucher(): void {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(fileInput(), {
+      target: { files: [new File(["contenido"], "voucher.png", { type: "image/png" })] },
+    });
+  }
+
+  it("shows the approval outcome for in-person cash without touching voucher or validar", async () => {
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 601, estadoPago: "APROBADO" });
+    const onPaymentRegistered = vi.fn();
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} onPaymentRegistered={onPaymentRegistered} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(mockRegistrarPagoPresencial).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoPago: "EFECTIVO", personaId: 74 }),
+    ));
+    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    // Evidence for cash is the in-person act itself: no voucher upload, no
+    // separate finalize step — the backend already ran its audit tail.
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+    expect(mockValidarPago).not.toHaveBeenCalled();
+    await waitFor(() => expect(onPaymentRegistered).toHaveBeenCalledTimes(1));
+  });
+
+  it("uploads the voucher as a separate request and finalizes admin-only for transfer", async () => {
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 602, estadoPago: "PENDIENTE_VALIDACION" });
+    mockSubirVoucherPago.mockResolvedValue({ id: 602, estadoPago: "PENDIENTE_VALIDACION" });
+    mockValidarPago.mockResolvedValue({ id: 602, estadoPago: "APROBADO" });
+    openTransferWithVoucher();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(mockSubirVoucherPago).toHaveBeenCalledWith(602, expect.any(File)));
+    await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(602, { estadoPago: "APROBADO" }));
+    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the payment pending with an actionable retry when the voucher upload fails", async () => {
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 603, estadoPago: "PENDIENTE_VALIDACION" });
+    mockSubirVoucherPago.mockRejectedValueOnce(Object.assign(new Error("502"), { status: 502 }));
+    mockValidarPago.mockResolvedValue({ id: 603, estadoPago: "APROBADO" });
+    openTransferWithVoucher();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    // Failure message points at the pending payment and the retry action.
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/El pago quedó registrado y PENDIENTE/));
+    const retry = screen.getByRole("button", { name: "Reintentar comprobante" });
+    expect(retry).toBeEnabled();
+
+    // Retry uploads + finalizes again; the payment is NEVER re-registered.
+    mockSubirVoucherPago.mockResolvedValue({ id: 603, estadoPago: "PENDIENTE_VALIDACION" });
+    fireEvent.click(retry);
+    await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(603, { estadoPago: "APROBADO" }));
+    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
+    expect(mockSubirVoucherPago).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the payment pending with the same retry when the finalize (validar) fails", async () => {
+    mockRegistrarPagoPresencial.mockResolvedValue({ id: 604, estadoPago: "PENDIENTE_VALIDACION" });
+    mockSubirVoucherPago.mockResolvedValueOnce({ id: 604, estadoPago: "PENDIENTE_VALIDACION" });
+    mockValidarPago.mockRejectedValueOnce(Object.assign(new Error("400"), { status: 400 }));
+    openTransferWithVoucher();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/El pago quedó registrado y PENDIENTE/));
+    expect(screen.getByRole("button", { name: "Reintentar comprobante" })).toBeEnabled();
+    // The pago exists and stays pending — no second registration.
+    expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Issue #1402: the in-person endpoint is ONLY for a first inscription. Any
+// membership that already carried a backend state (ACTIVA, VENCIDA,
+// SUSPENDIDA — or no `estadoBackend` at all, which reads operational) is a
+// RENEWAL and must keep the original `registrarPago` flow untouched: plain
+// registration, the staged voucher uploaded right after, the payment into
+// the regular validation queue — never `registrarPagoPresencial`/`validar`.
+describe("RegisterPaymentForm — renovación usa el flujo original registrarPago (#1402)", () => {
+  /** Same shape as the first-inscription fixture but WITHOUT `estadoBackend:
+   *  "INACTIVA"` — a lapsed membership being renewed through the regular
+   *  flow (the missing field is exactly how MembersPage fixtures read). */
+  const MEMBRESIA_RENOVACION: NonNullable<MemberStudentSummary["membresia"]> = {
+    tipo: "Mensual",
+    estado: "vencida",
+    fechaInicio: "2026-01-01",
+    fechaFin: "2026-12-31",
+    monto: 25,
+    id: 54,
+  };
+
+  it("registers a renewal transfer through registrarPago and uploads the voucher, never presencial/validar", async () => {
+    mockRegistrarPago.mockResolvedValue({ id: 701, estadoPago: "PENDIENTE_VALIDACION" });
+    const onPaymentRegistered = vi.fn();
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA_RENOVACION} onPaymentRegistered={onPaymentRegistered} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.change(fileInput(), {
+      target: { files: [new File(["contenido"], "voucher.png", { type: "image/png" })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(mockRegistrarPago).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoPago: "TRANSFERENCIA", personaId: 74, membresiaId: 54 }),
+    ));
+    // Original voucher handling: the staged file is uploaded against the
+    // freshly created pago — no presencial endpoint, no admin-only finalize.
+    await waitFor(() => expect(mockSubirVoucherPago).toHaveBeenCalledWith(701, expect.any(File)));
+    expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
+    expect(mockValidarPago).not.toHaveBeenCalled();
+    // The original collapsed success text, not the in-person approval one.
+    await waitFor(() => expect(screen.getByText("Pago registrado.")).toBeInTheDocument());
+    await waitFor(() => expect(onPaymentRegistered).toHaveBeenCalledTimes(1));
+  });
+
+  it("registers a renewal cash payment without touching voucher or presencial flows", async () => {
+    mockRegistrarPago.mockResolvedValue({ id: 702, estadoPago: "PENDIENTE_VALIDACION" });
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA_RENOVACION} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(mockRegistrarPago).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoPago: "EFECTIVO" }),
+    ));
+    expect(mockSubirVoucherPago).not.toHaveBeenCalled();
+    expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
+    expect(mockValidarPago).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText("Pago registrado.")).toBeInTheDocument());
+  });
+
+  it("keeps the plain original error outcome when a renewal registration fails", async () => {
+    // The shape `services/api` really throws: the backend's own detail on an
+    // `ApiClientError` — surfaced verbatim by the ORIGINAL flow's error path.
+    mockRegistrarPago.mockRejectedValue(
+      Object.assign(new Error("Esta membresía ya tiene un pago pendiente de validación."), { status: 400 }),
+    );
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA_RENOVACION} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(
+      "Esta membresía ya tiene un pago pendiente de validación.",
+    ));
+    // The failed renewal is NOT turned into the in-person pending-retry flow.
+    expect(screen.queryByRole("button", { name: "Reintentar comprobante" })).not.toBeInTheDocument();
+    expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
   });
 });
 
@@ -329,7 +512,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
     });
     fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
 
-    expect(mockRegistrarPago).not.toHaveBeenCalled();
+    expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
   });
 
   it("does not resurrect a stale absurd preview after closing and reopening", () => {
@@ -344,7 +527,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
   });
 
   it("shows the real limit instead of a generic message when the backend still rejects a 422", async () => {
-    mockRegistrarPago.mockRejectedValue(
+    mockRegistrarPagoPresencial.mockRejectedValue(
       Object.assign(new Error("Input should be less than or equal to 12"), { status: 422 }),
     );
     open();
