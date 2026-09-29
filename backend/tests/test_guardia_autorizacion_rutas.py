@@ -161,6 +161,7 @@ RUTAS_PUBLICAS = {
 #   (b) ownership verificado DENTRO del handler via `PoliticaAccesoPersona`
 #       o un chequeo equivalente contra `token_payload["persona_id"]`.
 RUTAS_SOLO_AUTENTICADAS = {
+    ("POST", "/reportes-error/"),  # reporter authenticated; ownership from token
     ("GET", "/asistencias/alumnos/{persona_id}/horarios"),      # (b)
     ("GET", "/asistencias/categorias"),                          # (a)
     ("GET", "/asistencias/horarios"),                           # (a)
@@ -211,6 +212,9 @@ RUTAS_SOLO_AUTENTICADAS = {
 # usados en su vecindario, es una decision que este test obliga a hacer
 # visible en el diff.
 RUTAS_ROLES_REQUERIDOS = {
+    ("GET", "/reportes-error/"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/reportes-error/{reporte_id}"): frozenset({"ADMINISTRADOR"}),
+    ("GET", "/reportes-error/{reporte_id}/captura"): frozenset({"ADMINISTRADOR"}),
     # Supresión de datos (issue #1062): procedimiento admin-revisado (D1) --
     # no existe autogestión; incluso listar/ver una solicitud es dato sensible.
     ("GET", "/supresion-datos/"): frozenset({"ADMINISTRADOR"}),

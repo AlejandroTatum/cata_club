@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy import (
-    String, CHAR, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, Table, Column,
+    String, CHAR, ForeignKey, Numeric, DateTime, Date, Time, Boolean, Integer, LargeBinary, Table, Column,
     CheckConstraint, Index, UniqueConstraint, text, func, event,
     Enum as SAEnum, inspect as inspeccionar_orm,
 )
@@ -1990,6 +1990,21 @@ class ConsultaFichaEmergencia(Base):
 # para poder reutilizarse en otros procesos del sistema (ej. vencimiento de
 # membresía, ver `alertas_tareas.py`).
 # ---------------------------------------------------------------------------
+class ReporteError(Base):
+    __tablename__ = "reporte_error"
+    __table_args__ = (Index("ix_reporte_error_fecha_creacion", "fecha_creacion"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)
+    descripcion: Mapped[str] = mapped_column(String(2000), nullable=False)
+    request_id: Mapped[Optional[str]] = mapped_column(String(128))
+    ruta: Mapped[Optional[str]] = mapped_column(String(500))
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
+    captura: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    captura_mime: Mapped[Optional[str]] = mapped_column(String(32))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora_utc, nullable=False)
+
+
 class Notificacion(Base):
     __tablename__ = "notificacion"
     __table_args__ = (

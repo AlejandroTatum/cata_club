@@ -65,6 +65,7 @@ from app.infraestructura.cloudinary_cliente import (
     resource_type_de_destruccion,
 )
 from app.infraestructura.repositorios.persona_repositorio import PersonaRepositorio
+from app.infraestructura.repositorios.reporte_error_repositorio import ReporteErrorRepositorio
 from app.infraestructura.repositorios.supresion_datos_repositorio import (
     SolicitudSupresionDatosRepositorio,
 )
@@ -347,6 +348,8 @@ class SupresionDatosServicio:
         return objetivos, residuos
 
     def _suprimir_en_base(self, persona: Persona, residuos: List[str]) -> str:
+        # D10: borrar también las descripciones y capturas de esta persona.
+        ReporteErrorRepositorio(self.db).borrar_por_persona(persona.id)
         """Todas las mutaciones de la supresión, en la transacción del caso de
         uso. El `commit()` lo hace `ejecutar` (issue #831)."""
 

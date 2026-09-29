@@ -26,6 +26,7 @@ celery_app = Celery(
         "app.infraestructura.tareas.vencimientos_tareas",
         "app.infraestructura.tareas.contador_correo_tareas",
         "app.infraestructura.tareas.recordatorio_sesion_tareas",
+        "app.infraestructura.tareas.reporte_error_tareas",
     ],
 )
 
@@ -74,6 +75,10 @@ def _parsear_hora_crontab(hhmm: str) -> crontab:
 
 _hora_diaria = _parsear_hora_crontab(settings.celery_hora_automatizaciones)
 celery_app.conf.beat_schedule = {
+    "purgar-reportes-error-diario": {
+        "task": "app.infraestructura.tareas.reporte_error_tareas.purgar_reportes_error",
+        "schedule": _parsear_hora_crontab("03:10"),
+    },
     "despachar-inscripcion-notificaciones-cada-minuto": {
         "task": "app.infraestructura.tareas.enrollment_notificacion_tareas.despachar_inscripcion_notificaciones",
         "schedule": crontab(minute="*/1"),

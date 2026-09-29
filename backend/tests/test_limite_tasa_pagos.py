@@ -21,6 +21,7 @@ import pytest
 
 from app.presentacion.routers import (
     auth_router, descuentos_router, enrollment_router, membresias_pagos_router, personas_router,
+    reporte_error_router,
 )
 
 
@@ -66,6 +67,7 @@ def _inventario_declarado(modulo) -> dict[str, str]:
 # propósito. PR3-PR5 extienden este mismo diccionario router por router --
 # ver `sdd/api-abuse-protection/tasks`.
 _INVENTARIO_ESPERADO: dict[object, dict[str, str]] = {
+    reporte_error_router: {"crear_reporte": "5/minute"},
     auth_router: {
         "login": "60/minute",
         "registro": "20/minute",
