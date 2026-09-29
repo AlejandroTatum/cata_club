@@ -124,6 +124,70 @@ def test_inscripcion_registra_los_cuatro_documentos_y_el_representado(db_session
     assert all(registro.version_documento and registro.texto_aceptado for registro in consentimientos)
 
 
+def test_inscripcion_del_menor_entrega_aviso_propio_al_representante(monkeypatch, db_session):
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
+
+    datos = _enrollment_dto(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ),
+        alumno=_alumno_dto(),
+    )
+    EnrollmentServicio(db_session).enroll(datos)
+    alumno = db_session.query(Persona).filter_by(cedula=cedula_valida(251)).one()
+    eventos = db_session.query(EnrollmentNotificacionOutbox).filter_by(
+        alumno_persona_id=alumno.id,
+    ).all()
+    assert len(eventos) == 1
+    assert eventos[0].admin_persona_id == alumno.representante_id
+    eventos[0].status = "ENVIANDO"
+    db_session.commit()
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
+    assert tasks.entregar_inscripcion_notificacion(eventos[0].id)["enviado"]
+    assert db_session.query(Notificacion).filter_by(
+        persona_id=alumno.representante_id,
+        enrollment_outbox_id=eventos[0].id,
+    ).count() == 1
+    assert tasks.entregar_inscripcion_notificacion(eventos[0].id)["enviado"] is False
+
+
+def test_inscripcion_con_admin_conserva_ambos_destinatarios_y_lider(monkeypatch, db_session):
+    from app.dominio.modelos import Rol
+    from app.infraestructura.tareas import enrollment_notificacion_tareas as tasks
+
+    admin = Persona(nombres="Admin", apellidos="Club", cedula=cedula_valida(290),
+                    fecha_nacimiento=date(1990, 1, 1), telefono="0991111111")
+    db_session.add(admin)
+    db_session.flush()
+    db_session.add(Usuario(correo="admin@example.com", contrasenia="hash", persona_id=admin.id,
+                           roles=[Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Admin")]))
+    db_session.commit()
+    EnrollmentServicio(db_session).enroll(_enrollment_dto(
+        representante=EnrollmentRepresentanteDTO(
+            nombres="Sofia", apellidos="Martinez", cedula=cedula_valida(250),
+            fecha_nacimiento=date(1990, 5, 20), telefono="0991234567",
+            correo="sofia@example.com", contrasenia="password8",
+        ), alumno=_alumno_dto(),
+    ))
+    alumno = db_session.query(Persona).filter_by(cedula=cedula_valida(251)).one()
+    eventos = db_session.query(EnrollmentNotificacionOutbox).filter_by(
+        alumno_persona_id=alumno.id,
+    ).order_by(EnrollmentNotificacionOutbox.id).all()
+    destinatarios = [admin.id, alumno.representante_id]
+    assert [evento.admin_persona_id for evento in eventos] == destinatarios
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: db_session)
+    for evento in eventos:
+        evento.status = "ENVIANDO"
+    db_session.commit()
+    ids = [evento.id for evento in eventos]
+    for evento_id in reversed(ids):
+        assert tasks.entregar_inscripcion_notificacion(evento_id)["enviado"]
+    assert {n.persona_id for n in db_session.query(Notificacion).all()} == set(destinatarios)
+    assert db_session.query(Notificacion).count() == 2
+
+
 def test_inscripcion_representante_persiste_su_rol_mas_alla_del_flush(db_session):
     """Issue #762: la inscripción de un menor otorgaba REPRESENTANTE **y**
     ALUMNO a la cuenta del representante, en dos llamadas seguidas. Ese era

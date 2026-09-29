@@ -155,6 +155,7 @@ class TipoNotificacion(str, enum.Enum):
     MIEMBRESIA_VENCIMIENTO_PROXIMO = "MIEMBRESIA_VENCIMIENTO_PROXIMO"
     PAGO_APROBADO = "PAGO_APROBADO"
     PAGO_RECHAZADO = "PAGO_RECHAZADO"
+    PAGO_REGISTRADO = "PAGO_REGISTRADO"
     NUEVA_INSCRIPCION = "NUEVA_INSCRIPCION"
     # INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): avisa al
     # representante ANTERIOR de un dependiente, después del hecho, cuando otro

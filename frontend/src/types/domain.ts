@@ -431,6 +431,7 @@ export type TipoNotificacion =
   | "MIEMBRESIA_VENCIMIENTO_PROXIMO"
   | "PAGO_APROBADO"
   | "PAGO_RECHAZADO"
+  | "PAGO_REGISTRADO"
   | "NUEVA_INSCRIPCION"
   // INS-2 (docs/product/decisiones-de-negocio-2026-08-11.md §1): notice to the
   // PREVIOUS guardian when a dependent gets linked to another account.

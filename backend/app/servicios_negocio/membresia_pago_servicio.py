@@ -724,6 +724,13 @@ class PagoServicio:
         # response_dto`) DESPUÉS, ya en el event loop.
         if inspeccionar_orm(resultado).expired:
             self.db.refresh(resultado)
+        persona_pago = self.repo_persona.obtener_por_id(resultado.persona_id)
+        if persona_pago is not None and persona_pago.representante_id:
+            self._crear_notificacion_pago(
+                resultado,
+                TipoNotificacion.PAGO_REGISTRADO,
+                f"Su pago de ${resultado.monto} fue registrado y está pendiente de validación.",
+            )
         return resultado
 
     # --- Issue #1402: pago presencial de primera inscripción -----------------

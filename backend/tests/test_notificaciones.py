@@ -662,14 +662,12 @@ class TestNotificacionPago:
         assert notif is not None
         assert "Comprobante ilegible" in notif.mensaje
 
-    def test_pago_aprobado_notifica_una_sola_vez_al_alumno_no_al_representante(
-        self, client, db_session
+    @pytest.mark.parametrize("estado", ["APROBADO", "RECHAZADO"])
+    def test_pago_del_hijo_notifica_registro_y_resultado_sin_copiar_al_representante(
+        self, client, db_session, estado
     ):
-        """Issue #1227: la fila la crea SOLO el titular del pago (el
-        alumno). El representante ya no recibe una segunda fila -- su feed
-        (`listar_para_persona_y_hijos`) muestra la del alumno con el
-        prefijo "Para <nombre>: " al leerla, ver
-        `test_notificaciones_paginacion.py`."""
+        """The representative sees both stages through the child's rows,
+        without a second copy of either outcome in the merged feed."""
         from app.dominio.modelos import Notificacion
 
         representante = _crear_persona(client, cedula=cedula_valida(460))
@@ -691,19 +689,36 @@ class TestNotificacionPago:
             },
         ).json()
         pago = _crear_pago_pendiente(client, alumno["id"], membresia["id"])
+        from app.dominio.enums import TipoNotificacion
+        from app.servicios_negocio.notificacion_servicio import NotificacionServicio
+
+        pendientes = db_session.query(Notificacion).filter_by(
+            tipo=TipoNotificacion.PAGO_REGISTRADO, entidad_relacionada_id=pago["id"],
+        ).all()
+        assert len(pendientes) == 1
+        assert pendientes[0].persona_id == alumno["id"]
+        feed, total = NotificacionServicio(db_session).listar_para_persona_y_hijos(
+            representante["id"], limit=1,
+        )
+        assert total == 1
+        assert len(feed) == 1
+        assert feed[0].mensaje.startswith("Para Hijo Representado: ")
 
         resp = client.patch(
             f"/api/v1/membresias/pagos/{pago['id']}/validar",
-            json={"estado_pago": "APROBADO"},
+            json={"estado_pago": estado, **({"motivo_rechazo": "Comprobante ilegible"} if estado == "RECHAZADO" else {})},
         )
         assert resp.status_code == 200
 
-        todas = db_session.execute(
-            select(Notificacion).where(Notificacion.tipo == "PAGO_APROBADO")
-        ).scalars().all()
+        todas = db_session.query(Notificacion).filter_by(
+            tipo=TipoNotificacion[f"PAGO_{estado}"], entidad_relacionada_id=pago["id"],
+        ).all()
         assert len(todas) == 1
         assert todas[0].persona_id == alumno["id"]
         assert not todas[0].mensaje.startswith("Para ")
+        feed, total = NotificacionServicio(db_session).listar_para_persona_y_hijos(representante["id"])
+        assert total == 2
+        assert len(feed) == 2
 
     def test_pago_rechazado_con_nota_larga_no_revienta_y_preserva_el_motivo(self, client, db_session):
         """Hallazgo en vivo, 2026-08-11: un motivo de rechazo de 250

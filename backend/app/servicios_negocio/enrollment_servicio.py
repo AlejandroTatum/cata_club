@@ -534,13 +534,14 @@ class EnrollmentServicio:
         vuelva."""
         repo_outbox = EnrollmentNotificacionOutboxRepositorio(self.db)
         rol_admin = self.repo_rol.obtener_por_tipo_con_usuarios(TipoRol.ADMINISTRADOR)
-        if not rol_admin:
-            return
-        admins = [u.persona for u in rol_admin.usuarios if u.persona]
+        admins = [u.persona for u in rol_admin.usuarios if u.persona] if rol_admin else []
         nombre_alumno = acortar_nombre_para_notificacion(nombre_completo(alumno.nombres, alumno.apellidos))
-        for admin in admins:
+        destinatarios = {admin.id: admin.id for admin in admins}
+        if alumno.representante_id:
+            destinatarios[alumno.representante_id] = alumno.representante_id
+        for destinatario_id in destinatarios:
             repo_outbox.crear(
-                admin.id,
+                destinatario_id,
                 alumno.id,
                 f"Nuevo alumno inscrito: {nombre_alumno} (cédula: {alumno.cedula}).",
             )
