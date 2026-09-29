@@ -3,7 +3,7 @@ import { ATTENDANCE_STATUS_CHART_COLORS } from "@/app/dashboard/dashboard-utils"
 import type { EstadoAsistencia } from "@/types/domain";
 import { ATTENDANCE_LABELS } from "./attendance-utils";
 
-const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
 
 interface SessionReceiptBreakdownProps {
   hasFailedRecords: boolean;

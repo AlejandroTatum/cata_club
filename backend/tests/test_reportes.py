@@ -1038,3 +1038,41 @@ def test_encabezado_del_reporte_se_lee_blanco_sobre_el_rojo(monkeypatch):
 
     assert all(isinstance(celda, Paragraph) for celda in encabezado)
     assert all(celda.style.textColor == colors.white for celda in encabezado)
+
+
+# --- Issue #1373: ENFERMO y COMPETENCIA --------------------------------------
+def test_reporte_asistencia_incluye_enfermo_y_competencia(client, db_session):
+    """AC estadística/reporte: las filas ENFERMO y COMPETENCIA aparecen en el
+    reporte como cualquier otro estado -- el reporte lista, no penaliza: el
+    desglose de ausencias injustificadas del frontend sigue contando solo
+    AUSENTE."""
+    alumno = _crear_persona(client, cedula_valida(560))
+    _habilitar_como_jugador(db_session, alumno["id"])
+
+    horario = client.post(
+        "/api/v1/asistencias/horarios",
+        json={"categoria": "FORMATIVO", "dia_semana": "LUNES"},
+    ).json()
+    client.post(
+        "/api/v1/asistencias/asignar-alumno",
+        json={"persona_id": alumno["id"], "horario_id": horario["id"]},
+    )
+    for fecha, estado in (
+        ("2026-07-06", "ENFERMO"),
+        ("2026-07-13", "COMPETENCIA"),
+        ("2026-07-20", "AUSENTE"),
+    ):
+        client.post(
+            "/api/v1/asistencias/",
+            json={
+                "fecha_entrenamiento": fecha, "estado": estado,
+                "persona_id": alumno["id"], "horario_id": horario["id"],
+            },
+        )
+
+    resp = client.get("/api/v1/asistencias/reportes")
+    assert resp.status_code == 200
+    estados = [fila["estado"] for fila in resp.json()["items"]]
+    assert estados.count("ENFERMO") == 1
+    assert estados.count("COMPETENCIA") == 1
+    assert estados.count("AUSENTE") == 1

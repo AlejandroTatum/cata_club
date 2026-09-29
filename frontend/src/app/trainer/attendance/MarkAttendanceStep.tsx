@@ -13,12 +13,16 @@ import FilteredRosterEmptyState from "./FilteredRosterEmptyState";
 import { clubIsoDate } from "@/lib/club-date";
 import { ATTENDANCE_LABELS, type SessionStudent } from "./attendance-utils";
 
-const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "absent"];
+const TOTAL_ORDER: EstadoAsistencia[] = ["present", "late", "justified", "sick", "competition", "absent"];
 
 const ATTENDANCE_DEFINITIONS: Record<EstadoAsistencia, string> = {
   present: "asistió a la clase.",
   late: "asistió, pero llegó después de que empezó.",
   justified: "no asistió, pero avisó un motivo que el club aceptó — se registra aparte de una ausencia.",
+  // Issue #1373: inasistencias autorizadas — conocidas del lado del club,
+  // nunca ausencias injustificadas.
+  sick: "no asistió por enfermedad — inasistencia autorizada, no cuenta como ausencia injustificada.",
+  competition: "no asistió por competencia deportiva — convocatoria oficial, no cuenta como ausencia injustificada.",
   absent: "no asistió y no hay motivo aceptado.",
 };
 

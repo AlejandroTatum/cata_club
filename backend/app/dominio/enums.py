@@ -96,6 +96,15 @@ class EstadoAsistencia(str, enum.Enum):
     AUSENTE = "AUSENTE"
     ATRASADO = "ATRASADO"
     JUSTIFICADO = "JUSTIFICADO"
+    # Issue #1373: estados explícitos de inasistencia autorizada. Ninguno de
+    # los dos es una ausencia injustificada: el alumno no entrenó, pero hay
+    # una razón conocida del lado del club (enfermedad / competencia
+    # deportiva). La estadística los trata como familia justificada/neutral
+    # (ver `AsistenciaServicio.ultimas_listas`): jamás penalizan al alumno
+    # como AUSENTE. La migración que los agrega al tipo PG
+    # `estadoasistencia` es la `r1373asis`.
+    ENFERMO = "ENFERMO"
+    COMPETENCIA = "COMPETENCIA"
 
 
 class TipoEscuela(str, enum.Enum):
