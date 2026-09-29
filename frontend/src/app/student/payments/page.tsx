@@ -54,6 +54,7 @@ import { useToast } from "@/contexts/ToastContext";
 import {
   fetchStudentPortal,
   fetchPagosDePersona,
+  fetchCoberturasDePersona,
   fetchBeneficio,
   subirVoucherPago,
   registrarPago,
@@ -100,8 +101,6 @@ import ManagedStudentPicker, {
   withSelectedStudent,
 } from "../ManagedStudentPicker";
 import {
-  filterPagosByStatus,
-  sortPagosByDate,
   formatPagoMonto,
   getEmptyStateMessage,
   describePagoEstado,
@@ -143,7 +142,17 @@ type PortalLoadState =
 type PagosLoadState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; pagos: PagoPersona[] };
+  | { status: "ready"; pagos: PagoPersona[]; coberturas: CoberturaBonificada[] };
+
+/**
+ * One merged row of the payment history (issue #1369, slice 3): a real
+ * `Pago`, or a 100%-coverage activation — applying the benefit never creates
+ * a `Pago`, so without the second kind the covered month was invisible in
+ * the very history it belongs to.
+ */
+type HistorialItem =
+  | { kind: "pago"; pago: PagoPersona }
+  | { kind: "cobertura"; cobertura: CoberturaBonificada };
 
 const FILTERS: PagoStatusFilter[] = ["TODOS", "PENDIENTE_VALIDACION", "APROBADO", "RECHAZADO"];
 
@@ -1856,6 +1865,68 @@ function PagoCard({
   );
 }
 
+/**
+ * The cobertura row's fixed facts (issue #1369, slice 3). The amount cell is
+ * `—` on purpose: a coverage never charged anything (#400), and a printed
+ * "$0,00" would describe a charge of zero that never happened. The status
+ * badge is the fact the backend can prove — it was otorgada — with no
+ * client-side date math about whether it is still current.
+ */
+function buildCoberturaRowFields(cobertura: CoberturaBonificada): {
+  badge: string;
+  period: string;
+  concept: string;
+  grantedOn: string;
+} {
+  return {
+    badge: "Otorgada",
+    period: formatDateRange(cobertura.fechaInicio, cobertura.fechaFin),
+    concept: "Cobertura bonificada — 100%",
+    grantedOn: formatDate(cobertura.fechaInicio),
+  };
+}
+
+function CoberturaTableRow({ cobertura }: { cobertura: CoberturaBonificada }): React.ReactElement {
+  const fields = buildCoberturaRowFields(cobertura);
+  return (
+    <TableRow>
+      <TableCell type="badge">
+        <Badge tone="ok">{fields.badge}</Badge>
+      </TableCell>
+      <TableCell type="number">—</TableCell>
+      <TableCell type="text">{fields.period}</TableCell>
+      <TableCell type="text">
+        <span className="block">{fields.concept}</span>
+        <span className="mt-px block text-2xs tracking-flat text-ink-3">
+          Otorgada el <span className="tabular-nums">{fields.grantedOn}</span>
+        </span>
+      </TableCell>
+      <TableCell type="action" />
+    </TableRow>
+  );
+}
+
+/** The mobile card — same facts as `CoberturaTableRow`, same one-column
+ *  order `PagoCard` settled on. */
+function CoberturaCard({ cobertura }: { cobertura: CoberturaBonificada }): React.ReactElement {
+  const fields = buildCoberturaRowFields(cobertura);
+  return (
+    <li className="flex flex-col gap-3 p-4">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-base font-bold tabular-nums text-ink">—</span>
+          <Badge tone="ok">{fields.badge}</Badge>
+        </div>
+        <p className="mt-1 text-xs text-ink-3-strong">
+          {fields.concept} · Otorgada el{" "}
+          <span className="tabular-nums">{fields.grantedOn}</span> · Cubre{" "}
+          <span className="tabular-nums">{fields.period}</span>
+        </p>
+      </div>
+    </li>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main content
 // ---------------------------------------------------------------------------
@@ -1942,9 +2013,14 @@ function PaymentsContent({
     if (!selectedPersonaId) return;
     let cancelled = false;
     setPagosState({ status: "loading" });
-    fetchPagosDePersona(selectedPersonaId)
-      .then((pagos) => {
-        if (!cancelled) setPagosState({ status: "ready", pagos });
+    // Slice 3: both halves of the same financial history, fetched together —
+    // a 100% activation lives in `cobertura_bonificada`, never in `pago`.
+    Promise.all([
+      fetchPagosDePersona(selectedPersonaId),
+      fetchCoberturasDePersona(selectedPersonaId).catch(() => []),
+    ])
+      .then(([pagos, coberturas]) => {
+        if (!cancelled) setPagosState({ status: "ready", pagos, coberturas });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -2009,6 +2085,10 @@ function PaymentsContent({
     () => (pagosState.status === "ready" ? pagosState.pagos : NO_PAGOS),
     [pagosState],
   );
+  const coberturas = useMemo(
+    () => (pagosState.status === "ready" ? pagosState.coberturas : []),
+    [pagosState],
+  );
   // Issue #1328: `MembershipSummary.cubiertoHasta` (the backend's own
   // combined anchor over an APPROVED `Pago` AND a `CoberturaBonificada`) is
   // the only reading, so a benefit applied through `ApplyBenefitForm` shows
@@ -2016,10 +2096,29 @@ function PaymentsContent({
   // `null`, so there is no real payload where it is `undefined`.
   const coverageEnd = selectedProfile?.membership?.cubiertoHasta ?? null;
   const counts = useMemo(() => countPagosByStatus(pagos), [pagos]);
-  const filteredPagos = useMemo(
-    () => sortPagosByDate(filterPagosByStatus(pagos, filter)),
-    [pagos, filter],
-  );
+  /**
+   * The merged history (issue #1369, slice 3): pagos AND 100%-coverage
+   * activations, newest-first by their own date (`fechaRegistro` vs
+   * `fechaInicio` — the activation day). The status filters are PAYMENT
+   * statuses, so a cobertura row (which has no payment status) shows only
+   * under "TODOS" — filtering by APROBADO must not silently claim rows the
+   * backend never gave that status.
+   */
+  const filteredPagos = useMemo(() => {
+    const items: HistorialItem[] = [
+      ...pagos.map((pago) => ({ kind: "pago", pago }) as const),
+      ...coberturas.map((cobertura) => ({ kind: "cobertura", cobertura }) as const),
+    ];
+    const visible =
+      filter === "TODOS"
+        ? items
+        : items.filter((item) => item.kind === "pago" && item.pago.estadoPago === filter);
+    const itemDate = (item: HistorialItem) =>
+      item.kind === "pago" ? item.pago.fechaRegistro : item.cobertura.fechaInicio;
+    return [...visible].sort(
+      (a, b) => new Date(itemDate(b)).getTime() - new Date(itemDate(a)).getTime(),
+    );
+  }, [pagos, coberturas, filter]);
   const hasPendingPago = pagos.some((pago) => pago.estadoPago === "PENDIENTE_VALIDACION");
 
   /**
@@ -2450,7 +2549,11 @@ function PaymentsContent({
               tableTestId="student-payments-table"
               cardsTestId="student-payments-cards"
               items={filteredPagos}
-              getKey={(pago) => pago.id}
+              // `pago.id` and `cobertura.id` are different tables' sequences:
+              // the kind prefix keeps the React key unique across the merge.
+              getKey={(item) =>
+                item.kind === "pago" ? `pago-${item.pago.id}` : `cobertura-${item.cobertura.id}`
+              }
               columns={[
                 <TableHeaderCell key="estado" type="badge">Estado</TableHeaderCell>,
                 <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
@@ -2460,26 +2563,34 @@ function PaymentsContent({
                   <span className="sr-only">Acción</span>
                 </TableHeaderCell>,
               ]}
-              renderRow={(pago) => (
-                <PagoTableRow
-                  pago={pago}
-                  isOpen={openPagoDetailIds.has(pago.id)}
-                  onToggleDetail={() => togglePagoDetail(pago.id)}
-                  onUploadFile={handleSelectFile}
-                  uploadingId={uploadingId}
-                  registerHref={registerHref}
-                />
-              )}
-              renderCard={(pago) => (
-                <PagoCard
-                  pago={pago}
-                  isOpen={openPagoDetailIds.has(pago.id)}
-                  onToggleDetail={() => togglePagoDetail(pago.id)}
-                  onUploadFile={handleSelectFile}
-                  uploadingId={uploadingId}
-                  registerHref={registerHref}
-                />
-              )}
+              renderRow={(item) =>
+                item.kind === "pago" ? (
+                  <PagoTableRow
+                    pago={item.pago}
+                    isOpen={openPagoDetailIds.has(item.pago.id)}
+                    onToggleDetail={() => togglePagoDetail(item.pago.id)}
+                    onUploadFile={handleSelectFile}
+                    uploadingId={uploadingId}
+                    registerHref={registerHref}
+                  />
+                ) : (
+                  <CoberturaTableRow cobertura={item.cobertura} />
+                )
+              }
+              renderCard={(item) =>
+                item.kind === "pago" ? (
+                  <PagoCard
+                    pago={item.pago}
+                    isOpen={openPagoDetailIds.has(item.pago.id)}
+                    onToggleDetail={() => togglePagoDetail(item.pago.id)}
+                    onUploadFile={handleSelectFile}
+                    uploadingId={uploadingId}
+                    registerHref={registerHref}
+                  />
+                ) : (
+                  <CoberturaCard cobertura={item.cobertura} />
+                )
+              }
             />
           )}
         </section>

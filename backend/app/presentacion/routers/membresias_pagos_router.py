@@ -775,6 +775,32 @@ async def listar_pagos_de_persona(
     return [servicio.pago_a_response_dto(p) for p in pagos]
 
 
+# Historial de activaciones de cobertura bonificada de una persona (issue
+# #1369, slice 3). Mismo criterio que la ruta de pagos de arriba: autenticado,
+# con la autorización real (dueño, su representante, o ADMINISTRADOR) validada
+# dentro del servicio. Tres segmentos ("coberturas", "persona",
+# "{persona_id}") -- no colisiona con `/{membresia_id}` (un segmento); el
+# frontend mezcla estas filas con las de pagos en el MISMO historial, porque
+# el #400 deliberadamente no creó ningún `Pago` al activar el beneficio.
+@router.get(
+    "/coberturas/persona/{persona_id}",
+    response_model=List[CoberturaBonificadaResponseDTO],
+    dependencies=[Depends(GestorAutenticacion.decodificar_token)],
+)
+async def listar_coberturas_de_persona(
+    persona_id: int,
+    db: Session = Depends(obtener_sesion),
+    token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
+):
+    servicio = PagoServicio(db)
+    coberturas = servicio.listar_coberturas_de_persona(
+        persona_id_objetivo=persona_id,
+        persona_id_solicitante=token_payload.get("persona_id"),
+        roles_solicitante=token_payload.get("roles", []),
+    )
+    return [servicio.cobertura_bonificada_a_response_dto(c) for c in coberturas]
+
+
 # --- ComprobantePago (PDF oficial generado por Celery al aprobar) ---
 # Sólo admin puede adjuntar manualmente el comprobante oficial (la vida normal
 # es que la tarea Celery lo genere): igualamos a `validar_pago` que ya es admin.

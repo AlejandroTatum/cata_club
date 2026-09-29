@@ -283,6 +283,22 @@ class CoberturaBonificadaRepositorio:
     def __init__(self, db: Session):
         self.db = db
 
+    def listar_por_persona(self, persona_id: int) -> list[CoberturaBonificada]:
+        """Todas las coberturas bonificadas de una persona, la más reciente
+        primero (issue #1369, slice 3): es la contraparte de
+        `PagoRepositorio.listar_por_persona` para la OTRA tabla que cubre
+        períodos -- sin ella, el mes otorgado por el beneficio era invisible
+        en el historial financiero del alumno, porque el #400 deliberadamente
+        no creó ningún `Pago`. Sin `joinedload` por la misma razón que aquel:
+        la persona ya es conocida por quien pide.
+        """
+        stmt = (
+            select(CoberturaBonificada)
+            .where(CoberturaBonificada.persona_id == persona_id)
+            .order_by(CoberturaBonificada.fecha_inicio.desc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def fecha_fin_maxima(self, membresia_id: int) -> Optional[date]:
         """`fecha_fin` más lejana entre las coberturas bonificadas ya
         otorgadas de una membresía, o `None` si nunca tuvo una. Mismo rol que

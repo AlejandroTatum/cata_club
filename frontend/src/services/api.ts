@@ -1725,6 +1725,21 @@ export async function fetchPagosDePersona(personaId: string): Promise<PagoPerson
 }
 
 /**
+ * A persona's own 100%-coverage activations (issue #1369, slice 3) — `GET
+ * /membresias/coberturas/persona/:personaId`. Applying the benefit never
+ * created a `Pago`, so the student payment history fetches these alongside
+ * `fetchPagosDePersona` and merges them as real rows of the SAME history.
+ * Same authorization as the pagos history (own persona, representative, or
+ * admin), enforced backend-side.
+ */
+export async function fetchCoberturasDePersona(personaId: string): Promise<CoberturaBonificada[]> {
+  const mockHeaders = isMockMode() ? getMockRoleHeader() : {};
+  return request<CoberturaBonificada[]>(apiEndpoint(`/membresias/coberturas/persona/${personaId}`), {
+    headers: mockHeaders,
+  });
+}
+
+/**
  * A single pago's own detail, any status — admin-facing (issue #400,
  * criterio 7/8): `GET /api/membresias/pagos/:pagoId`, proxying the
  * backend's `GET /membresias/pagos/{pago_id}` (dueño/representante/admin

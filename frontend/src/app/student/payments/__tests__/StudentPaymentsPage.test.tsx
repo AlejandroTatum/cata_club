@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import StudentPaymentsPage from "@/app/student/payments/page";
-import type { PagoPersona, StudentPortalSummary, StudentProfileSummary } from "@/services/api";
+import type { PagoPersona, StudentPortalSummary, StudentProfileSummary, CoberturaBonificada } from "@/services/api";
 
 vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -80,6 +80,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 const mockFetchStudentPortal = vi.fn();
 const mockFetchPagosDePersona = vi.fn();
+const mockFetchCoberturasDePersona = vi.fn();
 const mockSubirVoucherPago = vi.fn();
 const mockRegistrarPago = vi.fn();
 const mockFetchBeneficio = vi.fn();
@@ -88,6 +89,7 @@ const mockAplicarBeneficio = vi.fn();
 vi.mock("@/services/api", () => ({
   fetchStudentPortal: () => mockFetchStudentPortal(),
   fetchPagosDePersona: (...args: unknown[]) => mockFetchPagosDePersona(...args),
+  fetchCoberturasDePersona: (...args: unknown[]) => mockFetchCoberturasDePersona(...args),
   subirVoucherPago: (...args: unknown[]) => mockSubirVoucherPago(...args),
   registrarPago: (...args: unknown[]) => mockRegistrarPago(...args),
   fetchBeneficio: (...args: unknown[]) => mockFetchBeneficio(...args),
@@ -267,6 +269,8 @@ beforeEach(() => {
   mockUseAuth.mockReset().mockReturnValue(authSession());
   mockFetchStudentPortal.mockReset().mockResolvedValue(PORTAL);
   mockFetchPagosDePersona.mockReset().mockResolvedValue([makePago()]);
+  // No coverage activations by default — the merged-history tests override.
+  mockFetchCoberturasDePersona.mockReset().mockResolvedValue([]);
   mockSubirVoucherPago.mockReset().mockResolvedValue(undefined);
   mockRegistrarPago.mockReset().mockResolvedValue({ id: 99, monto: "25.00" });
   // No active benefit by default — tests that care override this per-case.
@@ -1061,6 +1065,80 @@ describe("StudentPaymentsPage — the history", () => {
  * mount at once via `ResponsiveList`; CSS alone decides which one a real
  * browser shows), and absent entirely on a row with nothing to disclose.
  */
+describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () => {
+  function makeCobertura(overrides: Partial<CoberturaBonificada> = {}): CoberturaBonificada {
+    return {
+      id: 7,
+      membresiaId: 3,
+      personaId: 9,
+      // `asignacionDescuento` is opaque to this screen — the merged row reads
+      // nothing from it — so the fixture shapes only the fields the row uses.
+      asignacionDescuento: {
+        id: 2,
+        personaId: 9,
+        descuento: { id: 1, nombre: "Becado" } as CoberturaBonificada["asignacionDescuento"]["descuento"],
+        asignadoPorPersonaId: 1,
+        asignadoPorNombre: "Admin",
+        asignadoEn: "2026-07-20T10:00:00",
+        retiradoPorPersonaId: null,
+        retiradoEn: null,
+      },
+      tarifaMensualAplicada: "25.00",
+      mesesComprados: 1,
+      descuentoValorAplicado: null as unknown as string,
+      descuentoPorcentajeAplicado: "100.00",
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-31",
+      otorgadaPorPersonaId: 9,
+      otorgadaEn: "2026-08-01T09:00:00",
+      ...overrides,
+    };
+  }
+
+  it("renders a 100% activation as its own row, with the period and no amount", async () => {
+    mockFetchCoberturasDePersona.mockResolvedValue([makeCobertura()]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    const table = historyTable();
+    expect(within(table).getByText("Cobertura bonificada — 100%")).toBeInTheDocument();
+    expect(within(table).getByText(shownRange("2026-08-01", "2026-08-31"))).toBeInTheDocument();
+    expect(within(table).getByText("Otorgada el")).toBeInTheDocument();
+    // A coverage never charged anything (#400): the amount cell is a dash,
+    // never a fabricated "$0,00".
+    expect(within(table).queryByText("$0,00")).not.toBeInTheDocument();
+  });
+
+  it("sorts a newer activation above an older payment, newest-first across kinds", async () => {
+    mockFetchCoberturasDePersona.mockResolvedValue([makeCobertura()]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    const text = historyTable().textContent ?? "";
+    const coberturaAt = text.indexOf("Cobertura bonificada — 100%");
+    const pagoPeriodAt = text.indexOf(shownRange(PAGO_START, COVERAGE_END));
+    expect(coberturaAt).toBeGreaterThanOrEqual(0);
+    expect(pagoPeriodAt).toBeGreaterThanOrEqual(0);
+    expect(coberturaAt).toBeLessThan(pagoPeriodAt);
+  });
+
+  it("keeps cobertura rows out of payment-status filters — they have no payment status", async () => {
+    mockFetchCoberturasDePersona.mockResolvedValue([makeCobertura()]);
+
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    // Through the UI: this environment has no localStorage (the preference
+    // store), so the filter pill is the real entry point anyway.
+    fireEvent.click(screen.getByRole("button", { name: /aprobados/i }));
+
+    expect(within(historyTable()).queryByText("Cobertura bonificada — 100%")).not.toBeInTheDocument();
+    expect(within(historyTable()).getByText(shownRange(PAGO_START, COVERAGE_END))).toBeInTheDocument();
+  });
+});
+
 describe("StudentPaymentsPage — the row accordion (#513)", () => {
   it("opens a row's detail from the table, and the mobile card's own copy opens with it", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([

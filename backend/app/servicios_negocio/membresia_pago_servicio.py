@@ -2091,6 +2091,33 @@ class PagoServicio:
 
         return self.repo.listar_por_persona(persona_id_objetivo)
 
+    def listar_coberturas_de_persona(
+        self,
+        persona_id_objetivo: int,
+        persona_id_solicitante: int | None = None,
+        roles_solicitante: list[str] | None = None,
+    ) -> list[CoberturaBonificada]:
+        """Activaciones de cobertura bonificada de una persona (issue #1369,
+        slice 3), para mezclarlas como filas del historial de pagos: el #400
+        no creó ningún `Pago`, así que sin esta lectura el mes cubierto por el
+        beneficio era invisible. EXACTAMENTE la misma autorización que
+        `listar_pagos_de_persona` -- es la misma conversación financiera.
+        """
+        roles_solicitante = roles_solicitante or []
+        if not PoliticaAccesoPersona(self.db).puede_acceder(
+            persona_id_objetivo=persona_id_objetivo,
+            persona_id_solicitante=persona_id_solicitante,
+            roles_solicitante=roles_solicitante,
+        ):
+            raise PermisosInsuficientes(
+                "Solo la propia persona, su representante, o un administrador "
+                "pueden ver este historial de pagos"
+            )
+
+        return self.repo_cobertura_bonificada.listar_por_persona(
+            persona_id_objetivo
+        )
+
     def listar_pagos(
         self,
         estado_pago: EstadoPago | None = None,
