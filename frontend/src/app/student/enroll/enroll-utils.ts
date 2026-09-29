@@ -18,6 +18,7 @@ import {
   phoneFieldRule,
   toStoredPhone,
   emergencyPhoneDiffersRule,
+  representativeCedulaDiffersRule,
   personNameRule,
   normalizePersonName,
   passwordRule,
@@ -419,7 +420,13 @@ const FIELD_RULES: Partial<Record<EnrollField, (data: EnrollFormData) => string 
   nombreRepresentante: (d) => personNameRule(d.nombreRepresentante, "Los nombres del representante"),
   apellidosRepresentante: (d) =>
     personNameRule(d.apellidosRepresentante, "Los apellidos del representante"),
-  cedulaRepresentante: (d) => cedulaRule(d.cedulaRepresentante, "La cédula del representante"),
+  cedulaRepresentante: (d) =>
+    // Issue #1397: chained after the field's own rule so a malformed number
+    // is reported first — the cross-check only makes sense once the value is
+    // itself a valid cédula. Same shape as `telefonoEmergencia` below; the
+    // backend answers the same collision with the mirrored message.
+    cedulaRule(d.cedulaRepresentante, "La cédula del representante") ??
+    representativeCedulaDiffersRule(d.cedulaRepresentante, d.cedula),
   fechaNacimientoRepresentante: (d) => {
     if (!isValidCalendarDate(d.fechaNacimientoRepresentante)) {
       // "(18+)" was an abbreviation of the sentence it sat inside — the rule of
