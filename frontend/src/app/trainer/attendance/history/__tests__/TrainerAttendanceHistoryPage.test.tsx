@@ -210,7 +210,7 @@ describe("TrainerAttendanceHistoryPage", () => {
     const rows = await screen.findAllByRole("row");
     expect(
       within(rows[1]).getByRole("img", {
-        name: "2 presentes, 1 tardanza, 0 justificados y 1 ausente sobre 4 registros",
+        name: "2 presentes, 1 tardanza, 0 justificados, 0 enfermos, 0 competencias y 1 ausente sobre 4 registros",
       }),
     ).toBeInTheDocument();
     // One bar per row, and nothing left of the four-badge table it replaces.

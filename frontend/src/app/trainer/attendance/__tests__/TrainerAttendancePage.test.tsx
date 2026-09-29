@@ -182,6 +182,9 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(within(stateSelector).getByRole("radio", { name: "Presente" })).toBeVisible();
     expect(within(stateSelector).getByRole("radio", { name: "Ausente" })).toBeVisible();
     expect(within(stateSelector).getByRole("radio", { name: "Tardanza" })).toBeVisible();
+    // Issue #1373: the two authorized-absence states are first-class controls.
+    expect(within(stateSelector).getByRole("radio", { name: "Enfermo" })).toBeVisible();
+    expect(within(stateSelector).getByRole("radio", { name: "Competencia" })).toBeVisible();
     const justified = within(stateSelector).getByRole("radio", { name: "Justificado" });
 
     fireEvent.click(justified);
@@ -189,12 +192,13 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     expect(justified).toHaveAttribute("aria-checked", "true");
   });
 
-  it("defines each of the four attendance states, not just names them (#315 hallazgo #20)", async () => {
+  it("defines each of the six attendance states, not just names them (#315 hallazgo #20)", async () => {
     // The FAQ enumerates "Presente Tardanza Justificado Ausente" with zero
     // definitions (indexOf === -1 for all four, even with every accordion
     // open), and this "Cómo funciona pasar lista" panel used to only list the
     // same four names as badges. A novice trainer choosing between four
     // equal-weight buttons needs to know what each one means, not just spell it.
+    // Issue #1373 adds Enfermo/Competencia: same rule, six definitions.
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 12, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -211,7 +215,7 @@ describe("TrainerAttendancePage — role gate (PR8)", () => {
     fireEvent.click(screen.getByRole("button", { name: /cómo funciona pasar lista/i }));
     const panel = screen.getByRole("region", { name: /cómo funciona pasar lista/i });
 
-    for (const state of ["Presente", "Tardanza", "Justificado", "Ausente"]) {
+    for (const state of ["Presente", "Tardanza", "Justificado", "Enfermo", "Competencia", "Ausente"]) {
       expect(within(panel).getByText(new RegExp(`^${state}:`))).toBeInTheDocument();
     }
   });
@@ -872,7 +876,7 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
   });
 
-  it("exposes the four states as one exclusive radiogroup labelled by the student's name", async () => {
+  it("exposes the six states as one exclusive radiogroup labelled by the student's name", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
@@ -885,7 +889,7 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
       labelledBy.map((id) => document.getElementById(id)?.textContent).join(" "),
     ).toContain("Ana López");
 
-    expect(within(group).getAllByRole("radio")).toHaveLength(4);
+    expect(within(group).getAllByRole("radio")).toHaveLength(6);
     expect(group.querySelector("fieldset")).toBeNull();
   });
 
@@ -913,15 +917,17 @@ describe("TrainerAttendancePage — attendance state selector affordances", () =
     }
   });
 
-  it("lays the four states out in a single full-width row on mobile", async () => {
+  it("lays the six states out in a full-width 2×3 grid on mobile", async () => {
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await openRoster();
 
     const group = await screen.findByRole("radiogroup", { name: /Ana López/ });
-    // grid-cols-4 (not the old grid-cols-2 2x2 block) so all four states sit
-    // in one row within thumb reach.
-    expect(group).toHaveClass("grid", "grid-cols-4", "w-full");
+    // grid-cols-3 (issue #1373: six states no longer fit one row at 44px
+    // touch targets on a 390px screen) — two full-width rows, never the old
+    // grid-cols-2 2x2 block and never six-across.
+    expect(group).toHaveClass("grid", "grid-cols-3", "w-full");
     expect(group).not.toHaveClass("grid-cols-2");
+    expect(group).not.toHaveClass("grid-cols-4");
   });
 });
 
@@ -981,9 +987,12 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
 
     fireEvent.keyDown(justificado, { key: "ArrowRight" });
 
-    const presente = within(group).getByRole("radio", { name: "Presente" });
-    expect(presente).toHaveAttribute("aria-checked", "true");
-    expect(document.activeElement).toBe(presente);
+    // Issue #1373: Justificado is no longer last — the walk continues into
+    // the authorized-absence states (justified → sick → competition) before
+    // wrapping around to present.
+    const enfermo = within(group).getByRole("radio", { name: "Enfermo" });
+    expect(enfermo).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(enfermo);
   });
 
   it("moves backward and wraps with ArrowLeft", async () => {
@@ -996,9 +1005,11 @@ describe("TrainerAttendancePage — teclado y rótulos del radiogroup de asisten
 
     fireEvent.keyDown(presente, { key: "ArrowLeft" });
 
-    const justificado = within(group).getByRole("radio", { name: "Justificado" });
-    expect(justificado).toHaveAttribute("aria-checked", "true");
-    expect(document.activeElement).toBe(justificado);
+    // Issue #1373: wrapping left from the first state lands on the NEW last
+    // state (Competencia), not Justificado.
+    const competencia = within(group).getByRole("radio", { name: "Competencia" });
+    expect(competencia).toHaveAttribute("aria-checked", "true");
+    expect(document.activeElement).toBe(competencia);
   });
 
   it("keeps a visible label under each icon from desktop width up, not just sm:", async () => {
@@ -1089,7 +1100,7 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
     expect(row).toHaveAttribute("data-attendance", "present");
     expect(row).toHaveAttribute("data-reviewed", "true");
 
-    for (const expected of ["late", "justified", "absent", "present"]) {
+    for (const expected of ["late", "justified", "sick", "competition", "absent", "present"]) {
       fireEvent.click(fiche);
       expect(row).toHaveAttribute("data-attendance", expected);
     }
@@ -1157,9 +1168,9 @@ describe("TrainerAttendancePage — the fiche is the target", () => {
       within(row).queryByRole("button", { name: /Ficha de emergencia/ }),
     ).not.toBeInTheDocument();
     // What the row still carries: the fiche that cycles the state, and the
-    // radiogroup's four explicit controls.
+    // radiogroup's six explicit controls.
     expect(within(row).getByRole("button", { name: /^Ana López:/ })).toBeInTheDocument();
-    expect(within(row).getAllByRole("radio")).toHaveLength(4);
+    expect(within(row).getAllByRole("radio")).toHaveLength(6);
   });
 
   it("names the tap target with the student, their current state, and whether it is anybody's answer", async () => {
@@ -2320,7 +2331,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
   // Decision 1: a state at zero is shown atenuado, never omitted — otherwise
   // "nadie llegó tarde" and "la tardanza no se reportó" read identically.
-  it("shows all four states in the breakdown, including a zero, instead of omitting it", async () => {
+  it("shows all six states in the breakdown, including a zero, instead of omitting it", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
@@ -2329,7 +2340,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(presentRow).not.toBeNull();
     expect(within(presentRow as HTMLElement).getByText("3")).toBeInTheDocument();
 
-    for (const label of ["Ausente", "Tardanza", "Justificado"]) {
+    for (const label of ["Ausente", "Tardanza", "Justificado", "Enfermo", "Competencia"]) {
       const row = screen.getByText(label).closest("li");
       expect(row).not.toBeNull();
       expect(within(row as HTMLElement).getByText("0")).toBeInTheDocument();
@@ -2381,7 +2392,7 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
 
     expect(
       screen.getByRole("img", {
-        name: "3 presentes, 0 tardanzas, 0 justificados y 0 ausentes sobre 3 registros",
+        name: "3 presentes, 0 tardanzas, 0 justificados, 0 enfermos, 0 competencias y 0 ausentes sobre 3 registros",
       }),
     ).toBeInTheDocument();
   });
