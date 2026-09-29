@@ -52,6 +52,9 @@ export type { PaginationProps } from "./Pagination";
 export { default as PageHeader } from "./PageHeader";
 export type { PageHeaderProps } from "./PageHeader";
 
+export { default as PasswordGuidance, PASSWORD_GUIDANCE_HEADING } from "./PasswordGuidance";
+export type { PasswordGuidanceProps } from "./PasswordGuidance";
+
 export { default as ResponsiveListTable } from "./ResponsiveListTable";
 export type { ResponsiveListTableProps } from "./ResponsiveListTable";
 
