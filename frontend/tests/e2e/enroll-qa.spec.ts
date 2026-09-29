@@ -210,7 +210,11 @@ const VALID_CREDENTIALS = {
 const VALID_REPRESENTATIVE = {
   nombres: "María Fernanda",
   apellidos: "Mora Salas",
-  cedula: "1798765432",
+  // Issue #1397: must differ from the student's cédula — the wizard now
+  // rejects a representative who shares it, so a colliding fixture would
+  // legitimately block "Siguiente" and fail every flow that completes this
+  // step (R10, H06, H07).
+  cedula: "1723456719",
   fechaNacimiento: isoYearsAgo(38),
   telefono: "0987654321",
   correo: "maria.mora@example.com",
