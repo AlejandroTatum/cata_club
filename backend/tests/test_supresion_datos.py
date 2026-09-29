@@ -19,7 +19,7 @@ from app.dominio.excepciones import OperacionInvalida, ServicioNoDisponible
 from app.dominio.modelos import (
     Asistencia, ComprobantePago, ConsentimientoLegal, ConsultaFichaEmergencia,
     Enfermedades, EnrollmentNotificacionOutbox, FichaMedica, HorarioEntrenamiento,
-    Membresia, Pago, Persona, RecuperacionOutbox, Rol, Sesion,
+    Membresia, Pago, Persona, RecuperacionOutbox, ReporteError, Rol, Sesion,
     SolicitudSupresionDatos, TipoMembresia, Usuario,
 )
 from app.servicios_negocio.supresion_datos_servicio import (
@@ -221,6 +221,17 @@ def cloudinary_falso(monkeypatch):
         registro,
     )
     return registro
+
+
+def test_supresion_elimina_descripcion_y_captura_del_reportero(db_session, cloudinary_falso):
+    admin = _crear_admin(db_session)
+    persona = _crear_persona(db_session)
+    db_session.add(ReporteError(persona_id=persona.id, descripcion="Dato privado", captura=b"bytes", captura_mime="image/png"))
+    db_session.flush()
+    servicio = SupresionDatosServicio(db_session)
+    solicitud = _solicitud_aprobada_y_vencida(db_session, servicio, persona)
+    servicio.ejecutar(solicitud.id, admin_persona_id=admin.id)
+    assert db_session.query(ReporteError).filter_by(persona_id=persona.id).count() == 0
 
 
 # --- T5: no identificabilidad + historial sobrevive ------------------------------

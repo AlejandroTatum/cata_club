@@ -37,6 +37,7 @@ async def crear_reporte(
     descripcion: str = Form(min_length=1, max_length=2000),
     ruta: str | None = Form(default=None, max_length=500),
     captura: UploadFile | None = File(default=None),
+    consentimiento_captura: bool = Form(default=False),
     x_request_id: str | None = Header(default=None),
     db: Session = Depends(obtener_sesion),
     token_payload: dict = Depends(GestorAutenticacion.decodificar_token),
@@ -50,6 +51,8 @@ async def crear_reporte(
     contenido = None
     mime = None
     if captura is not None:
+        if not consentimiento_captura:
+            raise HTTPException(422, "Debe aceptar el envío de la captura")
         contenido = await captura.read(MAX_CAPTURA + 1)
         mime = captura.content_type or ""
         try:

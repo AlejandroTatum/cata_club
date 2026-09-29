@@ -2,7 +2,7 @@
 import re
 
 MAX_CAPTURA = 2 * 1024 * 1024
-_REQUEST_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+_REQUEST_ID = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
 
 
 def validar_request_id(valor: str | None) -> str | None:

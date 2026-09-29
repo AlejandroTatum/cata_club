@@ -16,7 +16,7 @@ def test_aviso_admin_no_incluye_descripcion_ni_captura(client, db_session, perso
                     roles=[Rol(tipo_rol=TipoRol.ADMINISTRADOR, descripcion="Administrador")])
     db_session.add(admin)
     db_session.flush()
-    response = client.post("/api/v1/reportes-error/", data={"descripcion": "Dato muy privado"},
+    response = client.post("/api/v1/reportes-error/", data={"descripcion": "Dato muy privado", "consentimiento_captura": "true"},
                            files={"captura": ("a.png", b"\x89PNG\r\n\x1a\nprivate", "image/png")})
     assert response.status_code == 201, response.text
     aviso = db_session.query(Notificacion).filter_by(tipo=TipoNotificacion.NUEVO_REPORTE_ERROR).one()

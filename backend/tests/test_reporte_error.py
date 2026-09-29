@@ -28,9 +28,29 @@ def test_captura_invalida(mime, contenido):
         validar_captura(mime, contenido)
 
 
+def test_reporte_sin_captura_y_request_id_invalido(client, persona_sin_usuario):
+    response = client.post("/api/v1/reportes-error/", data={"descripcion": "Falla"})
+    assert response.status_code == 201
+    assert response.json()["captura_mime"] is None
+    assert client.post("/api/v1/reportes-error/", data={"descripcion": "Falla"},
+                       headers={"X-Request-ID": "incorrecto espacio"}).status_code == 422
+
+
+def test_captura_falsificada_se_rechaza(client, persona_sin_usuario):
+    response = client.post("/api/v1/reportes-error/", data={"descripcion": "Falla", "consentimiento_captura": "true"},
+                           files={"captura": ("a.png", b"texto", "image/png")})
+    assert response.status_code == 422
+
+
+def test_captura_sin_consentimiento_se_rechaza(client, persona_sin_usuario):
+    response = client.post("/api/v1/reportes-error/", data={"descripcion": "Falla"},
+                           files={"captura": ("a.png", b"\x89PNG\r\n\x1a\nbytes", "image/png")})
+    assert response.status_code == 422
+
+
 def test_creacion_autenticada_y_lectura_admin(client, persona_sin_usuario):
     response = client.post(
-        "/api/v1/reportes-error/", data={"descripcion": "Falla al guardar", "ruta": "/perfil"},
+        "/api/v1/reportes-error/", data={"descripcion": "Falla al guardar", "ruta": "/perfil", "consentimiento_captura": "true"},
         headers={"X-Request-ID": "req-123"},
         files={"captura": ("pantalla.png", b"\x89PNG\r\n\x1a\nbytes", "image/png")},
     )
@@ -67,7 +87,7 @@ def test_reportero_no_accede_a_bandeja_ni_captura(client_sin_permisos):
 
 
 def test_request_id_valido_y_rechazado():
-    assert validar_request_id("abc-123_def") == "abc-123_def"
+    assert validar_request_id("abc-123_def.1") == "abc-123_def.1"
     assert validar_request_id(None) is None
     for value in ("a b", "../secret", "a" * 129):
         with pytest.raises(ValueError):
