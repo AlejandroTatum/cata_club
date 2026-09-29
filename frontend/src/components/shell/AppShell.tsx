@@ -100,6 +100,24 @@ export interface AppShellProps {
    */
   actions?: React.ReactNode;
   /**
+   * Optional back control, drawn by the shell directly BEFORE the page title
+   * — above and to the left of it, per the placement rule
+   * `components/ui/BackLink.tsx` writes down.
+   *
+   * ## Why a shell slot, and not the page's own markup
+   *
+   * The header row belongs to the shell and is drawn above `<main>`, so a
+   * back control a screen renders among its children can never precede the
+   * title in the document — it lands after it by construction. That is the
+   * root of #1396: the payments queue had no visible way back at all, and its
+   * detail view's `BackLink` — which lives in local view state, not a route —
+   * could not be lifted above the title from inside `<main>` either. A screen
+   * whose back control belongs to shell-level view state passes it here, and
+   * the shell keeps ONE document order for every screen that has one: back
+   * control, title, content.
+   */
+  back?: React.ReactNode;
+  /**
    * WHICH content measure this screen is drawn on. Defaults to `"default"`.
    *
    * See `CONTENT_MEASURE` for what the two measures are, why there are two,
@@ -350,6 +368,7 @@ export default function AppShell({
   title,
   subtitle,
   actions,
+  back,
   measure = "default",
   children,
 }: AppShellProps): React.ReactElement {
@@ -979,6 +998,10 @@ export default function AppShell({
             showMobileTabs ? "pb-[78px] lg:pb-8" : "pb-8"
           }`}
         >
+          {/* The page's back control (#1396) — see `AppShellProps.back`. It
+              is drawn in the page's own document order: back control, then
+              the title row, then the content. */}
+          {back}
           <PageHeader title={title} subtitle={subtitle} actions={actions} />
           {/* `tabIndex={-1}` so the skip link actually MOVES focus here rather
               than only scrolling: a `<main>` is not focusable by default, and

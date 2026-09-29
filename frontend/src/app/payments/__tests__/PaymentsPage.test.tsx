@@ -362,6 +362,45 @@ describe("PaymentsPage — opens on the pending queue", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 1b. The way back sits above the page title (issue #1396)
+// ---------------------------------------------------------------------------
+
+describe("PaymentsPage — the way back sits above the page title", () => {
+  /**
+   * Placement is a document-order guarantee, not a CSS one: the back control
+   * has to PRECEDE the page title in the DOM (issue #1396), so the tab order
+   * and a screen reader's read-out meet "back" before the screen's own name.
+   */
+  function expectBeforeTitle(back: HTMLElement): void {
+    const title = screen.getByRole("heading", { name: "Membresías y Pagos" });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+
+  it("offers a named BackLink above the title while the queue is showing", async () => {
+    renderPage();
+    await screen.findByTestId("payments-table");
+
+    expectBeforeTitle(await screen.findByRole("link", { name: /volver al panel de control/i }));
+  });
+
+  it("keeps the detail's BackLink working, moved above the title", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([PENDING_REQUEST, SECOND_PENDING]);
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    const back = await screen.findByRole("link", { name: /volver a membresías y pagos/i });
+    expect(back).toHaveAttribute("href", "/payments");
+    expectBeforeTitle(back);
+
+    // Same contract as before the move: the click is the in-page queue⇄detail
+    // state reset — `href` stays the real fallback destination — so this must
+    // hand the view back to the queue without navigating.
+    fireEvent.click(back);
+    expect(await screen.findByTestId("payments-table")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 1a. Real pagination, no silent truncation past 200 (issue #400, criterio 4/5)
 // ---------------------------------------------------------------------------
 
@@ -1489,6 +1528,53 @@ describe("PaymentsPage — voucher preview recovery", () => {
 
     expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
     expect(screen.queryByText(/vista previa no disponible/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #1400 — the type badge ("Imagen"/"PDF") in the proof header rendered
+// unconditionally, so a cash payment with no voucher — the NORMAL case there
+// (issue #452) — read "Sin comprobante adjunto  Imagen": a file-type label
+// for a file that does not exist, right next to the sentence saying so. The
+// badge is a property OF an attachment; with nothing attached there is no
+// type to name, and the header's first span already carries the absence.
+// A payment that DOES have a voucher (a transfer, or cash with a receipt)
+// keeps the badge and the preview exactly as before.
+// ---------------------------------------------------------------------------
+
+/** The exact shape the adapter builds for an EFECTIVO pago with no voucher:
+ *  no `proofPreviewUrl`, and `proofFileType` at its "image" default even
+ *  though nothing is attached — the gap the badge bug lived in (#1400). */
+const CASH_WITHOUT_VOUCHER: PaymentValidationRequest = {
+  ...CASH_REQUEST,
+  proofFileType: "image",
+};
+
+describe("PaymentsPage — sin comprobante no muestra etiqueta de tipo (#1400)", () => {
+  it("does not show an 'Imagen' nor 'PDF' badge next to 'Sin comprobante adjunto'", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([CASH_WITHOUT_VOUCHER]);
+
+    renderPage();
+    await openRequest(CASH_REQUEST.studentName);
+
+    expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
+    expect(screen.queryByText("Imagen")).not.toBeInTheDocument();
+    expect(screen.queryByText("PDF")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["image", "Imagen"],
+    ["pdf", "PDF"],
+  ] as const)("keeps the %s type badge and preview when a proof IS attached", async (proofFileType, badge) => {
+    mockFetchPaymentValidations.mockResolvedValue([
+      { ...PENDING_REQUEST, proofPreviewUrl: "https://files.example/voucher.png", proofFileType },
+    ]);
+
+    renderPage();
+    await openRequest("Juan Pérez");
+
+    expect(await screen.findByText("Comprobante adjunto")).toBeInTheDocument();
+    expect(screen.getByText(badge)).toBeInTheDocument();
   });
 });
 

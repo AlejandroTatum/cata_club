@@ -2568,17 +2568,13 @@ function PaymentsPageContent(): React.ReactElement {
             ? "Registre un pago, siga su validación y consulte lo que ya pagó."
             : "Registre el pago de un dependiente, siga su validación y consulte lo que ya pagó."
       }
+      // Issue #1396: through the shell's `back` slot, so the control precedes
+      // the title in document order — `PageHeader` is drawn above `<main>`,
+      // so a back control among the children lands after the title by
+      // construction. The finding that put a named way back on this screen
+      // (issue #316 hallazgo #70) stands; only its placement moves.
+      back={<BackLink href="/student" />}
     >
-      {/*
-       * Issue #316 hallazgo #70: this screen and `/student/attendance` were
-       * the only two second-level screens with no way back at all — `/ayuda`
-       * and `/profile`, reached from the very same sidebar, both carry one.
-       * The comment this replaced argued the sidebar already does that job,
-       * which is the admin rail's own rule — but the admin rail has no
-       * `/ayuda` or `/profile` counter-example proving otherwise; the family
-       * portal does. Same component, same placement as `/ayuda`'s.
-       */}
-      <BackLink href="/student" />
 
       {state.status === "loading" && (
         <div className="card">

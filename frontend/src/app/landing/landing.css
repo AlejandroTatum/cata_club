@@ -650,7 +650,18 @@
   /* Same arithmetic as the desktop rule, shifted 4px to match the narrower
      mobile gap `.landing-hero-nav-prev` opens above. */
   .landing-hero-counter { top: 20px; right: calc(var(--landing-gutter) + 114px); }
-  .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 12px; padding: 42px 20px; }
+  /* Issue #1399: on phones the three institutional stats stop sharing one
+     undivided strip and become three distinct cards — white surface and
+     hairline border over the warm band ground — so each figure reads as its
+     own fact. The pair of numbers keeps side-by-side columns; Loja spans the
+     full row so the odd count never strands an empty grid cell. The cards
+     own the breathing room now, so the old 36px row gap collapses to the
+     shared 12px and the band's padding tightens: same readability in
+     measurably less vertical space. Desktop keeps the bare, undivided band
+     — the card treatment exists only inside this breakpoint. */
+  .landing-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 32px 16px; }
+  .landing-stat { gap: 6px; padding: 20px 14px; border: 1px solid var(--landing-border); border-radius: 16px; background: var(--landing-surface); box-shadow: 0 12px 24px -20px color-mix(in srgb, var(--landing-brand-black) 40%, transparent); }
+  .landing-stat:last-child { grid-column: 1 / -1; }
   .landing-stat strong { font-size: 38px; }
   .landing-page { --landing-gutter: 24px; }
   .landing-carousel { --landing-slide-height: 340px; }
