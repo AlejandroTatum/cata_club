@@ -27,8 +27,10 @@ def upgrade():
         sa.Column("fecha_creacion", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_reporte_error_fecha_creacion", "reporte_error", ["fecha_creacion"])
+    op.create_index("ix_reporte_error_persona_id", "reporte_error", ["persona_id"])
 
 
 def downgrade():
+    op.drop_index("ix_reporte_error_persona_id", table_name="reporte_error")
     op.drop_index("ix_reporte_error_fecha_creacion", table_name="reporte_error")
     op.drop_table("reporte_error")

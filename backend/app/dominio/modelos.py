@@ -1992,7 +1992,10 @@ class ConsultaFichaEmergencia(Base):
 # ---------------------------------------------------------------------------
 class ReporteError(Base):
     __tablename__ = "reporte_error"
-    __table_args__ = (Index("ix_reporte_error_fecha_creacion", "fecha_creacion"),)
+    __table_args__ = (
+        Index("ix_reporte_error_fecha_creacion", "fecha_creacion"),
+        Index("ix_reporte_error_persona_id", "persona_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), nullable=False)

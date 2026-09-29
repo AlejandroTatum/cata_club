@@ -7,12 +7,14 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.dominio.enums import TipoNotificacion, TipoRol
+from app.dominio.excepciones import OperacionInvalida
 from app.dominio.modelos import Notificacion, ReporteError, Rol, Usuario
 from app.infraestructura.db import obtener_sesion
 from app.infraestructura.repositorios.reporte_error_repositorio import ReporteErrorRepositorio
 from app.seguridad.gestor_auth import GestorAutenticacion
 from app.servicios_negocio.gestor_permisos import GestorPermisos
 from app.servicios_negocio.reporte_error_servicio import MAX_CAPTURA, validar_captura, validar_request_id
+from app.soporte_transversal.lectura_archivos import leer_con_limite
 from app.soporte_transversal.rate_limit import limiter
 
 router = APIRouter(prefix="/reportes-error", tags=["Reportes de error"])
@@ -47,18 +49,18 @@ async def crear_reporte(
     try:
         validar_request_id(x_request_id)
     except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+        raise HTTPException(422, "Identificador de solicitud inválido") from exc
     contenido = None
     mime = None
     if captura is not None:
         if not consentimiento_captura:
             raise HTTPException(422, "Debe aceptar el envío de la captura")
-        contenido = await captura.read(MAX_CAPTURA + 1)
-        mime = captura.content_type or ""
         try:
+            contenido = await leer_con_limite(captura, MAX_CAPTURA)
+            mime = captura.content_type or ""
             validar_captura(mime, contenido)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+        except (ValueError, OperacionInvalida) as exc:
+            raise HTTPException(422, "Captura inválida: use PNG, JPEG o WebP de hasta 2 MB") from exc
     repo = ReporteErrorRepositorio(db)
     reporte = repo.crear(ReporteError(
         persona_id=token_payload["persona_id"], descripcion=descripcion.strip(),
