@@ -23,7 +23,6 @@ Python↔Postgres lo vigila `test_drift_enums_postgres.py`.
 """
 from datetime import date
 
-import pytest
 from sqlalchemy.orm import Session
 
 import app.infraestructura.repositorios.rol_repositorio as rol_repo_mod
@@ -35,7 +34,6 @@ from tests.fabricas_pagos import (
     asignar_beneficio_api, crear_membresia_api, crear_persona_api,
     crear_tipo_membresia_api,
 )
-from decimal import Decimal
 
 RUTA_APLICAR = "/api/v1/membresias/{membresia_id}/aplicar-beneficio"
 
