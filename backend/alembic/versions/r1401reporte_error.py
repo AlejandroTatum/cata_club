@@ -1,13 +1,13 @@
 """Reportes de error iniciados por usuario (#1401).
 
 Revision ID: r1401reporte
-Revises: r1373asis
+Revises: s1370pagoreg
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "r1401reporte"
-down_revision = "r1373asis"
+down_revision = "s1370pagoreg"
 branch_labels = None
 depends_on = None
 
