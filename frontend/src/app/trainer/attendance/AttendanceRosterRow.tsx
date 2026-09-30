@@ -127,7 +127,7 @@ export default function AttendanceRosterRow({
               {/* hallazgo #24: escondido debajo de `lg` (1024px), visible
                   desde `lg`, donde los seis estados comparten una sola fila
                   ancha y cada control tiene lugar para su etiqueta. */}
-              <span className="sr-only lg:not-sr-only 2xl:sr-only">{ATTENDANCE_LABELS[state]}</span>
+              <span className="sr-only lg:not-sr-only">{ATTENDANCE_LABELS[state]}</span>
             </button>
           );
         })}

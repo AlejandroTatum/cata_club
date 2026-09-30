@@ -31,7 +31,7 @@ export default function AttendanceRosterList({
   return (
     <ul
       data-testid="attendance-roster-scroll"
-      className="grid gap-2 2xl:grid-cols-2"
+      className="grid gap-2"
     >
       {filteredStudents.map((student) => (
         <AttendanceRosterRow

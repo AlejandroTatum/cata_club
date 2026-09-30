@@ -118,7 +118,7 @@ export default function AttendanceReceipt({
         className="flex flex-col gap-page lg:sticky lg:top-4"
         aria-label="Siguientes pasos"
       >
-        <div className="card flex flex-col gap-4 p-5">
+        <div className="card flex flex-1 flex-col gap-4 p-5">
           {selectedSchedule && (
             <div className="flex flex-col gap-0.5 border-b border-line pb-4">
               <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Sesión</p>
@@ -131,7 +131,7 @@ export default function AttendanceReceipt({
               )}
             </div>
           )}
-          <div className="flex justify-center border-b border-line pb-4">
+          <div className="flex flex-1 items-center justify-center border-b border-line pb-4">
             <SessionDonut counts={receiptCounts} total={receiptTotal} />
           </div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Qué sigue</p>

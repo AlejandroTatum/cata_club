@@ -69,7 +69,7 @@ export default function SchedulePickerStep({
             <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
             <p className="text-sm text-ink-3">
               {activeGroup
-                ? `${activeDay === today ? "Horarios de hoy" : "Otro día"} · ${activeGroup.label} — toque el que va a pasar`
+                ? `${activeDay === today ? `Horarios de hoy · ${activeGroup.label}` : `Horarios del ${activeGroup.label.toLowerCase()}`} — toque el que va a pasar`
                 : "Seleccione el horario de entrenamiento:"}
             </p>
           </div>
