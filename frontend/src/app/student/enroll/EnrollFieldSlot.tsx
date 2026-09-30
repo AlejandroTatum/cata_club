@@ -14,10 +14,14 @@ export default function FieldSlot(props: {
   return <div className="min-h-22">{props.children}</div>;
 }
 
-/** Two fields side by side from `md`; one column from `lg` (the aside takes a third of the surface) and two again from `2xl`. */
+/**
+ * Two fields side by side from `md`, packed from the top with the step's normal
+ * rhythm. `-mb-4` cancels the last field's own `mb-4`, so whatever follows the
+ * grid sets the distance instead of adding to it.
+ */
 export function EnrollFieldGrid(props: { children: ReactNode }): ReactElement {
   return (
-    <div className="grid gap-x-page md:grid-cols-2 md:items-start lg:grid-cols-1 lg:gap-y-6 2xl:my-auto 2xl:grid-cols-2 2xl:gap-y-14">
+    <div className="grid gap-x-page -mb-4 gap-y-4 md:grid-cols-2 md:items-start">
       {props.children}
     </div>
   );

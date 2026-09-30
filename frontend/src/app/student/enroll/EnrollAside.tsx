@@ -102,7 +102,7 @@ function AfterConfirming(props: { heading: string }): ReactElement {
  */
 function ClubPhoto(): ReactElement {
   return (
-    <figure className="relative hidden min-h-24 flex-1 overflow-hidden rounded-ctl bg-coal lg:block">
+    <figure className="relative hidden min-h-40 flex-1 overflow-hidden rounded-ctl bg-coal lg:block">
       <Image
         src="/landing/hero-training.jpg"
         alt="Deportistas de Cata Club entrenando tenis de mesa en el club"
@@ -114,6 +114,29 @@ function ClubPhoto(): ReactElement {
       <figcaption className="absolute inset-x-0 bottom-0 bg-coal/70 px-4 py-2 text-sm font-semibold text-white">
         Entrenamiento en el club
       </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * The form column's own photograph: it takes whatever height the step's
+ * fields leave free, so a short step ends in the club rather than in white
+ * space. Like the aside's, it is not rendered below its minimum height.
+ */
+export function EnrollFormPhoto(): ReactElement {
+  return (
+    <figure
+      aria-hidden="true"
+      className="relative mt-section hidden min-h-40 flex-1 overflow-hidden rounded-card bg-coal lg:block"
+    >
+      <Image
+        src="/landing/hero-community.jpg"
+        alt=""
+        fill
+        sizes="(min-width: 1536px) 812px, 524px"
+        className="object-cover"
+        style={{ objectPosition: "50% 40%" }}
+      />
     </figure>
   );
 }
