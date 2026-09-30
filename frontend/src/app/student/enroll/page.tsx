@@ -52,8 +52,6 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  PAGE_RAIL,
-  PageHeader,
   Stepper,
   buttonClasses,
 } from "@/components/ui";
@@ -109,7 +107,11 @@ import {
   type WizardStep,
 } from "./enroll-utils";
 import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
+import { cn } from "@/components/ui/cn";
+import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
+import EnrollSteps from "./EnrollSteps";
+import useWideLayout from "./useWideLayout";
 import EnrollSummary, { SummaryRow } from "./EnrollSummary";
 
 // ---------------------------------------------------------------------------
@@ -305,6 +307,7 @@ function EnrollWizard(): React.ReactElement {
 
   const currentIndex = effectiveSteps.indexOf(step);
   const isFirst = currentIndex === 0;
+  const wide = useWideLayout();
   const isLast = currentIndex === effectiveSteps.length - 1;
 
   /**
@@ -1380,6 +1383,47 @@ function EnrollWizard(): React.ReactElement {
   // must never be built from a session it does not have.
   const accountAreaLink = sessionConfirmed && session ? accountAreaLinkFor(session) : null;
 
+  /**
+   * The live summary and, on step 1, the public tariff catalog (issue #331,
+   * consumes the public BFF/backend contract of #394) — shown before the
+   * visitor's first field so anyone knows the price before they start. Public
+   * and harmless data: NOT gated on auth or environment, and a failure gets its
+   * own loud `ErrorState` with retry — this block exists to show a price, so its
+   * absence must say so. `dark` restyles it for the coal brand panel.
+   */
+  function renderSummaryRail(dark: boolean): React.ReactElement {
+    return (
+      <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step} dark={dark}>
+        {step === "type" && (
+          <section aria-label="Tarifas vigentes">
+            <h3 className={cn("mb-field text-xs", dark ? "text-white/75" : "text-ink-3-strong")}>
+              Tarifas vigentes
+            </h3>
+            {tarifasLoading ? (
+              <LoadingState label="Cargando tarifas…" />
+            ) : tarifasError ? (
+              <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
+            ) : tarifas.length === 0 ? (
+              <EmptyState
+                surface="inset"
+                title="Sin tarifas publicadas"
+                description="Todavía no hay categorías de membresía configuradas."
+              />
+            ) : (
+              <ul className={cn("divide-y", dark ? "divide-white/10" : "divide-line")}>
+                {tarifas.map((tarifa) => (
+                  <SummaryRow key={tarifa.categoria} label={tarifa.categoria} dark={dark}>
+                    {formatCurrency(tarifa.precio)}
+                  </SummaryRow>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+      </EnrollSummary>
+    );
+  }
+
   return (
     // The public enrolment wizard reaches the user through no shell, so the
     // landmark is declared here — around BOTH branches, so the confirmation
@@ -1559,107 +1603,59 @@ function EnrollWizard(): React.ReactElement {
         </div>
       ) : (
 
-        /* A wide canvas with a rail: the form column on the left and a live
-           summary on the right from `lg`, both under one `PAGE_RAIL` (no hand
-           written track). The navigation row spans both, above them. The
-           review step drops the rail and lays its own summary out in two
-           columns. Still no `AppShell` here, so the rhythm lock never looked
-           at this screen; the doctrine (`gap-page` on the column, distances
-           owned by the container) applies all the same. */
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-page px-4 py-page">
-          {/* One back-navigation rule: a sub-page carries a `BackLink` at the
-              TOP, where back navigation lives everywhere else in the product.
-              This used to be a centred text link at the very bottom of a
-              five-step wizard — the one place a visitor who wants out is not
-              looking.
+        /* A full-height split (see `EnrollFrame`): the brand panel carries the
+           way out, the title, the vertical steps and the live summary; the form
+           gets the rest. The review step lays its own summary out in two
+           columns, so the panel drops the mirror there. Still no `AppShell`
+           here, so the rhythm lock never looked at this screen; the doctrine
+           (`gap-page` on the column, distances owned by the container) applies
+           all the same.
 
-              The destination is conditional because this wizard is public
-              (see PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts): most
-              visitors arrive from the landing with no account, and sending
-              them to `/student` would bounce them straight to /login, which
-              is the wall the landing funnel exists to route around.
+           One back-navigation rule: a sub-page carries a `BackLink` at the TOP,
+           where back navigation lives everywhere else in the product. The
+           destination is conditional because this wizard is public (see
+           PUBLIC_EXCEPTIONS in src/lib/middleware-utils.ts): most visitors
+           arrive from the landing with no account, and sending them to
+           `/student` would bounce them straight to /login. While the session
+           hydrates nobody knows who is asking, so no destination is offered —
+           the placeholder reserves the control's height so the row never jumps.
+           `backHrefForRole` is the same resolver /ayuda uses.
 
-              Dos cosas que la primera pasada del #295 dio por buenas y no lo
-              eran, porque la condición se LEE bien:
-
-              1. Decidía sin saber. `isAuthenticated` es false mientras la
-                 sesión se hidrata — `AuthContext` arranca en `session: null,
-                 isLoading: true` y recién resuelve tras un round trip — así
-                 que un usuario logueado veía "Volver al Inicio" en esa ventana
-                 y, si tocaba ahí, la promesa se cumplía: salía a la landing.
-                 Mientras no se sabe, no se ofrece destino; el hueco reserva la
-                 altura del control para que la fila no salte cuando aparece.
-              2. `/student` no es la casa de todos. Un admin o un entrenador
-                 logueado no vuelve al portal del alumno. `backHrefForRole`
-                 resuelve la casa de cada rol, y es la MISMA función que usa
-                 /ayuda: la regla se escribió dos veces y la segunda salió
-                 mal. */}
-          {/* Back on the left — the one thing a visitor reaches for when a
-              five-step form stops making sense. */}
-          {/* The element no longer carries margins of its own: the column
-              above puts the page step between blocks, which is the whole point
-              of the doctrine — a distance belongs to the container, not to
-              each thing inside it. */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {isLoading ? (
+           The count in the subtitle is read from `effectiveSteps`, not written
+           out. #317 / hallazgo #31: on step 1 itself the count is not yet a
+           COMMITTED fact — the visitor can still swap Jugador/Representante on
+           the very card in front of them — so step 1 states both possibilities
+           and the resolved count is deferred to the step that depends on it. */
+        <EnrollFrame
+          back={
+            isLoading ? (
               <span className="h-ctl-sm" aria-hidden="true" />
             ) : (
-              <BackLink href={backHrefForRole(session?.user.role)} />
-            )}
-          </div>
-
-          {/* Step header + the NAMED stepper. The five steps are named from
-              step one: "Paso 2 de 5" anticipates nothing, "Contacto" does.
-
-              The title is `PageHeader`'s now, and that is the point: the `<h1>`
-              was `text-xl font-extrabold`, which resolves to Barlow — the same
-              defect `PageHeader` was fixed for one level up, drawn by hand
-              here so the fix never reached it. `PageHeader` owns the face
-              (Graduate), the case, the flat tracking and the absent weight
-              class; this screen owns only the eyebrow above it, which the
-              primitive has no slot for. */}
-          {/* The header/context wash (#874): the one place on this screen
-              that carries `enroll-wash` instead of `canvas`/`paper`/`sunken`.
-              The 3px left rule is the brand accent the acceptance criteria
-              asks for — a rule beside the heading, never red TEXT on it, the
-              same distinction the primary button already draws between
-              "the action" and "everything else". */}
-          <div
-            data-testid="enroll-wizard-header"
-            className="rounded-card border border-line border-l-[3px] border-l-cata-red bg-enroll-wash p-page"
-          >
-            {/* `ink-3-strong`, not `ink-3`: this block sits on the wash
-                surface, not on plain `paper`, and `ink-3` only clears AA on
-                `paper` — it measures 4.21:1 here. Same reason `PageHeader`
-                uses the companion token. */}
-            <p className="mb-field text-2xs font-bold uppercase text-ink-3-strong">
-              {isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
-            </p>
-            {/* The count is read from `effectiveSteps`, not written out: this
-                copy said "Cinco pasos" while the line directly above it said
-                "Paso 1 de 4", because arriving from the landing with
-                `?type=self` already answers the first step and drops it.
-                #317 / hallazgo #31: on step 1 itself, `effectiveSteps.length`
-                is not yet a COMMITTED fact — the visitor can still swap
-                Jugador/Representante on the very card in front of them, and
-                doing so used to flip "Paso 1 de 4" to "Paso 1 de 5" mid-decision.
-                A promise that changes in response to the click that made it is
-                worse than a vague one, so step 1 states both possibilities and
-                the resolved count is deferred to the step that actually
-                depends on it — the same alternative the finding names. */}
-            <PageHeader
-              title="Inscripción de estudiante"
-              subtitle={
-                isFirst
-                  ? "4 o 5 pasos y queda dentro del club, según quién se inscriba."
-                  : `${effectiveSteps.length} pasos y queda dentro del club.` +
-                    (formData.enrollmentType === "self"
-                      ? " Se inscribe usted como jugador."
-                      : " Usted actúa como representante.")
-              }
-            />
-          </div>
-
+              <BackLink href={backHrefForRole(session?.user.role)} tone="coal" />
+            )
+          }
+          eyebrow={isFirst ? "Paso 1" : `Paso ${currentIndex + 1} de ${effectiveSteps.length}`}
+          title="Inscripción de estudiante"
+          subtitle={
+            isFirst
+              ? "4 o 5 pasos y queda dentro del club, según quién se inscriba."
+              : `${effectiveSteps.length} pasos y queda dentro del club.` +
+                (formData.enrollmentType === "self"
+                  ? " Se inscribe usted como jugador."
+                  : " Usted actúa como representante.")
+          }
+          steps={
+            wide && (
+              <EnrollSteps
+                label="Pasos de la inscripción"
+                steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+                current={currentIndex + 1}
+                onStepClick={handleStepperJump}
+              />
+            )
+          }
+          summary={wide && renderSummaryRail(true)}
+        >
           {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
               servidor — nada de esto se envió todavía. El rótulo lo dice para
               que un dato restaurado nunca se confunda con uno ya guardado, la
@@ -1719,60 +1715,25 @@ function EnrollWizard(): React.ReactElement {
               submitting={submitting}
               onBack={handleBack}
               stepper={
-                <Stepper
-                  label="Pasos de la inscripción"
-                  current={currentIndex + 1}
-                  steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
-                  onStepClick={handleStepperJump}
-                  showCount={!isFirst}
-                />
+                wide ? null : (
+                  <Stepper
+                    label="Pasos de la inscripción"
+                    current={currentIndex + 1}
+                    steps={effectiveSteps.map((s) => STEP_SHORT_LABELS[s])}
+                    onStepClick={handleStepperJump}
+                    showCount={!isFirst}
+                  />
+                )
               }
             />
 
-            <div className={isLast ? undefined : PAGE_RAIL}>
-              {/* The rail comes FIRST in the DOM so that on a phone the public
-                  tariffs (issue #331) still precede the first choice, as the
-                  wizard has always promised; from `lg` it is pinned to the
-                  second column on the same row. */}
-              {!isLast && (
-                <div className="flex flex-col gap-page lg:col-start-2 lg:row-start-1">
-                  {/* Public tariff catalog (issue #331, consumes the public BFF/
-                      backend contract of #394) — shown ONLY on step 1, before the
-                      visitor's first field, so anyone knows the price before they
-                      start. It shares the summary card as its trailing section.
-                      Public and harmless data: unlike the demo panel above, this
-                      is NOT gated on auth or environment, and a failure here gets
-                      its own loud `ErrorState` with retry — the whole point of
-                      this block is showing a price, so its absence must say so. */}
-                  <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step}>
-                    {step === "type" && (
-                      <section aria-label="Tarifas vigentes">
-                        <h3 className="mb-field text-xs text-ink-3-strong">Tarifas vigentes</h3>
-                        {tarifasLoading ? (
-                          <LoadingState label="Cargando tarifas…" />
-                        ) : tarifasError ? (
-                          <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
-                        ) : tarifas.length === 0 ? (
-                          <EmptyState
-                            surface="inset"
-                            title="Sin tarifas publicadas"
-                            description="Todavía no hay categorías de membresía configuradas."
-                          />
-                        ) : (
-                          <ul className="divide-y divide-line">
-                            {tarifas.map((tarifa) => (
-                              <SummaryRow key={tarifa.categoria} label={tarifa.categoria}>
-                                {formatCurrency(tarifa.precio)}
-                              </SummaryRow>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
-                    )}
-                  </EnrollSummary>
-                </div>
-              )}
-              <div data-testid="enroll-wizard-card" className="card p-page lg:col-start-1 lg:row-start-1">
+            <div className="flex flex-col gap-page">
+              {/* Narrow layouts only: the summary (and the public tariffs, issue
+                  #331) sit ABOVE the first choice so a phone visitor still sees
+                  the price before deciding. From `lg` the same block lives in the
+                  brand panel instead. */}
+              {!wide && !isLast && renderSummaryRail(false)}
+              <div data-testid="enroll-wizard-card" className="card p-page">
                 {/* The card title was `text-sm font-bold` — 13.5px of Barlow,
                     the DENSE step, smaller than the labels inside it. It takes
                     the `title` step now: Graduate, 20px, uppercase, flat
@@ -1849,7 +1810,7 @@ function EnrollWizard(): React.ReactElement {
 
             </div>
           </form>
-        </div>
+        </EnrollFrame>
       )}
 
       {/* #1368 — one shared review for all three grouped documents. Opening

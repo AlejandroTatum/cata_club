@@ -30,23 +30,31 @@ interface EnrollSummaryProps {
   formData: EnrollFormData;
   steps: WizardStep[];
   currentStep: WizardStep;
+  /** Restyled for the coal brand panel of the wide frame. */
+  dark?: boolean;
   children?: ReactNode;
 }
 
 const ROW = "flex items-baseline justify-between gap-section py-field";
 
 /** One aligned key–value row; an empty value keeps its slot as "Pendiente". */
-function Fact(props: { label: string; value: string }): ReactElement {
+function Fact(props: { label: string; value: string; dark?: boolean }): ReactElement {
   return (
     <div className={ROW}>
-      <dt className="flex-none text-xs text-ink-3-strong">{props.label}</dt>
+      <dt className={cn("flex-none text-xs", props.dark ? "text-white/75" : "text-ink-3-strong")}>
+        {props.label}
+      </dt>
       <dd
         title={props.value || undefined}
-        className={
+        className={cn(
+          "text-right text-sm",
           props.value
-            ? "min-w-0 truncate text-right text-sm font-semibold tabular-nums text-ink"
-            : "text-right text-sm text-ink-3-strong"
-        }
+            ? "min-w-0 truncate font-semibold tabular-nums"
+            : props.dark
+              ? "text-white/75"
+              : "text-ink-3-strong",
+          props.value && (props.dark ? "text-white" : "text-ink"),
+        )}
       >
         {props.value || "Pendiente"}
       </dd>
@@ -56,12 +64,17 @@ function Fact(props: { label: string; value: string }): ReactElement {
 
 export function SummaryRow(props: {
   label: string;
+  dark?: boolean;
   children: ReactNode;
 }): ReactElement {
   return (
     <li className={ROW}>
-      <span className="text-sm text-ink-2">{props.label}</span>
-      <b className="text-sm tabular-nums text-ink">{props.children}</b>
+      <span className={cn("text-sm", props.dark ? "text-white/90" : "text-ink-2")}>
+        {props.label}
+      </span>
+      <b className={cn("text-sm tabular-nums", props.dark ? "text-white" : "text-ink")}>
+        {props.children}
+      </b>
     </li>
   );
 }
@@ -70,6 +83,7 @@ export default function EnrollSummary({
   formData,
   steps,
   currentStep,
+  dark = false,
   children,
 }: EnrollSummaryProps): ReactElement {
   const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
@@ -87,17 +101,27 @@ export default function EnrollSummary({
   return (
     <aside
       aria-label="Resumen de la inscripción"
-      className={cn("card p-section", !children && "hidden lg:block")}
+      className={cn(
+        dark ? "rounded-card border border-white/10 bg-coal-2 p-section" : "card p-section",
+        !children && "hidden lg:block",
+      )}
     >
       {/* On a phone only the trailing section (tariffs) shows; the mirror of
           the form is redundant next to the form itself. */}
       <div className="hidden lg:block">
-        <h2 className="mb-section text-base font-semibold text-ink">Resumen</h2>
+        <h2
+          className={cn("mb-section text-base font-semibold", dark ? "text-white" : "text-ink")}
+        >
+          Resumen
+        </h2>
 
         <div className="flex items-center gap-3">
           <span
             aria-hidden="true"
-            className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-sunken text-sm font-semibold text-ink-2"
+            className={cn(
+              "flex h-10 w-10 flex-none items-center justify-center rounded-full text-sm font-semibold",
+              dark ? "bg-white/10 text-white" : "bg-sunken text-ink-2",
+            )}
           >
             {name ? getUserInitials(name) : "?"}
           </span>
@@ -105,24 +129,30 @@ export default function EnrollSummary({
             <div className="flex items-center gap-2">
               <p
                 title={name || undefined}
-                className={
-                  name
-                    ? "truncate text-sm font-semibold text-ink"
-                    : "truncate text-sm text-ink-3-strong"
-                }
+                className={cn(
+                  "truncate text-sm",
+                  name ? "font-semibold" : "",
+                  name ? (dark ? "text-white" : "text-ink") : dark ? "text-white/75" : "text-ink-3-strong",
+                )}
               >
                 {name || (isChild ? "Nuevo representante" : "Nuevo jugador")}
               </p>
-              <Badge className="flex-none">
-                {isChild ? "Representante" : "Jugador"}
-              </Badge>
+              {dark ? (
+                <span className="flex-none rounded-full bg-white/10 px-2 py-0.5 text-2xs font-semibold text-white">
+                  {isChild ? "Representante" : "Jugador"}
+                </span>
+              ) : (
+                <Badge className="flex-none">
+                  {isChild ? "Representante" : "Jugador"}
+                </Badge>
+              )}
             </div>
-            <p className="text-xs text-ink-3-strong">
+            <p className={cn("text-xs", dark ? "text-white/75" : "text-ink-3-strong")}>
               {agePlausible ? (
                 <>
                   {age} años
                   {age < 18 && (
-                    <span className="text-state-warn"> · menor de edad</span>
+                    <span className={dark ? "text-ball" : "text-state-warn"}> · menor de edad</span>
                   )}
                 </>
               ) : (
@@ -132,21 +162,32 @@ export default function EnrollSummary({
           </div>
         </div>
 
-        <dl className="mt-section divide-y divide-line border-t border-line">
-          <Fact label="Cédula" value={formData.cedula} />
+        <dl
+          className={cn(
+            "mt-section divide-y border-t",
+            dark ? "divide-white/10 border-white/10" : "divide-line border-line",
+          )}
+        >
+          <Fact dark={dark} label="Cédula" value={formData.cedula} />
           {isChild ? (
-            <Fact label="Representante" value={guardian} />
+            <Fact dark={dark} label="Representante" value={guardian} />
           ) : (
             <Fact
+              dark={dark}
               label="Teléfono"
               value={formData.telefono ? toStoredPhone(formData.telefono) : ""}
             />
           )}
-          <Fact label="Correo" value={email} />
+          <Fact dark={dark} label="Correo" value={email} />
         </dl>
 
-        <div className="mt-section border-t border-line pt-section">
-          <div className="mb-field flex items-baseline justify-between text-xs text-ink-3-strong">
+        <div className={cn("mt-section border-t pt-section", dark ? "border-white/10" : "border-line")}>
+          <div
+            className={cn(
+              "mb-field flex items-baseline justify-between text-xs",
+              dark ? "text-white/75" : "text-ink-3-strong",
+            )}
+          >
             <span>{`${stepNumber} de ${steps.length} pasos`}</span>
           </div>
           <div
@@ -155,10 +196,10 @@ export default function EnrollSummary({
             aria-valuemin={1}
             aria-valuenow={stepNumber}
             aria-valuemax={steps.length}
-            className="h-1.5 overflow-hidden rounded-full bg-sunken"
+            className={cn("h-1.5 overflow-hidden rounded-full", dark ? "bg-white/10" : "bg-sunken")}
           >
             <div
-              className="h-full rounded-full bg-coal"
+              className={cn("h-full rounded-full", dark ? "bg-ball" : "bg-coal")}
               style={{ width: `${(stepNumber / steps.length) * 100}%` }}
             />
           </div>
@@ -166,7 +207,12 @@ export default function EnrollSummary({
       </div>
 
       {children && (
-        <div className="lg:mt-section lg:border-t lg:border-line lg:pt-section">
+        <div
+          className={cn(
+            "lg:mt-section lg:border-t lg:pt-section",
+            dark ? "lg:border-white/10" : "lg:border-line",
+          )}
+        >
           {children}
         </div>
       )}

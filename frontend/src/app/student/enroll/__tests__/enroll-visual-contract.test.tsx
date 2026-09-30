@@ -229,24 +229,20 @@ describe("the titles are in the club's face", () => {
 // the stepper's three states each have to be tellable apart.
 // ---------------------------------------------------------------------------
 
-describe("the enrollment wash marks only the wizard's own header/context", () => {
-  it("carries the wash and the 3px red accent on the header block, and nowhere else", () => {
+describe("the enrollment frame is a coal brand panel beside the form", () => {
+  it("carries the title in the coal panel, and the pink wash appears nowhere", () => {
     const { container } = render(<EnrollPage />);
 
-    const header = screen.getByTestId("enroll-wizard-header");
-    expect(header.className).toContain("bg-enroll-wash");
-    expect(header.className).toContain("border-l-cata-red");
-    expect(header).toContainElement(
-      screen.getByRole("heading", { name: /inscripción de estudiante/i }),
+    const panel = screen.getByTestId("enroll-brand-panel");
+    expect(panel.className).toContain("bg-coal");
+    expect(panel).toContainElement(
+      screen.getByRole("heading", { level: 1, name: /inscripción de estudiante/i }),
     );
-    // The stepper left the header for the navigation row: Atrás | Stepper | Siguiente.
+    // Narrow layouts keep the compact stepper in the navigation row.
     expect(screen.getByTestId("enroll-nav")).toContainElement(
       screen.getByRole("list", { name: /pasos de la inscripción/i }),
     );
-
-    // The wash is this ONE block's surface — nothing else on the screen
-    // repeats it.
-    expect(container.querySelectorAll(".bg-enroll-wash")).toHaveLength(1);
+    expect(container.querySelectorAll(".bg-enroll-wash")).toHaveLength(0);
   });
 
   it("keeps the form card off the wash and the info panel on sunken", () => {
