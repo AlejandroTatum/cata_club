@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendFetchAuthed, passthroughBackendError } from "@/lib/server/backend-client";
-import { setAuthCookies } from "@/lib/server/auth";
+import { setAuthCookies, userAgentFrom } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +18,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ message: "Debe aceptar el envío de la captura." }, { status: 400 });
   }
   const requestId = request.headers.get("X-Request-ID");
+  // The backend stores the User-Agent it receives; without this it records the BFF's own ("node").
+  const userAgent = userAgentFrom(request);
+  const forwarded: Record<string, string> = {
+    ...(requestId ? { "X-Request-ID": requestId } : {}),
+    ...(userAgent ? { "User-Agent": userAgent } : {}),
+  };
   const result = await backendFetchAuthed(request, "/reportes-error/", {
     method: "POST", body: form,
-    ...(requestId ? { headers: { "X-Request-ID": requestId } } : {}),
+    ...(Object.keys(forwarded).length ? { headers: forwarded } : {}),
   });
   if (!result.ok) return NextResponse.json({ message: "No se pudo contactar al servicio de reportes." }, { status: result.status });
   if (!result.response.ok) return passthroughBackendError(result.response, "No se pudo enviar el reporte.");
