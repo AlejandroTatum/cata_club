@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Camera, X } from "lucide-react";
 import { Button, FileDropZone } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
@@ -41,6 +41,8 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
   const [route] = useState(() => (typeof window === "undefined" ? "" : window.location.pathname));
   const [browser] = useState(() => (typeof navigator === "undefined" ? "" : navigator.userAgent));
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isAuto = Boolean(screenshot && screenshot === capture?.file);
   const previewUrl = useMemo(() => (screenshot ? URL.createObjectURL(screenshot) : null), [screenshot]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -101,48 +103,59 @@ export default function ReportProblemDialog({ onClose, requestId, capture }: Rep
             <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-5 lg:grid-cols-2">
               <div className="flex min-w-0 flex-col gap-4">
                 <label className="flex flex-col gap-2 text-sm font-semibold">¿Qué ocurrió?
-                  <textarea required maxLength={MAX_DESCRIPTION} value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-40 rounded-lg border border-cata-border p-3 text-base font-normal" />
+                  <textarea required maxLength={MAX_DESCRIPTION} value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-32 rounded-lg border border-cata-border p-3 text-base font-normal" />
                   <span className="text-xs font-normal text-ink-2" aria-live="polite">{description.length}/{MAX_DESCRIPTION}</span>
                 </label>
                 <label className="flex flex-col gap-2 text-sm font-semibold">¿Dónde ocurrió?
                   <input readOnly value={route} className="rounded-lg border border-cata-border bg-sunken p-2 font-mono text-sm font-normal" />
                 </label>
-                <FileDropZone
-                  id="report-capture" label="Captura opcional (PNG, JPEG o WebP, hasta 2 MB)"
-                  hint="Puede reemplazar la captura automática por otra imagen." accept="image/png,image/jpeg,image/webp"
-                  file={screenshot} onFile={pickFile} chooseLabel="Elegir imagen"
-                />
+                {isAuto ? (
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="report-capture" className="text-sm font-semibold">Captura opcional (PNG, JPEG o WebP, hasta 2 MB)</label>
+                    <input ref={inputRef} id="report-capture" type="file" accept="image/png,image/jpeg,image/webp" tabIndex={-1} className="sr-only" onChange={(event) => pickFile(event.target.files?.[0] ?? null)} />
+                    <div className="flex items-center justify-between gap-3 rounded-card border border-dashed border-line-2 bg-paper px-3 py-2 text-sm">
+                      <span className="min-w-0 truncate font-semibold">Captura automática · {screenshot?.name}</span>
+                      <button type="button" onClick={() => inputRef.current?.click()} className="shrink-0 text-xs font-semibold text-cata-red">Cambiar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <FileDropZone
+                    id="report-capture" label="Captura opcional (PNG, JPEG o WebP, hasta 2 MB)"
+                    hint="Puede adjuntar una imagen de su equipo." accept="image/png,image/jpeg,image/webp"
+                    file={screenshot} onFile={pickFile} chooseLabel="Elegir imagen"
+                  />
+                )}
                 {fileError && <p role="alert" className="text-sm text-cata-red">{fileError}</p>}
               </div>
               <div className="flex min-w-0 flex-col gap-4">
                 <p className="text-xs font-semibold text-ink-2">Vista previa</p>
                 {screenshot && previewUrl ? (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2">
                     <button type="button" onClick={() => setEnlarged(true)} aria-label="Ampliar captura" className="overflow-hidden rounded-card border border-cata-border">
                       {/* eslint-disable-next-line @next/next/no-img-element -- local blob: preview */}
-                      <img src={previewUrl} alt="Vista previa de la captura" className="max-h-64 w-full object-contain" />
+                      <img src={previewUrl} alt="Vista previa de la captura" className="max-h-56 w-full object-contain" />
                     </button>
-                    <div className="flex flex-col gap-2">
-                      <label className="flex items-start gap-2 text-sm">
-                        <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1" />
+                    <div className="flex items-start justify-between gap-3">
+                      <label className="flex items-start gap-2 text-xs">
+                        <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-0.5" />
                         <span>La captura puede contener datos personales y solo la administración del club la verá. Acepto enviarla.</span>
                       </label>
-                      <Button type="button" variant="secondary" onClick={() => pickFile(null)} className="self-start">Quitar captura</Button>
+                      <Button type="button" variant="secondary" onClick={() => pickFile(null)} className="shrink-0">Quitar captura</Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 rounded-card border border-dashed border-line-2 p-4 text-sm text-ink-2">
+                  <div className="flex items-center gap-2 rounded-card border border-dashed border-line-2 p-3 text-sm text-ink-2">
                     <Camera size={ICON.base} aria-hidden="true" />
                     <span>{capture?.failed ? "No se pudo capturar la pantalla. Puede adjuntar una imagen manualmente." : "Sin captura adjunta."}</span>
                   </div>
                 )}
-                <section aria-label="Así llegará su reporte" className="card flex flex-col gap-2 p-4 text-sm">
+                <section aria-label="Así llegará su reporte" className="card flex flex-col gap-2 p-3 text-sm">
                   <h3 className="font-semibold">Así llegará su reporte</h3>
-                  <dl className="flex flex-col gap-2">
-                    <div><dt className="text-xs font-bold uppercase text-ink-2">Descripción</dt><dd data-testid="report-preview-description" className="whitespace-pre-wrap break-words">{description.trim() || "—"}</dd></div>
-                    <div><dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all font-mono">{route || "—"}</dd></div>
-                    <div><dt className="text-xs font-bold uppercase text-ink-2">Navegador</dt><dd className="break-words text-xs">{browser || "—"}</dd></div>
-                    <div><dt className="text-xs font-bold uppercase text-ink-2">Captura</dt><dd>{attached ? "Con captura" : screenshot ? "Sin captura (falta su autorización)" : "Sin captura"}</dd></div>
+                  <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+                    <dt className="text-xs font-bold uppercase text-ink-2">Descripción</dt><dd data-testid="report-preview-description" className="whitespace-pre-wrap break-words">{description.trim() || "—"}</dd>
+                    <dt className="text-xs font-bold uppercase text-ink-2">Ruta</dt><dd className="break-all font-mono text-xs">{route || "—"}</dd>
+                    <dt className="text-xs font-bold uppercase text-ink-2">Navegador</dt><dd className="break-words text-xs">{browser || "—"}</dd>
+                    <dt className="text-xs font-bold uppercase text-ink-2">Captura</dt><dd>{attached ? "Con captura" : screenshot ? "Sin captura (falta su autorización)" : "Sin captura"}</dd>
                   </dl>
                 </section>
               </div>

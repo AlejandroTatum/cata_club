@@ -86,6 +86,12 @@ describe("ReportProblemDialog", () => {
     expect(screen.getByText("Con captura")).toBeInTheDocument();
   });
 
+  it("labels the automatic capture in a compact upload row", () => {
+    render(<ReportProblemDialog onClose={vi.fn()} capture={{ file: draft(), failed: false }} />);
+    expect(screen.getByText("Captura automática · captura-pantalla.jpg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cambiar" })).toBeInTheDocument();
+  });
+
   it("shows the soft failure message when the capture failed", () => {
     render(<ReportProblemDialog onClose={vi.fn()} capture={{ file: null, failed: true }} />);
     expect(screen.getByText(/No se pudo capturar la pantalla/)).toBeInTheDocument();
