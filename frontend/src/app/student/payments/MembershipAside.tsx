@@ -88,59 +88,51 @@ export function MembershipCard({
       className="card overflow-hidden"
       aria-labelledby="membership-status-title"
     >
-      {/* The badge carries the `estado`; the heading carries the fact the
-          reader came for. The badge used to say the same thing as the heading
-          in coarser words ("Al día"), which is a second, weaker judgement of
-          data that already speaks for itself. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-10 gap-y-section px-5 py-[18px]">
-        <div className="min-w-0 flex-1 basis-72 sm:flex-none sm:basis-[26rem]">
-          <div className="mb-2 flex flex-wrap items-center gap-2.5">
-            <p className="text-2xs font-bold uppercase text-ink-3">
-              {studentName ? `Membresía de ${studentName}` : "Su membresía"}
-            </p>
-            <Badge tone={state.tone}>{state.label}</Badge>
-          </div>
-          <h2 id="membership-status-title" className="text-base font-bold tracking-tight text-ink">
-            {coverageEnd ? (
-              <>
-                Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
-              </>
-            ) : (
-              "Todavía no hay ningún pago aprobado"
-            )}
-          </h2>
-          <p className="mt-1.5 text-sm text-ink-3">
-            {coverageEnd
-              ? "Es la fecha del pago aprobado que llega más lejos en su historial."
-              : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
+      {/* Rail card: identity and coverage on top, the plan facts as a compact
+          two-column grid, then the action area. Stacked because the rail is
+          340px wide; the badge carries the `estado`, the heading carries the
+          fact the reader came for. */}
+      <div className="px-5 py-[18px]">
+        <div className="mb-2 flex flex-wrap items-center gap-2.5">
+          <p className="text-2xs font-bold uppercase text-ink-3">
+            {studentName ? `Membresía de ${studentName}` : "Su membresía"}
           </p>
+          <Badge tone={state.tone}>{state.label}</Badge>
         </div>
+        <h2 id="membership-status-title" className="text-base font-bold tracking-tight text-ink">
+          {coverageEnd ? (
+            <>
+              Pagado hasta el <span className="tabular-nums">{formatDate(coverageEnd)}</span>
+            </>
+          ) : (
+            "Todavía no hay ningún pago aprobado"
+          )}
+        </h2>
+        <p className="mt-1.5 text-sm text-ink-3">
+          {coverageEnd
+            ? "Es la fecha del pago aprobado que llega más lejos en su historial."
+            : "En cuanto el club apruebe un pago, aquí aparecerá hasta qué fecha queda cubierto."}
+        </p>
 
         {facts.length > 0 && (
-          <dl className="flex min-w-[16rem] flex-1 flex-wrap justify-evenly gap-x-8 gap-y-section">
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4">
             {facts.map((fact) => (
-              <div key={fact.label}>
+              <div key={fact.label} className="min-w-0">
                 <dt className="text-2xs font-bold uppercase text-ink-3-strong">{fact.label}</dt>
-                <dd className="mt-1 text-base font-bold tabular-nums text-ink">{fact.value}</dd>
+                <dd className="mt-0.5 truncate text-sm font-bold tabular-nums text-ink">{fact.value}</dd>
               </div>
             ))}
           </dl>
         )}
       </div>
 
-      {/* Issue #513 (Propuesta B, idea 1): a compact status-footer dot, in the
-          same row as the CTA below — the `Badge` at the top carries the state
-          for a reader scanning down from the title; this repeats it right
-          where the eye lands before acting, so status and action read
-          together without a scroll back up. One row rather than two: a thin
-          footer line above a button left a blank band to the right of both. */}
       {children && (
-        <div className="flex flex-col gap-x-6 gap-y-section border-t border-line px-5 py-3.5 sm:flex-row sm:items-start">
-          <span className="flex h-ctl flex-none items-center gap-1.5 sm:w-44">
+        <div className="flex flex-col gap-3 border-t border-line bg-sunken/40 px-5 py-4">
+          <span className="flex items-center gap-1.5">
             <span aria-hidden="true" className={cn("h-1.5 w-1.5 flex-none rounded-full bg-current", STATUS_DOT_TEXT[state.tone])} />
             <span className={cn("text-2xs font-bold uppercase", STATUS_DOT_TEXT[state.tone])}>{state.label}</span>
           </span>
-          <div className="min-w-0 flex-1 self-center">{children}</div>
+          <div className="min-w-0">{children}</div>
         </div>
       )}
     </section>

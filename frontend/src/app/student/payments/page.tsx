@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, ResponsiveList, TableHeaderCell, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, ResponsiveList, TableHeaderCell, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
@@ -66,7 +66,7 @@ import { MembershipCard } from "./MembershipAside";
 import { HowToPay } from "./HowToPay";
 import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
-import { PagoTableRow, PagoCard, CoberturaTableRow, CoberturaCard } from "./PagoHistoryRows";
+import { GhostPagoRows, PagoTableRow, PagoCard, CoberturaTableRow, CoberturaCard } from "./PagoHistoryRows";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -508,19 +508,14 @@ function PaymentsContent({
         }}
       />
 
-      {/* One column, not a rail.
-       *
-       * The rail existed to hold "Cómo se registra un pago", and that block is
-       * behind "Ver ayuda" now (D11c — see the note above `HowToPay`). With it
-       * gone there is no second column: the membership summary, the filters
-       * and the history are one reading order, top to bottom, and it is the
-       * same order a phone already got. A 340px column kept for its own sake
-       * would be the "rail does not close vertical emptiness" mistake
-       * `PAGE_RAIL`'s own doc comment warns about.
-       *
-       * The disclosure sits directly under the card whose form it explains,
-       * not at the top of the page: the question it answers is the one the
-       * reader has while looking at "Registrar un pago". */}
+      {/* Rail layout: history on the left, the account's state and the action
+          on the right. The aside comes FIRST in the DOM (phone reading order:
+          status, pay, then history) and is placed in column 2 from `lg` up. */}
+      <div className={PAGE_RAIL}>
+        <aside
+          aria-label="Membresía y registro de pagos"
+          className="flex min-w-0 flex-col gap-page lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
+        >
       <MembershipCard
         membership={selectedProfile.membership}
         coverageEnd={coverageEnd}
@@ -577,7 +572,9 @@ function PaymentsContent({
           openByDefault={howToPayOpensByDefault}
         />
       )}
+        </aside>
 
+        <div className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1 lg:min-h-[calc(100dvh-10rem)]">
       {/* Selection is coal plus the ball dot — `FilterPill` owns that rule.
           The chips used to sit loose on the canvas here too; the portal
           filters through the same panel the admin screens do. */}
@@ -709,6 +706,7 @@ function PaymentsContent({
                   ) : undefined
                 }
               />
+              <GhostPagoRows />
             </div>
           ) : (
             // Issue #513: the same `ResponsiveList`/`Table*`/`Badge`
@@ -770,7 +768,8 @@ function PaymentsContent({
           )}
         </section>
       )}
-
+        </div>
+      </div>
     </>
   );
 }

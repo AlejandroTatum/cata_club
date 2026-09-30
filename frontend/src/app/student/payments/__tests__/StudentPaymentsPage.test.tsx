@@ -724,7 +724,7 @@ describe("StudentPaymentsPage — the history", () => {
     expect(screen.queryByText(PAGO_START, { exact: false })).not.toBeInTheDocument();
   });
 
-  it("states the rejection reason in full, behind the row's own accordion (#513)", async () => {
+  it("states the rejection reason inline on the rejected row, with no accordion to open", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "RECHAZADO", motivoRechazo: "El comprobante es ilegible" }),
     ]);
@@ -732,28 +732,21 @@ describe("StudentPaymentsPage — the history", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    // Closed by default (issue #513): the panel is in the DOM (a plain
-    // text query cannot tell — `hidden` is not a text query's concern) but
-    // not visible, exactly the native-`hidden` contract `Accordion.tsx`
-    // already established for this product.
-    expect(within(historyTable()).getByText("El comprobante es ilegible")).not.toBeVisible();
-    openHistoryDetail();
-
-    expect(within(historyTable()).getByText("El comprobante es ilegible")).toBeInTheDocument();
-    expect(within(historyTable()).getByText("Motivo del rechazo")).toBeInTheDocument();
+    expect(within(historyTable()).getByText("El comprobante es ilegible")).toBeVisible();
+    expect(within(historyTable()).getByText("Motivo del rechazo:")).toBeInTheDocument();
+    expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
   });
 
   // Issue #400 (criterio 8): el comprobante OFICIAL que genera el club al
   // aprobar es distinto del voucher que sube el socio (`voucherUrl` /
   // "Ver el comprobante") — solo aparece cuando el backend lo pobló.
-  it("shows a 'Descargar comprobante oficial' link, behind the accordion, when comprobanteOficialUrl is populated", async () => {
+  it("surfaces a 'Descargar comprobante oficial' link on the row when comprobanteOficialUrl is populated", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "APROBADO", comprobanteOficialUrl: "https://files.example/comprobante-oficial.pdf" }),
     ]);
 
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
-    openHistoryDetail();
 
     const link = within(historyTable()).getByRole("link", { name: /descargar comprobante oficial/i });
     expect(link).toHaveAttribute("href", "https://files.example/comprobante-oficial.pdf");
@@ -806,6 +799,8 @@ describe("StudentPaymentsPage — the history", () => {
 
     expect(await screen.findByText("No hay pagos rechazados.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ver todos los pagos" })).toBeInTheDocument();
+    // The empty box keeps the list's shape with decorative ghost rows.
+    expect(screen.getByTestId("pago-ghost-rows")).toHaveAttribute("aria-hidden", "true");
   });
 
   /**
@@ -897,7 +892,6 @@ describe("StudentPaymentsPage — the history", () => {
 
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
-    openHistoryDetail();
 
     expect(within(historyTable()).getByText("El comprobante no coincide")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /subir comprobante/i })).not.toBeInTheDocument();
@@ -1142,7 +1136,7 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
 describe("StudentPaymentsPage — the row accordion (#513)", () => {
   it("opens a row's detail from the table, and the mobile card's own copy opens with it", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
-      makePago({ estadoPago: "RECHAZADO", motivoRechazo: "El comprobante es ilegible" }),
+      makePago({ estadoPago: "APROBADO", motivoExcepcionSinComprobante: "Verificado en la cuenta del club" }),
     ]);
 
     render(<StudentPaymentsPage />);
@@ -1152,7 +1146,7 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     const cardToggle = within(historyCards()).getByRole("button", { name: /detalle/i });
     expect(tableToggle).toHaveAttribute("aria-expanded", "false");
     expect(cardToggle).toHaveAttribute("aria-expanded", "false");
-    expect(within(historyCards()).getByText("El comprobante es ilegible")).not.toBeVisible();
+    expect(within(historyCards()).getByText("Verificado en la cuenta del club")).not.toBeVisible();
 
     fireEvent.click(tableToggle);
 
@@ -1161,7 +1155,7 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     // copy too, even though only one of the two is visible in a real
     // browser at any given width.
     expect(cardToggle).toHaveAttribute("aria-expanded", "true");
-    expect(within(historyCards()).getByText("El comprobante es ilegible")).toBeVisible();
+    expect(within(historyCards()).getByText("Verificado en la cuenta del club")).toBeVisible();
   });
 
   it("gives a row with nothing to disclose no accordion toggle at all", async () => {
@@ -1238,7 +1232,6 @@ describe("StudentPaymentsPage — the mobile card keeps its metadata readable", 
     const registerLink = /registrar un pago nuevo/i;
     expect(within(infoBlock).queryByRole("link", { name: registerLink })).not.toBeInTheDocument();
     expect(within(actionsBlock).getByRole("link", { name: registerLink })).toBeInTheDocument();
-    expect(within(actionsBlock).getByRole("button", { name: /detalle/i })).toBeInTheDocument();
   });
 
   // Triangulates: the stacking is the card's own shape, not something only a
@@ -1488,23 +1481,41 @@ describe("StudentPaymentsPage — registering a payment", () => {
     expect(screen.queryByRole("button", { name: /registrar un pago/i })).not.toBeInTheDocument();
   });
 
-  // WCAG 2.2 SC 2.5.8 — the detach control was a bare 14px ✕ inside a button
-  // with no padding, i.e. a 14x14 target, and it is the only way back from
-  // attaching the wrong file. It gets 24x24 of hit area; the glyph stays 14px.
-  it("gives the detach control a 24x24 target around its 14px glyph", async () => {
-    render(<StudentPaymentsPage />);
-
+  // uv3: the picked proof is previewed BEFORE submitting — thumbnail for an
+  // image, a document tile for a PDF — with replace/remove actions.
+  async function pickProof(file: File): Promise<void> {
     fireEvent.click(await screen.findByRole("button", { name: /registrar un pago/i }));
+    fireEvent.change(screen.getByTestId("renew-voucher-input"), { target: { files: [file] } });
+  }
 
-    // Transferencia is the default method, so the voucher row is already up.
-    const fileInput = screen.getByTestId("renew-voucher-input") as HTMLInputElement;
-    fireEvent.change(fileInput, {
-      target: { files: [new File(["x"], "comprobante.pdf", { type: "application/pdf" })] },
-    });
+  it("previews a picked image proof as a thumbnail with its name and size", async () => {
+    render(<StudentPaymentsPage />);
+    await pickProof(new File(["x"], "comprobante.png", { type: "image/png" }));
 
-    const detach = await screen.findByRole("button", { name: /quitar el comprobante/i });
-    expect(detach).toHaveClass("h-6", "w-6");
-    expect(detach).toHaveClass("items-center", "justify-center");
+    const preview = await screen.findByTestId("renew-proof-preview");
+    expect(within(preview).getByRole("img")).toHaveAttribute("src", "blob:mock-voucher-preview");
+    expect(within(preview).getByText("comprobante.png")).toBeInTheDocument();
+    expect(within(preview).getByRole("button", { name: /cambiar archivo/i })).toBeInTheDocument();
+  });
+
+  it("previews a picked PDF proof as a document tile instead of an image", async () => {
+    render(<StudentPaymentsPage />);
+    await pickProof(new File(["x"], "comprobante.pdf", { type: "application/pdf" }));
+
+    const preview = await screen.findByTestId("renew-proof-preview");
+    expect(within(preview).getByTestId("renew-proof-pdf-tile")).toBeInTheDocument();
+    expect(within(preview).queryByRole("img")).not.toBeInTheDocument();
+    expect(within(preview).getByText("comprobante.pdf")).toBeInTheDocument();
+  });
+
+  it("removes the previewed proof and offers the picker again", async () => {
+    render(<StudentPaymentsPage />);
+    await pickProof(new File(["x"], "comprobante.pdf", { type: "application/pdf" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /quitar el comprobante/i }));
+
+    expect(screen.queryByTestId("renew-proof-preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /seleccionar archivo/i })).toBeInTheDocument();
   });
 
   // Issue #488: switching to Efectivo removes the Comprobante field, but the

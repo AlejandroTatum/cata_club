@@ -52,13 +52,10 @@ function buildPagoRowFields(pago: PagoPersona): PagoRowFields {
  * expand gets no toggle rather than an empty disclosure.
  */
 function pagoHasDetail(pago: PagoPersona): boolean {
-  return (
-    describePagoDescuento(pago) != null ||
-    Boolean(pago.voucherUrl) ||
-    Boolean(pago.comprobanteOficialUrl) ||
-    (pago.estadoPago === "RECHAZADO" && Boolean(pago.motivoRechazo)) ||
-    Boolean(pago.motivoExcepcionSinComprobante)
-  );
+  // Voucher, official receipt and rejection reason are surfaced on the row
+  // itself (see `PagoEvidenceLinks` / `PagoRejection`); the accordion keeps
+  // only what explains the row's numbers.
+  return describePagoDescuento(pago) != null || Boolean(pago.motivoExcepcionSinComprobante);
 }
 
 /**
@@ -109,42 +106,6 @@ function PagoDetailPanel({ pago }: { pago: PagoPersona }): React.ReactElement {
               <dd className="text-xs font-bold tabular-nums text-ink">{descuento.montoFinal}</dd>
             </div>
           </dl>
-        </div>
-      )}
-
-      {pago.voucherUrl && (
-        <a
-          href={pago.voucherUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
-        >
-          <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Ver el comprobante
-        </a>
-      )}
-
-      {/* Comprobante OFICIAL en PDF que el club genera al aprobar (issue
-          #400, criterio 8) — distinto del `voucherUrl` de arriba, que es
-          la evidencia que el propio socio subió. Solo existe una vez
-          aprobado (la condición la impone la fila `ComprobantePago`
-          misma, no un chequeo de `estadoPago` acá). */}
-      {pago.comprobanteOficialUrl && (
-        <a
-          href={pago.comprobanteOficialUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex min-h-[24px] items-center gap-1.5 rounded text-xs font-semibold text-ink underline decoration-line-2 decoration-2 underline-offset-4 hover:decoration-ink"
-        >
-          <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Descargar comprobante oficial
-        </a>
-      )}
-
-      {pago.estadoPago === "RECHAZADO" && pago.motivoRechazo && (
-        <div className="rounded-ctl bg-state-bad-bg px-3.5 py-2.5">
-          <p className="text-2xs font-bold uppercase text-state-bad">Motivo del rechazo</p>
-          <p className="mt-0.5 text-sm text-ink-2">{pago.motivoRechazo}</p>
         </div>
       )}
 
@@ -204,6 +165,58 @@ function PagoDetailToggle({
         className={cn("flex-none transition-transform duration-200", isOpen && "rotate-180")}
       />
     </button>
+  );
+}
+
+const EVIDENCE_LINK =
+  "inline-flex h-8 items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-2.5 text-xs font-semibold text-ink hover:bg-sunken";
+
+/**
+ * The two documents a payment can carry, as direct row actions: the OFFICIAL
+ * receipt the club generates on approval (`comprobanteOficialUrl`, issue #400
+ * criterio 8) and the proof the member uploaded (`voucherUrl`). They used to
+ * hide inside the expandable detail; a family looking for "mi recibo" should
+ * not have to open anything.
+ */
+function PagoEvidenceLinks({ pago }: { pago: PagoPersona }): React.ReactElement | null {
+  if (!pago.comprobanteOficialUrl && !pago.voucherUrl) return null;
+  return (
+    <>
+      {pago.comprobanteOficialUrl && (
+        <a
+          href={pago.comprobanteOficialUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Descargar comprobante oficial"
+          className={EVIDENCE_LINK}
+        >
+          <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Recibo
+        </a>
+      )}
+      {pago.voucherUrl && (
+        <a
+          href={pago.voucherUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Ver el comprobante"
+          className={EVIDENCE_LINK}
+        >
+          <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+          Mi comprobante
+        </a>
+      )}
+    </>
+  );
+}
+
+/** The club's reason for rejecting a payment, inline on its row. */
+function PagoRejection({ pago }: { pago: PagoPersona }): React.ReactElement | null {
+  if (pago.estadoPago !== "RECHAZADO" || !pago.motivoRechazo) return null;
+  return (
+    <p className="mt-1.5 rounded-ctl bg-state-bad-bg px-2.5 py-1.5 text-xs text-ink-2">
+      <span className="font-bold text-state-bad">Motivo del rechazo:</span> {pago.motivoRechazo}
+    </p>
   );
 }
 
@@ -308,6 +321,7 @@ export function PagoTableRow({
                 it. */}
             {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
           </div>
+          <PagoRejection pago={pago} />
         </TableCell>
         <TableCell type="number">{fields.amount}</TableCell>
         <TableCell type="text">{fields.period}</TableCell>
@@ -319,6 +333,7 @@ export function PagoTableRow({
         </TableCell>
         <TableCell type="action">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <PagoEvidenceLinks pago={pago} />
             <PagoActionSlot
               pago={pago}
               fields={fields}
@@ -385,8 +400,10 @@ export function PagoCard({
           <span className="tabular-nums">{fields.registeredOn}</span> · Cubre{" "}
           <span className="tabular-nums">{fields.period}</span>
         </p>
+        <PagoRejection pago={pago} />
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
+        <PagoEvidenceLinks pago={pago} />
         <PagoActionSlot
           pago={pago}
           fields={fields}
@@ -466,5 +483,29 @@ export function CoberturaCard({ cobertura }: { cobertura: CoberturaBonificada })
         </p>
       </div>
     </li>
+  );
+}
+
+/**
+ * Placeholder rows under an empty history: they show the shape the list will
+ * take (status chip, period, amount) so the empty box reads as "not yet"
+ * instead of a void. Decorative only — hidden from assistive tech.
+ */
+export function GhostPagoRows({ count = 3 }: { count?: number }): React.ReactElement {
+  return (
+    <ul aria-hidden="true" data-testid="pago-ghost-rows" className="flex flex-col divide-y divide-line border-t border-line">
+      {Array.from({ length: count }, (_, i) => (
+        <li
+          key={i}
+          className="flex items-center gap-4 px-4 py-3.5"
+          style={{ opacity: 1 - i * 0.28 }}
+        >
+          <span className="h-5 w-20 flex-none rounded-full bg-line" />
+          <span className="h-3 w-16 flex-none rounded-full bg-line" />
+          <span className="h-3 min-w-0 flex-1 rounded-full bg-line/70" />
+          <span className="hidden h-3 w-24 flex-none rounded-full bg-line/70 sm:block" />
+        </li>
+      ))}
+    </ul>
   );
 }

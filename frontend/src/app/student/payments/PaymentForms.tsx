@@ -13,6 +13,7 @@ import { addMonthsIso, estimateTotal, voucherFileError } from "./payments-utils"
 import { CreditCard, Loader2, Minus, Paperclip, Plus, Upload, X } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
+import { ProofPreview } from "./ProofPreview";
 
 /** `_sistema.css` `.fld` — the one input shape, 40px like every other control. */
 export const FIELD_CLASSES =
@@ -571,12 +572,12 @@ function RenewPaymentForm({
     return (
       // The hint sits beside the button so the card's foot is a sentence long
       // rather than a lone button with a blank row to its right.
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-field">
-        <Button variant="primary" onClick={action.open}>
+      <div className="flex flex-col gap-2.5">
+        <Button variant="primary" onClick={action.open} className="w-full">
           <Plus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
           {studentName ? `Registrar un pago de ${studentName}` : "Registrar un pago"}
         </Button>
-        <p className="min-w-0 flex-1 basis-64 text-sm text-ink-3">
+        <p className="min-w-0 text-sm text-ink-3">
           Elija los meses y la forma de pago; el club valida cada pago y lo verá «En revisión» en
           el historial.
         </p>
@@ -591,7 +592,7 @@ function RenewPaymentForm({
           Este pago se registra a nombre de <b className="font-semibold text-ink">{studentName}</b>.
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3">
         <MonthCountField value={months} onChange={setMonths} disabled={action.loading} />
         <label className="flex flex-col gap-1.5">
           <span className={FIELD_LABEL_CLASSES}>Forma de pago <span aria-hidden="true" className="text-state-bad">*</span></span>
@@ -643,40 +644,34 @@ function RenewPaymentForm({
       {tipoPago === "TRANSFERENCIA" && (
         <div className="flex flex-col gap-1.5">
           <span className={FIELD_LABEL_CLASSES}>Comprobante <span aria-hidden="true" className="text-state-bad">*</span></span>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              aria-required="true"
-              accept="image/jpeg,image/png,application/pdf"
-              onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
-              className="hidden"
-              data-testid="renew-voucher-input"
+          <input
+            ref={fileInputRef}
+            type="file"
+            aria-required="true"
+            accept="image/jpeg,image/png,application/pdf"
+            onChange={(e) => handleVoucherChange(e.target.files?.[0] ?? null)}
+            className="hidden"
+            data-testid="renew-voucher-input"
+          />
+          {voucherFile ? (
+            <ProofPreview
+              file={voucherFile}
+              onReplace={() => fileInputRef.current?.click()}
+              onRemove={() => {
+                setVoucherFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
             />
-            <Button onClick={() => fileInputRef.current?.click()}>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 rounded-ctl border border-dashed border-line-2 bg-sunken px-3 py-4 text-sm font-semibold text-ink-2 hover:border-ink-3 hover:text-ink"
+            >
               <Upload size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              {voucherFile ? "Cambiar archivo" : "Seleccionar archivo"}
-            </Button>
-            {voucherFile && (
-              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink-2">
-                <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                <span className="truncate">{voucherFile.name}</span>
-                {/* The only way back from attaching the wrong file, and it
-                    shipped as a bare 14px glyph in an unpadded button — a
-                    14x14 target against the 24x24 of WCAG 2.2 SC 2.5.8.
-                    `h-6 w-6` with the glyph centred is hit area only; the ✕
-                    itself is still 14px. */}
-                <button
-                  type="button"
-                  onClick={() => setVoucherFile(null)}
-                  aria-label="Quitar el comprobante seleccionado"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-state-bad"
-                >
-                  <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </span>
-            )}
-          </div>
+              Seleccionar archivo
+            </button>
+          )}
           <span className="text-xs text-ink-3-strong">PDF, JPG o PNG — máximo 5 MB.</span>
         </div>
       )}
