@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { buildContextLine } from "@/components/dashboard/context-line";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1369,6 +1370,7 @@ function ActivePortalView({
         <div data-testid="student-pulse" className={STAT_GRID}>
           <StatCard
             label="Cobertura"
+            href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={diasDeCobertura === null ? "—" : Math.abs(diasDeCobertura)}
             unit={diasDeCobertura === null ? undefined : diasDeCobertura === 1 || diasDeCobertura === -1 ? "día" : "días"}
             hint={
@@ -1381,6 +1383,7 @@ function ActivePortalView({
           />
           <StatCard
             label="Asistencia"
+            href={withSelectedStudent("/student/attendance", selectedPersonaId)}
             value={asistencia === null ? "—" : asistencia.porcentaje}
             unit={asistencia === null ? undefined : "%"}
             hint={
@@ -1401,6 +1404,7 @@ function ActivePortalView({
           />
           <StatCard
             label="Pagos en revisión"
+            href={withSelectedStudent("/student/payments", selectedPersonaId)}
             value={pendingPagos}
             hint={pendingPagos === 0 ? "nada esperando validación" : "esperan validación del club"}
           />
@@ -1594,9 +1598,13 @@ function StudentPortalContent(): React.ReactElement {
     state.status === "ready"
       ? derivePortalMode(isPlayer, state.data.representados.length)
       : null;
+  const roleLabel =
+    state.status === "ready" && isRepresentative(state.data.representados.length)
+      ? "Representante"
+      : "Estudiante";
   const subtitle =
     portalMode === "active" && greetingName
-      ? `Hola, ${greetingName}. Esto es lo que el club tiene registrado.`
+      ? buildContextLine(`Hola, ${greetingName} · ${roleLabel}`)
       : undefined;
 
   return (

@@ -2937,3 +2937,23 @@ describe("StudentPage — a pure representative with no dependents and no member
     expect(link).toHaveAttribute("href", "/student/enroll?type=child");
   });
 });
+
+describe("StudentPage — encabezado y pulso navegables", () => {
+  it("dice el rol y la fecha larga junto al saludo", async () => {
+    render(<StudentPage />);
+    await screen.findByTestId("student-pulse");
+
+    expect(
+      screen.getByText(/^Hola, .+ · (Estudiante|Representante) · \w+, \d{1,2} de \w+ de \d{4}$/),
+    ).toBeInTheDocument();
+  });
+
+  it("lleva cada cifra a la pantalla donde se trabaja", async () => {
+    render(<StudentPage />);
+    const pulso = within(await screen.findByTestId("student-pulse"));
+
+    expect(pulso.getByText("Cobertura").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
+    expect(pulso.getByText("Asistencia").closest("a")?.getAttribute("href")).toMatch(/^\/student\/attendance/);
+    expect(pulso.getByText("Pagos en revisión").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
+  });
+});
