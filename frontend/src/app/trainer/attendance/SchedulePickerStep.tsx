@@ -35,7 +35,7 @@ interface SchedulePickerStepProps {
   selectedListTaken: boolean;
   rosterError: string | null;
   /** The stacked commit bar ("Continuar"), hosted in the aside. */
-  actions: React.ReactNode;
+  commitBar: React.ReactNode;
   heading: string;
 }
 
@@ -58,7 +58,7 @@ export default function SchedulePickerStep({
   weekRecordCounts,
   selectedListTaken,
   rosterError,
-  actions,
+  commitBar,
   heading,
 }: SchedulePickerStepProps): React.ReactElement {
   const dayGroups = groupSchedulesByDay(visible.schedules);
@@ -170,7 +170,7 @@ export default function SchedulePickerStep({
         today={today}
         recordedCount={selectedSchedule ? (weekRecordCounts.get(selectedSchedule.id) ?? 0) : 0}
         preview={preview}
-        actions={actions}
+        commitBar={commitBar}
       />
     </div>
   );

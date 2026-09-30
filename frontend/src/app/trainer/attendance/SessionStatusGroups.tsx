@@ -54,7 +54,7 @@ export default function SessionStatusGroups({
             {members.map((member) => (
               <li
                 key={member.id}
-                className={`rounded-full border bg-canvas px-2.5 py-1 text-xs font-medium text-ink-2 ${
+                className={`rounded-full border bg-canvas px-2.5 py-1 text-xs font-semibold text-ink-2 ${
                   flagUnreviewed && !isReviewed(member) ? "border-dashed border-ink-3/60" : "border-line"
                 }`}
               >

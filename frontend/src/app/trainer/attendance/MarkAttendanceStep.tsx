@@ -52,7 +52,7 @@ interface MarkAttendanceStepProps {
     state: EstadoAsistencia,
   ) => void;
   /** The stacked commit bar, hosted in the aside under the progress card. */
-  actions: React.ReactNode;
+  commitBar: React.ReactNode;
   heading: string;
 }
 
@@ -77,7 +77,7 @@ export default function MarkAttendanceStep({
   onCycleAttendance,
   onDirectAttendanceSet,
   onRadioKeyDown,
-  actions,
+  commitBar,
   heading,
 }: MarkAttendanceStepProps): React.ReactElement | null {
   if (!selectedSchedule) return null;
@@ -107,7 +107,7 @@ export default function MarkAttendanceStep({
             ))}
           </ul>
         </div>
-        <aside className="flex flex-col gap-page lg:sticky lg:top-4">{actions}</aside>
+        <aside className="flex flex-col gap-page lg:sticky lg:top-4">{commitBar}</aside>
       </div>
     );
   }
@@ -212,7 +212,7 @@ export default function MarkAttendanceStep({
           unreviewedCount={unreviewedCount}
           onMarkRemainingPresent={onMarkRemainingPresent}
         />
-        {actions}
+        {commitBar}
       </aside>
     </div>
   );

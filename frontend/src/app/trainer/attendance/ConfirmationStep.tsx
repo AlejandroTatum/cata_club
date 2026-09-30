@@ -23,7 +23,7 @@ interface ConfirmationStepProps {
   onMarkRemainingPresent: () => void;
   submitError: string | null;
   /** The stacked commit bar (Atrás / Confirmar asistencia), hosted in the aside. */
-  actions: React.ReactNode;
+  commitBar: React.ReactNode;
   heading: string;
 }
 
@@ -32,7 +32,7 @@ interface ConfirmationStepProps {
  *
  * A review screen, not a form: the left column says WHO is in each state
  * (empty states collapse into one muted line), the aside holds the session
- * card — horario, fecha, the ring with its legend — and the two actions.
+ * card — horario, fecha, the ring with its legend — and the two commitBar.
  */
 export default function ConfirmationStep({
   selectedSchedule,
@@ -45,7 +45,7 @@ export default function ConfirmationStep({
   onReviewUnreviewed,
   onMarkRemainingPresent,
   submitError,
-  actions,
+  commitBar,
   heading,
 }: ConfirmationStepProps): React.ReactElement | null {
   if (!selectedSchedule) return null;
@@ -131,7 +131,7 @@ export default function ConfirmationStep({
             </div>
           )}
         </div>
-        {actions}
+        {commitBar}
       </aside>
     </div>
   );

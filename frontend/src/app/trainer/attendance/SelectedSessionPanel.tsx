@@ -13,7 +13,7 @@ interface SelectedSessionPanelProps {
   recordedCount: number;
   preview: SchedulePreview;
   /** The stacked commit bar ("Continuar"), hosted under the details. */
-  actions: React.ReactNode;
+  commitBar: React.ReactNode;
 }
 
 /**
@@ -26,7 +26,7 @@ export default function SelectedSessionPanel({
   today,
   recordedCount,
   preview,
-  actions,
+  commitBar,
 }: SelectedSessionPanelProps): React.ReactElement {
   const shown = preview.names.slice(0, PREVIEW_NAMES);
   const rest = preview.names.length - shown.length;
@@ -68,7 +68,7 @@ export default function SelectedSessionPanel({
                   {shown.map((name) => (
                     <li
                       key={name}
-                      className="rounded-full border border-line bg-canvas px-2.5 py-1 text-xs font-medium text-ink-2"
+                      className="rounded-full border border-line bg-canvas px-2.5 py-1 text-xs font-semibold text-ink-2"
                     >
                       {name}
                     </li>
@@ -90,7 +90,7 @@ export default function SelectedSessionPanel({
           </div>
         )}
       </div>
-      {actions}
+      {commitBar}
     </aside>
   );
 }

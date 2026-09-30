@@ -57,7 +57,7 @@ export default function AttendanceCommitBar({
       // Below `lg` the bar is `sticky bottom-0`, so a forty-row roster never
       // costs a scroll to the action. From `lg` it is the tail of the aside
       // card — stacked, so the actions sit under the summary they commit.
-      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper/95 px-4 py-3 shadow-sm backdrop-blur lg:static lg:flex-col lg:items-stretch lg:bg-paper lg:p-5 lg:shadow-none"
+      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:flex-col lg:items-stretch lg:bg-paper lg:p-5 lg:shadow-none"
     >
       {!isFirst && (
         <Button

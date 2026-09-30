@@ -12,7 +12,7 @@ describe("SelectedSessionPanel", () => {
         today="mar"
         recordedCount={0}
         preview={{ names: [], loading: false }}
-        actions={<button type="button">Continuar</button>}
+        commitBar={<button type="button">Continuar</button>}
       />,
     );
     expect(screen.getByTestId("selected-session-ghost")).toBeInTheDocument();
@@ -27,7 +27,7 @@ describe("SelectedSessionPanel", () => {
         today="mar"
         recordedCount={0}
         preview={{ names, loading: false }}
-        actions={null}
+        commitBar={null}
       />,
     );
     expect(screen.getByText("Martes 18:00 — 20:00")).toBeInTheDocument();

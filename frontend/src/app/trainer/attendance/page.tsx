@@ -361,7 +361,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   {roster.step === "select-session" && (
                     <SchedulePickerStep
                       heading={STEP_LABELS["select-session"]}
-                      actions={commitBar}
+                      commitBar={commitBar}
                       resumableDrafts={resumableDrafts.resumableDrafts}
                       describeSchedule={resumableDrafts.describeSchedule}
                       onResumeDraft={resumableDrafts.handleResumeDraft}
@@ -384,7 +384,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   {roster.step === "mark-attendance" && (
                     <MarkAttendanceStep
                       heading={STEP_LABELS["mark-attendance"]}
-                      actions={commitBar}
+                      commitBar={commitBar}
                       selectedSchedule={schedules.selectedSchedule}
                       readOnly={roster.readOnly}
                       students={roster.students}
@@ -409,7 +409,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   {roster.step === "confirm" && (
                     <ConfirmationStep
                       heading={STEP_LABELS.confirm}
-                      actions={commitBar}
+                      commitBar={commitBar}
                       students={roster.students}
                       sessionDate={roster.sessionDate}
                       selectedSchedule={schedules.selectedSchedule}
