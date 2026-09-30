@@ -707,9 +707,9 @@ describe("TrainerAttendanceHistoryPage — las tres cifras del período", () => 
     render(<TrainerAttendanceHistoryPage />);
 
     await screen.findAllByRole("row");
-    // Three sessions on the page -> two ghost rows up to the minimum of five.
+    // Three sessions on the page -> seven ghost rows up to a full page of ten.
     const ghost = screen.getByTestId("history-ghost-rows");
-    expect(ghost.querySelectorAll("li")).toHaveLength(2);
+    expect(ghost.querySelectorAll("li")).toHaveLength(7);
     expect(ghost).toHaveAttribute("aria-hidden", "true");
   });
 

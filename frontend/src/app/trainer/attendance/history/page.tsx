@@ -89,8 +89,8 @@ import { findMissingSessions, summarizePeriodCoverage, AVISO_ESTIMACION } from "
 /** Sessions per page. */
 const PAGE_SIZE = 10;
 
-/** A short list is padded with ghost rows up to this many, so the card keeps its shape. */
-const MIN_ROWS = 5;
+/** A short list is padded with ghost rows up to a full page, so the card keeps its shape. */
+const MIN_ROWS = PAGE_SIZE;
 
 /** Sessions without a list shown in the aside before the rest are left to the period's stats. */
 const MAX_MISSING_SHOWN = 5;
