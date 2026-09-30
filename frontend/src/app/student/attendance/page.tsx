@@ -255,7 +255,7 @@ function SessionList({
               aria-hidden="true"
               className="mt-0.5 flex-none text-ink-3"
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-ink">
                 {studentName
                   ? `Aún no hay asistencias registradas de ${studentName}`
@@ -266,6 +266,12 @@ function SessionList({
                 le haya asignado.
               </p>
             </div>
+            {/* The scope line lives here for an empty record: a footnote under
+                a one-line card would only float in the canvas. */}
+            <p className="hidden max-w-xs text-right text-xs text-ink-3 lg:block">
+              El portal muestra las {PORTAL_SESSION_WINDOW} sesiones más recientes; para un período
+              anterior, pídalo al club.
+            </p>
           </div>
           <div className="border-t border-line bg-sunken px-5 py-3">
             <p className="text-2xs font-bold uppercase text-ink-3-strong">Estados posibles</p>
@@ -448,7 +454,9 @@ function AttendanceView({
          */
         <>
           <SessionList profile={selectedProfile} studentName={studentName} />
-          <PortalWindowNote />
+          <div className="lg:hidden">
+            <PortalWindowNote />
+          </div>
         </>
       ) : (
         <div className={PAGE_RAIL}>
