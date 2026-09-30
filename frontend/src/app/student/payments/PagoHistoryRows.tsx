@@ -340,7 +340,7 @@ export function PagoRow({
           </p>
           <PagoRejection pago={pago} />
         </div>
-        <p className="flex-none font-display text-xl tabular-nums text-ink md:w-24 md:text-right">
+        <p className="flex-none text-xl font-extrabold tabular-nums text-ink md:w-24 md:text-right">
           {fields.amount}
         </p>
         <div className="flex flex-col gap-1.5 md:w-48 md:flex-none">
@@ -398,7 +398,7 @@ export function CoberturaRow({ cobertura }: { cobertura: CoberturaBonificada }):
           {fields.concept} · Otorgada el <span className="tabular-nums">{fields.grantedOn}</span>
         </p>
       </div>
-      <p className="flex-none font-display text-xl text-ink md:w-24 md:text-right">—</p>
+      <p className="flex-none text-xl font-extrabold text-ink md:w-24 md:text-right">—</p>
       <div className="hidden md:block md:w-48 md:flex-none" />
     </li>
   );

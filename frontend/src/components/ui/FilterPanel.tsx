@@ -125,6 +125,12 @@ export interface FilterPanelProps {
    */
   layout?: FilterPanelLayout;
   /** Merged with the base classes, never replacing them. */
+  /**
+   * Drop the frame (card surface and padding) when the controls already sit
+   * inside a card's own header — a second frame there would read as a
+   * page-level filter nested in another card.
+   */
+  bare?: boolean;
   className?: string;
 }
 
@@ -135,12 +141,13 @@ export function FilterPanel({
   fields,
   help,
   layout = "column",
+  bare = false,
   className,
 }: FilterPanelProps): ReactElement {
   const flowing = layout === "row";
 
   return (
-    <section aria-label={label} className={cn(PANEL, AXIS[layout], className)}>
+    <section aria-label={label} className={cn(bare ? "gap-4" : PANEL, AXIS[layout], className)}>
       {/* Flowing, the search is one track of the grid and the grid owns its
           width; capping it again at 320px would leave a hole inside its own
           column. Stacked, the cap is what stops a full-width text field from

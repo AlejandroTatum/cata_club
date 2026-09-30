@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPill, LoadingState, PAGE_RAIL, StatGrid, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, StatGrid, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
@@ -653,21 +653,24 @@ function PaymentsContent({
                 {filteredPagos.length}
               </span>
             )}
-            <div
-              className="flex flex-wrap gap-2 sm:ml-auto"
-              role="group"
-              aria-label="Filtrar pagos por estado"
-            >
-              {FILTERS.map((option) => (
-                <FilterPill
-                  key={option}
-                  label={PAGO_FILTER_LABELS[option]}
-                  count={counts[option]}
-                  active={filter === option}
-                  onClick={() => setFilter(option)}
-                />
-              ))}
-            </div>
+            <FilterPanel
+              bare
+              label="Filtros de pagos"
+              className="sm:ml-auto"
+              chips={
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar pagos por estado">
+                  {FILTERS.map((option) => (
+                    <FilterPill
+                      key={option}
+                      label={PAGO_FILTER_LABELS[option]}
+                      count={counts[option]}
+                      active={filter === option}
+                      onClick={() => setFilter(option)}
+                    />
+                  ))}
+                </div>
+              }
+            />
           </div>
           {filteredPagos.length === 0 ? (
             <>
