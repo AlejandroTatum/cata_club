@@ -270,18 +270,13 @@ describe("StudentMedicalRecordPage — no representados", () => {
   });
 });
 
-/**
- * The ficha médica is five controls that never grow with data, so the FORM is
- * kept to a reading width — but on its own wrapper. The page column stays on
- * the default measure so the content keeps the same left edge as every other
- * screen of the role (the short measure used to shift it).
- */
-describe("StudentMedicalRecordPage — narrow form on the default page measure", () => {
-  it("constrains the form, not the page column", async () => {
+/** Width rule (uv3): the page draws on the dashboard measure, no inner cap. */
+describe("StudentMedicalRecordPage — dashboard measure", () => {
+  it("does not cap the page or the editor below the shell measure", async () => {
     const { container } = render(<StudentMedicalRecordPage />);
 
     await screen.findByRole("button", { name: "Editar" });
-    expect(container.querySelector(".max-w-3xl")).not.toBeNull();
+    expect(container.querySelector(".max-w-3xl")).toBeNull();
     expect(container.querySelector(".max-w-5xl")).toBeNull();
     expect(container.querySelector(".max-w-8xl")).not.toBeNull();
   });
