@@ -81,6 +81,9 @@ export default function SponsorsPage(): React.ReactElement {
     catch { showError("No se pudo eliminar el patrocinador."); }
   }
 
+  // With no sponsors the main column stretches to the composer's height and the ghost grid takes the slack.
+  const vacio = !cargando && !errorCarga && sponsors.length === 0;
+
   return <ProtectedRoute allowedRoles={["admin"]}><AppShell
     title="Patrocinadores"
     subtitle="Suba el logo y el nombre que se leerá como texto alternativo en la landing."
@@ -115,8 +118,8 @@ export default function SponsorsPage(): React.ReactElement {
           {error && <p ref={errorRef} role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
           <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Subiendo…" : "Subir logo"}</Button>
         </form>
-        <div className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
-        <section aria-label="Logos cargados" className="flex min-w-0 flex-col">
+        <div className={`flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1 ${vacio ? "lg:self-stretch" : ""}`}>
+        <section aria-label="Logos cargados" className={`flex min-w-0 flex-col ${vacio ? "lg:flex-1" : ""}`}>
           {cargando ? <LoadingState label="Cargando patrocinadores…" />
             : errorCarga ? <ErrorState message="No se pudieron cargar los patrocinadores." onRetry={() => void load()} />
             : sponsors.length === 0 ? <EmptyGrid icon={<Handshake size={ICON.lg} />} title="Aún no hay patrocinadores cargados" description="Los logos cargados aparecen aquí y en la landing." tileRatio="5 / 2" tiles={32} compact wide />

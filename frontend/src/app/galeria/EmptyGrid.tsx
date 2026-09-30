@@ -75,7 +75,12 @@ export default function EmptyGrid({
   );
 }
 
-/** Two rows of ghosts: three columns from lg, four from 2xl, two on mobile. */
+/**
+ * Compact empty card. On mobile: a short block of ghost tiles with the guide
+ * below. From lg it fills whatever height its column gives it (the ghost tiles
+ * are clipped and fade out at the bottom, the guide sits centered on top), so
+ * the column can line up with a taller rail beside it.
+ */
 function CompactEmptyGrid({
   icon,
   title,
@@ -83,26 +88,26 @@ function CompactEmptyGrid({
   tileRatio,
 }: Omit<EmptyGridProps, "tiles" | "wide" | "compact">): ReactElement {
   return (
-    <div className="card relative overflow-hidden">
+    <div className="card relative flex flex-col overflow-hidden lg:min-h-64 lg:flex-1">
       <div
         aria-hidden="true"
         data-testid="empty-grid-tiles"
-        className="grid grid-cols-2 gap-3 p-4 opacity-60 lg:grid-cols-3 lg:gap-4 2xl:grid-cols-4"
+        className="grid grid-cols-2 content-start gap-3 p-4 opacity-60 lg:absolute lg:inset-0 lg:grid-cols-3 lg:gap-4 2xl:grid-cols-4"
       >
-        {Array.from({ length: 8 }, (_, tile) => (
+        {Array.from({ length: 12 }, (_, tile) => (
           <div
             key={tile}
             style={{ aspectRatio: tileRatio }}
             className={`rounded-card border border-dashed border-line bg-sunken ${
-              tile < MOBILE_TILES
-                ? ""
-                : tile < 6
-                  ? "hidden lg:block"
-                  : "hidden 2xl:block"
+              tile < MOBILE_TILES ? "" : "hidden lg:block"
             }`}
           />
         ))}
       </div>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-1/4 bg-gradient-to-t from-paper to-transparent lg:block"
+      />
       <div className="flex justify-center p-4 lg:absolute lg:inset-0 lg:items-center">
         <div className="rounded-card border border-line bg-paper/75 backdrop-blur-sm">
           <EmptyState
