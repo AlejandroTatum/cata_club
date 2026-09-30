@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, StatGrid, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, STAT_GRID, StatCard, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
@@ -587,19 +587,25 @@ function PaymentsContent({
 
         <div data-dash-col className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
       {pagosState.status === "ready" && (
-        <StatGrid
-          className="card px-5 py-4 sm:grid-cols-4"
-          items={[
-            { label: "Pagado hasta", value: coverageEnd ? formatDate(coverageEnd) : "—", tone: "neutral" },
-            { label: "Pagos aprobados", value: String(counts.APROBADO), tone: "ok" },
-            { label: "En revisión", value: String(counts.PENDIENTE_VALIDACION), tone: "warn" },
-            {
-              label: lastPago ? `Último pago · ${formatDate(lastPago.fechaRegistro)}` : "Último pago",
-              value: lastPago ? formatPagoMonto(lastPago.monto) : "—",
-              tone: "neutral",
-            },
-          ]}
-        />
+        <div className={STAT_GRID}>
+          <StatCard
+            label="Pagado hasta"
+            value={coverageEnd ? formatDate(coverageEnd) : "—"}
+            hint={coverageEnd ? "fin de la cobertura aprobada" : "sin pagos aprobados"}
+          />
+          <StatCard label="Pagos aprobados" value={counts.APROBADO} hint="en su historial" />
+          <StatCard
+            label="En revisión"
+            value={counts.PENDIENTE_VALIDACION}
+            hint="esperando al club"
+            className={counts.PENDIENTE_VALIDACION === 0 ? "opacity-60" : undefined}
+          />
+          <StatCard
+            label="Último pago"
+            value={lastPago ? formatPagoMonto(lastPago.monto) : "—"}
+            hint={lastPago ? `registrado el ${formatDate(lastPago.fechaRegistro)}` : "aún no hay pagos"}
+          />
+        </div>
       )}
 
       <input
