@@ -113,10 +113,13 @@ export default function StudentFichaPanel({
           ].map(([label, hint]) => (
             <div
               key={label}
-              className="flex flex-col gap-1 border-b border-dashed border-line px-5 py-3 last:border-b-0"
+              className="flex items-center justify-between gap-3 border-b border-dashed border-line px-5 py-3 last:border-b-0"
             >
-              <dt className="text-2xs font-bold uppercase tracking-flat text-ink-3">{label}</dt>
-              <dd className="text-sm text-ink-3">{hint}</dd>
+              <div className="flex min-w-0 flex-col gap-1">
+                <dt className="text-2xs font-bold uppercase tracking-flat text-ink-3">{label}</dt>
+                <dd className="text-sm text-ink-3">{hint}</dd>
+              </div>
+              <span className="flex-none text-sm font-semibold text-ink-3">—</span>
             </div>
           ))}
         </dl>
