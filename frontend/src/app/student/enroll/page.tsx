@@ -109,7 +109,7 @@ import {
 } from "./enroll-utils";
 import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
 import EnrollNav from "./EnrollNav";
-import EnrollSummary from "./EnrollSummary";
+import EnrollSummary, { SummaryRow } from "./EnrollSummary";
 
 // ---------------------------------------------------------------------------
 // Step 1 — the two ways into the club. Transcribed from
@@ -1727,44 +1727,40 @@ function EnrollWizard(): React.ReactElement {
                   second column on the same row. */}
               {!isLast && (
                 <div className="flex flex-col gap-page lg:col-start-2 lg:row-start-1">
-                  <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step} />
                   {/* Public tariff catalog (issue #331, consumes the public BFF/
                       backend contract of #394) — shown ONLY on step 1, before the
                       visitor's first field, so anyone knows the price before they
-                      start. Public and harmless data: unlike the demo panel above,
-                      this is NOT gated on auth or environment, and a failure here
-                      gets its own loud `ErrorState` with retry — the whole point of
+                      start. It shares the summary card as its trailing section.
+                      Public and harmless data: unlike the demo panel above, this
+                      is NOT gated on auth or environment, and a failure here gets
+                      its own loud `ErrorState` with retry — the whole point of
                       this block is showing a price, so its absence must say so. */}
-                  {step === "type" && (
-                    <div className="card p-page">
-                      <h2 className="mb-page font-display text-lg uppercase tracking-flat text-ink">
-                        Tarifas vigentes
-                      </h2>
-                      {tarifasLoading ? (
-                        <LoadingState label="Cargando tarifas…" />
-                      ) : tarifasError ? (
-                        <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
-                      ) : tarifas.length === 0 ? (
-                        <EmptyState
-                          surface="inset"
-                          title="Sin tarifas publicadas"
-                          description="Todavía no hay categorías de membresía configuradas."
-                        />
-                      ) : (
-                        <ul className="space-y-field">
-                          {tarifas.map((tarifa) => (
-                            <li
-                              key={tarifa.categoria}
-                              className="flex items-center justify-between gap-3 text-sm"
-                            >
-                              <span className="text-ink-2">{tarifa.categoria}</span>
-                              <b className="text-ink">{formatCurrency(tarifa.precio)}</b>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
+                  <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step}>
+                    {step === "type" && (
+                      <section aria-label="Tarifas vigentes">
+                        <h3 className="mb-field text-xs text-ink-3-strong">Tarifas vigentes</h3>
+                        {tarifasLoading ? (
+                          <LoadingState label="Cargando tarifas…" />
+                        ) : tarifasError ? (
+                          <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
+                        ) : tarifas.length === 0 ? (
+                          <EmptyState
+                            surface="inset"
+                            title="Sin tarifas publicadas"
+                            description="Todavía no hay categorías de membresía configuradas."
+                          />
+                        ) : (
+                          <ul className="divide-y divide-line">
+                            {tarifas.map((tarifa) => (
+                              <SummaryRow key={tarifa.categoria} label={tarifa.categoria}>
+                                {formatCurrency(tarifa.precio)}
+                              </SummaryRow>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    )}
+                  </EnrollSummary>
                 </div>
               )}
               <div data-testid="enroll-wizard-card" className="card p-page lg:col-start-1 lg:row-start-1">

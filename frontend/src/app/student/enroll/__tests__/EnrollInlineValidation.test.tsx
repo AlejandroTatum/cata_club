@@ -149,6 +149,31 @@ describe("EnrollPage — summary rail", () => {
     expect(within(rail).getByText("Lucas Martinez")).toBeInTheDocument();
     expect(within(rail).getByText(/\d+ años/)).toBeInTheDocument();
     expect(within(rail).getByText(/menor de edad/i)).toBeInTheDocument();
+    // The identity header leads with the initials of the typed name.
+    expect(within(rail).getByText("LM")).toBeInTheDocument();
+  });
+
+  it("shows placeholders and 'Pendiente' rows before anything is typed", () => {
+    render(<EnrollPage />);
+    goToPersonalStep();
+
+    const rail = screen.getByRole("complementary", { name: /resumen de la inscripción/i });
+    expect(within(rail).getByText("Nuevo jugador")).toBeInTheDocument();
+    expect(within(rail).getByText("Edad por completar")).toBeInTheDocument();
+    // Cédula, Teléfono and Correo all read "Pendiente" so the rows keep their height.
+    expect(within(rail).getAllByText("Pendiente")).toHaveLength(3);
+  });
+
+  it("reports the step as a labelled progressbar", () => {
+    render(<EnrollPage />);
+    goToPersonalStep();
+
+    const rail = screen.getByRole("complementary", { name: /resumen de la inscripción/i });
+    const bar = within(rail).getByRole("progressbar", { name: /progreso de la inscripción/i });
+    expect(bar).toHaveAttribute("aria-valuemin", "1");
+    expect(bar).toHaveAttribute("aria-valuenow", "2");
+    expect(bar).toHaveAttribute("aria-valuemax", "4");
+    expect(within(rail).getByText("2 de 4 pasos")).toBeInTheDocument();
   });
 });
 
