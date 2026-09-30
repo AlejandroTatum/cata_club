@@ -626,8 +626,11 @@ describe("EnrollPage — edad en la columna de la fecha de nacimiento", () => {
  * a weak-composed but policy-compliant password advances the wizard.
  */
 describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
-  const CHECKLIST = "Recomendaciones para la contraseña";
-  const METER = "Fortaleza de la contraseña";
+  const METER_ID = "enroll-contrasenia-strength";
+
+  function segments(): number {
+    return document.querySelectorAll('[data-segment="filled"]').length;
+  }
 
   function goToSelfStudentStep(): void {
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
@@ -642,36 +645,31 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     });
   }
 
-  it("shows the advisory checklist and meter in the self credentials block", () => {
+  it("shows the compact meter under the password, with no recommendations checklist", () => {
     render(<EnrollPage />);
     goToSelfStudentStep();
 
-    expect(screen.getByRole("status", { name: CHECKLIST })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: METER })).toBeInTheDocument();
+    expect(screen.getByText("Al menos 8 caracteres.")).toHaveAttribute("id", METER_ID);
+    expect(screen.queryByText("Para una contraseña más fuerte")).not.toBeInTheDocument();
+    expect(segments()).toBe(0);
   });
 
-  it("ticks the recommendations while typing, without moving any hard rule", () => {
+  it("moves the meter level while typing, without moving any hard rule", () => {
     render(<EnrollPage />);
     goToSelfStudentStep();
 
-    fireEvent.change(screen.getByLabelText(/^Contraseña/), {
-      target: { value: "nubesverd" },
-    });
-    const list = screen.getByRole("status", { name: CHECKLIST });
-    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
-      "data-met",
-      "false",
-    );
-    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "nubes" } });
+    expect(segments()).toBe(1);
+    expect(screen.getByText("5 de 8 caracteres — faltan 3.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Contraseña/), { target: { value: "nubesverd" } });
+    expect(segments()).toBe(2);
 
     fireEvent.change(screen.getByLabelText(/^Contraseña/), {
       target: { value: "Nubes-Verdes-2024" },
     });
-    expect(within(list).getByText("Al menos 10 caracteres").closest("li")).toHaveAttribute(
-      "data-met",
-      "true",
-    );
-    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Muy fuerte");
+    expect(segments()).toBe(3);
+    expect(screen.getByText("Contraseña segura.")).toBeInTheDocument();
   });
 
   it("shows the same guidance under the representative's own credentials", () => {
@@ -681,8 +679,10 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fillChildStudentStep();
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    expect(screen.getByRole("status", { name: CHECKLIST })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: METER })).toBeInTheDocument();
+    expect(screen.getByText("Al menos 8 caracteres.")).toHaveAttribute(
+      "id",
+      "enroll-contrasenia-representante-strength",
+    );
   });
 
   it("renders no guidance on the child flow's personal step — no credentials there", () => {
@@ -690,8 +690,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Representante Gestiono la inscripción/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
-    expect(screen.queryByRole("status", { name: CHECKLIST })).not.toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: METER })).not.toBeInTheDocument();
+    expect(screen.queryByText("Al menos 8 caracteres.")).not.toBeInTheDocument();
   });
 
   it("never gates the step on the meter: a policy-compliant but weak password advances", () => {
@@ -707,7 +706,7 @@ describe("EnrollPage — guía informativa de la contraseña (#1395)", () => {
     fireEvent.change(screen.getByLabelText(/^Confirmar contraseña/), {
       target: { value: "nubesverd" },
     });
-    expect(screen.getByRole("status", { name: METER })).toHaveTextContent("Débil");
+    expect(segments()).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
     expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();

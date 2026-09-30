@@ -54,10 +54,10 @@ import {
   LoadingState,
   PAGE_RAIL,
   PageHeader,
-  PasswordGuidance,
   Stepper,
   buttonClasses,
 } from "@/components/ui";
+import PasswordStrengthMeter from "@/components/ui/PasswordStrengthMeter";
 import { BLOOD_TYPES, BLOOD_TYPE_LABELS, SELECTABLE_BLOOD_TYPES } from "@/types/enrollment";
 import {
   User,
@@ -96,6 +96,7 @@ import {
   validateEnrollStep,
   validateEnrollment,
   ENROLL_ID_PREFIX,
+  enrollFieldId,
   ENROLL_FIELD_TOKEN,
   STEP_ORDER,
   isStepComplete,
@@ -885,13 +886,15 @@ function EnrollWizard(): React.ReactElement {
                   onChange: (v) => updateField("contrasenia", v),
                   type: "password",
                   required: true,
-                  hint: "Al menos 8 caracteres.",
                   autoComplete: "new-password",
                 })}
                 {/* Issue #1395 — the advisory layer, LIVE under the field it
                     reads. Information only: the hard policy (floor + common
                     list) stays the only gate. */}
-                <PasswordGuidance password={formData.contrasenia} />
+                <PasswordStrengthMeter
+                  id={`${enrollFieldId("contrasenia")}-strength`}
+                  value={formData.contrasenia}
+                />
               </div>
               {renderField("contraseniaConfirmacion", {
                 label: "Confirmar contraseña",
@@ -984,11 +987,13 @@ function EnrollWizard(): React.ReactElement {
               onChange: (v) => updateField("contraseniaRepresentante", v),
               type: "password",
               required: true,
-              hint: "Al menos 8 caracteres.",
               autoComplete: "new-password",
             })}
             {/** Same advisory layer as the self flow (#1395): informs, never gates. */}
-            <PasswordGuidance password={formData.contraseniaRepresentante} />
+            <PasswordStrengthMeter
+              id={`${enrollFieldId("contraseniaRepresentante")}-strength`}
+              value={formData.contraseniaRepresentante}
+            />
           </div>
           {renderField("contraseniaRepresentanteConfirmacion", {
             label: "Confirmar contraseña",
