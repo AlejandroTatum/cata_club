@@ -142,8 +142,8 @@ export default function StudentFichaPanel({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-bold text-ink">{student.nombreCompleto}</h2>
-          <p className="truncate text-xs text-ink-3">
-            {student.edad} años{student.horarios ? ` · ${student.horarios}` : ""}
+          <p className="text-xs text-ink-3">
+            {student.edad} años{student.horariosCompactos ? ` · ${student.horariosCompactos}` : ""}
           </p>
         </div>
       </div>

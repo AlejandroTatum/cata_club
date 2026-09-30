@@ -44,7 +44,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookUser, SearchX, Stethoscope } from "lucide-react";
+import { BookUser, ChevronRight, SearchX, Stethoscope } from "lucide-react";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
@@ -149,6 +149,7 @@ function BotonHorario({
       variant="secondary"
       className="flex-none"
       onClick={(event) => {
+        event.stopPropagation();
         event.currentTarget.focus();
         onAbrir();
       }}
@@ -159,9 +160,26 @@ function BotonHorario({
   );
 }
 
-/** `12 años · Lun 18:00 · Mié 18:00`: who they are and when to find them. */
+/** `12 años · Lun–Vie 15:00`: who they are and when to find them. */
 function descripcion(alumno: AlumnoDelClub): string {
-  return alumno.horarios ? `${alumno.edad} años · ${alumno.horarios}` : `${alumno.edad} años`;
+  return alumno.horariosCompactos
+    ? `${alumno.edad} años · ${alumno.horariosCompactos}`
+    : `${alumno.edad} años`;
+}
+
+/** Name (truncating on its own element, #664) over the compact age-and-schedule line. */
+function NombreYDetalle({ alumno }: { alumno: AlumnoDelClub }): React.ReactElement {
+  return (
+    <>
+      <span
+        className="block min-w-0 max-w-[280px] flex-1 truncate text-sm font-semibold text-ink"
+        title={alumno.nombreCompleto}
+      >
+        {alumno.nombreCompleto}
+      </span>
+      <span className="block text-xs text-ink-3">{descripcion(alumno)}</span>
+    </>
+  );
 }
 
 export default function TrainerStudentsPage(): React.ReactElement {
@@ -170,6 +188,8 @@ export default function TrainerStudentsPage(): React.ReactElement {
   const [fallo, setFallo] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
+  /** The group filter: a start time from the roster, or `null` for everyone. */
+  const [grupo, setGrupo] = useState<string | null>(null);
   const esEscritorio = useIsDesktop();
   /** The student shown in the side panel (desktop). */
   const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null);
@@ -201,7 +221,15 @@ export default function TrainerStudentsPage(): React.ReactElement {
   }, [cargarPadron]);
 
   const nomina = useMemo(() => agruparAlumnosDelPadron(padron), [padron]);
-  const encontrados = useMemo(() => filtrarPorNombre(nomina, busqueda), [nomina, busqueda]);
+  const grupos = useMemo(() => {
+    const cuentas = new Map<string, number>();
+    for (const a of nomina) if (a.grupo) cuentas.set(a.grupo, (cuentas.get(a.grupo) ?? 0) + 1);
+    return [...cuentas.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [nomina]);
+  const encontrados = useMemo(
+    () => filtrarPorNombre(nomina, busqueda).filter((a) => grupo === null || a.grupo === grupo),
+    [nomina, busqueda, grupo],
+  );
   const totalPaginas = getTotalPages(encontrados.length, PAGE_SIZE);
   const seleccionado = useMemo(
     () => nomina.find((a) => a.personaId === seleccionadoId) ?? null,
@@ -244,6 +272,11 @@ export default function TrainerStudentsPage(): React.ReactElement {
     else setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto });
   }
 
+  function elegirGrupo(valor: string | null): void {
+    setGrupo(valor);
+    setPagina(1);
+  }
+
   function buscar(termino: string): void {
     setBusqueda(termino);
     setPagina(1);
@@ -264,7 +297,7 @@ export default function TrainerStudentsPage(): React.ReactElement {
          */}
         <FilterPanel
           label="Filtro de la nómina"
-          layout="row"
+          className="lg:flex-row lg:items-center lg:gap-6"
           search={
             <SearchInput
               value={busqueda}
@@ -272,6 +305,45 @@ export default function TrainerStudentsPage(): React.ReactElement {
               label="Buscar un alumno por nombre"
               placeholder="Buscar por nombre"
             />
+          }
+          chips={
+            grupos.length > 1 ? (
+              <div role="group" aria-label="Grupo" className="flex flex-wrap gap-1.5">
+                {[
+                  { valor: null, etiqueta: "Todos", cuenta: nomina.length },
+                  ...grupos.map(([v, c]) => ({ valor: v, etiqueta: v, cuenta: c })),
+                ].map(({ valor, etiqueta, cuenta }) => (
+                  <button
+                    key={etiqueta}
+                    type="button"
+                    aria-pressed={grupo === valor}
+                    aria-label={valor ? `Grupo de las ${valor}, ${cuenta}` : `Todos, ${cuenta}`}
+                    onClick={() => elegirGrupo(valor)}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors ${
+                      grupo === valor
+                        ? "border-coal bg-coal text-white"
+                        : "border-line-2 bg-paper text-ink-2 hover:border-ink-3"
+                    }`}
+                  >
+                    {etiqueta}
+                    <span
+                      className={`text-xs tabular-nums ${grupo === valor ? "text-white/70" : "text-ink-3"}`}
+                    >
+                      {cuenta}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : undefined
+          }
+          fields={
+            !cargando && !fallo ? (
+              <p className="text-sm text-ink-2 lg:ml-auto" aria-live="polite">
+                <b className="font-bold tabular-nums text-ink">{encontrados.length}</b>{" "}
+                {encontrados.length === 1 ? "alumno" : "alumnos"}
+                {encontrados.length !== nomina.length ? ` de ${nomina.length}` : ""}
+              </p>
+            ) : undefined
           }
         />
 
@@ -362,27 +434,41 @@ export default function TrainerStudentsPage(): React.ReactElement {
                     renderRow={(alumno) => (
                       <TableRow
                         data-testid={`student-row-${alumno.personaId}`}
+                        // On desktop the whole row selects; the name is the keyboard target.
+                        onClick={esEscritorio ? () => abrirFicha(alumno) : undefined}
                         className={
-                          esEscritorio && seleccionadoId === alumno.personaId ? "bg-ink/5" : undefined
+                          esEscritorio
+                            ? `cursor-pointer ${seleccionadoId === alumno.personaId ? "bg-ink/5" : "hover:bg-ink/5"}`
+                            : undefined
                         }
                       >
                         <TableCell>
-                          {/* `block` + `max-w` so the name truncates on its own element (#664). */}
-                          <span
-                            className="block min-w-0 max-w-[280px] flex-1 truncate text-sm font-semibold text-ink"
-                            title={alumno.nombreCompleto}
-                          >
-                            {alumno.nombreCompleto}
-                          </span>
-                          <span className="block text-xs text-ink-3">{descripcion(alumno)}</span>
+                          {esEscritorio ? (
+                            <button
+                              type="button"
+                              className="block w-full text-left"
+                              aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
+                              aria-pressed={seleccionadoId === alumno.personaId}
+                              onClick={() => abrirFicha(alumno)}
+                            >
+                              <NombreYDetalle alumno={alumno} />
+                            </button>
+                          ) : (
+                            <NombreYDetalle alumno={alumno} />
+                          )}
                         </TableCell>
                         <TableCell type="action">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            <BotonFichaMedica
-                              alumno={alumno}
-                              onAbrir={() => abrirFicha(alumno)}
-                              seleccionado={esEscritorio && seleccionadoId === alumno.personaId}
-                            />
+                            {esEscritorio ? (
+                              <ChevronRight
+                                size={ICON.base}
+                                strokeWidth={2}
+                                aria-hidden="true"
+                                className={seleccionadoId === alumno.personaId ? "text-ink" : "text-ink-3/50"}
+                              />
+                            ) : (
+                              <BotonFichaMedica alumno={alumno} onAbrir={() => abrirFicha(alumno)} />
+                            )}
                             <BotonHorario
                               alumno={alumno}
                               onAbrir={() =>

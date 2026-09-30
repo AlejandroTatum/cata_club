@@ -158,7 +158,7 @@ describe("un entrenador llega a la pantalla y ve la nómina", () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
-    expect(melany).toHaveTextContent("12 años · Lun 18:00 · Mié 18:00 · Vie 18:00");
+    expect(melany).toHaveTextContent("12 años · Lun, Mié, Vie 18:00");
   });
 
   it("se titula «Alumnos del club» y nunca dice que los alumnos son suyos", async () => {
@@ -616,5 +616,47 @@ describe("maestro–detalle en escritorio", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.queryByTestId("ficha-panel-ghost")).not.toBeInTheDocument();
+  });
+
+  it("en escritorio la fila selecciona: el nombre es el botón y no hay un botón de ficha por fila", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    const fila = await screen.findByTestId("student-row-7");
+    const nombre = within(fila).getByRole("button", { name: "Ficha médica de Melany Quimis" });
+    expect(nombre).toHaveAttribute("aria-pressed", "false");
+    expect(within(fila).queryByText("Ficha médica")).not.toBeInTheDocument();
+    expect(within(fila).getByRole("button", { name: "Horario de Melany Quimis" })).toBeInTheDocument();
+
+    fireEvent.click(fila);
+    expect(await screen.findByTestId("ficha-panel")).toBeInTheDocument();
+    expect(nombre).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("Horario no selecciona la fila", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    const fila = await screen.findByTestId("student-row-7");
+    fireEvent.click(within(fila).getByRole("button", { name: "Horario de Melany Quimis" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByTestId("ficha-panel")).not.toBeInTheDocument();
+  });
+
+  it("cuenta los alumnos y filtra por grupo con las horas de inicio del padrón", async () => {
+    render(<TrainerStudentsPage />);
+
+    await screen.findByTestId("student-row-7");
+    expect(screen.getByText("alumnos", { exact: false, selector: "p" })).toHaveTextContent("3 alumnos");
+
+    // Melany trains at 18:00, Diego at 17:00, Sofía at 09:00.
+    fireEvent.click(screen.getByRole("button", { name: "Grupo de las 17:00, 1" }));
+    expect(screen.queryByTestId("student-row-7")).not.toBeInTheDocument();
+    expect(screen.getByTestId("student-row-3")).toBeInTheDocument();
+    expect(screen.getByText("alumno", { exact: false, selector: "p" })).toHaveTextContent("1 alumno de 3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Todos, 3" }));
+    expect(screen.getByTestId("student-row-7")).toBeInTheDocument();
   });
 });
