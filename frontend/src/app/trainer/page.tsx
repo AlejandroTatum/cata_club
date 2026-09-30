@@ -1,66 +1,29 @@
 /**
- * Trainer — "Mi día" (issue #211,
- * `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * Trainer — "Mi día", drawn in the student dashboard's idiom.
  *
- * ## The panel's anatomy, because the owner approves the panel
+ * Top to bottom, what a trainer standing courtside asks:
  *
- * This screen and `/dashboard` used to read as two different products, and the
- * owner named the admin one as the reference. So the three layers are its
- * three layers:
- *
- *   1. a full-width coal band — `SessionCard`, which already spoke that
- *      vocabulary (`rounded-card bg-coal`, a `font-display text-display`
- *      figure) and was merely boxed into half a screen by a
- *      `split:grid-cols-2` pair with a donut, since removed;
- *   2. the pulse row on `STAT_GRID`, four tiles in one grammar;
- *   3. `PAGE_RAIL` — `RecentSessionsList` ("Últimas listas") fluid beside the
- *      340px `SessionsWithoutList` ("Sesiones sin lista") card.
- *
- * ## "Sesiones sin lista" replaced "Distribución de asistencias" (usability
- * audit, 2026-09-16)
- *
- * The donut told the trainer how a month's records split by state — a fact
- * about the past that this screen never let anyone act on. It was also the
- * third slice of the exact same month query this screen already loads
- * (`monthRecords`), so it cost nothing to fetch and asked nothing back. The
- * rail now answers the question a trainer standing courtside actually has —
- * which of this month's sessions still needs a list — with a direct link into
- * the wizard for each one. See `SessionsWithoutList.tsx` for the derivation
- * (shared with the history screen's own "Sin lista" estimate) and its own
- * caveats.
- *
- * What did NOT come across is the hero's empty hands. `/dashboard` moved its
- * action to the header because it was the third place in the product where a
- * primary action could be found; this one is bound to one session and named by
- * that session's own hour — "Pasar lista de las 15:00", never "esta sesión" —
- * which is exactly what #211 put on the card and why. Porting a shape is not a
- * reason to undo a placement.
- *
- * ## The pulse row is not the recap that was removed
- *
- * A per-trainer "Última lista" `StatGrid` used to sit here and was deleted for
- * duplicating what the dense rows below already show for the same (fecha,
- * horario) pair. These four tiles are the opposite case — none of them can be
- * read off those rows: how many sessions the club runs TODAY, how many
- * students are enrolled in them, the month's attendance rate, and how many
- * lists have been taken all month. Same component, different question.
+ *   1. `NextSessionHero`: the next (or running) session — its hour, the wait in
+ *      words, the enrolled students as initials — and the one primary action,
+ *      named by that hour ("Pasar lista de las 15:00").
+ *   2. "Hoy": the day's sessions on the same `Timeline` the admin uses, placed
+ *      by their real hours, coloured by the state of their list.
+ *   3. The rail: attendance trend over the last six weeks, "Alumnos a seguir"
+ *      with a dot per recent session (filled = trained, ring = did not) and
+ *      "Últimas listas" in the fluid column; "Sesiones sin lista", with "Pasar
+ *      lista", in the fixed one.
  *
  * ## Only what the backend can sustain
  *
- * "N estudiantes inscritos", not "N esperan": the number is a count of
- * `AlumnoHorario` rows (who is ENROLLED), and no DTO says who turned up. And
- * no level anywhere on THIS screen — "Mi día" has one decision on it, and the
- * competitive-ranking feature the old level concept belonged to was removed
- * from the MVP entirely.
+ * One attendance query covers the trailing six weeks and the current month; the
+ * month figures (students to follow, missing lists) are filtered from it, so no
+ * second call. The trend is the club's, not the trainer's own: no DTO says who
+ * taught a session. "Inscritos" is a count of `AlumnoHorario` rows — who is
+ * ENROLLED — never who turned up. No level anywhere: the competitive-ranking
+ * feature it belonged to left the MVP.
  *
- * ## "Últimas listas" has no author column
- *
- * This summary list carries no author column on purpose — it's counts-only.
- * `Asistencia` DOES record who took the list since #263
- * (`registrado_por_id`/nombre), surfaced in the history, not here. Who TAUGHT
- * the session is still unrecorded: trainers are paid a flat monthly rate and
- * the club never asked "who marked this kid absent". This list does not grow a
- * column to fill that gap.
+ * "Últimas listas" has no author column on purpose: it is counts-only. Who took
+ * a list is surfaced in the history, not here.
  */
 
 "use client";
@@ -70,6 +33,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import Link from "next/link";
 import { CalendarOff } from "lucide-react";
+import { Bars, Dots, Timeline, type ChartTone } from "@/components/charts";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -80,55 +44,77 @@ import {
   type RecentAttendanceSession,
 } from "@/services/api";
 import {
-  Badge,
-  EmptyState,
   ErrorState,
   LoadingState,
   PAGE_RAIL,
-  STAT_GRID,
-  StatCard,
-  StatTrack,
   buttonClasses,
 } from "@/components/ui";
 import {
-  buildAttendanceStats,
+  ATTENDANCE_LABELS,
   formatDay,
   type AttendanceRecord,
   type TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
+import type { EstadoAsistencia } from "@/types/domain";
 import { clubIsoDate, clubTimeHHMM, todayDiaSemana } from "@/lib/club-date";
+import { buildTimelineItems, buildTodayClasses, clubNowMinutes } from "@/app/dashboard/dashboard-utils";
+import { formatDate } from "@/lib/format-utils";
 import {
-  buildEnrolledCountsByHorario,
-  buildMonthAttendanceRate,
-  buildDayRail,
+  buildLastSessionSummary,
+  buildRosterNamesByHorario,
   buildSessionCardState,
+  buildWeeklyAttendanceTrend,
+  recentStatesOfStudent,
+  trailingWeeksRange,
   findNextScheduledSession,
   findStudentsToFollow,
   formatNextSessionLabel,
   formatAbsenceCount,
-  groupRecordsBySession,
   monthToDateRange,
-  sumEnrolledToday,
 } from "./trainer-day-utils";
 import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import { buildContextLine } from "@/components/dashboard/context-line";
-import SessionCard from "./SessionCard";
+import NextSessionHero from "./NextSessionHero";
 import RecentSessionsList from "./RecentSessionsList";
 import SessionsWithoutList from "./SessionsWithoutList";
+import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { findMissingSessions } from "@/app/trainer/attendance/history/history-utils";
+
+/** Weeks the attendance trend spans. */
+const TREND_WEEKS = 6;
+
+/** Sessions each student's dots remember. */
+const DOT_SESSIONS = 6;
+
+/** The tone of a student's session dot; only presente and tardanza count as having trained. */
+const STATE_TONE: Record<EstadoAsistencia, ChartTone> = {
+  present: "ok",
+  late: "warn",
+  justified: "neutral",
+  sick: "neutral",
+  competition: "neutral",
+  absent: "bad",
+};
 
 /** First name only — "Hola, Carlos Mendoza" is a greeting nobody says out loud. */
 function firstNameOf(fullName: string | undefined): string {
   return fullName?.trim().split(/\s+/)[0] ?? "entrenador";
 }
 
+/** From the earlier of the month's first day and the trend window's, through today. */
+function loadRange(): { fechaInicio: string; fechaFin: string } {
+  const month = monthToDateRange();
+  const trend = trailingWeeksRange(new Date(), TREND_WEEKS);
+  return { fechaInicio: month.fechaInicio < trend.fechaInicio ? month.fechaInicio : trend.fechaInicio, fechaFin: month.fechaFin };
+}
+
 export default function TrainerPage(): React.ReactElement {
   const { session, isLoading: authLoading } = useAuth();
 
   const [schedules, setSchedules] = useState<TrainingSchedule[]>([]);
-  const [monthRecords, setMonthRecords] = useState<AttendanceRecord[]>([]);
-  const [enrolledCounts, setEnrolledCounts] = useState<Record<number, number>>({});
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [roster, setRoster] = useState<Record<number, string[]> | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentAttendanceSession[]>([]);
   const [recentStatus, setRecentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
@@ -138,12 +124,9 @@ export default function TrainerPage(): React.ReactElement {
     try {
       setLoading(true);
       setError(null);
-      const [scheduleData, recordData] = await Promise.all([
-        fetchTrainingSchedules(),
-        fetchAttendanceRecords(monthToDateRange()),
-      ]);
+      const [scheduleData, recordData] = await Promise.all([fetchTrainingSchedules(), fetchAttendanceRecords(loadRange())]);
       setSchedules(scheduleData);
-      setMonthRecords(recordData);
+      setRecords(recordData);
     } catch (err) {
       console.error("[trainer] loadData failed", err);
       setError("No se pudo cargar su día. Intente nuevamente.");
@@ -155,9 +138,7 @@ export default function TrainerPage(): React.ReactElement {
   /**
    * "Últimas listas del club", loaded separately and best-effort: it is
    * companion content, not the one decision this screen exists for, so a
-   * failure here empties the card instead of blocking the hero and the
-   * "última lista" stats — same treatment `/dashboard` gives its own
-   * secondary cards (`loadDetail`, `Promise.allSettled`).
+   * failure here empties the card instead of blocking the hero.
    */
   const loadRecentSessions = useCallback(async (): Promise<void> => {
     setRecentStatus("loading");
@@ -190,43 +171,33 @@ export default function TrainerPage(): React.ReactElement {
   }, [schedules]);
 
   const sessionCardState = useMemo(() => buildSessionCardState(todaySchedules), [todaySchedules]);
-  // El día entero, no solo lo que falta: el riel de la banda dibuja también las
-  // sesiones ya terminadas, que es lo que le deja al entrenador ver dónde está
-  // parado. La geometría se calcula acá, junto al resto del estado derivado,
-  // para que `SessionCard` no tenga que leer el reloj por su cuenta.
-  const dayRail = useMemo(() => buildDayRail(todaySchedules), [todaySchedules]);
   const nextSessionLabel = useMemo(() => {
     const next = findNextScheduledSession(schedules);
     return next ? formatNextSessionLabel(next) : null;
   }, [schedules]);
-  const studentsToFollow = useMemo(() => findStudentsToFollow(monthRecords), [monthRecords]);
-  const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
-  /**
-   * The pulse row's four figures — every one of them read from state this
-   * screen already holds, none of them a new call.
-   *
-   * `listsThisMonth` counts SESSIONS, not records: `groupRecordsBySession`
-   * keys on (fecha, horarioId), so a list of twenty students is one list. The
-   * record count would have been a bigger number measuring nothing anyone
-   * asks for.
-   */
-  const enrolledToday = useMemo(
-    () => sumEnrolledToday(todaySchedules, enrolledCounts),
-    [todaySchedules, enrolledCounts],
-  );
-  const monthRate = useMemo(() => buildMonthAttendanceRate(attendanceStats), [attendanceStats]);
-  const listsThisMonth = useMemo(
-    () => groupRecordsBySession(monthRecords).length,
-    [monthRecords],
-  );
+  // The query spans the trend window AND the month; the month figures read
+  // only the month's part of it.
+  const monthRecords = useMemo(() => {
+    const { fechaInicio } = monthToDateRange();
+    return records.filter((record) => record.fecha >= fechaInicio);
+  }, [records]);
+  const studentsToFollow = useMemo(() => findStudentsToFollow(monthRecords), [monthRecords]);
+  const trend = useMemo(() => buildWeeklyAttendanceTrend(records, new Date(), TREND_WEEKS), [records]);
+  const trendTotal = trend.reduce((sum, week) => sum + week.total, 0);
+  const trendAttended = trend.reduce((sum, week) => sum + week.attended, 0);
+  const trendPercent = trendTotal > 0 ? Math.round((trendAttended / trendTotal) * 100) : 0;
+  const trendData = trend.map((week, index) => ({
+    key: week.startIso,
+    label: index === trend.length - 1 ? "Act." : `S-${trend.length - 1 - index}`,
+    value: week.ratePercent,
+    detail: `Semana del ${formatDate(week.startIso).slice(0, 5)}: ${week.total > 0 ? `${week.ratePercent}% · ${week.attended} de ${week.total}` : "sin registros"}`,
+  }));
 
   /**
    * "Sesiones sin lista" — this month's weekly schedule minus the sessions
    * that already have a list, newest first. Same cross the history screen
-   * counts (`findMissingSessions`, `history-utils.ts`), over the same
-   * `monthRecords` this screen already fetches — no second call, and the same
-   * ESTIMATE caveat that module documents.
+   * counts (`findMissingSessions`), with the same ESTIMATE caveat.
    */
   const missingSessions = useMemo(() => {
     const { fechaInicio, fechaFin } = monthToDateRange();
@@ -241,201 +212,151 @@ export default function TrainerPage(): React.ReactElement {
   }, [monthRecords, schedules]);
 
   /**
-   * Enrolled counts for every session shown on the card today — the hero
-   * session AND the "rest of today" list underneath it. One club-wide roster
-   * call (`fetchRosterDeTodosLosHorarios`, the same TRA-7 move `/groups`
-   * already made) instead of one `fetchAlumnosPorHorario` per row, so the new
-   * list does not turn into an N+1 as the day's session count grows.
-   *
-   * Loaded separately from `loadData`, once `todaySchedules` is known: it is
-   * a garnish, so a failure here leaves every count unknown (each clause
-   * simply not rendered) instead of blocking the card's one CTA.
+   * Who is enrolled in today's sessions: one club-wide roster call, not one
+   * per row. A garnish — a failure leaves the names unknown (the hero says so
+   * in a line, the timeline omits the counts) instead of blocking the day.
    */
   useEffect((): (() => void) => {
     let cancelled = false;
     if (todaySchedules.length === 0) {
-      setEnrolledCounts({});
+      setRoster(null);
       return (): void => {};
     }
     fetchRosterDeTodosLosHorarios()
-      .then((roster) => {
-        if (!cancelled) setEnrolledCounts(buildEnrolledCountsByHorario(todaySchedules, roster));
+      .then((all) => {
+        if (!cancelled) setRoster(buildRosterNamesByHorario(todaySchedules, all));
       })
       .catch((err: unknown) => {
         console.error("[trainer] fetchRosterDeTodosLosHorarios failed", err);
-        if (!cancelled) setEnrolledCounts({});
+        if (!cancelled) setRoster(null);
       });
     return (): void => {
       cancelled = true;
     };
   }, [todaySchedules]);
 
+  const enrolledCounts = useMemo(() => {
+    if (!roster) return null;
+    return Object.fromEntries(Object.entries(roster).map(([id, names]) => [Number(id), names.length])) as Record<number, number>;
+  }, [roster]);
+  const todayClasses = useMemo(() => buildTodayClasses(todaySchedules, records), [todaySchedules, records]);
+  const timelineItems = useMemo(
+    () =>
+      buildTimelineItems(todayClasses, enrolledCounts, (id) => `/trainer/attendance${buildWizardQuery(id, null, "mark-attendance")}`),
+    [todayClasses, enrolledCounts],
+  );
+  const listsTaken = todayClasses.filter((entry) => entry.status === "taken").length;
+  const heroSummary = useMemo(
+    () =>
+      sessionCardState && sessionCardState.kind !== "done"
+        ? buildLastSessionSummary(records, sessionCardState.schedule.id, clubIsoDate())
+        : null,
+    [records, sessionCardState],
+  );
+
   return (
     <ProtectedRoute allowedRoles={["trainer"]}>
       {/*
        * The `<h1>` is a greeting on purpose — this is the one screen a trainer
-       * opens standing at courtside, and it should sound like a person. But a
-       * greeting is not a page name, and every other authenticated screen names
-       * itself, so the subtitle carries "Mi día" — the same name the sidebar
-       * and the browser tab use — instead of overwriting the welcome.
-       *
-       * No `actions` prop here any more: the one primary action lives on
-       * `SessionCard` now, named by the session's own hour — see the module
-       * doc for why it moved.
+       * opens standing at courtside, and it should sound like a person. The
+       * subtitle carries the role and date; the one primary action lives in the
+       * hero, named by the session's own hour.
        */}
-      <AppShell
-        title={`Hola, ${firstNameOf(session?.user?.name)}`}
-        subtitle={buildContextLine("Entrenador")}
-      >
+      <AppShell title={`Hola, ${firstNameOf(session?.user?.name)}`} subtitle={buildContextLine("Entrenador")}>
         {loading && <LoadingState label="Cargando su día…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadData()} />}
 
         {!loading && !error && (
           <>
-            {/*
-              LAYER 1 — the hero band, full width.
-
-              It used to be half of a `split:grid-cols-2` pair with the donut,
-              which is the single biggest reason this screen and `/dashboard`
-              read as different products: the panel the owner approves leads
-              with ONE full-width coal band and sends its secondary cards to
-              the rail below. `SessionCard` already spoke that vocabulary —
-              `rounded-card bg-coal`, a `font-display text-display` figure —
-              it was just boxed into half a screen.
-
-              Its action stays on the card and did NOT move to the header.
-              `/dashboard`'s hero gave its action up because it was the third
-              place in the product where a primary action could be found; this
-              one is bound to a specific session and named by that session's
-              own hour ("Pasar lista de las 15:00"), which is the whole point
-              of #211's placement. Porting the shape is not a reason to undo it.
-
-              On a rest day `sessionCardState` is `null` and `SessionCard`
-              renders nothing — that guard is the component's whole safety rule
-              and does not move. The rest-day statement takes the band's place,
-              full width, with the three parts D11 asks for. It no longer needs
-              `fill`: there is no equal-height sibling left to match.
-            */}
             {sessionCardState ? (
-              <SessionCard
+              <NextSessionHero
                 state={sessionCardState}
-                rail={dayRail}
-                enrolledCounts={enrolledCounts}
+                roster={roster}
+                lastSummary={heroSummary}
                 nextSessionLabel={nextSessionLabel}
               />
             ) : (
-              <EmptyState
-                icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                title="Hoy no hay entrenamientos"
-                description={`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
-                action={
-                  // The same words the card uses for the same destination —
-                  // "Elegir otro horario" is already how this screen names
-                  // the picker, and a second name for one place is the drift
-                  // the destination registry exists to stop.
-                  <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                    Elegir otro horario
-                  </Link>
-                }
-              />
+              <section data-testid="rest-day" className="card flex flex-wrap items-center gap-x-4 gap-y-field px-[18px] py-4">
+                <CalendarOff size={ICON.lg} strokeWidth={1.5} className="flex-none text-ink-3" aria-hidden="true" />
+                <div className="flex min-w-0 flex-1 basis-72 flex-col gap-0.5">
+                  <b className="text-sm font-bold text-ink">Hoy no hay entrenamientos</b>
+                  <span className="text-sm text-ink-2">
+                    {`El club no tiene sesiones programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}. Puede pasar la lista de otro día si quedó pendiente.`}
+                  </span>
+                </div>
+                <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
+                  Elegir otro horario
+                </Link>
+              </section>
             )}
 
-            {/*
-              LAYER 2 — the pulse, on `/dashboard`'s own `STAT_GRID`.
+            {timelineItems.length > 0 && (
+              <DashboardSection title="Hoy" testId="trainer-today">
+                <div className="flex flex-col gap-3 px-[18px] py-4">
+                  <Timeline
+                    items={timelineItems}
+                    nowMinutes={clubNowMinutes()}
+                    ariaLabel={`Sesiones de hoy: ${timelineItems.length}, ${listsTaken} con lista tomada`}
+                  />
+                </div>
+              </DashboardSection>
+            )}
 
-              One internal grammar across all four tiles, the same the admin
-              panel states: uppercase label, ink figure with its unit, one
-              caption line. Every figure is read from data already on this
-              screen — nothing here triggers a call, and nothing here is
-              derived from something the backend does not send. That second
-              constraint is not decoration: `/profile`'s history records two
-              figures retired for failing it.
-
-              "Inscritos hoy" is an em dash rather than a number when the
-              roster did not fully arrive. `sumEnrolledToday` returns `null`
-              instead of a partial sum for the reason its own doc gives — a
-              partial sum is not a smaller number, it is a wrong one — and the
-              tile has to state that absence rather than paper over it.
-
-              Issue #313 (K5 hallazgo #56): "SESIONES HOY 0" convivía con
-              "ÚLTIMAS LISTAS" mostrando una lista de hoy con registros
-              reales — no es una contradicción (uno cuenta el horario
-              SEMANAL programado para hoy, el otro las listas que de hecho
-              se tomaron, y un entrenador puede tomar lista de un día
-              distinto al programado), pero los dos tiles no decían su
-              propio alcance. Los hints ahora nombran "programadas", no
-              "hoy" a secas.
-            */}
-            <div data-testid="trainer-pulse" className={STAT_GRID}>
-              <StatCard
-                label="Sesiones hoy"
-                value={todaySchedules.length}
-                hint={`programadas para hoy, ${formatDay(todayDiaSemana()).toLowerCase()}`}
-                href="/trainer/attendance"
-              />
-              <StatCard
-                label="Inscritos hoy"
-                value={enrolledToday ?? "—"}
-                hint={
-                  enrolledToday === null
-                    ? "no se pudo leer el padrón"
-                    : "alumnos en las sesiones programadas para hoy"
-                }
-              />
-              <StatCard
-                label="Asistencia del mes"
-                value={monthRate.percent}
-                unit="%"
-                href="/trainer/attendance/history"
-                hint={
-                  <span className="flex flex-col gap-y-field">
-                    <StatTrack value={monthRate.present} total={monthRate.total} />
-                    <span>{`${monthRate.present} de ${monthRate.total} entrenaron`}</span>
-                  </span>
-                }
-              />
-              <StatCard
-                label="Listas del mes"
-                value={listsThisMonth}
-                hint="sesiones con lista tomada"
-                href="/trainer/attendance/history"
-              />
-            </div>
-
-            {/*
-              LAYER 3 — the rail. Neither the recent lists nor "Sesiones sin
-              lista" needs the full width, and `PAGE_RAIL` is the token
-              `/dashboard` spends on exactly this pair: a fluid feed beside a
-              fixed 340px card.
-
-              The absence alert stays inside this card. It is a fact ABOUT
-              attendance and it belongs to the block that draws attendance —
-              moving it up to the band would have made it the second thing in
-              a hero whose own rule is one number and the sentence that reads it.
-            */}
             <div data-testid="trainer-lower" className={PAGE_RAIL}>
               {/* Two independent stacks: each column ends where its own content
                   ends, so an empty block on one side never stretches the other. */}
-              <div data-testid="trainer-main" className="flex flex-col gap-page">
-                <RecentSessionsList
-                  sessions={recentSessions}
-                  status={recentStatus}
-                  onRetry={() => void loadRecentSessions()}
-                />
+              <div data-testid="trainer-main" className="flex min-w-0 flex-col gap-page">
+                <DashboardSection
+                  title="Asistencia de las últimas semanas"
+                  testId="attendance-trend"
+                  action={
+                    <Link href="/trainer/attendance/history" className={buttonClasses("secondary", "sm")}>
+                      Ver historial
+                    </Link>
+                  }
+                >
+                  {trendTotal > 0 ? (
+                    <div className="flex flex-col gap-3 px-[18px] py-4">
+                      <p className="m-0 text-sm text-ink-2">
+                        <b className="font-display text-xl font-normal tabular-nums tracking-flat text-ink">{trendPercent}%</b> entrenaron en {TREND_WEEKS}{" "}
+                        semanas · {trendAttended} de {trendTotal} registros
+                      </p>
+                      <Bars
+                        data={trendData}
+                        max={100}
+                        heightClass="h-24"
+                        ariaLabel={`Asistencia de las últimas ${TREND_WEEKS} semanas: ${trendData.map((d) => `${d.label} ${d.value}%`).join(", ")}`}
+                      />
+                    </div>
+                  ) : (
+                    <CompactEmpty title="Sin asistencias recientes" description="La tendencia se dibuja con la primera lista." />
+                  )}
+                </DashboardSection>
 
                 <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
                   {studentsToFollow.length > 0 ? (
-                    <ul className="grid sm:grid-cols-2 lg:grid-cols-3">
-                      {studentsToFollow.map((student) => (
-                        <li
-                          key={student.estudiante}
-                          className="flex min-h-drow items-center justify-between gap-3 border-b border-line px-[18px] py-3 text-sm"
-                        >
-                          <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
-                          <Badge tone="warn">{formatAbsenceCount(student.ausencias)}</Badge>
-                        </li>
-                      ))}
+                    <ul className="m-0 grid list-none p-0 sm:grid-cols-2 lg:grid-cols-3">
+                      {studentsToFollow.map((student) => {
+                        const dots = recentStatesOfStudent(monthRecords, student.estudiante, DOT_SESSIONS).map((entry) => ({
+                          key: entry.fecha,
+                          label: `${formatDate(entry.fecha).slice(0, 5)} ${ATTENDANCE_LABELS[entry.estado].toLowerCase()}`,
+                          tone: STATE_TONE[entry.estado],
+                          hollow: entry.estado !== "present" && entry.estado !== "late",
+                        }));
+                        return (
+                          <li
+                            key={student.estudiante}
+                            className="flex min-h-drow flex-col justify-center gap-1.5 border-b border-line px-[18px] py-3 text-sm"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
+                              <span className="flex-none text-xs font-semibold text-ink-2">{formatAbsenceCount(student.ausencias)}</span>
+                            </div>
+                            <Dots data={dots} ariaLabel={`Últimas asistencias de ${student.estudiante}`} />
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
                     <CompactEmpty
@@ -444,9 +365,11 @@ export default function TrainerPage(): React.ReactElement {
                     />
                   )}
                 </DashboardSection>
+
+                <RecentSessionsList sessions={recentSessions} status={recentStatus} onRetry={() => void loadRecentSessions()} />
               </div>
 
-              <div data-testid="trainer-rail" className="flex flex-col gap-page max-lg:order-first">
+              <div data-testid="trainer-rail" className="flex min-w-0 flex-col gap-page max-lg:order-first">
                 <section className="card flex flex-col gap-4 p-[18px]">
                   <SessionsWithoutList missing={missingSessions} />
                 </section>

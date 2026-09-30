@@ -1,13 +1,11 @@
 /**
- * Component tests for the trainer's "Mi día" (issue #211,
- * `docs/archive/prototypes/prototipos/31-entrenador-dashboard-alternativas.html`).
+ * Component tests for the trainer's "Mi día".
  *
- * The screen was compacted around two symmetric top cards — the immediate
- * session (`SessionCard`) and the attendance summary — plus dense
- * "Últimas listas" rows below. These tests are mostly about the same rule
- * `SessionCard.test.tsx` locks down at the unit level, exercised here through
- * the full page and real system-clock states: no state without a session may
- * ever leave a `horario=` link in the tree.
+ * The screen reads top to bottom: the next session as a hero (`NextSessionHero`),
+ * the day on a timeline, the attendance trend and the students to follow, and
+ * the sessions that never got a list. The rule exercised through real
+ * system-clock states: no state without a session may ever leave a `horario=`
+ * link in the hero.
  *
  * @vitest-environment jsdom
  */
@@ -145,9 +143,9 @@ const RECENT_SESSIONS: RecentAttendanceSession[] = [
  * excluded here rather than asserted empty.
  */
 function horarioLinks(): HTMLAnchorElement[] {
-  const rail = document.querySelector("[data-testid='trainer-lower']");
+  const elsewhere = ["trainer-lower", "trainer-today"].map((id) => document.querySelector(`[data-testid='${id}']`));
   return Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href*='horario=']")).filter(
-    (link) => !rail || !rail.contains(link),
+    (link) => !elsewhere.some((region) => region?.contains(link)),
   );
 }
 
@@ -173,6 +171,7 @@ const ROSTER: AlumnoHorario[] = [
   ...new Array(3).fill(null).map(() => alumno(2)),
 ];
 
+
 describe("TrainerPage — Mi día", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -188,177 +187,103 @@ describe("TrainerPage — Mi día", () => {
     vi.useRealTimers();
   });
 
-  it("greets the trainer by first name", async () => {
+  it("greets the trainer by first name and states role and date", async () => {
     render(<TrainerPage />);
 
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Hola, Carlos" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Hola, Carlos" })).toBeInTheDocument();
+    expect(screen.getByText("Entrenador · lunes, 20 de julio de 2026")).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
-  // The immediate-session card's four states.
+  // The hero's states.
   // -------------------------------------------------------------------------
 
-  // The figure is the hour in both states now, and the wait is a sentence —
-  // see the renegotiation note in `SessionCard.test.tsx`. What this test is
-  // about (which session leads, and that the roster count is fetched and
-  // worded as "inscritos") did not move.
-  it("'next': leads with the session's hour, the wait in words and the roster count", async () => {
+  it("'next': leads with the hour, the wait in words and the roster count", async () => {
     render(<TrainerPage />);
 
-    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(screen.getByText("15:00")).toBeInTheDocument();
-    expect(screen.getByText("Empieza en 25 minutos")).toBeInTheDocument();
-    // "inscritos", never "esperan": the count is of AlumnoHorario rows, and no
-    // DTO says who actually turned up.
-    expect(await screen.findByText(/12 estudiantes inscritos/)).toBeInTheDocument();
-    expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalled();
+    const hero = within(await screen.findByTestId("session-hero"));
+    expect(hero.getByText("Próxima sesión")).toBeInTheDocument();
+    expect(hero.getByText("Empieza en 25 minutos")).toBeInTheDocument();
+    expect(await hero.findByText("12 estudiantes inscritos")).toBeInTheDocument();
   });
 
-  // -------------------------------------------------------------------------
-  // The day rail. QA's complaint about this band was its SIZE, and the band
-  // used to answer it with an `<ol>` that gained a ~40px row per session left
-  // today. The day is drawn along the band's width now — see the renegotiation
-  // note in `SessionCard.test.tsx`. What this pair is about (that today's
-  // sessions reach the band at all, that the roster is fetched ONCE and worded
-  // as "inscritos", and that a failed roster blocks nothing) did not move; the
-  // counts are read off each block's accessible name instead of off a text row.
-  // -------------------------------------------------------------------------
-
-  it("draws every session of today on the rail, roster counts included, and none of another day's", async () => {
+  it("'next': the hero is one card with a bar counting down to the start", async () => {
     render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
 
-    const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
-    // Three today. The Tuesday session in the fixture never reaches the band.
-    expect(within(rail).getAllByRole("listitem")).toHaveLength(3);
-
-    // The roster resolves after the initial render, so wait for it.
-    expect(
-      await screen.findByRole("listitem", {
-        name: "16:00 a 17:00, por venir, 3 estudiantes inscritos",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("listitem", { name: "15:00 a 16:00, por venir, 12 estudiantes inscritos" }),
-    ).toBeInTheDocument();
-    // Schedule 3's real, seeded enrollment is 0 — said, not hidden.
-    expect(
-      screen.getByRole("listitem", { name: "17:00 a 18:00, por venir, 0 estudiantes inscritos" }),
-    ).toBeInTheDocument();
-
-    // No hidden or tabbable session link snuck in through the rail.
-    expect(within(rail).queryAllByRole("link")).toHaveLength(0);
-    // Three sessions today, ONE roster call: the rail must not reintroduce
-    // the per-horario N+1 `fetchAlumnosPorHorario` replaced.
-    expect(mockFetchRosterDeTodosLosHorarios).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not block the rail when the roster fails to load", async () => {
-    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("boom"));
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const rail = screen.getByRole("list", { name: "Sus sesiones de hoy" });
-    expect(within(rail).getAllByRole("listitem")).toHaveLength(3);
-    // Every block still names its hours; the count is the only part missing.
-    expect(screen.getByRole("listitem", { name: "16:00 a 17:00, por venir" })).toBeInTheDocument();
-    expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
+    const hero = await screen.findByTestId("session-hero");
+    expect(hero.className).toContain("card");
+    const bar = within(hero).getByRole("progressbar", { name: /cuenta regresiva/i });
+    expect(Number(bar.getAttribute("aria-valuenow"))).toBeGreaterThan(80);
   });
 
   it("'next': the primary action names the session by its hour and calls the wizard's real query contract", async () => {
     render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
 
-    const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
-    expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=1&paso=lista");
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
+    const hero = within(await screen.findByTestId("session-hero"));
+    expect(hero.getByRole("link", { name: "Pasar lista de las 15:00" })).toHaveAttribute(
       "href",
-      "/trainer/attendance",
+      "/trainer/attendance?horario=1&paso=lista",
     );
-    // No second copy of the PRIMARY action outside the rail — the sidebar
-    // carries its own "Pasar lista" nav row (navigation, not this screen's
-    // CTA), and "Sesiones sin lista" carries its own "Pasar lista" rows on
-    // purpose, one per missing session, which is a different action entirely.
-    const main = within(screen.getByRole("main"));
-    const rail = screen.getByTestId("trainer-lower");
-    const outsideRail = main
-      .getAllByRole("link", { name: /Pasar lista/ })
-      .filter((link) => !rail.contains(link));
-    expect(outsideRail).toHaveLength(1);
+    expect(hero.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute("href", "/trainer/attendance");
   });
 
-  it("'live': the start hour replaces the countdown as the big number, and 'En curso' is written text", async () => {
-    // 15:10 — ten minutes into the 15:00-16:00 session.
+  it("'next': names the enrolled students by first name, with a +N for the rest", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockResolvedValue(
+      ["Ana Garcia", "Sofia Vera", "Luis Lopez", "Diego Mendoza", "Melany Quimis", "Pedro Salgado", "Maria Torres", "Jose Ruiz", "Rosa Mora", "Raul Paz"].map(
+        (name) => ({ ...alumno(1), personaNombreCompleto: name }),
+      ),
+    );
+    render(<TrainerPage />);
+
+    const hero = within(await screen.findByTestId("session-hero"));
+    const chips = await hero.findByRole("list", { name: "Alumnos inscritos" });
+    expect(within(chips).getAllByRole("listitem")).toHaveLength(9);
+    expect(within(chips).getByText("Ana")).toBeInTheDocument();
+    expect(within(chips).getByText("+2 más")).toBeInTheDocument();
+  });
+
+  it("'next': summarises how the previous session of the same horario went", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([
+      { ...record("present", "Ana Garcia", "2026-07-13") },
+      { ...record("late", "Sofia Vera", "2026-07-13") },
+      { ...record("absent", "Luis Lopez", "2026-07-13") },
+    ]);
+    render(<TrainerPage />);
+
+    const summary = await screen.findByTestId("hero-last-summary");
+    expect(summary).toHaveTextContent("2 de 3 entrenaron");
+  });
+
+  it("'live': says the session is running and what has elapsed", async () => {
     vi.setSystemTime(new Date(2026, 6, 20, 15, 10));
     render(<TrainerPage />);
 
-    await screen.findByText("Lunes 15:00 — 16:00");
-    expect(screen.getByText("15:00")).toBeInTheDocument();
-    expect(screen.getByText("En curso")).toBeInTheDocument();
-    expect(screen.getByText(/Hace 10 minutos/)).toBeInTheDocument();
-    // The number that was the countdown before the session started is gone.
-    expect(screen.queryByText("25")).not.toBeInTheDocument();
-
-    const primary = screen.getByRole("link", { name: "Pasar lista de las 15:00" });
-    expect(primary).toHaveAttribute("href", "/trainer/attendance?horario=1&paso=lista");
+    const hero = within(await screen.findByTestId("session-hero"));
+    expect(hero.getByText("Sesión en curso")).toBeInTheDocument();
+    expect(hero.getByRole("progressbar", { name: /avance de la sesión/i })).toBeInTheDocument();
+    expect(hero.getByRole("link", { name: "Pasar lista de las 15:00" })).toBeInTheDocument();
   });
 
-  it("'done': no countdown and no session link anywhere once every session today has ended", async () => {
+  it("'done': no countdown and no session link in the hero once every session today has ended", async () => {
     vi.setSystemTime(new Date(2026, 6, 20, 21, 0));
     render(<TrainerPage />);
 
-    expect(await screen.findByText(/No quedan sesiones hoy/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
-    expect(screen.queryByRole("link", { name: /Pasar lista de las/ })).not.toBeInTheDocument();
+    const hero = within(await screen.findByTestId("session-hero"));
+    expect(hero.getByText(/ya terminaron/)).toBeInTheDocument();
+    expect(hero.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute("href", "/trainer/attendance");
+    expect(hero.queryByRole("link", { name: /Pasar lista de las/ })).not.toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
   });
 
-  it("rest day: the session card does not render at all, and no session link exists in the tree", async () => {
-    mockFetchTrainingSchedules.mockResolvedValue([
-      { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
-    ]);
-    render(<TrainerPage />);
-
-    await screen.findByText("Sesiones sin lista");
-    expect(screen.queryByText(/Pasar lista de las/)).not.toBeInTheDocument();
-    // `SessionCard` still renders NOTHING for `state === null` — the guard the
-    // whole component is built around is untouched.
-    expect(screen.queryByLabelText("Su día de hoy")).not.toBeInTheDocument();
-    expect(horarioLinks()).toHaveLength(0);
-  });
-
-  /*
-   * Renegotiated in the trainer sweep, with the reason written: this used to
-   * assert that "Elegir otro horario" was absent on a rest day, which was true
-   * because the screen said NOTHING about a day with no sessions — the card
-   * simply vanished and the summary took the whole row. DESIGN.md's "regla del
-   * estado flaco" was written about this very screen, and D11 asks an empty
-   * state for three things: what is missing, why, and what to do. The exit is
-   * the generic picker, which carries no `horario=` — the safety rule the
-   * assertion above protects is unchanged and still asserted.
-   */
-  it("rest day: says so, says why, and still offers the picker as the way out", async () => {
-    mockFetchTrainingSchedules.mockResolvedValue([
-      { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
-    ]);
+  it("rest day: says so, says why, offers the picker, and draws no timeline", async () => {
+    mockFetchTrainingSchedules.mockResolvedValue([{ ...schedule(4, "09:00", "10:00"), diaSemana: "mar" }]);
     render(<TrainerPage />);
 
     expect(await screen.findByText("Hoy no hay entrenamientos")).toBeInTheDocument();
-    // The day is named, and it is TODAY's day — not a fixed string.
-    expect(
-      screen.getByText(/El club no tiene sesiones programadas para hoy, lunes\./),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
-      "href",
-      "/trainer/attendance",
-    );
+    expect(screen.getByText(/El club no tiene sesiones programadas para hoy, lunes\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute("href", "/trainer/attendance");
+    expect(screen.queryByTestId("session-hero")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("timeline")).not.toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
   });
 
@@ -374,7 +299,7 @@ describe("TrainerPage — Mi día", () => {
     expect(screen.getByText("Cargando su día…")).toBeInTheDocument();
     expect(horarioLinks()).toHaveLength(0);
     resolveSchedules(TODAY_SCHEDULES);
-    await screen.findByText("Lunes 15:00 — 16:00");
+    await screen.findByTestId("session-hero");
   });
 
   it("recovers from a failed load with a retry, and shows no session link while errored", async () => {
@@ -389,24 +314,95 @@ describe("TrainerPage — Mi día", () => {
     mockFetchTrainingSchedules.mockResolvedValue(TODAY_SCHEDULES);
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
 
-    await waitFor(() => {
-      expect(screen.getByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    });
+    expect(await screen.findByTestId("session-hero")).toBeInTheDocument();
   });
 
-  it("does not block the hero session's countdown when the roster fails to load", async () => {
+  it("does not block the hero's countdown when the roster fails to load", async () => {
     mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("boom"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     render(<TrainerPage />);
 
-    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    expect(screen.getByText("Empieza en 25 minutos")).toBeInTheDocument();
-    expect(screen.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
+    const hero = within(await screen.findByTestId("session-hero"));
+    expect(hero.getByText("Empieza en 25 minutos")).toBeInTheDocument();
+    expect(hero.queryByText(/estudiantes inscritos/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
-  // Sesiones sin lista — replaces the donut (usability audit 2026-09-16).
+  // Hoy — the day on the shared timeline.
+  // -------------------------------------------------------------------------
+
+  it("draws today's sessions on the timeline, none of another day's, each linking into the wizard", async () => {
+    render(<TrainerPage />);
+
+    const today = within(await screen.findByTestId("trainer-today"));
+    const blocks = today.getAllByTestId("timeline-block");
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0].getAttribute("href")).toBe("/trainer/attendance?horario=1&paso=lista");
+    expect(today.getByTestId("timeline-summary")).toHaveTextContent("1 de 3 listas tomadas");
+  });
+
+  it("colours the blocks by group and marks the clock with the 'ahora' line", async () => {
+    render(<TrainerPage />);
+
+    const today = within(await screen.findByTestId("trainer-today"));
+    expect(today.getByTestId("timeline-now-label")).toHaveTextContent("Ahora 14:35");
+    expect(today.getAllByTestId("timeline-block")[0]).toHaveAttribute("data-status", "done");
+    expect(today.getAllByTestId("timeline-block")[1]).toHaveAttribute("data-status", "pending");
+  });
+
+  // -------------------------------------------------------------------------
+  // Trend, students to follow, recent lists.
+  // -------------------------------------------------------------------------
+
+  it("reads the trend as quienes entrenaron — presentes MÁS tardanzas — over the records", async () => {
+    render(<TrainerPage />);
+
+    const trend = within(await screen.findByTestId("attendance-trend"));
+    // 3 of 7 records trained (present ×2, late ×1, justified ×1 and absent ×3 do not).
+    expect(trend.getByText(/3 de 7 registros/)).toBeInTheDocument();
+    expect(trend.getByRole("group", { name: /Asistencia de las últimas 6 semanas/ })).toBeInTheDocument();
+  });
+
+  it("says so in one line when there is no attendance yet", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([]);
+    render(<TrainerPage />);
+
+    const trend = within(await screen.findByTestId("attendance-trend"));
+    expect(trend.getByText("Sin asistencias recientes")).toBeInTheDocument();
+    expect(trend.queryByTestId("bars")).toBeNull();
+  });
+
+  it("lists the students to follow with their absence count and a dot per session", async () => {
+    render(<TrainerPage />);
+
+    const block = await screen.findByTestId("students-to-follow");
+    expect(within(block).getByText("Luis Lopez")).toBeInTheDocument();
+    expect(within(block).getByText("3 ausencias")).toBeInTheDocument();
+    expect(within(block).getByRole("img", { name: /Últimas asistencias de Luis Lopez/ })).toBeInTheDocument();
+  });
+
+  it("says nobody needs follow-up instead of hiding the block", async () => {
+    mockFetchAttendanceRecords.mockResolvedValue([record("present", "Sofia Vera")]);
+    render(<TrainerPage />);
+
+    const block = await screen.findByTestId("students-to-follow");
+    expect(within(block).getByText("Nadie necesita seguimiento")).toBeInTheDocument();
+  });
+
+  it("tells the trainer the recent lists failed to load, and retries", async () => {
+    mockFetchRecentAttendanceSessions.mockRejectedValueOnce(new Error("boom")).mockResolvedValue(RECENT_SESSIONS);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<TrainerPage />);
+
+    const notice = await screen.findByText(/no se pudieron cargar las últimas listas/i);
+    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
+    fireEvent.click(within(notice.closest("[role=status]") as HTMLElement).getByRole("button", { name: /reintentar/i }));
+    expect(await screen.findByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Sesiones sin lista.
   //
   // TODAY_SCHEDULES puts schedules 1/2/3 on every Monday and schedule 4 on
   // every Tuesday; MONTH_RECORDS only ever files schedule 1. Within the
@@ -414,16 +410,6 @@ describe("TrainerPage — Mi día", () => {
   // without a list on the 6th and 13th, and schedule 4 without one on the
   // 7th and 14th — six sessions, newest first, capped at five.
   // -------------------------------------------------------------------------
-
-  it("no longer renders the attendance distribution donut", async () => {
-    render(<TrainerPage />);
-
-    await screen.findByText("Lunes 15:00 — 16:00");
-    expect(screen.queryByText("Distribución de asistencias")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("img", { name: /Distribución de asistencias/ }),
-    ).not.toBeInTheDocument();
-  });
 
   it("lists the month's sessions that never got a list, newest first and capped at five, each linking into the wizard", async () => {
     render(<TrainerPage />);
@@ -475,319 +461,7 @@ describe("TrainerPage — Mi día", () => {
     const rail = within(screen.getByTestId("trainer-lower"));
     expect(rail.queryByRole("link", { name: "Pasar lista" })).not.toBeInTheDocument();
   });
-
-  it("names the student piling up absences, without a button to act on it", async () => {
-    render(<TrainerPage />);
-
-    await screen.findByText("Sesiones sin lista");
-    expect(screen.getByText("Luis Lopez")).toBeInTheDocument();
-    expect(screen.getByText("3 ausencias")).toBeInTheDocument();
-  });
-
-  it("stays quiet about absences when nobody has reached the threshold", async () => {
-    mockFetchAttendanceRecords.mockResolvedValue([
-      record("present", "Sofia Vera"),
-      record("absent", "Luis Lopez"),
-    ]);
-    render(<TrainerPage />);
-
-    await screen.findByText("Sesiones sin lista");
-    expect(screen.queryByText(/ausencias/)).not.toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // Últimas listas — dense rows, one proportional bar per session.
-  // -------------------------------------------------------------------------
-
-  it("lists the club's recent sessions as dense rows with a proportional-bar aria-label", async () => {
-    render(<TrainerPage />);
-
-    // Scoped to "Últimas listas": "Sesiones sin lista" can legitimately share
-    // an hour range fixture ("Lunes 16:00 — 17:00") for a different date.
-    const heading = await screen.findByText("Últimas listas");
-    const section = within(heading.closest("section") as HTMLElement);
-    expect(section.getByText("Lunes 16:00 — 17:00")).toBeInTheDocument();
-    expect(section.getByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
-    expect(
-      section.getByRole("img", {
-        name: "6 presentes, 0 tardanzas, 1 justificado, 0 enfermos, 0 competencias y 1 ausente sobre 8 registros",
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not render the four counts as loose colored badges — no author column either", async () => {
-    render(<TrainerPage />);
-
-    const heading = await screen.findByText("Últimas listas");
-    const list = within(heading.closest("section") as HTMLElement);
-    expect(list.queryByText(/Entrenador/)).not.toBeInTheDocument();
-    expect(list.queryByText(/Registrad[oa] por/)).not.toBeInTheDocument();
-  });
-
-  it("shows an empty state when the club has no recent sessions", async () => {
-    mockFetchRecentAttendanceSessions.mockResolvedValue([]);
-    render(<TrainerPage />);
-
-    expect(
-      await screen.findByText("Todavía no hay listas registradas"),
-    ).toBeInTheDocument();
-  });
-
-  it("does not let a failed recent-sessions load block the rest of the panel", async () => {
-    mockFetchRecentAttendanceSessions.mockRejectedValue(new Error("boom"));
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    render(<TrainerPage />);
-
-    expect(await screen.findByText("Lunes 15:00 — 16:00")).toBeInTheDocument();
-    // The failure is announced, not dressed up as "no lists yet".
-    expect(await screen.findByText(/no se pudieron cargar las últimas listas/i)).toBeInTheDocument();
-    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
-  });
-
-  it("sends the history to its own view instead of embedding a correction table", async () => {
-    render(<TrainerPage />);
-
-    // Two now: "Últimas listas"' own header link, and "Sesiones sin lista"'s
-    // footer link ("Ver todas" once more than five are missing) — both name
-    // the same destination, once each.
-    const links = await screen.findAllByRole("link", { name: /^Ver (historial|todas)$/ });
-    expect(links).toHaveLength(2);
-    for (const link of links) {
-      expect(link).toHaveAttribute("href", "/trainer/attendance/history");
-    }
-    expect(screen.queryByRole("link", { name: "Corregir" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Filtrar por horario")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Página siguiente" })).not.toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // Settled product decisions.
-  // -------------------------------------------------------------------------
-
-  it("no longer stacks quick-action and stat cards above the fold", async () => {
-    render(<TrainerPage />);
-
-    await screen.findByText("Lunes 15:00 — 16:00");
-    expect(screen.queryByText("Registrar Asistencia")).not.toBeInTheDocument();
-    expect(screen.queryByText("Horarios de Hoy")).not.toBeInTheDocument();
-    expect(screen.queryByText("Asistencias Registradas Hoy")).not.toBeInTheDocument();
-    expect(screen.queryByText("Presentes Hoy")).not.toBeInTheDocument();
-  });
-
-  it("does not render an 'Avisar al club' button — no endpoint notifies the club (owner: not an MVP feature)", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Sesiones sin lista");
-
-    expect(screen.queryByRole("button", { name: /Avisar al club/ })).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Abre el asistente con el mensaje ya escrito. Usted lo revisa y lo envía."),
-    ).not.toBeInTheDocument();
-  });
-
-  it("runs the session hero across the full width instead of pairing it with the donut", async () => {
-    // The pair was this screen's own invention: `/dashboard`, the panel the
-    // owner approves, leads with ONE full-width coal band and puts its
-    // secondary cards in the rail below. The half-width pair is what made the
-    // two screens read as different products.
-    const { container: withSession } = render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-    expect(withSession.querySelector(".split\\:grid-cols-2")).toBeNull();
-
-    mockFetchTrainingSchedules.mockResolvedValue([
-      { ...schedule(4, "09:00", "10:00"), diaSemana: "mar" },
-    ]);
-    const { container: restDay } = render(<TrainerPage />);
-    await screen.findAllByText("Sesiones sin lista");
-    expect(restDay.querySelector(".split\\:grid-cols-2")).toBeNull();
-  });
-
-  it("scopes the header row correctly: exactly one primary action reaches the DOM", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const header = within(screen.getByRole("banner"));
-    expect(header.queryByRole("link", { name: /Pasar lista/ })).toBeNull();
-  });
 });
-
-// ---------------------------------------------------------------------------
-// The admin panel's anatomy, on this screen
-//
-// The owner approves `/dashboard` and asked for this one to be rebuilt on it,
-// because the two read as different products. `/dashboard` is three layers: a
-// full-width coal band, a STAT_GRID pulse row, and a PAGE_RAIL region holding
-// a fluid feed beside a 340px rail. This screen had the first layer's
-// VOCABULARY already — SessionCard is `rounded-card bg-coal` with a
-// `font-display text-display` figure — but none of its SHAPE: no pulse row at
-// all, and a symmetric pair where the rail belongs.
-//
-// Every tile below is read from data the screen already fetches. That
-// constraint is the point: /profile's own history records two attempts to
-// fill space with figures nobody could falsify, and both were retired.
-// ---------------------------------------------------------------------------
-
-describe("TrainerPage — la anatomía del panel de admin", () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(NOW);
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
-    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
-    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
-    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
-    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("draws the pulse row on the admin panel's own grid", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const pulse = screen.getByTestId("trainer-pulse");
-    expect(pulse.className).toBe(STAT_GRID);
-  });
-
-  it("counts today's sessions, ignoring the ones on other days", async () => {
-    // TODAY_SCHEDULES carries a Tuesday session that must never be counted.
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const tile = within(screen.getByTestId("trainer-pulse")).getByText("Sesiones hoy");
-    expect(tile.closest("[data-testid='stat-card']") ?? tile.parentElement).toHaveTextContent("3");
-  });
-
-  // Issue #313 (K5 hallazgo #56): "SESIONES HOY 0" convivía con una lista de
-  // hoy con registros reales en la misma pantalla, sin decir su alcance —
-  // este tile cuenta lo PROGRAMADO por horario semanal, no lo REGISTRADO.
-  // Las dos cosas son legítimamente distintas; el fix nombra cuál es cuál.
-  it("names the tile's own scope — sesiones PROGRAMADAS, no listas tomadas", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const tile = within(screen.getByTestId("trainer-pulse")).getByText("Sesiones hoy");
-    const card = tile.closest("[data-testid='stat-card']") ?? tile.parentElement;
-    expect(card).toHaveTextContent(/programadas para hoy/i);
-  });
-
-  it("names the enrolled-today tile's own scope once the roster arrives", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const pulse = within(screen.getByTestId("trainer-pulse"));
-    await waitFor(() => {
-      expect(pulse.getByText(/alumnos en las sesiones programadas para hoy/i)).toBeInTheDocument();
-    });
-  });
-
-  it("adds the enrolments across today's sessions, empty classes included", async () => {
-    // ROSTER is 12 in horario 1 and 3 in horario 2; horario 3 has nobody, and
-    // an empty class counts as 0 rather than dropping out of the sum.
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const pulse = within(screen.getByTestId("trainer-pulse"));
-    expect(pulse.getByText("Inscritos hoy")).toBeInTheDocument();
-    expect(pulse.getByText("15")).toBeInTheDocument();
-  });
-
-  it("says nothing about enrolments when the roster did not arrive", async () => {
-    // A wrong number renders exactly as confidently as a right one, so the
-    // tile states the absence instead of a partial sum.
-    mockFetchRosterDeTodosLosHorarios.mockRejectedValue(new Error("network"));
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const pulse = within(screen.getByTestId("trainer-pulse"));
-    await waitFor(() => {
-      expect(pulse.getByText("Inscritos hoy")).toBeInTheDocument();
-    });
-    expect(pulse.queryByText("15")).not.toBeInTheDocument();
-  });
-
-  it("reads the month's attendance as quienes entrenaron — presentes MAS tardanzas — over all records", async () => {
-    // MONTH_RECORDS is 2 present + 1 late out of 7 — 43%. Issue #313 (K5
-    // hallazgo #57): a trainer who only counted presentes read 29% here
-    // while the same screen's own distribution table implied 43%, and
-    // "asistencia" for a trainer means "vino a entrenar" — tardanza incluida.
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const pulse = within(screen.getByTestId("trainer-pulse"));
-    expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
-    expect(pulse.getByText("43")).toBeInTheDocument();
-    expect(pulse.getByText("3 de 7 entrenaron")).toBeInTheDocument();
-  });
-
-  it("counts the lists taken as sessions, not as records", async () => {
-    // Seven records across three (fecha, horarioId) pairs is three lists —
-    // counting rows would have said seven.
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const pulse = within(screen.getByTestId("trainer-pulse"));
-    expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
-  });
-
-  it("labels each missing session with weekday and short date, not a bare long date", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Sesiones sin lista");
-
-    const rail = within(screen.getByTestId("trainer-lower"));
-    // Newest first: 14/07 (mar) leads; 13/07 is a Monday.
-    expect(rail.getAllByText("mar 14/07").length).toBeGreaterThan(0);
-    expect(rail.getAllByText("lun 13/07").length).toBeGreaterThan(0);
-    expect(rail.queryByText("14/07/2026")).not.toBeInTheDocument();
-  });
-
-  it("stacks 'Alumnos a seguir' under the recent lists and the absence card in its own rail column", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Sesiones sin lista");
-
-    const main = screen.getByTestId("trainer-main");
-    const rail = screen.getByTestId("trainer-rail");
-    expect(main.contains(screen.getByTestId("students-to-follow"))).toBe(true);
-    expect(rail.contains(screen.getByText("Sesiones sin lista"))).toBe(true);
-    // Independent stacks: neither column is stretched to the other's height.
-    expect(main.className).not.toMatch(/stretch|h-full|flex-1/);
-    expect(rail.className).not.toMatch(/stretch|h-full|flex-1/);
-  });
-
-  it("renders the empty states as one line, not as tall empty cards", async () => {
-    mockFetchRecentAttendanceSessions.mockResolvedValue([]);
-    render(<TrainerPage />);
-    await screen.findByText("Sesiones sin lista");
-    await screen.findByText("Todavía no hay listas registradas");
-    const follow = screen.getByTestId("students-to-follow");
-    // Both blocks say it in the shared one-line shape, never an illustrated card.
-    expect(screen.getByText("Todavía no hay listas registradas").closest('[data-testid="compact-empty"]')).not.toBeNull();
-    if (within(follow).queryByText("Nadie necesita seguimiento")) {
-      expect(within(follow).getByTestId("compact-empty")).toBeInTheDocument();
-    }
-  });
-
-  it("puts the recent lists beside sesiones sin lista in the rail, as the panel does", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-
-    const lower = screen.getByTestId("trainer-lower");
-    expect(lower.className).toBe(PAGE_RAIL);
-    expect(within(lower).getByText("Sesiones sin lista")).toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Role-gated fetch (issue #319 hallazgo #49).
-//
-// `loadData`/`loadRecentSessions` ran from a bare mount effect, so a
-// non-trainer (e.g. a student landing on /trainer) fired
-// GET /api/attendance/records and GET /api/attendance/recent-sessions and
-// logged two 403s before ProtectedRoute's redirect effect ran. ProtectedRoute
-// is mocked to a pass-through here so the fetch gate itself is what is under
-// test.
-// ---------------------------------------------------------------------------
 
 describe("TrainerPage — defers attendance API calls until the role resolves", () => {
   beforeEach(() => {
@@ -839,6 +513,7 @@ describe("TrainerPage — defers attendance API calls until the role resolves", 
 // aserción solo pase si la pantalla realmente pide un rango que alcance la
 // sesión, no solo hoy.
 // ---------------------------------------------------------------------------
+
 describe("TrainerPage — el pulso mensual no pierde una sesión de días antes (issue #346)", () => {
   const SUNDAY_IN_CLUB_TIME = new Date("2026-08-16T15:00:00Z");
   const WEDNESDAY_SESSION_DATE = "2026-08-12";
@@ -885,16 +560,10 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
   it("cuenta los 15 registros de la sesión del miércoles en el pulso del mes, visto un domingo (candado #346)", async () => {
     render(<TrainerPage />);
 
-    const pulse = within(await screen.findByTestId("trainer-pulse"));
-    await waitFor(() => {
-      expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
-    });
-    // Una sola sesión (15 registros agrupados), no una sesión "perdida" ni
-    // partida en varias por una fecha mal resuelta.
-    const listsCard = pulse.getByText("Listas del mes").parentElement as HTMLElement;
-    expect(within(listsCard).getByText("1")).toBeInTheDocument();
-    expect(pulse.getByText("Asistencia del mes")).toBeInTheDocument();
-    expect(pulse.getByText("15 de 15 entrenaron")).toBeInTheDocument();
+    const trend = within(await screen.findByTestId("attendance-trend"));
+    // Los 15 registros de la sesión del miércoles entran en la tendencia: una
+    // fecha mal resuelta los dejaría fuera y la tendencia diría "sin asistencias".
+    expect(await trend.findByText(/15 de 15 registros/)).toBeInTheDocument();
   });
 });
 
@@ -902,59 +571,3 @@ describe("TrainerPage — el pulso mensual no pierde una sesión de días antes 
 // Dashboard reorganisation: context line, clickable pulse, "Alumnos a seguir",
 // and a recent-lists failure that says so.
 // ---------------------------------------------------------------------------
-
-describe("TrainerPage — organised around today", () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(NOW);
-    mockFetchTrainingSchedules.mockReset().mockResolvedValue(TODAY_SCHEDULES);
-    mockFetchAttendanceRecords.mockReset().mockResolvedValue(MONTH_RECORDS);
-    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue(ROSTER);
-    mockFetchRecentAttendanceSessions.mockReset().mockResolvedValue(RECENT_SESSIONS);
-    mockUseAuth.mockReset().mockReturnValue(createAuthenticatedAuth("trainer", "Carlos Mendoza"));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("states role and long date under the greeting", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-    expect(screen.getByText("Entrenador · lunes, 20 de julio de 2026")).toBeInTheDocument();
-  });
-
-  it("links the pulse figures to where their numbers are worked", async () => {
-    render(<TrainerPage />);
-    await screen.findByText("Lunes 15:00 — 16:00");
-    const pulse = within(screen.getByTestId("trainer-pulse"));
-    expect(pulse.getByText("Sesiones hoy").closest("a")).toHaveAttribute("href", "/trainer/attendance");
-    expect(pulse.getByText("Asistencia del mes").closest("a")).toHaveAttribute("href", "/trainer/attendance/history");
-    expect(pulse.getByText("Listas del mes").closest("a")).toHaveAttribute("href", "/trainer/attendance/history");
-  });
-
-  it("lists the students to follow with their absence counts", async () => {
-    render(<TrainerPage />);
-    const block = await screen.findByTestId("students-to-follow");
-    expect(within(block).getByText("Alumnos a seguir")).toBeInTheDocument();
-    expect(within(block).getByText("Luis Lopez")).toBeInTheDocument();
-    expect(within(block).getByText("3 ausencias")).toBeInTheDocument();
-  });
-
-  it("says nobody needs follow-up instead of hiding the block", async () => {
-    mockFetchAttendanceRecords.mockResolvedValue([record("present", "Sofia Vera")]);
-    render(<TrainerPage />);
-    const block = await screen.findByTestId("students-to-follow");
-    expect(within(block).getByText("Nadie necesita seguimiento")).toBeInTheDocument();
-  });
-
-  it("tells the trainer the recent lists failed to load, and retries", async () => {
-    mockFetchRecentAttendanceSessions.mockRejectedValueOnce(new Error("boom")).mockResolvedValue(RECENT_SESSIONS);
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    render(<TrainerPage />);
-    const notice = await screen.findByText(/no se pudieron cargar las últimas listas/i);
-    expect(screen.queryByText("Todavía no hay listas registradas")).toBeNull();
-    fireEvent.click(within(notice.closest("[role=status]") as HTMLElement).getByRole("button", { name: /reintentar/i }));
-    expect(await screen.findByText("Domingo 09:00 — 10:00")).toBeInTheDocument();
-  });
-});
