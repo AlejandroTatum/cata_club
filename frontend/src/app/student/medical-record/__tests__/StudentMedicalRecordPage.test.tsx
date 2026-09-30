@@ -316,7 +316,7 @@ describe("StudentMedicalRecordPage — emergency card rail", () => {
   });
 
   it("reads 'Sangre —' in the card header while no blood type is known, not a bare '?'", async () => {
-    mockFetchFichaMedica.mockReset().mockResolvedValue(ficha({ tipoSangre: null }));
+    mockFetchFichaMedica.mockReset().mockResolvedValue(ficha({ tipoSangre: "" }));
     render(<StudentMedicalRecordPage />);
 
     const blood = await screen.findByTestId("emergency-card-blood");
