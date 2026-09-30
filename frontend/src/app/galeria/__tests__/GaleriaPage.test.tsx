@@ -138,6 +138,10 @@ describe("GaleriaPage", () => {
     expect(within(preview).getByText("El punto decisivo.")).toBeInTheDocument();
     expect(preview.querySelector("img")).toHaveAttribute("src", "blob:preview");
   });
+  it("gives every published card the slide's 3:2 image frame", async () => {
+    render(<GaleriaPage />);
+    expect((await screen.findByRole("img", { name: "En juego" })).style.aspectRatio).toBe("3 / 2");
+  });
   it("frames the preview at the landing slide's default 3:2 ratio before and after a photo is chosen", async () => {
     render(<GaleriaPage />); await screen.findByText("En juego");
     const frame = () => screen.getByTestId("galeria-preview").querySelector("figure") as HTMLElement;

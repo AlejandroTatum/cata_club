@@ -171,7 +171,7 @@ export default function GaleriaPage(): React.ReactElement {
             : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
               {entradas.map((entrada) => <li key={entrada.id} className="card flex flex-col overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
-                <img src={entrada.imagenUrl} alt={entrada.titulo} loading="lazy" width={400} height={267} className="aspect-3/2 w-full bg-sunken object-cover" />
+                <img src={entrada.imagenUrl} alt={entrada.titulo} loading="lazy" width={400} height={267} style={{ aspectRatio: "3 / 2" }} className="h-auto w-full bg-sunken object-cover" />
                 <div className="flex flex-1 flex-col gap-1 p-3">
                   <p className="truncate text-sm font-semibold" title={entrada.titulo}>{entrada.titulo}</p>
                   <p className="line-clamp-2 text-xs text-ink-2">{entrada.descripcion}</p>
