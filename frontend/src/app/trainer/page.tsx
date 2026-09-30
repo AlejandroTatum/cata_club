@@ -421,7 +421,7 @@ export default function TrainerPage(): React.ReactElement {
               />
 
               {/* Stretched to the row so it ends level with "Últimas listas". */}
-              <section className="card flex flex-col gap-4 p-[18px] lg:self-stretch">
+              <section className="card flex flex-col gap-4 p-[18px] max-lg:order-first lg:self-stretch">
                 <SessionsWithoutList missing={missingSessions} />
               </section>
             </div>
