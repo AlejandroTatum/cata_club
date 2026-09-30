@@ -245,11 +245,11 @@ export default function CuotaCard({
           {action && (
             <Link
               href={action.href}
-              className={buttonClasses(
-                situation.urgent ? "primary" : "secondary",
-                "md",
-                "w-full justify-center",
-              )}
+              // One urgent signal: the verdict above already carries the red.
+              // The button is the way out of it, content-sized and neutral —
+              // a full-width red bar under a red banner shouted the same
+              // thing twice.
+              className={cn(buttonClasses("secondary", "md"), "self-start")}
             >
               {situation.urgent ? (
                 <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />

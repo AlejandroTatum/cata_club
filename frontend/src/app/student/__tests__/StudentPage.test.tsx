@@ -252,10 +252,10 @@ describe("StudentPage — the dependent selection survives navigation", () => {
   it("writes an explicit switch to both the URL and the store", async () => {
     render(<StudentPage />);
 
-    const select = await screen.findByLabelText("Estudiante");
+    await screen.findByRole("group", { name: "Estudiante" });
     expect(await carnetName()).toBe("Carnet de socio de Sofía Vera");
 
-    fireEvent.change(select, { target: { value: "42" } });
+    fireEvent.click(screen.getByRole("button", { name: /Martín/ }));
 
     expect(await carnetName()).toBe("Carnet de socio de Martín Vera");
     await waitFor(() => {
@@ -2208,7 +2208,7 @@ describe("StudentPage — the switcher's procedure note is disclosed, not perman
   it("keeps the note behind 'Ver ayuda' instead of printing it beside the select", async () => {
     render(<StudentPage />);
 
-    await screen.findByLabelText("Estudiante");
+    await screen.findByRole("group", { name: "Estudiante" });
     expect(screen.queryByText(/Se mantiene en Mi cuenta/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Cómo funciona esta elección" }));
@@ -2955,5 +2955,73 @@ describe("StudentPage — encabezado y pulso navegables", () => {
     expect(pulso.getByText("Cobertura").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
     expect(pulso.getByText("Asistencia").closest("a")?.getAttribute("href")).toMatch(/^\/student\/attendance/);
     expect(pulso.getByText("Pagos en revisión").closest("a")?.getAttribute("href")).toMatch(/^\/student\/payments/);
+  });
+});
+
+describe("StudentPage — second-pass organisation", () => {
+  const GUARDIAN: StudentPortalSummary = {
+    self: null,
+    representados: [
+      { ...PORTAL.self!, personaId: "41", nombres: "Sofía", apellidos: "Vera" },
+      { ...PORTAL.self!, personaId: "42", nombres: "Martín", apellidos: "Vera" },
+    ],
+    membershipPlans: [],
+  };
+
+  it("puts the account actions in a card under the carnet instead of floating at the page bottom", async () => {
+    render(<StudentPage />);
+
+    const actions = await screen.findByRole("region", { name: "Acciones de la cuenta" });
+    expect(within(actions).getByRole("link", { name: /Agregar hijo o dependiente/ })).toHaveAttribute(
+      "href",
+      "/student/add-dependent",
+    );
+    expect(within(actions).getByRole("link", { name: /Ficha médica/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/student/medical-record"),
+    );
+    const carnetColumn = screen.getByTestId("student-carnet-panel").parentElement!;
+    expect(carnetColumn.contains(actions)).toBe(true);
+  });
+
+  it("shows the family strip with each dependent's coverage for a guardian with two dependents", async () => {
+    mockFetchStudentPortal.mockResolvedValue(GUARDIAN);
+    render(<StudentPage />);
+
+    const group = await screen.findByRole("group", { name: "Estudiante" });
+    expect(within(group).getAllByRole("button")).toHaveLength(2);
+    // No dropdown any more: the strip is the switcher.
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("keeps the dropdown-free layout for a single profile: no strip at all", async () => {
+    render(<StudentPage />);
+
+    await screen.findByTestId("student-carnet");
+    expect(screen.queryByRole("group", { name: "Estudiante" })).not.toBeInTheDocument();
+  });
+
+  it("does not stretch the payment action across the whole card, and does not stack a red button on the red verdict", async () => {
+    mockFetchStudentPortal.mockResolvedValue({
+      ...PORTAL,
+      self: {
+        ...PORTAL.self!,
+        membership: { id: 3, estado: "ACTIVA", personaId: 9, montoAplicado: "40.00", categoria: "Mensual", modalidad: "MENSUAL", fechaActivacion: null, fechaFin: null, cubiertoHasta: "2020-01-01" },
+      },
+    });
+    render(<StudentPage />);
+
+    const cuota = await screen.findByTestId("student-cuota-card");
+    const link = within(cuota).getByText("Registrar un pago").closest("a")!;
+    expect(link.className).not.toMatch(/\bw-full\b/);
+    expect(link.className).not.toMatch(/\bbg-cata-red\b/);
+    expect(within(cuota).getByTestId("cuota-verdict")).toHaveAttribute("data-urgent", "true");
+  });
+
+  it("tells a family what will make the attendance tile fill in", async () => {
+    render(<StudentPage />);
+
+    const pulse = await screen.findByTestId("student-pulse");
+    expect(within(pulse).getByText(/Aparece cuando el entrenador tome lista/)).toBeInTheDocument();
   });
 });

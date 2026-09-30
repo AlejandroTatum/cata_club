@@ -1000,3 +1000,34 @@ export function contarEntrenamientosSemanales(
 ): number {
   return buildWeeklyTrainingSchedule(rows).length;
 }
+
+// ---------------------------------------------------------------------------
+// Family strip — one short coverage status per dependent
+// ---------------------------------------------------------------------------
+
+export interface FamilyCoverageStatus {
+  label: string;
+  tone: "ok" | "warn" | "bad" | "neutral";
+}
+
+/**
+ * The one fact a guardian scans a family for: is this child covered. Read from
+ * `MembershipSummary.cubiertoHasta` that the portal summary already carries
+ * for every dependent — no per-child request behind it. `warn` covers the
+ * last week (`COVERAGE_ENDING_SOON_DAYS`), the same window the rest of the
+ * portal calls "por vencer".
+ */
+export function describeFamilyCoverage(
+  membership: { cubiertoHasta?: string | null } | null | undefined,
+  today: Date = new Date(),
+): FamilyCoverageStatus {
+  if (!membership) return { label: "Sin membresía", tone: "neutral" };
+  const days = daysUntil(membership.cubiertoHasta ?? null, today);
+  if (days === null) return { label: "Sin pago aprobado", tone: "warn" };
+  if (days < 0) return { label: "Vencida", tone: "bad" };
+  if (days === 0) return { label: "Vence hoy", tone: "warn" };
+  return {
+    label: `${days} ${days === 1 ? "día" : "días"} de cobertura`,
+    tone: days <= COVERAGE_ENDING_SOON_DAYS ? "warn" : "ok",
+  };
+}

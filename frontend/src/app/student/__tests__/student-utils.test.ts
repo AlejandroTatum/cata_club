@@ -20,6 +20,7 @@ import {
   contarEntrenamientosSemanales,
   findNextTrainingSessions,
   COVERAGE_ENDING_SOON_DAYS,
+  describeFamilyCoverage,
 } from "../student-utils";
 import type { PaymentSituationInput, StudentPortalMode } from "../student-utils";
 import type { PagoPersona, StudentSessionSummary } from "@/services/api";
@@ -987,5 +988,35 @@ describe("contarEntrenamientosSemanales", () => {
 
   it("es cero para un alumno sin horarios asignados", () => {
     expect(contarEntrenamientosSemanales([])).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// describeFamilyCoverage — one short status per dependent, from data the
+// portal summary already carries.
+// ---------------------------------------------------------------------------
+
+describe("describeFamilyCoverage", () => {
+  const TODAY = new Date(2026, 8, 29);
+  const membership = (cubiertoHasta: string | null) =>
+    ({ id: 1, estado: "ACTIVA", personaId: 1, montoAplicado: "40.00", categoria: null, modalidad: null, fechaActivacion: null, fechaFin: null, cubiertoHasta }) as never;
+
+  it("says there is no membership when the profile has none", () => {
+    expect(describeFamilyCoverage(null, TODAY)).toEqual({ label: "Sin membresía", tone: "neutral" });
+  });
+
+  it("says there is no approved payment yet when coverage is unknown", () => {
+    expect(describeFamilyCoverage(membership(null), TODAY)).toEqual({ label: "Sin pago aprobado", tone: "warn" });
+  });
+
+  it("flags expired coverage as bad", () => {
+    expect(describeFamilyCoverage(membership("2026-09-20"), TODAY)).toEqual({ label: "Vencida", tone: "bad" });
+  });
+
+  it("warns for the last days and reads ok beyond that", () => {
+    expect(describeFamilyCoverage(membership("2026-09-29"), TODAY)).toEqual({ label: "Vence hoy", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-10-03"), TODAY)).toEqual({ label: "4 días de cobertura", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-09-30"), TODAY)).toEqual({ label: "1 día de cobertura", tone: "warn" });
+    expect(describeFamilyCoverage(membership("2026-11-29"), TODAY)).toEqual({ label: "61 días de cobertura", tone: "ok" });
   });
 });

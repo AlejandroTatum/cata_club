@@ -35,10 +35,11 @@ import {
 // strip's, already owned by `/groups` — see `toStripDia`'s own comment for why
 // the two tables are joined by the WORD they both print and not by position.
 import { toStripDias } from "@/app/groups/groups-page-utils";
-import ManagedStudentPicker, {
+import {
   useManagedProfiles,
   withSelectedStudent,
 } from "./ManagedStudentPicker";
+import FamilyStrip from "./FamilyStrip";
 import CuotaCard from "./CuotaCard";
 import JoinAsPlayerAction from "./JoinAsPlayerAction";
 import {
@@ -55,7 +56,7 @@ import {
   daysUntil,
   type UpcomingTraining,
 } from "./student-utils";
-import { CalendarDays, ShieldCheck, User, UserPlus, ArrowRight } from "lucide-react";
+import { CalendarDays, ShieldCheck, Stethoscope, User, UserPlus, ArrowRight } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
 import { subirFotoDeArchivo } from "@/lib/photo-upload";
@@ -1212,7 +1213,7 @@ function ActivePortalView({
   // del representante" — which is gone (independence is now a PRESENCIAL
   // command an ADMINISTRADOR runs from "Miembros", never self-service). That
   // account has nothing left to trigger from its own portal, so it no longer
-  // counts toward `hasAccountActions`.
+  // counts toward the account-actions card.
   //
   // #1318: "Agregar hijo o dependiente" is no longer gated on `representative`
   // alone — a self-managed player (`isPlayer`, no dependents yet) can reach
@@ -1227,7 +1228,6 @@ function ActivePortalView({
   const selfRepresented = data.self?.representanteId != null;
   const showAddDependentCta = (representative || isPlayer) && !selfRepresented;
   const showJoinAsPlayerCta = !isPlayer;
-  const hasAccountActions = showAddDependentCta || showJoinAsPlayerCta;
 
   /**
    * The one thing this screen exists to answer, resolved once and rendered
@@ -1272,12 +1272,7 @@ function ActivePortalView({
       {/* Guardian → dependent switcher. The audit named this genuinely
           club-specific: a representante lands on one child and swaps to the
           next without leaving the page. */}
-      <ManagedStudentPicker
-        id="student-select"
-        profiles={managedProfiles}
-        value={selectedId}
-        onChange={setSelectedId}
-      />
+      <FamilyStrip profiles={managedProfiles} value={selectedId} onChange={setSelectedId} />
 
       {selectedProfile === null || paymentSituation === null ? (
         <EmptyState
@@ -1388,7 +1383,7 @@ function ActivePortalView({
             unit={asistencia === null ? undefined : "%"}
             hint={
               asistencia === null ? (
-                "sin listas tomadas todavía"
+                "Aparece cuando el entrenador tome lista"
               ) : (
                 <span className="flex flex-col gap-y-field">
                   <StatTrack value={asistencia.attended} total={asistencia.total} />
@@ -1411,7 +1406,10 @@ function ActivePortalView({
         </div>
 
         <div className={cn(PAGE_RAIL, "lg:!grid-cols-[minmax(0,336px)_minmax(0,1fr)]", "flex-1")}>
-          <div className="flex flex-col gap-5">
+          {/* Below `lg` the wrapper dissolves (`contents`) so the account
+              actions can drop to the end of the page: a phone reads carnet,
+              cuota, this week, and only then the occasional actions. */}
+          <div className="flex flex-col gap-5 max-lg:contents">
             <Carnet
               profile={selectedProfile}
               coverageEnd={coverageEnd}
@@ -1446,6 +1444,45 @@ function ActivePortalView({
                 </span>
               </section>
             )}
+
+            {/* A minor manages nothing on their own account — no dependents, no
+                joining — but the ficha médica is theirs to read.
+
+                #1318 reopened "Agregar hijo o dependiente" for a self-managed
+                adult player, not just an existing representante;
+                `/student/add-dependent` grants REPRESENTANTE on save. #1132:
+                "Unirme como jugador" is gated on `isPlayer` (role OR own
+                active membership), never the role alone, and creates the
+                membership for `accountPersonaId`, never the selected profile.
+                #1137: independence is a PRESENCIAL admin command, not here. */}
+            <section
+              aria-label="Acciones de la cuenta"
+              className="card flex flex-col gap-2 p-5 max-lg:order-last"
+            >
+              <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
+              <div className="flex flex-col items-stretch gap-2">
+                {!selfIsMinor && showAddDependentCta && (
+                  <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
+                    <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                    Agregar hijo o dependiente
+                    <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                  </Link>
+                )}
+                {!selfIsMinor && showJoinAsPlayerCta && (
+                  <JoinAsPlayerAction accountPersonaId={accountPersonaId} />
+                )}
+                <Link
+                  href={withSelectedStudent("/student/medical-record", selectedPersonaId)}
+                  className={buttonClasses("secondary")}
+                >
+                  <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                  {viewingOwnProfile
+                    ? "Ficha médica"
+                    : `Ficha médica de ${firstNameOf(selectedProfile.nombres)}`}
+                  <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                </Link>
+              </div>
+            </section>
           </div>
 
           {/* Below `lg` this is the SECOND stacked block (see `PAGE_RAIL`'s
@@ -1495,49 +1532,6 @@ function ActivePortalView({
         </>
       )}
 
-      {/* A minor manages nothing on their own account: no dependents, no
-          payments. Everything below is gated on that.
-
-          #1318 reopened "Agregar hijo o dependiente" for a self-managed
-          adult player, not just an existing representante: `/student/
-          add-dependent` now posts to `POST /personas/me/representados`,
-          which grants the representative role on save if the account
-          doesn't have it yet — so this CTA is finally honest for that visitor too (it used
-          to point at the PUBLIC enrolment wizard, which created a whole
-          second account, or was hidden entirely because the honest route
-          was gated to `representante`).
-
-          `hasAccountActions` is kept as its own named condition — never a
-          bare `true` — even though `derivePortalMode` guarantees at least
-          one of `showAddDependentCta`/`showJoinAsPlayerCta` for any account
-          that reaches THIS view (a zero-signal account lands on
-          `PendingEnrollmentView` instead, above): the payments CTA already
-          lives in `CuotaCard` in the rail above, on the fact it acts on, so
-          this row stays conditionally rendered rather than assumed. #1137:
-          "Independizarse del representante" is gone too — independence is a
-          PRESENCIAL command an ADMINISTRADOR runs from "Miembros", not
-          self-service. */}
-      {!selfIsMinor && hasAccountActions && (
-        <div className="flex flex-wrap gap-3 pt-1">
-          {showAddDependentCta && (
-            <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
-              <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-              Agregar hijo o dependiente
-              <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            </Link>
-          )}
-          {/* Issue #1132: gated on `isPlayer` (role OR own active membership),
-              never on the role alone — a representante who already paid a
-              membership for themselves must not be offered this CTA again.
-              This used to point at `/student/enroll?type=self`, the PUBLIC
-              wizard — for an already-authenticated representante it opened a
-              SECOND account instead of a membership for their existing one.
-              `JoinAsPlayerAction` picks a plan and creates that membership
-              for `accountPersonaId` (never the selected profile, which can
-              be a dependent) — see its own doc comment. */}
-          {showJoinAsPlayerCta && <JoinAsPlayerAction accountPersonaId={accountPersonaId} />}
-        </div>
-      )}
     </>
   );
 }
