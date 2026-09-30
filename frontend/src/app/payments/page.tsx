@@ -110,6 +110,7 @@ import {
   findQueueNeighbours,
   getAutoAdvanceId,
   buildApprovalChecklist,
+  classifyPaymentMethod,
   composeRejectionReason,
   REJECTION_REASONS,
   REJECTION_NOTE_MAX_LENGTH,
@@ -1319,6 +1320,8 @@ export default function PaymentsPage(): React.ReactElement {
     const payer = request.responsablePagoName || request.representativeName || request.studentName;
     const isPending = request.validationStatus === "pendiente";
     const membership = membershipBadge(request);
+    const hideProofPanel =
+      classifyPaymentMethod(request.paymentMethod) === "efectivo" && !request.proofPreviewUrl;
 
     return (
       <div>
@@ -1361,8 +1364,14 @@ export default function PaymentsPage(): React.ReactElement {
         {/* Data left, proof right and always visible: validating is comparing
             a document against a set of numbers, and scrolling between the two
             was the problem (prototype 10). */}
+        {/* Cash with no receipt has nothing to compare, so the proof column
+            is not rendered at all (a transfer without a voucher keeps it: the
+            missing proof is a meaningful warning there). The data column then
+            takes the full width instead of leaving an empty gap. */}
         <div className="grid gap-5 lg:grid-cols-5">
-          <div className="flex flex-col gap-5 lg:col-span-3">
+          <div
+            className={`flex flex-col gap-5 ${hideProofPanel ? "lg:col-span-5" : "lg:col-span-3"}`}
+          >
             <section className="card overflow-hidden">
               {/* `tabIndex={-1}` so the effect above can put focus here when
                   the detail opens: reachable programmatically, never a Tab
@@ -1736,15 +1745,17 @@ export default function PaymentsPage(): React.ReactElement {
             )}
           </div>
 
-          <div className="lg:col-span-2">
-            <ProofViewer
-              request={request}
-              previewUnavailable={previewUnavailable}
-              onPreviewError={() => setPreviewUnavailable(true)}
-              onRetryPreview={() => setPreviewUnavailable(false)}
-              onExpand={() => setVoucherModalOpen(true)}
-            />
-          </div>
+          {!hideProofPanel && (
+            <div className="lg:col-span-2">
+              <ProofViewer
+                request={request}
+                previewUnavailable={previewUnavailable}
+                onPreviewError={() => setPreviewUnavailable(true)}
+                onRetryPreview={() => setPreviewUnavailable(false)}
+                onExpand={() => setVoucherModalOpen(true)}
+              />
+            </div>
+          )}
         </div>
       </div>
     );

@@ -1520,11 +1520,11 @@ describe("PaymentsPage — voucher preview recovery", () => {
   // "Vista previa no disponible para este tipo de comprobante" (which implies
   // a file DOES exist, just of an unpreviewable type). When there is no
   // `proofPreviewUrl` at all, only the absence message belongs on screen.
-  it("shows only the absence message when no proof was attached at all — never the contradictory 'vista previa' text (#453)", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([CASH_REQUEST]);
+  it("shows only the absence message when a transfer has no proof — never the contradictory 'vista previa' text (#453)", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([{ ...PENDING_REQUEST, proofPreviewUrl: undefined }]);
 
     renderPage();
-    await openRequest(CASH_REQUEST.studentName);
+    await openRequest(PENDING_REQUEST.studentName);
 
     expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
     expect(screen.queryByText(/vista previa no disponible/i)).not.toBeInTheDocument();
@@ -1550,12 +1550,52 @@ const CASH_WITHOUT_VOUCHER: PaymentValidationRequest = {
   proofFileType: "image",
 };
 
-describe("PaymentsPage — sin comprobante no muestra etiqueta de tipo (#1400)", () => {
-  it("does not show an 'Imagen' nor 'PDF' badge next to 'Sin comprobante adjunto'", async () => {
+/** A transfer that arrived without a voucher: there the absence IS the warning. */
+const TRANSFER_WITHOUT_VOUCHER: PaymentValidationRequest = {
+  ...PENDING_REQUEST,
+  proofPreviewUrl: undefined,
+  proofFileType: "image",
+};
+
+describe("PaymentsPage — cash without a receipt hides the proof panel", () => {
+  it("does not render the proof panel for a cash payment with no proof", async () => {
     mockFetchPaymentValidations.mockResolvedValue([CASH_WITHOUT_VOUCHER]);
 
     renderPage();
+    await openRequest(CASH_WITHOUT_VOUCHER.studentName);
+
+    await screen.findByText("Detalle de la solicitud");
+    expect(screen.queryByText("Sin comprobante adjunto")).not.toBeInTheDocument();
+    expect(screen.queryByText(/no tiene ningún comprobante adjunto/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the 'Sin comprobante adjunto' warning for a transfer without a voucher", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([TRANSFER_WITHOUT_VOUCHER]);
+
+    renderPage();
+    await openRequest(TRANSFER_WITHOUT_VOUCHER.studentName);
+
+    expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
+  });
+
+  it("keeps the proof panel for cash WITH an attached receipt", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([
+      { ...CASH_REQUEST, proofPreviewUrl: "https://files.example/recibo.png", proofFileType: "image" },
+    ]);
+
+    renderPage();
     await openRequest(CASH_REQUEST.studentName);
+
+    expect(await screen.findByRole("img", { name: /vista previa del comprobante/i })).toBeInTheDocument();
+  });
+});
+
+describe("PaymentsPage — sin comprobante no muestra etiqueta de tipo (#1400)", () => {
+  it("does not show an 'Imagen' nor 'PDF' badge next to 'Sin comprobante adjunto'", async () => {
+    mockFetchPaymentValidations.mockResolvedValue([TRANSFER_WITHOUT_VOUCHER]);
+
+    renderPage();
+    await openRequest(TRANSFER_WITHOUT_VOUCHER.studentName);
 
     expect(await screen.findByText("Sin comprobante adjunto")).toBeInTheDocument();
     expect(screen.queryByText("Imagen")).not.toBeInTheDocument();
