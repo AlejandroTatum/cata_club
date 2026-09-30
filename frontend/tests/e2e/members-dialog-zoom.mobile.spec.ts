@@ -229,7 +229,9 @@ test("no field in the Pagos dialog is small enough to make a phone zoom", async 
 
   await page.keyboard.press("Escape");
 
-  const editar = page.getByRole("button", { name: "Editar María González" }).first();
+  // Editar lives in the row's overflow menu now; the card's visible actions
+  // (Pagos and the menu trigger) must stay inside the card at 320px.
+  const editar = page.getByRole("button", { name: "Más acciones para María González" }).first();
   await expect(editar).toBeVisible();
   const overflow = await editar.evaluate((el) => {
     const card = el.closest("[class*='overflow-hidden']") ?? document.body;
