@@ -91,4 +91,54 @@ describe("RowActionsMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
+
+  it("stays open when a scroll or resize fires right after opening", () => {
+    const { trigger } = setup();
+
+    fireEvent.click(trigger);
+    fireEvent.scroll(window);
+    fireEvent(window, new Event("resize"));
+
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+  });
+
+  it("repositions under the trigger on scroll instead of closing", async () => {
+    const { trigger } = setup();
+    let bottom = 100;
+    vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(
+      () => ({ top: bottom - 32, bottom, left: 0, right: 300, width: 32, height: 32, x: 0, y: bottom - 32, toJSON: () => ({}) }) as DOMRect,
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("menu");
+    expect(menu.style.top).toBe("104px");
+
+    bottom = 60;
+    fireEvent.scroll(document, { target: { scrollY: 40 } });
+
+    expect(screen.getByRole("menu").style.top).toBe("64px");
+  });
+
+  it("closes when the trigger scrolls out of the viewport", () => {
+    const { trigger } = setup();
+    let bottom = 100;
+    vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(
+      () => ({ top: bottom - 32, bottom, left: 0, right: 300, width: 32, height: 32, x: 0, y: bottom - 32, toJSON: () => ({}) }) as DOMRect,
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    fireEvent.click(trigger);
+    bottom = -10;
+    fireEvent.scroll(document);
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
 });

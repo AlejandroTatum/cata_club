@@ -71,19 +71,26 @@ export default function RowActionsMenu({ label, items }: RowActionsMenuProps): R
     if (restoreFocus) triggerRef.current?.focus();
   }, []);
 
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
+  /** Measures the trigger and places the menu under it; false once the trigger is out of view. */
+  const place = useCallback((): boolean => {
+    if (!triggerRef.current) return false;
     const rect = triggerRef.current.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return false;
     setPosition({
       top: rect.bottom + MENU_GAP,
       right: Math.max(window.innerWidth - rect.right, MENU_GAP),
     });
-  }, [open]);
+    return true;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open, place]);
 
   useEffect(() => {
     if (!open || !position) return;
     const buttons = itemButtons();
-    (initialFocus.current === "last" ? buttons[buttons.length - 1] : buttons[0])?.focus();
+    (initialFocus.current === "last" ? buttons[buttons.length - 1] : buttons[0])?.focus({ preventScroll: true });
   }, [open, position, itemButtons]);
 
   useEffect(() => {
@@ -93,18 +100,29 @@ export default function RowActionsMenu({ label, items }: RowActionsMenuProps): R
       if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
       close(false);
     }
-    // The popup is positioned from a rectangle measured once, so it must not
-    // outlive a scroll or resize that would leave it detached from its row.
-    const dismiss = (): void => close(false);
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", dismiss, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", dismiss, true);
+    // The popup is positioned from the trigger's rectangle, so a scroll or
+    // resize re-measures it rather than closing it: touch browsers fire both
+    // as a side effect of opening (focus, URL bar, virtual keyboard), and
+    // closing there would dismiss the menu before it could be used. It only
+    // closes once its row has left the viewport. rAF-throttled: scroll is hot.
+    let frame = 0;
+    const reposition = (): void => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (!place()) close(false);
+      });
     };
-  }, [open, close]);
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, close, place]);
 
   function openWith(which: "first" | "last"): void {
     initialFocus.current = which;

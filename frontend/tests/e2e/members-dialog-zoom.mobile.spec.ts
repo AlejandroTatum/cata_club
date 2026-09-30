@@ -90,6 +90,9 @@ async function mockMembersRuntime(page: Page): Promise<void> {
     roles: ["ADMINISTRADOR"],
     loggedInAt: "2026-07-21T00:00:00.000Z",
   }));
+  // AppShell's pending-payments badge calls this; unmocked it 401s, the refresh
+  // 401s too, and the session is dropped before the Pagos dialog can open.
+  await page.route("**/api/dashboard", (route: Route) => fulfillJson(route, {}));
   await page.route("**/api/members", (route: Route) =>
     fulfillJson(route, { accounts: [ACCOUNT], personasCapped: false }),
   );
