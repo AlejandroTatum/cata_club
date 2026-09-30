@@ -253,7 +253,15 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           </Link>
         }
       >
-        <AttendanceFilters filters={filters} schedules={schedules} layout="row" />
+        {/* The date column gets the wider track: with three equal ones the four
+            presets wrapped onto a second row and left a blank band under the
+            student and horario fields. */}
+        <AttendanceFilters
+          filters={filters}
+          schedules={schedules}
+          layout="row"
+          className="lg:grid-cols-[1fr_1.7fr_1fr]"
+        />
 
         {/*
           Las tres cifras del período, arriba de la tabla.
