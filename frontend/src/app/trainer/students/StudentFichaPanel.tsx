@@ -97,12 +97,13 @@ export default function StudentFichaPanel({
         data-testid="ficha-panel-ghost"
         className="card overflow-hidden p-0 lg:sticky lg:top-4"
       >
-        <EmptyState
-          surface="inset"
-          icon={<UserRound size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="Elija un alumno"
-          description="Su ficha médica y a quién llamar aparecen acá."
-        />
+        <div className="flex items-start gap-3 px-5 py-4 text-ink-3">
+          <UserRound size={ICON.lg} strokeWidth={1.5} aria-hidden="true" className="flex-none" />
+          <div>
+            <h2 className="text-base font-bold text-ink">Elija un alumno</h2>
+            <p className="text-sm">Su ficha médica y a quién llamar aparecen acá.</p>
+          </div>
+        </div>
         <dl
           aria-hidden="true"
           className="flex flex-col divide-y divide-dashed divide-line border-t border-dashed border-line"

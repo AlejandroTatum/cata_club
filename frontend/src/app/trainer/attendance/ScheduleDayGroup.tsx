@@ -40,6 +40,9 @@ function sessionTiming(schedule: TrainingSchedule, nowHHMM: string): SessionTimi
  * real `disabled` card — not a "solo consulta" mode dressed up with CSS — so
  * the count doubles as the reason the card cannot be tapped.
  */
+/** Most tiles a day shows side by side before it wraps (they stay at least ~170px wide). */
+const MAX_TILES_PER_ROW = 4;
+
 export default function ScheduleDayGroup({
   group,
   today,
@@ -51,6 +54,11 @@ export default function ScheduleDayGroup({
 }: ScheduleDayGroupProps): React.ReactElement {
   const panelId = `schedule-day-${group.day}`;
   const now = clubTimeHHMM();
+  // Tiles share each row evenly: five sessions wrap 3 + 2 instead of 4 + 1, so
+  // the last row stretches to fill the card rather than leaving a void.
+  const perRow = Math.ceil(group.schedules.length / Math.ceil(group.schedules.length / MAX_TILES_PER_ROW));
+  const tileBasis = `calc(${(100 / perRow).toFixed(2)}% - 10px)`;
+
   return (
     <div className="overflow-hidden rounded-ctl border border-line bg-paper">
       <button
@@ -77,10 +85,7 @@ export default function ScheduleDayGroup({
         />
       </button>
       {isExpanded && (
-        <div
-          id={panelId}
-          className="grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-2.5 border-t border-line p-3"
-        >
+        <div id={panelId} className="flex flex-wrap gap-2.5 border-t border-line p-3">
           {group.schedules.map((sched: TrainingSchedule) => {
             const isActive = sched.id === selectedScheduleId;
             const recordedCount = weekRecordCounts.get(sched.id) ?? 0;
@@ -96,6 +101,7 @@ export default function ScheduleDayGroup({
                 }}
                 disabled={takenForThisUser}
                 aria-pressed={isActive}
+                style={{ flex: `1 1 ${tileBasis}` }}
                 // Selection is coal + the yellow ball dot, never a red fill —
                 // red is CTA and destructive only.
                 className={`flex min-h-[84px] flex-col justify-between gap-2 rounded-ctl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -130,9 +136,7 @@ export default function ScheduleDayGroup({
                 ) : (
                   timing && (
                     <span
-                      className={`text-2xs font-bold ${
-                        timing === "now" ? "text-state-ok" : "text-ink-3"
-                      }`}
+                      className={`text-2xs font-bold ${timing === "now" ? "text-state-ok" : "text-ink-3"}`}
                     >
                       {TIMING_LABEL[timing]}
                     </span>
