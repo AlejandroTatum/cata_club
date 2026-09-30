@@ -59,7 +59,7 @@ export default function ScheduleDayGroup({
         />
       </button>
       {isExpanded && (
-        <div id={panelId} className="grid gap-2 border-t border-line p-3 sm:grid-cols-2">
+        <div id={panelId} className="grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-2 border-t border-line p-3">
           {group.schedules.map((sched: TrainingSchedule) => {
             const isActive = sched.id === selectedScheduleId;
             const recordedCount = weekRecordCounts.get(sched.id) ?? 0;
