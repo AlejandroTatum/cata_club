@@ -29,4 +29,20 @@ describe("/api/sponsors", () => {
     expect(response.status).toBe(201);
     expect(global.fetch).toHaveBeenCalledWith("http://backend/api/v1/sponsors/", expect.objectContaining({ method: "POST" }));
   });
+  const upload = () => {
+    const body = new FormData(); body.append("nombre", "Municipio"); body.append("archivo", new File(["logo"], "logo.png", { type: "image/png" }));
+    return POST(request("POST", body, `${ACCESS_TOKEN_COOKIE}=${token}`));
+  };
+  it("forwards the backend's status and message when the provider is unavailable", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ message: "Servicio de imágenes no disponible." }), { status: 503 }));
+    const response = await upload();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ message: "Servicio de imágenes no disponible." });
+  });
+  it("forwards a validation 400 with its message", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ detail: "El logo no puede superar 5 MB." }), { status: 400 }));
+    const response = await upload();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ message: "El logo no puede superar 5 MB." });
+  });
 });

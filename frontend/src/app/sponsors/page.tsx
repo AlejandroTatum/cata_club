@@ -8,6 +8,7 @@ import { Trash2 } from "lucide-react";
 import { Button, EmptyState, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
+import { imageFileError, uploadErrorMessage } from "@/app/galeria/uploadError";
 import { crearSponsor, eliminarSponsor, fetchSponsors, type Sponsor } from "@/services/api";
 
 /** The landing strip's tile is 300-416px by 168px (landing.css `.landing-sponsor`): about 5:2. */
@@ -46,6 +47,13 @@ export default function SponsorsPage(): React.ReactElement {
   // Move focus to the message so keyboard and screen-reader users land on it.
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
+  function aceptarArchivo(candidato: File | null): void {
+    if (!candidato) { setArchivo(null); return; }
+    const errorArchivo = imageFileError(candidato, "El logo");
+    if (errorArchivo) { setArchivo(null); setError(errorArchivo); return; }
+    setError(null); setArchivo(candidato);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!nombre.trim() || !archivo) { setError("Escriba el nombre y seleccione un logo."); return; }
@@ -57,7 +65,7 @@ export default function SponsorsPage(): React.ReactElement {
       showSuccess(`Logo de ${nombreLimpio} subido.`);
       await load();
     }
-    catch { setError("No se pudo subir el logo. Use una imagen JPG o PNG de hasta 5 MB."); }
+    catch (error: unknown) { setError(uploadErrorMessage(error, "No se pudo subir el logo. Intente de nuevo.")); }
     finally { setSaving(false); }
   }
 
@@ -87,7 +95,7 @@ export default function SponsorsPage(): React.ReactElement {
             accept="image/jpeg,image/png"
             chooseLabel="Elegir logo"
             file={archivo}
-            onFile={setArchivo}
+            onFile={aceptarArchivo}
           />
           <div className="flex flex-col gap-field">
             <p className="text-xs font-semibold text-ink-2">Así se verá en la landing</p>

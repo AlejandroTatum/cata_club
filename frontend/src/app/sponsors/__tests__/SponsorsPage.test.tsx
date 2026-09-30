@@ -10,6 +10,7 @@ vi.mock("@/components/ProtectedRoute", () => ({ default: ({ children }: { childr
 vi.mock("@/components/shell/AppShell", () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/services/api", () => ({ fetchSponsors: () => fetchSponsors(), crearSponsor: (...args: unknown[]) => crearSponsor(...args), eliminarSponsor: (id: number) => eliminarSponsor(id) }));
 
+const fail = (message: string, status: number): Error => Object.assign(new Error(message), { status });
 const logo = () => new File(["logo"], "logo.png", { type: "image/png" });
 
 describe("SponsorsPage", () => {
@@ -105,5 +106,46 @@ describe("SponsorsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eliminar Municipio" }));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Eliminar" }));
     await waitFor(() => expect(showError).toHaveBeenCalledWith("No se pudo eliminar el patrocinador."));
+  });
+  async function intentarSubir(): Promise<void> {
+    render(<SponsorsPage />); await screen.findByText("Municipio");
+    fireEvent.change(screen.getByLabelText("Nombre corto"), { target: { value: "Club Sol" } });
+    fireEvent.change(screen.getByLabelText("Logo (JPG o PNG)"), { target: { files: [logo()] } });
+    fireEvent.click(screen.getByRole("button", { name: "Subir logo" }));
+  }
+  it("reports a provider outage (503) as a service problem, not the 5 MB copy", async () => {
+    crearSponsor.mockRejectedValueOnce(fail("ServicioNoDisponible", 503));
+    await intentarSubir();
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("El servicio de imágenes no está disponible en este momento. Intente de nuevo más tarde.");
+    expect(alerta.textContent).not.toMatch(/5 MB|JPG|PNG/);
+  });
+  it("shows the backend's validation message on a 400", async () => {
+    crearSponsor.mockRejectedValueOnce(fail("El logo no puede superar 5 MB.", 400));
+    await intentarSubir();
+    expect(await screen.findByRole("alert")).toHaveTextContent("El logo no puede superar 5 MB.");
+  });
+  it("reports a network failure as a connection problem", async () => {
+    crearSponsor.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await intentarSubir();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/conexión/);
+  });
+  it("uses a neutral generic message for an unknown failure", async () => {
+    crearSponsor.mockRejectedValueOnce(new Error("boom"));
+    await intentarSubir();
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo subir el logo. Intente de nuevo.");
+  });
+  it("blames the size client-side only for an actually oversized logo, without calling the backend", async () => {
+    render(<SponsorsPage />); await screen.findByText("Municipio");
+    const pesado = new File([new ArrayBuffer(5 * 1024 * 1024 + 1)], "logo.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Logo (JPG o PNG)"), { target: { files: [pesado] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/supera el límite de 5 MB/);
+    expect(screen.queryByAltText("Vista previa del logo seleccionado")).not.toBeInTheDocument();
+    expect(crearSponsor).not.toHaveBeenCalled();
+  });
+  it("rejects a logo that is neither JPG nor PNG client-side", async () => {
+    render(<SponsorsPage />); await screen.findByText("Municipio");
+    fireEvent.change(screen.getByLabelText("Logo (JPG o PNG)"), { target: { files: [new File(["gif"], "logo.gif", { type: "image/gif" })] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/debe ser un archivo JPG o PNG/);
   });
 });
