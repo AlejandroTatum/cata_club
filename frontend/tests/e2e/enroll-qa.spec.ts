@@ -889,8 +889,8 @@ test.describe("S · Resumen, envío y errores del servidor", () => {
 
   test("S02 · el resumen muestra los datos cargados antes de enviarlos", async ({ page }) => {
     await goToSummary(page);
-    await expect(page.getByText(VALID_STUDENT.cedula)).toBeVisible();
-    await expect(page.getByText(VALID_CREDENTIALS.correo)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(VALID_STUDENT.cedula)).toBeVisible();
+    await expect(page.getByTestId("enroll-wizard-card").getByText(VALID_CREDENTIALS.correo)).toBeVisible();
     // La contraseña nunca se muestra en claro, ni siquiera en el resumen.
     await expect(page.getByText(VALID_CREDENTIALS.contrasenia)).toHaveCount(0);
     await shot(page, "S02", "resumen-datos-visibles");
