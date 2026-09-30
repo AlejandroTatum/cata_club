@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { EmptyState, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
+import { EmptyState, ErrorState, InfoPanel, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import { CLUB_TIME_ZONE } from "@/lib/club-date";
 import { fetchReportesError, fetchReporteError, type ReporteError } from "@/services/api";
 
@@ -93,7 +93,14 @@ export default function ReportesErrorPage(): React.ReactElement {
           </ul>
         </section>
         <aside ref={detalleRef} aria-label="Detalle" className="min-w-0 lg:sticky lg:top-4">
-          {selectedId === null ? <p className="card p-5 text-sm text-ink-2">Seleccione un reporte para ver su detalle.</p>
+          {selectedId === null ? <InfoPanel as="div" title="Detalle del reporte">
+              <p>Seleccione un reporte de la lista para ver su detalle.</p>
+              <p>
+                Cada aviso trae lo que escribió la persona, la ruta afectada y el dispositivo; si
+                adjuntó una captura, se abre desde aquí.
+              </p>
+              <p>{reports.length === 1 ? "Hay 1 reporte recibido." : `Hay ${reports.length} reportes recibidos.`}</p>
+            </InfoPanel>
             : cargandoDetalle ? <LoadingState label="Cargando reporte…" />
             : errorDetalle ? <ErrorState message="No se pudo cargar el reporte." onRetry={() => void select(selectedId)} />
             : detalle && <section aria-label={`Detalle del reporte ${detalle.id}`} className="card p-5">

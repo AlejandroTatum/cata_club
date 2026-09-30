@@ -82,4 +82,12 @@ describe("bandeja de reportes", () => {
     expect(await screen.findByRole("region", { name: "Detalle del reporte 7" })).toBeInTheDocument();
     expect(screen.queryByText("No se pudo cargar el reporte.")).not.toBeInTheDocument();
   });
+  it("guides the reader in the detail column until a report is selected", async () => {
+    render(<ReportesErrorPage />);
+    await screen.findByRole("button", { name: /Reporte #7/ });
+
+    const detail = screen.getByRole("complementary", { name: "Detalle" });
+    expect(within(detail).getByText("Seleccione un reporte de la lista para ver su detalle.")).toBeInTheDocument();
+    expect(within(detail).getByText("Hay 2 reportes recibidos.")).toBeInTheDocument();
+  });
 });
