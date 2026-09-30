@@ -61,8 +61,10 @@ function CuotaFigure({ label, value, note }: { label: string; value: string; not
   return (
     <div className="min-w-0">
       <p className="text-2xs font-bold uppercase text-ink-3-strong">{label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums tracking-tight text-ink">{value}</p>
-      {note ? <p className="text-xs text-ink-3-strong">{note}</p> : null}
+      <p className="mt-0.5 flex items-baseline gap-1.5 text-xl font-bold tabular-nums tracking-tight text-ink">
+        {value}
+        {note ? <span className="text-xs font-normal text-ink-3-strong">{note}</span> : null}
+      </p>
     </div>
   );
 }
@@ -99,47 +101,38 @@ export default function CuotaCard({
         </Link>
       </div>
 
-      <div className="flex flex-col gap-4 px-5 py-4">
-        <div className="flex flex-col items-start gap-2">
+      {/* ONE row that uses the width: verdict | figures | action. Wrapping
+          (phones) stacks the same pieces; nothing is stretched to fill. */}
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
           <div
             data-testid="cuota-verdict"
             data-urgent={String(situation.urgent)}
             data-tone={tone}
-            className="flex flex-col items-start gap-2"
+            className="flex flex-wrap items-center gap-x-3 gap-y-2"
           >
             <Badge tone={badge.tone}>{badge.label}</Badge>
             <p className="text-sm font-semibold text-ink">{situation.headline}</p>
           </div>
-          {showDetail && <p className="text-xs leading-relaxed text-ink-3-strong">{situation.detail}</p>}
+
+          {hasFigures && (
+            <div data-testid="cuota-figures" className="flex flex-wrap items-center gap-x-8 gap-y-3">
+              {coverageEnd && <CuotaFigure label="Cubierta hasta" value={formatDate(coverageEnd)} />}
+              {monthlyPriceLabel && <CuotaFigure label="A pagar" value={monthlyPriceLabel} note="al mes" />}
+            </div>
+          )}
+
+          {action && (
+            <Link href={action.href} className={buttonClasses("secondary", "md")}>
+              {situation.urgent ? (
+                <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+              ) : null}
+              {action.label}
+              <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+            </Link>
+          )}
         </div>
-
-        {hasFigures && (
-          <div
-            data-testid="cuota-figures"
-            className={cn(
-              "grid gap-4 border-t border-line pt-4",
-              coverageEnd && monthlyPriceLabel ? "grid-cols-2" : "grid-cols-1",
-            )}
-          >
-            {coverageEnd && <CuotaFigure label="Cubierta hasta" value={formatDate(coverageEnd)} />}
-            {monthlyPriceLabel && <CuotaFigure label="A pagar" value={monthlyPriceLabel} note="al mes" />}
-          </div>
-        )}
-
-        {action && (
-          <Link
-            href={action.href}
-            // Content-sized and neutral: the badge is the only colour on the
-            // card, and the button is the way out of it, not a second alarm.
-            className={cn(buttonClasses("secondary", "md"), "self-start")}
-          >
-            {situation.urgent ? (
-              <CreditCard size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-            ) : null}
-            {action.label}
-            <ArrowRight size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          </Link>
-        )}
+        {showDetail && <p className="text-xs leading-relaxed text-ink-3-strong">{situation.detail}</p>}
       </div>
     </section>
   );

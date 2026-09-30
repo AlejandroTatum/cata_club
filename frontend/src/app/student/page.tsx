@@ -503,7 +503,7 @@ function Carnet({
           paper", and it is what makes the coal object read as HELD by the
           panel rather than as the panel's own surface. On white the same card
           reads as a hole cut in the page. */}
-      <div className="flex justify-center bg-sunken px-5 py-5">
+      <div className="flex justify-center px-5 py-4">
         {/* THE CREDENTIAL — the object, and the only thing that prints.
             `role="group"` rather than a second `<section>`: the panel around it
             is already a landmark, and two nested regions announce twice for one
@@ -824,7 +824,7 @@ function TrainingPanel({
       // the WHOLE stretched column", squeezing `CuotaCard` below its own
       // content height and letting its `overflow-hidden` silently clip the
       // payment button. `flex-1` takes only what `CuotaCard` doesn't need.
-      className="card flex flex-1 min-h-0 flex-col overflow-hidden"
+      className="card flex flex-col overflow-hidden"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-field px-5 pb-3.5 pt-[18px]">
         <h2 className="text-base font-bold tracking-tight text-ink">Esta semana</h2>
@@ -852,7 +852,7 @@ function TrainingPanel({
 
       {horariosState.status === "ready" &&
         (sessions.length > 0 ? (
-          <div className="flex flex-1 flex-col border-t border-line pt-4">
+          <div className="border-t border-line pt-4">
             <WeekPlan sessions={sessions} />
           </div>
         ) : (
@@ -879,7 +879,7 @@ function TrainingPanel({
       {/* One line, not a second panel: it is the same subject — training —
           and it is the fact a family checks right after "when is the next
           one". The record itself lives on `/student/attendance`. */}
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-5 gap-y-field border-t border-line bg-sunken px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-field border-t border-line bg-sunken px-5 py-3.5">
         <p className="text-xs leading-relaxed text-ink-3-strong">
           {recap ? (
             // La CIFRA se fue a la tile "Asistencia" de la fila de pulso: acá
@@ -1368,44 +1368,6 @@ function ActivePortalView({
               </section>
             )}
 
-            {/* A minor manages nothing on their own account — no dependents, no
-                joining — but the ficha médica is theirs to read.
-
-                #1318 reopened "Agregar hijo o dependiente" for a self-managed
-                adult player, not just an existing representante;
-                `/student/add-dependent` grants REPRESENTANTE on save. #1132:
-                "Unirme como jugador" is gated on `isPlayer` (role OR own
-                active membership), never the role alone, and creates the
-                membership for `accountPersonaId`, never the selected profile.
-                #1137: independence is a PRESENCIAL admin command, not here. */}
-            <section
-              aria-label="Acciones de la cuenta"
-              className="card flex flex-col gap-2 p-5 max-lg:order-last"
-            >
-              <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
-              <div className="flex flex-col items-stretch gap-2">
-                {!selfIsMinor && showAddDependentCta && (
-                  <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
-                    <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                    Agregar hijo o dependiente
-                    <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                  </Link>
-                )}
-                {!selfIsMinor && showJoinAsPlayerCta && (
-                  <JoinAsPlayerAction accountPersonaId={accountPersonaId} />
-                )}
-                <Link
-                  href={withSelectedStudent("/student/medical-record", selectedPersonaId)}
-                  className={buttonClasses("secondary")}
-                >
-                  <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                  {viewingOwnProfile
-                    ? "Ficha médica"
-                    : `Ficha médica de ${firstNameOf(selectedProfile.nombres)}`}
-                  <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-                </Link>
-              </div>
-            </section>
           </div>
 
           {/* Below `lg` this is the SECOND stacked block (see `PAGE_RAIL`'s
@@ -1421,7 +1383,7 @@ function ActivePortalView({
               under its fact grid, which is the same emptiness moved rather
               than closed. A carnet has a carnet's proportions; a panel of
               rows does not. */}
-          <div className="flex flex-col gap-5 lg:self-stretch">
+          <div className="flex flex-col gap-5">
             <CuotaCard
               situation={paymentSituation}
               coverageEnd={coverageEnd}
@@ -1450,6 +1412,45 @@ function ActivePortalView({
               viewingOwnProfile={viewingOwnProfile}
               studentName={firstNameOf(selectedProfile.nombres)}
             />
+
+            {/* A minor manages nothing on their own account — no dependents, no
+                joining — but the ficha médica is theirs to read.
+
+                #1318 reopened "Agregar hijo o dependiente" for a self-managed
+                adult player, not just an existing representante;
+                `/student/add-dependent` grants REPRESENTANTE on save. #1132:
+                "Unirme como jugador" is gated on `isPlayer` (role OR own
+                active membership), never the role alone, and creates the
+                membership for `accountPersonaId`, never the selected profile.
+                #1137: independence is a PRESENCIAL admin command, not here. */}
+            <section
+              aria-label="Acciones de la cuenta"
+              className="card flex flex-col gap-3 p-5"
+            >
+              <h2 className="text-sm font-bold text-ink">Acciones de la cuenta</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                {!selfIsMinor && showAddDependentCta && (
+                  <Link href="/student/add-dependent" className={buttonClasses("secondary")}>
+                    <UserPlus size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                    Agregar hijo o dependiente
+                    <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                  </Link>
+                )}
+                {!selfIsMinor && showJoinAsPlayerCta && (
+                  <JoinAsPlayerAction accountPersonaId={accountPersonaId} />
+                )}
+                <Link
+                  href={withSelectedStudent("/student/medical-record", selectedPersonaId)}
+                  className={buttonClasses("secondary")}
+                >
+                  <Stethoscope size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                  {viewingOwnProfile
+                    ? "Ficha médica"
+                    : `Ficha médica de ${firstNameOf(selectedProfile.nombres)}`}
+                  <ArrowRight size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+                </Link>
+              </div>
+            </section>
           </div>
         </div>
         </>

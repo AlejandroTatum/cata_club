@@ -59,11 +59,11 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
   const sharedRange = ranges.size === 1 ? range(sessions[0]) : null;
 
   return (
-    <div className="flex flex-1 flex-col justify-evenly gap-4 px-5 pb-4">
+    <div className="flex flex-col gap-3 px-5 pb-4">
       {next && (
         <p
           data-testid="week-plan-next"
-          className="rounded-ctl bg-sunken px-4 py-3 text-base text-ink-2"
+          className="text-sm text-ink-2"
         >
           <span className="font-bold text-ink">Próximo:</span>{" "}
           <span className="font-semibold text-ink">
@@ -72,15 +72,18 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
             {dayMonth(next.fecha)}
           </span>{" "}
           <span className="font-semibold tabular-nums text-ink">· {range(next)}</span>
+          {sharedRange && (
+            <span data-testid="week-plan-same-time" className="text-ink-3-strong">
+              {" "}
+              · mismo horario todos los días marcados
+            </span>
+          )}
         </p>
       )}
 
-      {/* `flex-1` up to a ceiling: the panel may be stretched to its neighbour's
-          height, and the days take that slack (they are the content) before any
-          air is added between the blocks. */}
       <ul
         data-testid="week-plan"
-        className="grid min-h-[72px] flex-1 grid-cols-7 gap-1.5 sm:gap-2 lg:max-h-[120px]"
+        className="grid grid-cols-7 gap-1.5 sm:gap-2"
       >
         {WEEK_ORDER.map((dia, index) => {
           const slots = byDia.get(dia) ?? [];
@@ -108,7 +111,7 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
               aria-current={isToday ? "date" : undefined}
               aria-label={name}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2 text-center",
+                "flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2.5 text-center",
                 state === "next" && "border-cata-red bg-cata-red text-white",
                 state === "active" && "border-line-2 bg-paper text-ink",
                 state === "idle" && "border-transparent bg-sunken text-ink-3-strong",
@@ -133,11 +136,6 @@ export default function WeekPlan({ sessions, now = new Date() }: WeekPlanProps):
         })}
       </ul>
 
-      {sharedRange && (
-        <p data-testid="week-plan-same-time" className="text-xs text-ink-3-strong">
-          Mismo horario todos los días marcados.
-        </p>
-      )}
     </div>
   );
 }

@@ -46,7 +46,9 @@ describe("WeekPlan", () => {
     render(<WeekPlan sessions={SAME_TIME} now={NOW} />);
     // Once, in the next-session line; the days carry no time of their own.
     expect(screen.getAllByText(/20:00 – 21:15/)).toHaveLength(1);
-    expect(screen.getByTestId("week-plan-same-time")).toHaveTextContent("Mismo horario todos los días marcados.");
+    // Folded into the "Próximo" line instead of a line of its own.
+    expect(screen.getByTestId("week-plan-next")).toContainElement(screen.getByTestId("week-plan-same-time"));
+    expect(screen.getByTestId("week-plan-same-time")).toHaveTextContent(/mismo horario/i);
     expect(screen.getByTestId("week-plan").querySelector('[data-day="JUEVES"]')).not.toHaveTextContent("20:00");
   });
 

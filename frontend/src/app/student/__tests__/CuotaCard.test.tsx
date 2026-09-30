@@ -53,7 +53,9 @@ describe("CuotaCard", () => {
   it("puts 'Cubierta hasta' and 'A pagar' side by side as plain tabular figures", () => {
     renderCard(situation({}));
     const figures = screen.getByTestId("cuota-figures");
-    expect(figures.className).toMatch(/\bgrid-cols-2\b/);
+    // One row with the verdict and the action: figures are inline, not stacked.
+    expect(figures.className).toMatch(/\bflex\b/);
+    expect(figures.parentElement?.className).toMatch(/\bjustify-between\b/);
     expect(within(figures).getByText("Cubierta hasta")).toBeInTheDocument();
     expect(within(figures).getByText("26/09/2026")).toHaveClass("tabular-nums");
     expect(within(figures).getByText("A pagar")).toBeInTheDocument();
@@ -82,7 +84,9 @@ describe("CuotaCard", () => {
     const card = screen.getByTestId("student-cuota-card");
     expect(within(card).getByText("Al día")).toBeInTheDocument();
     const cta = within(card).getByRole("link", { name: /Registrar un pago/ });
-    expect(cta.className).toMatch(/\bself-start\b/);
+    expect(cta.className).not.toMatch(/\bw-full\b/);
+    // Same row as the verdict, not a second line under it.
+    expect(cta.parentElement).toBe(screen.getByTestId("cuota-verdict").parentElement);
   });
 
   it("counts the days in the badge when the coverage is about to lapse", () => {

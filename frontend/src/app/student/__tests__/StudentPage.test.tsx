@@ -1060,7 +1060,8 @@ describe("StudentPage — the carnet prints as a standalone credential", () => {
     // inside paper, which is what makes the dark object read as held rather
     // than as the panel's own surface.
     const credential = within(panel).getByTestId("student-carnet");
-    expect(credential.parentElement?.className).toMatch(/\bbg-sunken\b/);
+    // No grey band around the credential: it was padding with nothing in it.
+    expect(credential.parentElement?.className).not.toMatch(/\bbg-sunken\b/);
   });
 
   // THIS LOCK INVERTS. It used to pin the status band inside a `print:hidden`
@@ -2107,12 +2108,12 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
     expect(grid?.className).toMatch(/\bflex-1\b/);
   });
 
-  it("stretches the rail column so the panel's own flex-1 and mt-auto can bite", async () => {
+  it("keeps the rail column at its content height so no card carries slack", async () => {
     render(<StudentPage />);
 
     const panel = await screen.findByTestId("student-situation");
-    const railColumn = panel.parentElement;
-    expect(railColumn?.className).toMatch(/lg:self-stretch/);
+    expect(panel.parentElement?.className).not.toMatch(/self-stretch/);
+    expect(panel.className).not.toMatch(/\bflex-1\b/);
   });
 
   it("still leaves the carnet at its natural height inside the stretched grid", async () => {
@@ -2926,7 +2927,7 @@ describe("StudentPage — second-pass organisation", () => {
     membershipPlans: [],
   };
 
-  it("puts the account actions in a card under the carnet instead of floating at the page bottom", async () => {
+  it("puts the account actions in a card in the rail column instead of floating at the page bottom", async () => {
     render(<StudentPage />);
 
     const actions = await screen.findByRole("region", { name: "Acciones de la cuenta" });
@@ -2938,8 +2939,9 @@ describe("StudentPage — second-pass organisation", () => {
       "href",
       expect.stringContaining("/student/medical-record"),
     );
-    const carnetColumn = screen.getByTestId("student-carnet-panel").parentElement!;
-    expect(carnetColumn.contains(actions)).toBe(true);
+    // Under Esta semana, so the two columns end at about the same height.
+    const railColumn = screen.getByTestId("student-situation").parentElement!;
+    expect(railColumn.contains(actions)).toBe(true);
   });
 
   it("shows the family strip with each dependent's coverage for a guardian with two dependents", async () => {
