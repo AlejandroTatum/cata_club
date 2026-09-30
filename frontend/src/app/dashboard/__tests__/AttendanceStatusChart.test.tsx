@@ -22,12 +22,13 @@ const STATS: AttendanceDayStats = {
 };
 
 describe("AttendanceStatusChart", () => {
-  it("lays the donut beside the legend on wide cards and stacks them on a phone", () => {
+  it("stacks the donut above the legend at rail width, centred, at every viewport", () => {
     render(<AttendanceStatusChart stats={STATS} />);
 
     const root = screen.getByRole("img").parentElement!;
-    expect(root.className).toMatch(/\bsm:flex-row\b/);
     expect(root.className).toMatch(/\bflex-col\b/);
-    expect(screen.getByRole("table").className).toMatch(/\bflex-1\b/);
+    expect(root.className).toMatch(/\bitems-center\b/);
+    expect(root.className).not.toMatch(/\bsm:flex-row\b/);
+    expect(screen.getByRole("table").className).toMatch(/\bw-full\b/);
   });
 });

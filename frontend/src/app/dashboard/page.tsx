@@ -32,15 +32,12 @@ import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { useAuth } from "@/contexts/AuthContext";
-import { CalendarCheck, CalendarOff, ClipboardList, CreditCard } from "lucide-react";
-import { ICON } from "@/lib/icon-size";
 import {
   ActivityItem,
   ActivityList,
   Badge,
   buttonClasses,
   cn,
-  EmptyState,
   ErrorState,
   LoadingState,
   PAGE_RAIL,
@@ -51,6 +48,7 @@ import {
   type BadgeTone,
 } from "@/components/ui";
 import AttentionStrip, { type AttentionItem } from "@/components/dashboard/AttentionStrip";
+import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import StatusRowList from "@/components/dashboard/StatusRowList";
 import SectionNotice from "@/components/dashboard/SectionNotice";
@@ -334,8 +332,15 @@ export default function DashboardPage(): React.ReactElement {
           </>
         )}
 
-        {/* The work: the queue is fluid, today's classes take the rail. */}
+        {/*
+          Two independent columns, not row-aligned pairs. A pair stretches the
+          shorter block to the taller one (one pending payment beside five
+          classes left a hole under the payment); each column stacks its own
+          blocks instead, so it is exactly as tall as its content. Empty states
+          are one line, so nothing here is a tall empty card.
+        */}
         <div data-testid="dashboard-work" className={PAGE_RAIL}>
+          <div data-testid="dashboard-main" className="flex min-w-0 flex-col gap-page">
           <DashboardSection
             title="Pagos por validar"
             testId="payment-queue"
@@ -369,78 +374,16 @@ export default function DashboardPage(): React.ReactElement {
                 ))}
               </ActivityList>
             ) : (
-              <EmptyState
-                surface="inset"
-                icon={<CreditCard size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+              <CompactEmpty
                 title="No hay pagos por validar"
-                description="Los comprobantes que suban las familias aparecen aquí para su revisión."
+                description="Los comprobantes de las familias aparecen aquí."
               />
             )}
           </DashboardSection>
 
-          <DashboardSection
-            title="Clases de hoy"
-            testId="today-classes"
-            action={
-              <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
-                Ver asistencia
-              </Link>
-            }
-          >
-            {schedulesStatus === "loading" || recordsStatus === "loading" ? (
-              <LoadingState label="Cargando clases…" />
-            ) : schedulesStatus === "error" ? (
-              <SectionNotice
-                message="No se pudieron cargar las clases de hoy."
-                onRetry={() => void loadSchedules()}
-              />
-            ) : todayClasses.length > 0 ? (
-              <>
-                {recordsStatus === "error" && (
-                  <SectionNotice
-                    message="No se pudo comprobar qué listas ya se tomaron."
-                    onRetry={() => void loadRecords()}
-                  />
-                )}
-                <StatusRowList
-                  rows={todayClasses.map((entry) => ({
-                    id: entry.scheduleId,
-                    title: entry.hours,
-                    detail: entry.category,
-                    status: CLASS_STATUS[entry.status],
-                    action:
-                      entry.status === "missing" ? (
-                        <Link
-                          href={`/trainer/attendance${buildWizardQuery(entry.scheduleId, null, "mark-attendance")}`}
-                          className={buttonClasses("secondary", "sm")}
-                        >
-                          Pasar lista
-                        </Link>
-                      ) : null,
-                  }))}
-                />
-              </>
-            ) : (
-              <EmptyState
-                surface="inset"
-                icon={<CalendarOff size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                title="Hoy no hay clases"
-                description="El club no tiene sesiones programadas para hoy."
-              />
-            )}
-          </DashboardSection>
-        </div>
-
-        {/*
-          Two equal columns that end together. This is not a main+rail split —
-          neither block outranks the other — so it is not `PAGE_RAIL`; the
-          sections stretch to the row so the shorter one has no gap under it.
-        */}
-        <div data-testid="dashboard-lower" className="grid gap-page lg:grid-cols-2 lg:items-stretch">
           <DashboardSection
             title="Actividad reciente"
             testId="activity-feed"
-            fill
             action={
               <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
                 Ver todo
@@ -494,12 +437,9 @@ export default function DashboardPage(): React.ReactElement {
                 })}
               </ActivityList>
             ) : (
-              <EmptyState
-                surface="inset"
-                fill
-                icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+              <CompactEmpty
                 title="Todavía no hay movimiento"
-                description="Aquí aparecen los pagos que suben y las listas que se pasan, apenas ocurra el primero."
+                description="Aquí aparecen los pagos que suben y las listas que se pasan."
                 action={
                   <Link href="/trainer/attendance" className={buttonClasses("primary", "sm")}>
                     Pasar lista
@@ -509,7 +449,55 @@ export default function DashboardPage(): React.ReactElement {
             )}
           </DashboardSection>
 
-          <DashboardSection title="Distribución de asistencias" testId="attendance-distribution" fill>
+          </div>
+          <div data-testid="dashboard-rail" className="flex min-w-0 flex-col gap-page">
+          <DashboardSection
+            title="Clases de hoy"
+            testId="today-classes"
+            action={
+              <Link href="/attendance" className={buttonClasses("secondary", "sm")}>
+                Ver asistencia
+              </Link>
+            }
+          >
+            {schedulesStatus === "loading" || recordsStatus === "loading" ? (
+              <LoadingState label="Cargando clases…" />
+            ) : schedulesStatus === "error" ? (
+              <SectionNotice
+                message="No se pudieron cargar las clases de hoy."
+                onRetry={() => void loadSchedules()}
+              />
+            ) : todayClasses.length > 0 ? (
+              <>
+                {recordsStatus === "error" && (
+                  <SectionNotice
+                    message="No se pudo comprobar qué listas ya se tomaron."
+                    onRetry={() => void loadRecords()}
+                  />
+                )}
+                <StatusRowList
+                  rows={todayClasses.map((entry) => ({
+                    id: entry.scheduleId,
+                    title: entry.hours,
+                    detail: entry.category,
+                    status: CLASS_STATUS[entry.status],
+                    action:
+                      entry.status === "missing" ? (
+                        <Link
+                          href={`/trainer/attendance${buildWizardQuery(entry.scheduleId, null, "mark-attendance")}`}
+                          className={buttonClasses("secondary", "sm")}
+                        >
+                          Pasar lista
+                        </Link>
+                      ) : null,
+                  }))}
+                />
+              </>
+            ) : (
+              <CompactEmpty title="Hoy no hay clases" description="Sin sesiones programadas." />
+            )}
+          </DashboardSection>
+          <DashboardSection title="Distribución de asistencias" testId="attendance-distribution">
             {recordsStatus === "loading" ? (
               <LoadingState label="Cargando asistencias…" />
             ) : recordsStatus === "error" ? (
@@ -518,21 +506,17 @@ export default function DashboardPage(): React.ReactElement {
                 onRetry={() => void loadRecords()}
               />
             ) : attendanceStats.totalStudents > 0 ? (
-              // Centred in whatever height the row gives the card, so the
-              // shorter block never ends in an empty band.
-              <div className="flex flex-1 items-center p-[18px]">
+              <div className="p-[18px]">
                 <AttendanceStatusChart stats={attendanceStats} />
               </div>
             ) : (
-              <EmptyState
-                surface="inset"
-                fill
-                icon={<CalendarCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+              <CompactEmpty
                 title="Sin asistencias registradas"
-                description="El gráfico se dibuja con la primera lista del período."
+                description="El gráfico se dibuja con la primera lista."
               />
             )}
           </DashboardSection>
+          </div>
         </div>
       </AppShell>
     </ProtectedRoute>

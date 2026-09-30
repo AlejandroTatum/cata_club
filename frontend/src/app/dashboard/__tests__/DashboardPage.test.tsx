@@ -327,7 +327,7 @@ describe("DashboardPage — actividad reciente", () => {
     expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(6);
   });
 
-  it("groups the feed and the donut side by side instead of stacking full-width cards", async () => {
+  it("keeps the feed in the main column and the donut in the rail", async () => {
     mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1")]);
     mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
 
@@ -338,9 +338,8 @@ describe("DashboardPage — actividad reciente", () => {
     // Awaiting the row would let the donut assertion run against a card still
     // showing "Sin asistencias registradas".
     await screen.findByTestId("attendance-donut");
-    const lower = screen.getByTestId("dashboard-lower");
-    expect(within(lower).getByTestId("activity-feed")).toBeInTheDocument();
-    expect(within(lower).getByTestId("attendance-donut")).toBeInTheDocument();
+    expect(within(screen.getByTestId("dashboard-main")).getByTestId("activity-feed")).toBeInTheDocument();
+    expect(within(screen.getByTestId("dashboard-rail")).getByTestId("attendance-donut")).toBeInTheDocument();
   });
 
   it("says there is nothing yet, instead of unmounting and leaving a hole", async () => {
@@ -379,14 +378,13 @@ describe("DashboardPage — actividad reciente", () => {
     render(<DashboardPage />);
     await screen.findByText("Miembros");
 
-    // `PAGE_RAIL`, not a literal, for the work row (queue + today's classes):
-    // the dashboard used to write its own 16px gap and its own
-    // `minmax(0,340px)` track, one of the six spellings #36 found. The bottom
-    // row is two EQUAL blocks that end together — not a rail — so it names its
-    // own stretch instead.
+    // `PAGE_RAIL`, not a literal: the dashboard used to write its own 16px gap
+    // and its own `minmax(0,340px)` track, one of the six spellings #36 found.
+    // Each column stacks its own blocks, so neither is stretched to the other.
     expect(screen.getByTestId("dashboard-work").className).toBe(PAGE_RAIL);
-    expect(screen.getByTestId("dashboard-lower").className).toContain("lg:grid-cols-2");
-    expect(screen.getByTestId("dashboard-lower").className).toContain("lg:items-stretch");
+    for (const id of ["dashboard-main", "dashboard-rail"]) {
+      expect(screen.getByTestId(id).className).toContain("flex-col");
+    }
   });
 });
 

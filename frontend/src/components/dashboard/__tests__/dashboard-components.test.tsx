@@ -8,6 +8,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import AttentionStrip from "../AttentionStrip";
+import CompactEmpty from "../CompactEmpty";
 import SectionNotice from "../SectionNotice";
 import StatusRowList from "../StatusRowList";
 import { buildContextLine, formatClubLongDate } from "../context-line";
@@ -79,5 +80,18 @@ describe("StatusRowList", () => {
     expect(within(row).getByText("Sub-12")).toBeInTheDocument();
     expect(within(row).getByText("Lista tomada")).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: "Abrir" })).toBeInTheDocument();
+  });
+});
+
+describe("CompactEmpty", () => {
+  it("is a single status line: title, hint and an optional action, never a tall card", () => {
+    render(
+      <CompactEmpty title="Todo al día" description="No hay nada por revisar." action={<a href="/x">Ir</a>} />,
+    );
+    const line = screen.getByTestId("compact-empty");
+    expect(within(line).getByText("Todo al día")).toBeInTheDocument();
+    expect(within(line).getByText("No hay nada por revisar.")).toBeInTheDocument();
+    expect(within(line).getByRole("link", { name: "Ir" })).toBeInTheDocument();
+    expect(line.className).not.toMatch(/\bmin-h-|\bh-full\b|\bflex-1\b/);
   });
 });

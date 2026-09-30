@@ -187,6 +187,39 @@ describe("admin dashboard — pagos por validar", () => {
   });
 });
 
+describe("admin dashboard — two independent columns", () => {
+  it("puts payments and activity in the main column, classes and distribution in the rail", async () => {
+    render(<DashboardPage />);
+    await screen.findByTestId("payment-queue");
+    const main = screen.getByTestId("dashboard-main");
+    const rail = screen.getByTestId("dashboard-rail");
+    expect(within(main).getByTestId("payment-queue")).toBeInTheDocument();
+    expect(within(main).getByTestId("activity-feed")).toBeInTheDocument();
+    expect(within(rail).getByTestId("today-classes")).toBeInTheDocument();
+    expect(within(rail).getByTestId("attendance-distribution")).toBeInTheDocument();
+  });
+
+  it("never stretches a block to its neighbour's height (1 payment beside 5 classes)", async () => {
+    mockPayments.mockResolvedValue([payment("a", 1)]);
+    mockSchedules.mockResolvedValue([1, 2, 3, 4, 5].map((id) => todaySchedule(id, "20:00", "21:00")));
+    render(<DashboardPage />);
+    await within(screen.getByTestId("payment-queue")).findByText(/Pagador a/);
+    for (const id of ["payment-queue", "today-classes", "activity-feed", "attendance-distribution"]) {
+      expect(screen.getByTestId(id).className).not.toMatch(/\bh-full\b/);
+    }
+  });
+
+  it("renders every empty block as a one-line state, never a tall empty card", async () => {
+    render(<DashboardPage />);
+    await within(screen.getByTestId("payment-queue")).findByText("No hay pagos por validar");
+    await within(screen.getByTestId("today-classes")).findByText("Hoy no hay clases");
+    await within(screen.getByTestId("activity-feed")).findByText("Todavía no hay movimiento");
+    await within(screen.getByTestId("attendance-distribution")).findByText("Sin asistencias registradas");
+    expect(screen.getAllByTestId("compact-empty")).toHaveLength(4);
+    expect(screen.queryByTestId("empty-state")).toBeNull();
+  });
+});
+
 describe("admin dashboard — clases de hoy", () => {
   it("states which of today's lists were taken and which are missing", async () => {
     // A session that ended at 00:01 is always over; one at 23:58 never is.
