@@ -617,7 +617,7 @@ function IdentityPanel({
       {/* The one full-width row at the foot of the panel — never squeezed
           beside anything else, so the full correo always has the panel's whole
           width to wrap into. */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-line bg-sunken px-5 py-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-section border-t border-line bg-sunken px-5 py-3">
         <div className="min-w-0 flex-1 basis-64">
           <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Correo de acceso</p>
           <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>

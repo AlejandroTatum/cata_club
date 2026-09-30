@@ -17,7 +17,7 @@ export function HeroStats({ stats }: { stats: readonly HeroStat[] }): React.Reac
   return (
     <dl
       data-testid="profile-hero-stats"
-      className="grid grid-cols-3 gap-x-8 gap-y-3 border-t border-line pt-4 lg:flex-none lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0"
+      className="grid grid-cols-3 gap-x-8 gap-y-section border-t border-line pt-4 lg:flex-none lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0"
     >
       {stats.map((stat) => (
         <div key={stat.label} className="min-w-0">
