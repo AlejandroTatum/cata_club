@@ -655,15 +655,20 @@ function EnrollWizard(): React.ReactElement {
   ): React.ReactElement {
     return (
       <FieldSlot>
-        <BirthDateField
-          idPrefix={ENROLL_ID_PREFIX}
-          field={ENROLL_FIELD_TOKEN[field]}
-          icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-          {...opts}
-          disabled={submitting}
-          error={shownError(field)}
-          onBlur={() => markTouched(field)}
-        />
+        {/* Día/Mes/Año keep their `<label>`s as accessible names but drop the
+            visible captions (the placeholders say the same), so the three
+            controls sit on the same top line as the cédula input beside them. */}
+        <div className="[&_label]:sr-only">
+          <BirthDateField
+            idPrefix={ENROLL_ID_PREFIX}
+            field={ENROLL_FIELD_TOKEN[field]}
+            icon={<Calendar size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
+            {...opts}
+            disabled={submitting}
+            error={shownError(field)}
+            onBlur={() => markTouched(field)}
+          />
+        </div>
       </FieldSlot>
     );
   }
@@ -759,22 +764,22 @@ function EnrollWizard(): React.ReactElement {
     );
   }
 
-  /** The "Edad calculada" well, shared by the student and the represented minor. */
-  function renderAgeWell(): React.ReactElement | null {
-    if (!formData.fechaNacimiento) return null;
+  /**
+   * The computed age, as the birth-date column's own hint line — it replaces
+   * the generic format hint once a date exists, so it never spans the row.
+   */
+  function birthDateHint(): string {
+    const generic = "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).";
+    if (!formData.fechaNacimiento) return generic;
     const age = calculatePersonAge(formData.fechaNacimiento);
-    const plausible = !isNaN(age) && isPlausibleHumanAge(age);
-    return (
-      <div className="mb-4 rounded-ctl bg-sunken p-3 text-xs text-ink-3-strong md:col-span-2">
-        Edad calculada:{" "}
-        <span className="font-semibold text-ink">
-          {plausible ? `${age} años` : !isNaN(age) ? "Revise el año." : "—"}
-        </span>
-        {plausible && age < 18 && formData.enrollmentType === ENROLLMENT_TYPES.SELF && (
-          <span className="ml-1 text-state-warn">— Los menores de edad requieren un representante.</span>
-        )}
-      </div>
-    );
+    if (isNaN(age)) return generic;
+    if (!isPlausibleHumanAge(age)) return "Revise el año.";
+    if (age < 18) {
+      return formData.enrollmentType === ENROLLMENT_TYPES.SELF
+        ? `${age} años · menor de edad: requiere un representante.`
+        : `${age} años · menor de edad.`;
+    }
+    return `${age} años`;
   }
 
   function renderPersonalStep(): React.ReactElement {
@@ -826,7 +831,7 @@ function EnrollWizard(): React.ReactElement {
             required: true,
             min: birthDateBounds.min,
             max: birthDateBounds.max,
-            hint: "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).",
+            hint: birthDateHint(),
           })}
           {renderField("cedula", {
             label: "Cédula de identidad",
@@ -843,7 +848,6 @@ function EnrollWizard(): React.ReactElement {
                 ? `Lleva ${cedulaTyped} de 10 dígitos.`
                 : CEDULA_HINT,
           })}
-          {renderAgeWell()}
 
           {/* Student credentials — self enrollment only (issue #1137,
               invariante B: un menor representado nunca tiene Usuario propio). */}

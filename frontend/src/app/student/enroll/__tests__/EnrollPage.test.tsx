@@ -586,6 +586,40 @@ describe("EnrollPage — un enrolamiento de menor nunca pide sus credenciales (#
 });
 
 /**
+ * The birth date's computed age is the date column's own hint line, and its
+ * three parts keep their accessible names without visible captions.
+ */
+describe("EnrollPage — edad en la columna de la fecha de nacimiento", () => {
+  function goToStudentStep(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+  }
+
+  it("shows the age as the date field's hint, not as a separate well", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+    fillBirthDate(enrollFieldId("fechaNacimiento"), "2000-02-20");
+
+    const hint = document.getElementById("enroll-fecha-nacimiento-message");
+    expect(hint).toHaveTextContent(/^\d+ años$/);
+    expect(screen.queryByText(/Edad calculada/)).not.toBeInTheDocument();
+    expect(document.getElementById("enroll-fecha-nacimiento")).toContainElement(hint);
+  });
+
+  it("names the three date parts for assistive tech while hiding the captions", () => {
+    render(<EnrollPage />);
+    goToStudentStep();
+
+    // jsdom applies no stylesheet: assert the wrapper that hides every
+    // caption, and that each part is still reachable by its label.
+    const wrapper = document.getElementById("enroll-fecha-nacimiento")?.parentElement;
+    expect(wrapper).toHaveClass("[&_label]:sr-only");
+    for (const name of [/^Día/, /^Mes/, /^Año/]) {
+      expect(screen.getByLabelText(name)).toBeInTheDocument();
+    }
+  });
+});
+
+/**
  * Issue #1395 — the advisory layer on the credential-creation steps. The
  * checklist and meter inform while the visitor types; the hard policy (the
  * 8-character floor and the common-password list) stays the only gate, so
