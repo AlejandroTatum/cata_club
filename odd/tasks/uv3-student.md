@@ -12,6 +12,14 @@ Branch `feat/uv3-student` (from `feat/usability-v3`). Local only, not pushed.
 | T4 | 8cd7f90 | redesign profile with hero stats, coverage meter and action tiles |
 | T4 | f4261a4 | use rhythm gap tokens on profile hero |
 
+## Round 2
+
+| Fix | Subject |
+| --- | --- |
+| payments | rich payment history rows with visible receipt actions, stat strip and balanced columns |
+| payments | keep payment ghost rows out of flow so columns end together; ink-weight ghost bars |
+| medical | balance medical record columns and label unknown blood type ("Sangre —") |
+
 Evidence: `pnpm type-check`, `pnpm lint` clean; `pnpm test` 5443 tests green
 after the gap-token fix; role-pages checker PASS on :3011; screenshots in
 `~/.cache/ui-compare/uv3/student/`.
