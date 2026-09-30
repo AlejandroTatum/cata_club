@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import type { PagoPersona, CoberturaBonificada } from "@/services/api";
-import { Badge, Button, ResponsiveList, TableCell, TableRow, cn, type BadgeTone } from "@/components/ui";
+import { Badge, Button, cn, type BadgeTone } from "@/components/ui";
 import { formatDate, formatDateRange } from "@/lib/format-utils";
 import { formatPagoMonto, describePagoEstado, describePagoDescuento, pagoFaltaComprobante, TIPO_PAGO_LABEL } from "./payments-utils";
 import { ChevronDown, Download, Loader2, Paperclip, RefreshCw } from "lucide-react";
@@ -168,42 +168,60 @@ function PagoDetailToggle({
   );
 }
 
-const EVIDENCE_LINK =
-  "inline-flex h-8 items-center gap-1.5 rounded-ctl border border-line-2 bg-paper px-2.5 text-xs font-semibold text-ink hover:bg-sunken";
+const ACTION_BASE =
+  "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-ctl px-3 text-xs font-semibold";
+const ACTION_PRIMARY = cn(ACTION_BASE, "bg-coal text-white hover:bg-ink");
+const ACTION_SECONDARY = cn(ACTION_BASE, "border border-line-2 bg-paper text-ink hover:bg-sunken");
+const ACTION_DISABLED = cn(
+  ACTION_BASE,
+  "cursor-not-allowed border border-dashed border-line-2 bg-sunken text-ink-3-strong",
+);
 
 /**
- * The two documents a payment can carry, as direct row actions: the OFFICIAL
- * receipt the club generates on approval (`comprobanteOficialUrl`, issue #400
- * criterio 8) and the proof the member uploaded (`voucherUrl`). They used to
- * hide inside the expandable detail; a family looking for "mi recibo" should
- * not have to open anything.
+ * The documents a payment can carry, as an action group that is ALWAYS drawn:
+ * the OFFICIAL receipt the club generates on approval (`comprobanteOficialUrl`,
+ * issue #400 criterio 8) and the proof the member uploaded (`voucherUrl`).
+ * When the receipt is not available yet the slot stays, disabled, and says why
+ * — a family looking for "mi recibo" sees where it will appear.
  */
 function PagoEvidenceLinks({ pago }: { pago: PagoPersona }): React.ReactElement | null {
-  if (!pago.comprobanteOficialUrl && !pago.voucherUrl) return null;
+  const receipt = pago.comprobanteOficialUrl ? (
+    <a
+      href={pago.comprobanteOficialUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Descargar comprobante oficial"
+      className={ACTION_PRIMARY}
+    >
+      <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      Recibo oficial
+    </a>
+  ) : pago.estadoPago === "APROBADO" ? (
+    <button type="button" disabled className={ACTION_DISABLED}>
+      <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      Recibo en preparación
+    </button>
+  ) : pago.estadoPago === "PENDIENTE_VALIDACION" ? (
+    <button type="button" disabled className={ACTION_DISABLED}>
+      <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+      Disponible al aprobarse
+    </button>
+  ) : null;
+
+  if (!receipt && !pago.voucherUrl) return null;
   return (
     <>
-      {pago.comprobanteOficialUrl && (
-        <a
-          href={pago.comprobanteOficialUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Descargar comprobante oficial"
-          className={EVIDENCE_LINK}
-        >
-          <Download size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Recibo
-        </a>
-      )}
+      {receipt}
       {pago.voucherUrl && (
         <a
           href={pago.voucherUrl}
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Ver el comprobante"
-          className={EVIDENCE_LINK}
+          className={ACTION_SECONDARY}
         >
           <Paperclip size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          Mi comprobante
+          Ver comprobante
         </a>
       )}
     </>
@@ -280,17 +298,13 @@ function PagoActionSlot({
   return null;
 }
 
-const PAGO_TABLE_COLUMN_COUNT = 5;
-
 /**
- * The desktop table row — `renderRow` returns the COMPLETE row markup, same
- * contract `ResponsiveList`'s own doc comment describes for `/members`'
- * `AccountRow`: a summary `<TableRow>` plus, when this payment has detail to
- * show, a second `<TableRow>` holding the accordion panel, spanning every
- * column. Collapsed by default (`isOpen` starts `false` in `PaymentsContent`)
- * — the accordion the issue asks for, "cerrado por defecto por fila".
+ * One payment as a rich row: status chip and covered period on the left, the
+ * amount in the middle, and the action group on the right (receipt, proof,
+ * upload/retry, detail). Stacks into one column below `md`: facts, then
+ * actions, then (open) detail.
  */
-export function PagoTableRow({
+export function PagoRow({
   pago,
   isOpen,
   onToggleDetail,
@@ -307,113 +321,41 @@ export function PagoTableRow({
 }): React.ReactElement {
   const fields = buildPagoRowFields(pago);
   const hasDetail = pagoHasDetail(pago);
-  const panelId = `pago-detail-desktop-${pago.id}`;
+  const panelId = `pago-detail-${pago.id}`;
 
   return (
-    <>
-      <TableRow>
-        <TableCell type="badge">
+    <li className="flex flex-col gap-3 px-5 py-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-5">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={fields.estado.tone}>{fields.estado.label}</Badge>
-            {/* Distinct from an ordinary "awaiting validation" row: this is
-                the payment a failed voucher upload left behind. The owner's
-                call (decisiones §7) keeps it, marked, instead of reverting
-                it. */}
+            {/* The payment a failed voucher upload left behind — kept, marked
+                (decisiones §7), not reverted. */}
             {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
           </div>
+          <p className="mt-1.5 text-base font-bold tabular-nums text-ink">{fields.period}</p>
+          <p className="mt-0.5 text-xs text-ink-3-strong">
+            {fields.method} · Registrado el{" "}
+            <span className="tabular-nums">{fields.registeredOn}</span>
+          </p>
           <PagoRejection pago={pago} />
-        </TableCell>
-        <TableCell type="number">{fields.amount}</TableCell>
-        <TableCell type="text">{fields.period}</TableCell>
-        <TableCell type="text">
-          <span className="block">{fields.method}</span>
-          <span className="mt-px block text-2xs tracking-flat text-ink-3">
-            Registrado el <span className="tabular-nums">{fields.registeredOn}</span>
-          </span>
-        </TableCell>
-        <TableCell type="action">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <PagoEvidenceLinks pago={pago} />
-            <PagoActionSlot
-              pago={pago}
-              fields={fields}
-              onUploadFile={onUploadFile}
-              uploadingId={uploadingId}
-              registerHref={registerHref}
-            />
-            {hasDetail && (
-              <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
-            )}
-          </div>
-        </TableCell>
-      </TableRow>
-      {hasDetail && (
-        <TableRow hidden={!isOpen}>
-          <TableCell colSpan={PAGO_TABLE_COLUMN_COUNT} id={panelId} className="bg-sunken">
-            <PagoDetailPanel pago={pago} />
-          </TableCell>
-        </TableRow>
-      )}
-    </>
-  );
-}
-
-/** The mobile card — same facts as `PagoTableRow`, same accordion contract,
- *  in a `<li>` instead of a table row pair. */
-export function PagoCard({
-  pago,
-  isOpen,
-  onToggleDetail,
-  onUploadFile,
-  uploadingId,
-  registerHref,
-}: {
-  pago: PagoPersona;
-  isOpen: boolean;
-  onToggleDetail: () => void;
-  onUploadFile: (pagoId: number) => void;
-  uploadingId: number | null;
-  registerHref: string | null;
-}): React.ReactElement {
-  const fields = buildPagoRowFields(pago);
-  const hasDetail = pagoHasDetail(pago);
-  const panelId = `pago-detail-mobile-${pago.id}`;
-
-  // Stacked, not side-by-side: the card only renders below `md`
-  // (`ResponsiveList`), where a metadata-plus-actions flex row repeats the
-  // exact failure `DataRow`'s basis-0 comment documents (issue #660) — with
-  // `flex-1` the info block's hypothetical size is 0, so the wide
-  // "Registrar un pago nuevo" link plus "Detalle" claimed the row and the
-  // rejection metadata squeezed into a ~50px column (issue #666's report).
-  // One column: facts, then actions, then (open) detail. The desktop table
-  // row keeps the side-by-side action cell — it has the width for it.
-  return (
-    <li className="flex flex-col gap-3 p-4">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-base font-bold tabular-nums text-ink">{fields.amount}</span>
-          <Badge tone={fields.estado.tone}>{fields.estado.label}</Badge>
-          {fields.faltaComprobante && <Badge tone="bad">Falta el comprobante</Badge>}
         </div>
-        <p className="mt-1 text-xs text-ink-3-strong">
-          {fields.method} · Registrado el{" "}
-          <span className="tabular-nums">{fields.registeredOn}</span> · Cubre{" "}
-          <span className="tabular-nums">{fields.period}</span>
+        <p className="flex-none font-display text-xl tabular-nums text-ink md:w-24 md:text-right">
+          {fields.amount}
         </p>
-        <PagoRejection pago={pago} />
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <PagoEvidenceLinks pago={pago} />
-        <PagoActionSlot
-          pago={pago}
-          fields={fields}
-          onUploadFile={onUploadFile}
-          uploadingId={uploadingId}
-          registerHref={registerHref}
-        />
-        {hasDetail && (
-          <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
-        )}
+        <div className="flex flex-col gap-1.5 md:w-48 md:flex-none">
+          <PagoEvidenceLinks pago={pago} />
+          <PagoActionSlot
+            pago={pago}
+            fields={fields}
+            onUploadFile={onUploadFile}
+            uploadingId={uploadingId}
+            registerHref={registerHref}
+          />
+          {hasDetail && (
+            <PagoDetailToggle panelId={panelId} isOpen={isOpen} onToggle={onToggleDetail} />
+          )}
+        </div>
       </div>
       {hasDetail && (
         <div id={panelId} hidden={!isOpen}>
@@ -445,65 +387,59 @@ function buildCoberturaRowFields(cobertura: CoberturaBonificada): {
   };
 }
 
-export function CoberturaTableRow({ cobertura }: { cobertura: CoberturaBonificada }): React.ReactElement {
+export function CoberturaRow({ cobertura }: { cobertura: CoberturaBonificada }): React.ReactElement {
   const fields = buildCoberturaRowFields(cobertura);
   return (
-    <TableRow>
-      <TableCell type="badge">
+    <li className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:gap-5">
+      <div className="min-w-0 flex-1">
         <Badge tone="ok">{fields.badge}</Badge>
-      </TableCell>
-      <TableCell type="number">—</TableCell>
-      <TableCell type="text">{fields.period}</TableCell>
-      <TableCell type="text">
-        <span className="block">{fields.concept}</span>
-        <span className="mt-px block text-2xs tracking-flat text-ink-3">
-          Otorgada el <span className="tabular-nums">{fields.grantedOn}</span>
-        </span>
-      </TableCell>
-      <TableCell type="action" />
-    </TableRow>
-  );
-}
-
-/** The mobile card — same facts as `CoberturaTableRow`, same one-column
- *  order `PagoCard` settled on. */
-export function CoberturaCard({ cobertura }: { cobertura: CoberturaBonificada }): React.ReactElement {
-  const fields = buildCoberturaRowFields(cobertura);
-  return (
-    <li className="flex flex-col gap-3 p-4">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-base font-bold tabular-nums text-ink">—</span>
-          <Badge tone="ok">{fields.badge}</Badge>
-        </div>
-        <p className="mt-1 text-xs text-ink-3-strong">
-          {fields.concept} · Otorgada el{" "}
-          <span className="tabular-nums">{fields.grantedOn}</span> · Cubre{" "}
-          <span className="tabular-nums">{fields.period}</span>
+        <p className="mt-1.5 text-base font-bold tabular-nums text-ink">{fields.period}</p>
+        <p className="mt-0.5 text-xs text-ink-3-strong">
+          {fields.concept} · Otorgada el <span className="tabular-nums">{fields.grantedOn}</span>
         </p>
       </div>
+      <p className="flex-none font-display text-xl text-ink md:w-24 md:text-right">—</p>
+      <div className="hidden md:block md:w-48 md:flex-none" />
     </li>
   );
 }
 
 /**
- * Placeholder rows under an empty history: they show the shape the list will
- * take (status chip, period, amount) so the empty box reads as "not yet"
- * instead of a void. Decorative only — hidden from assistive tech.
+ * Placeholder rows under the history: they show the shape real rows take
+ * (status chip, period, amount, actions) so a short list reads as "more will
+ * appear here" instead of a void. With `fill` the block takes the height the
+ * column has left and clips, which is how the history's bottom edge meets the
+ * rail's. Decorative only — hidden from assistive tech.
  */
-export function GhostPagoRows({ count = 3 }: { count?: number }): React.ReactElement {
+export function GhostPagoRows({
+  count = 3,
+  fill = false,
+}: {
+  count?: number;
+  fill?: boolean;
+}): React.ReactElement {
   return (
-    <ul aria-hidden="true" data-testid="pago-ghost-rows" className="flex flex-col divide-y divide-line border-t border-line">
+    <ul
+      aria-hidden="true"
+      data-testid="pago-ghost-rows"
+      className={cn(
+        "flex flex-col divide-y divide-line border-t border-line",
+        fill && "min-h-0 flex-1 overflow-hidden",
+      )}
+    >
       {Array.from({ length: count }, (_, i) => (
         <li
           key={i}
-          className="flex items-center gap-4 px-4 py-3.5"
-          style={{ opacity: 1 - i * 0.28 }}
+          className="flex flex-none items-center gap-5 px-5 py-4"
+          style={{ opacity: Math.max(0.12, 0.7 - i * 0.12) }}
         >
-          <span className="h-5 w-20 flex-none rounded-full bg-line" />
-          <span className="h-3 w-16 flex-none rounded-full bg-line" />
-          <span className="h-3 min-w-0 flex-1 rounded-full bg-line/70" />
-          <span className="hidden h-3 w-24 flex-none rounded-full bg-line/70 sm:block" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <span className="h-5 w-20 rounded-full bg-line" />
+            <span className="h-3.5 w-44 max-w-full rounded-full bg-line" />
+            <span className="h-2.5 w-32 rounded-full bg-line/70" />
+          </div>
+          <span className="hidden h-5 w-16 flex-none rounded-full bg-line sm:block" />
+          <span className="hidden h-9 w-48 flex-none rounded-ctl bg-line/60 md:block" />
         </li>
       ))}
     </ul>

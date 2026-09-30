@@ -192,7 +192,7 @@ function historyTable(): HTMLElement {
 }
 
 function historyCards(): HTMLElement {
-  return screen.getByTestId("student-payments-cards");
+  return historyTable();
 }
 
 /**
@@ -1096,9 +1096,9 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
     await screen.findByTestId("student-payments-table");
 
     const table = historyTable();
-    expect(within(table).getByText("Cobertura bonificada — 100%")).toBeInTheDocument();
+    expect(within(table).getByText(/Cobertura bonificada — 100%/)).toBeInTheDocument();
     expect(within(table).getByText(shownRange("2026-08-01", "2026-08-31"))).toBeInTheDocument();
-    expect(within(table).getByText("Otorgada el")).toBeInTheDocument();
+    expect(within(table).getByText(/Otorgada el/)).toBeInTheDocument();
     // A coverage never charged anything (#400): the amount cell is a dash,
     // never a fabricated "$0,00".
     expect(within(table).queryByText("$0,00")).not.toBeInTheDocument();
@@ -1134,7 +1134,7 @@ describe("StudentPaymentsPage — the merged coverage rows (issue #1369)", () =>
 });
 
 describe("StudentPaymentsPage — the row accordion (#513)", () => {
-  it("opens a row's detail from the table, and the mobile card's own copy opens with it", async () => {
+  it("opens a row's detail from its own toggle", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({ estadoPago: "APROBADO", motivoExcepcionSinComprobante: "Verificado en la cuenta del club" }),
     ]);
@@ -1142,20 +1142,14 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     render(<StudentPaymentsPage />);
     await screen.findByTestId("student-payments-table");
 
-    const tableToggle = within(historyTable()).getByRole("button", { name: /detalle/i });
-    const cardToggle = within(historyCards()).getByRole("button", { name: /detalle/i });
-    expect(tableToggle).toHaveAttribute("aria-expanded", "false");
-    expect(cardToggle).toHaveAttribute("aria-expanded", "false");
-    expect(within(historyCards()).getByText("Verificado en la cuenta del club")).not.toBeVisible();
+    const toggle = within(historyTable()).getByRole("button", { name: /detalle/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(historyTable()).getByText("Verificado en la cuenta del club")).not.toBeVisible();
 
-    fireEvent.click(tableToggle);
+    fireEvent.click(toggle);
 
-    expect(tableToggle).toHaveAttribute("aria-expanded", "true");
-    // Same logical row: opening the table's toggle opens the card's own
-    // copy too, even though only one of the two is visible in a real
-    // browser at any given width.
-    expect(cardToggle).toHaveAttribute("aria-expanded", "true");
-    expect(within(historyCards()).getByText("Verificado en la cuenta del club")).toBeVisible();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(historyTable()).getByText("Verificado en la cuenta del club")).toBeVisible();
   });
 
   it("gives a row with nothing to disclose no accordion toggle at all", async () => {
@@ -1165,36 +1159,38 @@ describe("StudentPaymentsPage — the row accordion (#513)", () => {
     await screen.findByTestId("student-payments-table");
 
     expect(within(historyTable()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
-    expect(within(historyCards()).queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
   });
 
-  it("ports the admin queue's exact column vocabulary — Estado, Monto, Período, Método, Acción", async () => {
-    render(<StudentPaymentsPage />);
-
-    const headers = within(await screen.findByTestId("student-payments-table")).getAllByRole(
-      "columnheader",
-    );
-    expect(headers.map((header) => header.textContent)).toEqual([
-      "Estado",
-      "Monto",
-      "Período",
-      "Método",
-      "Acción",
+  it("always draws the receipt slot: a link when the club issued it, a disabled state otherwise", async () => {
+    mockFetchPagosDePersona.mockResolvedValueOnce([
+      makePago({ id: 1, estadoPago: "APROBADO", comprobanteOficialUrl: "https://files.example/r1.pdf" }),
+      makePago({ id: 2, estadoPago: "APROBADO", comprobanteOficialUrl: null }),
+      makePago({ id: 3, estadoPago: "PENDIENTE_VALIDACION", comprobanteOficialUrl: null }),
     ]);
+
+    render(<StudentPaymentsPage />);
+    const list = await screen.findByTestId("student-payments-table");
+
+    expect(within(list).getByRole("link", { name: /descargar comprobante oficial/i })).toHaveTextContent(
+      "Recibo oficial",
+    );
+    expect(within(list).getByRole("button", { name: "Recibo en preparación" })).toBeDisabled();
+    expect(within(list).getByRole("button", { name: "Disponible al aprobarse" })).toBeDisabled();
+  });
+
+  it("summarises the account in a stat strip above the history", async () => {
+    render(<StudentPaymentsPage />);
+    await screen.findByTestId("student-payments-table");
+
+    for (const label of ["Pagado hasta", "Pagos aprobados", "En revisión"]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText(/^Último pago/)).toBeInTheDocument();
   });
 });
 
-/**
- * The screenshot finding: on a narrow phone a REJECTED payment's row actions
- * ("Registrar un pago nuevo" + "Detalle") sat BESIDE the metadata in one
- * `flex-wrap` row whose info block was `flex-1` — basis 0, so it never
- * wrapped and the actions claimed the width, squeezing the metadata into a
- * ~50px column (the same basis-0 failure `DataRow`'s own comment documents
- * for /tarifas, issue #660). The card now stacks: facts, then actions. The
- * desktop table row keeps its side-by-side action cell — it has the width.
- */
-describe("StudentPaymentsPage — the mobile card keeps its metadata readable", () => {
-  function renderRejectedPayment(): Promise<HTMLElement> {
+describe("StudentPaymentsPage — a row keeps its actions visible", () => {
+  it("offers 'Registrar un pago nuevo' on a rejected row, next to the inline reason", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
       makePago({
         id: 8,
@@ -1205,60 +1201,20 @@ describe("StudentPaymentsPage — the mobile card keeps its metadata readable", 
       }),
     ]);
     render(<StudentPaymentsPage />);
-    return screen.findByTestId("student-payments-cards");
-  }
+    const row = within(await screen.findByTestId("student-payments-table")).getByRole("listitem");
 
-  it("stacks a rejected payment's actions under its metadata instead of beside it", async () => {
-    await renderRejectedPayment();
-
-    const card = within(historyCards()).getByRole("listitem");
-    // The metadata line ("Transferencia · Registrado el … · Cubre …") is the
-    // info block's own paragraph — the card's first stacked child.
-    const metadata = card.querySelector("p");
-    expect(metadata).not.toBeNull();
-    expect(metadata!.textContent).toContain("Transferencia");
-    expect(metadata!.textContent).toContain("Cubre");
-    const infoBlock = metadata!.parentElement as HTMLElement;
-
-    // Both blocks are DIRECT children of the stacked `li` — the old markup
-    // nested them side by side inside an intermediate flex-wrap row, which
-    // is exactly the containment that produced the squeezed column.
-    expect(infoBlock.parentElement).toBe(card);
-    const actionsBlock = infoBlock.nextElementSibling as HTMLElement;
-    expect(actionsBlock.parentElement).toBe(card);
-
-    // The "Registrar un pago nuevo" link lives in the actions block, never
-    // inside the metadata's block.
-    const registerLink = /registrar un pago nuevo/i;
-    expect(within(infoBlock).queryByRole("link", { name: registerLink })).not.toBeInTheDocument();
-    expect(within(actionsBlock).getByRole("link", { name: registerLink })).toBeInTheDocument();
+    expect(within(row).getByText(/El comprobante no coincide/)).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: /registrar un pago nuevo/i })).toBeInTheDocument();
   });
 
-  // Triangulates: the stacking is the card's own shape, not something only a
-  // rejected payment gets — an ordinary approved row stacks the same way.
-  it("keeps the same stacked shape for an approved payment's upload action", async () => {
+  it("offers the upload retry on a pending transfer with no proof", async () => {
     mockFetchPagosDePersona.mockResolvedValueOnce([
-      makePago({
-        id: 9,
-        estadoPago: "PENDIENTE_VALIDACION",
-        tipoPago: "TRANSFERENCIA",
-        voucherUrl: null,
-      }),
+      makePago({ id: 9, estadoPago: "PENDIENTE_VALIDACION", tipoPago: "TRANSFERENCIA", voucherUrl: null }),
     ]);
     render(<StudentPaymentsPage />);
-    await screen.findByTestId("student-payments-cards");
+    const row = within(await screen.findByTestId("student-payments-table")).getByRole("listitem");
 
-    const card = within(historyCards()).getByRole("listitem");
-    const infoBlock = (card.querySelector("p") as HTMLElement).parentElement as HTMLElement;
-    expect(infoBlock.parentElement).toBe(card);
-    const actionsBlock = infoBlock.nextElementSibling as HTMLElement;
-    expect(actionsBlock.parentElement).toBe(card);
-    expect(
-      within(infoBlock).queryByRole("button", { name: /subir comprobante/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(actionsBlock).getByRole("button", { name: /subir comprobante/i }),
-    ).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /subir comprobante/i })).toBeInTheDocument();
   });
 });
 
@@ -1821,7 +1777,7 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
    * stands, and so it does for the minor-blocked and gratuitous variants,
    * which describe situations rather than a procedure to follow.
    */
-  it("starts OPEN when coverage has lapsed — the steps are the reader's next move", async () => {
+  it("keeps the procedure collapsed even when coverage has lapsed — the rail stays compact", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       ...PORTAL,
       self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: COVERAGE_END_PAST } },
@@ -1833,13 +1789,12 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
     render(<StudentPaymentsPage />);
 
     await screen.findByTestId("membership-status");
-    expect(await screen.findByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Cómo se registra un pago" }),
-    ).toHaveAttribute("aria-expanded", "true");
+      await screen.findByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("starts OPEN for a student with no approved payment at all (triangulation)", async () => {
+  it("keeps the procedure collapsed for a student with no approved payment (triangulation)", async () => {
     mockFetchStudentPortal.mockReset().mockResolvedValue({
       ...PORTAL,
       self: { ...SELF, membership: { ...SELF.membership!, cubiertoHasta: null } },
@@ -1849,7 +1804,9 @@ describe("StudentPaymentsPage — the procedure is disclosed, not a permanent ra
     render(<StudentPaymentsPage />);
 
     await screen.findByTestId("membership-status");
-    expect(await screen.findByText(/Son tres pasos y terminan en el club/i)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Cómo se registra un pago" }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   it("leaves the procedure collapsed while coverage is still in force — ending soon", async () => {
@@ -1940,11 +1897,12 @@ describe("StudentPaymentsPage — the history claims the page's leftover height"
    * statement in the box, which is the empty case — and that is also the case
    * D11b says to design for first, because a socio nuevo has no payments.
    */
-  it("leaves the card at its own height while there are rows to show", async () => {
+  it("always claims the column's leftover height, topping a short list up with ghost rows", async () => {
     render(<StudentPaymentsPage />);
 
     const history = await screen.findByLabelText("Historial de pagos");
-    expect(history.className).not.toMatch(/\bflex-1\b/);
+    expect(history.className).toMatch(/\bflex-1\b/);
+    expect(within(history).getByTestId("pago-ghost-rows")).toBeInTheDocument();
   });
 
   it("claims the page's leftover height only when there is nothing to list", async () => {

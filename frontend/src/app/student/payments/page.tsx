@@ -53,11 +53,12 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, ResponsiveList, TableHeaderCell, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPill, LoadingState, PAGE_RAIL, StatGrid, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
-import { getEmptyStateMessage, countPagosByStatus, PAGO_FILTER_LABELS, voucherFileError, type PagoStatusFilter } from "./payments-utils";
+import { getEmptyStateMessage, countPagosByStatus, formatPagoMonto, PAGO_FILTER_LABELS, voucherFileError, type PagoStatusFilter } from "./payments-utils";
+import { formatDate } from "@/lib/format-utils";
 import { CreditCard } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { toUserMessage } from "@/lib/error-message";
@@ -66,7 +67,7 @@ import { MembershipCard } from "./MembershipAside";
 import { HowToPay } from "./HowToPay";
 import { BeneficioNote, PaymentOrBenefitForm } from "./PaymentForms";
 import { VoucherUploadPreview } from "./VoucherUploadPreview";
-import { GhostPagoRows, PagoTableRow, PagoCard, CoberturaTableRow, CoberturaCard } from "./PagoHistoryRows";
+import { GhostPagoRows, PagoRow, CoberturaRow } from "./PagoHistoryRows";
 
 // ---------------------------------------------------------------------------
 // Load state
@@ -100,6 +101,8 @@ function isPagoStatusFilter(value: string): value is PagoStatusFilter {
 
 /** Shared empty list, so "not loaded yet" is a stable reference for the memos below. */
 const NO_PAGOS: PagoPersona[] = [];
+/** Below this many rows the history is topped up with ghost rows. */
+const GHOST_BELOW = 6;
 
 // ---------------------------------------------------------------------------
 // Main content
@@ -293,6 +296,15 @@ function PaymentsContent({
       (a, b) => new Date(itemDate(b)).getTime() - new Date(itemDate(a)).getTime(),
     );
   }, [pagos, coberturas, filter]);
+  const lastPago = useMemo(
+    () =>
+      pagos.reduce<PagoPersona | null>(
+        (latest, pago) =>
+          !latest || new Date(pago.fechaRegistro) > new Date(latest.fechaRegistro) ? pago : latest,
+        null,
+      ),
+    [pagos],
+  );
   const hasPendingPago = pagos.some((pago) => pago.estadoPago === "PENDIENTE_VALIDACION");
 
   /**
@@ -355,9 +367,7 @@ function PaymentsContent({
    * family that is up to date. `HowToPay` is mounted no earlier than the
    * settled state below for the same reason.
    */
-  const howToPayOpensByDefault =
-    pagosState.status === "ready" &&
-    (situation.kind === "expired" || situation.kind === "never-paid");
+  const howToPayOpensByDefault = false;
 
   /**
    * The history has stopped loading — `ready` or `error` — which is the first
@@ -511,10 +521,11 @@ function PaymentsContent({
       {/* Rail layout: history on the left, the account's state and the action
           on the right. The aside comes FIRST in the DOM (phone reading order:
           status, pay, then history) and is placed in column 2 from `lg` up. */}
-      <div className={PAGE_RAIL}>
+      <div className={cn(PAGE_RAIL, "lg:items-stretch")}>
         <aside
+          data-dash-col
           aria-label="Membresía y registro de pagos"
-          className="flex min-w-0 flex-col gap-page lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
+          className="flex min-w-0 flex-col gap-page lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
         >
       <MembershipCard
         membership={selectedProfile.membership}
@@ -574,26 +585,22 @@ function PaymentsContent({
       )}
         </aside>
 
-        <div className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1 lg:min-h-[calc(100dvh-10rem)]">
-      {/* Selection is coal plus the ball dot — `FilterPill` owns that rule.
-          The chips used to sit loose on the canvas here too; the portal
-          filters through the same panel the admin screens do. */}
-      <FilterPanel
-        label="Filtros de pagos"
-        chips={
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar pagos por estado">
-            {FILTERS.map((option) => (
-              <FilterPill
-                key={option}
-                label={PAGO_FILTER_LABELS[option]}
-                count={counts[option]}
-                active={filter === option}
-                onClick={() => setFilter(option)}
-              />
-            ))}
-          </div>
-        }
-      />
+        <div data-dash-col className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
+      {pagosState.status === "ready" && (
+        <StatGrid
+          className="card px-5 py-4 sm:grid-cols-4"
+          items={[
+            { label: "Pagado hasta", value: coverageEnd ? formatDate(coverageEnd) : "—", tone: "neutral" },
+            { label: "Pagos aprobados", value: String(counts.APROBADO), tone: "ok" },
+            { label: "En revisión", value: String(counts.PENDIENTE_VALIDACION), tone: "warn" },
+            {
+              label: lastPago ? `Último pago · ${formatDate(lastPago.fechaRegistro)}` : "Último pago",
+              value: lastPago ? formatPagoMonto(lastPago.monto) : "—",
+              tone: "neutral",
+            },
+          ]}
+        />
+      )}
 
       <input
         ref={fileInputRef}
@@ -632,28 +639,13 @@ function PaymentsContent({
         <ErrorState message={pagosState.message} onRetry={() => setReloadToken((n) => n + 1)} />
       )}
       {pagosState.status === "ready" && (
-        // `flex-1` when — and only when — the list is empty (D11b).
-        //
-        // Everything above this is a fixed summary; the history is the only
-        // block whose height is a function of the family's real record, so it
-        // is the one that may claim the height `AppShell`'s `<main>` already
-        // reserved. But claiming it unconditionally was measured and rejected:
-        // with one payment on file the card stretched to the foot of the
-        // window and drew a 200px empty frame under a single row, which is the
-        // same emptiness the redesign is closing, moved inside a border and
-        // made MORE visible than the canvas it replaced.
-        //
-        // Empty is the case where stretching earns its keep, because
-        // `EmptyState`'s `fill` centres the statement in the box instead of
-        // pinning it to the top — the shape `/members` already uses for its
-        // own no-results state. It is also the case D11b says to design for
-        // first: a socio nuevo has no payments at all.
-        <section
-          className={cn("flex flex-col", filteredPagos.length === 0 && "flex-1")}
-          aria-labelledby="pagos-title"
-        >
-          <div className="mb-3 flex items-center gap-3">
-            <h2 id="pagos-title" className="flex-1 text-sm font-bold text-ink">
+        // One card: title, count and the status pills on top, rows below. It
+        // claims the column's remaining height (the grid row is as tall as the
+        // rail), and short lists are topped up with ghost rows so both columns
+        // end together instead of leaving a void under the last payment.
+        <section className="card flex flex-1 flex-col overflow-hidden" aria-labelledby="pagos-title">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-field px-5 py-4">
+            <h2 id="pagos-title" className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
               Historial de pagos
             </h2>
             {filteredPagos.length > 0 && (
@@ -661,9 +653,24 @@ function PaymentsContent({
                 {filteredPagos.length}
               </span>
             )}
+            <div
+              className="flex flex-wrap gap-2 sm:ml-auto"
+              role="group"
+              aria-label="Filtrar pagos por estado"
+            >
+              {FILTERS.map((option) => (
+                <FilterPill
+                  key={option}
+                  label={PAGO_FILTER_LABELS[option]}
+                  count={counts[option]}
+                  active={filter === option}
+                  onClick={() => setFilter(option)}
+                />
+              ))}
+            </div>
           </div>
           {filteredPagos.length === 0 ? (
-            <div className="card flex flex-1 flex-col overflow-hidden">
+            <>
               <EmptyState
                 surface="inset"
                 fill
@@ -707,64 +714,31 @@ function PaymentsContent({
                 }
               />
               <GhostPagoRows />
-            </div>
+            </>
           ) : (
-            // Issue #513: the same `ResponsiveList`/`Table*`/`Badge`
-            // primitives `/payments` (the admin validation queue) already
-            // uses — same `breakpoint`/`order`, so this history keeps
-            // whichever DOM-first order that screen already settled on
-            // (see `ResponsiveList`'s own doc comment on why that order is
-            // not a no-op). `ResponsiveList` supplies its own `card`
-            // surface, which is why the title bar above sits outside one.
-            <ResponsiveList
-              breakpoint="md"
-              order="tableFirst"
-              tableTestId="student-payments-table"
-              cardsTestId="student-payments-cards"
-              items={filteredPagos}
-              // `pago.id` and `cobertura.id` are different tables' sequences:
-              // the kind prefix keeps the React key unique across the merge.
-              getKey={(item) =>
-                item.kind === "pago" ? `pago-${item.pago.id}` : `cobertura-${item.cobertura.id}`
-              }
-              columns={[
-                <TableHeaderCell key="estado" type="badge">Estado</TableHeaderCell>,
-                <TableHeaderCell key="monto" type="number">Monto</TableHeaderCell>,
-                <TableHeaderCell key="periodo" type="text">Período</TableHeaderCell>,
-                <TableHeaderCell key="metodo" type="text">Método</TableHeaderCell>,
-                <TableHeaderCell key="accion" type="action">
-                  <span className="sr-only">Acción</span>
-                </TableHeaderCell>,
-              ]}
-              renderRow={(item) =>
-                item.kind === "pago" ? (
-                  <PagoTableRow
-                    pago={item.pago}
-                    isOpen={openPagoDetailIds.has(item.pago.id)}
-                    onToggleDetail={() => togglePagoDetail(item.pago.id)}
-                    onUploadFile={handleSelectFile}
-                    uploadingId={uploadingId}
-                    registerHref={registerHref}
-                  />
-                ) : (
-                  <CoberturaTableRow cobertura={item.cobertura} />
-                )
-              }
-              renderCard={(item) =>
-                item.kind === "pago" ? (
-                  <PagoCard
-                    pago={item.pago}
-                    isOpen={openPagoDetailIds.has(item.pago.id)}
-                    onToggleDetail={() => togglePagoDetail(item.pago.id)}
-                    onUploadFile={handleSelectFile}
-                    uploadingId={uploadingId}
-                    registerHref={registerHref}
-                  />
-                ) : (
-                  <CoberturaCard cobertura={item.cobertura} />
-                )
-              }
-            />
+            <>
+              <ul
+                data-testid="student-payments-table"
+                className="flex flex-col divide-y divide-line border-t border-line"
+              >
+                {filteredPagos.map((item) =>
+                  item.kind === "pago" ? (
+                    <PagoRow
+                      key={`pago-${item.pago.id}`}
+                      pago={item.pago}
+                      isOpen={openPagoDetailIds.has(item.pago.id)}
+                      onToggleDetail={() => togglePagoDetail(item.pago.id)}
+                      onUploadFile={handleSelectFile}
+                      uploadingId={uploadingId}
+                      registerHref={registerHref}
+                    />
+                  ) : (
+                    <CoberturaRow key={`cobertura-${item.cobertura.id}`} cobertura={item.cobertura} />
+                  ),
+                )}
+              </ul>
+              {filteredPagos.length < GHOST_BELOW && <GhostPagoRows count={GHOST_BELOW} fill />}
+            </>
           )}
         </section>
       )}
