@@ -810,6 +810,8 @@ interface EmergencyContactFieldsProps {
   telefonoError?: string;
   onContactoBlur?: () => void;
   onTelefonoBlur?: () => void;
+  /** Keeps the two fields at a readable width inside a three-column parent grid (`2xl`). */
+  wide?: boolean;
 }
 
 /** "Contacto de Emergencia" section (divider + header + 2 fields) — shared by both wizards' health/medical step. */
@@ -828,7 +830,7 @@ export function EmergencyContactFields(props: EmergencyContactFieldsProps): Reac
           Contacto de emergencia
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={`grid gap-4 sm:grid-cols-2 ${props.wide ? "2xl:grid-cols-3" : ""}`}>
         <WizardInput
           idPrefix={idPrefix} field="contacto-emergencia" disabled={disabled} label="Nombre del contacto" value={props.contacto}
           onChange={props.onContactoChange} placeholder={example("María Rodríguez")} required

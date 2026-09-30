@@ -1121,7 +1121,7 @@ function EnrollWizard(): React.ReactElement {
           )}
         </div>
         </FieldSlot>
-        <div className="hidden md:block" aria-hidden="true" />
+        <div className="hidden md:block 2xl:hidden" aria-hidden="true" />
 
         {renderTextarea("condicionesSalud", {
           label: "Condiciones de salud",
@@ -1161,6 +1161,7 @@ function EnrollWizard(): React.ReactElement {
             telefonoError={shownError("telefonoEmergencia")}
             onContactoBlur={() => markTouched("contactoEmergencia")}
             onTelefonoBlur={() => markTouched("telefonoEmergencia")}
+            wide
           />
         ) : (
           <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
@@ -1688,7 +1689,7 @@ function EnrollWizard(): React.ReactElement {
             onSubmit={handleConfirm}
             data-testid="enroll-wizard-card"
             data-enroll-card
-            className="card mx-auto w-full max-w-4xl p-page"
+            className="card w-full flex-1 p-page lg:p-10"
           >
             {/* #1321: `goToStep` already jumps to an arbitrary step from the
                 review's "Editar" buttons without losing anything —
