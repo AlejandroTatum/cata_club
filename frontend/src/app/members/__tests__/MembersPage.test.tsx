@@ -1164,7 +1164,7 @@ describe("MembersPage — Registrar pago inline form", () => {
    *  dialog — the step every test past the button-presence check takes right
    *  after `openMemberDialog`. */
   async function openPaymentForm(dialog: HTMLElement): Promise<void> {
-    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar pago/i }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /registrar (pago|inscripción)/i }));
   }
 
   /** When: the admin attaches a voucher and submits. TRANSFERENCIA is the
@@ -1178,7 +1178,7 @@ describe("MembersPage — Registrar pago inline form", () => {
     fireEvent.change(fileInput, {
       target: { files: [new File(["x"], "comprobante.pdf", { type: "application/pdf" })] },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: /registrar pago/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /registrar (pago|inscripción)/i }));
   }
 
   it("renders a 'Registrar pago' button inside the student card when the student has a membership", async () => {
@@ -1309,7 +1309,7 @@ describe("MembersPage — Registrar pago inline form", () => {
       expect(mockValidarPago).toHaveBeenCalledWith(99, { estadoPago: "APROBADO" });
     });
     await waitFor(() => {
-      expect(within(dialog).getByText(/pago registrado/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/inscripción registrada/i)).toBeInTheDocument();
     });
   });
 

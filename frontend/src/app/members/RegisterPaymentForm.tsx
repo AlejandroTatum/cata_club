@@ -279,12 +279,18 @@ export default function RegisterPaymentForm({
     setVoucherFile(null);
     setPagoPendienteId(null);
     setAprobadoEnPersona(true);
-    showSuccess("Pago registrado y aprobado. La membresía quedó activa.");
+    showSuccess("Inscripción registrada y aprobada. La membresía quedó activa.");
     // Issue #1199: refresh the caller's data instead of asking the admin to
     // reload manually — fired here (and not right after registration) so the
     // refetch already shows the FINAL state (#1402: approved + active).
     onPaymentRegistered?.();
   }
+
+  // The first payment of a membership that never activated is the person's
+  // inscription; every other state is a plain payment. Same condition that
+  // routes to the presencial flow below — wording only, no behavior.
+  const esInscripcion = membresia.estadoBackend === "INACTIVA";
+  const etiquetaRegistro = esInscripcion ? "Registrar inscripción" : "Registrar pago";
 
   async function handleSubmit(): Promise<void> {
     // Retry mode (#1402): the payment EXISTS and is pending only for its
@@ -298,7 +304,7 @@ export default function RegisterPaymentForm({
         // Still pending — the backend keeps the payment PENDIENTE_VALIDACION
         // on any upload/approval failure: actionable retry, same flow.
         setError(
-          "El pago sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
+          "La inscripción sigue pendiente: no se pudo subir el comprobante o aprobarlo. "
           + "Verifique el archivo y presione \"Reintentar comprobante\".",
         );
         setErrorAnnounceKey((key) => key + 1);
@@ -343,7 +349,7 @@ export default function RegisterPaymentForm({
         personaId,
         membresiaId: membresia.id,
       };
-      if (membresia.estadoBackend !== "INACTIVA") {
+      if (!esInscripcion) {
         // Renewal / subsequent payment (#1402): the presencial endpoint only
         // accepts a FIRST inscription, so every other state keeps the
         // original flow — register, upload the staged voucher right after,
@@ -383,7 +389,7 @@ export default function RegisterPaymentForm({
       // was already set right after `registrarPagoPresencial` resolved.
       if (pagoRegistradoId !== null) {
         const pendienteMsg =
-          "El pago quedó registrado y PENDIENTE: no se pudo completar el comprobante "
+          "La inscripción quedó registrada y PENDIENTE: no se pudo completar el comprobante "
           + "o su aprobación. Verifique el archivo y presione \"Reintentar comprobante\".";
         setError(pendienteMsg);
         setErrorAnnounceKey((key) => key + 1);
@@ -407,7 +413,9 @@ export default function RegisterPaymentForm({
       // `toUserMessage` only reaches for the fallback when there isn't one.
       const status = err instanceof Error ? (err as Error & { status?: unknown }).status : null;
       const fallback =
-        status === 422 ? MENSAJE_MESES_MAXIMO_EXCEDIDO : "No se pudo registrar el pago.";
+        status === 422
+          ? MENSAJE_MESES_MAXIMO_EXCEDIDO
+          : `No se pudo registrar ${esInscripcion ? "la inscripción" : "el pago"}.`;
       const msg = toUserMessage(err, fallback);
       setError(msg);
       showError(msg);
@@ -438,7 +446,7 @@ export default function RegisterPaymentForm({
         {/* #1402: the in-person flow only completes on approval — cash
             approved in the same request, transfer after voucher + admin-only
             finalize — while a renewal keeps the plain original outcome. */}
-        {aprobadoEnPersona ? "Pago registrado y aprobado." : "Pago registrado."}
+        {aprobadoEnPersona ? "Inscripción registrada y aprobada." : "Pago registrado."}
       </p>
     );
   }
@@ -451,7 +459,7 @@ export default function RegisterPaymentForm({
         className="inline-flex h-ctl items-center gap-2 rounded-lg bg-cata-red/15 px-4 text-sm font-semibold text-cata-red transition-colors hover:bg-cata-red/25"
       >
         <Plus size={ICON.base} strokeWidth={2} aria-hidden="true" />
-        Registrar pago
+        {etiquetaRegistro}
       </button>
     );
   }
@@ -630,7 +638,7 @@ export default function RegisterPaymentForm({
           {loading ? <Loader2 size={ICON.base} className="animate-spin" /> : <Plus size={ICON.base} />}
           {/* #1402 retry mode: the payment exists; the button retries the
               voucher upload + approval, never a second registration. */}
-          {pagoPendienteId !== null ? "Reintentar comprobante" : "Registrar pago"}
+          {pagoPendienteId !== null ? "Reintentar comprobante" : etiquetaRegistro}
         </button>
         <button
           type="button"
