@@ -390,7 +390,7 @@ export default function MedicalRecordEditor({
     // representante, both measured by #266).
     <div
       data-testid="medical-record-card"
-      className="mt-3 rounded-2xl border border-line bg-paper"
+      className={`mt-3 rounded-2xl border border-line bg-paper${withEmergencyCard ? " flex h-full flex-col" : ""}`}
     >
       {/* `sticky top-0`, not a plain header: on a narrow screen this card's
           own fields can outgrow the viewport, and the student's identity —
@@ -452,7 +452,7 @@ export default function MedicalRecordEditor({
         )}
       </header>
 
-      <div className="p-3 sm:p-4">
+      <div className={withEmergencyCard ? "flex flex-1 flex-col p-3 sm:p-4" : "p-3 sm:p-4"}>
       {!editing && state.status === "ready" && !state.isNew && (
         /* El reposo: filas etiqueta-valor, no la grilla de dos columnas de
          * abajo. Son dos formas distintas porque dicen dos cosas distintas —
@@ -512,7 +512,9 @@ export default function MedicalRecordEditor({
        * the illness list gets the full width it needs for a comma-separated
        * value, and the two emergency-contact fields are adjacent because they
        * are one fact written in two boxes. */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* In page mode the card is stretched to the rail's height; the rows
+          spread over that height instead of leaving a void under the last. */}
+      <div className={`grid gap-3 sm:grid-cols-2${withEmergencyCard ? " flex-1 lg:content-between" : ""}`}>
         {withEmergencyCard && <GroupHeading className="sm:col-span-2">Salud</GroupHeading>}
         <div>
           {/* The asterisk sits OUTSIDE the `<label>` on purpose: inside, it
@@ -641,8 +643,8 @@ export default function MedicalRecordEditor({
   if (!withEmergencyCard) return recordCard;
 
   return (
-    <div className={PAGE_RAIL}>
-      <div className="min-w-0 [&>[data-testid=medical-record-card]]:mt-0">{recordCard}</div>
+    <div className={`${PAGE_RAIL} lg:items-stretch`}>
+      <div className="flex min-w-0 flex-col [&>[data-testid=medical-record-card]]:mt-0 [&>[data-testid=medical-record-card]]:flex-1">{recordCard}</div>
       <EmergencyCard studentName={studentName} values={cardValues} ownerIsViewer={viewerIsOwner} />
     </div>
   );

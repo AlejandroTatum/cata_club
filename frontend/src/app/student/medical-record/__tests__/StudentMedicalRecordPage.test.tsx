@@ -315,6 +315,15 @@ describe("StudentMedicalRecordPage — emergency card rail", () => {
     expect(within(card).getByText("Quién puede ver estos datos")).toBeInTheDocument();
   });
 
+  it("reads 'Sangre —' in the card header while no blood type is known, not a bare '?'", async () => {
+    mockFetchFichaMedica.mockReset().mockResolvedValue(ficha({ tipoSangre: null }));
+    render(<StudentMedicalRecordPage />);
+
+    const blood = await screen.findByTestId("emergency-card-blood");
+    expect(blood).toHaveTextContent("Sangre —");
+    expect(blood.textContent).not.toContain("?");
+  });
+
   it("updates the emergency card while the form is being edited", async () => {
     render(<StudentMedicalRecordPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Editar" }));

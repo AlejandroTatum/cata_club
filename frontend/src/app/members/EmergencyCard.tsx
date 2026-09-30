@@ -58,7 +58,7 @@ export default function EmergencyCard({
     <aside
       aria-label="Tarjeta de emergencia"
       data-testid="emergency-card"
-      className="flex flex-col gap-page lg:sticky lg:top-4"
+      className="flex flex-col gap-page lg:sticky lg:top-4 lg:self-start"
     >
       <section className="card overflow-hidden">
         <header className="flex items-center gap-2.5 bg-coal px-4 py-3 text-white">
@@ -69,9 +69,13 @@ export default function EmergencyCard({
           </div>
           <span
             data-testid="emergency-card-blood"
-            className="ml-auto flex h-10 min-w-10 flex-none items-center justify-center rounded-ctl bg-white px-2 text-sm font-extrabold tabular-nums text-state-bad"
+            className={
+              values.tipoSangre
+                ? "ml-auto flex h-10 min-w-10 flex-none items-center justify-center rounded-ctl bg-white px-2 text-sm font-extrabold tabular-nums text-state-bad"
+                : "ml-auto flex-none text-xs font-semibold text-white/70"
+            }
           >
-            {values.tipoSangre ? values.tipoSangre.replace(" POSITIVO", "+").replace(" NEGATIVO", "−") : "?"}
+            {values.tipoSangre ? values.tipoSangre.replace(" POSITIVO", "+").replace(" NEGATIVO", "−") : "Sangre —"}
           </span>
         </header>
         <dl className="px-4">
