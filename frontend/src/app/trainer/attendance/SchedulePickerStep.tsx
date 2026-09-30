@@ -68,26 +68,9 @@ export default function SchedulePickerStep({
   return (
     <div className={PAGE_RAIL}>
       <div className="card flex flex-col gap-5 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-field">
-          <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
-          {schedules.length > 0 && (
-            <span className="flex items-center gap-2 text-xs font-bold uppercase text-ink-3">
-              Semana
-              <WeekStrip dias={[...new Set(schedules.map((s) => s.diaSemana))]} />
-            </span>
-          )}
-        </div>
-        {resumableDrafts.length > 0 && (
-          <ResumableDraftsPanel
-            resumableDrafts={resumableDrafts}
-            describeSchedule={describeSchedule}
-            onResumeDraft={onResumeDraft}
-            onDiscardDraft={onDiscardDraft}
-            rosterLoading={rosterLoading}
-          />
-        )}
-        <div>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-field">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-field">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
             <p className="text-sm text-ink-3">
               {visible.narrowedToToday ? (
                 <>
@@ -98,6 +81,14 @@ export default function SchedulePickerStep({
                 "Seleccione el horario de entrenamiento:"
               )}
             </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            {schedules.length > 0 && (
+              <span className="flex items-center gap-2 text-xs font-bold uppercase text-ink-3">
+                Semana
+                <WeekStrip dias={[...new Set(schedules.map((s) => s.diaSemana))]} />
+              </span>
+            )}
             {/* The escape hatch. Hidden when today is empty: the list is
               already the full week and the hint below says why. */}
             {schedules.length > 0 && !visible.emptyToday && (
@@ -112,6 +103,17 @@ export default function SchedulePickerStep({
               </button>
             )}
           </div>
+        </div>
+        {resumableDrafts.length > 0 && (
+          <ResumableDraftsPanel
+            resumableDrafts={resumableDrafts}
+            describeSchedule={describeSchedule}
+            onResumeDraft={onResumeDraft}
+            onDiscardDraft={onDiscardDraft}
+            rosterLoading={rosterLoading}
+          />
+        )}
+        <div>
           {visible.emptyToday && (
             <p className="mb-3 text-xs text-ink-3">
               No hay entrenamientos hoy ({formatDay(today).toLowerCase()}). Mostrando la semana completa.

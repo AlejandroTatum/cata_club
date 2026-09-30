@@ -104,14 +104,19 @@ export default function StudentFichaPanel({
             <p className="text-sm">Su ficha médica y a quién llamar aparecen acá.</p>
           </div>
         </div>
-        <dl
-          aria-hidden="true"
-          className="flex flex-col divide-y divide-dashed divide-line border-t border-dashed border-line"
-        >
-          {["Tipo de sangre", "Alergias", "Contacto de emergencia", "Representante legal"].map((label) => (
-            <div key={label} className="flex items-center justify-between gap-3 px-5 py-3">
+        <dl aria-hidden="true" className="flex flex-col border-t border-dashed border-line">
+          {[
+            ["Tipo de sangre", "Se muestra al elegir un alumno"],
+            ["Alergias", "Se muestra al elegir un alumno"],
+            ["Contacto de emergencia", "Nombre y teléfono para llamar"],
+            ["Representante legal", "Nombre y teléfono de respaldo"],
+          ].map(([label, hint]) => (
+            <div
+              key={label}
+              className="flex flex-col gap-1 border-b border-dashed border-line px-5 py-3 last:border-b-0"
+            >
               <dt className="text-2xs font-bold uppercase tracking-flat text-ink-3">{label}</dt>
-              <dd className="text-sm text-ink-3">—</dd>
+              <dd className="text-sm text-ink-3">{hint}</dd>
             </div>
           ))}
         </dl>
