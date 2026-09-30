@@ -336,11 +336,6 @@ function StudentAttendanceContent(): React.ReactElement {
       // reading a dependent's record. See the same change on `/student/payments`.
       title="Asistencias"
       subtitle="Cada sesión que el entrenador registró, con el estado que le asignó."
-      // `short`, like its two siblings. This screen's height is a function of
-      // how many sessions EXIST — the portal hands over a capped window with
-      // no pager — which is the reading that admits a screen to the 1024px
-      // measure. See `lib/__tests__/content-measure.test.ts`.
-      measure="short"
       // Issue #1396: through the shell's `back` slot, so the control precedes
       // the title in document order — `PageHeader` is drawn above `<main>`,
       // so a back control among the children lands after the title by

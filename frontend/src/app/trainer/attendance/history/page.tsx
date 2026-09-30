@@ -237,7 +237,8 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell
-        title="Historial de asistencias"
+        title="Historial"
+        subtitle="Las listas que se pasaron, sesión por sesión."
         back={<BackLink href="/trainer" />}
         /*
          * The same link, with the same label and the same arrow, that `/attendance`

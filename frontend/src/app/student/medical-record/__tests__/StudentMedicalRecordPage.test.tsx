@@ -271,26 +271,19 @@ describe("StudentMedicalRecordPage — no representados", () => {
 });
 
 /**
- * D11b — the ficha médica measured the worst dead air of the whole product
- * (57% as an adult titular, 42% as a guardian, at 1440x900), and it is the one
- * screen where that is PURE layout: five controls that never grow with data,
- * drawn on `max-w-8xl` — the product's WIDEST measure for its narrowest
- * content.
- *
- * `measure="short"` is the instrument `AppShell` already documents for exactly
- * this ("a page whose height is a function of the records that exist, not of a
- * page size"), and until now only `/discounts` and `/groups` used it. It does
- * not remove the emptiness and this suite does not claim it does — it reframes
- * a runt block on a 1356px measure as a column with a margin on 972px, which
- * is the same trade #85 recorded and accepted.
+ * The ficha médica is five controls that never grow with data, so the FORM is
+ * kept to a reading width — but on its own wrapper. The page column stays on
+ * the default measure so the content keeps the same left edge as every other
+ * screen of the role (the short measure used to shift it).
  */
-describe("StudentMedicalRecordPage — drawn on the short measure, not the widest one", () => {
-  it("caps the pane at the short measure the design system reserves for pages that cannot grow", async () => {
+describe("StudentMedicalRecordPage — narrow form on the default page measure", () => {
+  it("constrains the form, not the page column", async () => {
     const { container } = render(<StudentMedicalRecordPage />);
 
     await screen.findByRole("button", { name: "Editar" });
-    expect(container.querySelector(".max-w-5xl")).not.toBeNull();
-    expect(container.querySelector(".max-w-8xl")).toBeNull();
+    expect(container.querySelector(".max-w-3xl")).not.toBeNull();
+    expect(container.querySelector(".max-w-5xl")).toBeNull();
+    expect(container.querySelector(".max-w-8xl")).not.toBeNull();
   });
 });
 

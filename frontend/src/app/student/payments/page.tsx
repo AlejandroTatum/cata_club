@@ -2654,19 +2654,6 @@ function PaymentsPageContent(): React.ReactElement {
       // reader this screen most often serves — a representante paying for a
       // dependent, who has no membership of her own.
       title="Pagos"
-      // `measure="short"` (D11b). With the "cómo se registra un pago" rail
-      // behind "Ver ayuda" this screen is one column, and one column on the
-      // product's WIDEST measure is what the rail was hiding: at 1356px the
-      // membership card carried "Pagado hasta el 02/09/2026" on the left and
-      // 600px of nothing on its right, and a payment row — an amount, a badge
-      // and one meta line — ran the full width for the same reason. The
-      // horizontal half of "espacios vacíos" is the same complaint as the
-      // vertical one.
-      //
-      // It qualifies on the rule `AppShell`'s `CONTENT_MEASURE` note states,
-      // not on taste: this page's height is a function of how many payments
-      // EXIST, and it has no pager.
-      measure="short"
       // A minor with no dependants of their own cannot register anything from
       // here — the gate below is deliberate and stays. Telling them to
       // "registre un pago" in the page's own subtitle was an instruction the
