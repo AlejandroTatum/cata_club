@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   ApiClientError,
+  fetchReportesError,
   enrollStudent,
   fetchPaymentValidations,
   updatePaymentValidation,
@@ -125,6 +126,15 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.NEXT_PUBLIC_USE_MOCKS;
+});
+
+describe("error-report correlation", () => {
+  it("retains the failed request ID for the report dialog", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ message: "Falló" }), {
+      status: 500, headers: { "X-Request-ID": "req-1401" },
+    }));
+    await expect(fetchReportesError()).rejects.toMatchObject({ requestId: "req-1401" });
+  });
 });
 
 // ---------------------------------------------------------------------------

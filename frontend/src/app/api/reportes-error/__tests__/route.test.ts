@@ -16,13 +16,31 @@ describe("/api/reportes-error", () => {
     expect((await POST(request("POST", new FormData()))).status).toBe(400);
     expect(global.fetch).not.toHaveBeenCalled();
   });
+  it("rejects screenshot without consent before forwarding", async () => {
+    const form = new FormData();
+    form.set("descripcion", "Falla");
+    form.set("captura", new File(["bytes"], "foto.png", { type: "image/png" }));
+    expect((await POST(request("POST", form))).status).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
   it("forwards an explicit screenshot and request id", async () => {
     const form = new FormData();
     form.set("descripcion", "Se cerró la pantalla");
     form.set("captura", new File(["bytes"], "foto.png", { type: "image/png" }));
+    form.set("consentimiento_captura", "true");
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 1 }), { status: 201 }));
     expect((await POST(request("POST", form, "req-123"))).status).toBe(201);
     expect(global.fetch).toHaveBeenCalledWith("http://backend/api/v1/reportes-error/", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-Request-ID": "req-123" }) }));
+  });
+  it("preserves the failed backend request ID", async () => {
+    const form = new FormData();
+    form.set("descripcion", "Error");
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Falló" }), {
+      status: 500, headers: { "X-Request-ID": "req-backend-1401" },
+    }));
+    const response = await POST(request("POST", form));
+    expect(response.status).toBe(500);
+    expect(response.headers.get("X-Request-ID")).toBe("req-backend-1401");
   });
   it("requires backend admin authorization for the inbox", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Forbidden" }), { status: 403 }));
