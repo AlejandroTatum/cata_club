@@ -108,6 +108,7 @@ import {
 } from "./enroll-utils";
 import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
 import { cn } from "@/components/ui/cn";
+import EnrollAside from "./EnrollAside";
 import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSteps from "./EnrollSteps";
@@ -724,9 +725,9 @@ function EnrollWizard(): React.ReactElement {
             description="Todavía no hay categorías de membresía configuradas."
           />
         ) : (
-          <ul className="grid gap-section sm:grid-cols-2">
+          <ul className="grid grid-cols-2 gap-section">
             {tarifas.map((tarifa) => (
-              <li key={tarifa.categoria} className="rounded-ctl bg-sunken p-page">
+              <li key={tarifa.categoria} className="rounded-ctl bg-paper p-section">
                 <p className="text-sm text-ink-2">{tarifa.categoria}</p>
                 <p className="mt-field text-xl font-bold tabular-nums text-ink">
                   {formatCurrency(tarifa.precio)}
@@ -742,7 +743,7 @@ function EnrollWizard(): React.ReactElement {
 
   function renderTypeStep(): React.ReactElement {
     return (
-      <div className="space-y-section">
+      <div className="flex flex-1 flex-col gap-section">
         <p className="text-sm text-ink-2">
           Seleccione el tipo de inscripción que desea realizar:
         </p>
@@ -757,7 +758,7 @@ function EnrollWizard(): React.ReactElement {
             same non-colour marker: `aria-pressed`, the "Seleccionado" text and
             the ball dot are what make the state readable without colour, the
             border is only the accent on top of that. */}
-        <div data-enroll-choices className="grid items-stretch gap-section sm:grid-cols-2">
+        <div data-enroll-choices className="my-auto grid items-stretch gap-section sm:grid-cols-2">
           {ENROLLMENT_CHOICES.map((choice) => {
             const selected = formData.enrollmentType === choice.value;
             return (
@@ -807,8 +808,7 @@ function EnrollWizard(): React.ReactElement {
           </p>
         </div>
 
-        {renderTariffs()}
-      </div>
+              </div>
     );
   }
 
@@ -839,7 +839,7 @@ function EnrollWizard(): React.ReactElement {
     const birthDateBounds = studentBirthDateBounds();
     const cedulaTyped = digitsOf(formData.cedula).length;
     return (
-      <div>
+      <div className="flex flex-1 flex-col">
         <p className="mb-page text-sm text-ink-2">
           {isSelf
             ? "Ingrese sus datos personales y credenciales de acceso:"
@@ -971,7 +971,7 @@ function EnrollWizard(): React.ReactElement {
       // the fields say which datum. What made the repetition load-bearing was
       // that the ids were slugged from those labels, which is the coupling
       // `ENROLL_FIELD_TOKEN` breaks.
-      <div>
+      <div className="flex flex-1 flex-col">
         <p className="mb-page text-sm text-ink-2">
           Complete los datos del representante legal y sus credenciales de acceso:
         </p>
@@ -1075,7 +1075,7 @@ function EnrollWizard(): React.ReactElement {
 
   function renderHealthStep(): React.ReactElement {
     return (
-      <div className="space-y-1">
+      <div className="flex flex-1 flex-col">
         <p className="mb-page text-sm text-ink-2">
           Información que el club necesita conocer para la seguridad del estudiante:
         </p>
@@ -1140,6 +1140,16 @@ function EnrollWizard(): React.ReactElement {
           icon: <AlertTriangle size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
           rows: 2,
         })}
+
+        {renderTextarea("observaciones", {
+          label: "Observaciones adicionales",
+          value: formData.observaciones,
+          onChange: (v) => updateField("observaciones", v),
+          placeholder:
+            "Cualquier otra información relevante que el club deba conocer",
+          icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
+          rows: 2,
+        })}
         </EnrollFieldGrid>
 
         {/*
@@ -1161,7 +1171,6 @@ function EnrollWizard(): React.ReactElement {
             telefonoError={shownError("telefonoEmergencia")}
             onContactoBlur={() => markTouched("contactoEmergencia")}
             onTelefonoBlur={() => markTouched("telefonoEmergencia")}
-            wide
           />
         ) : (
           <div className="rounded-ctl border border-line-2 bg-canvas p-page text-xs text-ink-2">
@@ -1170,22 +1179,12 @@ function EnrollWizard(): React.ReactElement {
           </div>
         )}
 
-        {renderTextarea("observaciones", {
-          label: "Observaciones adicionales",
-          value: formData.observaciones,
-          onChange: (v) => updateField("observaciones", v),
-          placeholder:
-            "Cualquier otra información relevante que el club deba conocer",
-          icon: <FileText size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />,
-          rows: 2,
-        })}
-
         {/* `rounded-xl` (12px) was a third radius on a screen that already had
             two, and the second line was `text-blue-700` — a raw Tailwind blue,
             a colour that exists nowhere in the palette, inside an amber box.
             One tone, one radius: this is a `warn` notice and it says so all the
             way through. */}
-        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn">
+        <div className="rounded-ctl border border-state-warn/25 bg-state-warn-bg p-page text-xs text-state-warn lg:hidden">
           <p className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={ICON.sm} strokeWidth={2} aria-hidden="true" />
             Datos sensibles
@@ -1255,7 +1254,7 @@ function EnrollWizard(): React.ReactElement {
     const ageLabel = age !== null && !Number.isNaN(age) ? ` · ${age} años` : "";
     const isChild = formData.enrollmentType === ENROLLMENT_TYPES.CHILD;
     return (
-      <div className="space-y-section">
+      <div className="flex flex-1 flex-col gap-section 2xl:gap-12">
         <p className="text-sm text-ink-2">
           Esto es lo que vamos a crear. Corrija cualquier bloque antes de confirmar:
         </p>
@@ -1274,7 +1273,7 @@ function EnrollWizard(): React.ReactElement {
             has no background at all — this list is the one that sits inside
             a summary card and needs to read as an inset panel instead of a
             second `paper` surface stacked on the first. */}
-        <div className="grid gap-page md:grid-cols-2 md:items-start">
+        <div className="grid gap-page 2xl:grid-cols-2 2xl:items-start">
         <DataRowList className="bg-sunken">
           {summaryRow(
             "Tipo",
@@ -1713,7 +1712,8 @@ function EnrollWizard(): React.ReactElement {
               }
             />
 
-            <div data-enroll-body className="flex flex-1 flex-col justify-center">
+            <div data-enroll-body className="grid flex-1 gap-8 lg:grid-cols-5">
+            <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3">
             {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
                 servidor — nada de esto se envió todavía. El rótulo lo dice para
                 que un dato restaurado nunca se confunda con uno ya guardado, la
@@ -1826,6 +1826,14 @@ function EnrollWizard(): React.ReactElement {
                     </Button>
                   </div>
                 )}
+            </div>
+
+            <EnrollAside
+              step={step}
+              isChild={formData.enrollmentType === ENROLLMENT_TYPES.CHILD}
+              tariffs={step === "type" ? renderTariffs() : null}
+              onOpenDocument={setLegalReviewDoc}
+            />
             </div>
           </form>
         </EnrollFrame>
