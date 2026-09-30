@@ -11,7 +11,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { crearSponsor, eliminarSponsor, fetchSponsors, type Sponsor } from "@/services/api";
 
 /** The landing strip's tile is 300-416px by 168px (landing.css `.landing-sponsor`): about 5:2. */
-const TILE = "flex aspect-5/2 w-full items-center justify-center overflow-hidden rounded-card border border-line bg-sunken";
+const TILE = "flex w-full items-center justify-center overflow-hidden rounded-card border border-line bg-sunken";
+const TILE_STYLE = { aspectRatio: "5 / 2" } as const;
 const CONTROL = "h-ctl rounded-ctl border border-line-2 bg-paper px-3 text-sm font-normal text-ink";
 
 export default function SponsorsPage(): React.ReactElement {
@@ -90,7 +91,7 @@ export default function SponsorsPage(): React.ReactElement {
           />
           <div className="flex flex-col gap-field">
             <p className="text-xs font-semibold text-ink-2">Así se verá en la landing</p>
-            <div data-testid="sponsor-preview" className={TILE}>
+            <div data-testid="sponsor-preview" style={TILE_STYLE} className={TILE}>
               {vistaPrevia ? (
                 // eslint-disable-next-line @next/next/no-img-element -- local blob: preview, not optimizable by next/image
                 <img src={vistaPrevia} alt="Vista previa del logo seleccionado" className="size-full object-contain p-2" />
@@ -107,7 +108,7 @@ export default function SponsorsPage(): React.ReactElement {
             : errorCarga ? <ErrorState message="No se pudieron cargar los patrocinadores." onRetry={() => void load()} />
             : sponsors.length === 0 ? <EmptyState title="Aún no hay patrocinadores cargados" description="Cuando suba el primer logo, aparecerá aquí y en la landing." />
             : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">{sponsors.map((sponsor) => <li key={sponsor.id} className="card flex flex-col gap-2 p-3">
-              <div className={TILE}>
+              <div style={TILE_STYLE} className={TILE}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
                 <img src={sponsor.logoUrl} alt={`Logo de ${sponsor.nombre}`} loading="lazy" width={200} height={80} className="size-full object-contain p-2" />
               </div>
