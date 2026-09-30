@@ -12,7 +12,7 @@ from app.servicios_negocio.reporte_error_servicio import validar_captura, valida
     ("image/png", b"\x89PNG\r\n\x1a\nabc"),
     ("image/jpeg", b"\xff\xd8\xffabc"),
     ("image/webp", b"RIFF\x04\x00\x00\x00WEBPabc"),
-])
+], ids=["png", "jpeg", "webp"])
 def test_captura_valida(mime, contenido):
     validar_captura(mime, contenido)
 
@@ -22,7 +22,7 @@ def test_captura_valida(mime, contenido):
     ("image/gif", b"GIF89a"),
     ("image/jpeg", b"\xff\xd8"),
     ("image/png", b"\x89PNG\r\n\x1a\n" + b"a" * (2 * 1024 * 1024)),
-])
+], ids=["png-not-image", "gif", "jpeg-truncated", "png-over-2mb"])
 def test_captura_invalida(mime, contenido):
     with pytest.raises(ValueError):
         validar_captura(mime, contenido)
