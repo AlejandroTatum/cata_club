@@ -46,7 +46,7 @@ function row(href: string): NavLinkDef {
  */
 export interface NavGroup {
   /**
-   * The rótulo above the block — "Entrenar", "Mi cuenta", "Operación".
+   * The rótulo above the block — "Hoy", "Mi cuenta", "Operación".
    *
    * `null` for the rows that name no section of the product (Inicio, and
    * Iniciar sesión while signed out). They are not a group with a heading
@@ -105,8 +105,26 @@ const RAIL_GROUPS: readonly {
     roles: ["admin"],
     hrefs: ["/galeria", "/sponsors", "/admin/reportes-error"],
   },
-  { heading: "Entrenar", roles: ["trainer"] },
-  { heading: "Mi cuenta", roles: ["representante", "estudiante"] },
+  // Same split for the trainer: what they do today, versus what they look up.
+  { heading: "Hoy", roles: ["trainer"], hrefs: ["/trainer", "/trainer/attendance"] },
+  {
+    heading: "Seguimiento",
+    roles: ["trainer"],
+    hrefs: ["/trainer/attendance/history", "/trainer/students"],
+  },
+  // Representante and estudiante still share both groups (see above); the
+  // medical record is split out because it is the family's health, not the
+  // account's money and attendance.
+  {
+    heading: "Mi cuenta",
+    roles: ["representante", "estudiante"],
+    hrefs: ["/student", "/student/payments", "/student/attendance"],
+  },
+  {
+    heading: "Salud y familia",
+    roles: ["representante", "estudiante"],
+    hrefs: ["/student/medical-record"],
+  },
 ];
 
 /**
