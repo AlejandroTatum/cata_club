@@ -1363,11 +1363,11 @@ describe("StudentPage — the carnet's franja agrees with the assigned schedule"
 
     const panel = await screen.findByTestId("student-situation");
     await waitFor(() => {
-      expect(within(panel).getAllByText("20:00 – 21:15").length).toBeGreaterThan(0);
+      expect(within(panel).getAllByText(/20:00 – 21:15/).length).toBeGreaterThan(0);
     });
     // The panel states the window with an en dash, the carnet with its own em
     // dash: same window, two typographies.
-    const windowOnTheList = within(panel).getAllByText("20:00 – 21:15")[0].textContent!.replace("–", "—");
+    const windowOnTheList = within(panel).getAllByText(/20:00 – 21:15/)[0].textContent!.replace("·", "").trim().replace("–", "—");
 
     const carnet = await screen.findByTestId("student-carnet");
     await waitFor(() => {
@@ -1497,7 +1497,7 @@ describe("StudentPage — próximos entrenamientos", () => {
       expect(within(panel).getByTestId("week-plan-next")).toBeInTheDocument();
     });
     // Both sessions share the window, so it is stated once.
-    expect(within(panel).getByTestId("week-plan-time")).toHaveTextContent("15:00 – 18:00");
+    expect(within(panel).getByTestId("week-plan-same-time")).toBeInTheDocument();
     // Today's window has not closed at 09:00, so today IS the next session.
     expect(within(panel).getByTestId("week-plan-next")).toHaveTextContent(
       "Próximo: hoy, miércoles 22/07 · 15:00 – 18:00",

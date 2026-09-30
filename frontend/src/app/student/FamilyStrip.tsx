@@ -64,7 +64,7 @@ export default function FamilyStrip({
             aria-pressed={selected}
             onClick={() => onChange(profile.personaId)}
             className={cn(
-              "flex min-h-[64px] min-w-0 items-start gap-3 rounded-ctl border bg-paper px-4 py-3 text-left transition-colors",
+              "flex min-h-[64px] min-w-0 items-center gap-3 rounded-ctl border bg-paper px-4 py-3 text-left transition-colors",
               selected
                 ? "border-ink ring-1 ring-ink"
                 : "border-line-2 hover:border-ink-3",
@@ -83,14 +83,14 @@ export default function FamilyStrip({
               <span className="block truncate text-sm font-semibold text-ink">
                 {profile.nombres} {profile.apellidos}
               </span>
-              {profile.membership?.categoria ? (
-                <span className="block truncate text-xs text-ink-3-strong">
-                  {profile.membership.categoria}
-                </span>
-              ) : null}
-              <Badge tone={status.tone} className="mt-1.5">
-                {status.label}
-              </Badge>
+              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {profile.membership?.categoria ? (
+                  <span className="truncate text-xs text-ink-3-strong">
+                    {profile.membership.categoria}
+                  </span>
+                ) : null}
+                <Badge tone={status.tone}>{status.label}</Badge>
+              </span>
             </span>
           </button>
         );

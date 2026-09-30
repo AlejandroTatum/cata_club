@@ -5,8 +5,9 @@
  * A student who trains five days at the same hour used to read the same
  * "20:00 — 21:15" five times down a tall list. Here the week is seven fixed
  * days (the order and letters `WeekStrip` uses), the days that train are lit
- * and carry their date, and the time is stated ONCE when every session shares
- * it; only when sessions differ does each day carry its own start time. The
+ * and carry their date, and the time is stated ONCE — in the next-session line
+ * — when every session shares it; only when sessions differ does each day carry
+ * its own start time. The
  * next session is spelled out above the strip, because "when do I go next" is
  * the question the panel exists to answer.
  *
@@ -37,20 +38,29 @@ export default function WeekPlan({ sessions }: WeekPlanProps): React.ReactElemen
   const sharedRange = ranges.size === 1 ? range(sessions[0]) : null;
 
   return (
-    <div className="flex flex-col gap-4 px-5 pb-4">
+    <div className="flex flex-1 flex-col justify-evenly gap-4 px-5 pb-4">
       {next && (
-        <p data-testid="week-plan-next" className="text-sm text-ink-2">
+        <p
+          data-testid="week-plan-next"
+          className="rounded-ctl bg-sunken px-4 py-3 text-base text-ink-2"
+        >
           <span className="font-bold text-ink">Próximo:</span>{" "}
           <span className="font-semibold text-ink">
             {next.isToday ? "hoy, " : ""}
             {DIA_LABELS[next.dia]?.toLocaleLowerCase("es") ?? next.diaLabel.toLocaleLowerCase("es")}{" "}
             {dayMonth(next.fecha)}
           </span>{" "}
-          <span className="tabular-nums">· {range(next)}</span>
+          <span className="font-semibold tabular-nums text-ink">· {range(next)}</span>
         </p>
       )}
 
-      <ul data-testid="week-plan" className="grid grid-cols-7 gap-1.5 sm:gap-2">
+      {/* `flex-1` up to a ceiling: the panel may be stretched to its neighbour's
+          height, and the days take that slack (they are the content) before any
+          air is added between the blocks. */}
+      <ul
+        data-testid="week-plan"
+        className="grid min-h-[72px] flex-1 grid-cols-7 gap-1.5 sm:gap-2 lg:max-h-[120px]"
+      >
         {WEEK_ORDER.map((dia) => {
           const slots = byDia.get(dia) ?? [];
           const first = slots[0];
@@ -66,7 +76,7 @@ export default function WeekPlan({ sessions }: WeekPlanProps): React.ReactElemen
               data-state={state}
               aria-label={name}
               className={cn(
-                "flex min-h-[64px] flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2 text-center",
+                "flex flex-col items-center justify-center gap-0.5 rounded-ctl border px-1 py-2 text-center",
                 state === "next" && "border-cata-red bg-cata-red text-white",
                 state === "active" && "border-line-2 bg-paper text-ink",
                 state === "idle" && "border-transparent bg-sunken text-ink-3-strong",
@@ -92,12 +102,8 @@ export default function WeekPlan({ sessions }: WeekPlanProps): React.ReactElemen
       </ul>
 
       {sharedRange && (
-        <p className="text-xs text-ink-3-strong">
-          Todos los entrenamientos son de{" "}
-          <span data-testid="week-plan-time" className="font-semibold tabular-nums text-ink">
-            {sharedRange}
-          </span>
-          .
+        <p data-testid="week-plan-same-time" className="text-xs text-ink-3-strong">
+          Mismo horario todos los días marcados.
         </p>
       )}
     </div>

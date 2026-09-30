@@ -28,9 +28,10 @@ describe("WeekPlan", () => {
     render(<WeekPlan sessions={SAME_TIME} />);
     const days = within(screen.getByTestId("week-plan")).getAllByRole("listitem");
     expect(days).toHaveLength(7);
+    // L M X(next: today) J V S D
     expect(days.map((d) => d.getAttribute("data-state"))).toEqual([
       "active", "active", "next", "active", "active", "idle", "idle",
-    ].map((_, i) => (i === 2 ? "next" : i < 5 ? "active" : "idle")));
+    ]);
   });
 
   it("shows the date on each training day", () => {
@@ -40,10 +41,12 @@ describe("WeekPlan", () => {
     expect(thursday).toHaveAccessibleName(/Jueves 01\/10\/2026/);
   });
 
-  it("states the time once when every session shares it", () => {
+  it("states the time once when every session shares it, and only says the rest is the same", () => {
     render(<WeekPlan sessions={SAME_TIME} />);
-    expect(screen.getAllByText("20:00 – 21:15")).toHaveLength(1);
-    expect(screen.getByTestId("week-plan-time")).toHaveTextContent("20:00 – 21:15");
+    // Once, in the next-session line; the days carry no time of their own.
+    expect(screen.getAllByText(/20:00 – 21:15/)).toHaveLength(1);
+    expect(screen.getByTestId("week-plan-same-time")).toHaveTextContent("Mismo horario todos los días marcados.");
+    expect(screen.getByTestId("week-plan").querySelector('[data-day="JUEVES"]')).not.toHaveTextContent("20:00");
   });
 
   it("puts the time on each day when sessions differ", () => {
@@ -55,7 +58,7 @@ describe("WeekPlan", () => {
         ]}
       />,
     );
-    expect(screen.queryByTestId("week-plan-time")).toBeNull();
+    expect(screen.queryByTestId("week-plan-same-time")).toBeNull();
     const tuesday = screen.getByTestId("week-plan").querySelector('[data-day="MARTES"]') as HTMLElement;
     expect(tuesday).toHaveTextContent("18:00");
     expect(tuesday).toHaveAccessibleName(/18:00 – 19:00/);

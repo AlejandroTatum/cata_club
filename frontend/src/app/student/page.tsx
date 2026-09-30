@@ -852,7 +852,7 @@ function TrainingPanel({
 
       {horariosState.status === "ready" &&
         (sessions.length > 0 ? (
-          <div className="border-t border-line pt-4">
+          <div className="flex flex-1 flex-col border-t border-line pt-4">
             <WeekPlan sessions={sessions} />
           </div>
         ) : (
