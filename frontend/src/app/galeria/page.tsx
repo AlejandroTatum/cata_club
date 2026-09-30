@@ -1,10 +1,10 @@
 "use client";
 
-import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { Button, EmptyState, ErrorState, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
+import { Button, EmptyState, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import GaleriaPreview from "./GaleriaPreview";
 import { crearEntradaGaleria, eliminarEntradaGaleria, fetchGaleria, type GaleriaEntry } from "@/services/api";
@@ -57,13 +57,9 @@ export default function GaleriaPage(): React.ReactElement {
   const [descripcion, setDescripcion] = useState("");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
-  // Bumped after a publish so the uncontrolled file input remounts empty.
-  const [inputKey, setInputKey] = useState(0);
-  const [arrastrando, setArrastrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [porEliminar, setPorEliminar] = useState<GaleriaEntry | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
   const load = useCallback(async (): Promise<void> => {
@@ -87,23 +83,8 @@ export default function GaleriaPage(): React.ReactElement {
   function aceptarArchivo(candidato: File | null): void {
     if (!candidato) { setArchivo(null); return; }
     const errorArchivo = errorDeArchivo(candidato);
-    if (errorArchivo) {
-      setArchivo(null); setError(errorArchivo);
-      if (inputRef.current) inputRef.current.value = "";
-      return;
-    }
+    if (errorArchivo) { setArchivo(null); setError(errorArchivo); return; }
     setError(null); setArchivo(candidato);
-  }
-
-  function seleccionarArchivo(event: ChangeEvent<HTMLInputElement>): void {
-    aceptarArchivo(event.target.files?.[0] ?? null);
-  }
-
-  function soltarArchivo(event: DragEvent<HTMLDivElement>): void {
-    event.preventDefault(); setArrastrando(false);
-    const soltado = event.dataTransfer.files[0] ?? null;
-    if (soltado && inputRef.current) inputRef.current.files = event.dataTransfer.files;
-    aceptarArchivo(soltado);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -116,7 +97,7 @@ export default function GaleriaPage(): React.ReactElement {
     setSaving(true); setError(null);
     try {
       await crearEntradaGaleria(titulo.trim(), descripcion.trim(), archivo);
-      setTitulo(""); setDescripcion(""); setArchivo(null); setInputKey((k) => k + 1);
+      setTitulo(""); setDescripcion(""); setArchivo(null);
       showSuccess("Foto publicada en la galería.");
       await load();
     }
@@ -151,22 +132,21 @@ export default function GaleriaPage(): React.ReactElement {
     subtitle="Publique las fotos que se muestran en la galería de la landing, con su título y descripción."
   >
     <>
-      <form onSubmit={submit} className={cn("card p-5", PAGE_RAIL)}>
-        <div className="flex min-w-0 flex-col gap-field">
-          <label htmlFor="galeria-foto" className="text-sm font-semibold">Foto (JPG o PNG)</label>
-          <div
-            onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
-            onDragLeave={() => setArrastrando(false)}
-            onDrop={soltarArchivo}
-            className={`rounded-card border border-dashed p-3 ${arrastrando ? "border-cata-red bg-sunken" : "border-line-2"}`}
-          >
-            <input key={inputKey} ref={inputRef} id="galeria-foto" type="file" accept="image/jpeg,image/png" aria-required="true" onChange={seleccionarArchivo} className="mb-3 w-full text-sm" />
+      <div className={PAGE_RAIL}>
+        <form onSubmit={submit} className="card flex min-w-0 flex-col gap-4 p-4 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
+          <FileDropZone
+            id="galeria-foto"
+            label="Foto (JPG o PNG)"
+            hint="JPG o PNG · máx. 5 MB"
+            accept="image/jpeg,image/png"
+            required
+            file={archivo}
+            onFile={aceptarArchivo}
+          />
+          <div className="flex flex-col gap-field">
+            <p className="text-xs font-semibold text-ink-2">Así se verá en la galería del sitio</p>
             <div data-testid="galeria-preview"><GaleriaPreview imageUrl={vistaPrevia} title={titulo.trim()} description={descripcion.trim()} /></div>
           </div>
-          <p className="text-xs text-ink-2">Arrastre una imagen o elíjala desde su equipo. Máximo 5 MB.</p>
-        </div>
-        <div className="flex flex-col gap-4">
-          <p className="text-xs text-ink-2">Todos los campos son obligatorios.</p>
           <div className="flex flex-col gap-field text-sm font-semibold">
             <label htmlFor="galeria-titulo">Título</label>
             <input id="galeria-titulo" value={titulo} maxLength={80} aria-required="true" aria-invalid={tituloExcedido} aria-describedby="galeria-titulo-cuenta" onChange={(e) => setTitulo(e.target.value)} className={`h-ctl ${CONTROL}`} />
@@ -176,33 +156,31 @@ export default function GaleriaPage(): React.ReactElement {
           </div>
           <div className="flex flex-col gap-field text-sm font-semibold">
             <label htmlFor="galeria-descripcion">Descripción de la foto</label>
-            <textarea id="galeria-descripcion" value={descripcion} maxLength={500} rows={5} aria-required="true" aria-invalid={descripcionExcedida} aria-describedby="galeria-descripcion-cuenta" onChange={(e) => setDescripcion(e.target.value)} className={`py-2 ${CONTROL}`} />
+            <textarea id="galeria-descripcion" value={descripcion} maxLength={500} rows={3} aria-required="true" aria-invalid={descripcionExcedida} aria-describedby="galeria-descripcion-cuenta" onChange={(e) => setDescripcion(e.target.value)} className={`py-2 ${CONTROL}`} />
             <span id="galeria-descripcion-cuenta" className={`text-xs font-normal ${descripcionExcedida ? "text-state-bad" : "text-ink-2"}`}>
               Máximo {DESCRIPCION_MAX_PALABRAS} palabras · {descripcionPalabras}/{DESCRIPCION_MAX_PALABRAS}
             </span>
           </div>
           {error && <p ref={errorRef} id="galeria-error" role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
-          <div className="flex justify-end">
-            <Button type="submit" variant="primary" disabled={saving}>{saving ? "Publicando…" : "Publicar foto"}</Button>
-          </div>
-        </div>
-      </form>
-      <section aria-label="Fotos publicadas">
-        {cargando ? <LoadingState label="Cargando fotos…" />
-          : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
-          : entradas.length === 0 ? <EmptyState title="Aún no hay fotos en la galería" description="Suba la primera foto con el formulario de arriba: aparecerá en la galería de la landing." />
-          : <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {entradas.map((entrada) => <li key={entrada.id} className="card flex flex-col overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
-              <img src={entrada.imagenUrl} alt={entrada.titulo} loading="lazy" width={400} height={300} className="aspect-4/3 w-full bg-sunken object-cover" />
-              <div className="flex flex-1 flex-col gap-1 p-3">
-                <p className="truncate text-sm font-semibold" title={entrada.titulo}>{entrada.titulo}</p>
-                <p className="line-clamp-2 text-xs text-ink-2">{entrada.descripcion}</p>
-                <Button size="sm" className="mt-2 self-start text-state-bad" aria-label={`Eliminar ${entrada.titulo}`} onClick={() => setPorEliminar(entrada)}>Eliminar</Button>
-              </div>
-            </li>)}
-          </ul>}
-      </section>
+          <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Publicando…" : "Publicar foto"}</Button>
+        </form>
+        <section aria-label="Fotos publicadas" className="min-w-0 lg:col-start-1 lg:row-start-1">
+          {cargando ? <LoadingState label="Cargando fotos…" />
+            : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
+            : entradas.length === 0 ? <EmptyState title="Aún no hay fotos en la galería" description="Cuando publique la primera foto, aparecerá aquí y en la galería de la landing." />
+            : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+              {entradas.map((entrada) => <li key={entrada.id} className="card flex flex-col overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
+                <img src={entrada.imagenUrl} alt={entrada.titulo} loading="lazy" width={400} height={267} className="aspect-3/2 w-full bg-sunken object-cover" />
+                <div className="flex flex-1 flex-col gap-1 p-3">
+                  <p className="truncate text-sm font-semibold" title={entrada.titulo}>{entrada.titulo}</p>
+                  <p className="line-clamp-2 text-xs text-ink-2">{entrada.descripcion}</p>
+                  <Button size="sm" className="mt-2 self-start text-state-bad" aria-label={`Eliminar ${entrada.titulo}`} onClick={() => setPorEliminar(entrada)}>Eliminar</Button>
+                </div>
+              </li>)}
+            </ul>}
+        </section>
+      </div>
       <ConfirmDialog
         open={porEliminar !== null}
         variant="danger"

@@ -138,11 +138,31 @@ describe("GaleriaPage", () => {
     expect(within(preview).getByText("El punto decisivo.")).toBeInTheDocument();
     expect(preview.querySelector("img")).toHaveAttribute("src", "blob:preview");
   });
+  it("frames the preview at the landing slide's default 3:2 ratio before and after a photo is chosen", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    const frame = () => screen.getByTestId("galeria-preview").querySelector("figure") as HTMLElement;
+    expect(frame().style.aspectRatio).toMatch(/^1\.5/);
+    expect(screen.getByText("Así se verá en la galería del sitio")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [fotoValida()] } });
+    expect(frame().style.aspectRatio).toMatch(/^1\.5/);
+  });
+  it("adopts the chosen photo's own aspect ratio, as the landing slide does", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    fireEvent.change(screen.getByLabelText("Foto (JPG o PNG)"), { target: { files: [fotoValida()] } });
+    const img = screen.getByTestId("galeria-preview").querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "naturalWidth", { value: 800 }); Object.defineProperty(img, "naturalHeight", { value: 1000 });
+    fireEvent.load(img);
+    expect((screen.getByTestId("galeria-preview").querySelector("figure") as HTMLElement).style.aspectRatio).toMatch(/^0\.8/);
+  });
+  it("shows the chosen file name in the drop zone", async () => {
+    render(<GaleriaPage />); await completarFormularioValido();
+    expect(screen.getByText("foto.png")).toBeInTheDocument();
+  });
   it("guides the admin with an empty state after a successful empty load", async () => {
     fetchGaleria.mockResolvedValue([]);
     render(<GaleriaPage />);
     expect(await screen.findByText("Aún no hay fotos en la galería")).toBeInTheDocument();
-    expect(screen.getByText(/formulario/i)).toBeInTheDocument();
+    expect(screen.getByText(/aparecerá aquí y en la galería/i)).toBeInTheDocument();
   });
   it("shows a loading state, not the empty copy, while the list loads", async () => {
     let resolver: (v: unknown[]) => void = () => undefined;
