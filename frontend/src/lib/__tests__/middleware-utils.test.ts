@@ -162,6 +162,14 @@ describe("middleware CSP", () => {
     expect(imgSrc?.split(" ")).toContain("blob:");
   });
 
+  // The report-a-problem page capture renders its DOM snapshot through an
+  // SVG data: URL; without data: the capture always fails under the real CSP.
+  it("allows data: in img-src for the page-capture snapshot", () => {
+    const csp = buildContentSecurityPolicy("n");
+    const imgSrc = csp.split("; ").find((directive) => directive.startsWith("img-src "));
+    expect(imgSrc?.split(" ")).toContain("data:");
+  });
+
   it("sets Content-Security-Policy on plain next() responses for public paths", () => {
     const response = middleware(makeRequest("/"));
     expect(response.headers.get("Content-Security-Policy")).toContain("strict-dynamic");
