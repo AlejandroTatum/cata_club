@@ -11,9 +11,11 @@
  * presentation only.
  *
  * Two presentation fixes:
- *   · Stacked, never side-by-side. The card now shares its row with the
- *     activity feed, so the legend gets the column's full width instead of
- *     ~180px for three numeric columns.
+ *   · Donut beside the legend from `sm` up, stacked on a phone. The card
+ *     shares its row with the activity feed; stacked it stood ~100px taller
+ *     than that feed and left a blank band under the shorter one. A half-width
+ *     card is ~530px inside its padding, which is room for a 140px donut and a
+ *     three-column legend side by side.
  *   · Legend text migrated off the legacy `cata-*` palette onto the ink ramp.
  *     `text-cata-text/50` measured 3.05:1 — below AA. The percentage column is
  *     `ink-3-strong`, which holds on `paper` (5.26:1) AND on the `canvas` fill
@@ -45,7 +47,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
   );
 
   return (
-    <div className="flex flex-col items-center gap-page">
+    <div className="flex w-full flex-col items-center gap-page sm:flex-row">
       <svg
         width={SIZE}
         height={SIZE}
@@ -119,7 +121,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
         </g>
       </svg>
 
-      <table className="w-full text-left text-sm">
+      <table className="w-full min-w-0 flex-1 text-left text-sm">
         <thead>
           <tr className="border-b border-line text-2xs font-bold uppercase tracking-caps-wide text-ink-3-strong">
             <th className="py-2 font-bold">Estado</th>
@@ -137,7 +139,7 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
                 onMouseLeave={() => setHovered((prev) => (prev === segment.estado ? null : prev))}
                 className={`transition-colors ${isHovered ? "bg-canvas" : ""}`}
               >
-                <td className="py-2">
+                <td className="py-2.5">
                   <span className="flex items-center gap-2.5 text-ink-2">
                     <span
                       aria-hidden="true"
@@ -147,8 +149,8 @@ export default function AttendanceStatusChart({ stats }: AttendanceStatusChartPr
                     {segment.label}
                   </span>
                 </td>
-                <td className="py-2 text-right font-semibold text-ink">{segment.value}</td>
-                <td className="py-2 text-right text-xs text-ink-3-strong">{segment.percentage}%</td>
+                <td className="py-2.5 text-right font-semibold text-ink">{segment.value}</td>
+                <td className="py-2.5 text-right text-xs text-ink-3-strong">{segment.percentage}%</td>
               </tr>
             );
           })}

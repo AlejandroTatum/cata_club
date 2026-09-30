@@ -518,7 +518,9 @@ export default function DashboardPage(): React.ReactElement {
                 onRetry={() => void loadRecords()}
               />
             ) : attendanceStats.totalStudents > 0 ? (
-              <div className="p-[18px]">
+              // Centred in whatever height the row gives the card, so the
+              // shorter block never ends in an empty band.
+              <div className="flex flex-1 items-center p-[18px]">
                 <AttendanceStatusChart stats={attendanceStats} />
               </div>
             ) : (
