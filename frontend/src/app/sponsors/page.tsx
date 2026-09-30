@@ -89,7 +89,7 @@ export default function SponsorsPage(): React.ReactElement {
     subtitle="Suba el logo y el nombre que se leerá como texto alternativo en la landing."
   >
     <>
-      <div className={PAGE_RAIL}>
+      <div className={`${PAGE_RAIL} ${vacio ? "lg:flex-1" : ""}`}>
         <form onSubmit={submit} className="card flex min-w-0 flex-col gap-4 p-4 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1">
           <div className="flex flex-col gap-field text-sm font-semibold">
             <label htmlFor="sponsor-nombre">Nombre corto</label>

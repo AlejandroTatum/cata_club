@@ -94,7 +94,7 @@ function CompactEmptyGrid({
         data-testid="empty-grid-tiles"
         className="grid grid-cols-2 content-start gap-3 p-4 opacity-60 lg:absolute lg:inset-0 lg:grid-cols-3 lg:gap-4 2xl:grid-cols-4"
       >
-        {Array.from({ length: 12 }, (_, tile) => (
+        {Array.from({ length: 24 }, (_, tile) => (
           <div
             key={tile}
             style={{ aspectRatio: tileRatio }}
