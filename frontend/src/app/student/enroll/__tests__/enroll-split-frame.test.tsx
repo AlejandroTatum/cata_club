@@ -1,6 +1,6 @@
 /**
  * The enrollment page frame is a full-height split from `lg`: a coal brand
- * panel (way out, title, vertical steps, live summary, tariffs) beside the
+ * panel (way out, title, vertical steps, live summary) beside the
  * form. Below `lg` the panel is a compact header and the compact `Stepper`
  * sits above the form. `matchMedia` decides which one renders — jsdom has none,
  * so the other test files exercise the narrow layout.
@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe("EnrollPage — split frame from lg", () => {
-  it("puts the vertical steps, the summary and the tariffs inside the coal panel", async () => {
+  it("puts the vertical steps and the summary in the coal panel and the tariffs in the card", async () => {
     mockWide(true);
     render(<EnrollPage />);
 
@@ -91,7 +91,11 @@ describe("EnrollPage — split frame from lg", () => {
     expect(within(steps).getAllByRole("listitem")).toHaveLength(4);
     expect(within(steps).getByText("Tipo")).toHaveAttribute("data-state", "current");
     expect(within(panel).getByRole("complementary", { name: /resumen/i })).toBeInTheDocument();
-    expect(await within(panel).findByText("Categoria Test A")).toBeInTheDocument();
+    const tariff = await screen.findByText("Categoria Test A");
+    expect(panel).not.toContainElement(tariff);
+    expect(screen.getByTestId("enroll-wizard-card")).toContainElement(tariff);
+    expect(screen.getByTestId("enroll-nav")).toHaveAttribute("data-enroll-nav");
+    expect(screen.getByTestId("enroll-wizard-card")).toContainElement(screen.getByTestId("enroll-nav"));
     // One list of steps only: no compact stepper beside the form.
     expect(screen.getAllByRole("list", { name: /pasos de la inscripción/i })).toHaveLength(1);
     expect(screen.getByTestId("enroll-nav")).not.toContainElement(steps);
@@ -111,7 +115,7 @@ describe("EnrollPage — split frame from lg", () => {
     expect(within(steps).getByText("Tipo").closest("li")).toHaveAttribute("aria-current", "step");
   });
 
-  it("keeps the compact stepper and the tariffs above the form when narrow", async () => {
+  it("keeps the compact stepper in the card nav and the tariffs under the choices when narrow", async () => {
     mockWide(false);
     render(<EnrollPage />);
 
@@ -121,9 +125,7 @@ describe("EnrollPage — split frame from lg", () => {
       screen.getByRole("list", { name: /pasos de la inscripción/i }),
     );
     const tariff = await screen.findByText("Categoria Test A");
-    const card = screen.getByTestId("enroll-wizard-card");
-    // eslint-disable-next-line no-bitwise -- DOM position bitmask is the standard API for this.
-    expect(tariff.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("enroll-wizard-card")).toContainElement(tariff);
     expect(panel).not.toContainElement(tariff);
   });
 });

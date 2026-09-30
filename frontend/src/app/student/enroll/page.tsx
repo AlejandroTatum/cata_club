@@ -112,7 +112,7 @@ import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSteps from "./EnrollSteps";
 import useWideLayout from "./useWideLayout";
-import EnrollSummary, { SummaryRow } from "./EnrollSummary";
+import EnrollSummary from "./EnrollSummary";
 
 // ---------------------------------------------------------------------------
 // Step 1 — the two ways into the club. Transcribed from
@@ -618,6 +618,7 @@ function EnrollWizard(): React.ReactElement {
       minLength?: number;
       inputMode?: string;
       hint?: string;
+      describedBy?: string;
       numericMode?: NumericFieldMode;
       autoComplete?: string;
     },
@@ -655,6 +656,7 @@ function EnrollWizard(): React.ReactElement {
       min?: string;
       max?: string;
       hint?: string;
+      hintTone?: "neutral" | "warn";
     },
   ): React.ReactElement {
     return (
@@ -698,6 +700,46 @@ function EnrollWizard(): React.ReactElement {
 
   // ---- Step renderers ----
 
+  /**
+   * The public tariff catalog (issue #331, consumes the public BFF/backend
+   * contract of #394), under the type choices on step 1 — visible before the
+   * visitor picks a type, so anyone knows the price before they start. Public
+   * and harmless data: NOT gated on auth or environment, and a failure gets its
+   * own loud `ErrorState` with retry — this block exists to show a price, so its
+   * absence must say so. One tile per plan, in the same two columns as the
+   * choices above it.
+   */
+  function renderTariffs(): React.ReactElement {
+    return (
+      <section data-enroll-tariffs aria-label="Tarifas vigentes">
+        <h3 className="mb-field text-xs font-semibold text-ink-3-strong">Tarifas vigentes</h3>
+        {tarifasLoading ? (
+          <LoadingState label="Cargando tarifas…" />
+        ) : tarifasError ? (
+          <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
+        ) : tarifas.length === 0 ? (
+          <EmptyState
+            surface="inset"
+            title="Sin tarifas publicadas"
+            description="Todavía no hay categorías de membresía configuradas."
+          />
+        ) : (
+          <ul className="grid gap-section sm:grid-cols-2">
+            {tarifas.map((tarifa) => (
+              <li key={tarifa.categoria} className="rounded-ctl bg-sunken p-page">
+                <p className="text-sm text-ink-2">{tarifa.categoria}</p>
+                <p className="mt-field text-xl font-bold tabular-nums text-ink">
+                  {formatCurrency(tarifa.precio)}
+                </p>
+                <p className="text-xs text-ink-3-strong">por mes</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    );
+  }
+
   function renderTypeStep(): React.ReactElement {
     return (
       <div className="space-y-section">
@@ -715,7 +757,7 @@ function EnrollWizard(): React.ReactElement {
             same non-colour marker: `aria-pressed`, the "Seleccionado" text and
             the ball dot are what make the state readable without colour, the
             border is only the accent on top of that. */}
-        <div className="grid items-stretch gap-section sm:grid-cols-2">
+        <div data-enroll-choices className="grid items-stretch gap-section sm:grid-cols-2">
           {ENROLLMENT_CHOICES.map((choice) => {
             const selected = formData.enrollmentType === choice.value;
             return (
@@ -764,6 +806,8 @@ function EnrollWizard(): React.ReactElement {
               : "Usted será el responsable de pago de este estudiante. Los datos del estudiante se registran por separado de su cuenta."}
           </p>
         </div>
+
+        {renderTariffs()}
       </div>
     );
   }
@@ -772,18 +816,22 @@ function EnrollWizard(): React.ReactElement {
    * The computed age, as the birth-date column's own hint line — it replaces
    * the generic format hint once a date exists, so it never spans the row.
    */
-  function birthDateHint(): string {
+  function birthDateHint(): { hint: string; hintTone?: "warn" } {
     const generic = "Día, mes y año de cuatro dígitos (por ejemplo, 15 marzo 2015).";
-    if (!formData.fechaNacimiento) return generic;
+    if (!formData.fechaNacimiento) return { hint: generic };
     const age = calculatePersonAge(formData.fechaNacimiento);
-    if (isNaN(age)) return generic;
-    if (!isPlausibleHumanAge(age)) return "Revise el año.";
+    if (isNaN(age)) return { hint: generic };
+    if (!isPlausibleHumanAge(age)) return { hint: "Revise el año." };
     if (age < 18) {
-      return formData.enrollmentType === ENROLLMENT_TYPES.SELF
-        ? `${age} años · menor de edad: requiere un representante.`
-        : `${age} años · menor de edad.`;
+      return {
+        hint:
+          formData.enrollmentType === ENROLLMENT_TYPES.SELF
+            ? `${age} años · menor de edad: requiere un representante.`
+            : `${age} años · menor de edad.`,
+        hintTone: "warn",
+      };
     }
-    return `${age} años`;
+    return { hint: `${age} años` };
   }
 
   function renderPersonalStep(): React.ReactElement {
@@ -835,7 +883,7 @@ function EnrollWizard(): React.ReactElement {
             required: true,
             min: birthDateBounds.min,
             max: birthDateBounds.max,
-            hint: birthDateHint(),
+            ...birthDateHint(),
           })}
           {renderField("cedula", {
             label: "Cédula de identidad",
@@ -890,6 +938,7 @@ function EnrollWizard(): React.ReactElement {
                   type: "password",
                   required: true,
                   autoComplete: "new-password",
+                  describedBy: `${enrollFieldId("contrasenia")}-strength`,
                 })}
                 {/* Issue #1395 — the advisory layer, LIVE under the field it
                     reads. Information only: the hard policy (floor + common
@@ -991,6 +1040,7 @@ function EnrollWizard(): React.ReactElement {
               type: "password",
               required: true,
               autoComplete: "new-password",
+              describedBy: `${enrollFieldId("contraseniaRepresentante")}-strength`,
             })}
             {/** Same advisory layer as the self flow (#1395): informs, never gates. */}
             <PasswordStrengthMeter
@@ -1384,43 +1434,11 @@ function EnrollWizard(): React.ReactElement {
   const accountAreaLink = sessionConfirmed && session ? accountAreaLinkFor(session) : null;
 
   /**
-   * The live summary and, on step 1, the public tariff catalog (issue #331,
-   * consumes the public BFF/backend contract of #394) — shown before the
-   * visitor's first field so anyone knows the price before they start. Public
-   * and harmless data: NOT gated on auth or environment, and a failure gets its
-   * own loud `ErrorState` with retry — this block exists to show a price, so its
-   * absence must say so. `dark` restyles it for the coal brand panel.
+   * The live summary. `dark` restyles it for the coal brand panel.
    */
   function renderSummaryRail(dark: boolean): React.ReactElement {
     return (
-      <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step} dark={dark}>
-        {step === "type" && (
-          <section aria-label="Tarifas vigentes">
-            <h3 className={cn("mb-field text-xs", dark ? "text-white/75" : "text-ink-3-strong")}>
-              Tarifas vigentes
-            </h3>
-            {tarifasLoading ? (
-              <LoadingState label="Cargando tarifas…" />
-            ) : tarifasError ? (
-              <ErrorState message={tarifasError} onRetry={() => void loadTarifas()} />
-            ) : tarifas.length === 0 ? (
-              <EmptyState
-                surface="inset"
-                title="Sin tarifas publicadas"
-                description="Todavía no hay categorías de membresía configuradas."
-              />
-            ) : (
-              <ul className={cn("divide-y", dark ? "divide-white/10" : "divide-line")}>
-                {tarifas.map((tarifa) => (
-                  <SummaryRow key={tarifa.categoria} label={tarifa.categoria} dark={dark}>
-                    {formatCurrency(tarifa.precio)}
-                  </SummaryRow>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-      </EnrollSummary>
+      <EnrollSummary formData={formData} steps={effectiveSteps} currentStep={step} dark={dark} />
     );
   }
 
@@ -1656,54 +1674,21 @@ function EnrollWizard(): React.ReactElement {
           }
           summary={wide && renderSummaryRail(true)}
         >
-          {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
-              servidor — nada de esto se envió todavía. El rótulo lo dice para
-              que un dato restaurado nunca se confunda con uno ya guardado, la
-              misma distinción que #310 (K3) cerró del lado de asistencias. */}
-          {restoredFromDraft && (
-            <p className="rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
-              Recuperamos los datos que ya había completado. Todavía no se han
-              enviado — revíselos antes de continuar.
-            </p>
-          )}
-
-          {/* Demo helper — quick-fill for testing convenience. The "(solo
-              desarrollo)" label used to be the ONLY thing stopping this from
-              reaching real visitors; `isDemoQuickFillEnabled` is the actual
-              guard. See its doc comment for why it reads NODE_ENV. It is one
-              compact row: it never reaches a visitor, so it should not cost
-              them (or a developer's screenshot) a card of height. */}
-          {demoQuickFillEnabled && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-field rounded-card border border-dashed border-line-2 bg-sunken px-page py-2">
-              <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
-              {/* `ink-3-strong`, not translucent ink: the old `/45` and `/40`
-                  pairs measured 2.61:1 and 2.31:1 on `sunken`. */}
-              <p
-                className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong"
-                title="Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno."
-              >
-                Rellenar datos de prueba (solo desarrollo)
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" onClick={() => fillDemoData("self")}>
-                  Jugador
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => fillDemoData("child")}>
-                  Representante
-                </Button>
-              </div>
-            </div>
-          )}
-
           {/* One form around the navigation row and both columns, so the
               top-bar "Siguiente" is the form's submit control and Enter inside
               a field advances. `noValidate`: the messages are ours, printed
               under each field, not the browser's one-at-a-time bubble. */}
+          {/* Narrow layouts only: the summary sits ABOVE the card. From `lg` the
+              same block lives in the brand panel instead. */}
+          {!wide && !isLast && renderSummaryRail(false)}
+
           <form
             ref={formRef}
             noValidate
             onSubmit={handleConfirm}
-            className="flex flex-col gap-page"
+            data-testid="enroll-wizard-card"
+            data-enroll-card
+            className="card mx-auto w-full max-w-4xl p-page"
           >
             {/* #1321: `goToStep` already jumps to an arbitrary step from the
                 review's "Editar" buttons without losing anything —
@@ -1727,13 +1712,46 @@ function EnrollWizard(): React.ReactElement {
               }
             />
 
-            <div className="flex flex-col gap-page">
-              {/* Narrow layouts only: the summary (and the public tariffs, issue
-                  #331) sit ABOVE the first choice so a phone visitor still sees
-                  the price before deciding. From `lg` the same block lives in the
-                  brand panel instead. */}
-              {!wide && !isLast && renderSummaryRail(false)}
-              <div data-testid="enroll-wizard-card" className="card p-page">
+            {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
+                servidor — nada de esto se envió todavía. El rótulo lo dice para
+                que un dato restaurado nunca se confunda con uno ya guardado, la
+                misma distinción que #310 (K3) cerró del lado de asistencias. */}
+            {restoredFromDraft && (
+              <p className="mb-page rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
+                Recuperamos los datos que ya había completado. Todavía no se han
+                enviado — revíselos antes de continuar.
+              </p>
+            )}
+
+            {/* Demo helper — quick-fill for testing convenience. The "(solo
+                desarrollo)" label used to be the ONLY thing stopping this from
+                reaching real visitors; `isDemoQuickFillEnabled` is the actual
+                guard. See its doc comment for why it reads NODE_ENV. It is one
+                compact row: it never reaches a visitor, so it should not cost
+                them (or a developer's screenshot) a card of height. */}
+            {demoQuickFillEnabled && (
+              <div className="mb-page flex flex-wrap items-center gap-x-4 gap-y-field rounded-card border border-dashed border-line-2 bg-sunken px-page py-2">
+                <AlertTriangle size={ICON.sm} strokeWidth={1.5} className="text-state-warn" aria-hidden="true" />
+                {/* `ink-3-strong`, not translucent ink: the old `/45` and `/40`
+                    pairs measured 2.61:1 and 2.31:1 on `sunken`. */}
+                <p
+                  className="text-2xs font-semibold uppercase tracking-wider text-ink-3-strong"
+                  title="Llena los campos automáticamente pero no salta la validación — los pasos deben completarse uno por uno."
+                >
+                  Rellenar datos de prueba (solo desarrollo)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => fillDemoData("self")}>
+                    Jugador
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => fillDemoData("child")}>
+                    Representante
+                  </Button>
+                </div>
+              </div>
+            )}
+
+
                 {/* The card title was `text-sm font-bold` — 13.5px of Barlow,
                     the DENSE step, smaller than the labels inside it. It takes
                     the `title` step now: Graduate, 20px, uppercase, flat
@@ -1806,9 +1824,6 @@ function EnrollWizard(): React.ReactElement {
                     </Button>
                   </div>
                 )}
-              </div>
-
-            </div>
           </form>
         </EnrollFrame>
       )}

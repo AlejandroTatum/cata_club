@@ -74,7 +74,8 @@ function goToPersonalStep(): void {
 
 /** The message element a field points at with `aria-describedby`. */
 function describedMessage(field: HTMLElement): string {
-  const id = field.getAttribute("aria-describedby");
+  // The field's own message comes first; a meter id may follow it.
+  const id = field.getAttribute("aria-describedby")?.split(" ")[0];
   expect(id).toBeTruthy();
   return document.getElementById(id as string)?.textContent ?? "";
 }

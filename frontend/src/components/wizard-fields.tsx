@@ -142,6 +142,13 @@ interface WizardInputProps {
   error?: string;
   /** Neutral guidance under the field (`.hint`), shown only when there is no error. */
   hint?: string;
+  /** Tone of `hint`; defaults to neutral. */
+  hintTone?: HintTone;
+  /**
+   * Id of an extra element that describes the field (e.g. a strength meter),
+   * appended to `aria-describedby` after the field's own message.
+   */
+  describedBy?: string;
   /** Fired when the field loses focus — callers use it to mark the field "touched". */
   onBlur?: () => void;
   /**
@@ -176,6 +183,9 @@ function RequiredMarker(props: { required?: boolean }): ReactElement {
   );
 }
 
+/** `warn` tints a hint that is information, not an error — e.g. "menor de edad". */
+export type HintTone = "neutral" | "warn";
+
 /** The error paragraph every field message renders in its `hasError` branch — shared so `BirthDateField` (issue #853) does not duplicate `WizardInput`'s. */
 function FieldErrorMessage(props: { id: string; children: ReactNode }): ReactElement {
   return (
@@ -187,9 +197,16 @@ function FieldErrorMessage(props: { id: string; children: ReactNode }): ReactEle
 }
 
 /** The neutral hint paragraph every field message renders when there is no error — same sharing reason as `FieldErrorMessage`. */
-function FieldHintMessage(props: { id: string; children: ReactNode }): ReactElement {
+function FieldHintMessage(props: {
+  id: string;
+  tone?: HintTone;
+  children: ReactNode;
+}): ReactElement {
   return (
-    <p id={props.id} className="mt-field text-xs text-ink-3">
+    <p
+      id={props.id}
+      className={`mt-field text-xs ${props.tone === "warn" ? "text-state-warn" : "text-ink-3"}`}
+    >
       {props.children}
     </p>
   );
@@ -257,7 +274,11 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           max={opts.max}
           autoComplete={opts.autoComplete}
           aria-invalid={hasError || undefined}
-          aria-describedby={opts.error || limitReached || opts.hint ? messageId : undefined}
+          aria-describedby={
+            [opts.error || limitReached || opts.hint ? messageId : undefined, opts.describedBy]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
           inputMode={(opts.inputMode ?? "text") as InputHTMLAttributes<HTMLInputElement>["inputMode"]}
           /* `state-bad` is the error ink of the ramp; `cata-red` is the ACTION
              colour, and as a border it said "press me" on the one field the
@@ -299,7 +320,9 @@ export function WizardInput(opts: WizardInputProps): ReactElement {
           {NUMERIC_FIELD_LIMIT_MESSAGE[numericMode]}
         </p>
       ) : opts.hint ? (
-        <FieldHintMessage id={messageId}>{opts.hint}</FieldHintMessage>
+        <FieldHintMessage id={messageId} tone={opts.hintTone}>
+          {opts.hint}
+        </FieldHintMessage>
       ) : null}
     </div>
   );
@@ -344,6 +367,8 @@ export interface BirthDateFieldProps {
   max?: string;
   error?: string;
   hint?: string;
+  /** Tone of `hint`; defaults to neutral. */
+  hintTone?: HintTone;
   onBlur?: () => void;
 }
 
@@ -508,7 +533,9 @@ export function BirthDateField(opts: BirthDateFieldProps): ReactElement {
       {hasError ? (
         <FieldErrorMessage id={messageId}>{opts.error}</FieldErrorMessage>
       ) : opts.hint ? (
-        <FieldHintMessage id={messageId}>{opts.hint}</FieldHintMessage>
+        <FieldHintMessage id={messageId} tone={opts.hintTone}>
+          {opts.hint}
+        </FieldHintMessage>
       ) : null}
     </fieldset>
   );
