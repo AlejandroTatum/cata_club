@@ -108,7 +108,7 @@ import {
 } from "./enroll-utils";
 import FieldSlot, { EnrollFieldGrid } from "./EnrollFieldSlot";
 import { cn } from "@/components/ui/cn";
-import EnrollAside, { EnrollFormPhoto } from "./EnrollAside";
+import EnrollAside from "./EnrollAside";
 import EnrollFrame from "./EnrollFrame";
 import EnrollNav from "./EnrollNav";
 import EnrollSteps from "./EnrollSteps";
@@ -1724,7 +1724,7 @@ function EnrollWizard(): React.ReactElement {
             onSubmit={handleConfirm}
             data-testid="enroll-wizard-card"
             data-enroll-card
-            className="card flex w-full flex-1 flex-col p-page lg:p-10"
+            className="card flex w-full flex-1 flex-col p-page lg:flex-none lg:p-10"
           >
             {/* #1321: `goToStep` already jumps to an arbitrary step from the
                 review's "Editar" buttons without losing anything —
@@ -1748,8 +1748,8 @@ function EnrollWizard(): React.ReactElement {
               }
             />
 
-            <div data-enroll-body className="grid flex-1 gap-8 lg:grid-cols-5">
-            <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3">
+            <div data-enroll-body className="grid gap-8 lg:grid-cols-5">
+            <div data-enroll-form className="flex min-w-0 flex-col lg:col-span-3 lg:self-start">
             {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
                 servidor — nada de esto se envió todavía. El rótulo lo dice para
                 que un dato restaurado nunca se confunda con uno ya guardado, la
@@ -1834,8 +1834,6 @@ function EnrollWizard(): React.ReactElement {
                     </div>
                   </div>
                 )}
-
-                <EnrollFormPhoto />
 
                 {isLast && (
                   <div className="mt-page flex flex-col items-end gap-section">

@@ -73,10 +73,11 @@ export default function EnrollFrame(props: EnrollFrameProps): ReactElement {
       </header>
 
       {/* The card sits centred in this area: equal side margins at any width,
-          and the same 40px top as the panel's first block. */}
+          and from `lg` the height the step leaves free splits evenly above and
+          below it. */}
       <div
         data-enroll-main
-        className="flex min-w-0 flex-1 flex-col gap-page px-4 py-page lg:p-10"
+        className="flex min-w-0 flex-1 flex-col gap-page px-4 py-page lg:justify-center lg:p-10"
       >
         {props.children}
       </div>
