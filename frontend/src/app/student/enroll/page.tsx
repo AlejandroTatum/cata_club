@@ -1689,7 +1689,7 @@ function EnrollWizard(): React.ReactElement {
             onSubmit={handleConfirm}
             data-testid="enroll-wizard-card"
             data-enroll-card
-            className="card w-full flex-1 p-page lg:p-10"
+            className="card flex w-full flex-1 flex-col p-page lg:p-10"
           >
             {/* #1321: `goToStep` already jumps to an arbitrary step from the
                 review's "Editar" buttons without losing anything —
@@ -1713,6 +1713,7 @@ function EnrollWizard(): React.ReactElement {
               }
             />
 
+            <div data-enroll-body className="flex flex-1 flex-col justify-center">
             {/* Issue #317 / hallazgo #62: recuperado de `sessionStorage`, no del
                 servidor — nada de esto se envió todavía. El rótulo lo dice para
                 que un dato restaurado nunca se confunda con uno ya guardado, la
@@ -1825,6 +1826,7 @@ function EnrollWizard(): React.ReactElement {
                     </Button>
                   </div>
                 )}
+            </div>
           </form>
         </EnrollFrame>
       )}
