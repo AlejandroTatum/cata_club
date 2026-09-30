@@ -32,9 +32,9 @@ const FIELD_LABELS: { key: keyof EmergencyCardValues; label: string }[] = [
 
 function Line({ label, value, emptyText }: { label: string; value: string; emptyText: string }): React.ReactElement {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-line py-2.5 last:border-b-0">
-      <dt className="text-2xs font-bold uppercase text-ink-3-strong">{label}</dt>
-      <dd className={value ? "text-sm font-semibold text-ink" : "text-sm italic text-ink-3"}>{value || emptyText}</dd>
+    <div className="flex items-baseline justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
+      <dt className="flex-none text-2xs font-bold uppercase text-ink-3-strong">{label}</dt>
+      <dd className={value ? "min-w-0 break-words text-right text-sm font-semibold text-ink" : "text-right text-sm text-ink-3-strong"}>{value || emptyText}</dd>
     </div>
   );
 }
@@ -75,10 +75,10 @@ export default function EmergencyCard({
           </span>
         </header>
         <dl className="px-4">
-          <Line label="Alergias" value={values.alergias} emptyText="Sin alergias registradas" />
-          <Line label="Enfermedades" value={values.enfermedades} emptyText="Sin enfermedades registradas" />
-          <Line label="Contacto" value={values.contactoEmergencia} emptyText="Sin contacto registrado" />
-          <Line label="Teléfono" value={values.telefonoEmergencia} emptyText="Sin teléfono registrado" />
+          <Line label="Alergias" value={values.alergias} emptyText="Sin registrar" />
+          <Line label="Enfermedades" value={values.enfermedades} emptyText="Sin registrar" />
+          <Line label="Contacto" value={values.contactoEmergencia} emptyText="Sin registrar" />
+          <Line label="Teléfono" value={values.telefonoEmergencia} emptyText="Sin registrar" />
         </dl>
       </section>
 
