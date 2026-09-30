@@ -56,9 +56,9 @@ import {
   Button,
   ErrorState,
   LoadingState,
+  PAGE_RAIL,
   Pagination,
   ResponsiveListTable,
-  STAT_GRID,
   StatCard,
   TableCell,
   TableHeaderCell,
@@ -77,16 +77,49 @@ import {
 } from "@/app/attendance/attendance-utils";
 import { formatDate } from "@/lib/format-utils";
 import { calendarIsoDate, clubIsoDate, clubTimeHHMM, clubToday } from "@/lib/club-date";
-import { groupRecordsBySession, type SessionSummary } from "../../trainer-day-utils";
 import {
-  SessionCompositionBar,
-  SessionCompositionCounts,
-} from "../../SessionComposition";
+  formatMissingSessionDate,
+  groupRecordsBySession,
+  type SessionSummary,
+} from "../../trainer-day-utils";
+import { SessionCompositionBar, SessionCompositionCounts } from "../../SessionComposition";
 import { buildWizardQuery } from "../attendance-utils";
-import { summarizePeriodCoverage, AVISO_ESTIMACION } from "./history-utils";
+import { findMissingSessions, summarizePeriodCoverage, AVISO_ESTIMACION } from "./history-utils";
 
 /** Sessions per page. */
 const PAGE_SIZE = 10;
+
+/** A short list is padded with ghost rows up to this many, so the card keeps its shape. */
+const MIN_ROWS = 5;
+
+/** Sessions without a list shown in the aside before the rest are left to the period's stats. */
+const MAX_MISSING_SHOWN = 5;
+
+/** A row-shaped placeholder: the shape of a session not yet filed, not a void under the table. */
+function GhostSessionRows({
+  count,
+  caption,
+}: {
+  count: number;
+  caption?: string;
+}): React.ReactElement | null {
+  if (count <= 0) return null;
+  return (
+    <ul aria-hidden="true" data-testid="history-ghost-rows">
+      {Array.from({ length: count }, (_, i) => (
+        <li key={i} className="flex items-center gap-6 border-t border-dashed border-line px-4 py-3.5">
+          <span className="flex w-28 flex-none flex-col gap-1.5">
+            <span className="h-3 w-20 rounded bg-line/70" />
+            <span className="h-2.5 w-14 rounded bg-line/50" />
+          </span>
+          <span className="h-3 w-28 flex-none rounded bg-line/50" />
+          <span className="h-2.5 flex-1 rounded-full bg-line/50" />
+          {i === 0 && caption && <span className="sr-only">{caption}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Corregir solo admite sesiones con hasta 30 días de antigüedad — mismo
  *  tope que el backend impone en `PATCH /asistencias/{id}/corregir`
@@ -224,13 +257,46 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
     [sessions, schedules, query],
   );
 
+  // La misma estimación, pero la lista y no la cifra: qué sesiones del período
+  // siguen esperando su lista, la más reciente primero.
+  const missing = useMemo(
+    () =>
+      findMissingSessions({
+        sessions,
+        schedules,
+        desde: query?.fechaInicio ?? "",
+        hasta: query?.fechaFin ?? "",
+        hoy: clubIsoDate(),
+        horaActual: clubTimeHHMM(),
+        horarioId: query?.horarioId ?? null,
+      }),
+    [sessions, schedules, query],
+  );
+
   const renderCorrectionAction = (sessionRow: SessionSummary): React.ReactNode => {
     if (!esAdmin) return null;
-    if (sessionRow.fecha >= corteCorreccion) return <Link href={buildCorrectionHref(sessionRow)} className={buttonClasses("secondary", "sm")}>Corregir</Link>;
-    return <div className="flex flex-col items-end gap-1.5"><Button variant="secondary" size="sm" disabled aria-describedby={buildReasonId(sessionRow)}>Corregir</Button><p id={buildReasonId(sessionRow)} className="max-w-[240px] text-balance text-xs text-ink-3">{CORRECTION_WINDOW_CLOSED_REASON}</p></div>;
+    if (sessionRow.fecha >= corteCorreccion)
+      return (
+        <Link href={buildCorrectionHref(sessionRow)} className={buttonClasses("secondary", "sm")}>
+          Corregir
+        </Link>
+      );
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        <Button variant="secondary" size="sm" disabled aria-describedby={buildReasonId(sessionRow)}>
+          Corregir
+        </Button>
+        <p id={buildReasonId(sessionRow)} className="max-w-[240px] text-balance text-xs text-ink-3">
+          {CORRECTION_WINDOW_CLOSED_REASON}
+        </p>
+      </div>
+    );
   };
   const renderComposition = (sessionRow: SessionSummary): React.ReactElement => (
-    <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[320px]"><SessionCompositionBar counts={sessionRow.counts} total={sessionRow.total} /><SessionCompositionCounts counts={sessionRow.counts} total={sessionRow.total} /></div>
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:min-w-[240px]">
+      <SessionCompositionBar counts={sessionRow.counts} total={sessionRow.total} />
+      <SessionCompositionCounts counts={sessionRow.counts} total={sessionRow.total} hideZero />
+    </div>
   );
 
   return (
@@ -263,95 +329,200 @@ export default function TrainerAttendanceHistoryPage(): React.ReactElement {
           className="lg:grid-cols-[1fr_1.7fr_1fr]"
         />
 
-        {/*
-          Las tres cifras del período, arriba de la tabla.
-          Con 54 sesiones repartidas en páginas, "cuántas listas se tomaron" era
-          una pregunta que solo se contestaba sumando a mano; y la que de verdad
-          importa —cuántas sesiones quedaron SIN lista— no se contestaba de
-          ninguna manera, porque una lista que nadie pasó no deja fila.
-
-          Se dibujan también cuando el período no tiene ni una lista: ese es
-          justamente el momento en que el hueco es toda la información que hay.
-        */}
-        {!loading && !error && query !== null && (
-          filters.student ? (
-            <p className="card px-4 py-3 text-sm text-ink-2">{AVISO_FILTRO_ALUMNO}</p>
-          ) : (
-            <section aria-labelledby="period-summary-title" className="space-y-field">
-              <h2 id="period-summary-title" className="sr-only">Resumen del período</h2>
-              <div className={STAT_GRID}>
-                <StatCard label="Listas tomadas" value={coverage.listasTomadas} hint="registradas en el período" />
-                <StatCard label="Sesiones programadas" value={coverage.sesionesProgramadas} hint="según el horario semanal" />
-                <StatCard label="Sin lista (estimado)" value={coverage.sinLista} hint="diferencia estimada" />
-              </div>
-              <p className="card px-4 py-3 text-sm text-ink-2" role="note">{AVISO_ESTIMACION}</p>
-            </section>
-          )
-        )}
         {loading && <LoadingState label="Cargando historial…" />}
 
         {error && !loading && <ErrorState message={error} onRetry={() => loadHistory()} />}
 
         {!loading && !error && (
-          <div className="card overflow-hidden">
-            {sessions.length === 0 ? (
-              // One row, not a centred column in a tall card: the period having
-              // no lists is one sentence and one way out.
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-section px-5 py-4">
-                <ClipboardList
-                  size={ICON.lg}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                  className="flex-none text-ink-3"
-                />
-                <div className="min-w-0 flex-1 basis-64">
-                  <p className="text-sm font-bold text-ink">No hay listas en este período</p>
-                  <p className="mt-0.5 text-sm text-ink-3">
-                    {query === null
-                      // Covers both unusable states — one end missing, or the
-                      // two ends inverted — because "complete las dos fechas"
-                      // is wrong advice when both are already filled in.
-                      ? "Ajuste el rango de fechas para ver las listas."
-                      : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."}
-                  </p>
-                </div>
-                {/* Issue #1273: the header already carries the page's one
+          <div className={query !== null ? PAGE_RAIL : undefined}>
+            <div className="card overflow-hidden">
+              {sessions.length === 0 ? (
+                <>
+                  {/* One row, not a centred column in a tall card: the period having
+              no lists is one sentence and one way out. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-section px-5 py-4">
+                    <ClipboardList
+                      size={ICON.lg}
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                      className="flex-none text-ink-3"
+                    />
+                    <div className="min-w-0 flex-1 basis-64">
+                      <p className="text-sm font-bold text-ink">No hay listas en este período</p>
+                      <p className="mt-0.5 text-sm text-ink-3">
+                        {query === null
+                          ? // Covers both unusable states — one end missing, or the
+                            // two ends inverted — because "complete las dos fechas"
+                            // is wrong advice when both are already filled in.
+                            "Ajuste el rango de fechas para ver las listas."
+                          : "Cambie el rango o los filtros, o pase lista para que aparezca aquí."}
+                      </p>
+                    </div>
+                    {/* Issue #1273: the header already carries the page's one
                     primary CTA (`primary-action.test.ts` pins it there).
                     This is still the honest way out of an empty period, just
                     not a second red button for the same verb. */}
-                <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
-                  Pasar lista
-                </Link>
-              </div>
-            ) : (
+                    <Link href="/trainer/attendance" className={buttonClasses("secondary")}>
+                      Pasar lista
+                    </Link>
+                  </div>
+                  <GhostSessionRows count={MIN_ROWS - 1} />
+                </>
+              ) : (
                 <ResponsiveListTable
                   items={visible}
                   getKey={(sessionRow) => `${sessionRow.fecha}|${sessionRow.horario}`}
                   mobileListTestId="history-mobile-list"
                   desktopTableTestId="history-desktop-table"
-                  tableHead={<tr><TableHeaderCell className="w-px">Sesión</TableHeaderCell><TableHeaderCell>Registró</TableHeaderCell><TableHeaderCell className="w-full">Resultado</TableHeaderCell>{esAdmin && <TableHeaderCell align="right"><span className="sr-only">Acciones</span></TableHeaderCell>}</tr>}
+                  tableHead={
+                    <tr>
+                      <TableHeaderCell className="w-px">Sesión</TableHeaderCell>
+                      <TableHeaderCell>Registró</TableHeaderCell>
+                      <TableHeaderCell className="w-full">Resultado</TableHeaderCell>
+                      {esAdmin && (
+                        <TableHeaderCell align="right">
+                          <span className="sr-only">Acciones</span>
+                        </TableHeaderCell>
+                      )}
+                    </tr>
+                  }
                   renderCard={(sessionRow) => (
-                    <li className="space-y-section px-4 py-4" data-testid={`history-mobile-card-${sessionRow.fecha}-${sessionRow.horarioId}`}>
-                      <div><p className="font-semibold text-ink">{formatDate(sessionRow.fecha)}</p><p className="text-xs text-ink-3">{sessionRow.horario}</p></div>
-                      <p className="text-sm text-ink-2"><span className="font-semibold text-ink">Registró: </span>{sessionRow.registradoPorNombre ?? "No registrado"}</p>
+                    <li
+                      className="space-y-section px-4 py-4"
+                      data-testid={`history-mobile-card-${sessionRow.fecha}-${sessionRow.horarioId}`}
+                    >
+                      <div>
+                        <p className="font-semibold text-ink">{formatDate(sessionRow.fecha)}</p>
+                        <p className="text-xs text-ink-3">{sessionRow.horario}</p>
+                      </div>
+                      <p className="text-sm text-ink-2">
+                        <span className="font-semibold text-ink">Registró: </span>
+                        {sessionRow.registradoPorNombre ?? "No registrado"}
+                      </p>
                       {renderComposition(sessionRow)}
-                      {esAdmin && <div className="flex justify-end">{renderCorrectionAction(sessionRow)}</div>}
+                      {esAdmin && (
+                        <div className="flex justify-end">{renderCorrectionAction(sessionRow)}</div>
+                      )}
                     </li>
                   )}
                   renderRow={(sessionRow) => (
                     <TableRow>
-                      <TableNameCell className="w-px whitespace-nowrap" name={formatDate(sessionRow.fecha)} sub={sessionRow.horario} />
-                      <TableCell>{sessionRow.registradoPorNombre ? <span className="block max-w-[240px] truncate" title={sessionRow.registradoPorNombre}>{sessionRow.registradoPorNombre}</span> : "No registrado"}</TableCell>
+                      <TableNameCell
+                        className="w-px whitespace-nowrap"
+                        name={formatDate(sessionRow.fecha)}
+                        sub={sessionRow.horario}
+                      />
+                      <TableCell>
+                        {sessionRow.registradoPorNombre ? (
+                          <span
+                            className="block max-w-[240px] truncate"
+                            title={sessionRow.registradoPorNombre}
+                          >
+                            {sessionRow.registradoPorNombre}
+                          </span>
+                        ) : (
+                          "No registrado"
+                        )}
+                      </TableCell>
                       <TableCell>{renderComposition(sessionRow)}</TableCell>
                       {esAdmin && <TableCell align="right">{renderCorrectionAction(sessionRow)}</TableCell>}
                     </TableRow>
                   )}
-                  footer={totalPages > 1 ? <Pagination variant="footer" page={page} totalPages={totalPages} onPageChange={setPage} totalItems={sessions.length} pageSize={PAGE_SIZE} itemNoun="sesión" itemNounPlural="sesiones" /> : undefined}
+                  footer={
+                    totalPages > 1 ? (
+                      <Pagination
+                        variant="footer"
+                        page={page}
+                        totalPages={totalPages}
+                        onPageChange={setPage}
+                        totalItems={sessions.length}
+                        pageSize={PAGE_SIZE}
+                        itemNoun="sesión"
+                        itemNounPlural="sesiones"
+                      />
+                    ) : undefined
+                  }
                 />
+              )}
+              {sessions.length > 0 && totalPages <= 1 && (
+                <GhostSessionRows
+                  count={MIN_ROWS - visible.length}
+                  caption="Las próximas listas aparecerán aquí."
+                />
+              )}
+            </div>
+
+            {query !== null && (
+              <aside className="flex flex-col gap-page lg:sticky lg:top-4" aria-label="Resumen del período">
+                {filters.student ? (
+                  <p className="card px-4 py-3 text-sm text-ink-2">{AVISO_FILTRO_ALUMNO}</p>
+                ) : (
+                  <>
+                    <section aria-labelledby="period-summary-title" className="flex flex-col gap-field">
+                      <h2 id="period-summary-title" className="sr-only">
+                        Resumen del período
+                      </h2>
+                      <StatCard
+                        label="Listas tomadas"
+                        value={coverage.listasTomadas}
+                        hint="registradas en el período"
+                      />
+                      <StatCard
+                        label="Sesiones programadas"
+                        value={coverage.sesionesProgramadas}
+                        hint="según el horario semanal"
+                      />
+                      <StatCard
+                        label="Sin lista (estimado)"
+                        value={coverage.sinLista}
+                        hint="diferencia estimada"
+                      />
+                      <p className="px-1 text-xs text-ink-3" role="note">
+                        {AVISO_ESTIMACION}
+                      </p>
+                    </section>
+                    <section className="card flex flex-col gap-2 p-4" aria-labelledby="missing-title">
+                      <h2 id="missing-title" className="text-xs font-bold uppercase tracking-wide text-ink-3">
+                        Sin lista en el período
+                      </h2>
+                      {missing.length === 0 ? (
+                        <p className="text-sm text-ink-2">Todas las sesiones del período tienen lista.</p>
+                      ) : (
+                        <ul className="flex flex-col">
+                          {missing.slice(0, MAX_MISSING_SHOWN).map((m) => (
+                            <li
+                              key={`${m.fecha}|${m.schedule.id}`}
+                              className="flex items-center justify-between gap-3 border-t border-line py-2 first:border-t-0"
+                            >
+                              <span className="min-w-0 text-sm text-ink">
+                                <b className="font-bold tabular-nums">{formatMissingSessionDate(m.fecha)}</b>{" "}
+                                <span className="text-xs tabular-nums text-ink-2">
+                                  {m.schedule.horaInicio} — {m.schedule.horaFin}
+                                </span>
+                              </span>
+                              <Link
+                                href={`/trainer/attendance${buildWizardQuery(m.schedule.id, m.fecha, "mark-attendance")}`}
+                                className={buttonClasses("secondary", "sm")}
+                                aria-label={`Pasar lista del ${formatMissingSessionDate(m.fecha)} ${m.schedule.horaInicio}`}
+                              >
+                                Pasar lista
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {missing.length > MAX_MISSING_SHOWN && (
+                        <p className="text-xs text-ink-3">
+                          y {missing.length - MAX_MISSING_SHOWN} más — acote el rango para verlas.
+                        </p>
+                      )}
+                    </section>
+                  </>
+                )}
+              </aside>
             )}
           </div>
         )}
-
       </AppShell>
     </ProtectedRoute>
   );
