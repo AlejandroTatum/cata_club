@@ -903,15 +903,36 @@ function reachSummaryStep(): void {
 }
 
 describe("EnrollPage — motivo del bloqueo en el paso 5 (#312 / #2, #9)", () => {
-  it("names why 'Confirmar inscripción' is disabled, the same pattern steps 2-4 already use", () => {
+  it("keeps 'Confirmar inscripción' enabled and shows no error before the visitor touches anything", () => {
     render(<EnrollPage />);
     reachSummaryStep();
 
-    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-    const confirmButton = screen.getByRole("button", { name: /confirmar inscripción/i });
-    expect(confirmButton).toBeDisabled();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+  });
+
+  it("names the missing checkbox inline once confirming is attempted, without submitting", () => {
+    vi.mocked(enrollStudent).mockClear();
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar inscripción/i }));
+
     expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    expect(enrollStudent).not.toHaveBeenCalled();
+  });
+
+  it("shows the inline error when the checkbox is toggled back off, and drops it when checked", () => {
+    render(<EnrollPage />);
+    reachSummaryStep();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.queryByText(/para continuar, marque la casilla de confirmación/i)).not.toBeInTheDocument();
   });
 
   it("opens the in-flow legal review for each grouped document — no link leaves the wizard (#1368)", () => {
@@ -1015,7 +1036,7 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     fireEvent.submit(form);
 
     expect(enrollStudent).not.toHaveBeenCalled();
-    expect(screen.getByText(/revise y confirme el resumen antes de finalizar/i)).toBeInTheDocument();
+    expect(screen.getByText(/para continuar, marque la casilla de confirmación/i)).toBeInTheDocument();
   });
 
   it("is never granted by the fill-everything shortcut — consent is the one field nothing else can answer", () => {
@@ -1030,7 +1051,7 @@ describe("EnrollPage — semántica nativa del consentimiento legal (#763)", () 
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
 
     expect(screen.getByRole("checkbox")).not.toBeChecked();
-    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /confirmar inscripción/i })).toBeEnabled();
   });
 });
 

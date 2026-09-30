@@ -226,6 +226,9 @@ function EnrollWizard(): React.ReactElement {
    */
   const sessionConfirmed = sessionOutcome === "authenticated";
   const [summaryReviewed, setSummaryReviewed] = useState(false);
+  // The missing-checkbox error is shown only after confirming was attempted
+  // (or the box was ticked and then cleared), never on arrival at the step.
+  const [confirmAttempted, setConfirmAttempted] = useState(false);
   // #1368 — which grouped legal document is under review, or none. Reviewing
   // is an overlay on the summary step: it must never unmount this component,
   // because everything the visitor entered (and the consent decision itself)
@@ -455,7 +458,10 @@ function EnrollWizard(): React.ReactElement {
     const nextIdx = currentIndex + 1;
     if (nextIdx < effectiveSteps.length) {
       const nextStep = effectiveSteps[nextIdx];
-      if (nextStep === "summary") setSummaryReviewed(false);
+      if (nextStep === "summary") {
+        setSummaryReviewed(false);
+        setConfirmAttempted(false);
+      }
       goToStep(nextStep);
     }
   }
@@ -478,7 +484,7 @@ function EnrollWizard(): React.ReactElement {
       return;
     }
     if (!summaryReviewed) {
-      setFormErrors(["Revise y confirme el resumen antes de finalizar la inscripción."]);
+      setConfirmAttempted(true);
       return;
     }
     const errors = validateEnrollment(formData);
@@ -526,6 +532,7 @@ function EnrollWizard(): React.ReactElement {
     setSessionOutcome(null);
     setSubmitting(false);
     setSummaryReviewed(false);
+    setConfirmAttempted(false);
     setFormErrors([]);
     setTouched(new Set());
     setRestoredFromDraft(false);
@@ -584,6 +591,7 @@ function EnrollWizard(): React.ReactElement {
     setFormErrors([]);
     setConfirmed(false);
     setSummaryReviewed(false);
+    setConfirmAttempted(false);
     setSubmitting(false);
     setTouched(new Set());
   }
@@ -1308,6 +1316,7 @@ function EnrollWizard(): React.ReactElement {
             checked={summaryReviewed}
             onChange={(e) => {
               setSummaryReviewed(e.target.checked);
+              if (!e.target.checked) setConfirmAttempted(true);
               setFormErrors([]);
             }}
             /* #763: the rule was enforced and never declared — the audit read
@@ -1317,11 +1326,10 @@ function EnrollWizard(): React.ReactElement {
                the "Tipo de sangre" select already carries, and on a native
                checkbox it is what maps to the accessibility tree's required
                state; no `aria-required` on top, which would only restate it.
-               It does not become a second voice either: "Confirmar
-               inscripción" is `disabled` while this is unchecked, so the form
-               is never submitted in the invalid state and the browser's own
-               bubble has no moment to fire. The message people read is still
-               `submitBlockedReason`, and the block is still `handleConfirm`. */
+               It does not become a second voice either: the form is
+               `noValidate`, so the browser's own bubble never fires; the
+               message people read is the inline one below, and the block is
+               still `handleConfirm`. */
             required
             /* `focus:ring-ball` was inert twice over: it names a colour with
                no ring width, and `@tailwindcss/forms` (which is what would
@@ -1807,18 +1815,18 @@ function EnrollWizard(): React.ReactElement {
 
                 {isLast && (
                   <div className="mt-page flex flex-col items-end gap-section">
-                    {/* #312 / hallazgo #2: the final button is off until the
-                        box is ticked, and says why — same rule "Siguiente"
-                        used to follow before it stopped being disabled. */}
-                    {!submitting && !summaryReviewed && (
-                      <p className="text-base font-semibold text-cata-red-dark [text-wrap:pretty]">
+                    {/* Same pattern as "Siguiente": the button stays enabled and
+                        the missing box is named inline once confirming was
+                        attempted, not before the visitor has touched anything. */}
+                    {!submitting && confirmAttempted && !summaryReviewed && (
+                      <p role="alert" className="text-base font-semibold text-cata-red-dark [text-wrap:pretty]">
                         Para continuar, marque la casilla de confirmación.
                       </p>
                     )}
                     <Button
                       type="submit"
                       variant="primary"
-                      disabled={submitting || !summaryReviewed}
+                      disabled={submitting}
                       className="disabled:cursor-not-allowed"
                     >
                       {submitting ? (

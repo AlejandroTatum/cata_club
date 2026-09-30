@@ -877,9 +877,13 @@ async function goToSummary(page: Page): Promise<void> {
 }
 
 test.describe("S · Resumen, envío y errores del servidor", () => {
-  test("S01 · sin marcar la casilla de revisión, confirmar está deshabilitado", async ({ page }) => {
+  test("S01 · sin marcar la casilla de revisión, confirmar muestra el error en línea", async ({ page }) => {
     await goToSummary(page);
-    await expect(page.getByRole("button", { name: /confirmar inscripción/i })).toBeDisabled();
+    const confirmar = page.getByRole("button", { name: /confirmar inscripción/i });
+    await expect(confirmar).toBeEnabled();
+    await expect(page.getByText(/marque la casilla de confirmación/i)).toHaveCount(0);
+    await confirmar.click();
+    await expect(page.getByText(/marque la casilla de confirmación/i)).toBeVisible();
     await shot(page, "S01", "resumen-sin-confirmar");
   });
 
