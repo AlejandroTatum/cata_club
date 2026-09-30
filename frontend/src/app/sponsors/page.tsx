@@ -4,8 +4,10 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { Trash2 } from "lucide-react";
-import { Button, EmptyState, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
+import { Handshake, Trash2 } from "lucide-react";
+import EmptyGrid from "@/app/galeria/EmptyGrid";
+import SponsorsStripPreview from "./SponsorsStripPreview";
+import { Button, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
 import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
 import { imageFileError, uploadErrorMessage } from "@/app/galeria/uploadError";
@@ -111,11 +113,11 @@ export default function SponsorsPage(): React.ReactElement {
           {error && <p ref={errorRef} role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
           <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Subiendo…" : "Subir logo"}</Button>
         </form>
-        <section aria-label="Logos cargados" className="min-w-0 lg:col-start-1 lg:row-start-1">
+        <section aria-label="Logos cargados" className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:self-stretch">
           {cargando ? <LoadingState label="Cargando patrocinadores…" />
             : errorCarga ? <ErrorState message="No se pudieron cargar los patrocinadores." onRetry={() => void load()} />
-            : sponsors.length === 0 ? <EmptyState title="Aún no hay patrocinadores cargados" description="Cuando suba el primer logo, aparecerá aquí y en la landing." />
-            : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">{sponsors.map((sponsor) => <li key={sponsor.id} className="card flex flex-col gap-2 p-3">
+            : sponsors.length === 0 ? <EmptyGrid icon={<Handshake size={ICON.lg} />} title="Aún no hay patrocinadores cargados" description="Los logos cargados aparecen aquí y en la landing." tileRatio="5 / 2" tiles={32} wide />
+            : <div className="card flex-1 p-4"><ul className="grid grid-cols-2 content-start gap-3 lg:grid-cols-3 lg:gap-4 2xl:grid-cols-4">{sponsors.map((sponsor) => <li key={sponsor.id} className="flex flex-col gap-2 rounded-card border border-line p-2">
               <div style={TILE_STYLE} className={TILE}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
                 <img src={sponsor.logoUrl} alt={`Logo de ${sponsor.nombre}`} loading="lazy" width={200} height={80} className="size-full object-contain p-2" />
@@ -126,9 +128,10 @@ export default function SponsorsPage(): React.ReactElement {
                   <Trash2 size={ICON.sm} aria-hidden="true" />
                 </Button>
               </div>
-            </li>)}</ul>}
+            </li>)}</ul></div>}
         </section>
       </div>
+      {!cargando && !errorCarga && <SponsorsStripPreview sponsors={sponsors} />}
       <ConfirmDialog
         open={porEliminar !== null}
         variant="danger"

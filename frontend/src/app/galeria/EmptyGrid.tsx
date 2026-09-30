@@ -9,6 +9,8 @@ interface EmptyGridProps {
   tileRatio: string;
   /** Ghost tiles drawn on desktop; enough rows to outgrow the tallest rail. */
   tiles: number;
+  /** Adds a fourth column from 2xl up, for grids whose real tiles are small. */
+  wide?: boolean;
 }
 
 /** Ghost tiles kept on mobile: two rows of the two-column grid. */
@@ -26,13 +28,14 @@ export default function EmptyGrid({
   description,
   tileRatio,
   tiles,
+  wide = false,
 }: EmptyGridProps): ReactElement {
   return (
     <div className="card relative flex flex-1 flex-col overflow-hidden">
       <div
         aria-hidden="true"
         data-testid="empty-grid-tiles"
-        className="grid grid-cols-2 content-start gap-3 p-4 opacity-60 lg:absolute lg:inset-0 lg:grid-cols-3 lg:gap-4"
+        className={`grid grid-cols-2 content-start gap-3 p-4 opacity-60 lg:absolute lg:inset-0 lg:grid-cols-3 lg:gap-4${wide ? " 2xl:grid-cols-4" : ""}`}
       >
         {Array.from({ length: tiles }, (_, tile) => (
           <div
