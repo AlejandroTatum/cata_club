@@ -126,7 +126,7 @@ describe("admin dashboard — header", () => {
     render(<DashboardPage />);
     await screen.findByTestId("attention-strip");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/Marta/);
-    expect(screen.getByTestId("subtitle").textContent).toMatch(/^Administración · \w+, \d{1,2} de \w+ de \d{4}$/);
+    expect(screen.getByTestId("subtitle").textContent).toMatch(/^Administración · \p{L}+, \d{1,2} de \p{L}+ de \d{4}$/u);
   });
 });
 
