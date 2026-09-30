@@ -3,12 +3,13 @@ import type { Sponsor } from "@/services/api";
 
 interface SponsorsStripPreviewProps {
   sponsors: Sponsor[];
+  /** A short roster gets three big tiles per row; a long one packs smaller tiles. */
+  few?: boolean;
 }
 
 /** Same ~5:2 tile the landing strip draws (landing.css `.landing-sponsor`). */
 const TILE_STYLE = { aspectRatio: "5 / 2" } as const;
-const TILE =
-  "w-72 shrink-0 overflow-hidden rounded-card border bg-sunken lg:w-96";
+const TILE = "w-full overflow-hidden rounded-card border bg-sunken";
 /** Ghost tiles shown while the roster is empty: enough to show the strip's rhythm. */
 const GHOST_TILES = 4;
 
@@ -20,6 +21,7 @@ const GHOST_TILES = 4;
  */
 export default function SponsorsStripPreview({
   sponsors,
+  few = false,
 }: SponsorsStripPreviewProps): ReactElement {
   return (
     <section
@@ -33,12 +35,12 @@ export default function SponsorsStripPreview({
         <p className="text-xs text-ink-2">
           {sponsors.length === 0
             ? "Cuando suba el primer logo, aparecerá aquí tal como lo verá el público."
-            : "La franja de patrocinadores de la landing, con los logos en este mismo orden."}
+            : "La franja de patrocinadores de la landing: los mismos logos, en este mismo orden."}
         </p>
       </div>
       <div
         data-testid="sponsors-strip"
-        className="flex gap-3 overflow-x-auto pb-1 lg:gap-4"
+        className={`grid grid-cols-2 gap-3 ${sponsors.length === 0 ? "sm:grid-cols-4" : few ? "sm:grid-cols-3" : "sm:grid-cols-4 2xl:grid-cols-6"}`}
       >
         {sponsors.length === 0
           ? Array.from({ length: GHOST_TILES }, (_, tile) => (

@@ -56,6 +56,9 @@ describe("SponsorsPage", () => {
     fetchSponsors.mockResolvedValue([]);
     render(<SponsorsPage />);
     expect(await screen.findByText("Aún no hay patrocinadores cargados")).toBeInTheDocument();
+    expect(screen.getByText("Los logos cargados aparecen aquí y en la landing.")).toBeInTheDocument();
+    expect(screen.getByTestId("empty-grid-tiles").firstElementChild).toHaveStyle({ aspectRatio: "5 / 2" });
+    expect(screen.getByRole("region", { name: "Logos cargados" })).not.toHaveClass("lg:self-stretch");
   });
   it("shows an error with retry on load failure, without the empty copy", async () => {
     fetchSponsors.mockRejectedValueOnce(new Error("boom"));

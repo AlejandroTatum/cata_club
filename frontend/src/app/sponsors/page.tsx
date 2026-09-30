@@ -16,6 +16,8 @@ import { crearSponsor, eliminarSponsor, fetchSponsors, type Sponsor } from "@/se
 /** The landing strip's tile is 300-416px by 168px (landing.css `.landing-sponsor`): about 5:2. */
 const TILE = "flex w-full items-center justify-center overflow-hidden rounded-card border border-line bg-sunken";
 const TILE_STYLE = { aspectRatio: "5 / 2" } as const;
+/** Up to this many logos the tiles stay large (three columns); more logos pack into four. */
+const FEW_SPONSORS = 3;
 const CONTROL = "h-ctl rounded-ctl border border-line-2 bg-paper px-3 text-sm font-normal text-ink";
 
 export default function SponsorsPage(): React.ReactElement {
@@ -113,11 +115,12 @@ export default function SponsorsPage(): React.ReactElement {
           {error && <p ref={errorRef} role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
           <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Subiendo…" : "Subir logo"}</Button>
         </form>
-        <section aria-label="Logos cargados" className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:self-stretch">
+        <div className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
+        <section aria-label="Logos cargados" className="flex min-w-0 flex-col">
           {cargando ? <LoadingState label="Cargando patrocinadores…" />
             : errorCarga ? <ErrorState message="No se pudieron cargar los patrocinadores." onRetry={() => void load()} />
-            : sponsors.length === 0 ? <EmptyGrid icon={<Handshake size={ICON.lg} />} title="Aún no hay patrocinadores cargados" description="Los logos cargados aparecen aquí y en la landing." tileRatio="5 / 2" tiles={32} wide />
-            : <div className="card flex-1 p-4"><ul className="grid grid-cols-2 content-start gap-3 lg:grid-cols-3 lg:gap-4 2xl:grid-cols-4">{sponsors.map((sponsor) => <li key={sponsor.id} className="flex flex-col gap-2 rounded-card border border-line p-2">
+            : sponsors.length === 0 ? <EmptyGrid icon={<Handshake size={ICON.lg} />} title="Aún no hay patrocinadores cargados" description="Los logos cargados aparecen aquí y en la landing." tileRatio="5 / 2" tiles={32} compact wide />
+            : <div className="card p-4"><ul className={`grid grid-cols-2 content-start gap-3 lg:gap-4 ${sponsors.length <= FEW_SPONSORS ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>{sponsors.map((sponsor) => <li key={sponsor.id} className="flex flex-col gap-2 rounded-card border border-line p-2">
               <div style={TILE_STYLE} className={TILE}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
                 <img src={sponsor.logoUrl} alt={`Logo de ${sponsor.nombre}`} loading="lazy" width={200} height={80} className="size-full object-contain p-2" />
@@ -130,8 +133,9 @@ export default function SponsorsPage(): React.ReactElement {
               </div>
             </li>)}</ul></div>}
         </section>
+        {!cargando && !errorCarga && <SponsorsStripPreview sponsors={sponsors} few={sponsors.length <= FEW_SPONSORS} />}
+        </div>
       </div>
-      {!cargando && !errorCarga && <SponsorsStripPreview sponsors={sponsors} />}
       <ConfirmDialog
         open={porEliminar !== null}
         variant="danger"
