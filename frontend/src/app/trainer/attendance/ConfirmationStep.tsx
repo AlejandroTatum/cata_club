@@ -9,7 +9,7 @@ import type { EstadoAsistencia } from "@/types/domain";
 import type { SessionStudent } from "./attendance-utils";
 import ReadOnlyReasonNotice from "./ReadOnlyReasonNotice";
 import SessionDonut from "./SessionDonut";
-import SessionStatusGroups from "./SessionStatusGroups";
+import StudentReviewList, { StatusTiles } from "./StudentReviewList";
 
 interface ConfirmationStepProps {
   selectedSchedule: TrainingSchedule | null;
@@ -52,7 +52,7 @@ export default function ConfirmationStep({
 
   return (
     <div className={PAGE_RAIL}>
-      <div className="card flex flex-col gap-5 p-5 sm:p-6">
+      <div data-dash-col className="card flex flex-col gap-5 p-5 sm:p-6">
         <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
 
         {/* Defense in depth (issue #310/#3): the commit bar already disables
@@ -87,10 +87,15 @@ export default function ConfirmationStep({
           </div>
         )}
 
-        <SessionStatusGroups students={students} flagUnreviewed />
+        <StatusTiles counts={confirmCounts} />
+        <StudentReviewList students={students} flagUnreviewed />
       </div>
 
-      <aside className="flex flex-col gap-page lg:sticky lg:top-4" aria-label="Resumen de la sesión">
+      <aside
+        data-dash-col
+        className="flex flex-col gap-page lg:sticky lg:top-4"
+        aria-label="Resumen de la sesión"
+      >
         <div className="card flex flex-col gap-4 p-5">
           <div className="flex flex-col gap-0.5">
             <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Horario</p>
@@ -130,8 +135,9 @@ export default function ConfirmationStep({
               {submitError}
             </div>
           )}
+
+          <div className="border-t border-line pt-4 max-lg:border-0 max-lg:pt-0">{commitBar}</div>
         </div>
-        {commitBar}
       </aside>
     </div>
   );

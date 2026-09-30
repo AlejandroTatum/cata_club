@@ -343,7 +343,7 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
     mockRegisterAttendance.mockReset();
   });
 
-  it("groups schedules on Monday, Wednesday and Friday into three independent day sections", async () => {
+  it("shows one day at a time and switches with the day chips", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 1, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -353,51 +353,19 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    const mondaySection = await screen.findByRole("button", { name: /^lunes/i });
-    const wednesdaySection = screen.getByRole("button", { name: /^miércoles/i });
-    const fridaySection = screen.getByRole("button", { name: /^viernes/i });
-    expect(mondaySection).toBeInTheDocument();
-    expect(wednesdaySection).toBeInTheDocument();
-    expect(fridaySection).toBeInTheDocument();
-
-    // Collapsed by default: no schedule card is reachable before expanding.
-    expect(screen.queryByRole("button", { name: /18:00/i })).not.toBeInTheDocument();
-
-    fireEvent.click(mondaySection);
+    fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
     expect(await screen.findByRole("button", { name: /18:00/i })).toBeInTheDocument();
-    // Wednesday/Friday remain collapsed — their cards are not shown.
     expect(screen.queryByRole("button", { name: /09:00/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /20:00/i })).not.toBeInTheDocument();
-  });
+    expect(screen.getByRole("button", { name: /^lunes/i })).toHaveAttribute("aria-pressed", "true");
 
-  it("expands and collapses each day section independently of the others", async () => {
-    mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
-    mockFetchTrainingSchedules.mockResolvedValue([
-      { id: 1, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
-      { id: 2, diaSemana: "mie", horaInicio: "09:00", horaFin: "10:00", entrenadorId: 18, entrenadorNombre: "Coach Diaz" },
-    ]);
-
-    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-
-    const mondaySection = await screen.findByRole("button", { name: /^lunes/i });
-    const wednesdaySection = screen.getByRole("button", { name: /^miércoles/i });
-
-    fireEvent.click(mondaySection);
-    expect(await screen.findByRole("button", { name: /18:00/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /09:00/i })).not.toBeInTheDocument();
-
-    fireEvent.click(wednesdaySection);
+    fireEvent.click(screen.getByRole("button", { name: /^miércoles/i }));
     expect(await screen.findByRole("button", { name: /09:00/i })).toBeInTheDocument();
-    // Monday card is still visible — expanding Wednesday did not collapse it.
-    expect(screen.getByRole("button", { name: /18:00/i })).toBeInTheDocument();
-
-    fireEvent.click(mondaySection);
+    // Switching days replaces the tiles, it does not stack them.
     expect(screen.queryByRole("button", { name: /18:00/i })).not.toBeInTheDocument();
-    // Wednesday remains expanded — collapsing Monday did not affect it.
-    expect(screen.getByRole("button", { name: /09:00/i })).toBeInTheDocument();
   });
 
-  it("omits the day section for a day with no schedules", async () => {
+  it("disables the chip of a day with no schedules", async () => {
     mockUseAuth.mockReturnValue(createAuthenticatedAuth("trainer", "Coach Torres"));
     mockFetchTrainingSchedules.mockResolvedValue([
       { id: 1, diaSemana: "lun", horaInicio: "18:00", horaFin: "19:00", entrenadorId: 17, entrenadorNombre: "Coach Torres" },
@@ -405,8 +373,8 @@ describe("TrainerAttendancePage — schedule accordion grouped by day (Slice A)"
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    await screen.findByRole("button", { name: /^lunes/i });
-    expect(screen.queryByRole("button", { name: /^martes/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^lunes/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^martes/i })).toBeDisabled();
   });
 
   it("still triggers roster loading when a schedule card is selected inside an expanded day", async () => {
@@ -2123,8 +2091,8 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    // The counts effect now has to reach back far enough to cover any day
-    // "Ver todos los días" can show, not just today.
+    // The counts effect has to reach back far enough to cover any day the
+    // day chips can show, not just today.
     await waitFor(() =>
       expect(mockFetchAttendanceRecords).toHaveBeenCalledWith({
         fechaInicio: WEEK_WINDOW_START,
@@ -2132,7 +2100,6 @@ describe("TrainerAttendancePage — el paso 1 avisa antes de continuar sobre una
       }),
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Ver todos los días" }));
     fireEvent.click(await screen.findByRole("button", { name: /^lunes/i }));
     const mondayScheduleButton = await screen.findByRole("button", { name: /10:00/i });
 
@@ -2332,21 +2299,20 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
   // Redesigned receipt: only the states somebody is in get a group of names;
   // the rest collapse into ONE muted line, so "nadie llegó tarde" is still
   // said — once, quietly — instead of as five big zero rows.
-  it("groups names under the states somebody is in and collapses the zeros into one line", async () => {
+  it("lists every saved student with their state, and keeps the six state tiles", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    const present = screen.getByRole("region", { name: "Presente" });
-    expect(within(present).getByText("3")).toBeInTheDocument();
-    expect(within(present).getByText("Student 01")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Asistencia por alumno" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(within(rows[0]).getByText("Student 01")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Presente")).toBeInTheDocument();
 
-    for (const label of ["Ausente", "Tardanza", "Justificado", "Enfermo", "Competencia"]) {
-      expect(screen.queryByRole("region", { name: label })).not.toBeInTheDocument();
-    }
-    expect(
-      screen.getByText("Sin tardanzas, justificados, enfermos, competencias, ausentes."),
-    ).toBeInTheDocument();
+    const tiles = screen.getByRole("list", { name: "Conteo por estado" });
+    expect(within(tiles).getAllByRole("listitem")).toHaveLength(6);
+    expect(within(tiles).getByText("Ausente").closest("li")).toHaveTextContent("0");
   });
 
   // Decision 2: with failed records, the breakdown counts what was SAVED, not
@@ -2370,10 +2336,12 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
-    expect(screen.queryByRole("region", { name: "Justificado" })).not.toBeInTheDocument();
-    const present = screen.getByRole("region", { name: "Presente" });
-    expect(within(present).getByText("2")).toBeInTheDocument();
-    expect(within(present).queryByText("Student 02")).not.toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Asistencia por alumno" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(list).queryByText("Student 02")).not.toBeInTheDocument();
+    const tiles = screen.getByRole("list", { name: "Conteo por estado" });
+    expect(within(tiles).getByText("Justificado").closest("li")).toHaveTextContent("0");
+    expect(within(tiles).getByText("Presente").closest("li")).toHaveTextContent("2");
   });
 
   /*
@@ -2661,8 +2629,9 @@ describe("TrainerAttendancePage — the picker opens on today", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Horarios de hoy · Jueves")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^viernes/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Horarios de hoy · Jueves/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^viernes/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: /20:00/ })).not.toBeInTheDocument();
   });
 
   it("hides the other days and names the day it is showing", async () => {
@@ -2674,9 +2643,9 @@ describe("TrainerAttendancePage — the picker opens on today", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    expect(await screen.findByText("Horarios de hoy · Lunes")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^lunes/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^viernes/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Horarios de hoy · Lunes/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^lunes/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /20:00/ })).not.toBeInTheDocument();
   });
 
   it("opens today's panel so the times are readable without a tap", async () => {
@@ -2690,7 +2659,7 @@ describe("TrainerAttendancePage — the picker opens on today", () => {
     expect(await screen.findByRole("button", { name: /18:00/ })).toBeInTheDocument();
   });
 
-  it("gives back the whole week on request, and takes it away again", async () => {
+  it("keeps the other days one tap away, and comes back to today", async () => {
     pinToMonday();
     mockFetchTrainingSchedules.mockResolvedValue([
       sched(12, "lun", "18:00"),
@@ -2699,36 +2668,15 @@ describe("TrainerAttendancePage — the picker opens on today", () => {
 
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Ver todos los días" }));
+    await screen.findByRole("button", { name: /18:00/ });
+    // Yesterday's missed session has to stay reachable — the default opens on
+    // today, it does not lock.
+    fireEvent.click(screen.getByRole("button", { name: /^viernes/i }));
+    expect(await screen.findByRole("button", { name: /20:00/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /18:00/ })).not.toBeInTheDocument();
 
-    // Yesterday's missed session has to stay reachable — the default narrows,
-    // it does not lock.
-    expect(screen.getByRole("button", { name: /^viernes/i })).toBeInTheDocument();
-    expect(screen.getByText("Seleccione el horario de entrenamiento:")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Ver solo hoy" }));
-
-    expect(screen.queryByRole("button", { name: /^viernes/i })).not.toBeInTheDocument();
-  });
-
-  // Issue #818 (WCAG 2.5.8, AA): "Ver todos los días" measured 99 × 18.8px —
-  // bare 12px type with no padding or min-height. `MIN_TARGET_CLASS`
-  // (`min-h-[24px]`, `lib/target-size.ts`) is the project's shared floor for
-  // exactly this shape.
-  it("gives Ver todos los días a 24px minimum hit area without resizing its type", async () => {
-    pinToMonday();
-    mockFetchTrainingSchedules.mockResolvedValue([
-      sched(12, "lun", "18:00"),
-      sched(13, "vie", "20:00"),
-    ]);
-
-    render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
-
-    const boton = await screen.findByRole("button", { name: "Ver todos los días" });
-    expect(boton).toHaveClass("min-h-[24px]");
-    expect(boton).toHaveClass("inline-flex");
-    expect(boton).toHaveClass("items-center");
-    expect(boton.className).toMatch(/\btext-xs\b/);
+    fireEvent.click(screen.getByRole("button", { name: /^lunes/i }));
+    expect(await screen.findByRole("button", { name: /18:00/ })).toBeInTheDocument();
   });
 
   it("shows the full week and says why when today has nothing scheduled", async () => {

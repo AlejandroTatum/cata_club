@@ -114,7 +114,7 @@ export default function MarkAttendanceStep({
 
   return (
     <div className={PAGE_RAIL}>
-      <div className="card flex flex-col gap-4 p-5 sm:p-6">
+      <div data-dash-col className="card flex flex-col gap-4 p-5 sm:p-6">
         {headingEl}
         {restoredFromDraft && (
           <p className="rounded-ctl border border-line bg-canvas px-3.5 py-2.5 text-xs text-ink-2">
@@ -204,15 +204,21 @@ export default function MarkAttendanceStep({
         )}
       </div>
 
-      <aside className="flex flex-col gap-page lg:sticky lg:top-4" aria-label="Progreso de la lista">
-        <RosterProgressHeader
-          selectedSchedule={selectedSchedule}
-          reviewedCount={reviewedCount}
-          totalCount={students.length}
-          unreviewedCount={unreviewedCount}
-          onMarkRemainingPresent={onMarkRemainingPresent}
-        />
-        {commitBar}
+      <aside
+        data-dash-col
+        className="flex flex-col gap-page lg:sticky lg:top-4"
+        aria-label="Progreso de la lista"
+      >
+        <div className="card overflow-hidden">
+          <RosterProgressHeader
+            selectedSchedule={selectedSchedule}
+            reviewedCount={reviewedCount}
+            totalCount={students.length}
+            unreviewedCount={unreviewedCount}
+            onMarkRemainingPresent={onMarkRemainingPresent}
+          />
+          <div className="p-5 max-lg:p-0 max-lg:pt-3">{commitBar}</div>
+        </div>
       </aside>
     </div>
   );

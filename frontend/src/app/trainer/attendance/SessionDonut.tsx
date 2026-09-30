@@ -1,7 +1,7 @@
 import { ATTENDANCE_STATUS_CHART_COLORS, buildDonutArcs } from "@/app/dashboard/dashboard-utils";
 import { buildSessionBarAriaLabel } from "@/app/trainer/trainer-day-utils";
 import type { EstadoAsistencia } from "@/types/domain";
-import { STATE_DISPLAY_ORDER } from "./SessionStatusGroups";
+import { STATE_DISPLAY_ORDER } from "./StudentReviewList";
 
 const SIZE = 120;
 const STROKE = 14;
@@ -43,7 +43,14 @@ export default function SessionDonut({
         aria-label={buildSessionBarAriaLabel(counts, total)}
         className="-rotate-90"
       >
-        <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" strokeWidth={STROKE} className="stroke-line" />
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={RADIUS}
+          fill="none"
+          strokeWidth={STROKE}
+          className="stroke-line"
+        />
         {STATE_DISPLAY_ORDER.map((state, index) => (
           <circle
             key={state}
@@ -58,7 +65,10 @@ export default function SessionDonut({
           />
         ))}
       </svg>
-      <span aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 flex flex-col items-center justify-center leading-none"
+      >
         <span className="text-2xl font-extrabold tabular-nums text-ink">
           {attending}
           <span className="text-sm font-bold text-ink-3">/{total}</span>

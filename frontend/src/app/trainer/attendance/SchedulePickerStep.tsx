@@ -1,15 +1,11 @@
+import { useState } from "react";
 import { Calendar } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { EmptyState, PAGE_RAIL, WeekStrip } from "@/components/ui";
-import { MIN_TARGET_CLASS } from "@/lib/target-size";
-import {
-  formatDay,
-  groupSchedulesByDay,
-  type TrainingSchedule,
-  type VisibleSchedules,
-} from "@/app/attendance/attendance-utils";
+import { EmptyState, PAGE_RAIL } from "@/components/ui";
+import { formatDay, groupSchedulesByDay, type TrainingSchedule } from "@/app/attendance/attendance-utils";
 import type { DiaSemana } from "@/types/domain";
 import ResumableDraftsPanel from "./ResumableDraftsPanel";
+import DayTabs from "./DayTabs";
 import ScheduleDayGroup from "./ScheduleDayGroup";
 import SelectedSessionPanel from "./SelectedSessionPanel";
 import { useSchedulePreview } from "./useSchedulePreview";
@@ -23,12 +19,7 @@ interface SchedulePickerStepProps {
   onDiscardDraft: (confirmation: PendingConfirmation) => void;
   rosterLoading: boolean;
   schedules: TrainingSchedule[];
-  visible: VisibleSchedules;
   today: DiaSemana;
-  showAllDays: boolean;
-  onToggleShowAllDays: () => void;
-  expandedDays: Set<DiaSemana>;
-  onToggleDay: (day: DiaSemana) => void;
   selectedScheduleId: number | null;
   onSelectSchedule: (id: number) => void;
   weekRecordCounts: Map<number, number>;
@@ -47,12 +38,7 @@ export default function SchedulePickerStep({
   onDiscardDraft,
   rosterLoading,
   schedules,
-  visible,
   today,
-  showAllDays,
-  onToggleShowAllDays,
-  expandedDays,
-  onToggleDay,
   selectedScheduleId,
   onSelectSchedule,
   weekRecordCounts,
@@ -61,9 +47,19 @@ export default function SchedulePickerStep({
   commitBar,
   heading,
 }: SchedulePickerStepProps): React.ReactElement {
-  const dayGroups = groupSchedulesByDay(visible.schedules);
+  const dayGroups = groupSchedulesByDay(schedules);
   const selectedSchedule = schedules.find((s) => s.id === selectedScheduleId) ?? null;
   const preview = useSchedulePreview(selectedScheduleId);
+
+  // One day at a time: the day the trainer picked, else the selected session's
+  // day (a resumed draft), else today, else the first day that has sessions.
+  const [pickedDay, setPickedDay] = useState<DiaSemana | null>(null);
+  const daysWithSchedules = new Set(dayGroups.map((g) => g.day));
+  const activeDay: DiaSemana | null =
+    pickedDay ??
+    selectedSchedule?.diaSemana ??
+    (daysWithSchedules.has(today) ? today : (dayGroups[0]?.day ?? null));
+  const activeGroup = dayGroups.find((g) => g.day === activeDay) ?? null;
 
   return (
     <div className={PAGE_RAIL}>
@@ -72,37 +68,19 @@ export default function SchedulePickerStep({
           <div className="flex min-w-0 flex-col gap-1.5">
             <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
             <p className="text-sm text-ink-3">
-              {visible.narrowedToToday ? (
-                <>
-                  <span>{`Horarios de hoy · ${formatDay(today)}`}</span>
-                  <span> — toque el que va a pasar</span>
-                </>
-              ) : (
-                "Seleccione el horario de entrenamiento:"
-              )}
+              {activeGroup
+                ? `${activeDay === today ? "Horarios de hoy" : "Otro día"} · ${activeGroup.label} — toque el que va a pasar`
+                : "Seleccione el horario de entrenamiento:"}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-1">
-            {schedules.length > 0 && (
-              <span className="flex items-center gap-2 text-xs font-bold uppercase text-ink-3">
-                Semana
-                <WeekStrip dias={[...new Set(schedules.map((s) => s.diaSemana))]} />
-              </span>
-            )}
-            {/* The escape hatch. Hidden when today is empty: the list is
-              already the full week and the hint below says why. */}
-            {schedules.length > 0 && !visible.emptyToday && (
-              <button
-                type="button"
-                onClick={onToggleShowAllDays}
-                // `MIN_TARGET_CLASS` (issue #818, WCAG 2.5.8 AA): the button
-                // used to be exactly its text, 99 × 18.8px.
-                className={`inline-flex items-center text-xs font-semibold text-ink-2 underline underline-offset-2 transition-colors hover:text-ink ${MIN_TARGET_CLASS}`}
-              >
-                {showAllDays ? "Ver solo hoy" : "Ver todos los días"}
-              </button>
-            )}
-          </div>
+          {activeDay && (
+            <DayTabs
+              daysWithSchedules={daysWithSchedules}
+              active={activeDay}
+              today={today}
+              onSelect={setPickedDay}
+            />
+          )}
         </div>
         {resumableDrafts.length > 0 && (
           <ResumableDraftsPanel
@@ -114,9 +92,9 @@ export default function SchedulePickerStep({
           />
         )}
         <div>
-          {visible.emptyToday && (
+          {activeDay !== today && daysWithSchedules.size > 0 && !daysWithSchedules.has(today) && (
             <p className="mb-3 text-xs text-ink-3">
-              No hay entrenamientos hoy ({formatDay(today).toLowerCase()}). Mostrando la semana completa.
+              No hay entrenamientos hoy ({formatDay(today).toLowerCase()}). Elija otro día.
             </p>
           )}
           {schedules.length === 0 ? (
@@ -126,20 +104,15 @@ export default function SchedulePickerStep({
               description="Sin un horario no se puede tomar lista. Pida a administración que registre uno."
             />
           ) : (
-            <div className="flex flex-col gap-3">
-              {dayGroups.map((group) => (
-                <ScheduleDayGroup
-                  key={group.day}
-                  group={group}
-                  today={today}
-                  isExpanded={expandedDays.has(group.day)}
-                  onToggle={onToggleDay}
-                  selectedScheduleId={selectedScheduleId}
-                  onSelectSchedule={onSelectSchedule}
-                  weekRecordCounts={weekRecordCounts}
-                />
-              ))}
-            </div>
+            activeGroup && (
+              <ScheduleDayGroup
+                group={activeGroup}
+                today={today}
+                selectedScheduleId={selectedScheduleId}
+                onSelectSchedule={onSelectSchedule}
+                weekRecordCounts={weekRecordCounts}
+              />
+            )
           )}
         </div>
 

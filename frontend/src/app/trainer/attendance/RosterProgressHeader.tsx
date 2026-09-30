@@ -24,7 +24,7 @@ export default function RosterProgressHeader({
   onMarkRemainingPresent,
 }: RosterProgressHeaderProps): React.ReactElement {
   return (
-    <div className="flex flex-wrap items-center gap-5 rounded-card bg-coal px-[22px] py-[18px] text-white">
+    <div className="flex flex-wrap items-center gap-5 bg-coal px-[22px] py-[18px] text-white">
       <span aria-live="polite" className="text-display font-extrabold leading-none tabular-nums">
         {reviewedCount}
         <span className="text-lg text-white/50">/{totalCount}</span>

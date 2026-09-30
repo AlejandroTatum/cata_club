@@ -56,8 +56,8 @@ export default function AttendanceCommitBar({
       data-testid="attendance-commit-bar"
       // Below `lg` the bar is `sticky bottom-0`, so a forty-row roster never
       // costs a scroll to the action. From `lg` it is the tail of the aside
-      // card — stacked, so the actions sit under the summary they commit.
-      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:flex-col lg:items-stretch lg:bg-paper lg:p-5 lg:shadow-none"
+      // card (no chrome of its own) — stacked, so the actions sit under the summary they commit.
+      className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-line bg-paper/95 px-4 py-3 shadow-soft backdrop-blur lg:static lg:flex-col lg:items-stretch lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none"
     >
       {!isFirst && (
         <Button
@@ -82,7 +82,9 @@ export default function AttendanceCommitBar({
           onClick={onUndo}
           disabled={lastUndoable === null || submitting}
           className="lg:order-3 lg:justify-center"
-          aria-label={lastUndoable ? `Deshacer: ${lastUndoable.label}` : "Deshacer — no hay nada que deshacer"}
+          aria-label={
+            lastUndoable ? `Deshacer: ${lastUndoable.label}` : "Deshacer — no hay nada que deshacer"
+          }
         >
           <Undo2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Deshacer

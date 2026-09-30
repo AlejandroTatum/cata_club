@@ -368,12 +368,7 @@ export default function TrainerAttendancePage(): React.ReactElement {
                       onDiscardDraft={leaveGuard.setPendingConfirmation}
                       rosterLoading={roster.rosterLoading}
                       schedules={schedules.schedules}
-                      visible={schedules.visible}
                       today={schedules.today}
-                      showAllDays={schedules.showAllDays}
-                      onToggleShowAllDays={() => schedules.setShowAllDays((prev) => !prev)}
-                      expandedDays={schedules.expandedDays}
-                      onToggleDay={schedules.toggleDay}
                       selectedScheduleId={schedules.selectedScheduleId}
                       onSelectSchedule={schedules.setSelectedScheduleId}
                       weekRecordCounts={schedules.weekRecordCounts}

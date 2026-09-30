@@ -99,8 +99,8 @@ export default function SelectedSessionPanel({
             </dl>
           </div>
         )}
+        <div className="border-t border-line pt-4 max-lg:border-0 max-lg:pt-0">{commitBar}</div>
       </div>
-      {commitBar}
     </aside>
   );
 }

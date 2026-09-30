@@ -6,6 +6,7 @@ import { formatDateTime } from "@/lib/format-utils";
 import type { RegisterAttendanceResult } from "@/services/api";
 import type { EstadoAsistencia } from "@/types/domain";
 import type { SessionStudent } from "./attendance-utils";
+import SessionDonut from "./SessionDonut";
 import FailedRecordsNotice from "./FailedRecordsNotice";
 import SessionReceiptBreakdown from "./SessionReceiptBreakdown";
 
@@ -55,7 +56,7 @@ export default function AttendanceReceipt({
 
   return (
     <div className={PAGE_RAIL}>
-      <div className="flex flex-col gap-page">
+      <div data-dash-col className="flex flex-col gap-page">
         <div>
           <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">
             {hasFailedRecords ? "Asistencia registrada parcialmente" : "Asistencia registrada"}
@@ -74,6 +75,23 @@ export default function AttendanceReceipt({
               : "Horario seleccionado"}
           </h2>
         </div>
+
+        {/* The identity band: what quedó archivado, sobre cuántos, cuándo y quién. */}
+        <StatCard
+          variant="hot"
+          label={
+            hasFailedRecords
+              ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "alumno" : "alumnos"} por guardar`
+              : "Guardada en el historial del club"
+          }
+          value={result?.createdCount ?? 0}
+          unit={`/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`}
+          hint={
+            confirmedAt
+              ? `${formatDateTime(confirmedAt.toISOString())} · ${result?.registradoPorNombre ?? "No registrado"}`
+              : undefined
+          }
+        />
 
         {result && result.failed.length > 0 && (
           <FailedRecordsNotice failed={result.failed} students={students} />
@@ -95,24 +113,11 @@ export default function AttendanceReceipt({
         )}
       </div>
 
-      <aside className="flex flex-col gap-page lg:sticky lg:top-4" aria-label="Siguientes pasos">
-        {/* The identity band: what quedó archivado, sobre cuántos, cuándo y quién. */}
-        <StatCard
-          variant="hot"
-          label={
-            hasFailedRecords
-              ? `Falta${result && result.failed.length === 1 ? "" : "n"} ${result?.failed.length ?? 0} ${result?.failed.length === 1 ? "alumno" : "alumnos"} por guardar`
-              : "Guardada en el historial del club"
-          }
-          value={result?.createdCount ?? 0}
-          unit={`/${students.length} ${students.length === 1 ? "alumno" : "alumnos"}`}
-          hint={
-            confirmedAt
-              ? `${formatDateTime(confirmedAt.toISOString())} · ${result?.registradoPorNombre ?? "No registrado"}`
-              : undefined
-          }
-        />
-
+      <aside
+        data-dash-col
+        className="flex flex-col gap-page lg:sticky lg:top-4"
+        aria-label="Siguientes pasos"
+      >
         <div className="card flex flex-col gap-4 p-5">
           {selectedSchedule && (
             <div className="flex flex-col gap-0.5 border-b border-line pb-4">
@@ -126,6 +131,9 @@ export default function AttendanceReceipt({
               )}
             </div>
           )}
+          <div className="flex justify-center border-b border-line pb-4">
+            <SessionDonut counts={receiptCounts} total={receiptTotal} />
+          </div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-3">Qué sigue</p>
           {/* One way back, not two — see the page's own note on why the
             frame's `BackLink` is the one that stays. */}

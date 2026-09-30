@@ -1,7 +1,5 @@
-import { SessionCompositionCounts } from "@/app/trainer/SessionComposition";
 import type { EstadoAsistencia } from "@/types/domain";
-import SessionDonut from "./SessionDonut";
-import SessionStatusGroups from "./SessionStatusGroups";
+import StudentReviewList, { StatusTiles } from "./StudentReviewList";
 import type { SessionStudent } from "./attendance-utils";
 
 interface SessionReceiptBreakdownProps {
@@ -12,10 +10,9 @@ interface SessionReceiptBreakdownProps {
 }
 
 /**
- * The desglose, as a compact receipt: the ring and a legend of only the
- * states somebody is in (a zero is not a row — it collapses into one muted
- * line under the names), then who is in each state. Counts what got SAVED,
- * not what the trainer marked.
+ * The desglose: six state tiles (a zero shrinks and mutes, it does not vanish)
+ * and every saved student with the state they were filed under. Counts what
+ * got SAVED, not what the trainer marked.
  */
 export default function SessionReceiptBreakdown({
   hasFailedRecords,
@@ -28,19 +25,8 @@ export default function SessionReceiptBreakdown({
       <p className="text-xs font-bold uppercase tracking-wide text-ink-3">
         {hasFailedRecords ? `Cómo quedó la sesión · ${receiptTotal} guardados` : "Cómo quedó la sesión"}
       </p>
-
-      <div className="grid gap-6 md:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
-        <div className="flex flex-col items-start gap-4 md:items-center">
-          <SessionDonut counts={receiptCounts} total={receiptTotal} className="flex-none" />
-          <SessionCompositionCounts
-            counts={receiptCounts}
-            total={receiptTotal}
-            className="flex-col !gap-y-1.5"
-            hideZero
-          />
-        </div>
-        <SessionStatusGroups students={students} className="md:border-l md:border-line md:pl-6" />
-      </div>
+      <StatusTiles counts={receiptCounts} />
+      <StudentReviewList students={students} />
     </div>
   );
 }
