@@ -1,10 +1,12 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import GaleriaPage from "../page";
 import { ApiClientError } from "@/services/api";
 
 const fetchGaleria = vi.fn(); const crearEntradaGaleria = vi.fn(); const eliminarEntradaGaleria = vi.fn();
+const showSuccess = vi.fn(); const showError = vi.fn();
+vi.mock("@/contexts/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn(), showSuccess, showError }) }));
 vi.mock("@/components/ProtectedRoute", () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/components/shell/AppShell", () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/services/api", () => {
@@ -36,10 +38,11 @@ describe("GaleriaPage", () => {
     crearEntradaGaleria.mockResolvedValue({});
     eliminarEntradaGaleria.mockResolvedValue(undefined);
     vi.stubGlobal("confirm", vi.fn(() => true));
+    URL.createObjectURL = vi.fn(() => "blob:preview"); URL.revokeObjectURL = vi.fn();
   });
   it("lists published photos with their accessible descriptions", async () => {
     render(<GaleriaPage />);
-    expect(await screen.findByRole("img", { name: "Una jugada frente al público." })).toHaveAttribute("src", "https://cdn/foto.png");
+    expect(await screen.findByRole("img", { name: "En juego" })).toHaveAttribute("src", "https://cdn/foto.png");
     expect(screen.getByText("En juego")).toBeInTheDocument();
   });
   it("requires the title, the description and a photo before publishing", async () => {
@@ -111,9 +114,58 @@ describe("GaleriaPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("La imagen no puede superar 5 MB.");
   });
-  it("deletes a published photo after confirmation", async () => {
+  it("deletes a published photo through the confirm dialog, not window.confirm", async () => {
     render(<GaleriaPage />); await screen.findByText("En juego");
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar En juego" }));
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(eliminarEntradaGaleria).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("En juego");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }));
     await waitFor(() => expect(eliminarEntradaGaleria).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(showSuccess).toHaveBeenCalled());
+  });
+  it("does not delete when the dialog is cancelled", async () => {
+    render(<GaleriaPage />); await screen.findByText("En juego");
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar En juego" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancelar" }));
+    expect(eliminarEntradaGaleria).not.toHaveBeenCalled();
+  });
+  it("mirrors the typed title, description and chosen photo in the preview figcaption", async () => {
+    render(<GaleriaPage />); await completarFormularioValido();
+    const preview = screen.getByTestId("galeria-preview");
+    expect(within(preview).getByText("La final")).toBeInTheDocument();
+    expect(within(preview).getByText("El punto decisivo.")).toBeInTheDocument();
+    expect(preview.querySelector("img")).toHaveAttribute("src", "blob:preview");
+  });
+  it("guides the admin with an empty state after a successful empty load", async () => {
+    fetchGaleria.mockResolvedValue([]);
+    render(<GaleriaPage />);
+    expect(await screen.findByText("Aún no hay fotos en la galería")).toBeInTheDocument();
+    expect(screen.getByText(/formulario/i)).toBeInTheDocument();
+  });
+  it("shows a loading state, not the empty copy, while the list loads", async () => {
+    let resolver: (v: unknown[]) => void = () => undefined;
+    fetchGaleria.mockReturnValue(new Promise((r) => { resolver = r; }));
+    render(<GaleriaPage />);
+    expect(screen.getByRole("status")).toHaveTextContent(/Cargando/);
+    expect(screen.queryByText(/Aún no hay fotos/)).not.toBeInTheDocument();
+    resolver([]);
+    expect(await screen.findByText("Aún no hay fotos en la galería")).toBeInTheDocument();
+  });
+  it("shows a retryable error state when the list fails to load", async () => {
+    fetchGaleria.mockRejectedValueOnce(new Error("boom"));
+    render(<GaleriaPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar la galería.");
+    expect(screen.queryByText(/Aún no hay fotos/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByText("En juego")).toBeInTheDocument();
+  });
+  it("confirms a publish with a toast and clears the form and preview", async () => {
+    render(<GaleriaPage />); await completarFormularioValido();
+    fireEvent.click(screen.getByRole("button", { name: "Publicar foto" }));
+    await waitFor(() => expect(showSuccess).toHaveBeenCalled());
+    expect(screen.getByLabelText("Título")).toHaveValue("");
+    expect(screen.getByTestId("galeria-preview").querySelector("img")).toBeNull();
   });
 });
