@@ -154,14 +154,11 @@ describe("un entrenador llega a la pantalla y ve la nómina", () => {
     expect(within(melany).getByText("Melany Quimis")).toBeInTheDocument();
   });
 
-  it("no muestra la edad ni el resumen de horarios del alumno", async () => {
-    // El renglón se achicó a nombre + ficha de emergencia (issue #511): edad y
-    // horarios eran ruido que no ayudaba a decidir a quién llamar.
+  it("muestra la edad y los horarios bajo el nombre, para reconocer al alumno sin abrir la ficha", async () => {
     render(<TrainerStudentsPage />);
 
     const melany = await screen.findByTestId("student-row-7");
-    expect(melany.textContent).not.toMatch(/años/);
-    expect(melany.textContent).not.toMatch(/Lun 18:00/);
+    expect(melany).toHaveTextContent("12 años · Lun 18:00 · Mié 18:00 · Vie 18:00");
   });
 
   it("se titula «Alumnos del club» y nunca dice que los alumnos son suyos", async () => {
@@ -225,9 +222,7 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
     render(<TrainerStudentsPage />);
 
     const diego = await screen.findByTestId("student-row-3");
-    fireEvent.click(
-      within(diego).getByRole("button", { name: /ficha médica de Diego Mendoza/i }),
-    );
+    fireEvent.click(within(diego).getByRole("button", { name: /ficha médica de Diego Mendoza/i }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     await waitFor(() => expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(3));
@@ -324,45 +319,44 @@ describe("la ficha de emergencia es la única acción del renglón", () => {
     render(<TrainerStudentsPage />);
 
     const diego = await screen.findByTestId("student-row-3");
-    fireEvent.click(
-      within(diego).getByRole("button", { name: "Ficha médica de Diego Mendoza" }),
-    );
+    fireEvent.click(within(diego).getByRole("button", { name: "Ficha médica de Diego Mendoza" }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog.querySelector(".lucide-triangle-alert")).not.toBeNull();
   });
 
   it("abre Horario con todas las ventanas y restaura el foco al cerrar", async () => {
-      render(<TrainerStudentsPage />);
-      const melany = await screen.findByTestId("student-row-7");
-      const trigger = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
-      // El renglón enfoca su propio disparador antes de abrir (mismo patrón
-      // de la ficha médica), así que la prueba no precarga el foco: lo que se
-      // prueba es ese comportamiento de la página.
-      expect(trigger).not.toHaveFocus();
-      fireEvent.click(trigger);
-      const dialog = screen.getByRole("dialog", { name: "Horario" });
-      expect(within(dialog).getByText("Melany Quimis")).toBeInTheDocument();
-      for (const window of ["Lun 18:00", "Mié 18:00", "Vie 18:00"]) expect(within(dialog).getByText(window)).toBeInTheDocument();
-      fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar horario" }));
-      await waitFor(() => expect(trigger).toHaveFocus());
-      expect(screen.queryByRole("dialog", { name: "Horario" })).not.toBeInTheDocument();
-    });
+    render(<TrainerStudentsPage />);
+    const melany = await screen.findByTestId("student-row-7");
+    const trigger = within(melany).getByRole("button", { name: "Horario de Melany Quimis" });
+    // El renglón enfoca su propio disparador antes de abrir (mismo patrón
+    // de la ficha médica), así que la prueba no precarga el foco: lo que se
+    // prueba es ese comportamiento de la página.
+    expect(trigger).not.toHaveFocus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Horario" });
+    expect(within(dialog).getByText("Melany Quimis")).toBeInTheDocument();
+    for (const window of ["Lun 18:00", "Mié 18:00", "Vie 18:00"])
+      expect(within(dialog).getByText(window)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar horario" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(screen.queryByRole("dialog", { name: "Horario" })).not.toBeInTheDocument();
+  });
 
-    it("explica cuando el padrón no trae un horario legible", async () => {
-      const unreadable = fila(11, "Noelia Paz", 13, "DIA_INVALIDO");
-      unreadable.horarioHoraInicio = "";
-      unreadable.horarioHoraFin = "";
-      mockFetchRoster.mockResolvedValue([unreadable]);
-      render(<TrainerStudentsPage />);
-      const noelia = await screen.findByTestId("student-row-11");
-      fireEvent.click(within(noelia).getByRole("button", { name: "Horario de Noelia Paz" }));
-      const dialog = screen.getByRole("dialog", { name: "Horario" });
-      expect(within(dialog).getByText("Sin horario disponible")).toBeInTheDocument();
-      expect(within(dialog).getByRole("button", { name: "Cerrar horario" })).toBeInTheDocument();
-    });
+  it("explica cuando el padrón no trae un horario legible", async () => {
+    const unreadable = fila(11, "Noelia Paz", 13, "DIA_INVALIDO");
+    unreadable.horarioHoraInicio = "";
+    unreadable.horarioHoraFin = "";
+    mockFetchRoster.mockResolvedValue([unreadable]);
+    render(<TrainerStudentsPage />);
+    const noelia = await screen.findByTestId("student-row-11");
+    fireEvent.click(within(noelia).getByRole("button", { name: "Horario de Noelia Paz" }));
+    const dialog = screen.getByRole("dialog", { name: "Horario" });
+    expect(within(dialog).getByText("Sin horario disponible")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Cerrar horario" })).toBeInTheDocument();
+  });
 
-    it("no pide ninguna ficha hasta que alguien toca un botón", async () => {
+  it("no pide ninguna ficha hasta que alguien toca un botón", async () => {
     // 66 alumnos en pantalla no pueden ser 66 lecturas auditadas: el backend
     // registra quién consultó a quién, y precargarlas ensuciaría esa bitácora
     // con consultas que nadie hizo.
@@ -492,9 +486,7 @@ describe("los encabezados se alinean con su contenido (issue #1158)", () => {
     const melany = await screen.findByTestId("student-row-7");
     expect(within(melany).queryByText(/^#\d+$/)).not.toBeInTheDocument();
 
-    const tarjetaMelany = within(screen.getByTestId("students-mobile-list")).getByTestId(
-      "student-card-7",
-    );
+    const tarjetaMelany = within(screen.getByTestId("students-mobile-list")).getByTestId("student-card-7");
     expect(within(tarjetaMelany).queryByText(/^#\d+$/)).not.toBeInTheDocument();
   });
 });
@@ -558,5 +550,71 @@ describe("el camino de vuelta queda sobre el título (#1396)", () => {
     // por el slot `AppShell.back`, que el shell dibuja antes del `<h1>`.
     const title = screen.getByRole("heading", { name: "Alumnos del club", level: 1 });
     expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("maestro–detalle en escritorio", () => {
+  function setDesktop(matches: boolean): void {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  }
+
+  it("sin selección muestra un panel fantasma en vez de un hueco", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    expect(await screen.findByTestId("ficha-panel-ghost")).toBeInTheDocument();
+    expect(mockFetchFichaEmergencia).not.toHaveBeenCalled();
+  });
+
+  it("al tocar Ficha médica llena el panel lateral, sin abrir el diálogo", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    fireEvent.click(
+      within(await screen.findByTestId("student-row-7")).getByRole("button", {
+        name: "Ficha médica de Melany Quimis",
+      }),
+    );
+
+    const panel = await screen.findByTestId("ficha-panel");
+    expect(await within(panel).findByText("O positivo")).toBeInTheDocument();
+    expect(within(panel).getByText("Polen")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(mockFetchFichaEmergencia).toHaveBeenCalledTimes(1);
+    expect(mockFetchFichaEmergencia).toHaveBeenCalledWith(7);
+  });
+
+  it("el teléfono de emergencia es un enlace para llamar", async () => {
+    setDesktop(true);
+    render(<TrainerStudentsPage />);
+
+    fireEvent.click(
+      within(await screen.findByTestId("student-row-7")).getByRole("button", {
+        name: "Ficha médica de Melany Quimis",
+      }),
+    );
+
+    const panel = await screen.findByTestId("ficha-panel");
+    const links = await within(panel).findAllByRole("link", { name: /Llamar a Marta Quimis/ });
+    expect(links[0]).toHaveAttribute("href", "tel:0987654321");
+  });
+
+  it("por debajo de lg conserva el diálogo y no dibuja el panel", async () => {
+    setDesktop(false);
+    render(<TrainerStudentsPage />);
+
+    fireEvent.click(
+      within(await screen.findByTestId("student-row-7")).getByRole("button", {
+        name: "Ficha médica de Melany Quimis",
+      }),
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByTestId("ficha-panel-ghost")).not.toBeInTheDocument();
   });
 });

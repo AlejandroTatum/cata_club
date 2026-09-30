@@ -55,6 +55,7 @@ import {
   ErrorState,
   FilterPanel,
   LoadingState,
+  PAGE_RAIL,
   Pagination,
   ResponsiveListTable,
   SearchInput,
@@ -65,18 +66,30 @@ import {
 import { ICON } from "@/lib/icon-size";
 import { fetchRosterDeTodosLosHorarios, type AlumnoHorario } from "@/services/api";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
-import EmergencyCardDialog, {
-  type EmergencyCardStudent,
-} from "@/app/trainer/attendance/EmergencyCardDialog";
-import {
-  agruparAlumnosDelPadron,
-  filtrarPorNombre,
-  type AlumnoDelClub,
-} from "./students-utils";
+import EmergencyCardDialog, { type EmergencyCardStudent } from "@/app/trainer/attendance/EmergencyCardDialog";
+import { agruparAlumnosDelPadron, filtrarPorNombre, type AlumnoDelClub } from "./students-utils";
 import ScheduleDialog from "./ScheduleDialog";
+import StudentFichaPanel from "./StudentFichaPanel";
 
 /** Diez, como toda lista paginada del producto — ver `list-page-size.test.ts`. */
 const PAGE_SIZE = 10;
+
+/** Tailwind's `lg`: from here the ficha is a panel beside the roster, below it a dialog. */
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
+/** `false` until mounted and whenever `matchMedia` is missing (SSR, jsdom): the dialog is the safe default. */
+function useIsDesktop(): boolean {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    const sync = (): void => setDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return (): void => mq.removeEventListener("change", sync);
+  }, []);
+  return desktop;
+}
 
 /**
  * Los dos disparadores del renglón, compartidos por las DOS renderings de
@@ -101,9 +114,11 @@ const PAGE_SIZE = 10;
 function BotonFichaMedica({
   alumno,
   onAbrir,
+  seleccionado = false,
 }: {
   alumno: AlumnoDelClub;
   onAbrir: () => void;
+  seleccionado?: boolean;
 }): React.ReactElement {
   return (
     <Button
@@ -114,6 +129,7 @@ function BotonFichaMedica({
         onAbrir();
       }}
       aria-label={`Ficha médica de ${alumno.nombreCompleto}`}
+      aria-pressed={seleccionado || undefined}
     >
       <Stethoscope size={ICON.base} strokeWidth={1.5} aria-hidden="true" />
       Ficha médica
@@ -143,19 +159,29 @@ function BotonHorario({
   );
 }
 
+/** `12 años · Lun 18:00 · Mié 18:00`: who they are and when to find them. */
+function descripcion(alumno: AlumnoDelClub): string {
+  return alumno.horarios ? `${alumno.edad} años · ${alumno.horarios}` : `${alumno.edad} años`;
+}
+
 export default function TrainerStudentsPage(): React.ReactElement {
   const [padron, setPadron] = useState<AlumnoHorario[]>([]);
   const [cargando, setCargando] = useState(true);
   const [fallo, setFallo] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
+  const esEscritorio = useIsDesktop();
+  /** The student shown in the side panel (desktop). */
+  const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null);
   /**
    * El alumno cuya ficha está abierta, o `null`. Sale del renglón y entra al
    * diálogo, que recién ahí pide el dato: 66 alumnos en pantalla no pueden ser
    * 66 lecturas auditadas, y el backend registra quién consultó a quién.
    */
   const [fichaAbierta, setFichaAbierta] = useState<EmergencyCardStudent | null>(null);
-    const [horarioAbierto, setHorarioAbierto] = useState<{ name: string; horarios: string | null } | null>(null);
+  const [horarioAbierto, setHorarioAbierto] = useState<{ name: string; horarios: string | null } | null>(
+    null,
+  );
 
   const cargarPadron = useCallback(async (): Promise<void> => {
     setCargando(true);
@@ -177,10 +203,11 @@ export default function TrainerStudentsPage(): React.ReactElement {
   const nomina = useMemo(() => agruparAlumnosDelPadron(padron), [padron]);
   const encontrados = useMemo(() => filtrarPorNombre(nomina, busqueda), [nomina, busqueda]);
   const totalPaginas = getTotalPages(encontrados.length, PAGE_SIZE);
-  const visibles = useMemo(
-    () => paginateRecords(encontrados, pagina, PAGE_SIZE),
-    [encontrados, pagina],
+  const seleccionado = useMemo(
+    () => nomina.find((a) => a.personaId === seleccionadoId) ?? null,
+    [nomina, seleccionadoId],
   );
+  const visibles = useMemo(() => paginateRecords(encontrados, pagina, PAGE_SIZE), [encontrados, pagina]);
 
   /**
    * Cuál de los dos vacíos aplica, si aplica alguno — nunca ambos: un padrón
@@ -211,6 +238,12 @@ export default function TrainerStudentsPage(): React.ReactElement {
    * vacía con resultados que sí existen: la página que estaba abierta ya no
    * cae dentro de lo encontrado.
    */
+  /** Desktop: fill the side panel. Below `lg`: open the dialog, as before. */
+  function abrirFicha(alumno: AlumnoDelClub): void {
+    if (esEscritorio) setSeleccionadoId(alumno.personaId);
+    else setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto });
+  }
+
   function buscar(termino: string): void {
     setBusqueda(termino);
     setPagina(1);
@@ -223,7 +256,6 @@ export default function TrainerStudentsPage(): React.ReactElement {
         subtitle="El padrón completo, con la ficha de emergencia de cada chico a un toque."
         back={<BackLink href="/trainer" />}
       >
-
         {/*
          * El buscador va en el panel, no suelto sobre el lienzo: es el único
          * control de filtro de la pantalla, y `FilterPanel` es el marco que el
@@ -256,70 +288,100 @@ export default function TrainerStudentsPage(): React.ReactElement {
         )}
 
         {!cargando && !fallo && (
-          <div className="card overflow-hidden">
-            {estadoVacio ? (
-              <EmptyState
-                surface="inset"
-                icon={estadoVacio.icon}
-                title={estadoVacio.title}
-                description={estadoVacio.description}
-              />
-            ) : (
-              <>
-                    {/*
-                     * La nómina es la MISMA tabla compartida que `/members`,
-                     * `/discounts` y el historial de asistencias: tarjetas
-                     * debajo de `sm`, tabla con `<thead>` de `sm` para arriba
-                     * (issue #1156). El `<ul>` hecho a mano se jubila. Una
-                     * sola columna de acciones al final (issue #1291): con
-                     * dos columnas `type="action"` el layout automático de la
-                     * tabla repartía el ancho sobrante entre las tres
-                     * columnas, y cada botón flotaba en el borde derecho de
-                     * una celda mucho más ancha que él.
-                     */}
-                    <ResponsiveListTable
-                      items={visibles}
-                      getKey={(alumno) => alumno.personaId}
-                      mobileListTestId="students-mobile-list"
-                      desktopTableTestId="students-desktop-table"
-                      tableHead={
-                        <TableRow>
-                          {/* El número de renglón se retiró: ya no numera. */}
-                          <TableHeaderCell>Estudiante</TableHeaderCell>
-                          {/* Sigue en el árbol de accesibilidad porque un
+          <div className={esEscritorio && !estadoVacio ? PAGE_RAIL : undefined}>
+            <div className="card overflow-hidden">
+              {estadoVacio ? (
+                <EmptyState
+                  surface="inset"
+                  icon={estadoVacio.icon}
+                  title={estadoVacio.title}
+                  description={estadoVacio.description}
+                />
+              ) : (
+                <>
+                  {/*
+                   * La nómina es la MISMA tabla compartida que `/members`,
+                   * `/discounts` y el historial de asistencias: tarjetas
+                   * debajo de `sm`, tabla con `<thead>` de `sm` para arriba
+                   * (issue #1156). El `<ul>` hecho a mano se jubila. Una
+                   * sola columna de acciones al final (issue #1291): con
+                   * dos columnas `type="action"` el layout automático de la
+                   * tabla repartía el ancho sobrante entre las tres
+                   * columnas, y cada botón flotaba en el borde derecho de
+                   * una celda mucho más ancha que él.
+                   */}
+                  <ResponsiveListTable
+                    items={visibles}
+                    getKey={(alumno) => alumno.personaId}
+                    mobileListTestId="students-mobile-list"
+                    desktopTableTestId="students-desktop-table"
+                    tableHead={
+                      <TableRow>
+                        {/* El número de renglón se retiró: ya no numera. */}
+                        <TableHeaderCell>Estudiante</TableHeaderCell>
+                        {/* Sigue en el árbol de accesibilidad porque un
                               `<th>` sin nombre es una columna que un lector
                               de pantalla anuncia en blanco; un encabezado
                               visible "Acciones" no le dice nada a un lector
                               vidente que los botones de abajo no digan ya. */}
-                          <TableHeaderCell type="action">
-                            <span className="sr-only">Acciones</span>
-                          </TableHeaderCell>
-                        </TableRow>
-                      }
-                      renderCard={(alumno) => (
-                        <li
-                          data-testid={`student-card-${alumno.personaId}`}
-                          className="space-y-section px-4 py-4"
+                        <TableHeaderCell type="action">
+                          <span className="sr-only">Acciones</span>
+                        </TableHeaderCell>
+                      </TableRow>
+                    }
+                    renderCard={(alumno) => (
+                      <li
+                        data-testid={`student-card-${alumno.personaId}`}
+                        className="space-y-section px-4 py-4"
+                      >
+                        {/*
+                         * `truncate` es `overflow:hidden` + `nowrap`, y
+                         * `overflow` no aplica a un elemento en línea no
+                         * reemplazado (#664): `block` lo vuelve un
+                         * candidato válido y lo acota al ancho de la
+                         * tarjeta.
+                         */}
+                        <span
+                          className="block min-w-0 truncate text-sm font-semibold text-ink"
+                          title={alumno.nombreCompleto}
                         >
-                          {/*
-                           * `truncate` es `overflow:hidden` + `nowrap`, y
-                           * `overflow` no aplica a un elemento en línea no
-                           * reemplazado (#664): `block` lo vuelve un
-                           * candidato válido y lo acota al ancho de la
-                           * tarjeta.
-                           */}
+                          {alumno.nombreCompleto}
+                        </span>
+                        <span className="block text-xs text-ink-3">{descripcion(alumno)}</span>
+                        <div className="flex flex-wrap gap-2">
+                          <BotonFichaMedica alumno={alumno} onAbrir={() => abrirFicha(alumno)} />
+                          <BotonHorario
+                            alumno={alumno}
+                            onAbrir={() =>
+                              setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })
+                            }
+                          />
+                        </div>
+                      </li>
+                    )}
+                    renderRow={(alumno) => (
+                      <TableRow
+                        data-testid={`student-row-${alumno.personaId}`}
+                        className={
+                          esEscritorio && seleccionadoId === alumno.personaId ? "bg-ink/5" : undefined
+                        }
+                      >
+                        <TableCell>
+                          {/* `block` + `max-w` so the name truncates on its own element (#664). */}
                           <span
-                            className="block min-w-0 truncate text-sm font-semibold text-ink"
+                            className="block min-w-0 max-w-[280px] flex-1 truncate text-sm font-semibold text-ink"
                             title={alumno.nombreCompleto}
                           >
                             {alumno.nombreCompleto}
                           </span>
-                          <div className="flex flex-wrap gap-2">
+                          <span className="block text-xs text-ink-3">{descripcion(alumno)}</span>
+                        </TableCell>
+                        <TableCell type="action">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <BotonFichaMedica
                               alumno={alumno}
-                              onAbrir={() =>
-                                setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })
-                              }
+                              onAbrir={() => abrirFicha(alumno)}
+                              seleccionado={esEscritorio && seleccionadoId === alumno.personaId}
                             />
                             <BotonHorario
                               alumno={alumno}
@@ -328,68 +390,37 @@ export default function TrainerStudentsPage(): React.ReactElement {
                               }
                             />
                           </div>
-                        </li>
-                      )}
-                      renderRow={(alumno) => (
-                        <TableRow data-testid={`student-row-${alumno.personaId}`}>
-                          <TableCell>
-                            {/*
-                             * El nombre trunca en el MISMO elemento que se
-                             * angosta (#664): `block` hace que `overflow`
-                             * aplique, `max-w` le da contra qué truncar, y
-                             * `title` devuelve el nombre completo al vuelo.
-                             */}
-                            <span
-                              className="block min-w-0 max-w-[240px] flex-1 truncate text-sm font-semibold text-ink"
-                              title={alumno.nombreCompleto}
-                            >
-                              {alumno.nombreCompleto}
-                            </span>
-                          </TableCell>
-                          <TableCell type="action">
-                            <div className="flex flex-wrap items-center justify-end gap-1.5">
-                              <BotonFichaMedica
-                                alumno={alumno}
-                                onAbrir={() =>
-                                  setFichaAbierta({ id: alumno.personaId, name: alumno.nombreCompleto })
-                                }
-                              />
-                              <BotonHorario
-                                alumno={alumno}
-                                onAbrir={() =>
-                                  setHorarioAbierto({ name: alumno.nombreCompleto, horarios: alumno.horarios })
-                                }
-                              />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      footer={
-                        /*
-                         * Paginación de cliente sobre la nómina ya juntada,
-                         * porque el endpoint devuelve el padrón entero de una
-                         * y no se le va a pedir que pagine. Se cuentan
-                         * PERSONAS, no asignaciones: decir "200 alumnos" cuando
-                         * hay 66 sería contar tres veces al mismo chico.
-                         */
-                        <Pagination
-                          page={pagina}
-                          totalPages={totalPaginas}
-                          onPageChange={setPagina}
-                          totalItems={encontrados.length}
-                          pageSize={PAGE_SIZE}
-                          itemNoun="alumno"
-                          variant="footer"
-                        />
-                      }
-                    />
-              </>
-            )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    footer={
+                      /*
+                       * Paginación de cliente sobre la nómina ya juntada,
+                       * porque el endpoint devuelve el padrón entero de una
+                       * y no se le va a pedir que pagine. Se cuentan
+                       * PERSONAS, no asignaciones: decir "200 alumnos" cuando
+                       * hay 66 sería contar tres veces al mismo chico.
+                       */
+                      <Pagination
+                        page={pagina}
+                        totalPages={totalPaginas}
+                        onPageChange={setPagina}
+                        totalItems={encontrados.length}
+                        pageSize={PAGE_SIZE}
+                        itemNoun="alumno"
+                        variant="footer"
+                      />
+                    }
+                  />
+                </>
+              )}
+            </div>
+            {esEscritorio && !estadoVacio && <StudentFichaPanel student={seleccionado} />}
           </div>
         )}
 
         <EmergencyCardDialog student={fichaAbierta} onClose={() => setFichaAbierta(null)} />
-            <ScheduleDialog student={horarioAbierto} onClose={() => setHorarioAbierto(null)} />
+        <ScheduleDialog student={horarioAbierto} onClose={() => setHorarioAbierto(null)} />
       </AppShell>
     </ProtectedRoute>
   );
