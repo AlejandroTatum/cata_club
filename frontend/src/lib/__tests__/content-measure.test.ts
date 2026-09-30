@@ -88,6 +88,13 @@ const SHORT_SCREENS = SHELL_SCREENS.filter(({ code }) => /measure="short"/.test(
 );
 
 /**
+ * ADMIN MODULES ARE NOT ON THIS LIST. `/discounts`, `/tarifas` and `/groups`
+ * used to be, and the result was that content changed width and left edge
+ * between admin modules (972px centered vs the default measure, left-aligned
+ * beside the rail). They now share the default measure; a narrow table is
+ * constrained on its inner card, never on the page column. The rows below that
+ * mention them are the historical readings that justified the cap.
+ *
  * The screens whose height is a function of what EXISTS rather than of a page
  * size, each admitted on a reading rather than on a look.
  *
@@ -131,12 +138,9 @@ const SHORT_SCREENS = SHELL_SCREENS.filter(({ code }) => /measure="short"/.test(
  * shape, not a screen that adopted `short` because narrow looked tidy.
  */
 const SHORT_MEASURE_SCREENS = [
-  "discounts/page.tsx",
-  "groups/page.tsx",
   "student/attendance/page.tsx",
   "student/medical-record/page.tsx",
   "student/payments/page.tsx",
-  "tarifas/page.tsx",
 ];
 
 /** A screen answering the shell's question in its own markup. */
