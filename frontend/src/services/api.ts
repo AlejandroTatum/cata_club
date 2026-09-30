@@ -2753,6 +2753,25 @@ export async function eliminarEntradaGaleria(id: number): Promise<void> {
   await request<unknown>(apiEndpoint(`/galeria/${id}`), { method: "DELETE" });
 }
 
+export interface ReporteError {
+  id: number;
+  persona_id: number;
+  descripcion: string;
+  request_id: string | null;
+  ruta: string | null;
+  user_agent: string | null;
+  captura_mime: string | null;
+  fecha_creacion: string;
+}
+
+export async function fetchReportesError(): Promise<ReporteError[]> {
+  return request<ReporteError[]>(apiEndpoint("/reportes-error"));
+}
+
+export async function fetchReporteError(id: number): Promise<ReporteError> {
+  return request<ReporteError>(apiEndpoint(`/reportes-error/${id}`));
+}
+
 const FOTO_PERFIL_UPLOAD_TIMEOUT_MS = 30_000;
 
 /**

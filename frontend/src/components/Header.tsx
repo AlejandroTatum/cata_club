@@ -96,6 +96,7 @@ export const NAV_ICON_MAP: Record<string, React.ForwardRefExoticComponent<
   // pantalla. Glifo propio: `Handshake` ya es "/sponsors" y `House` es el
   // fallback silencioso que este mapa existe para evitar.
   "/galeria": Images,
+  "/admin/reportes-error": ClipboardCheck,
   "/tarifas": Tag,
   "/attendance": ClipboardCheck,
   "/trainer": LayoutGrid,
