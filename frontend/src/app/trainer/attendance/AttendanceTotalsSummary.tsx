@@ -1,4 +1,5 @@
 import { formatStateCount } from "@/app/trainer/trainer-day-utils";
+import { ATTENDANCE_STATUS_CHART_COLORS } from "@/app/dashboard/dashboard-utils";
 import { countByState, type SessionStudent } from "./attendance-utils";
 import type { EstadoAsistencia } from "@/types/domain";
 
@@ -19,12 +20,23 @@ export default function AttendanceTotalsSummary({
   unreviewedCount,
 }: AttendanceTotalsSummaryProps): React.ReactElement {
   return (
-    <span className="flex min-w-[250px] flex-1 flex-wrap gap-x-3 gap-y-field text-xs text-ink-3">
-      {TOTAL_ORDER.map((state) => (
-        <span key={state} className="whitespace-nowrap">
-          {formatStateCount(state, countByState(students, state))}
-        </span>
-      ))}
+    <span className="flex min-w-[250px] flex-1 flex-wrap gap-x-3 gap-y-field text-xs text-ink-3 lg:order-1 lg:min-w-0 lg:flex-none lg:flex-col lg:gap-y-1.5 lg:text-sm">
+      {TOTAL_ORDER.map((state) => {
+        const count = countByState(students, state);
+        return (
+          <span
+            key={state}
+            className={`inline-flex items-center gap-2 whitespace-nowrap ${count === 0 ? "lg:text-ink-3/60" : "lg:font-semibold lg:text-ink"}`}
+          >
+            <span
+              aria-hidden="true"
+              className="hidden h-2.5 w-2.5 flex-none rounded-[3px] bg-line-2 lg:inline-block"
+              style={{ backgroundColor: count === 0 ? undefined : ATTENDANCE_STATUS_CHART_COLORS[state] }}
+            />
+            {formatStateCount(state, count)}
+          </span>
+        );
+      })}
       {unreviewedCount > 0 && (
         <span className="whitespace-nowrap font-bold text-state-warn">{`${unreviewedCount} sin revisar`}</span>
       )}

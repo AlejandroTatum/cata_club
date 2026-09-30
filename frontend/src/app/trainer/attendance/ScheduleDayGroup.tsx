@@ -1,5 +1,7 @@
-import { ChevronDown, Clock } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
+import { Badge } from "@/components/ui";
+import { clubTimeHHMM } from "@/lib/club-date";
 import type { DiaSemana } from "@/types/domain";
 import type {
   ScheduleDayGroup as ScheduleDayGroupData,
@@ -14,6 +16,20 @@ interface ScheduleDayGroupProps {
   selectedScheduleId: number | null;
   onSelectSchedule: (id: number) => void;
   weekRecordCounts: Map<number, number>;
+}
+
+type SessionTiming = "now" | "upcoming" | "done";
+
+const TIMING_LABEL: Record<SessionTiming, string> = {
+  now: "En curso",
+  upcoming: "Por empezar",
+  done: "Ya terminó",
+};
+
+/** Where a session of TODAY sits against the club clock ("HH:mm" compares lexically). */
+function sessionTiming(schedule: TrainingSchedule, nowHHMM: string): SessionTiming {
+  if (nowHHMM < schedule.horaInicio) return "upcoming";
+  return nowHHMM < schedule.horaFin ? "now" : "done";
 }
 
 /**
@@ -34,6 +50,7 @@ export default function ScheduleDayGroup({
   weekRecordCounts,
 }: ScheduleDayGroupProps): React.ReactElement {
   const panelId = `schedule-day-${group.day}`;
+  const now = clubTimeHHMM();
   return (
     <div className="overflow-hidden rounded-ctl border border-line bg-paper">
       <button
@@ -48,6 +65,7 @@ export default function ScheduleDayGroup({
           <span className="text-xs text-ink-3">
             ({group.schedules.length} {group.schedules.length === 1 ? "horario" : "horarios"})
           </span>
+          {group.day === today && <Badge tone="ok">Hoy</Badge>}
         </span>
         <ChevronDown
           size={ICON.sm}
@@ -59,11 +77,15 @@ export default function ScheduleDayGroup({
         />
       </button>
       {isExpanded && (
-        <div id={panelId} className="flex flex-wrap gap-2 border-t border-line p-3">
+        <div
+          id={panelId}
+          className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-2.5 border-t border-line p-3"
+        >
           {group.schedules.map((sched: TrainingSchedule) => {
             const isActive = sched.id === selectedScheduleId;
             const recordedCount = weekRecordCounts.get(sched.id) ?? 0;
             const takenForThisUser = recordedCount > 0;
+            const timing = group.day === today ? sessionTiming(sched, now) : null;
             return (
               <button
                 key={sched.id}
@@ -76,7 +98,7 @@ export default function ScheduleDayGroup({
                 aria-pressed={isActive}
                 // Selection is coal + the yellow ball dot, never a red fill —
                 // red is CTA and destructive only.
-                className={`flex min-h-[56px] flex-1 basis-44 flex-col justify-center gap-1 rounded-ctl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`flex min-h-[84px] flex-col justify-between gap-2 rounded-ctl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   isActive
                     ? "border-coal bg-paper shadow-selected"
                     : "border-line-2 bg-paper hover:border-ink-3"
@@ -97,11 +119,24 @@ export default function ScheduleDayGroup({
                     />
                   )}
                 </span>
-                {recordedCount > 0 && (
-                  <span className="flex items-center gap-1 text-2xs font-bold text-ink-3">
-                    {group.day === today ? "Lista tomada hoy" : "Lista tomada"} · {recordedCount}{" "}
-                    {recordedCount === 1 ? "registro" : "registros"}
+                {recordedCount > 0 ? (
+                  <span className="flex items-center gap-1 text-2xs font-bold text-state-ok">
+                    <CheckCircle2 size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                    <span>
+                      {group.day === today ? "Lista tomada hoy" : "Lista tomada"} · {recordedCount}{" "}
+                      {recordedCount === 1 ? "registro" : "registros"}
+                    </span>
                   </span>
+                ) : (
+                  timing && (
+                    <span
+                      className={`text-2xs font-bold ${
+                        timing === "now" ? "text-state-ok" : "text-ink-3"
+                      }`}
+                    >
+                      {TIMING_LABEL[timing]}
+                    </span>
+                  )
                 )}
               </button>
             );

@@ -276,6 +276,31 @@ export default function TrainerAttendancePage(): React.ReactElement {
     [roster],
   );
 
+  /**
+   * The commit bar. Each step hosts it in its own aside (stacked from `lg`)
+   * and it is `sticky bottom-0` below `lg`, so the trainer never scrolls to
+   * reach the action — all three steps commit from it.
+   */
+  const commitBar = (
+    <AttendanceCommitBar
+      step={roster.step}
+      isFirst={isFirst}
+      isLast={isLast}
+      submitting={submission.submitting}
+      onBack={handleBack}
+      lastUndoable={marking.lastUndoable}
+      onUndo={marking.handleUndo}
+      students={roster.students}
+      unreviewedCount={marking.unreviewedCount}
+      unmarkedCount={marking.unmarkedCount}
+      readOnly={roster.readOnly}
+      rosterLoading={roster.rosterLoading}
+      selectedScheduleId={schedules.selectedScheduleId}
+      onContinueToRoster={handleContinueToRoster}
+      onNext={handleNext}
+    />
+  );
+
   return (
     <ProtectedRoute allowedRoles={["trainer", "admin"]}>
       <AppShell
@@ -332,107 +357,76 @@ export default function TrainerAttendancePage(): React.ReactElement {
                   label="Pasos para tomar asistencia"
                 />
 
-                <div className="mx-auto w-full max-w-3xl">
-                  <div className="card p-5 sm:p-6">
-                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-field">
-                      <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">
-                        {STEP_LABELS[roster.step]}
-                      </h2>
-                      {/* Fills the heading row's right side with what is on offer. */}
-                      {roster.step === "select-session" && schedules.visible.schedules.length > 0 && (
-                        <p className="text-xs font-bold uppercase text-ink-3">
-                          {schedules.visible.schedules.length === 1
-                            ? "1 horario disponible"
-                            : `${schedules.visible.schedules.length} horarios disponibles`}
-                        </p>
-                      )}
-                    </div>
-
-                    <form onSubmit={(e) => void submission.handleConfirm(e)}>
-                      {roster.step === "select-session" && (
-                        <SchedulePickerStep
-                          resumableDrafts={resumableDrafts.resumableDrafts}
-                          describeSchedule={resumableDrafts.describeSchedule}
-                          onResumeDraft={resumableDrafts.handleResumeDraft}
-                          onDiscardDraft={leaveGuard.setPendingConfirmation}
-                          rosterLoading={roster.rosterLoading}
-                          schedules={schedules.schedules}
-                          visible={schedules.visible}
-                          today={schedules.today}
-                          showAllDays={schedules.showAllDays}
-                          onToggleShowAllDays={() => schedules.setShowAllDays((prev) => !prev)}
-                          expandedDays={schedules.expandedDays}
-                          onToggleDay={schedules.toggleDay}
-                          selectedScheduleId={schedules.selectedScheduleId}
-                          onSelectSchedule={schedules.setSelectedScheduleId}
-                          weekRecordCounts={schedules.weekRecordCounts}
-                          selectedListTaken={schedules.selectedListTaken}
-                          rosterError={roster.rosterError}
-                        />
-                      )}
-                      {roster.step === "mark-attendance" && (
-                        <MarkAttendanceStep
-                          selectedSchedule={schedules.selectedSchedule}
-                          readOnly={roster.readOnly}
-                          students={roster.students}
-                          sessionDate={roster.sessionDate}
-                          isAdmin={isAdmin}
-                          onRowCorrected={handleRowCorrected}
-                          reviewedCount={marking.reviewedCount}
-                          unreviewedCount={marking.unreviewedCount}
-                          onMarkRemainingPresent={marking.handleMarkRemainingPresent}
-                          restoredFromDraft={roster.restoredFromDraft}
-                          filteredStudents={marking.filteredStudents}
-                          searchFilter={marking.searchFilter}
-                          onSearchFilterChange={marking.setSearchFilter}
-                          onlyUnreviewed={marking.onlyUnreviewed}
-                          onToggleOnlyUnreviewed={() => marking.setOnlyUnreviewed((prev) => !prev)}
-                          onShowAllStudents={() => marking.setOnlyUnreviewed(false)}
-                          onCycleAttendance={marking.handleCycleAttendance}
-                          onDirectAttendanceSet={marking.handleDirectAttendanceSet}
-                          onRadioKeyDown={marking.handleAttendanceRadioKeyDown}
-                        />
-                      )}
-                      {roster.step === "confirm" && (
-                        <ConfirmationStep
-                          selectedSchedule={schedules.selectedSchedule}
-                          readOnly={roster.readOnly}
-                          confirmCounts={marking.confirmCounts}
-                          totalStudents={roster.students.length}
-                          unreviewedCount={marking.unreviewedCount}
-                          onReviewUnreviewed={() => {
-                            marking.setOnlyUnreviewed(true);
-                            marking.setSearchFilter("");
-                            roster.setStep("mark-attendance");
-                          }}
-                          onMarkRemainingPresent={marking.handleMarkRemainingPresent}
-                          submitError={submission.submitError}
-                        />
-                      )}
-
-                      {/* The commit bar. `sticky bottom-0` so the trainer
-                          never scrolls the whole card to reach it — all
-                          three steps commit from it. */}
-                      <AttendanceCommitBar
-                        step={roster.step}
-                        isFirst={isFirst}
-                        isLast={isLast}
-                        submitting={submission.submitting}
-                        onBack={handleBack}
-                        lastUndoable={marking.lastUndoable}
-                        onUndo={marking.handleUndo}
-                        students={roster.students}
-                        unreviewedCount={marking.unreviewedCount}
-                        unmarkedCount={marking.unmarkedCount}
-                        readOnly={roster.readOnly}
-                        rosterLoading={roster.rosterLoading}
-                        selectedScheduleId={schedules.selectedScheduleId}
-                        onContinueToRoster={handleContinueToRoster}
-                        onNext={handleNext}
-                      />
-                    </form>
-                  </div>
-                </div>
+                <form onSubmit={(e) => void submission.handleConfirm(e)}>
+                  {roster.step === "select-session" && (
+                    <SchedulePickerStep
+                      heading={STEP_LABELS["select-session"]}
+                      actions={commitBar}
+                      resumableDrafts={resumableDrafts.resumableDrafts}
+                      describeSchedule={resumableDrafts.describeSchedule}
+                      onResumeDraft={resumableDrafts.handleResumeDraft}
+                      onDiscardDraft={leaveGuard.setPendingConfirmation}
+                      rosterLoading={roster.rosterLoading}
+                      schedules={schedules.schedules}
+                      visible={schedules.visible}
+                      today={schedules.today}
+                      showAllDays={schedules.showAllDays}
+                      onToggleShowAllDays={() => schedules.setShowAllDays((prev) => !prev)}
+                      expandedDays={schedules.expandedDays}
+                      onToggleDay={schedules.toggleDay}
+                      selectedScheduleId={schedules.selectedScheduleId}
+                      onSelectSchedule={schedules.setSelectedScheduleId}
+                      weekRecordCounts={schedules.weekRecordCounts}
+                      selectedListTaken={schedules.selectedListTaken}
+                      rosterError={roster.rosterError}
+                    />
+                  )}
+                  {roster.step === "mark-attendance" && (
+                    <MarkAttendanceStep
+                      heading={STEP_LABELS["mark-attendance"]}
+                      actions={commitBar}
+                      selectedSchedule={schedules.selectedSchedule}
+                      readOnly={roster.readOnly}
+                      students={roster.students}
+                      sessionDate={roster.sessionDate}
+                      isAdmin={isAdmin}
+                      onRowCorrected={handleRowCorrected}
+                      reviewedCount={marking.reviewedCount}
+                      unreviewedCount={marking.unreviewedCount}
+                      onMarkRemainingPresent={marking.handleMarkRemainingPresent}
+                      restoredFromDraft={roster.restoredFromDraft}
+                      filteredStudents={marking.filteredStudents}
+                      searchFilter={marking.searchFilter}
+                      onSearchFilterChange={marking.setSearchFilter}
+                      onlyUnreviewed={marking.onlyUnreviewed}
+                      onToggleOnlyUnreviewed={() => marking.setOnlyUnreviewed((prev) => !prev)}
+                      onShowAllStudents={() => marking.setOnlyUnreviewed(false)}
+                      onCycleAttendance={marking.handleCycleAttendance}
+                      onDirectAttendanceSet={marking.handleDirectAttendanceSet}
+                      onRadioKeyDown={marking.handleAttendanceRadioKeyDown}
+                    />
+                  )}
+                  {roster.step === "confirm" && (
+                    <ConfirmationStep
+                      heading={STEP_LABELS.confirm}
+                      actions={commitBar}
+                      students={roster.students}
+                      sessionDate={roster.sessionDate}
+                      selectedSchedule={schedules.selectedSchedule}
+                      readOnly={roster.readOnly}
+                      confirmCounts={marking.confirmCounts}
+                      totalStudents={roster.students.length}
+                      unreviewedCount={marking.unreviewedCount}
+                      onReviewUnreviewed={() => {
+                        marking.setOnlyUnreviewed(true);
+                        marking.setSearchFilter("");
+                        roster.setStep("mark-attendance");
+                      }}
+                      onMarkRemainingPresent={marking.handleMarkRemainingPresent}
+                      submitError={submission.submitError}
+                    />
+                  )}
+                </form>
               </>
             )}
           </>

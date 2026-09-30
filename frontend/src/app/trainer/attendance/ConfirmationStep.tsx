@@ -1,102 +1,138 @@
 import { AlertTriangle, UserCheck } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, PAGE_RAIL } from "@/components/ui";
 import { formatDay } from "@/app/attendance/attendance-utils";
 import type { TrainingSchedule } from "@/app/attendance/attendance-utils";
-import { SessionCompositionBar, SessionCompositionCounts } from "@/app/trainer/SessionComposition";
+import { SessionCompositionCounts } from "@/app/trainer/SessionComposition";
+import { formatDate } from "@/lib/format-utils";
 import type { EstadoAsistencia } from "@/types/domain";
+import type { SessionStudent } from "./attendance-utils";
 import ReadOnlyReasonNotice from "./ReadOnlyReasonNotice";
+import SessionDonut from "./SessionDonut";
+import SessionStatusGroups from "./SessionStatusGroups";
 
 interface ConfirmationStepProps {
   selectedSchedule: TrainingSchedule | null;
   readOnly: boolean;
+  students: SessionStudent[];
+  sessionDate: string | null;
   confirmCounts: Record<EstadoAsistencia, number>;
   totalStudents: number;
   unreviewedCount: number;
   onReviewUnreviewed: () => void;
   onMarkRemainingPresent: () => void;
   submitError: string | null;
+  /** The stacked commit bar (Atrás / Confirmar asistencia), hosted in the aside. */
+  actions: React.ReactNode;
+  heading: string;
 }
 
-/** Step 3: review before filing. See `TrainerAttendancePage`'s own notes on this step. */
+/**
+ * Step 3: review before filing. See `TrainerAttendancePage`'s own notes on this step.
+ *
+ * A review screen, not a form: the left column says WHO is in each state
+ * (empty states collapse into one muted line), the aside holds the session
+ * card — horario, fecha, the ring with its legend — and the two actions.
+ */
 export default function ConfirmationStep({
   selectedSchedule,
   readOnly,
+  students,
+  sessionDate,
   confirmCounts,
   totalStudents,
   unreviewedCount,
   onReviewUnreviewed,
   onMarkRemainingPresent,
   submitError,
+  actions,
+  heading,
 }: ConfirmationStepProps): React.ReactElement | null {
   if (!selectedSchedule) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Defense in depth (issue #310/#3): the commit bar already disables
-          "Revisar y confirmar" for a read-only session, so this step should
-          not be reachable except through a direct `?paso=confirmar` link. */}
-      {readOnly && <ReadOnlyReasonNotice />}
-      <dl className="overflow-hidden rounded-ctl border border-line">
-        <div className="flex h-drow items-center gap-4 border-b border-line px-5">
-          <dt className="w-[160px] flex-none text-2xs font-bold uppercase text-ink-3">Horario</dt>
-          <dd className="flex-1 text-sm font-semibold text-ink">
-            {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} —{" "}
-            {selectedSchedule.horaFin}
-          </dd>
-        </div>
-        <div className="flex min-h-drow items-center gap-4 px-5 py-3">
-          <dt className="w-[160px] flex-none text-2xs font-bold uppercase text-ink-3">Resultado</dt>
-          <dd className="flex flex-1 flex-col gap-2">
-            {/* The same figure the receipt will archive this session as —
-                see `SessionComposition`. */}
-            <SessionCompositionBar counts={confirmCounts} total={totalStudents} className="max-w-md" />
-            <SessionCompositionCounts counts={confirmCounts} total={totalStudents} />
-            {unreviewedCount > 0 && (
-              <Badge tone="warn" className="self-start">
-                {unreviewedCount} sin revisar
-              </Badge>
-            )}
-          </dd>
-        </div>
-      </dl>
+    <div className={PAGE_RAIL}>
+      <div className="card flex flex-col gap-5 p-5 sm:p-6">
+        <h2 className="font-display text-lg uppercase leading-tight tracking-flat text-ink">{heading}</h2>
 
-      {unreviewedCount > 0 && (
-        /* Names the risk in the trainer's own terms and hands back the way
-           to fix it — it does NOT block. */
-        <div
-          role="status"
-          className="flex flex-col gap-3 rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5"
-        >
-          <p className="flex items-start gap-2 text-sm font-semibold text-state-warn">
-            <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 flex-none" aria-hidden="true" />
-            <span>
-              {unreviewedCount === 1
-                ? `1 de ${totalStudents} alumnos sigue en "Presente" porque nadie lo revisó.`
-                : `${unreviewedCount} de ${totalStudents} alumnos siguen en "Presente" porque nadie los revisó.`}
-            </span>
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={onReviewUnreviewed}>
-              {unreviewedCount === 1 ? "Revisar a ese alumno" : `Revisar a esos ${unreviewedCount}`}
-            </Button>
-            <Button type="button" variant="tertiary" onClick={onMarkRemainingPresent}>
-              <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-              Confirmar que están presentes
-            </Button>
+        {/* Defense in depth (issue #310/#3): the commit bar already disables
+            "Revisar y confirmar" for a read-only session, so this step should
+            not be reachable except through a direct `?paso=confirmar` link. */}
+        {readOnly && <ReadOnlyReasonNotice />}
+
+        {unreviewedCount > 0 && (
+          /* Names the risk in the trainer's own terms and hands back the way
+             to fix it — it does NOT block. */
+          <div
+            role="status"
+            className="flex flex-col gap-3 rounded-ctl border border-state-warn/25 bg-state-warn-bg p-3.5"
+          >
+            <p className="flex items-start gap-2 text-sm font-semibold text-state-warn">
+              <AlertTriangle size={ICON.sm} strokeWidth={2} className="mt-0.5 flex-none" aria-hidden="true" />
+              <span>
+                {unreviewedCount === 1
+                  ? `1 de ${totalStudents} alumnos sigue en "Presente" porque nadie lo revisó.`
+                  : `${unreviewedCount} de ${totalStudents} alumnos siguen en "Presente" porque nadie los revisó.`}
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={onReviewUnreviewed}>
+                {unreviewedCount === 1 ? "Revisar a ese alumno" : `Revisar a esos ${unreviewedCount}`}
+              </Button>
+              <Button type="button" variant="tertiary" onClick={onMarkRemainingPresent}>
+                <UserCheck size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                Confirmar que están presentes
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <p className="text-xs text-ink-3">
-        Se registrará la asistencia de {totalStudents} {totalStudents === 1 ? "estudiante" : "estudiantes"}.
-      </p>
+        <SessionStatusGroups students={students} flagUnreviewed />
+      </div>
 
-      {submitError && (
-        <div className="alert-error" role="alert">
-          {submitError}
+      <aside className="flex flex-col gap-page lg:sticky lg:top-4" aria-label="Resumen de la sesión">
+        <div className="card flex flex-col gap-4 p-5">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-2xs font-bold uppercase tracking-wide text-ink-3">Horario</p>
+            <p className="text-base font-bold text-ink">
+              {formatDay(selectedSchedule.diaSemana)} {selectedSchedule.horaInicio} —{" "}
+              {selectedSchedule.horaFin}
+            </p>
+            {selectedSchedule.categoriaLabel && (
+              <p className="text-sm text-ink-2">{selectedSchedule.categoriaLabel}</p>
+            )}
+            {sessionDate && <p className="text-xs text-ink-3">{formatDate(sessionDate)}</p>}
+          </div>
+
+          <div className="flex items-center gap-4 border-t border-line pt-4">
+            <SessionDonut counts={confirmCounts} total={totalStudents} className="flex-none" />
+            <SessionCompositionCounts
+              counts={confirmCounts}
+              total={totalStudents}
+              className="flex-col !gap-y-1.5"
+              hideZero
+            />
+          </div>
+
+          {unreviewedCount > 0 && (
+            <Badge tone="warn" className="self-start">
+              {unreviewedCount} sin revisar
+            </Badge>
+          )}
+
+          <p className="text-xs text-ink-3">
+            Se registrará la asistencia de {totalStudents}{" "}
+            {totalStudents === 1 ? "estudiante" : "estudiantes"}.
+          </p>
+
+          {submitError && (
+            <div className="alert-error" role="alert">
+              {submitError}
+            </div>
+          )}
         </div>
-      )}
+        {actions}
+      </aside>
     </div>
   );
 }

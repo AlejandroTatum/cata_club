@@ -2329,22 +2329,24 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     await screen.findByText(/Asistencia registrada/i);
   }
 
-  // Decision 1: a state at zero is shown atenuado, never omitted — otherwise
-  // "nadie llegó tarde" and "la tardanza no se reportó" read identically.
-  it("shows all six states in the breakdown, including a zero, instead of omitting it", async () => {
+  // Redesigned receipt: only the states somebody is in get a group of names;
+  // the rest collapse into ONE muted line, so "nadie llegó tarde" is still
+  // said — once, quietly — instead of as five big zero rows.
+  it("groups names under the states somebody is in and collapses the zeros into one line", async () => {
     mockRegisterAttendance.mockReset().mockResolvedValue({ createdCount: 3, failed: [] });
     render(<ToastProvider><TrainerAttendancePage /></ToastProvider>);
     await fileSession();
 
-    const presentRow = screen.getByText("Presente").closest("li");
-    expect(presentRow).not.toBeNull();
-    expect(within(presentRow as HTMLElement).getByText("3")).toBeInTheDocument();
+    const present = screen.getByRole("region", { name: "Presente" });
+    expect(within(present).getByText("3")).toBeInTheDocument();
+    expect(within(present).getByText("Student 01")).toBeInTheDocument();
 
     for (const label of ["Ausente", "Tardanza", "Justificado", "Enfermo", "Competencia"]) {
-      const row = screen.getByText(label).closest("li");
-      expect(row).not.toBeNull();
-      expect(within(row as HTMLElement).getByText("0")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: label })).not.toBeInTheDocument();
     }
+    expect(
+      screen.getByText("Sin tardanzas, justificados, enfermos, competencias, ausentes."),
+    ).toBeInTheDocument();
   });
 
   // Decision 2: with failed records, the breakdown counts what was SAVED, not
@@ -2368,10 +2370,10 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar asistencia/ }));
     await screen.findByText(/Asistencia registrada/i);
 
-    const justifiedRow = screen.getByText("Justificado").closest("li");
-    expect(within(justifiedRow as HTMLElement).getByText("0")).toBeInTheDocument();
-    const presentRow = screen.getByText("Presente").closest("li");
-    expect(within(presentRow as HTMLElement).getByText("2")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Justificado" })).not.toBeInTheDocument();
+    const present = screen.getByRole("region", { name: "Presente" });
+    expect(within(present).getByText("2")).toBeInTheDocument();
+    expect(within(present).queryByText("Student 02")).not.toBeInTheDocument();
   });
 
   /*
@@ -2482,7 +2484,8 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     mockFetchAlumnosPorHorario.mockRejectedValueOnce(new Error("network down"));
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
 
-    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(2));
+    // One preview call on step 1, the roster open, and this retry.
+    await waitFor(() => expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(3));
     expect(await screen.findByText(/Asistencia registrada parcialmente/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reintentar/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Confirmar asistencia/ })).not.toBeInTheDocument();
@@ -2545,9 +2548,9 @@ describe("TrainerAttendancePage — confirmation receipt (issue #213)", () => {
     expect(retry).toHaveTextContent(/Reintentando/i);
 
     fireEvent.click(retry);
-    // The initial `openRoster()` call plus exactly ONE retry call — the
-    // repeated click above must not have fired a second request.
-    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(2);
+    // The step-1 preview and the initial `openRoster()` call plus exactly ONE
+    // retry call — the repeated click above must not have fired a fourth.
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(3);
 
     await act(async () => {
       releaseFetch();
@@ -2826,8 +2829,9 @@ describe("TrainerAttendancePage — the steps are history entries", () => {
         name: "Tardanza",
       }),
     ).toHaveAttribute("aria-checked", "true");
-    // The roster was already in memory — going back must not refetch it.
-    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(1);
+    // The roster was already in memory — going back must not refetch it: the
+    // two calls are step 1's preview and the one `openRoster`.
+    expect(mockFetchAlumnosPorHorario).toHaveBeenCalledTimes(2);
   });
 
   it("only leaves the wizard once Back has walked every step", async () => {
