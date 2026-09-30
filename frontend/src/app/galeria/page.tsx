@@ -4,8 +4,11 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
-import { Button, EmptyState, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
+import { ImageIcon } from "lucide-react";
+import { Button, ErrorState, FileDropZone, LoadingState, PAGE_RAIL } from "@/components/ui";
+import { ICON } from "@/lib/icon-size";
 import { useToast } from "@/contexts/ToastContext";
+import EmptyGrid from "./EmptyGrid";
 import GaleriaPreview from "./GaleriaPreview";
 import { crearEntradaGaleria, eliminarEntradaGaleria, fetchGaleria, type GaleriaEntry } from "@/services/api";
 import { toUserMessage } from "@/lib/error-message";
@@ -164,10 +167,10 @@ export default function GaleriaPage(): React.ReactElement {
           {error && <p ref={errorRef} id="galeria-error" role="alert" tabIndex={-1} className="text-sm text-state-bad">{error}</p>}
           <Button type="submit" variant="primary" disabled={saving} className="self-start">{saving ? "Publicando…" : "Publicar foto"}</Button>
         </form>
-        <section aria-label="Fotos publicadas" className="min-w-0 lg:col-start-1 lg:row-start-1">
+        <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:self-stretch">
           {cargando ? <LoadingState label="Cargando fotos…" />
             : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
-            : entradas.length === 0 ? <EmptyState title="Aún no hay fotos en la galería" description="Cuando publique la primera foto, aparecerá aquí y en la galería de la landing." />
+            : entradas.length === 0 ? <EmptyGrid icon={<ImageIcon size={ICON.lg} />} title="Aún no hay fotos en la galería" description="Las fotos publicadas aparecen aquí y en la galería del sitio." tileRatio="3 / 2" />
             : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
               {entradas.map((entrada) => <li key={entrada.id} className="card flex flex-col overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}

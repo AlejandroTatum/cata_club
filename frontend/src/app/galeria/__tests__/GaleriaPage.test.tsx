@@ -166,7 +166,9 @@ describe("GaleriaPage", () => {
     fetchGaleria.mockResolvedValue([]);
     render(<GaleriaPage />);
     expect(await screen.findByText("Aún no hay fotos en la galería")).toBeInTheDocument();
-    expect(screen.getByText(/aparecerá aquí y en la galería/i)).toBeInTheDocument();
+    expect(screen.getByText("Las fotos publicadas aparecen aquí y en la galería del sitio.")).toBeInTheDocument();
+    expect(screen.getByTestId("empty-grid-tiles").firstElementChild).toHaveStyle({ aspectRatio: "3 / 2" });
+    expect(screen.getByRole("region", { name: "Fotos publicadas" })).toHaveClass("lg:self-stretch");
   });
   it("shows a loading state, not the empty copy, while the list loads", async () => {
     let resolver: (v: unknown[]) => void = () => undefined;
