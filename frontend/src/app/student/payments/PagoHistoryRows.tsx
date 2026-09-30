@@ -418,13 +418,13 @@ export function GhostPagoRows({
   count?: number;
   fill?: boolean;
 }): React.ReactElement {
-  return (
+  const list = (
     <ul
       aria-hidden="true"
       data-testid="pago-ghost-rows"
       className={cn(
         "flex flex-col divide-y divide-line border-t border-line",
-        fill && "min-h-0 flex-1 overflow-hidden",
+        fill && "absolute inset-0 overflow-hidden",
       )}
     >
       {Array.from({ length: count }, (_, i) => (
@@ -444,4 +444,7 @@ export function GhostPagoRows({
       ))}
     </ul>
   );
+  // Filling: the list is taken out of flow inside a growing wrapper, so its own
+  // height never sets the column's — only the space the rail leaves over does.
+  return fill ? <div className="relative min-h-16 flex-1">{list}</div> : list;
 }
