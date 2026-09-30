@@ -155,6 +155,8 @@ import {
   resolveCoverageEnd,
 } from "@/app/student/student-utils";
 import SessionsCard from "./SessionsCard";
+import { ActionTile, CoverageMeter, HeroStats, daysUntil, type HeroStat } from "./ProfileParts";
+import { clubToday } from "@/lib/club-date";
 import { Badge, Button, DataBox, ErrorState, LoadingState, buttonClasses } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui/Badge";
 import { MEMBERSHIP_STATUS_LABELS, MEMBERSHIP_STATUS_TONE } from "@/app/members/members-utils";
@@ -432,6 +434,7 @@ interface IdentityPanelProps {
   statusBadge: { label: string; tone: BadgeTone } | null;
   /** Pre-formatted ("Cuenta creada el 10/03/2024"), or `null` when there is no date. */
   memberSince: string | null;
+  stats: readonly HeroStat[];
   correo: string;
   uploadingFoto: boolean;
   fotoError: string | null;
@@ -446,6 +449,7 @@ function IdentityPanel({
   roleLabel,
   statusBadge,
   memberSince,
+  stats,
   correo,
   uploadingFoto,
   fotoError,
@@ -511,7 +515,8 @@ function IdentityPanel({
         bridges. `pt-4` replaces `pt-[112px]`: with no colour field below the
         shoulder, the identity block starts where a card's content starts.
       */}
-      <div className="relative flex items-start gap-4 px-5 pb-4 pt-4">
+      <div className="relative flex flex-col gap-5 px-5 pb-5 pt-4 lg:flex-row lg:items-center lg:gap-8">
+      <div className="flex min-w-0 flex-1 items-start gap-4">
         <div className="relative -mt-9 flex-none">
           <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-coal text-xl font-extrabold text-ball shadow-elevated">
             {fotoUrl ? (
@@ -572,6 +577,8 @@ function IdentityPanel({
           {memberSince && <p className="mt-2 text-xs text-ink-3">{memberSince}</p>}
         </div>
       </div>
+      {stats.length > 0 && <HeroStats stats={stats} />}
+      </div>
 
       {fotoError && (
         <p role="alert" className="px-5 pb-3 text-xs text-state-bad">
@@ -596,29 +603,6 @@ function IdentityPanel({
         because the other two session actions already live there, and a group
         of three with one member somewhere else is not a group.
       */}
-      <div className="flex flex-col gap-2 px-5 pb-4">
-        <button
-          type="button"
-          onClick={() => fotoInputRef.current?.click()}
-          disabled={uploadingFoto}
-          className={buttonClasses("secondary", "sm", "justify-center")}
-        >
-          {uploadingFoto ? (
-            <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
-          )}
-          {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
-        </button>
-        <input
-          ref={fotoInputRef}
-          type="file"
-          accept="image/jpeg,image/png"
-          onChange={onFotoChange}
-          className="hidden"
-          data-testid="foto-perfil-input"
-        />
-      </div>
 
       {/* The one full-width row at the foot of the panel — never squeezed
           beside anything else, so the full correo always has the panel's
@@ -633,10 +617,35 @@ function IdentityPanel({
       {/* The one full-width row at the foot of the panel — never squeezed
           beside anything else, so the full correo always has the panel's whole
           width to wrap into. */}
-      <div className="border-t border-line bg-sunken px-5 py-3">
-        <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Correo de acceso</p>
-        <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>
-        <p className="mt-1 text-xs text-ink-3-strong">El correo lo gestiona el club, no se edita aquí.</p>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-line bg-sunken px-5 py-3">
+        <div className="min-w-0 flex-1 basis-64">
+          <p className="text-2xs font-bold uppercase tracking-wide text-ink-3-strong">Correo de acceso</p>
+          <p className="mt-1 break-words text-sm font-semibold text-ink">{correo}</p>
+          <p className="mt-1 text-xs text-ink-3-strong">El correo lo gestiona el club, no se edita aquí.</p>
+        </div>
+        <div className="flex-none">
+          <button
+            type="button"
+            onClick={() => fotoInputRef.current?.click()}
+            disabled={uploadingFoto}
+            className={buttonClasses("secondary", "sm", "justify-center")}
+          >
+            {uploadingFoto ? (
+              <Loader2 size={ICON.sm} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Camera size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />
+            )}
+            {uploadingFoto ? "Subiendo…" : "Cambiar foto"}
+          </button>
+          <input
+            ref={fotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            onChange={onFotoChange}
+            className="hidden"
+            data-testid="foto-perfil-input"
+          />
+        </div>
       </div>
     </section>
   );
@@ -731,6 +740,7 @@ function MembershipCard({
           Su membresía
         </h2>
       </div>
+      {coverageEnd && <CoverageMeter daysLeft={daysUntil(coverageEnd, clubToday())} />}
       {plan && <PanelFact label="Plan">{plan}</PanelFact>}
       {!modalidadIsRedundant && <PanelFact label="Modalidad">{modalidadLabel}</PanelFact>}
       {desde && <PanelFact label="Socio desde">{desde}</PanelFact>}
@@ -1118,6 +1128,15 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
   // a badge here AND as text there.
   const statusBadge = props.kind === "student" && self ? membership : null;
 
+  // Key numbers for the hero, from data this screen already holds: where the
+  // coverage ends, the plan, and how many sessions the club has recorded.
+  const heroStats: HeroStat[] = [];
+  if (props.kind === "student" && selfMembership) {
+    if (selfMembership.categoria?.trim()) heroStats.push({ label: "Plan", value: selfMembership.categoria.trim() });
+    if (coverageEnd) heroStats.push({ label: "Cobertura hasta", value: formatDate(coverageEnd) });
+    heroStats.push({ label: "Asistencias recientes", value: String(recentSessions.length) });
+  }
+
   // "Información de tu rol" — ALWAYS rendered now (issue #204: every one of
   // the four role variants has a real title/text/fact set to show there —
   // see `ROLE_COPY` and the module docstring's "Reversed since the #204
@@ -1194,42 +1213,26 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
         ~810px, and a staff account, which has no membership card, keeps a
         taller gap. Both numbers are in the comparison's "Lo que falta".
       */}
-      <div className="flex flex-col gap-5 split:flex-row split:items-start split:gap-6">
-        <div className="flex flex-col gap-5 split:w-[292px] split:flex-none">
-          <IdentityPanel
-            name={fullName}
-            initials={initials}
-            fotoUrl={currentFotoUrl}
-            roleLabel={panelRoleLabel}
-            statusBadge={statusBadge}
-            memberSince={memberSince}
-            correo={correoDisplay}
-            uploadingFoto={uploadingFoto}
-            fotoError={fotoError}
-            fotoInputRef={fotoInputRef}
-            onFotoChange={(e) => void handleFotoChange(e)}
-          />
+      {/* Hero across the full measure, then two balanced columns: who the
+          person is (data, role, dependants) and how the account stands
+          (membership, security, activity). */}
+      <IdentityPanel
+        name={fullName}
+        initials={initials}
+        fotoUrl={currentFotoUrl}
+        roleLabel={panelRoleLabel}
+        statusBadge={statusBadge}
+        memberSince={memberSince}
+        stats={heroStats}
+        correo={correoDisplay}
+        uploadingFoto={uploadingFoto}
+        fotoError={fotoError}
+        fotoInputRef={fotoInputRef}
+        onFotoChange={(e) => void handleFotoChange(e)}
+      />
 
-          {selfMembership && (
-            <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
-          )}
-
-          {/*
-            Lo que cierra el hueco que este archivo venía documentando: "a
-            staff account, which has no membership card, keeps a taller gap".
-            Va para TODOS los roles, no solo staff -- un alumno también tiene
-            derecho a ver desde dónde entró, y con la tarjeta de membresía
-            arriba la columna simplemente queda mejor servida.
-
-            Se monta sin condición y decide sola si vale la pena renderizarse:
-            sin filas devuelve `null`, y un fallo de red la deja invisible en
-            vez de gritar. Es contenido de compañía; nadie abre esta pantalla
-            para leerlo.
-          */}
-          <SessionsCard />
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-5">
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* Datos personales — one datum per row. Correo and Rol are
               deliberately repeated from the identity panel (issue #204's own
               requirement — see the module docstring's "Reversed since the
@@ -1353,12 +1356,6 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             )}
           </CardSection>
 
-          {/* The other field the payload always carried and the screen never
-              drew. It goes in the wide column because a row of it is a date, a
-              schedule and a state on one line — three things the 292px column
-              could not hold without wrapping every row differently. */}
-          {recentSessions.length > 0 && <RecentSessionsCard sessions={recentSessions} />}
-
           {/* Estudiantes a mi cargo — representante only, ALWAYS present for
               that role (even with zero representados: an explicit empty
               state, not a silently missing section), because for a
@@ -1385,6 +1382,13 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
             </CardSection>
           )}
 
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-5">
+          {selfMembership && (
+            <MembershipCard membership={selfMembership} coverageEnd={coverageEnd} />
+          )}
+
           <div className="flex flex-col gap-3">
             {/* Seguridad: the same row shape as "Datos personales", label on
                 the left and the action on the right. */}
@@ -1393,55 +1397,28 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               subtitle="Acciones de acceso"
               testId="profile-column-status"
             >
-              <DetailRow
-                label="Contraseña"
-                icon={<Lock size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-                action={
-                  <Button
-                    size="sm"
-                    onClick={() => void handleChangePassword()}
-                    disabled={requestingPassword}
-                  >
-                    {requestingPassword ? "Enviando…" : "Cambiar contraseña"}
-                  </Button>
-                }
-              >
-                <span className="text-sm font-normal text-ink-2">
-                  Le enviamos un enlace de cambio a su correo
-                </span>
-              </DetailRow>
-              {/* "Cerrar sesión", not "Salir". This row and the identity
-                  panel's retired button called the same `logout()` under two
-                  different words; the surviving one takes the word that names
-                  the act. */}
-              <DetailRow
-                label="Sesión"
-                icon={<LogOut size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-                action={
-                  <Button size="sm" onClick={() => void logout()}>
-                    Cerrar sesión
-                  </Button>
-                }
-              >
-                <span className="text-sm font-normal text-ink-2">Cerrar sesión en este equipo</span>
-              </DetailRow>
-              <DetailRow
-                label="Otras sesiones"
-                icon={<Monitor size={ICON.sm} strokeWidth={1.5} aria-hidden="true" />}
-                action={
-                  <Button
-                    size="sm"
-                    onClick={() => setConfirmingInvalidation(true)}
-                    disabled={invalidatingSessions}
-                  >
-                    {invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
-                  </Button>
-                }
-              >
-                <span className="text-sm font-normal text-ink-2">
-                  Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado
-                </span>
-              </DetailRow>
+              <div className="grid gap-3 p-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                <ActionTile
+                  icon={<Lock size={ICON.sm} strokeWidth={1.5} />}
+                  title={requestingPassword ? "Enviando…" : "Cambiar contraseña"}
+                  description="Le enviamos un enlace de cambio a su correo"
+                  onClick={() => void handleChangePassword()}
+                  disabled={requestingPassword}
+                />
+                <ActionTile
+                  icon={<LogOut size={ICON.sm} strokeWidth={1.5} />}
+                  title="Cerrar sesión"
+                  description="Cerrar sesión en este equipo"
+                  onClick={() => void logout()}
+                />
+                <ActionTile
+                  icon={<Monitor size={ICON.sm} strokeWidth={1.5} />}
+                  title={invalidatingSessions ? "Cerrando…" : "Cerrar otras sesiones"}
+                  description="Cierra su sesión en todos los demás dispositivos; este equipo sigue conectado"
+                  onClick={() => setConfirmingInvalidation(true)}
+                  disabled={invalidatingSessions}
+                />
+              </div>
             </CardSection>
 
             {sessionsMessage && (
@@ -1477,6 +1454,25 @@ function ProfileLayout(props: ProfileLayoutProps): React.ReactElement {
               </p>
             )}
           </div>
+          {/* The other field the payload always carried and the screen never
+              drew. It goes in the wide column because a row of it is a date, a
+              schedule and a state on one line — three things the 292px column
+              could not hold without wrapping every row differently. */}
+          {recentSessions.length > 0 && <RecentSessionsCard sessions={recentSessions} />}
+
+          {/*
+            Lo que cierra el hueco que este archivo venía documentando: "a
+            staff account, which has no membership card, keeps a taller gap".
+            Va para TODOS los roles, no solo staff -- un alumno también tiene
+            derecho a ver desde dónde entró, y con la tarjeta de membresía
+            arriba la columna simplemente queda mejor servida.
+
+            Se monta sin condición y decide sola si vale la pena renderizarse:
+            sin filas devuelve `null`, y un fallo de red la deja invisible en
+            vez de gritar. Es contenido de compañía; nadie abre esta pantalla
+            para leerlo.
+          */}
+          <SessionsCard />
         </div>
       </div>
     </ProfileShell>
