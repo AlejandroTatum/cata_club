@@ -433,13 +433,16 @@ export function GhostPagoRows({
           className="flex flex-none items-center gap-5 px-5 py-4"
           style={{ opacity: Math.max(0.12, 0.7 - i * 0.12) }}
         >
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <span className="h-5 w-20 rounded-full bg-line" />
-            <span className="h-3.5 w-44 max-w-full rounded-full bg-line" />
-            <span className="h-2.5 w-32 rounded-full bg-line/70" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+            <span className="h-2.5 w-20 rounded-full bg-line" />
+            <span className="h-2.5 w-44 max-w-full rounded-full bg-line" />
+            <span className="h-2 w-32 rounded-full bg-line/70" />
           </div>
-          <span className="hidden h-5 w-16 flex-none rounded-full bg-line sm:block" />
-          <span className="hidden h-9 w-48 flex-none rounded-ctl bg-line/60 md:block" />
+          <span className="hidden h-2.5 w-28 flex-none rounded-full bg-line/70 lg:block" />
+          <span className="hidden h-2.5 w-16 flex-none rounded-full bg-line sm:block" />
+          <span className="hidden h-9 w-48 flex-none items-center justify-center rounded-ctl bg-line/40 md:flex">
+            <span className="h-2.5 w-24 rounded-full bg-line" />
+          </span>
         </li>
       ))}
     </ul>
