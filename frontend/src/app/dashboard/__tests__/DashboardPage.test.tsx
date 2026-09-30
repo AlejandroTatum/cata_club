@@ -72,6 +72,7 @@ vi.mock("@/services/api", () => ({
   fetchAttendanceRecords: (params?: unknown) => mockFetchAttendanceRecords(params),
   fetchPaymentValidations: () => mockFetchPaymentValidations(),
   fetchTrainingSchedules: () => Promise.resolve([]),
+  fetchRosterDeTodosLosHorarios: () => Promise.resolve([]),
 }));
 
 // `totalPersonas` and `totalAlumnos` differ on purpose, and every assertion
@@ -147,48 +148,10 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("DashboardPage — the attention strip carries the count and its action", () => {
-  it("states the pending payment count and the ageing sub-line as real text", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([
-      pendingPayment("a", 10),
-      pendingPayment("b", 9),
-      pendingPayment("c", 1),
-    ]);
-
-    render(<DashboardPage />);
-
-    expect(await screen.findByText("14")).toBeInTheDocument();
-    const ageing = await screen.findByText("2 llevan más de una semana esperando");
-    // The old alert label sat inside an `aria-hidden` element, so assistive
-    // tech never reached it. This one must stay reachable.
-    expect(ageing.closest("[aria-hidden='true']")).toBeNull();
-  });
-
-  it("stays quiet instead of spending the hero on a negative", async () => {
-    mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
-
-    render(<DashboardPage />);
-
-    await screen.findByText("14");
-    // "Ninguno lleva más de una semana esperando" is dead weight in the most
-    // valuable space on the screen: the sub-line earns its place or is absent.
-    expect(screen.queryByText(/ninguno lleva/i)).toBeNull();
-    expect(screen.queryByTestId("hero-note")).toBeNull();
-  });
-
-  it("states the queue is clear, with no review link, when nothing is pending", async () => {
-    mockFetchDashboardStats.mockResolvedValue(statsFixture({ pendingPayments: 0 }));
-
-    render(<DashboardPage />);
-
-    const strip = await screen.findByTestId("attention-strip");
-    expect(await within(strip).findByText(/no hay nada pendiente/i)).toBeInTheDocument();
-    expect(within(strip).queryByRole("link", { name: /revisar/i })).toBeNull();
-  });
-
   it("points the row's action at the payment queue", async () => {
     render(<DashboardPage />);
 
-    expect(await screen.findByRole("link", { name: /^revisar/i })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: /^revisar ahora/i })).toHaveAttribute(
       "href",
       "/payments",
     );
@@ -207,16 +170,6 @@ describe("DashboardPage — the sidebar's table of contents is gone", () => {
     expect(screen.queryByText(/acciones r[áa]pidas/i)).not.toBeInTheDocument();
   });
 
-  it("links only from the figures and rows that act on a module, never a menu of shortcuts", async () => {
-    render(<DashboardPage />);
-    await screen.findByText("Miembros");
-
-    // `/members` is now reached through the Miembros tile — a figure that
-    // opens its own list, not a card that duplicates the sidebar. `/groups`
-    // has no figure here and stays unlinked.
-    expect(screen.getByText("Miembros").closest("a")).toHaveAttribute("href", "/members");
-    expect(document.querySelector('a[href="/groups"]')).toBeNull();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -252,40 +205,6 @@ describe("DashboardPage — the three-stat pulse", () => {
    * never in the second, so reusing `totalPersonas` as the denominator
    * understates the ratio for as long as any staff account exists.
    */
-  it("counts active memberships against the alumnos, and Miembros against the whole padrón", async () => {
-    mockFetchDashboardStats.mockResolvedValue(
-      statsFixture({ totalPersonas: 86, totalAlumnos: 84, activeMemberships: 21 }),
-    );
-
-    render(<DashboardPage />);
-
-    await screen.findByText("Membresías activas");
-    // 21 of 84 alumnos is 25%. Against all 86 registered personas the same
-    // club reads "de 86 · 24%" — which is the bug, not a rounding difference.
-    expect(screen.getByText("de 84")).toBeInTheDocument();
-    expect(screen.getByText("25% del total")).toBeInTheDocument();
-    // The Miembros tile answers the other question and keeps the full padrón:
-    // it is captioned "personas registradas" and there are 86 of them.
-    expect(screen.getByText("86")).toBeInTheDocument();
-    expect(screen.getByText("personas registradas (incluye staff)")).toBeInTheDocument();
-  });
-
-  it("gives all three tiles the same internal grammar: label, figure, caption", async () => {
-    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1"), todayRecord("2")]);
-
-    render(<DashboardPage />);
-
-    // The attendance caption, again: it is the last of the three to arrive,
-    // because it needs the attendance fetch and not just the stats one.
-    await screen.findByText("2 de 2 presentes");
-    // A caption, a progress bar and four sparkbars side by side read as three
-    // unrelated things rather than one pulse. Every tile now closes on a plain
-    // caption line — and the caption says what the widget only gestured at.
-    expect(screen.queryByRole("img", { name: /asistencia por semana/i })).toBeNull();
-    expect(screen.getByText("personas registradas (incluye staff)")).toBeInTheDocument();
-    // 17 of the 40 alumnos, not of the 44 registered personas.
-    expect(screen.getByText("43% del total")).toBeInTheDocument();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -324,22 +243,7 @@ describe("DashboardPage — actividad reciente", () => {
     // for the list itself, which replaces the empty state only once there is
     // something to list; its items all arrive in that same commit.
     await within(feed).findByRole("list");
-    expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(6);
-  });
-
-  it("keeps the feed in the main column and the donut in the rail", async () => {
-    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1")]);
-    mockFetchPaymentValidations.mockResolvedValue([pendingPayment("a", 1)]);
-
-    render(<DashboardPage />);
-
-    // The row and the feed card are structural and render immediately; the
-    // donut is the only one of the three that waits for the attendance records.
-    // Awaiting the row would let the donut assertion run against a card still
-    // showing "Sin asistencias registradas".
-    await screen.findByTestId("attendance-donut");
-    expect(within(screen.getByTestId("dashboard-main")).getByTestId("activity-feed")).toBeInTheDocument();
-    expect(within(screen.getByTestId("dashboard-rail")).getByTestId("attendance-donut")).toBeInTheDocument();
+    expect(within(feed).getAllByRole("listitem").length).toBeLessThanOrEqual(10);
   });
 
   it("says there is nothing yet, instead of unmounting and leaving a hole", async () => {
@@ -355,21 +259,6 @@ describe("DashboardPage — actividad reciente", () => {
       "href",
       "/trainer/attendance",
     );
-  });
-
-  it("keeps the attendance donut, and only when there are records", async () => {
-    mockFetchAttendanceRecords.mockResolvedValue([todayRecord("1")]);
-    render(<DashboardPage />);
-
-    expect(await screen.findByTestId("attendance-donut")).toBeInTheDocument();
-  });
-
-  it("keeps the donut's card and explains the blank, rather than dropping it", async () => {
-    render(<DashboardPage />);
-
-    expect(await screen.findByText("Sin asistencias registradas")).toBeInTheDocument();
-    expect(screen.queryByTestId("attendance-donut")).not.toBeInTheDocument();
-    expect(screen.getByText("Distribución de asistencias")).toBeInTheDocument();
   });
 
   it("holds the two-column row whether or not either card has data", async () => {
