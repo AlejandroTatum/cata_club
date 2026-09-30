@@ -13,7 +13,6 @@
 
 "use client";
 
-import ContextualHelp from "@/components/ContextualHelp";
 import { cn } from "@/components/ui";
 import type { StudentProfileSummary } from "@/services/api";
 import { describeFamilyCoverage } from "./student-utils";
@@ -69,10 +68,6 @@ export default function FamilyStrip({
           );
         })}
       </div>
-      <ContextualHelp title="Cómo funciona esta elección">
-        Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica hasta que usted lo cambie, y
-        viaja en la dirección de la página, así que un enlace compartido abre la misma persona.
-      </ContextualHelp>
     </div>
   );
 }

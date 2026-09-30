@@ -2182,16 +2182,10 @@ describe("StudentPage — the page's leftover height is claimed, not abandoned",
 });
 
 /**
- * D11c — "la ayuda no vive suelta".
- *
- * The switcher used to carry a permanent sentence explaining how the selection
- * behaves across the four family screens. It is a "cómo funciona", not a
- * "qué es", so it belongs behind "Ver ayuda" like every other procedure note
- * in the product (`/discounts`, `/members`, `/student/enroll`). It rode along
- * on all four socio screens at once, which is four copies of the same floating
- * paragraph.
+ * The dashboard's family strip carries no "Ver ayuda": the selection note
+ * still lives on the picker screens (payments, attendance, medical record).
  */
-describe("StudentPage — the switcher's procedure note is disclosed, not permanent", () => {
+describe("StudentPage — the family strip has no help toggle", () => {
   const GUARDIAN_PORTAL: StudentPortalSummary = {
     self: null,
     representados: [
@@ -2205,25 +2199,12 @@ describe("StudentPage — the switcher's procedure note is disclosed, not perman
     mockFetchStudentPortal.mockReset().mockResolvedValue(GUARDIAN_PORTAL);
   });
 
-  it("keeps the note behind 'Ver ayuda' instead of printing it beside the select", async () => {
+  it("does not show a help toggle on the dashboard", async () => {
     render(<StudentPage />);
 
     await screen.findByRole("group", { name: "Estudiante" });
+    expect(screen.queryByText("Ver ayuda")).toBeNull();
     expect(screen.queryByText(/Se mantiene en Mi cuenta/i)).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cómo funciona esta elección" }));
-
-    // Every screen the picker is mounted on, named in one sentence: the note
-    // is the promise that the choice survives the SIDEBAR's own links, and
-    // those links are `/student`, `/student/payments`, `/student/attendance`
-    // and `/student/medical-record`. Leaving any of them out was the same
-    // omission the sentence exists to prevent — reading "Pagos" and wondering
-    // about the screen she came from. Scoped to the panel: "Mi cuenta" is
-    // also the sidebar's row and this page's own title.
-    const panel = screen.getByRole("region", { name: "Cómo funciona esta elección" });
-    expect(panel).toHaveTextContent(
-      /Se mantiene en Mi cuenta, Pagos, Asistencias y Ficha médica/i,
-    );
   });
 });
 
@@ -2944,7 +2925,7 @@ describe("StudentPage — encabezado y pulso navegables", () => {
     await screen.findByTestId("student-pulse");
 
     expect(
-      screen.getByText(/^Hola, .+ · (Estudiante|Representante) · \w+, \d{1,2} de \w+ de \d{4}$/),
+      screen.getByText(/^Hola, .+ · (Estudiante|Representante) · \p{L}+, \d{1,2} de \p{L}+ de \d{4}$/u),
     ).toBeInTheDocument();
   });
 
