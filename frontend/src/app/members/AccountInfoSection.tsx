@@ -85,7 +85,7 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
               value={nombres}
               onChange={(e) => setNombres(e.target.value)}
               aria-labelledby={`nombres-label-${account.id}`}
-              className="input-field w-full py-1 text-right text-sm"
+              className="input-field w-full py-1 text-left text-sm"
             />
           </dd>
         </div>
@@ -97,7 +97,7 @@ export default function AccountInfoSection({ account }: AccountInfoSectionProps)
               value={apellidos}
               onChange={(e) => setApellidos(e.target.value)}
               aria-labelledby={`apellidos-label-${account.id}`}
-              className="input-field w-full py-1 text-right text-sm"
+              className="input-field w-full py-1 text-left text-sm"
             />
           </dd>
         </div>
