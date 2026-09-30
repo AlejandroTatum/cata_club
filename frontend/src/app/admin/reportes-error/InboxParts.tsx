@@ -39,7 +39,7 @@ export function GhostRows({ count, className }: { count: number; className?: str
 /** The empty inbox: ghost rows fill the column, the guide sits centered over them. */
 export function EmptyInbox(): ReactElement {
   return <section aria-label="Reportes recibidos" className="card relative flex min-h-[22rem] flex-col overflow-hidden lg:min-h-0 lg:flex-1">
-    <GhostRows count={8} className="absolute inset-0" />
+    <GhostRows count={14} className="absolute inset-0" />
     <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-paper to-transparent" />
     <div className="relative flex flex-1 items-center justify-center p-4">
       <div className="rounded-card border border-line bg-paper/75 backdrop-blur-sm">
@@ -68,7 +68,7 @@ export function SelectPrompt({ total }: { total: number }): ReactElement {
 
 /** How reports reach this inbox; only what the report dialog already promises. */
 export function HowItWorks(): ReactElement {
-  return <InfoPanel as="div" title="Cómo llegan los reportes" className="lg:flex-1">
+  return <InfoPanel as="div" title="Cómo llegan los reportes">
     <ol className="flex list-decimal flex-col gap-3 pl-5 marker:font-semibold marker:text-ink">
       <li>Quien usa la plataforma elige «Reportar un problema» y describe lo que pasó.</li>
       <li>La ruta y el dispositivo se adjuntan solos, junto con un código de seguimiento.</li>
@@ -76,4 +76,12 @@ export function HowItWorks(): ReactElement {
       <li>Las capturas pueden contener datos personales: solo la administración del club las ve.</li>
     </ol>
   </InfoPanel>;
+}
+
+/** Faint outline of a report detail; fills the rail below the guide on an empty inbox. */
+export function GhostDetail(): ReactElement {
+  return <div aria-hidden="true" data-testid="ghost-detail" className="card relative hidden min-h-32 flex-1 overflow-hidden lg:block">
+    <GhostRows count={14} className="absolute inset-0" />
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-paper to-transparent" />
+  </div>;
 }

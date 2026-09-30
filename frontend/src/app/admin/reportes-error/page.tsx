@@ -5,8 +5,11 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import { ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, cn } from "@/components/ui";
 import { fetchReportesError, fetchReporteError, type ReporteError } from "@/services/api";
-import { EmptyInbox, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
+import { EmptyInbox, GhostDetail, GhostRows, HowItWorks, SelectPrompt, SummaryStrip } from "./InboxParts";
 import { NO_DISPONIBLE, applyFilter, buildChips, formatFecha, resumirNavegador, summarize, type InboxFilter } from "./inbox";
+
+/** Empty inbox: both columns reach the bottom of the screen (page header and padding above, ~24px margin below). */
+const FILL_SCREEN = "lg:min-h-[calc(100dvh-10rem)]";
 
 /** Below this many visible rows the list card is continued with skeleton rows. */
 const GHOST_BELOW = 5;
@@ -94,7 +97,7 @@ export default function ReportesErrorPage(): React.ReactElement {
             </>}
           </div>
         </div>
-        <aside ref={detalleRef} aria-label="Detalle" className="flex min-w-0 flex-col gap-page lg:self-stretch">
+        <aside ref={detalleRef} aria-label="Detalle" className={cn("flex min-w-0 flex-col gap-page lg:self-stretch", vacia && FILL_SCREEN)}>
           {selectedId === null ? vacia ? null : <SelectPrompt total={reports.length} />
             : cargandoDetalle ? <LoadingState label="Cargando reporte…" />
             : errorDetalle ? <ErrorState message="No se pudo cargar el reporte." onRetry={() => void select(selectedId)} />
@@ -123,6 +126,7 @@ export default function ReportesErrorPage(): React.ReactElement {
               </div>
             </section>}
           <HowItWorks />
+          {vacia && <GhostDetail />}
         </aside>
       </div>}
   </AppShell></ProtectedRoute>;
