@@ -2323,3 +2323,52 @@ describe("GroupsPage — catalog categorías visible on a fresh install (issue #
     expect(screen.queryByRole("button", { name: "Editar «Formativo»" })).not.toBeInTheDocument();
   });
 });
+
+describe("GroupsPage — summary strip", () => {
+  const ROWS = [
+    { id: 101, diaSemana: "LUNES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+    { id: 102, diaSemana: "MIERCOLES", horaInicio: "18:00", horaFin: "20:00", categoria: "COMPETITIVO" },
+  ];
+
+  beforeEach(() => {
+    mockFetchHorarios.mockReset().mockResolvedValue(ROWS);
+    mockFetchMembers.mockReset().mockResolvedValue({
+      accounts: [
+        {
+          estudiantes: [
+            { id: 1, nombres: "Ana", apellidos: "Paz", activo: true },
+            { id: 2, nombres: "Luis", apellidos: "Mora", activo: true },
+            { id: 3, nombres: "Eva", apellidos: "Sol", activo: false },
+          ],
+        },
+      ],
+    });
+    // Ana is in both sessions of the group: she counts once.
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockResolvedValue([
+      { horarioId: 101, personaId: 1 },
+      { horarioId: 102, personaId: 1 },
+    ]);
+  });
+
+  it("counts distinct enrolled students and active students without a group", async () => {
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const strip = await screen.findByTestId("groups-summary");
+    await waitFor(() => {
+      expect(within(strip).getByText("Alumnos en grupos").parentElement).toHaveTextContent("1");
+    });
+    // Luis is active and unassigned; Eva is inactive and is not counted.
+    expect(within(strip).getByText("Sin grupo").parentElement).toHaveTextContent("1");
+    expect(within(strip).getByText("Horarios").parentElement).toHaveTextContent("2");
+  });
+
+  it("shows a dash instead of a number while the rosters have not answered", async () => {
+    mockFetchRosterDeTodosLosHorarios.mockReset().mockRejectedValue(new Error("boom"));
+    render(<ToastProvider><GroupsPage /></ToastProvider>);
+    await waitForHorarios();
+
+    const strip = await screen.findByTestId("groups-summary");
+    expect(within(strip).getByText("Alumnos en grupos").parentElement).toHaveTextContent("—");
+  });
+});

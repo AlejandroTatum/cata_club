@@ -97,7 +97,7 @@ import {
 } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { Button, Badge, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, WeekStrip } from "@/components/ui";
+import { Button, Badge, DataBox, DataRow, DataRowList, EmptyState, ErrorState, LoadingState, Pagination, STAT_GRID, StatCard, WeekStrip } from "@/components/ui";
 import { getTotalPages, paginateRecords } from "@/app/attendance/attendance-utils";
 import { useGroupRoster } from "./useGroupRoster";
 import {
@@ -641,6 +641,25 @@ export default function GroupsPage(): React.ReactElement {
    * Competitivo?") are about the group, and the weekday was never the subject.
    */
   const categoriaCards = useMemo(() => buildCategoriaCards(horarioGroups), [horarioGroups]);
+
+  /**
+   * The summary strip above the list, from data the screen already holds.
+   *
+   * Enrollment figures are `null` until EVERY schedule's roster has answered
+   * (see `personasPorHorario`): a partial union would undercount, and this is
+   * the figure the club plans around.
+   */
+  const summary = useMemo(() => {
+    const rostersLoaded =
+      horarios.length > 0 && horarios.every((horario) => personasPorHorario[horario.id] !== undefined);
+    if (!rostersLoaded) return { inscriptos: null, sinGrupo: null };
+    const assigned = new Set<number>();
+    for (const horario of horarios) {
+      for (const personaId of personasPorHorario[horario.id]) assigned.add(personaId);
+    }
+    const sinGrupo = allStudents.filter((student) => student.activo && !assigned.has(Number(student.id))).length;
+    return { inscriptos: assigned.size, sinGrupo };
+  }, [horarios, personasPorHorario, allStudents]);
 
   /**
    * Catalog categorías with no schedules yet, shown as their own cards.
@@ -1512,6 +1531,19 @@ export default function GroupsPage(): React.ReactElement {
             {renderHorarioForm()}
           </div>
         )}
+
+        {!loading && categoriaCards.length > 0 ? (
+          <div data-testid="groups-summary" className={STAT_GRID}>
+            <StatCard label="Categorías" value={categoriaCards.length} />
+            <StatCard label="Horarios" value={horarios.length} />
+            <StatCard label="Alumnos en grupos" value={summary.inscriptos ?? "—"} />
+            <StatCard
+              label="Sin grupo"
+              value={summary.sinGrupo ?? "—"}
+              hint="Alumnos activos sin ningún horario"
+            />
+          </div>
+        ) : null}
 
         {loading ? (
           <div className="card">
