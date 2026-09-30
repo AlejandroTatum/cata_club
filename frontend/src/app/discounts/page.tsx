@@ -507,7 +507,7 @@ export default function DiscountsPage(): React.ReactElement {
                       que editarlo nunca reescribe el historial.
                     </li>
                     <li>
-                      El descuento se aplica al registrar el pago, en Membresías y Pagos — no desde
+                      El descuento se aplica al registrar el pago, en Pagos — no desde
                       esta pantalla.
                     </li>
                   </ul>
