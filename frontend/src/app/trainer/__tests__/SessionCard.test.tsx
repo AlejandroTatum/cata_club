@@ -367,6 +367,24 @@ describe("SessionCard", () => {
     expect(horarioLinks(container)).toHaveLength(0);
   });
 
+  it("'done': collapses to a one-line strip that names the next session when it is known", () => {
+    render(
+      <SessionCard
+        state={{ kind: "done" }}
+        rail={null}
+        enrolledCounts={{}}
+        nextSessionLabel="miércoles 15:00"
+      />,
+    );
+
+    const strip = screen.getByLabelText("Su día de hoy");
+    expect(within(strip).getByText(/No quedan sesiones hoy/)).toBeInTheDocument();
+    expect(within(strip).getByText(/Próxima: miércoles 15:00/)).toBeInTheDocument();
+    // Compact: no coal band padding, and the button sits inline in the strip.
+    expect(strip.className).not.toMatch(/py-6/);
+    expect(within(strip).getByRole("link", { name: "Elegir otro horario" })).toBeInTheDocument();
+  });
+
   it("never leaves a horario= link anywhere for the three no-session states", () => {
     const nullRender = render(<SessionCard state={null} rail={null} enrolledCounts={{}} />);
     expect(horarioLinks(nullRender.container)).toHaveLength(0);

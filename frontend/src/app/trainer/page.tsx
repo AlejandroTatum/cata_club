@@ -102,7 +102,9 @@ import {
   buildMonthAttendanceRate,
   buildDayRail,
   buildSessionCardState,
+  findNextScheduledSession,
   findStudentsToFollow,
+  formatNextSessionLabel,
   formatAbsenceCount,
   groupRecordsBySession,
   monthToDateRange,
@@ -192,6 +194,10 @@ export default function TrainerPage(): React.ReactElement {
   // parado. La geometría se calcula acá, junto al resto del estado derivado,
   // para que `SessionCard` no tenga que leer el reloj por su cuenta.
   const dayRail = useMemo(() => buildDayRail(todaySchedules), [todaySchedules]);
+  const nextSessionLabel = useMemo(() => {
+    const next = findNextScheduledSession(schedules);
+    return next ? formatNextSessionLabel(next) : null;
+  }, [schedules]);
   const studentsToFollow = useMemo(() => findStudentsToFollow(monthRecords), [monthRecords]);
   const attendanceStats = useMemo(() => buildAttendanceStats(monthRecords), [monthRecords]);
 
@@ -315,6 +321,7 @@ export default function TrainerPage(): React.ReactElement {
                 state={sessionCardState}
                 rail={dayRail}
                 enrolledCounts={enrolledCounts}
+                nextSessionLabel={nextSessionLabel}
               />
             ) : (
               <EmptyState
@@ -413,35 +420,34 @@ export default function TrainerPage(): React.ReactElement {
                 onRetry={() => void loadRecentSessions()}
               />
 
-              <div className="grid content-start gap-page">
-                <section className="card flex flex-col gap-4 p-[18px]">
-                  <SessionsWithoutList missing={missingSessions} />
-                </section>
-
-                <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
-                  {studentsToFollow.length > 0 ? (
-                    <ul className="divide-y divide-line">
-                      {studentsToFollow.map((student) => (
-                        <li
-                          key={student.estudiante}
-                          className="flex min-h-drow items-center justify-between gap-3 px-[18px] py-3 text-sm"
-                        >
-                          <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
-                          <Badge tone="warn">{formatAbsenceCount(student.ausencias)}</Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <EmptyState
-                      surface="inset"
-                      icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                      title="Nadie necesita seguimiento"
-                      description="Aquí aparecen quienes faltan dos veces o más en el mes."
-                    />
-                  )}
-                </DashboardSection>
-              </div>
+              {/* Stretched to the row so it ends level with "Últimas listas". */}
+              <section className="card flex flex-col gap-4 p-[18px] lg:self-stretch">
+                <SessionsWithoutList missing={missingSessions} />
+              </section>
             </div>
+
+            <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
+              {studentsToFollow.length > 0 ? (
+                <ul className="grid sm:grid-cols-2 lg:grid-cols-3">
+                  {studentsToFollow.map((student) => (
+                    <li
+                      key={student.estudiante}
+                      className="flex min-h-drow items-center justify-between gap-3 border-b border-line px-[18px] py-3 text-sm"
+                    >
+                      <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
+                      <Badge tone="warn">{formatAbsenceCount(student.ausencias)}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  surface="inset"
+                  icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+                  title="Nadie necesita seguimiento"
+                  description="Aquí aparecen quienes faltan dos veces o más en el mes."
+                />
+              )}
+            </DashboardSection>
           </>
         )}
       </AppShell>

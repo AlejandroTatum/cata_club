@@ -19,14 +19,16 @@
  */
 
 import type { EstadoAsistencia } from "@/types/domain";
-import { buildDateRange, type DateRange } from "@/lib/club-date";
+import { buildDateRange, diaSemanaOfCalendarDate, todayDiaSemana, type DateRange } from "@/lib/club-date";
 import type {
   AttendanceDayStats,
   AttendanceRecord,
   TrainingSchedule,
 } from "@/app/attendance/attendance-utils";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
+import { formatDay } from "@/app/attendance/attendance-utils";
 import type { AlumnoHorario } from "@/services/api";
+import type { DiaSemana } from "@/types/domain";
 
 // ---------------------------------------------------------------------------
 // Clock helpers
@@ -666,4 +668,56 @@ export function buildMonthAttendanceRate(stats: AttendanceDayStats): MonthAttend
     present,
     total,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Empty-day strip and "Sesiones sin lista" rows
+// ---------------------------------------------------------------------------
+
+const WEEK_ORDER: DiaSemana[] = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"];
+
+export interface NextScheduledSession {
+  diaSemana: DiaSemana;
+  horaInicio: string;
+  /** 1 = tomorrow … 7 = the same weekday next week. */
+  daysAway: number;
+}
+
+/**
+ * The first session of the weekly schedule AFTER today — what the strip that
+ * replaces the hero on an emptied day can honestly promise. It reads the
+ * weekly template only (no holidays, no cancellations), so the caller words
+ * it as a schedule fact, not a guarantee.
+ */
+export function findNextScheduledSession(
+  schedules: TrainingSchedule[],
+  now: Date = new Date(),
+): NextScheduledSession | null {
+  const todayIndex = WEEK_ORDER.indexOf(todayDiaSemana(now));
+  for (let daysAway = 1; daysAway <= 7; daysAway += 1) {
+    const dia = WEEK_ORDER[(todayIndex + daysAway) % 7];
+    const first = schedules
+      .filter((s) => s.diaSemana === dia)
+      .sort((a, b) => (parseHoraToMinutes(a.horaInicio) ?? 0) - (parseHoraToMinutes(b.horaInicio) ?? 0))[0];
+    if (first) return { diaSemana: dia, horaInicio: first.horaInicio, daysAway };
+  }
+  return null;
+}
+
+/** "mañana 15:00" / "miércoles 15:00". */
+export function formatNextSessionLabel(next: NextScheduledSession): string {
+  const day = next.daysAway === 1 ? "mañana" : formatDay(next.diaSemana).toLowerCase();
+  return `${day} ${next.horaInicio}`;
+}
+
+/**
+ * "mar 01/09" — weekday plus short date. A bare `01/09/2026` beside a list
+ * dated 29/09 read as a different kind of date; the weekday says at a glance
+ * that this is a past occurrence of a weekly slot. Empty when not a date.
+ */
+export function formatMissingSessionDate(fecha: string): string {
+  const dia = diaSemanaOfCalendarDate(fecha);
+  if (!dia) return "";
+  const [, month, day] = fecha.split("-");
+  return `${formatDay(dia).slice(0, 3).toLowerCase()} ${day}/${month}`;
 }

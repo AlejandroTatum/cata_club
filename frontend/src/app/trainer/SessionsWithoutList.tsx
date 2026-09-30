@@ -20,8 +20,7 @@ import Link from "next/link";
 import { ClipboardCheck } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { EmptyState, buttonClasses } from "@/components/ui";
-import { formatDate } from "@/lib/format-utils";
-import { formatDay } from "@/app/attendance/attendance-utils";
+import { formatMissingSessionDate } from "./trainer-day-utils";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { AVISO_ESTIMACION, type MissingSession } from "@/app/trainer/attendance/history/history-utils";
 
@@ -37,10 +36,12 @@ export default function SessionsWithoutList({ missing }: SessionsWithoutListProp
   const visible = missing.slice(0, MAX_ROWS);
 
   return (
-    <div>
+    // `flex-1` so the card can be stretched to its neighbour's height and keep
+    // the footer at the bottom instead of leaving dead air under it.
+    <div className="flex flex-1 flex-col">
       {/* The card title step, in the club's display face — see `DESIGN.md`'s
           "regla de Graduate". */}
-      <h2 className="mb-4 font-display text-lg uppercase leading-tight tracking-flat text-ink">
+      <h2 className="mb-3 font-display text-lg uppercase leading-tight tracking-flat text-ink">
         Sesiones sin lista
       </h2>
 
@@ -59,17 +60,22 @@ export default function SessionsWithoutList({ missing }: SessionsWithoutListProp
         />
       )}
 
-      <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
+      <div className="mt-auto flex flex-col gap-1.5 border-t border-line pt-3">
         <p className="m-0 text-sm text-ink-2">
           <b className="font-semibold text-ink">{missing.length}</b>{" "}
           {missing.length === 1 ? "sesión sin lista" : "sesiones sin lista"} este mes ·{" "}
           <Link href="/trainer/attendance/history" className="font-semibold text-ink underline">
-            Ver historial
+            {missing.length > MAX_ROWS ? "Ver todas" : "Ver historial"}
           </Link>
         </p>
-        <p className="m-0 text-xs text-ink-3" role="note">
-          {AVISO_ESTIMACION}
-        </p>
+        {/* Short by default: the caveat matters, but four lines of it under
+            every card made the estimate louder than the list. */}
+        <details className="text-xs text-ink-3">
+          <summary className="cursor-pointer">Es una estimación</summary>
+          <p className="m-0 mt-1" role="note">
+            {AVISO_ESTIMACION}
+          </p>
+        </details>
       </div>
     </div>
   );
@@ -79,11 +85,11 @@ function MissingSessionRow({ session }: { session: MissingSession }): React.Reac
   const href = `/trainer/attendance${buildWizardQuery(session.schedule.id, session.fecha, "mark-attendance")}`;
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line py-3 last:border-b-0">
-      <div>
-        <b className="block text-sm font-bold text-ink">{formatDate(session.fecha)}</b>
-        <span className="block text-xs text-ink-2">
-          {formatDay(session.schedule.diaSemana)} {session.schedule.horaInicio} — {session.schedule.horaFin}
+    <div className="flex min-h-drow items-center justify-between gap-3 border-b border-line py-2 last:border-b-0">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <b className="text-sm font-bold tabular-nums text-ink">{formatMissingSessionDate(session.fecha)}</b>
+        <span className="text-xs tabular-nums text-ink-2">
+          {session.schedule.horaInicio} — {session.schedule.horaFin}
         </span>
       </div>
       <Link href={href} className={buttonClasses("secondary", "sm")}>

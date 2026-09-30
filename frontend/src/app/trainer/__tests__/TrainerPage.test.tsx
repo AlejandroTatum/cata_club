@@ -311,7 +311,7 @@ describe("TrainerPage — Mi día", () => {
     vi.setSystemTime(new Date(2026, 6, 20, 21, 0));
     render(<TrainerPage />);
 
-    expect(await screen.findByText("Ya no quedan sesiones hoy.")).toBeInTheDocument();
+    expect(await screen.findByText(/No quedan sesiones hoy/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Elegir otro horario" })).toHaveAttribute(
       "href",
       "/trainer/attendance",
@@ -549,8 +549,9 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     // Two now: "Últimas listas"' own header link, and "Sesiones sin lista"'s
-    // footer link — both name the same destination, once each.
-    const links = await screen.findAllByRole("link", { name: "Ver historial" });
+    // footer link ("Ver todas" once more than five are missing) — both name
+    // the same destination, once each.
+    const links = await screen.findAllByRole("link", { name: /^Ver (historial|todas)$/ });
     expect(links).toHaveLength(2);
     for (const link of links) {
       expect(link).toHaveAttribute("href", "/trainer/attendance/history");
@@ -728,6 +729,26 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
 
     const pulse = within(screen.getByTestId("trainer-pulse"));
     expect(pulse.getByText("Listas del mes")).toBeInTheDocument();
+  });
+
+  it("labels each missing session with weekday and short date, not a bare long date", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Sesiones sin lista");
+
+    const rail = within(screen.getByTestId("trainer-lower"));
+    // Newest first: 14/07 (mar) leads; 13/07 is a Monday.
+    expect(rail.getAllByText("mar 14/07").length).toBeGreaterThan(0);
+    expect(rail.getAllByText("lun 13/07").length).toBeGreaterThan(0);
+    expect(rail.queryByText("14/07/2026")).not.toBeInTheDocument();
+  });
+
+  it("keeps 'Alumnos a seguir' out of the rail so neither column is left with dead air", async () => {
+    render(<TrainerPage />);
+    await screen.findByText("Sesiones sin lista");
+
+    const lower = screen.getByTestId("trainer-lower");
+    const follow = screen.getByTestId("students-to-follow");
+    expect(lower.contains(follow)).toBe(false);
   });
 
   it("puts the recent lists beside sesiones sin lista in the rail, as the panel does", async () => {
