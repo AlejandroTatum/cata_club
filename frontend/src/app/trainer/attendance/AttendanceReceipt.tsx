@@ -115,7 +115,7 @@ export default function AttendanceReceipt({
 
       <aside
         data-dash-col
-        className="flex flex-col gap-page lg:sticky lg:top-4"
+        className="flex flex-col gap-page lg:self-stretch"
         aria-label="Siguientes pasos"
       >
         <div className="card flex flex-1 flex-col gap-4 p-5">
