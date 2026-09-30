@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 import { fetchStudentPortal, fetchPagosDePersona, fetchCoberturasDePersona, fetchBeneficio, subirVoucherPago, registrarPago } from "@/services/api";
 import type { StudentPortalSummary, PagoPersona, MembershipSummary, BeneficioAsignado, CoberturaBonificada } from "@/services/api";
-import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, STAT_GRID, StatCard, buttonClasses, cn } from "@/components/ui";
+import { BackLink, Badge, Button, EmptyState, ErrorState, FilterPanel, FilterPill, LoadingState, PAGE_RAIL, StatCard, buttonClasses, cn } from "@/components/ui";
 
 import { describePaymentSituation, firstNameOf, isMinor } from "../student-utils";
 import ManagedStudentPicker, { useManagedProfiles, withSelectedStudent } from "../ManagedStudentPicker";
@@ -587,7 +587,7 @@ function PaymentsContent({
 
         <div data-dash-col className="flex min-w-0 flex-col gap-page lg:col-start-1 lg:row-start-1">
       {pagosState.status === "ready" && (
-        <div className={STAT_GRID}>
+        <div className="grid grid-cols-2 gap-section lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <StatCard
             label="Pagado hasta"
             value={coverageEnd ? formatDate(coverageEnd) : "—"}
