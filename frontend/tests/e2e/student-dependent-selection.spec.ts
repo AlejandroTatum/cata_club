@@ -121,9 +121,11 @@ test("the dependent selection survives Mi cuenta → Pagos → Asistencias", asy
   await page.goto("/student");
 
   // Step 2 of the issue's reproduction: switch to the SECOND child.
-  const picker = page.getByLabel("Estudiante");
-  await expect(picker).toBeVisible();
-  await picker.selectOption("42");
+  // The dashboard drives it with the family strip (one button per child);
+  // Pagos and Asistencias below still use the select.
+  const strip = page.getByRole("group", { name: "Estudiante" });
+  await expect(strip).toBeVisible();
+  await strip.getByRole("button", { name: /Martín Vera/ }).click();
   await expect(page.getByTestId("student-carnet")).toHaveAttribute(
     "aria-label",
     "Carnet de socio de Martín Vera",
