@@ -459,6 +459,7 @@ export type TipoNotificacion =
   // daily summaries overwrite each other. See
   // `notificaciones_servicio._avisar_cupo_agotado`.
   | "RESUMEN_CUPO_CORREO_ADMIN"
+  | "NUEVO_REPORTE_ERROR"
   // PR F (student-experience debt): in-app reminder of tomorrow's training
   // session. Bell-only on purpose — the round's product constraint is that no
   // email budget is spent on reminders — so this type exists for the bell and
