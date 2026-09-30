@@ -26,6 +26,25 @@ describe("SponsorsPage", () => {
     expect(img).toHaveAttribute("loading", "lazy");
     expect(img).toHaveAttribute("width"); expect(img).toHaveAttribute("height");
   });
+  it("shows each logo on a tile with the landing strip's 5:2 proportions, name below", async () => {
+    render(<SponsorsPage />);
+    const img = await screen.findByRole("img", { name: "Logo de Municipio" });
+    expect(img).toHaveClass("object-contain");
+    expect(img.parentElement).toHaveClass("aspect-5/2");
+    expect(screen.getByText("Municipio")).toBeInTheDocument();
+  });
+  it("lays the logos out as a grid, not full-width rows", async () => {
+    render(<SponsorsPage />);
+    const img = await screen.findByRole("img", { name: "Logo de Municipio" });
+    expect(img.closest("ul")).toHaveClass("grid");
+  });
+  it("frames the preview like the landing tile and shows the chosen file name", async () => {
+    render(<SponsorsPage />); await screen.findByText("Municipio");
+    expect(screen.getByTestId("sponsor-preview")).toHaveClass("aspect-5/2");
+    fireEvent.change(screen.getByLabelText("Logo (JPG o PNG)"), { target: { files: [logo()] } });
+    expect(screen.getByText("logo.png")).toBeInTheDocument();
+    expect(screen.getByAltText("Vista previa del logo seleccionado").parentElement).toBe(screen.getByTestId("sponsor-preview"));
+  });
   it("shows a loading state and never the empty copy while loading", async () => {
     fetchSponsors.mockReturnValue(new Promise(() => {}));
     render(<SponsorsPage />);
