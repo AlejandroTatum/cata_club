@@ -60,8 +60,8 @@ function fileInput(): HTMLInputElement {
 
 function openAndSubmitEmpty(): void {
   render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-  fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
-  fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+  fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
+  fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 }
 
 beforeEach(() => {
@@ -69,10 +69,10 @@ beforeEach(() => {
 });
 
 describe("RegisterPaymentForm — controls follow the md sizing standard (#539)", () => {
-  it("uses 40px text-sm controls with standard padding and icons throughout Registrar pago", () => {
+  it("uses 40px text-sm controls with standard padding and icons throughout Registrar inscripción", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
 
-    const opener = screen.getByRole("button", { name: "Registrar pago" });
+    const opener = screen.getByRole("button", { name: "Registrar inscripción" });
     expect(opener).toHaveClass("h-ctl", "text-sm", "px-4");
     expect(opener.querySelector("svg")).toHaveAttribute("width", "18");
     fireEvent.click(opener);
@@ -87,7 +87,7 @@ describe("RegisterPaymentForm — controls follow the md sizing standard (#539)"
     expect(voucher).toHaveClass("h-ctl", "text-sm", "px-4");
     expect(voucher.querySelector("svg")).toHaveAttribute("width", "18");
 
-    const submit = screen.getByRole("button", { name: "Registrar pago" });
+    const submit = screen.getByRole("button", { name: "Registrar inscripción" });
     expect(submit).toHaveClass("h-ctl", "text-sm", "px-4");
     expect(submit.querySelector("svg")).toHaveAttribute("width", "18");
     expect(screen.getByRole("button", { name: "Cancelar" })).toHaveClass("h-ctl", "text-sm", "px-4");
@@ -110,9 +110,9 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
   it("registers cash without a voucher and sends EFECTIVO without uploading one", async () => {
     mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     await waitFor(() => {
       expect(mockRegistrarPagoPresencial).toHaveBeenCalledWith(expect.objectContaining({ tipoPago: "EFECTIVO" }));
@@ -128,28 +128,28 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
     mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     const onPaymentRegistered = vi.fn();
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} onPaymentRegistered={onPaymentRegistered} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     await waitFor(() => expect(onPaymentRegistered).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument();
+    expect(screen.getByText("Inscripción registrada y aprobada.")).toBeInTheDocument();
     expect(screen.queryByText(/recarga/i)).not.toBeInTheDocument();
   });
 
   it("does not throw when onPaymentRegistered is omitted", async () => {
     mockRegistrarPagoPresencial.mockResolvedValue({ id: 501, estadoPago: "APROBADO" });
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
-    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Inscripción registrada y aprobada.")).toBeInTheDocument());
   });
 
   it("clears the staged voucher and voucher error when switching to cash", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.change(fileInput(), {
       target: { files: [new File(["notas"], "notas.txt", { type: "text/plain" })] },
     });
@@ -166,7 +166,7 @@ describe("RegisterPaymentForm — método de pago (#540)", () => {
 describe("RegisterPaymentForm — el error de comprobante faltante ya no es silencioso (#465)", () => {
   it("marks the amount and transfer proof as required", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     expect(screen.getByRole("spinbutton", { name: /^Monto/ })).toBeRequired();
     expect(fileInput()).toHaveAttribute("aria-required", "true");
   });
@@ -190,7 +190,7 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
   it("moves focus off 'Registrar pago' to announce the error", () => {
     openAndSubmitEmpty();
 
-    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Registrar inscripción" })).not.toHaveFocus();
     expect(screen.getByRole("alert")).toHaveFocus();
   });
 
@@ -201,7 +201,7 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
     // A real user has to move focus back to the button before clicking it
     // again — jsdom's fireEvent.click does not do that implicitly (see
     // PaymentsPage.test.tsx's voucher-viewer suite for the same caveat).
-    const submit = screen.getByRole("button", { name: "Registrar pago" });
+    const submit = screen.getByRole("button", { name: "Registrar inscripción" });
     submit.focus();
     fireEvent.click(submit);
 
@@ -222,7 +222,7 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
 
     const file = new File(["contenido"], "voucher.png", { type: "image/png" });
     fireEvent.change(fileInput(), { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     // `setError(null)` runs synchronously once validation passes, ahead of
     // the async `registrarPagoPresencial` call — the silenced/invalid wiring
@@ -235,7 +235,7 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
     await waitFor(() => expect(mockSubirVoucherPago).toHaveBeenCalledWith(501, file));
     // Finalize happens only AFTER the voucher upload succeeded (#1402).
     await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(501, { estadoPago: "APROBADO" }));
-    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Inscripción registrada y aprobada.")).toBeInTheDocument());
   });
 });
 
@@ -247,13 +247,13 @@ describe("RegisterPaymentForm — el error de comprobante faltante ya no es sile
 describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402)", () => {
   function openCash(): void {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
   }
 
   function openTransferWithVoucher(): void {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.change(fileInput(), {
       target: { files: [new File(["contenido"], "voucher.png", { type: "image/png" })] },
     });
@@ -263,14 +263,14 @@ describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402
     mockRegistrarPagoPresencial.mockResolvedValue({ id: 601, estadoPago: "APROBADO" });
     const onPaymentRegistered = vi.fn();
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} onPaymentRegistered={onPaymentRegistered} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     await waitFor(() => expect(mockRegistrarPagoPresencial).toHaveBeenCalledWith(
       expect.objectContaining({ tipoPago: "EFECTIVO", personaId: 74 }),
     ));
-    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Inscripción registrada y aprobada.")).toBeInTheDocument());
     // Evidence for cash is the in-person act itself: no voucher upload, no
     // separate finalize step — the backend already ran its audit tail.
     expect(mockSubirVoucherPago).not.toHaveBeenCalled();
@@ -283,11 +283,11 @@ describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402
     mockSubirVoucherPago.mockResolvedValue({ id: 602, estadoPago: "PENDIENTE_VALIDACION" });
     mockValidarPago.mockResolvedValue({ id: 602, estadoPago: "APROBADO" });
     openTransferWithVoucher();
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     await waitFor(() => expect(mockSubirVoucherPago).toHaveBeenCalledWith(602, expect.any(File)));
     await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(602, { estadoPago: "APROBADO" }));
-    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Inscripción registrada y aprobada.")).toBeInTheDocument());
     expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
   });
 
@@ -296,10 +296,10 @@ describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402
     mockSubirVoucherPago.mockRejectedValueOnce(Object.assign(new Error("502"), { status: 502 }));
     mockValidarPago.mockResolvedValue({ id: 603, estadoPago: "APROBADO" });
     openTransferWithVoucher();
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     // Failure message points at the pending payment and the retry action.
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/El pago quedó registrado y PENDIENTE/));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/La inscripción quedó registrada y PENDIENTE/));
     const retry = screen.getByRole("button", { name: "Reintentar comprobante" });
     expect(retry).toBeEnabled();
 
@@ -307,7 +307,7 @@ describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402
     mockSubirVoucherPago.mockResolvedValue({ id: 603, estadoPago: "PENDIENTE_VALIDACION" });
     fireEvent.click(retry);
     await waitFor(() => expect(mockValidarPago).toHaveBeenCalledWith(603, { estadoPago: "APROBADO" }));
-    await waitFor(() => expect(screen.getByText("Pago registrado y aprobado.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Inscripción registrada y aprobada.")).toBeInTheDocument());
     expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
     expect(mockSubirVoucherPago).toHaveBeenCalledTimes(2);
   });
@@ -317,9 +317,9 @@ describe("RegisterPaymentForm — pago presencial de primera inscripción (#1402
     mockSubirVoucherPago.mockResolvedValueOnce({ id: 604, estadoPago: "PENDIENTE_VALIDACION" });
     mockValidarPago.mockRejectedValueOnce(Object.assign(new Error("400"), { status: 400 }));
     openTransferWithVoucher();
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/El pago quedó registrado y PENDIENTE/));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/La inscripción quedó registrada y PENDIENTE/));
     expect(screen.getByRole("button", { name: "Reintentar comprobante" })).toBeEnabled();
     // The pago exists and stays pending — no second registration.
     expect(mockRegistrarPagoPresencial).toHaveBeenCalledTimes(1);
@@ -412,7 +412,7 @@ describe("RegisterPaymentForm — renovación usa el flujo original registrarPag
 describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inválido antes de subir (#482)", () => {
   it("rejects a .txt file with a clear error and does not stage it as the voucher", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     const file = new File(["notas"], "notas.txt", { type: "text/plain" });
     fireEvent.change(fileInput(), { target: { files: [file] } });
@@ -425,7 +425,7 @@ describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inváli
 
   it("accepts a valid file after a rejected one, clearing the error", () => {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     fireEvent.change(fileInput(), {
       target: { files: [new File(["notas"], "notas.txt", { type: "text/plain" })] },
@@ -449,7 +449,7 @@ describe("RegisterPaymentForm — el selector rechaza un tipo de archivo inváli
 describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#666)", () => {
   function open(): void {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
   }
 
   it("caps the amount input's max at 12 months of the plan's monthly price", () => {
@@ -510,7 +510,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
     fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
       target: { value: "50000000" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     expect(mockRegistrarPagoPresencial).not.toHaveBeenCalled();
   });
@@ -521,7 +521,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
       target: { value: "50000000" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     expect(screen.getByText("Fin:").nextSibling).toHaveTextContent("—");
   });
@@ -532,7 +532,7 @@ describe("RegisterPaymentForm — el monto no puede comprar más de 12 meses (#6
     );
     open();
     fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(
@@ -554,7 +554,7 @@ describe("RegisterPaymentForm — el monto no múltiplo explica por qué el bot�
 
   function openWithMonto(amount: string): void {
     render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA_40} />);
-    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /^Monto/ }), {
       target: { value: amount },
     });
@@ -566,7 +566,7 @@ describe("RegisterPaymentForm — el monto no múltiplo explica por qué el bot�
     const monto = screen.getByRole("spinbutton", { name: /^Monto/ });
     const hint = screen.getByText("El monto debe ser un múltiplo de $40 (un mes = $40).");
     expect(monto).toHaveAttribute("aria-describedby", hint.id);
-    expect(screen.getByRole("button", { name: "Registrar pago" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Registrar inscripción" })).toBeDisabled();
   });
 
   it("shows no hint, '2 meses de vigencia' and an enabled button for a whole multiple", () => {
@@ -576,7 +576,7 @@ describe("RegisterPaymentForm — el monto no múltiplo explica por qué el bot�
       screen.queryByText("El monto debe ser un múltiplo de $40 (un mes = $40)."),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/2 meses de vigencia/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Registrar pago" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Registrar inscripción" })).toBeEnabled();
   });
 
   it("formats the Inicio/Fin preview as dd/mm/yyyy, not ISO", () => {
@@ -586,5 +586,32 @@ describe("RegisterPaymentForm — el monto no múltiplo explica por qué el bot�
     const fin = screen.getByText("Fin:").nextSibling;
     expect(inicio).toHaveTextContent(/^\d{2}\/\d{2}\/\d{4}$/);
     expect(fin).toHaveTextContent(/^\d{2}\/\d{2}\/\d{4}$/);
+  });
+});
+
+describe("RegisterPaymentForm — la primera inscripción se rotula como inscripción", () => {
+  it("labels the opener and submit 'Registrar inscripción' for an INACTIVA membership", () => {
+    render(<RegisterPaymentForm personaId={74} membresia={MEMBRESIA} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar inscripción" }));
+
+    expect(screen.getByRole("button", { name: "Registrar inscripción" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Registrar pago" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["ACTIVA", "activa"],
+    ["VENCIDA", "vencida"],
+    [undefined, "vencida"],
+  ] as const)("keeps 'Registrar pago' when estadoBackend is %s", (estadoBackend, estado) => {
+    render(
+      <RegisterPaymentForm
+        personaId={74}
+        membresia={{ ...MEMBRESIA, estado, estadoBackend }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Registrar pago" }));
+
+    expect(screen.getByRole("button", { name: "Registrar pago" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /inscripción/i })).not.toBeInTheDocument();
   });
 });
