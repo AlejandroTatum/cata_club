@@ -69,7 +69,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppShell from "@/components/shell/AppShell";
 import Link from "next/link";
-import { CalendarOff, UserCheck } from "lucide-react";
+import { CalendarOff } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -110,6 +110,7 @@ import {
   monthToDateRange,
   sumEnrolledToday,
 } from "./trainer-day-utils";
+import CompactEmpty from "@/components/dashboard/CompactEmpty";
 import DashboardSection from "@/components/dashboard/DashboardSection";
 import { buildContextLine } from "@/components/dashboard/context-line";
 import SessionCard from "./SessionCard";
@@ -414,40 +415,43 @@ export default function TrainerPage(): React.ReactElement {
               a hero whose own rule is one number and the sentence that reads it.
             */}
             <div data-testid="trainer-lower" className={PAGE_RAIL}>
-              <RecentSessionsList
-                sessions={recentSessions}
-                status={recentStatus}
-                onRetry={() => void loadRecentSessions()}
-              />
-
-              {/* Stretched to the row so it ends level with "Últimas listas". */}
-              <section className="card flex flex-col gap-4 p-[18px] max-lg:order-first lg:self-stretch">
-                <SessionsWithoutList missing={missingSessions} />
-              </section>
-            </div>
-
-            <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
-              {studentsToFollow.length > 0 ? (
-                <ul className="grid sm:grid-cols-2 lg:grid-cols-3">
-                  {studentsToFollow.map((student) => (
-                    <li
-                      key={student.estudiante}
-                      className="flex min-h-drow items-center justify-between gap-3 border-b border-line px-[18px] py-3 text-sm"
-                    >
-                      <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
-                      <Badge tone="warn">{formatAbsenceCount(student.ausencias)}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState
-                  surface="inset"
-                  icon={<UserCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-                  title="Nadie necesita seguimiento"
-                  description="Aquí aparecen quienes faltan dos veces o más en el mes."
+              {/* Two independent stacks: each column ends where its own content
+                  ends, so an empty block on one side never stretches the other. */}
+              <div data-testid="trainer-main" className="flex flex-col gap-page">
+                <RecentSessionsList
+                  sessions={recentSessions}
+                  status={recentStatus}
+                  onRetry={() => void loadRecentSessions()}
                 />
-              )}
-            </DashboardSection>
+
+                <DashboardSection title="Alumnos a seguir" testId="students-to-follow">
+                  {studentsToFollow.length > 0 ? (
+                    <ul className="grid sm:grid-cols-2 lg:grid-cols-3">
+                      {studentsToFollow.map((student) => (
+                        <li
+                          key={student.estudiante}
+                          className="flex min-h-drow items-center justify-between gap-3 border-b border-line px-[18px] py-3 text-sm"
+                        >
+                          <b className="min-w-0 truncate font-semibold text-ink">{student.estudiante}</b>
+                          <Badge tone="warn">{formatAbsenceCount(student.ausencias)}</Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <CompactEmpty
+                      title="Nadie necesita seguimiento"
+                      description="Aquí aparecen quienes faltan dos veces o más en el mes."
+                    />
+                  )}
+                </DashboardSection>
+              </div>
+
+              <div data-testid="trainer-rail" className="flex flex-col gap-page max-lg:order-first">
+                <section className="card flex flex-col gap-4 p-[18px]">
+                  <SessionsWithoutList missing={missingSessions} />
+                </section>
+              </div>
+            </div>
           </>
         )}
       </AppShell>

@@ -19,7 +19,7 @@
 import Link from "next/link";
 import { ClipboardCheck } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { EmptyState, buttonClasses } from "@/components/ui";
+import { buttonClasses } from "@/components/ui";
 import { formatMissingSessionDate } from "./trainer-day-utils";
 import { buildWizardQuery } from "@/app/trainer/attendance/attendance-utils";
 import { AVISO_ESTIMACION, type MissingSession } from "@/app/trainer/attendance/history/history-utils";
@@ -36,9 +36,7 @@ export default function SessionsWithoutList({ missing }: SessionsWithoutListProp
   const visible = missing.slice(0, MAX_ROWS);
 
   return (
-    // `flex-1` so the card can be stretched to its neighbour's height and keep
-    // the footer at the bottom instead of leaving dead air under it.
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-col gap-3">
       {/* The card title step, in the club's display face — see `DESIGN.md`'s
           "regla de Graduate". */}
       <h2 className="mb-3 font-display text-lg uppercase leading-tight tracking-flat text-ink">
@@ -52,15 +50,13 @@ export default function SessionsWithoutList({ missing }: SessionsWithoutListProp
           ))}
         </div>
       ) : (
-        <EmptyState
-          surface="inset"
-          icon={<ClipboardCheck size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
-          title="Todas las sesiones del mes tienen lista"
-          description="No quedan sesiones programadas este mes sin una lista registrada."
-        />
+        <p data-testid="compact-empty" className="m-0 text-sm text-ink-2">
+          <span className="font-semibold text-ink">Todas las sesiones del mes tienen lista.</span>{" "}
+          No quedan sesiones programadas sin una lista registrada.
+        </p>
       )}
 
-      <div className="mt-auto flex flex-col gap-1.5 border-t border-line pt-3">
+      <div className="flex flex-col gap-1.5 border-t border-line pt-3">
         <p className="m-0 text-sm text-ink-2">
           <b className="font-semibold text-ink">{missing.length}</b>{" "}
           {missing.length === 1 ? "sesión sin lista" : "sesiones sin lista"} este mes ·{" "}

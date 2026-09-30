@@ -468,7 +468,7 @@ describe("TrainerPage — Mi día", () => {
     render(<TrainerPage />);
 
     expect(
-      await screen.findByText("Todas las sesiones del mes tienen lista"),
+      await screen.findByText(/Todas las sesiones del mes tienen lista/),
     ).toBeInTheDocument();
     // Scoped to the rail: the sidebar's own bare "Pasar lista" nav row shares
     // this exact accessible name and is unrelated to the empty state.
@@ -742,13 +742,30 @@ describe("TrainerPage — la anatomía del panel de admin", () => {
     expect(rail.queryByText("14/07/2026")).not.toBeInTheDocument();
   });
 
-  it("keeps 'Alumnos a seguir' out of the rail so neither column is left with dead air", async () => {
+  it("stacks 'Alumnos a seguir' under the recent lists and the absence card in its own rail column", async () => {
     render(<TrainerPage />);
     await screen.findByText("Sesiones sin lista");
 
-    const lower = screen.getByTestId("trainer-lower");
+    const main = screen.getByTestId("trainer-main");
+    const rail = screen.getByTestId("trainer-rail");
+    expect(main.contains(screen.getByTestId("students-to-follow"))).toBe(true);
+    expect(rail.contains(screen.getByText("Sesiones sin lista"))).toBe(true);
+    // Independent stacks: neither column is stretched to the other's height.
+    expect(main.className).not.toMatch(/stretch|h-full|flex-1/);
+    expect(rail.className).not.toMatch(/stretch|h-full|flex-1/);
+  });
+
+  it("renders the empty states as one line, not as tall empty cards", async () => {
+    mockFetchRecentAttendanceSessions.mockResolvedValue([]);
+    render(<TrainerPage />);
+    await screen.findByText("Sesiones sin lista");
+    await screen.findByText("Todavía no hay listas registradas");
     const follow = screen.getByTestId("students-to-follow");
-    expect(lower.contains(follow)).toBe(false);
+    // Both blocks say it in the shared one-line shape, never an illustrated card.
+    expect(screen.getByText("Todavía no hay listas registradas").closest('[data-testid="compact-empty"]')).not.toBeNull();
+    if (within(follow).queryByText("Nadie necesita seguimiento")) {
+      expect(within(follow).getByTestId("compact-empty")).toBeInTheDocument();
+    }
   });
 
   it("puts the recent lists beside sesiones sin lista in the rail, as the panel does", async () => {

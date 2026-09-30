@@ -24,7 +24,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { ICON } from "@/lib/icon-size";
-import { EmptyState, LoadingState, buttonClasses } from "@/components/ui";
+import CompactEmpty from "@/components/dashboard/CompactEmpty";
+import { LoadingState, buttonClasses } from "@/components/ui";
 import SectionNotice from "@/components/dashboard/SectionNotice";
 import type { RecentAttendanceSession } from "@/services/api";
 import { formatDate } from "@/lib/format-utils";
@@ -65,9 +66,7 @@ export default function RecentSessionsList({ sessions, status = "ready", onRetry
           ))}
         </div>
       ) : (
-        <EmptyState
-          surface="inset"
-          icon={<ClipboardList size={ICON.lg} strokeWidth={1.5} aria-hidden="true" />}
+        <CompactEmpty
           title="Todavía no hay listas registradas"
           description="En cuanto alguien pase lista en el club, la sesión aparece acá con su desglose."
         />
