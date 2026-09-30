@@ -136,7 +136,7 @@ test.describe("Admin smoke", () => {
 
     // ── Step 3: Verify redirect to dashboard ──
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
-    await expect(page.getByRole("heading", { name: /panel de control/i })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^hola,/i })).toBeVisible();
 
     // ── Step 4: Navigate to members page via nav link ──
     // Use exact name to match the sidebar "Miembros" link, not the dashboard
