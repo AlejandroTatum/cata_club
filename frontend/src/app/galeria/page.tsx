@@ -170,7 +170,7 @@ export default function GaleriaPage(): React.ReactElement {
         <section aria-label="Fotos publicadas" className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:self-stretch">
           {cargando ? <LoadingState label="Cargando fotos…" />
             : errorCarga ? <ErrorState message="No se pudo cargar la galería." onRetry={() => void load()} />
-            : entradas.length === 0 ? <EmptyGrid icon={<ImageIcon size={ICON.lg} />} title="Aún no hay fotos en la galería" description="Las fotos publicadas aparecen aquí y en la galería del sitio." tileRatio="3 / 2" />
+            : entradas.length === 0 ? <EmptyGrid icon={<ImageIcon size={ICON.lg} />} title="Aún no hay fotos en la galería" description="Las fotos publicadas aparecen aquí y en la galería del sitio." tileRatio="3 / 2" tiles={15} />
             : <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
               {entradas.map((entrada) => <li key={entrada.id} className="card flex flex-col overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element -- external Cloudinary URL, not a local/static asset */}
