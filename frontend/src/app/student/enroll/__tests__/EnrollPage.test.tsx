@@ -391,14 +391,17 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
   }
 
-  it("disables 'Siguiente' on an empty step and says what is missing", () => {
+  it("keeps 'Siguiente' enabled on an empty step and names each missing field inline once pressed", () => {
     render(<EnrollPage />);
     goToStudentStep();
 
     const next = screen.getByRole("button", { name: /^Siguiente/ });
-    expect(next).toBeDisabled();
-    expect(screen.getByText(/para continuar, revise:/i)).toHaveTextContent("Nombres");
-    expect(screen.getByText(/para continuar, revise:/i)).toHaveTextContent("Cédula de identidad");
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+
+    expect(screen.getByLabelText(/^Nombres/)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(/cédula de identidad/i)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText(/para continuar, revise:/i)).not.toBeInTheDocument();
   });
 
   it("shows the cédula message beside the field only after the visitor leaves it", () => {
@@ -535,7 +538,9 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.blur(screen.getByLabelText(/^Año/));
 
     expect(screen.getByText(/menores de edad no pueden autoinscribirse/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    // Not disabled: pressing it re-flags the step instead of advancing.
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/^Nombres/)).toBeInTheDocument();
   });
 
   /**
@@ -552,10 +557,13 @@ describe("EnrollPage — error prevention on the student step", () => {
     fireEvent.blur(confirm);
 
     expect(screen.getByText("Las contraseñas no coinciden.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(confirm).toBeInTheDocument();
 
     fireEvent.change(confirm, { target: { value: "password8" } });
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeEnabled();
+    expect(screen.queryByText("Las contraseñas no coinciden.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
   });
 });
 
@@ -687,7 +695,7 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
   it.each([
     ["the exact same local number", "0991234567"],
     ["the equivalent +593 form of the same number", "+593991234567"],
-  ])("rejects %s beside 'Teléfono de emergencia' and keeps 'Siguiente' disabled", (_description, valor) => {
+  ])("rejects %s beside 'Teléfono de emergencia' and keeps the step from advancing", (_description, valor) => {
     render(<EnrollPage />);
     goToHealthStep();
 
@@ -701,7 +709,8 @@ describe("EnrollPage — el teléfono de emergencia no puede repetir el del estu
       screen.getByText("El teléfono de emergencia debe ser diferente del teléfono del estudiante."),
     ).toBeInTheDocument();
     expect(telefonoEmergencia).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: /^Siguiente/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Siguiente/ }));
+    expect(screen.getByLabelText(/tipo de sangre/i)).toBeInTheDocument();
   });
 
   it("enables 'Siguiente' once the emergency phone is a different valid number", () => {
@@ -776,7 +785,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     const cedulaRow = screen.getByText("Cédula").closest("li");
     expect(cedulaRow).not.toBeNull();
     expect(within(cedulaRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
-    expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
+    expect(within(cedulaRow as HTMLElement).getByRole("button", { name: /editar/i })).toBeVisible();
 
     // Issue #999: BOTH candidate rows get flagged, never just the one the
     // wizard happens to show first — a self enrollment collides on the same
@@ -784,7 +793,7 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     const correoRow = screen.getByText("Correo").closest("li");
     expect(correoRow).not.toBeNull();
     expect(within(correoRow as HTMLElement).getByText(/revisar/i)).toBeInTheDocument();
-    expect(within(correoRow as HTMLElement).getByRole("button", { name: /corregir/i })).toBeVisible();
+    expect(within(correoRow as HTMLElement).getByRole("button", { name: /editar/i })).toBeVisible();
   });
 
   it("still offers the two exits (Iniciar sesión / Recuperar contraseña)", async () => {
@@ -800,12 +809,12 @@ describe("EnrollPage — duplicate-identity recovery on the summary step", () =>
     );
   });
 
-  it("keeps every 'Corregir' button visible — no auto-navigation away from the summary", async () => {
+  it("keeps every 'Editar' button visible — no auto-navigation away from the summary", async () => {
     render(<EnrollPage />);
     fillValidSelfEnrollment();
     await submitAndFailWithDuplicate();
 
-    const corregirButtons = screen.getAllByRole("button", { name: /corregir/i });
+    const corregirButtons = screen.getAllByRole("button", { name: /^editar/i });
     expect(corregirButtons.length).toBeGreaterThan(0);
     corregirButtons.forEach((button) => expect(button).toBeVisible());
   });
